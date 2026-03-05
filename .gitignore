@@ -1,7 +1,11 @@
 # Build artifacts
 vibe
 studio/build/
+studio/studio/
 *.exe
+
+# Test data
+*.vibe
 
 # QA artifacts
 qa-screenshots/
