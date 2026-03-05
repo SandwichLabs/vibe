@@ -10,6 +10,10 @@ export function CreateFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateFile'](arg1, arg2, arg3, arg4);
 }
 
+export function CreateHTMLPage(arg1, arg2) {
+  return window['go']['main']['App']['CreateHTMLPage'](arg1, arg2);
+}
+
 export function CreatePage(arg1, arg2) {
   return window['go']['main']['App']['CreatePage'](arg1, arg2);
 }
@@ -64,6 +68,10 @@ export function GetDashboard() {
 
 export function GetFileInfo() {
   return window['go']['main']['App']['GetFileInfo']();
+}
+
+export function GetMCPStatus() {
+  return window['go']['main']['App']['GetMCPStatus']();
 }
 
 export function GetPage(arg1) {
@@ -136,6 +144,14 @@ export function SendAgentQuery(arg1) {
 
 export function SetMeta(arg1, arg2) {
   return window['go']['main']['App']['SetMeta'](arg1, arg2);
+}
+
+export function StartMCPServer() {
+  return window['go']['main']['App']['StartMCPServer']();
+}
+
+export function StopMCPServer() {
+  return window['go']['main']['App']['StopMCPServer']();
 }
 
 export function UpdatePage(arg1, arg2, arg3) {

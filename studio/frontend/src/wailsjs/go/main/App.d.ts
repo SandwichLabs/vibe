@@ -7,6 +7,8 @@ export function CloseFile():Promise<void>;
 
 export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
+export function CreateHTMLPage(arg1:string,arg2:string):Promise<string>;
+
 export function CreatePage(arg1:string,arg2:string):Promise<string>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
@@ -34,6 +36,8 @@ export function GetAllMeta():Promise<Record<string, string>>;
 export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetFileInfo():Promise<main.FileInfo>;
+
+export function GetMCPStatus():Promise<Record<string, any>>;
 
 export function GetPage(arg1:string):Promise<main.PageDetail>;
 
@@ -70,6 +74,10 @@ export function SelectVibeFile():Promise<string>;
 export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 
 export function SetMeta(arg1:string,arg2:string):Promise<void>;
+
+export function StartMCPServer():Promise<string>;
+
+export function StopMCPServer():Promise<void>;
 
 export function UpdatePage(arg1:string,arg2:string,arg3:string):Promise<void>;
 
