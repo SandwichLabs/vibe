@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
@@ -17,6 +17,11 @@ const errorMessage = ref('')
 const newPageType = ref<'markdown' | 'html'>('markdown')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
+
+const selectedPageType = computed(() => {
+  const p = pages.value.find(p => p.id === selectedId.value)
+  return p?.page_type ?? 'markdown'
+})
 
 async function loadPages() {
   loading.value = true
@@ -136,7 +141,7 @@ onMounted(async () => {
     <div class="flex-1 overflow-auto p-6">
       <div v-if="renderLoading" class="text-gray-500">Rendering...</div>
       <div v-else-if="!selectedId" class="text-gray-400 text-center mt-20">Select a page to view</div>
-      <div v-else v-html="renderedContent" class="prose max-w-none vibe-content"></div>
+      <div v-else v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
     </div>
 
     <!-- New page modal -->
