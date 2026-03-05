@@ -94,7 +94,7 @@ watch(errorMessage, (msg) => {
     <!-- Editor + Preview -->
     <div v-else class="flex flex-1 min-h-0">
       <div class="w-1/2 flex flex-col border-r border-gray-200">
-        <div class="px-3 py-1.5 bg-gray-100 text-xs font-medium text-gray-500 border-b border-gray-200">Markdown Source</div>
+        <div class="px-3 py-1.5 bg-gray-100 text-xs font-medium text-gray-500 border-b border-gray-200">{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</div>
         <textarea
           v-model="content"
           class="flex-1 p-4 font-mono text-sm resize-none focus:outline-none"
@@ -107,7 +107,7 @@ watch(errorMessage, (msg) => {
           Preview {{ previewLoading ? '(updating...)' : '' }}
         </div>
         <div class="flex-1 overflow-auto p-4">
-          <div v-html="preview" class="prose max-w-none vibe-content"></div>
+          <div v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
         </div>
       </div>
     </div>

@@ -15,6 +15,9 @@ qa-video.mp4
 # Dependencies
 studio/frontend/node_modules/
 
+# Frontend build output
+studio/frontend/dist/
+
 # Coverage
 coverage.out
 coverage.html

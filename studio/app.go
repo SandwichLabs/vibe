@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/sandwich-labs/vibe-app/internal/pages"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	htmlrenderer "github.com/sandwich-labs/vibe-app/internal/renderer/html"
@@ -50,6 +52,7 @@ type App struct {
 	registry  *queries.Registry
 	renderer  *htmlrenderer.Renderer
 	filePath  string
+	mcpServer *vibemcp.Server
 }
 
 // NewApp creates a new App instance.
@@ -67,6 +70,10 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(_ context.Context) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.mcpServer != nil {
+		a.mcpServer.Stop() //nolint:errcheck
+		a.mcpServer = nil
+	}
 	if a.container != nil {
 		a.container.Save()  //nolint:errcheck
 		a.container.Close() //nolint:errcheck
@@ -166,6 +173,11 @@ func (a *App) CloseFile() error {
 
 	if a.container == nil {
 		return nil
+	}
+
+	if a.mcpServer != nil {
+		a.mcpServer.Stop() //nolint:errcheck
+		a.mcpServer = nil
 	}
 
 	if err := a.container.Save(); err != nil {
@@ -318,8 +330,8 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 	}
 
 	db := a.container.SQLiteDB()
-	var content string
-	err := db.QueryRow("SELECT content FROM _vibe_pages WHERE id = ?", id).Scan(&content)
+	var content, pageType string
+	err := db.QueryRow("SELECT content, page_type FROM _vibe_pages WHERE id = ?", id).Scan(&content, &pageType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get page content: %w", err)
 	}
@@ -340,21 +352,25 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 		return "", fmt.Errorf("failed to execute page: %w", err)
 	}
 
-	return a.renderExecutedNodes(executed)
+	return a.renderExecutedNodes(executed, pageType)
 }
 
 // renderExecutedNodes renders executed page nodes to HTML fragments.
-func (a *App) renderExecutedNodes(executed *pages.ExecutedPage) (string, error) {
+func (a *App) renderExecutedNodes(executed *pages.ExecutedPage, pageType string) (string, error) {
 	var b strings.Builder
 
 	for _, en := range executed.Nodes {
 		switch n := en.Node.(type) {
 		case *pages.TextNode:
-			var mdBuf bytes.Buffer
-			if err := goldmark.Convert([]byte(n.Content), &mdBuf); err != nil {
-				b.WriteString("<div class=\"prose\">" + n.Content + "</div>\n")
+			if pageType == "html" {
+				b.WriteString(n.Content)
 			} else {
-				b.WriteString("<div class=\"prose\">" + mdBuf.String() + "</div>\n")
+				var mdBuf bytes.Buffer
+				if err := goldmark.Convert([]byte(n.Content), &mdBuf); err != nil {
+					b.WriteString("<div class=\"prose\">" + n.Content + "</div>\n")
+				} else {
+					b.WriteString("<div class=\"prose\">" + mdBuf.String() + "</div>\n")
+				}
 			}
 
 		case *pages.SQLBlockNode:
@@ -463,6 +479,27 @@ func (a *App) CreatePage(title, content string) (string, error) {
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create page: %w", err)
+	}
+	return id, nil
+}
+
+// CreateHTMLPage creates a new HTML page and returns its ID.
+func (a *App) CreateHTMLPage(title, content string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+
+	id := uuid.New().String()
+	db := a.container.SQLiteDB()
+	_, err := db.Exec(
+		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'html', 0, ?, ?)",
+		id, title, content, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create html page: %w", err)
 	}
 	return id, nil
 }
@@ -1342,6 +1379,76 @@ func (a *App) SetMeta(key, value string) error {
 		return fmt.Errorf("no file open")
 	}
 	return a.container.SetMeta(key, value)
+}
+
+// --- MCP Server ---
+
+// engineAgentAdapter wraps engine.Manager to satisfy agents.EngineAccess.
+type engineAgentAdapter struct {
+	mgr *engine.Manager
+}
+
+func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, eng string, params map[string]any) (*engine.ResultSet, error) {
+	return ea.mgr.Execute(ctx, sql, eng, params)
+}
+
+// StartMCPServer starts the MCP server for the currently open file.
+func (a *App) StartMCPServer() (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if a.mcpServer != nil {
+		return fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()), nil
+	}
+
+	sandbox := &agents.SandboxConfig{
+		Mode:         agents.ModeFull,
+		MaxQueryRows: 10000,
+	}
+	handler := agents.NewHandler(a.container, &engineAgentAdapter{mgr: a.engine}, sandbox, a.logger)
+
+	srv := vibemcp.New(handler, a.logger)
+	if err := srv.Start("127.0.0.1:0"); err != nil {
+		return "", fmt.Errorf("failed to start MCP server: %w", err)
+	}
+
+	a.mcpServer = srv
+	url := fmt.Sprintf("http://%s/sse", srv.Addr())
+	a.logger.Info("MCP server started", "url", url)
+	return url, nil
+}
+
+// StopMCPServer stops the MCP server.
+func (a *App) StopMCPServer() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.mcpServer == nil {
+		return nil
+	}
+	err := a.mcpServer.Stop()
+	a.mcpServer = nil
+	return err
+}
+
+// GetMCPStatus returns the current MCP server status.
+func (a *App) GetMCPStatus() map[string]any {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.mcpServer != nil {
+		return map[string]any{
+			"running": true,
+			"url":     fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()),
+		}
+	}
+	return map[string]any{
+		"running": false,
+		"url":     "",
+	}
 }
 
 // --- Helpers ---

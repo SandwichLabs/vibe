@@ -24,6 +24,7 @@ declare global {
           GetPage(id: string): Promise<PageDetail>
           RenderPageContent(id: string, params: Record<string, string>): Promise<string>
           CreatePage(title: string, content: string): Promise<string>
+          CreateHTMLPage(title: string, content: string): Promise<string>
           UpdatePage(id: string, title: string, content: string): Promise<void>
           DeletePage(id: string): Promise<void>
           ListTables(): Promise<string[]>
@@ -48,6 +49,9 @@ declare global {
           ExportTableJSON(tableName: string): Promise<string>
           GetAllMeta(): Promise<Record<string, string>>
           SetMeta(key: string, value: string): Promise<void>
+          StartMCPServer(): Promise<string>
+          StopMCPServer(): Promise<void>
+          GetMCPStatus(): Promise<Record<string, any>>
         }
       }
     }

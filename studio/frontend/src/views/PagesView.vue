@@ -14,6 +14,7 @@ const showNewModal = ref(false)
 const newTitle = ref('')
 const titleError = ref(false)
 const errorMessage = ref('')
+const newPageType = ref<'markdown' | 'html'>('markdown')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 
@@ -53,8 +54,11 @@ async function createPage() {
   }
   titleError.value = false
   try {
-    const id = await window.go.main.App.CreatePage(newTitle.value, '')
+    const id = newPageType.value === 'html'
+      ? await window.go.main.App.CreateHTMLPage(newTitle.value, '')
+      : await window.go.main.App.CreatePage(newTitle.value, '')
     newTitle.value = ''
+    newPageType.value = 'markdown'
     showNewModal.value = false
     await loadPages()
     selectedId.value = id
@@ -136,13 +140,23 @@ onMounted(async () => {
     </div>
 
     <!-- New page modal -->
-    <div v-if="showNewModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50" @click.self="showNewModal = false">
+    <div v-if="showNewModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50" @click.self="showNewModal = false; newPageType = 'markdown'">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
         <h3 class="text-lg font-semibold mb-4">New Page</h3>
         <input v-model="newTitle" placeholder="Page title" class="w-full px-3 py-2 border rounded-lg" :class="{ 'border-red-500': titleError }" @keyup.enter="createPage" @input="titleError = false" autofocus />
         <p v-if="titleError" class="text-red-500 text-xs mt-1">Title is required</p>
+        <div class="flex gap-3 mt-3">
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" v-model="newPageType" value="markdown" class="accent-blue-600" />
+            Markdown
+          </label>
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" v-model="newPageType" value="html" class="accent-blue-600" />
+            HTML
+          </label>
+        </div>
         <div class="flex gap-3 justify-end mt-4">
-          <button @click="showNewModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+          <button @click="showNewModal = false; newPageType = 'markdown'" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
           <button @click="createPage" :disabled="!newTitle.trim()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">Create</button>
         </div>
       </div>
