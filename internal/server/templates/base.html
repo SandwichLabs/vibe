@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vibe Preview</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="logo">Vibe</a>
+            </div>
+            <div class="sidebar-content">
+                {{block "sidebar" .}}{{end}}
+            </div>
+        </nav>
+        <main class="content">
+            {{if .Error}}
+            <div class="error-box">
+                <h2>Error {{.StatusCode}}</h2>
+                <p>{{.Error}}</p>
+            </div>
+            {{else}}
+            {{block "content" .}}{{end}}
+            {{end}}
+        </main>
+    </div>
+    <script>
+        // SSE live reload
+        (function() {
+            var es = new EventSource('/events');
+            es.onmessage = function(e) {
+                if (e.data === 'reload') {
+                    window.location.reload();
+                }
+            };
+            es.onerror = function() {
+                setTimeout(function() {
+                    es = new EventSource('/events');
+                }, 3000);
+            };
+        })();
+    </script>
+</body>
+</html>

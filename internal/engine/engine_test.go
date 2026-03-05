@@ -1,0 +1,243 @@
+package engine
+
+import (
+	"context"
+	"database/sql"
+	"log/slog"
+	"testing"
+
+	_ "github.com/mutecomm/go-sqlcipher/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func openTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func seedTestDB(t *testing.T, db *sql.DB) {
+	t.Helper()
+	_, err := db.Exec(`
+		CREATE TABLE customers (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT
+		)
+	`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO customers (id, name, email) VALUES (1, 'Alice', 'alice@example.com')`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO customers (id, name, email) VALUES (2, 'Bob', 'bob@example.com')`)
+	require.NoError(t, err)
+}
+
+// --- Parameter binding tests ---
+
+func TestBindParams_ReplacesPlaceholders(t *testing.T) {
+	sql, args, err := BindParams(
+		"SELECT * FROM customers WHERE id = $customer_id AND name = $name",
+		map[string]any{"customer_id": 42, "name": "Alice"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM customers WHERE id = ? AND name = ?", sql)
+	assert.Equal(t, []any{42, "Alice"}, args)
+}
+
+func TestBindParams_NoPlaceholders(t *testing.T) {
+	sql, args, err := BindParams("SELECT * FROM customers", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM customers", sql)
+	assert.Nil(t, args)
+}
+
+func TestBindParams_DuplicatePlaceholder(t *testing.T) {
+	sql, args, err := BindParams(
+		"SELECT * FROM t WHERE a = $x OR b = $x",
+		map[string]any{"x": 1},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM t WHERE a = ? OR b = ?", sql)
+	assert.Equal(t, []any{1, 1}, args)
+}
+
+func TestBindParams_MissingParam(t *testing.T) {
+	_, _, err := BindParams(
+		"SELECT * FROM t WHERE id = $missing",
+		map[string]any{},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing parameter")
+}
+
+func TestBindParams_SQLInjectionInParamName(t *testing.T) {
+	_, _, err := BindParams(
+		"SELECT * FROM t WHERE id = $ok",
+		map[string]any{"ok": 1, "'; DROP TABLE--": "bad"},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parameter name")
+}
+
+func TestBindParams_SQLInjectionAttemptInParamMap(t *testing.T) {
+	_, _, err := BindParams(
+		"SELECT 1",
+		map[string]any{"Robert'); DROP TABLE students;--": 1},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parameter name")
+}
+
+func TestValidateParamName_Valid(t *testing.T) {
+	assert.NoError(t, ValidateParamName("customer_id"))
+	assert.NoError(t, ValidateParamName("x"))
+	assert.NoError(t, ValidateParamName("ABC123"))
+}
+
+func TestValidateParamName_Invalid(t *testing.T) {
+	assert.Error(t, ValidateParamName(""))
+	assert.Error(t, ValidateParamName("foo bar"))
+	assert.Error(t, ValidateParamName("foo-bar"))
+	assert.Error(t, ValidateParamName("foo;bar"))
+}
+
+// --- ResultSet tests ---
+
+func TestResultSet_RowCount(t *testing.T) {
+	rs := &ResultSet{
+		Columns: []Column{{Name: "id", Type: "int64"}},
+		Rows:    [][]any{{1}, {2}, {3}},
+	}
+	assert.Equal(t, 3, rs.RowCount())
+}
+
+func TestResultSet_RowCountEmpty(t *testing.T) {
+	rs := &ResultSet{}
+	assert.Equal(t, 0, rs.RowCount())
+}
+
+func TestResultSet_Value(t *testing.T) {
+	rs := &ResultSet{
+		Columns: []Column{{Name: "id", Type: "int64"}, {Name: "name", Type: "string"}},
+		Rows:    [][]any{{1, "Alice"}, {2, "Bob"}},
+	}
+	assert.Equal(t, 1, rs.Value(0, 0))
+	assert.Equal(t, "Bob", rs.Value(1, 1))
+}
+
+func TestResultSet_ValueOutOfBounds(t *testing.T) {
+	rs := &ResultSet{
+		Columns: []Column{{Name: "id", Type: "int64"}},
+		Rows:    [][]any{{1}},
+	}
+	assert.Nil(t, rs.Value(-1, 0))
+	assert.Nil(t, rs.Value(5, 0))
+	assert.Nil(t, rs.Value(0, 5))
+	assert.Nil(t, rs.Value(0, -1))
+}
+
+func TestResultSet_ColumnIndex(t *testing.T) {
+	rs := &ResultSet{
+		Columns: []Column{
+			{Name: "id", Type: "int64"},
+			{Name: "name", Type: "string"},
+			{Name: "email", Type: "string"},
+		},
+	}
+	assert.Equal(t, 0, rs.ColumnIndex("id"))
+	assert.Equal(t, 1, rs.ColumnIndex("name"))
+	assert.Equal(t, 2, rs.ColumnIndex("email"))
+	assert.Equal(t, -1, rs.ColumnIndex("nonexistent"))
+}
+
+// --- Engine selection tests ---
+
+func TestManager_EngineSelection(t *testing.T) {
+	db := openTestDB(t)
+	m := NewManager(db, nil, WithLogger(slog.Default()))
+
+	eng, err := m.Engine("sqlite")
+	require.NoError(t, err)
+	assert.NotNil(t, eng)
+
+	_, err = m.Engine("duckdb")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not available")
+
+	_, err = m.Engine("postgres")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown engine")
+}
+
+func TestManager_EngineSelectionWithDuckDB(t *testing.T) {
+	db := openTestDB(t)
+	// Use a second in-memory SQLite as a stand-in for DuckDB in tests.
+	duckDB := openTestDB(t)
+	m := NewManager(db, duckDB)
+
+	eng, err := m.Engine("duckdb")
+	require.NoError(t, err)
+	assert.NotNil(t, eng)
+}
+
+// --- SQLite engine integration tests ---
+
+func TestSQLiteEngine_Execute(t *testing.T) {
+	db := openTestDB(t)
+	seedTestDB(t, db)
+
+	eng := NewSQLiteEngine(db, false)
+	ctx := context.Background()
+
+	rs, err := eng.Execute(ctx, "SELECT id, name, email FROM customers ORDER BY id", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, rs.RowCount())
+	assert.Equal(t, 3, len(rs.Columns))
+	assert.Equal(t, "id", rs.Columns[0].Name)
+	assert.Equal(t, "name", rs.Columns[1].Name)
+	assert.Equal(t, "email", rs.Columns[2].Name)
+
+	assert.Equal(t, int64(1), rs.Value(0, 0))
+	assert.Equal(t, "Alice", rs.Value(0, 1))
+	assert.Equal(t, "alice@example.com", rs.Value(0, 2))
+}
+
+func TestSQLiteEngine_ExecuteWithParams(t *testing.T) {
+	db := openTestDB(t)
+	seedTestDB(t, db)
+
+	eng := NewSQLiteEngine(db, false)
+	ctx := context.Background()
+
+	rs, err := eng.Execute(ctx, "SELECT name FROM customers WHERE id = $customer_id", map[string]any{
+		"customer_id": 1,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, rs.RowCount())
+	assert.Equal(t, "Alice", rs.Value(0, 0))
+}
+
+func TestManager_ExecuteViaManager(t *testing.T) {
+	db := openTestDB(t)
+	seedTestDB(t, db)
+
+	m := NewManager(db, nil, WithLogger(slog.Default()))
+	ctx := context.Background()
+
+	rs, err := m.Execute(ctx, "SELECT name FROM customers WHERE id = $id", "sqlite", map[string]any{
+		"id": 2,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, rs.RowCount())
+	assert.Equal(t, "Bob", rs.Value(0, 0))
+}
+
+func TestSQLiteEngine_Close(t *testing.T) {
+	db := openTestDB(t)
+	eng := NewSQLiteEngine(db, false)
+	assert.NoError(t, eng.Close())
+}

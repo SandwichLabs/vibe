@@ -1,0 +1,51 @@
+{{define "sidebar"}}
+<h3>Pages</h3>
+<ul>
+{{range .Pages}}
+    <li><a href="/page/{{.ID}}">{{.Title}}</a></li>
+{{else}}
+    <li class="empty">No pages</li>
+{{end}}
+</ul>
+<h3>Tables</h3>
+<ul>
+{{range .Tables}}
+    <li><a href="/table/{{.}}">{{.}}</a></li>
+{{else}}
+    <li class="empty">No tables</li>
+{{end}}
+</ul>
+{{end}}
+
+{{define "content"}}
+<h1>Pages</h1>
+{{if .Pages}}
+<div class="card-grid">
+    {{range .Pages}}
+    <a href="/page/{{.ID}}" class="card">
+        <h3>{{.Title}}</h3>
+        <span class="badge">{{.PageType}}</span>
+    </a>
+    {{end}}
+</div>
+{{else}}
+<p>No pages found in this container.</p>
+{{end}}
+
+<h1>Tables</h1>
+{{if .Tables}}
+<div class="card-grid">
+    {{range .Tables}}
+    <a href="/table/{{.}}" class="card">
+        <h3>{{.}}</h3>
+        <div class="card-actions">
+            <a href="/table/{{.}}.json" class="btn btn-sm">JSON</a>
+            <a href="/table/{{.}}.csv" class="btn btn-sm">CSV</a>
+        </div>
+    </a>
+    {{end}}
+</div>
+{{else}}
+<p>No user tables found in this container.</p>
+{{end}}
+{{end}}

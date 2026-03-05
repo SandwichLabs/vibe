@@ -1,0 +1,28 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - misspell
+    - gofmt
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+
+issues:
+  exclude-dirs:
+    - cmd/vibe-viewer/frontend
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m

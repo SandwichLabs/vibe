@@ -1,0 +1,61 @@
+{{define "sidebar"}}
+<h3>Navigation</h3>
+<ul>
+    <li><a href="/">Home</a></li>
+</ul>
+<h3>Export</h3>
+<ul>
+    <li><a href="/table/{{.TableName}}.json">JSON</a></li>
+    <li><a href="/table/{{.TableName}}.csv">CSV</a></li>
+</ul>
+{{end}}
+
+{{define "content"}}
+<div class="table-header">
+    <h1>{{.TableName}}</h1>
+    <span class="meta">{{.TotalRows}} rows</span>
+</div>
+
+<div class="table-wrapper">
+    <table>
+        <thead>
+            <tr>
+                {{range .Columns}}
+                <th>{{.}}</th>
+                {{end}}
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Rows}}
+            <tr>
+                {{range .}}
+                <td>{{.}}</td>
+                {{end}}
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="{{len $.Columns}}" class="empty">No data</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if gt .TotalPages 1}}
+<div class="pagination">
+    {{if .HasPrev}}
+    <a href="/table/{{.TableName}}?page={{.PrevPage}}&page_size={{.PageSize}}" class="btn">Previous</a>
+    {{else}}
+    <span class="btn disabled">Previous</span>
+    {{end}}
+
+    <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
+
+    {{if .HasNext}}
+    <a href="/table/{{.TableName}}?page={{.NextPage}}&page_size={{.PageSize}}" class="btn">Next</a>
+    {{else}}
+    <span class="btn disabled">Next</span>
+    {{end}}
+</div>
+{{end}}
+{{end}}

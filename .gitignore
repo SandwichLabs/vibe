@@ -1,0 +1,19 @@
+# Build artifacts
+vibe
+studio/build/
+*.exe
+
+# QA artifacts
+qa-screenshots/
+qa-frames/
+qa-video.mp4
+
+# Dependencies
+studio/frontend/node_modules/
+
+# Coverage
+coverage.out
+coverage.html
+
+# OS
+.DS_Store

@@ -1,0 +1,81 @@
+version: '3'
+
+env:
+  CGO_ENABLED: "1"
+
+vars:
+  BINARY: vibe
+
+tasks:
+  default:
+    desc: Lint, test, and build
+    cmds:
+      - task: lint
+      - task: test
+      - task: build
+
+  mod:
+    desc: Download and tidy Go modules
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  build:
+    desc: Build the vibe binary
+    cmds:
+      - go build -o {{.BINARY}} ./
+
+  test:
+    desc: Run all tests
+    aliases: [t]
+    cmds:
+      - go test ./...
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report written to coverage.html"
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  lint:fix:
+    desc: Run golangci-lint with auto-fix
+    cmds:
+      - golangci-lint run --fix ./...
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f {{.BINARY}}
+      - rm -f coverage.out coverage.html
+
+  studio:install:
+    desc: Install studio frontend dependencies
+    dir: studio/frontend
+    cmds:
+      - npm install
+
+  studio:dev:
+    desc: Run Vibe Studio in dev mode
+    dir: studio
+    cmds:
+      - wails dev -tags webkit2_41,duckdb_arrow
+
+  studio:build:
+    desc: Build Vibe Studio desktop app
+    dir: studio
+    cmds:
+      - wails build -tags webkit2_41,duckdb_arrow
+
+  release:*:
+    desc: Tag, build, and publish a release
+    vars:
+      VERSION: '{{index .MATCH 0}}'
+    cmds:
+      - git tag -a v{{.VERSION}} -m "Release v{{.VERSION}}"
+      - goreleaser release --clean
