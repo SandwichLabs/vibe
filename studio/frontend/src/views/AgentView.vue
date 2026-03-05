@@ -37,53 +37,51 @@ onMounted(loadStatus)
 <template>
   <div class="p-6 max-w-4xl">
     <h1 class="text-2xl font-bold mb-4">Agent</h1>
-    <p class="text-sm text-gray-500 mb-4">Enter a SQL query to analyze your data.</p>
+    <p class="text-sm text-muted mb-4">Enter a SQL query to analyze your data.</p>
 
     <div class="mb-4">
       <textarea
         v-model="query"
         @keydown="handleKeydown"
-        class="w-full h-32 p-4 border border-gray-300 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="field-input h-32 resize-none font-mono"
         placeholder="SELECT * FROM your_table LIMIT 10"
         spellcheck="false"
       ></textarea>
     </div>
 
     <div class="flex items-center gap-4 mb-6">
-      <button @click="sendQuery" :disabled="loading" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+      <button @click="sendQuery" :disabled="loading" class="btn btn-primary">
         {{ loading ? 'Running...' : 'Analyze (Ctrl+Enter)' }}
       </button>
-      <span class="text-sm text-gray-400">Mode: {{ status.mode || 'unknown' }}</span>
+      <span class="badge badge-black">Mode: {{ status.mode || 'unknown' }}</span>
     </div>
 
     <!-- Results -->
     <div v-if="result">
-      <div v-if="result.error" class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4">
+      <div v-if="result.error" class="p-4 bg-error/10 border-3 border-error text-error text-sm font-semibold mb-4">
         {{ result.error }}
       </div>
 
       <div v-if="result.sql" class="mb-4">
-        <div class="text-xs font-medium text-gray-500 mb-1">SQL</div>
-        <pre class="p-3 bg-gray-100 rounded-lg text-sm font-mono overflow-x-auto">{{ result.sql }}</pre>
+        <div class="field-label">SQL</div>
+        <pre class="p-3 bg-black text-yellow text-sm font-mono overflow-x-auto border-3 border-black">{{ result.sql }}</pre>
       </div>
 
       <div v-if="result.analysis" class="mb-4">
-        <div class="text-xs font-medium text-gray-500 mb-1">Analysis</div>
-        <div class="p-3 bg-gray-50 rounded-lg text-sm">{{ result.analysis }}</div>
+        <div class="field-label">Analysis</div>
+        <div class="card p-3 text-sm">{{ result.analysis }}</div>
       </div>
 
       <div v-if="result.columns && result.rows" class="overflow-auto">
-        <table class="w-full text-sm border-collapse">
+        <table class="brutal-table">
           <thead>
             <tr>
-              <th v-for="col in result.columns" :key="col" class="px-3 py-2 bg-gray-100 border border-gray-200 text-left font-medium">
-                {{ col }}
-              </th>
+              <th v-for="col in result.columns" :key="col">{{ col }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, i) in result.rows" :key="i" class="hover:bg-gray-50">
-              <td v-for="(cell, j) in row" :key="j" class="px-3 py-1.5 border border-gray-100">{{ cell ?? '' }}</td>
+            <tr v-for="(row, i) in result.rows" :key="i">
+              <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
             </tr>
           </tbody>
         </table>

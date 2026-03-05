@@ -12,7 +12,6 @@ async function selectFile() {
     const path = await window.go.main.App.SelectCSVFile()
     if (path) {
       csvPath.value = path
-      // Auto-generate table name from filename.
       const name = path.split('/').pop()?.replace(/\.csv$/i, '') || ''
       tableName.value = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
     }
@@ -41,29 +40,29 @@ async function importCSV() {
 
     <div class="space-y-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">CSV File</label>
+        <label class="field-label">CSV File</label>
         <div class="flex gap-3">
-          <input :value="csvPath" readonly class="flex-1 px-3 py-2 border rounded-lg bg-gray-50 text-sm" placeholder="No file selected" />
-          <button @click="selectFile" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-sm">Browse</button>
+          <input :value="csvPath" readonly class="field-input flex-1 bg-cream" placeholder="No file selected" />
+          <button @click="selectFile" class="btn btn-sm">Browse</button>
         </div>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
-        <input v-model="tableName" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="my_table" />
+        <label class="field-label">Table Name</label>
+        <input v-model="tableName" class="field-input" placeholder="my_table" />
       </div>
 
       <button
         @click="importCSV"
         :disabled="loading || !csvPath || !tableName"
-        class="w-full py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+        class="btn btn-primary w-full text-center"
       >
         {{ loading ? 'Importing...' : 'Import' }}
       </button>
 
-      <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{{ error }}</div>
+      <div v-if="error" class="p-3 bg-error/10 border-3 border-error text-error text-sm font-semibold">{{ error }}</div>
 
-      <div v-if="result" class="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+      <div v-if="result" class="p-3 bg-yellow/20 border-3 border-black text-sm font-semibold">
         Imported {{ result.rows_imported }} rows into table "{{ result.table_name }}"
       </div>
     </div>

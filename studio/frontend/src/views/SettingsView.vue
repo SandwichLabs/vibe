@@ -83,41 +83,41 @@ onMounted(() => {
   <div class="p-6 max-w-xl">
     <h1 class="text-2xl font-bold mb-6">Settings</h1>
 
-    <div v-if="loading" class="text-gray-500">Loading...</div>
+    <div v-if="loading" class="text-muted font-mono text-sm">Loading...</div>
 
     <div v-else class="space-y-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-        <input v-model="title" class="w-full px-3 py-2 border rounded-lg" />
+        <label class="field-label">Title</label>
+        <input v-model="title" class="field-input" />
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea v-model="description" rows="3" class="w-full px-3 py-2 border rounded-lg resize-none"></textarea>
+        <label class="field-label">Description</label>
+        <textarea v-model="description" rows="3" class="field-input resize-none"></textarea>
       </div>
 
-      <button @click="save" :disabled="saving" class="py-2 px-6 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+      <button @click="save" :disabled="saving" class="btn btn-primary">
         {{ saving ? 'Saving...' : 'Save Settings' }}
       </button>
 
-      <div v-if="message" class="text-sm" :class="message.startsWith('Error') ? 'text-red-600' : 'text-green-600'">
+      <div v-if="message" class="text-sm font-semibold" :class="message.startsWith('Error') ? 'text-error' : 'text-black'">
         {{ message }}
       </div>
 
       <!-- MCP Server -->
       <div class="mt-8">
-        <h2 class="text-lg font-semibold mb-3">MCP Server</h2>
-        <div class="bg-gray-50 rounded-lg p-4">
+        <h2 class="text-lg font-bold mb-3">MCP Server</h2>
+        <div class="card p-4">
           <div class="flex items-center gap-3 mb-3">
-            <span class="inline-block w-3 h-3 rounded-full" :class="mcpRunning ? 'bg-green-500' : 'bg-gray-400'"></span>
-            <span class="text-sm font-medium text-gray-700">{{ mcpRunning ? 'Running' : 'Stopped' }}</span>
+            <span class="inline-block w-3 h-3 border-2 border-black" :class="mcpRunning ? 'bg-yellow' : 'bg-muted'"></span>
+            <span class="font-mono text-xs uppercase font-bold">{{ mcpRunning ? 'Running' : 'Stopped' }}</span>
           </div>
 
           <div v-if="mcpRunning && mcpUrl" class="mb-3">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Server URL</label>
+            <label class="field-label">Server URL</label>
             <div class="flex items-center gap-2">
-              <code class="flex-1 px-3 py-2 bg-white border rounded text-sm text-gray-800 select-all break-all">{{ mcpUrl }}</code>
-              <button @click="copyMCPUrl" class="px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded">
+              <code class="flex-1 px-3 py-2 bg-cream border-3 border-black text-sm font-mono select-all break-all">{{ mcpUrl }}</code>
+              <button @click="copyMCPUrl" class="btn btn-sm">
                 {{ mcpCopied ? 'Copied' : 'Copy' }}
               </button>
             </div>
@@ -126,13 +126,13 @@ onMounted(() => {
           <button
             @click="toggleMCP"
             :disabled="mcpToggling"
-            class="py-2 px-6 text-sm text-white rounded-lg disabled:opacity-50"
-            :class="mcpRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
+            class="btn"
+            :class="mcpRunning ? 'btn-danger' : 'btn-primary'"
           >
             {{ mcpToggling ? '...' : (mcpRunning ? 'Stop' : 'Start') }}
           </button>
 
-          <p class="mt-2 text-xs text-gray-500">
+          <p class="mt-3 font-mono text-xs text-muted">
             Exposes container tools via MCP (Model Context Protocol) for AI clients. Server stops when the file is closed.
           </p>
         </div>
@@ -140,11 +140,11 @@ onMounted(() => {
 
       <!-- Raw metadata -->
       <div class="mt-8">
-        <h2 class="text-lg font-semibold mb-3">All Metadata</h2>
-        <div class="bg-gray-50 rounded-lg p-4 text-sm">
-          <div v-for="(v, k) in meta" :key="k" class="flex gap-4 py-1 border-b border-gray-100 last:border-0">
-            <span class="font-medium text-gray-600 w-40 shrink-0">{{ k }}</span>
-            <span class="text-gray-800 break-all">{{ v }}</span>
+        <h2 class="text-lg font-bold mb-3">All Metadata</h2>
+        <div class="card p-4">
+          <div v-for="(v, k) in meta" :key="k" class="flex gap-4 py-1.5 border-b-2 border-black/10 last:border-0">
+            <span class="font-mono text-xs uppercase font-bold text-muted w-40 shrink-0">{{ k }}</span>
+            <span class="text-sm break-all">{{ v }}</span>
           </div>
         </div>
       </div>

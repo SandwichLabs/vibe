@@ -108,26 +108,26 @@ watch(errorMessage, (msg) => {
 <template>
   <div class="flex h-full">
     <!-- Query list -->
-    <div class="w-56 border-r border-gray-200 bg-white flex flex-col">
-      <div class="p-3 border-b border-gray-200 flex items-center justify-between">
-        <h2 class="font-semibold text-sm">Queries</h2>
-        <button @click="newQuery" class="text-blue-600 hover:text-blue-700 text-sm font-medium">+ New</button>
+    <div class="w-56 border-r-3 border-black bg-white flex flex-col">
+      <div class="p-3 border-b-3 border-black flex items-center justify-between">
+        <h2 class="font-bold text-sm uppercase font-mono tracking-wide">Queries</h2>
+        <button @click="newQuery" class="btn btn-primary btn-sm">+ New</button>
       </div>
       <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 text-gray-500 text-sm">Loading...</div>
-        <div v-else-if="queries.length === 0" class="p-4 text-gray-400 text-sm text-center">No saved queries</div>
+        <div v-if="loading" class="p-4 text-muted font-mono text-sm">Loading...</div>
+        <div v-else-if="queries.length === 0" class="p-4 text-muted text-sm text-center font-mono">No saved queries</div>
         <div
           v-for="q in queries"
           :key="q.id"
           @click="selectQuery(q.id)"
-          class="px-3 py-2 cursor-pointer border-b border-gray-100 hover:bg-gray-50 flex items-center justify-between group text-sm"
-          :class="{ 'bg-blue-50 border-l-2 border-l-blue-500': selectedId === q.id }"
+          class="px-3 py-2 cursor-pointer border-b-2 border-black/10 flex items-center justify-between group text-sm"
+          :class="selectedId === q.id ? 'bg-yellow border-l-4 border-l-black' : 'hover:bg-cream'"
         >
           <div class="min-w-0">
-            <div class="truncate font-medium">{{ q.title }}</div>
-            <div class="text-xs text-gray-400">{{ q.engine }}</div>
+            <div class="truncate font-bold">{{ q.title }}</div>
+            <div class="badge mt-0.5">{{ q.engine }}</div>
           </div>
-          <button @click.stop="deleteQuery(q.id)" class="hidden group-hover:block text-xs text-red-500">Del</button>
+          <button @click.stop="deleteQuery(q.id)" class="hidden group-hover:block btn btn-ghost btn-sm text-error">Del</button>
         </div>
       </div>
     </div>
@@ -135,25 +135,23 @@ watch(errorMessage, (msg) => {
     <!-- Editor area -->
     <div class="flex-1 flex flex-col">
       <!-- Toolbar -->
-      <div class="px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-3">
-        <select v-model="engineName" class="px-2 py-1 border rounded text-sm">
+      <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center gap-3">
+        <select v-model="engineName" class="field-input w-32">
           <option value="sqlite">SQLite</option>
           <option value="duckdb">DuckDB</option>
         </select>
-        <button @click="runQuery" :disabled="running" class="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50">
+        <button @click="runQuery" :disabled="running" class="btn btn-primary">
           {{ running ? 'Running...' : 'Run (Ctrl+Enter)' }}
         </button>
-        <button @click="showSaveModal = true" class="px-4 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
-          Save Query
-        </button>
+        <button @click="showSaveModal = true" class="btn">Save Query</button>
       </div>
 
       <!-- SQL editor -->
-      <div class="border-b border-gray-200">
+      <div class="border-b-3 border-black">
         <textarea
           v-model="sqlText"
           @keydown="handleKeydown"
-          class="w-full h-40 p-4 font-mono text-sm resize-none focus:outline-none"
+          class="w-full h-40 p-4 font-mono text-sm resize-none focus:outline-none bg-white"
           placeholder="Enter SQL query..."
           spellcheck="false"
         ></textarea>
@@ -161,41 +159,39 @@ watch(errorMessage, (msg) => {
 
       <!-- Results -->
       <div class="flex-1 overflow-auto">
-        <div v-if="error" class="p-4 text-red-600 text-sm">{{ error }}</div>
-        <div v-else-if="running" class="p-4 text-gray-500 text-sm">Running query...</div>
+        <div v-if="error" class="p-4 text-error text-sm font-semibold">{{ error }}</div>
+        <div v-else-if="running" class="p-4 text-muted font-mono text-sm">Running query...</div>
         <div v-else-if="result" class="flex flex-col h-full">
-          <div class="px-4 py-1.5 bg-gray-100 text-xs text-gray-500 border-b border-gray-200">
+          <div class="px-4 py-1.5 bg-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black">
             {{ result.row_count }} rows &middot; {{ result.duration }}
           </div>
           <div class="flex-1 overflow-auto">
-            <table class="w-full text-sm border-collapse">
+            <table class="brutal-table">
               <thead class="sticky top-0">
                 <tr>
-                  <th v-for="col in result.columns" :key="col.name" class="px-3 py-2 bg-gray-100 border-b border-gray-200 text-left font-medium">
-                    {{ col.name }}
-                  </th>
+                  <th v-for="col in result.columns" :key="col.name">{{ col.name }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, i) in result.rows" :key="i" class="hover:bg-gray-50">
-                  <td v-for="(cell, j) in row" :key="j" class="px-3 py-1.5 border-b border-gray-100">{{ cell ?? '' }}</td>
+                <tr v-for="(row, i) in result.rows" :key="i">
+                  <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
-        <div v-else class="p-6 text-gray-400 text-center">Write a query and press Run</div>
+        <div v-else class="p-6 text-muted text-center font-mono">Write a query and press Run</div>
       </div>
     </div>
 
     <!-- Save modal -->
-    <div v-if="showSaveModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50" @click.self="showSaveModal = false">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-        <h3 class="text-lg font-semibold mb-4">Save Query</h3>
-        <input v-model="saveTitle" placeholder="Query name" class="w-full px-3 py-2 border rounded-lg mb-4" @keyup.enter="saveQuery" autofocus />
+    <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false">
+      <div class="card w-full max-w-sm p-6">
+        <h3 class="text-lg font-bold mb-4">Save Query</h3>
+        <input v-model="saveTitle" placeholder="Query name" class="field-input mb-4" @keyup.enter="saveQuery" autofocus />
         <div class="flex gap-3 justify-end">
-          <button @click="showSaveModal = false" class="px-4 py-2 text-gray-600">Cancel</button>
-          <button @click="saveQuery" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+          <button @click="showSaveModal = false" class="btn btn-ghost">Cancel</button>
+          <button @click="saveQuery" class="btn btn-primary">Save</button>
         </div>
       </div>
     </div>
@@ -208,7 +204,7 @@ watch(errorMessage, (msg) => {
       @cancel="showConfirmDelete = false; pendingDeleteId = null"
     />
 
-    <div v-if="errorMessage" class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50">
+    <div v-if="errorMessage" class="error-toast">
       {{ errorMessage }}
     </div>
   </div>

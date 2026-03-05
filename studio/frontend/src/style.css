@@ -1,1 +1,289 @@
 @import "tailwindcss";
+
+/* === Vendored Fonts === */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./assets/fonts/SpaceGrotesk-Variable.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./assets/fonts/SpaceGrotesk-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./assets/fonts/SpaceGrotesk-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* === Neo-Brutalist Design Tokens === */
+@theme {
+  --color-cream: #f5f0e8;
+  --color-paper: #fffbea;
+  --color-yellow: #FFD700;
+  --color-muted: #777777;
+  --color-error: #cc0000;
+
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Courier New', Courier, monospace;
+
+  --shadow-brutal: 4px 4px 0px #000000;
+  --shadow-brutal-lg: 6px 6px 0px #000000;
+  --shadow-brutal-sm: 2px 2px 0px #000000;
+  --shadow-brutal-yellow: 4px 4px 0px #FFD700;
+}
+
+/* === Base Resets === */
+@layer base {
+  *, *::before, *::after {
+    border-radius: 0 !important;
+  }
+
+  body {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Remove Tailwind's default ring/outline on focus for brutalist style */
+  *:focus {
+    outline: none;
+  }
+}
+
+/* === Brutalist Component Classes === */
+@layer components {
+  /* Buttons */
+  .btn {
+    padding: 0.5rem 1.25rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0px #000;
+    background: #fff;
+    color: #000;
+    transition: transform 0.08s, box-shadow 0.08s;
+    cursor: pointer;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  .btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px #000;
+  }
+
+  .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px #000;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 4px 4px 0px #000;
+  }
+
+  .btn-primary {
+    background: #FFD700;
+    color: #000;
+  }
+
+  .btn-inverted {
+    background: #000;
+    color: #FFD700;
+    box-shadow: 4px 4px 0px #FFD700;
+  }
+
+  .btn-inverted:hover {
+    box-shadow: 6px 6px 0px #FFD700;
+  }
+
+  .btn-inverted:active {
+    box-shadow: 2px 2px 0px #FFD700;
+  }
+
+  .btn-danger {
+    background: #cc0000;
+    color: #fff;
+  }
+
+  .btn-ghost {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    color: #000;
+    font-weight: 600;
+  }
+
+  .btn-ghost:hover {
+    background: #f5f0e8;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-ghost:active {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* Cards */
+  .card {
+    background: #fff;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0px #000;
+    padding: 1.5rem;
+  }
+
+  /* Inputs */
+  .field-input {
+    width: 100%;
+    border: 3px solid #000;
+    padding: 0.625rem 0.875rem;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.875rem;
+    background: #fff;
+    outline: none;
+  }
+
+  .field-input:focus {
+    box-shadow: 4px 4px 0px #FFD700;
+  }
+
+  .field-input-error {
+    border-color: #cc0000;
+    box-shadow: 4px 4px 0px #cc0000;
+  }
+
+  .field-label {
+    display: block;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.375rem;
+    color: #000;
+  }
+
+  /* Badges */
+  .badge {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.5rem;
+    border: 2px solid #000;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .badge-yellow {
+    background: #FFD700;
+    color: #000;
+  }
+
+  .badge-black {
+    background: #000;
+    color: #FFD700;
+  }
+
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  /* Error toast */
+  .error-toast {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: #cc0000;
+    color: #fff;
+    padding: 0.625rem 1rem;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0px #000;
+    font-size: 0.875rem;
+    font-weight: 600;
+    z-index: 50;
+  }
+
+  .success-toast {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: #FFD700;
+    color: #000;
+    padding: 0.625rem 1rem;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0px #000;
+    font-size: 0.875rem;
+    font-weight: 600;
+    z-index: 50;
+  }
+
+  /* Data tables */
+  .brutal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .brutal-table th {
+    padding: 0.5rem 0.75rem;
+    background: #FFD700;
+    border: 2px solid #000;
+    text-align: left;
+    font-weight: 700;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+  }
+
+  .brutal-table th:hover {
+    background: #e6c200;
+  }
+
+  .brutal-table td {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #000;
+    border-bottom: 2px solid #000;
+  }
+
+  .brutal-table tbody tr:hover {
+    background: #fffbea;
+  }
+}
+
+/* === Vibe Content (rendered pages) === */
+.vibe-content .vibe-table-container { overflow-x: auto; margin: 1rem 0; }
+.vibe-content .vibe-table { width: 100%; border-collapse: collapse; }
+.vibe-content .vibe-table th,
+.vibe-content .vibe-table td { padding: 0.5rem 0.75rem; border: 2px solid #000; text-align: left; }
+.vibe-content .vibe-table thead th { background: #FFD700; font-weight: 700; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; font-size: 0.75rem; }
+.vibe-content .vibe-metric { display: inline-block; padding: 1rem 1.5rem; background: #fff; border: 3px solid #000; box-shadow: 4px 4px 0px #000; text-align: center; margin: 0.5rem; }
+.vibe-content .vibe-metric-value { font-size: 2rem; font-weight: 700; color: #000; }
+.vibe-content .vibe-metric-label { font-size: 0.75rem; color: #777; margin-top: 0.25rem; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; }
+.vibe-content .vibe-chart-container { margin: 1rem 0; }
