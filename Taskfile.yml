@@ -66,11 +66,17 @@ tasks:
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
-  studio:build:
-    desc: Build Vibe Studio desktop app
+  build:studio:
+    desc: Build Vibe Studio desktop app (macOS)
     dir: studio
     cmds:
-      - wails build -tags webkit2_41,duckdb_arrow
+      - wails build
+
+  build:studio:linux:
+    desc: Build Vibe Studio desktop app (Linux)
+    dir: studio
+    cmds:
+      - wails build -tags webkit2_41
 
   release:*:
     desc: Tag, build, and publish a release

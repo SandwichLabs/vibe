@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/marcboeker/go-duckdb" // DuckDB driver
+	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver
 )
 
 // duckDBState holds the DuckDB connection and its temporary file path.
