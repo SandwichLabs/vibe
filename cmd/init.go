@@ -34,6 +34,7 @@ create with initial CSV data (these are mutually exclusive).`,
 		description, _ := cmd.Flags().GetString("description")
 		fromTemplate, _ := cmd.Flags().GetString("from")
 		importCSV, _ := cmd.Flags().GetString("import")
+		examples, _ := cmd.Flags().GetBool("examples")
 
 		// Validate mutually exclusive flags.
 		if fromTemplate != "" && importCSV != "" {
@@ -64,6 +65,7 @@ create with initial CSV data (these are mutually exclusive).`,
 			container.WithPassphrase(passphrase),
 			container.WithTitle(title),
 			container.WithLogger(logger),
+			container.WithExampleData(examples),
 		}
 		if description != "" {
 			opts = append(opts, container.WithDescription(description))
@@ -171,5 +173,6 @@ func init() {
 	initCmd.Flags().String("description", "", "set the container description")
 	initCmd.Flags().String("from", "", "clone from a template .vibe file")
 	initCmd.Flags().String("import", "", "import CSV data into the new container")
+	initCmd.Flags().Bool("examples", false, "include example data, pages, and queries")
 	rootCmd.AddCommand(initCmd)
 }

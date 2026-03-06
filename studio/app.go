@@ -355,6 +355,12 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 		return "", fmt.Errorf("failed to execute page: %w", err)
 	}
 
+	// Expand Go template syntax in text nodes.
+	executed, err = pages.ExpandTemplates(executed, engineParams)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand templates: %w", err)
+	}
+
 	return a.renderExecutedNodes(executed, pageType)
 }
 

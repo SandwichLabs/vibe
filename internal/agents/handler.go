@@ -107,6 +107,8 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 		return h.handleGetPage(ctx, req)
 	case "list_queries":
 		return h.handleListQueries(ctx, req)
+	case "help_search":
+		return h.handleHelpSearch(ctx, req)
 
 	// Data
 	case "run_query":
@@ -251,6 +253,25 @@ func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response
 		})
 	}
 	return NewResponse(req.ID, map[string]any{"queries": queries})
+}
+
+func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
+	query := ""
+	if q, ok := req.Params["query"].(string); ok {
+		query = q
+	}
+
+	entries := SearchHelp(query)
+
+	results := make([]map[string]any, len(entries))
+	for i, e := range entries {
+		results[i] = map[string]any{
+			"topic":   e.Topic,
+			"title":   e.Title,
+			"content": e.Content,
+		}
+	}
+	return NewResponse(req.ID, map[string]any{"results": results, "count": len(results)})
 }
 
 // --- Data handlers ---

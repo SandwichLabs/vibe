@@ -53,6 +53,14 @@ var Tools = []ToolDef{
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},
+	{
+		Name:        "help_search",
+		Description: "Search built-in Vibe documentation for help on features, syntax, directives, templates, and more. Returns matching help topics with full content. Call with an empty query to list all topics.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "query", Type: "string", Required: false, Desc: "Search keywords (e.g. 'chart directive', 'go template range', 'sql block')"},
+		},
+	},
 
 	// Data tools
 	{

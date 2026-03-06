@@ -1,0 +1,141 @@
+# Evidence Docs
+
+## Docs
+
+- [Changelog](https://docs.evidence.studio/changelog.md): Track the latest updates and improvements to Evidence
+- [Accordion](https://docs.evidence.studio/components/accordion.md): An accordion component that organizes content into collapsible sections.
+- [Accordion Item](https://docs.evidence.studio/components/accordion_item.md): An accordion item that can be expanded or collapsed.
+- [Area](https://docs.evidence.studio/components/area.md): Add an area series to a [combo_chart](/components/combo_chart)
+- [Area Chart](https://docs.evidence.studio/components/area_chart.md): Display an area chart
+- [Area Layer](https://docs.evidence.studio/components/area_layer.md): Add a choropleth layer to a map
+- [Bar](https://docs.evidence.studio/components/bar.md): Add a bar series to a [combo_chart](/components/combo_chart)
+- [Bar Chart](https://docs.evidence.studio/components/bar_chart.md): Display a bar chart
+- [Benchmark Comparison](https://docs.evidence.studio/components/benchmark_comparison.md): Define a custom benchmark comparison option for a comparison_selector
+- [Big Value](https://docs.evidence.studio/components/big_value.md): Display a big value with optional comparison, delta, and sparkline
+- [Bubble](https://docs.evidence.studio/components/bubble.md): Add a bubble series to a [combo_chart](/components/combo_chart)
+- [Bubble Chart](https://docs.evidence.studio/components/bubble_chart.md): Display a bubble chart
+- [Button Group](https://docs.evidence.studio/components/button_group.md): Display a segmented button group with distinct values from a database column to use in filters
+- [Calendar Heatmap](https://docs.evidence.studio/components/calendar_heatmap.md): Display a calendar heatmap visualization
+- [Callout](https://docs.evidence.studio/components/callout.md): Add a callout box to show a message or highlight a section of text
+- [Candlestick](https://docs.evidence.studio/components/candlestick.md): Display a candlestick chart for OHLC (Open, High, Low, Close) financial data visualization
+- [Clock](https://docs.evidence.studio/components/clock.md): Display a live clock with running seconds and the current date
+- [Combo Chart](https://docs.evidence.studio/components/combo_chart.md): Display a chart with a combination of multiple series types. Accepts area, bar, bubble, line, and scatter children series.
+- [Commentary](https://docs.evidence.studio/components/commentary.md): Allows users to input commentary to be saved with the page
+- [Comparison Selector](https://docs.evidence.studio/components/comparison_selector.md): Display a selector for comparison options to use in SQL query templates
+- [Date Grain Selector](https://docs.evidence.studio/components/date_grain_selector.md): Display a selector for date grain options to use in SQL query templates
+- [Delta](https://docs.evidence.studio/components/delta.md): Display an inline delta value with an up/down indicator
+- [Details](https://docs.evidence.studio/components/details.md): The details component
+- [Dimension](https://docs.evidence.studio/components/dimension.md): Add a dimension to a table, including date filtering, date grains, formatting, and more
+- [Dimension Grid](https://docs.evidence.studio/components/dimension_grid.md): Display an interactive grid of dimension columns with aggregated metrics and bar visualizations for filtering
+- [Download](https://docs.evidence.studio/components/download.md): A button to download data as an Excel file, supports up to 500,000 row downloads via the limit attribute.
+- [Dropdown](https://docs.evidence.studio/components/dropdown.md): Display a dropdown with distinct values from a database column to use in filters
+- [Else](https://docs.evidence.studio/components/else.md): If prior conditional blocks do not pass, the contents of the else block are rendered.
+- [Else If](https://docs.evidence.studio/components/else_if.md): If prior conditional blocks do not pass, conditionally render the contents based on whether rows are returned by the query.
+- [Fence](https://docs.evidence.studio/components/fence.md): Display a code block
+- [Filter Bar](https://docs.evidence.studio/components/filter_bar.md): Renders a floating bar of filters at the top or bottom of your page
+- [Funnel Chart](https://docs.evidence.studio/components/funnel_chart.md): Display a funnel chart showing conversion rates through stages
+- [Heat Grid](https://docs.evidence.studio/components/heat_grid.md): Display a grid of color-coded cells based on metric thresholds
+- [Heatmap](https://docs.evidence.studio/components/heatmap.md): Display a heatmap chart with color-coded cells
+- [Heatmap Layer](https://docs.evidence.studio/components/heatmap_layer.md): Add a heatmap layer to a map showing density of lat/lng coordinates
+- [Histogram](https://docs.evidence.studio/components/histogram.md): Display a histogram chart showing the distribution of values in a column.
+- [Horizontal Bar Chart](https://docs.evidence.studio/components/horizontal_bar_chart.md): Display a horizontal bar chart
+- [Icon](https://docs.evidence.studio/components/icon.md): Display an icon with customizable size and color
+- [If](https://docs.evidence.studio/components/if.md): Conditionally render the contents based on whether rows are returned by the query.
+- [Iframe](https://docs.evidence.studio/components/iframe.md): Embed another URL into your page
+- [Image](https://docs.evidence.studio/components/image.md): The image component
+- [Info](https://docs.evidence.studio/components/info.md): Display an info icon with a tooltip showing additional information on hover
+- [Input Tabs](https://docs.evidence.studio/components/input_tabs.md): Display a tab-style selector with distinct values from a database column to use in filters. Appears full-width and does not group with other filter inputs.
+- [Line](https://docs.evidence.studio/components/line.md): Add a line series to a [combo_chart](/components/combo_chart)
+- [Line Break](https://docs.evidence.studio/components/line_break.md): Adds vertical spacing between content by inserting line breaks
+- [Line Chart](https://docs.evidence.studio/components/line_chart.md): Display a line chart
+- [Link](https://docs.evidence.studio/components/link.md): Link to another page in Evidence or an external location
+- [Link Button](https://docs.evidence.studio/components/link_button.md): A button that links to a URL
+- [Logo](https://docs.evidence.studio/components/logo.md): Display a company logo from logo.dev
+- [Map](https://docs.evidence.studio/components/map.md): Display an interactive map with Mapbox
+- [Measure](https://docs.evidence.studio/components/measure.md): Add a measure to a table, including comparisons, sparklines, and more
+- [Modal](https://docs.evidence.studio/components/modal.md): Modal that shows content when opened.
+- [Note](https://docs.evidence.studio/components/note.md): The note component
+- [Option](https://docs.evidence.studio/components/option.md): Add an option to a dropdown or button_group component
+- [Page Break](https://docs.evidence.studio/components/page_break.md): Start content on a new page when printing or generating PDFs
+- [Partial](https://docs.evidence.studio/components/partial.md): Use a reusable partial to render a section of content. Create a partial in the page sidebar of your project.
+- [Pie Chart](https://docs.evidence.studio/components/pie_chart.md): Display a pie chart (donut style by default, use inner_radius="0%" for full pie)
+- [Pivot](https://docs.evidence.studio/components/pivot.md): Add a pivot to a table, including date filtering, date grains, formatting, and more
+- [Point Layer](https://docs.evidence.studio/components/point_layer.md): Add a point layer to a map showing lat/lng coordinates
+- [Polar Chart](https://docs.evidence.studio/components/polar_chart.md): Display a polar chart with bars arranged in a circular pattern
+- [Print Group](https://docs.evidence.studio/components/print_group.md): Group content together to prevent page breaks or hide content when printing or generating PDFs
+- [Progress Bars](https://docs.evidence.studio/components/progress_bars.md): Display progress bars showing a numerator/denominator ratio per category
+- [Range Calendar](https://docs.evidence.studio/components/range_calendar.md): Display a date range picker for use in SQL query templates
+- [Reference Area](https://docs.evidence.studio/components/reference_area.md): Add a reference area inside a chart
+- [Reference Line](https://docs.evidence.studio/components/reference_line.md): Add a reference line inside a chart
+- [Reference Point](https://docs.evidence.studio/components/reference_point.md): Add a reference point inside a chart
+- [Repeat](https://docs.evidence.studio/components/repeat.md): Repeats the children of this component once for each distinct value of a column
+- [Row](https://docs.evidence.studio/components/row.md): A flexible layout that places its children next to each other
+- [Sankey Chart](https://docs.evidence.studio/components/sankey_chart.md): Display a Sankey diagram showing flow between nodes
+- [Scatter](https://docs.evidence.studio/components/scatter.md): Add a scatter series to a [combo_chart](/components/combo_chart)
+- [Scatter Chart](https://docs.evidence.studio/components/scatter_chart.md): Display a scatter chart
+- [Slider](https://docs.evidence.studio/components/slider.md): A numeric slider input that can be used in filters
+- [Sparkline](https://docs.evidence.studio/components/sparkline.md): Display a small sparkline chart. To add sparklines to a table, use the measure component with the viz="sparkline" option.
+- [Stack](https://docs.evidence.studio/components/stack.md): A flexible layout that stacks its children vertically
+- [Tab](https://docs.evidence.studio/components/tab.md): An individual tab panel within a tabs component.
+- [Table](https://docs.evidence.studio/components/table.md): Display a table of data with dimensions, pivots, and measures
+- [Table Filter](https://docs.evidence.studio/components/table_filter.md): A filter component for tables with multiple condition support
+- [Tabs](https://docs.evidence.studio/components/tabs.md): A tabs component that organizes content into multiple panels.
+- [Target Comparison](https://docs.evidence.studio/components/target_comparison.md): Define a custom target comparison option for a comparison_selector
+- [Text Input](https://docs.evidence.studio/components/text_input.md): A text input field that can be used in filters
+- [Toggle](https://docs.evidence.studio/components/toggle.md): Display a toggle switch that outputs true/false values for use in filters
+- [Value](https://docs.evidence.studio/components/value.md): Display a single value from a database query
+- [Components](https://docs.evidence.studio/core-concepts/components.md): Components are used to create visual elements such as charts, tables and UI elements.
+- [Data Sources](https://docs.evidence.studio/core-concepts/data-sources.md): Connect your database, flat files or cloud storage buckets for use in reports.
+- [Markdown](https://docs.evidence.studio/core-concepts/markdown.md): Evidence pages are written in markdown, with additional syntax for adding SQL queries and charts.
+- [Models (Beta)](https://docs.evidence.studio/core-concepts/models.md): Transform and combine your data with SQL models that run automatically in the background.
+- [Partials](https://docs.evidence.studio/core-concepts/partials.md): Partials allow you to define reusable sections of content that can be included across multiple pages in your project.
+- [Value Formatting](https://docs.evidence.studio/core-concepts/value-formatting.md): Format values in components.
+- [Variables](https://docs.evidence.studio/core-concepts/variables.md): Create reusable values for use in markdown and SQL.
+- [Microsoft Azure Blob Storage](https://docs.evidence.studio/data-sources/abs.md): Connect to Parquet files in Microsoft Azure Blob Storage.
+- [Athena](https://docs.evidence.studio/data-sources/athena.md): AWS Athena is a serverless, interactive query service that enables analysis of data directly in Amazon S3 using standard SQL. Evidence supports connecting to Athena as a data source for querying data.
+- [Attio](https://docs.evidence.studio/data-sources/attio.md): Attio is a modern CRM platform. Evidence syncs your Attio data including companies, people, lists, and custom attributes.
+- [Azure Postgres](https://docs.evidence.studio/data-sources/azure-postgres.md): Azure Postgres is Microsoft's fully managed PostgreSQL database service. Evidence syncs your Azure Postgres data automatically, keeping your reports up to date.
+- [Azure SQL Database](https://docs.evidence.studio/data-sources/azure-sql.md): Azure SQL Database is Microsoft's fully managed relational cloud database. Evidence syncs your Azure SQL Database data automatically, keeping your reports up to date.
+- [BackBlaze](https://docs.evidence.studio/data-sources/backblaze.md): Connect to Parquet files in BackBlaze.
+- [BigQuery](https://docs.evidence.studio/data-sources/bigquery.md): BigQuery is Google's serverless, highly scalable data warehouse. Evidence syncs your BigQuery data automatically, keeping your reports up to date.
+- [Custom Bucket Provider](https://docs.evidence.studio/data-sources/custom.md): Connect to Parquet files in Custom Bucket Provider.
+- [Databricks](https://docs.evidence.studio/data-sources/databricks.md): Databricks is a unified analytics platform built on Apache Spark. Evidence syncs your Databricks data automatically, keeping your reports up to date.
+- [Delta Lake](https://docs.evidence.studio/data-sources/deltalake_s3.md)
+- [Facebook Ads](https://docs.evidence.studio/data-sources/facebook-ads.md): Facebook Ads is an online advertising platform for Meta products. Evidence syncs your Facebook Ads data including ad accounts, campaigns, ad sets, ads, ad creatives, and ad insights.
+- [Flat Files](https://docs.evidence.studio/data-sources/file.md): Evidence supports connecting to flat files as a data sources, including CSV, JSONL, and Parquet files.
+- [Google Cloud Storage (GCS)](https://docs.evidence.studio/data-sources/gcs.md): Connect to Parquet files in Google Cloud Storage (GCS).
+- [GitHub](https://docs.evidence.studio/data-sources/github.md): GitHub is a platform for version control and collaboration. Evidence syncs your GitHub data including repositories, pull requests, issues, and commits.
+- [Google Ads](https://docs.evidence.studio/data-sources/google-ads.md): Google Ads is an online advertising platform. Evidence syncs your Google Ads data including campaigns, ad groups, ads, keywords, and performance metrics.
+- [HubSpot](https://docs.evidence.studio/data-sources/hubspot.md): HubSpot is a CRM that provides tools for marketing, sales, and customer service. Evidence supports connecting to HubSpot as a data source to extract CRM data.
+- [Iceberg](https://docs.evidence.studio/data-sources/iceberg.md): Apache Iceberg is a high performance open-source format for large analytic tables. Evidence supports connecting to Iceberg as a data source for reading data files.
+- [Connector Types](https://docs.evidence.studio/data-sources/index.md): Connect to databases, object storage, data lakes, flat files, and applications.
+- [Linear](https://docs.evidence.studio/data-sources/linear.md): Linear is an issue tracking and project management tool. Evidence syncs your Linear data including issues, projects, teams, and cycles.
+- [MotherDuck](https://docs.evidence.studio/data-sources/motherduck.md): MotherDuck is a cloud-based data platform for running DuckDB. Evidence supports connecting to MotherDuck as a data source.
+- [MySQL](https://docs.evidence.studio/data-sources/mysql.md): MySQL is one of the world's most popular open-source relational databases. Evidence syncs your MySQL data automatically, keeping your reports up to date.
+- [PostgreSQL](https://docs.evidence.studio/data-sources/postgres.md): PostgreSQL is one of the world's most widely used open-source relational databases. Evidence syncs your PostgreSQL data automatically, keeping your reports up to date.
+- [PostHog](https://docs.evidence.studio/data-sources/posthog.md): PostHog is an open-source product analytics platform. Evidence syncs your PostHog data including events, persons, cohorts, feature flags, and insights.
+- [Cloudflare R2](https://docs.evidence.studio/data-sources/r2.md): Connect to Parquet files in Cloudflare R2.
+- [RDS PostgreSQL](https://docs.evidence.studio/data-sources/rds-postgres.md): Amazon RDS PostgreSQL is AWS's fully managed PostgreSQL database service. Evidence syncs your RDS PostgreSQL data automatically, keeping your reports up to date.
+- [Redshift](https://docs.evidence.studio/data-sources/redshift.md): Amazon Redshift is a fully managed, petabyte-scale data warehouse service in the cloud. Evidence supports connecting to Redshift as a data source, allowing you to query data using SQL. The format of the connection string is: `redshift://<user>:<password>@<AWS_HOST>:<PORT>/<db_name>?ssl=true&currentSchema=your_schema_name`.
+- [AWS (S3)](https://docs.evidence.studio/data-sources/s3.md): Connect to Parquet files in AWS (S3).
+- [Snowflake](https://docs.evidence.studio/data-sources/snowflake.md): Snowflake is a cloud data platform. Evidence syncs your Snowflake data automatically, keeping your reports up to date.
+- [SQL Server](https://docs.evidence.studio/data-sources/sqlserver.md): SQL Server is Microsoft's enterprise relational database. Evidence syncs your SQL Server data automatically, keeping your reports up to date.
+- [Stripe](https://docs.evidence.studio/data-sources/stripe.md): Stripe is a payment processing platform. Evidence syncs your Stripe data including charges, customers, subscriptions, and invoices.
+- [Twilio](https://docs.evidence.studio/data-sources/twilio.md): Twilio is a cloud communications platform. Evidence syncs your Twilio data including calls, messages, accounts, and usage records.
+- [Editing](https://docs.evidence.studio/editing.md): The Evidence Editor is the core of Evidence Studio, allowing you to create and edit reports in markdown and SQL.
+- [Access Control](https://docs.evidence.studio/features/access-control.md): Page Level Access Control, Row Level Security, and Groups allow you to control who can see data in your organization.
+- [Embedded Analytics](https://docs.evidence.studio/features/embedded.md): Deliver secure, personalized reports to your customers inside your own product
+- [Layouts](https://docs.evidence.studio/features/layouts.md): The Row and Stack components help you create flexible layouts in Evidence markdown.
+- [Docs MCP Server](https://docs.evidence.studio/features/mcp-server.md): Use AI tools to build Evidence reports with the Evidence Docs MCP server.
+- [SQL Files](https://docs.evidence.studio/features/sql-files.md): Create reusable SQL queries as standalone files that can be referenced by components and inline queries.
+- [Themes](https://docs.evidence.studio/features/themes.md): Customize colors and layout to match your brand and create beautiful, consistent reports.
+- [Translations](https://docs.evidence.studio/features/translations.md): Create multi-language versions of your pages. Define translations in the project and/or page settings.
+- [What is Evidence?](https://docs.evidence.studio/index.md): Evidence is a powerful framework for building and publishing data products using SQL, markdown, and AI.
+- [OSS Migration Guide](https://docs.evidence.studio/migration-guide.md): A comprehensive guide to help you migrate your Evidence OSS projects to Evidence Studio
+- [Publishing](https://docs.evidence.studio/publishing.md): Publish your reports to share them with your team
+- [Quickstart](https://docs.evidence.studio/quickstart.md): Start building reports in under 5 minutes
+
+## Optional
+
+- [Evidence Studio](https://evidence.studio)
+- [Community](https://slack.evidence.dev)

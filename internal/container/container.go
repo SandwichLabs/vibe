@@ -56,6 +56,15 @@ func Create(path string, opts ...Option) (*Container, error) {
 		return nil, fmt.Errorf("failed to seed metadata: %w", err)
 	}
 
+	// Seed example data if requested.
+	if o.ExampleData {
+		if err := seedExampleData(db); err != nil {
+			db.Close() //nolint:errcheck
+			os.Remove(path)
+			return nil, fmt.Errorf("failed to seed example data: %w", err)
+		}
+	}
+
 	// Materialize DuckDB (creates empty database for new files).
 	duckState, err := materializeDuckDB(db)
 	if err != nil {

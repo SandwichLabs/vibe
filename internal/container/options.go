@@ -9,6 +9,7 @@ type Options struct {
 	Title       string
 	Description string
 	ReadOnly    bool
+	ExampleData bool
 }
 
 // Option is a functional option for configuring a Container.
@@ -39,6 +40,13 @@ func WithTitle(title string) Option {
 func WithDescription(description string) Option {
 	return func(o *Options) {
 		o.Description = description
+	}
+}
+
+// WithExampleData seeds example tables, pages, and queries into a new container.
+func WithExampleData(v bool) Option {
+	return func(o *Options) {
+		o.ExampleData = v
 	}
 }
 
