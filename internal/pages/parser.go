@@ -192,8 +192,9 @@ func parseSQLBlock(lines []string, start int) (*SQLBlockNode, int, error) {
 }
 
 // isDirectiveLine checks if a line looks like a directive: {type: ...}.
+// Excludes Go template syntax (lines starting with {{).
 func isDirectiveLine(trimmed string) bool {
-	return strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")
+	return strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") && !strings.HasPrefix(trimmed, "{{")
 }
 
 // isConditionalStart checks if a directive line is an {if: ...} block start.

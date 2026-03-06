@@ -188,8 +188,6 @@ GROUP BY p.id ORDER BY revenue DESC
 
 ## Order Status
 
-{metric: order_status, label: Total Orders, sql: "SELECT COUNT(*) AS value FROM orders", engine: sqlite}
-
 | Status | Count | Total |
 |--------|-------|-------|
 {{range .Results.order_status.Rows}}| {{index . 0}} | {{index . 1}} | {{index . 2 | fmt_currency}} |

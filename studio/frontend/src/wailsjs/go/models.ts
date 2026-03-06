@@ -1,25 +1,5 @@
 export namespace main {
 	
-	export class AgentResult {
-	    sql?: string;
-	    columns?: string[];
-	    rows?: any[][];
-	    analysis?: string;
-	    error?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AgentResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.sql = source["sql"];
-	        this.columns = source["columns"];
-	        this.rows = source["rows"];
-	        this.analysis = source["analysis"];
-	        this.error = source["error"];
-	    }
-	}
 	export class ColumnInfo {
 	    name: string;
 	    type: string;
