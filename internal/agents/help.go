@@ -23,7 +23,7 @@ SQL blocks are fenced code blocks that execute queries and produce named result 
 ## Syntax
 
 ` + "~~~" + `
-` + "```sql block_name engine=sqlite cache=5m" + `
+` + "```sql block_name cache=5m" + `
 SELECT * FROM my_table WHERE status = :status
 ` + "```" + `
 ` + "~~~" + `
@@ -31,7 +31,6 @@ SELECT * FROM my_table WHERE status = :status
 ## Parameters
 
 - **block_name** (required): A unique name used to reference this result set in directives and templates
-- **engine** (optional): Query engine — ` + "`sqlite`" + ` (default for transactional) or ` + "`duckdb`" + ` (for analytics)
 - **cache** (optional): Cache duration (e.g. ` + "`5m`" + `, ` + "`1h`" + `)
 
 ## Named Parameters

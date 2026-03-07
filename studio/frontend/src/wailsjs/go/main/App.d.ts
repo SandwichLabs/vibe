@@ -5,7 +5,7 @@ import {queries} from '../models';
 
 export function CloseFile():Promise<void>;
 
-export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean):Promise<void>;
+export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function CreateHTMLPage(arg1:string,arg2:string):Promise<string>;
 
@@ -23,11 +23,13 @@ export function DescribeTable(arg1:string):Promise<main.TableInfo>;
 
 export function DropTable(arg1:string):Promise<void>;
 
-export function ExecuteQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
+export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
 
 export function ExportTableCSV(arg1:string):Promise<string>;
 
 export function ExportTableJSON(arg1:string):Promise<string>;
+
+export function GetAgentStatus():Promise<Record<string, any>>;
 
 export function GetAllMeta():Promise<Record<string, string>>;
 
@@ -61,13 +63,15 @@ export function RenderPageContent(arg1:string,arg2:Record<string, string>):Promi
 
 export function SaveFile():Promise<void>;
 
-export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SelectCSVFile():Promise<string>;
 
 export function SelectNewVibeFile():Promise<string>;
 
 export function SelectVibeFile():Promise<string>;
+
+export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 
 export function SetMeta(arg1:string,arg2:string):Promise<void>;
 

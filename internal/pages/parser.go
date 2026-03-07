@@ -1,15 +1,20 @@
 package pages
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 	"gopkg.in/yaml.v3"
 )
 
 // Parse parses a markdown page with frontmatter, SQL blocks, and directives
-// into a Page AST.
+// into a Page AST. Uses goldmark to parse the markdown body, then walks the
+// AST to extract SQL fenced code blocks and directive lines.
 func Parse(input string) (*Page, error) {
 	page := &Page{}
 	lines := strings.Split(input, "\n")
@@ -35,119 +40,123 @@ func Parse(input string) (*Page, error) {
 		idx = fmEnd + 1
 	}
 
-	// Parse body nodes.
-	nodes, endIdx, err := parseNodes(lines, idx, false)
+	// The body is everything after frontmatter.
+	body := strings.Join(lines[idx:], "\n")
+	bodyOffset := idx // line offset for error messages
+
+	// Parse the body with goldmark.
+	source := []byte(body)
+	md := goldmark.New()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
+	// Walk the goldmark AST to build our page nodes.
+	nodes, err := walkGoldmark(doc, source, bodyOffset)
 	if err != nil {
 		return nil, err
 	}
-	if endIdx < len(lines) {
-		// Should not happen at top level unless there's a stray {/if}.
-		return nil, fmt.Errorf("line %d: unexpected {/if} without matching {if:}", endIdx+1)
-	}
+
 	page.Nodes = nodes
 	return page, nil
 }
 
-// parseNodes parses lines into nodes. When inConditional is true, it stops at {/if}.
-// Returns the parsed nodes and the line index after the last consumed line.
-func parseNodes(lines []string, start int, inConditional bool) ([]Node, int, error) {
+// walkGoldmark walks a goldmark AST document and extracts page nodes.
+func walkGoldmark(doc ast.Node, source []byte, lineOffset int) ([]Node, error) {
 	var nodes []Node
-	var textBuf strings.Builder
-	textStart := start
-	idx := start
 
-	flushText := func() {
-		content := textBuf.String()
-		if content != "" {
-			nodes = append(nodes, &TextNode{Content: content})
-		}
-		textBuf.Reset()
-		textStart = idx
-	}
+	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		switch n := child.(type) {
+		case *ast.FencedCodeBlock:
+			lang := string(n.Language(source))
 
-	for idx < len(lines) {
-		line := lines[idx]
-		trimmed := strings.TrimSpace(line)
-
-		// Check for {/if} closing tag.
-		if trimmed == "{/if}" {
-			if !inConditional {
-				return nil, idx, fmt.Errorf("line %d: unexpected {/if} without matching {if:}", idx+1)
-			}
-			flushText()
-			return nodes, idx + 1, nil
-		}
-
-		// Check for SQL fenced code block.
-		if strings.HasPrefix(trimmed, "```sql") {
-			flushText()
-			sqlNode, endIdx, err := parseSQLBlock(lines, idx)
-			if err != nil {
-				return nil, idx, err
-			}
-			nodes = append(nodes, sqlNode)
-			idx = endIdx
-			textStart = idx
-			continue
-		}
-
-		// Check for directive line: must be a standalone line matching {type: ...}.
-		if isDirectiveLine(trimmed) {
-			flushText()
-
-			// Check if this is a conditional block.
-			if isConditionalStart(trimmed) {
-				condNode, endIdx, err := parseConditional(lines, idx)
+			if strings.HasPrefix(lang, "sql") {
+				sqlNode, err := parseSQLFencedBlock(n, source, lang, lineOffset)
 				if err != nil {
-					return nil, idx, err
+					return nil, err
 				}
-				nodes = append(nodes, condNode)
-				idx = endIdx
-				textStart = idx
+				nodes = append(nodes, sqlNode)
 				continue
 			}
 
-			dirNode, err := parseDirective(trimmed, idx)
-			if err != nil {
-				return nil, idx, err
+			// Non-SQL code blocks become text (rendered as code by goldmark downstream).
+			var buf bytes.Buffer
+			buf.WriteString("```")
+			buf.WriteString(lang)
+			buf.WriteString("\n")
+			for i := 0; i < n.Lines().Len(); i++ {
+				line := n.Lines().At(i)
+				buf.Write(line.Value(source))
 			}
-			nodes = append(nodes, dirNode)
-			idx++
-			textStart = idx
-			continue
-		}
+			buf.WriteString("```")
+			nodes = append(nodes, &TextNode{Content: buf.String()})
 
-		// Regular text line.
-		if textBuf.Len() > 0 || idx > textStart {
-			textBuf.WriteString("\n")
+		case *ast.Paragraph:
+			// Check if this paragraph is a directive line.
+			content := extractParagraphText(n, source)
+			trimmed := strings.TrimSpace(content)
+
+			if isDirectiveLine(trimmed) {
+				if isConditionalEnd(trimmed) {
+					// {/if} — shouldn't appear at top level.
+					line := lineOffset + getNodeLine(n, source) + 1
+					return nil, fmt.Errorf("line %d: unexpected {/if} without matching {if:}", line)
+				}
+
+				if isConditionalStart(trimmed) {
+					// {if: ...} — collect children until {/if}.
+					condNode, nextSibling, err := parseConditionalFromAST(n, child, source, lineOffset)
+					if err != nil {
+						return nil, err
+					}
+					nodes = append(nodes, condNode)
+					// Advance past the conditional block.
+					if nextSibling != nil {
+						child = nextSibling
+					}
+					continue
+				}
+
+				dirNode, err := parseDirective(trimmed, lineOffset+getNodeLine(n, source))
+				if err != nil {
+					return nil, err
+				}
+				nodes = append(nodes, dirNode)
+				continue
+			}
+
+			// Regular paragraph — store as text.
+			nodes = append(nodes, &TextNode{Content: content})
+
+		default:
+			// All other block elements (headings, lists, blockquotes, thematic breaks, HTML blocks, etc.)
+			// are rendered as text nodes. We extract the raw source lines.
+			content := extractNodeSource(child, source)
+			if content != "" {
+				nodes = append(nodes, &TextNode{Content: content})
+			}
 		}
-		textBuf.WriteString(line)
-		idx++
 	}
 
-	if inConditional {
-		return nil, idx, fmt.Errorf("line %d: unclosed {if:} block (missing {/if})", start+1)
-	}
-
-	flushText()
-	return nodes, idx, nil
+	return nodes, nil
 }
 
-// parseSQLBlock parses a fenced SQL code block starting at lines[start].
-// Format: ```sql name [engine=X] [cache=Xm]
-func parseSQLBlock(lines []string, start int) (*SQLBlockNode, int, error) {
-	header := strings.TrimSpace(lines[start])
-	// Remove the ``` prefix.
-	header = strings.TrimPrefix(header, "```")
-	parts := strings.Fields(header)
+// parseSQLFencedBlock extracts a SQLBlockNode from a goldmark FencedCodeBlock.
+// The info string format is: sql block_name [cache=5m]
+func parseSQLFencedBlock(n *ast.FencedCodeBlock, source []byte, lang string, lineOffset int) (*SQLBlockNode, error) {
+	// The info string after ``` is the full "sql block_name cache=5m" etc.
+	// goldmark's Language() returns just "sql", but the full info is in the segment.
+	info := string(n.Info.Segment.Value(source))
+	parts := strings.Fields(info)
+
+	line := lineOffset + getNodeLine(n, source) + 1
 
 	node := &SQLBlockNode{
-		Line: start + 1,
+		Line: line,
 	}
 
 	// parts[0] is "sql"
 	if len(parts) < 2 {
-		return nil, start, fmt.Errorf("line %d: SQL block requires a name: ```sql name [engine=X] [cache=Xm]", start+1)
+		return nil, fmt.Errorf("line %d: SQL block requires a name: ```sql block_name [cache=5m]", line)
 	}
 
 	node.Name = parts[1]
@@ -156,39 +165,226 @@ func parseSQLBlock(lines []string, start int) (*SQLBlockNode, int, error) {
 	for _, part := range parts[2:] {
 		key, val, ok := strings.Cut(part, "=")
 		if !ok {
-			return nil, start, fmt.Errorf("line %d: invalid SQL block option %q (expected key=value)", start+1, part)
+			return nil, fmt.Errorf("line %d: invalid SQL block option %q (expected key=value)", line, part)
 		}
 		switch key {
 		case "engine":
-			// engine parameter is accepted for backward compatibility but ignored;
-			// all queries now run on DuckDB.
+			// Accepted for backward compatibility but ignored.
 		case "cache":
 			d, err := time.ParseDuration(val)
 			if err != nil {
-				return nil, start, fmt.Errorf("line %d: invalid cache duration %q: %w", start+1, val, err)
+				return nil, fmt.Errorf("line %d: invalid cache duration %q: %w", line, val, err)
 			}
 			node.Cache = d
 		default:
-			return nil, start, fmt.Errorf("line %d: unknown SQL block option %q", start+1, key)
+			return nil, fmt.Errorf("line %d: unknown SQL block option %q", line, key)
 		}
 	}
 
-	// Collect SQL body until closing ```.
+	// Collect the SQL body.
 	var sqlBuf strings.Builder
-	idx := start + 1
-	for idx < len(lines) {
-		if strings.TrimSpace(lines[idx]) == "```" {
-			node.SQL = strings.TrimSpace(sqlBuf.String())
-			return node, idx + 1, nil
-		}
+	for i := 0; i < n.Lines().Len(); i++ {
+		line := n.Lines().At(i)
 		if sqlBuf.Len() > 0 {
 			sqlBuf.WriteString("\n")
 		}
-		sqlBuf.WriteString(lines[idx])
-		idx++
+		sqlBuf.WriteString(strings.TrimRight(string(line.Value(source)), "\n"))
+	}
+	node.SQL = strings.TrimSpace(sqlBuf.String())
+
+	return node, nil
+}
+
+// parseConditionalFromAST parses an {if: ...} block by collecting sibling nodes
+// until a {/if} paragraph is found.
+func parseConditionalFromAST(startPara *ast.Paragraph, startChild ast.Node, source []byte, lineOffset int) (*ConditionalNode, ast.Node, error) {
+	content := extractParagraphText(startPara, source)
+	trimmed := strings.TrimSpace(content)
+	inner := trimmed[1 : len(trimmed)-1]
+
+	config, err := parseDirectiveYAML(inner)
+	if err != nil {
+		line := lineOffset + getNodeLine(startPara, source) + 1
+		return nil, nil, fmt.Errorf("line %d: invalid conditional directive: %w", line, err)
 	}
 
-	return nil, start, fmt.Errorf("line %d: unclosed SQL block (missing closing ```)", start+1)
+	condition, ok := config["if"]
+	if !ok {
+		line := lineOffset + getNodeLine(startPara, source) + 1
+		return nil, nil, fmt.Errorf("line %d: conditional directive missing condition", line)
+	}
+	condStr, ok := condition.(string)
+	if !ok {
+		line := lineOffset + getNodeLine(startPara, source) + 1
+		return nil, nil, fmt.Errorf("line %d: conditional expression must be a string", line)
+	}
+
+	var children []Node
+	var lastSibling ast.Node
+
+	for sibling := startChild.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+		lastSibling = sibling
+
+		// Check if this is a {/if} paragraph.
+		if para, ok := sibling.(*ast.Paragraph); ok {
+			paraText := strings.TrimSpace(extractParagraphText(para, source))
+			if paraText == "{/if}" {
+				return &ConditionalNode{
+					Condition: condStr,
+					Children:  children,
+					Line:      lineOffset + getNodeLine(startPara, source) + 1,
+				}, lastSibling, nil
+			}
+		}
+
+		// Otherwise, process this sibling as a child node.
+		childNodes, err := processASTNode(sibling, source, lineOffset)
+		if err != nil {
+			return nil, nil, err
+		}
+		children = append(children, childNodes...)
+	}
+
+	line := lineOffset + getNodeLine(startPara, source) + 1
+	return nil, nil, fmt.Errorf("line %d: unclosed {if:} block (missing {/if})", line)
+}
+
+// processASTNode processes a single goldmark AST node into page nodes.
+func processASTNode(n ast.Node, source []byte, lineOffset int) ([]Node, error) {
+	// Process individual node types directly.
+	switch node := n.(type) {
+	case *ast.FencedCodeBlock:
+		lang := string(node.Language(source))
+		if strings.HasPrefix(lang, "sql") {
+			sqlNode, err := parseSQLFencedBlock(node, source, lang, lineOffset)
+			if err != nil {
+				return nil, err
+			}
+			return []Node{sqlNode}, nil
+		}
+		var buf bytes.Buffer
+		buf.WriteString("```")
+		buf.WriteString(lang)
+		buf.WriteString("\n")
+		for i := 0; i < node.Lines().Len(); i++ {
+			line := node.Lines().At(i)
+			buf.Write(line.Value(source))
+		}
+		buf.WriteString("```")
+		return []Node{&TextNode{Content: buf.String()}}, nil
+
+	case *ast.Paragraph:
+		content := extractParagraphText(node, source)
+		trimmed := strings.TrimSpace(content)
+		if isDirectiveLine(trimmed) && !isConditionalEnd(trimmed) && !isConditionalStart(trimmed) {
+			dirNode, err := parseDirective(trimmed, lineOffset+getNodeLine(node, source))
+			if err != nil {
+				return nil, err
+			}
+			return []Node{dirNode}, nil
+		}
+		return []Node{&TextNode{Content: content}}, nil
+
+	default:
+		content := extractNodeSource(n, source)
+		if content != "" {
+			return []Node{&TextNode{Content: content}}, nil
+		}
+	}
+	return nil, nil
+}
+
+// extractParagraphText extracts the raw text content of a paragraph node.
+func extractParagraphText(n *ast.Paragraph, source []byte) string {
+	var buf strings.Builder
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			buf.Write(t.Segment.Value(source))
+			if t.SoftLineBreak() || t.HardLineBreak() {
+				buf.WriteString("\n")
+			}
+		} else if raw, ok := c.(*ast.RawHTML); ok {
+			for i := 0; i < raw.Segments.Len(); i++ {
+				seg := raw.Segments.At(i)
+				buf.Write(seg.Value(source))
+			}
+		} else {
+			// For inline elements (emphasis, links, code spans, etc.),
+			// extract their raw source.
+			extractInlineText(c, source, &buf)
+		}
+	}
+	return buf.String()
+}
+
+// extractInlineText recursively extracts text from inline AST nodes.
+func extractInlineText(n ast.Node, source []byte, buf *strings.Builder) {
+	if t, ok := n.(*ast.Text); ok {
+		buf.Write(t.Segment.Value(source))
+		if t.SoftLineBreak() || t.HardLineBreak() {
+			buf.WriteString("\n")
+		}
+		return
+	}
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		extractInlineText(c, source, buf)
+	}
+}
+
+// extractNodeSource extracts the raw source lines covered by an AST node.
+func extractNodeSource(n ast.Node, source []byte) string {
+	var buf bytes.Buffer
+
+	// For block nodes with lines (like paragraphs, headings with content).
+	if block, ok := n.(interface{ Lines() *text.Segments }); ok {
+		lines := block.Lines()
+		for i := 0; i < lines.Len(); i++ {
+			seg := lines.At(i)
+			buf.Write(seg.Value(source))
+		}
+		if buf.Len() > 0 {
+			return strings.TrimRight(buf.String(), "\n")
+		}
+	}
+
+	// For container blocks (lists, blockquotes), reconstruct from children.
+	// Walk children and collect their source text.
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		childText := extractNodeSource(c, source)
+		if childText != "" {
+			if buf.Len() > 0 {
+				buf.WriteString("\n")
+			}
+			buf.WriteString(childText)
+		}
+	}
+
+	// Fallback: try to get text content for leaf nodes.
+	if buf.Len() == 0 {
+		if t, ok := n.(*ast.Text); ok {
+			buf.Write(t.Segment.Value(source))
+		}
+	}
+
+	return strings.TrimRight(buf.String(), "\n")
+}
+
+// getNodeLine returns the 0-based line number of a goldmark node by counting
+// newlines in the source up to the node's first byte.
+func getNodeLine(n ast.Node, source []byte) int {
+	if block, ok := n.(interface{ Lines() *text.Segments }); ok {
+		if block.Lines().Len() > 0 {
+			seg := block.Lines().At(0)
+			return bytes.Count(source[:seg.Start], []byte("\n"))
+		}
+	}
+	// For fenced code blocks, use the info segment.
+	if fcb, ok := n.(*ast.FencedCodeBlock); ok {
+		if fcb.Info != nil {
+			return bytes.Count(source[:fcb.Info.Segment.Start], []byte("\n"))
+		}
+	}
+	return 0
 }
 
 // isDirectiveLine checks if a line looks like a directive: {type: ...}.
@@ -204,36 +400,9 @@ func isConditionalStart(trimmed string) bool {
 	return strings.HasPrefix(inner, "if:")
 }
 
-// parseConditional parses an {if: "expr"} ... {/if} block.
-func parseConditional(lines []string, start int) (*ConditionalNode, int, error) {
-	trimmed := strings.TrimSpace(lines[start])
-	inner := trimmed[1 : len(trimmed)-1]
-
-	config, err := parseDirectiveYAML(inner)
-	if err != nil {
-		return nil, start, fmt.Errorf("line %d: invalid conditional directive: %w", start+1, err)
-	}
-
-	condition, ok := config["if"]
-	if !ok {
-		return nil, start, fmt.Errorf("line %d: conditional directive missing condition", start+1)
-	}
-
-	condStr, ok := condition.(string)
-	if !ok {
-		return nil, start, fmt.Errorf("line %d: conditional expression must be a string", start+1)
-	}
-
-	children, endIdx, err := parseNodes(lines, start+1, true)
-	if err != nil {
-		return nil, start, err
-	}
-
-	return &ConditionalNode{
-		Condition: condStr,
-		Children:  children,
-		Line:      start + 1,
-	}, endIdx, nil
+// isConditionalEnd checks if a line is a {/if} closing tag.
+func isConditionalEnd(trimmed string) bool {
+	return trimmed == "{/if}"
 }
 
 // parseDirective parses a single directive line into a DirectiveNode.

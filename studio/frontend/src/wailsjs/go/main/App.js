@@ -6,8 +6,8 @@ export function CloseFile() {
   return window['go']['main']['App']['CloseFile']();
 }
 
-export function CreateFile(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['CreateFile'](arg1, arg2, arg3, arg4, arg5);
+export function CreateFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateFile'](arg1, arg2, arg3, arg4);
 }
 
 export function CreateHTMLPage(arg1, arg2) {
@@ -42,8 +42,8 @@ export function DropTable(arg1) {
   return window['go']['main']['App']['DropTable'](arg1);
 }
 
-export function ExecuteQuery(arg1, arg2) {
-  return window['go']['main']['App']['ExecuteQuery'](arg1, arg2);
+export function ExecuteQuery(arg1) {
+  return window['go']['main']['App']['ExecuteQuery'](arg1);
 }
 
 export function ExportTableCSV(arg1) {
@@ -52,6 +52,10 @@ export function ExportTableCSV(arg1) {
 
 export function ExportTableJSON(arg1) {
   return window['go']['main']['App']['ExportTableJSON'](arg1);
+}
+
+export function GetAgentStatus() {
+  return window['go']['main']['App']['GetAgentStatus']();
 }
 
 export function GetAllMeta() {
@@ -118,8 +122,8 @@ export function SaveFile() {
   return window['go']['main']['App']['SaveFile']();
 }
 
-export function SaveQuery(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4, arg5);
+export function SaveQuery(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4);
 }
 
 export function SelectCSVFile() {
@@ -132,6 +136,10 @@ export function SelectNewVibeFile() {
 
 export function SelectVibeFile() {
   return window['go']['main']['App']['SelectVibeFile']();
+}
+
+export function SendAgentQuery(arg1) {
+  return window['go']['main']['App']['SendAgentQuery'](arg1);
 }
 
 export function SetMeta(arg1, arg2) {
