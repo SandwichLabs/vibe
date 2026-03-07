@@ -14,7 +14,7 @@ func (r *Renderer) RenderMetric(cfg *renderer.MetricConfig) (string, error) {
 		return "", fmt.Errorf("metric config is required")
 	}
 
-	formattedValue := formatMetricValue(cfg.Value, cfg.Format)
+	formattedValue := formatMetricValue(cfg)
 	escapedLabel := html.EscapeString(cfg.Label)
 	escapedValue := html.EscapeString(formattedValue)
 
@@ -30,30 +30,38 @@ func (r *Renderer) RenderMetric(cfg *renderer.MetricConfig) (string, error) {
 	return b.String(), nil
 }
 
-// formatMetricValue formats a value according to the specified format type.
-func formatMetricValue(value any, format string) string {
-	if value == nil {
+// formatMetricValue formats a metric value. If cfg.Fmt is set, uses the
+// Evidence-compatible format system. Otherwise falls back to legacy Format field.
+func formatMetricValue(cfg *renderer.MetricConfig) string {
+	if cfg.Value == nil {
 		return "--"
 	}
 
-	switch format {
+	// Prefer the new Evidence-compatible Fmt code
+	if cfg.Fmt != "" {
+		return renderer.Format(cfg.Value, cfg.Fmt)
+	}
+
+	// Legacy format field fallback
+	switch cfg.Format {
 	case "currency":
-		return fmt.Sprintf("$%s", formatNumber(toFloat64(value)))
+		return fmt.Sprintf("$%s", legacyFormatNumber(renderer.ToFloat64(cfg.Value)))
 	case "percent":
-		return fmt.Sprintf("%s%%", formatNumber(toFloat64(value)))
+		return fmt.Sprintf("%s%%", legacyFormatNumber(renderer.ToFloat64(cfg.Value)))
 	case "bytes":
-		return formatBytes(toFloat64(value))
+		return formatBytes(renderer.ToFloat64(cfg.Value))
 	case "duration":
-		return formatDuration(toFloat64(value))
+		return formatDuration(renderer.ToFloat64(cfg.Value))
 	case "number":
-		return formatNumber(toFloat64(value))
+		return legacyFormatNumber(renderer.ToFloat64(cfg.Value))
 	default:
-		return fmt.Sprintf("%v", value)
+		return fmt.Sprintf("%v", cfg.Value)
 	}
 }
 
-// formatNumber formats a float64 with comma separators and up to two decimal places.
-func formatNumber(v float64) string {
+// legacyFormatNumber formats a float64 with comma separators and up to two decimal places.
+// This preserves the original behavior for the legacy Format field.
+func legacyFormatNumber(v float64) string {
 	// Format with up to 2 decimal places, trimming trailing zeros
 	s := fmt.Sprintf("%.2f", v)
 	s = strings.TrimRight(s, "0")
@@ -99,7 +107,7 @@ func formatBytes(bytes float64) string {
 		v /= 1024
 		unit++
 	}
-	return fmt.Sprintf("%s %s", formatNumber(v), units[unit])
+	return fmt.Sprintf("%s %s", legacyFormatNumber(v), units[unit])
 }
 
 // formatDuration formats seconds into a human-readable duration.

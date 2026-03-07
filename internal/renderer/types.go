@@ -18,6 +18,7 @@ type TableConfig struct {
 	PageSize  int
 	Sortable  bool
 	Searchable bool
+	ColumnFmt map[string]string // Evidence-compatible format codes per column name
 	Result    *ResultSet
 }
 
@@ -27,6 +28,8 @@ type ChartConfig struct {
 	Type   string // bar, line, area, scatter, pie
 	X      string
 	Y      string
+	XFmt   string // Evidence-compatible format code for X axis labels
+	YFmt   string // Evidence-compatible format code for Y axis labels
 	Title  string
 	Color  string
 	Result *ResultSet
@@ -36,6 +39,7 @@ type ChartConfig struct {
 type MetricConfig struct {
 	Label  string
 	Format string // number, currency, percent, bytes, duration
+	Fmt    string // Evidence-compatible format code (e.g., num0, usd2, pct1)
 	Value  any
 }
 

@@ -47,8 +47,18 @@ func (r *Renderer) RenderTable(cfg *renderer.TableConfig) (string, error) {
 	b.WriteString("    <tbody>\n")
 	for _, row := range cfg.Result.Rows {
 		b.WriteString("      <tr>\n")
-		for _, cell := range row {
-			b.WriteString(fmt.Sprintf("        <td>%s</td>\n", html.EscapeString(formatValue(cell))))
+		for i, cell := range row {
+			var cellStr string
+			if cfg.ColumnFmt != nil && i < len(cfg.Result.Columns) {
+				if fmtCode, ok := cfg.ColumnFmt[cfg.Result.Columns[i].Name]; ok && fmtCode != "" {
+					cellStr = renderer.Format(cell, fmtCode)
+				} else {
+					cellStr = formatValue(cell)
+				}
+			} else {
+				cellStr = formatValue(cell)
+			}
+			b.WriteString(fmt.Sprintf("        <td>%s</td>\n", html.EscapeString(cellStr)))
 		}
 		b.WriteString("      </tr>\n")
 	}

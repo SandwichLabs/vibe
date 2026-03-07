@@ -26,7 +26,7 @@ var (
 
 // renderMetric renders a MetricConfig as a large styled value with a label.
 func renderMetric(cfg *renderer.MetricConfig, maxWidth int) string {
-	formattedValue := formatMetricValue(cfg.Value, cfg.Format)
+	formattedValue := formatMetricValue(cfg)
 
 	boxWidth := maxWidth / 3
 	if boxWidth < 20 {
@@ -44,32 +44,40 @@ func renderMetric(cfg *renderer.MetricConfig, maxWidth int) string {
 	return metricBoxStyle.Width(boxWidth).Render(content)
 }
 
-// formatMetricValue formats a value according to the specified format type.
-func formatMetricValue(value any, format string) string {
-	if value == nil {
+// formatMetricValue formats a metric value. If cfg.Fmt is set, uses the
+// Evidence-compatible format system. Otherwise falls back to legacy Format field.
+func formatMetricValue(cfg *renderer.MetricConfig) string {
+	if cfg.Value == nil {
 		return "--"
 	}
 
-	f := toFloat(value)
+	// Prefer the new Evidence-compatible Fmt code
+	if cfg.Fmt != "" {
+		return renderer.Format(cfg.Value, cfg.Fmt)
+	}
 
-	switch format {
+	// Legacy format field fallback
+	f := renderer.ToFloat64(cfg.Value)
+
+	switch cfg.Format {
 	case "currency":
-		return fmt.Sprintf("$%s", formatNumber(f))
+		return fmt.Sprintf("$%s", legacyFormatNumber(f))
 	case "percent":
-		return fmt.Sprintf("%s%%", formatNumber(f))
+		return fmt.Sprintf("%s%%", legacyFormatNumber(f))
 	case "bytes":
 		return formatBytes(f)
 	case "duration":
 		return formatDuration(f)
 	case "number":
-		return formatNumber(f)
+		return legacyFormatNumber(f)
 	default:
-		return fmt.Sprintf("%v", value)
+		return fmt.Sprintf("%v", cfg.Value)
 	}
 }
 
-// formatNumber formats a float64 with comma separators and up to two decimal places.
-func formatNumber(v float64) string {
+// legacyFormatNumber formats a float64 with comma separators and up to two decimal places.
+// This preserves the original behavior for the legacy Format field.
+func legacyFormatNumber(v float64) string {
 	s := fmt.Sprintf("%.2f", v)
 	s = strings.TrimRight(s, "0")
 	s = strings.TrimRight(s, ".")
@@ -113,7 +121,7 @@ func formatBytes(bytes float64) string {
 		v /= 1024
 		unit++
 	}
-	return fmt.Sprintf("%s %s", formatNumber(v), units[unit])
+	return fmt.Sprintf("%s %s", legacyFormatNumber(v), units[unit])
 }
 
 // formatDuration formats seconds into a human-readable duration.

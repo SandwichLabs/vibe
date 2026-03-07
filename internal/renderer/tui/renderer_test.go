@@ -153,7 +153,8 @@ func TestFormatMetricValue(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := formatMetricValue(tt.value, tt.format)
+		cfg := &renderer.MetricConfig{Value: tt.value, Format: tt.format}
+		result := formatMetricValue(cfg)
 		assert.Equal(t, tt.expected, result, "format=%s value=%v", tt.format, tt.value)
 	}
 }

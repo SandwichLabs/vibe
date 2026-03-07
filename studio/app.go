@@ -414,6 +414,7 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		return a.renderer.RenderTable(&renderer.TableConfig{
 			Source:    getStringConfig(node.Config, "source"),
 			Sortable: true,
+			ColumnFmt: getStringMapConfig(node.Config, "fmt"),
 			Result:   rrs,
 		})
 
@@ -433,9 +434,12 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		if rrs != nil && len(rrs.Rows) > 0 && len(rrs.Rows[0]) > 0 {
 			value = rrs.Rows[0][0]
 		}
+		// Support both "fmt" key and legacy "format" key
+		fmtCode := getStringConfig(node.Config, "fmt")
 		return a.renderer.RenderMetric(&renderer.MetricConfig{
 			Label:  getStringConfig(node.Config, "label"),
 			Format: getStringConfig(node.Config, "format"),
+			Fmt:    fmtCode,
 			Value:  value,
 		})
 
@@ -463,6 +467,29 @@ func getStringConfig(config map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+// getStringMapConfig extracts a map[string]string from a config map value.
+// Handles both map[string]any and map[string]string input types.
+func getStringMapConfig(config map[string]any, key string) map[string]string {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch m := v.(type) {
+	case map[string]string:
+		return m
+	case map[string]any:
+		result := make(map[string]string, len(m))
+		for k, val := range m {
+			if s, ok := val.(string); ok {
+				result[k] = s
+			}
+		}
+		return result
+	default:
+		return nil
+	}
 }
 
 // CreatePage creates a new page and returns its ID.

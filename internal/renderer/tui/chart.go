@@ -128,31 +128,10 @@ func extractChartValues(cfg *renderer.ChartConfig) (labels []string, values []fl
 			labels = append(labels, fmt.Sprintf("%v", row[xIdx]))
 		}
 		if yIdx < len(row) {
-			values = append(values, toFloat(row[yIdx]))
+			values = append(values, renderer.ToFloat64(row[yIdx]))
 		}
 	}
 
 	return labels, values
 }
 
-// toFloat converts a value to float64.
-func toFloat(v any) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case float32:
-		return float64(val)
-	case int:
-		return float64(val)
-	case int64:
-		return float64(val)
-	case int32:
-		return float64(val)
-	case string:
-		var f float64
-		fmt.Sscanf(val, "%f", &f)
-		return f
-	default:
-		return 0
-	}
-}
