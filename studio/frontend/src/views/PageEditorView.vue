@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
+import { vibeToolbarButtons, insertSnippet } from '../lib/vibeToolbar'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,6 +14,9 @@ const loading = ref(true)
 const saving = ref(false)
 const previewLoading = ref(false)
 const errorMessage = ref('')
+
+const editorEl = ref<HTMLElement | null>(null)
+let editorInstance: VibeEditorInstance | null = null
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -54,6 +59,37 @@ function debouncedPreview() {
 
 watch(content, debouncedPreview)
 
+/** Initialise CodeMirror once the editor container is in the DOM. */
+function initEditor() {
+  if (!editorEl.value || editorInstance) return
+  editorInstance = createVibeEditor(editorEl.value, {
+    value: content.value,
+    onChange: (val: string) => {
+      content.value = val
+    },
+  })
+}
+
+/** Keep the editor in sync when content is loaded externally (page load). */
+watch(loading, (isLoading) => {
+  if (!isLoading) {
+    // Wait one tick for the DOM to render
+    setTimeout(() => {
+      if (editorInstance) {
+        editorInstance.setValue(content.value)
+      } else {
+        initEditor()
+      }
+    }, 0)
+  }
+})
+
+function handleToolbarClick(snippet: string) {
+  if (editorInstance) {
+    insertSnippet(editorInstance.view, snippet)
+  }
+}
+
 async function save() {
   if (!page.value) return
   saving.value = true
@@ -72,6 +108,14 @@ function goBack() {
 
 onMounted(loadPage)
 
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (editorInstance) {
+    editorInstance.destroy()
+    editorInstance = null
+  }
+})
+
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
 })
@@ -79,7 +123,7 @@ watch(errorMessage, (msg) => {
 
 <template>
   <div class="flex flex-col h-full">
-    <!-- Toolbar -->
+    <!-- Top Toolbar -->
     <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center gap-3">
       <button @click="goBack" class="btn btn-ghost btn-sm">&larr; Back</button>
       <input v-model="title" class="field-input flex-1" placeholder="Page title" />
@@ -93,13 +137,21 @@ watch(errorMessage, (msg) => {
     <!-- Editor + Preview -->
     <div v-else class="flex flex-1 min-h-0">
       <div class="w-1/2 flex flex-col border-r-3 border-black">
-        <div class="px-3 py-1.5 bg-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black">{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</div>
-        <textarea
-          v-model="content"
-          class="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-white"
-          placeholder="Write your page content here..."
-          spellcheck="false"
-        ></textarea>
+        <!-- Source label + Vibe directive toolbar -->
+        <div class="px-3 py-1.5 bg-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black flex items-center gap-2">
+          <span>{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</span>
+          <span class="flex-1"></span>
+          <button
+            v-for="btn in vibeToolbarButtons"
+            :key="btn.id"
+            @click="handleToolbarClick(btn.snippet)"
+            :title="btn.tooltip"
+            class="vibe-toolbar-btn"
+            v-html="btn.icon"
+          ></button>
+        </div>
+        <!-- CodeMirror editor container -->
+        <div ref="editorEl" class="flex-1 min-h-0 overflow-hidden"></div>
       </div>
       <div class="w-1/2 flex flex-col">
         <div class="px-3 py-1.5 bg-black text-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black">
@@ -116,3 +168,30 @@ watch(errorMessage, (msg) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.vibe-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  background: #fff;
+  border: 2px solid #000;
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.vibe-toolbar-btn:hover {
+  background: #000;
+  color: #FFD700;
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px #000;
+}
+
+.vibe-toolbar-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+</style>
