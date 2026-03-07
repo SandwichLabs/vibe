@@ -272,3 +272,132 @@ func TestResolveLinks(t *testing.T) {
 	assert.Contains(t, result, "[inventory](/pages/inventory)")
 	assert.NotContains(t, result, "[[")
 }
+
+func TestFrontmatterVarsInSQL(t *testing.T) {
+	page := &Page{
+		Frontmatter: Frontmatter{
+			Extra: map[string]string{
+				"category": "electronics",
+			},
+		},
+		Nodes: []Node{
+			&SQLBlockNode{
+				Name: "filtered",
+				SQL:  "SELECT * FROM products WHERE category = ${category}",
+				Line: 1,
+			},
+		},
+	}
+
+	eng := newMockEngine()
+	eng.AddResult("SELECT * FROM products WHERE category = 'electronics'", &ResultSet{
+		Columns: []Column{{Name: "name", Type: "text"}},
+		Rows:    [][]any{{"Laptop"}},
+	})
+
+	result, err := Execute(context.Background(), page, eng, nil)
+	require.NoError(t, err)
+	require.Len(t, eng.calls, 1)
+	assert.Equal(t, "SELECT * FROM products WHERE category = 'electronics'", eng.calls[0].SQL)
+	assert.NotNil(t, result.Variables)
+	assert.Equal(t, "electronics", result.Variables["category"])
+}
+
+func TestExternalParamOverridesFrontmatter(t *testing.T) {
+	page := &Page{
+		Frontmatter: Frontmatter{
+			Extra: map[string]string{
+				"category": "electronics",
+			},
+		},
+		Nodes: []Node{
+			&SQLBlockNode{
+				Name: "filtered",
+				SQL:  "SELECT * FROM products WHERE category = ${category}",
+				Line: 1,
+			},
+		},
+	}
+
+	eng := newMockEngine()
+	eng.AddResult("SELECT * FROM products WHERE category = 'clothing'", &ResultSet{
+		Columns: []Column{{Name: "name", Type: "text"}},
+		Rows:    [][]any{{"Shirt"}},
+	})
+
+	params := map[string]any{"category": "clothing"}
+	result, err := Execute(context.Background(), page, eng, params)
+	require.NoError(t, err)
+	require.Len(t, eng.calls, 1)
+	// External param "clothing" should override frontmatter "electronics".
+	assert.Equal(t, "SELECT * FROM products WHERE category = 'clothing'", eng.calls[0].SQL)
+	assert.Equal(t, "clothing", result.Variables["category"])
+}
+
+func TestConditionalSQLRemoval(t *testing.T) {
+	// When variable is unset, conditional block is removed.
+	sql := "SELECT * FROM products {#if category}WHERE category = ${category}{/if}"
+	result := substituteSQL(sql, map[string]any{})
+	assert.Equal(t, "SELECT * FROM products ", result)
+}
+
+func TestConditionalSQLInclusion(t *testing.T) {
+	// When variable is set, conditional block content is included.
+	sql := "SELECT * FROM products {#if category}WHERE category = ${category}{/if}"
+	result := substituteSQL(sql, map[string]any{"category": "books"})
+	assert.Equal(t, "SELECT * FROM products WHERE category = 'books'", result)
+}
+
+func TestConditionalSQLEmptyStringRemoval(t *testing.T) {
+	sql := "SELECT * FROM products {#if category}WHERE category = ${category}{/if}"
+	result := substituteSQL(sql, map[string]any{"category": ""})
+	assert.Equal(t, "SELECT * FROM products ", result)
+}
+
+func TestConditionalSQLFalseRemoval(t *testing.T) {
+	sql := "SELECT * FROM products {#if active}WHERE active = true{/if}"
+	result := substituteSQL(sql, map[string]any{"active": false})
+	assert.Equal(t, "SELECT * FROM products ", result)
+}
+
+func TestSubstituteSQLNumericValue(t *testing.T) {
+	sql := "SELECT * FROM products LIMIT ${limit}"
+	result := substituteSQL(sql, map[string]any{"limit": 10})
+	assert.Equal(t, "SELECT * FROM products LIMIT 10", result)
+}
+
+func TestSubstituteSQLNilValue(t *testing.T) {
+	sql := "SELECT * FROM products WHERE category = ${category}"
+	result := substituteSQL(sql, map[string]any{})
+	assert.Equal(t, "SELECT * FROM products WHERE category = NULL", result)
+}
+
+func TestSubstituteSQLEscapesSingleQuotes(t *testing.T) {
+	sql := "SELECT * FROM products WHERE name = ${name}"
+	result := substituteSQL(sql, map[string]any{"name": "it's a test"})
+	assert.Equal(t, "SELECT * FROM products WHERE name = 'it''s a test'", result)
+}
+
+func TestVariablesPopulatedInExecutedPage(t *testing.T) {
+	page := &Page{
+		Frontmatter: Frontmatter{
+			Extra: map[string]string{
+				"region": "us-east",
+				"limit":  "100",
+			},
+		},
+		Nodes: []Node{
+			&TextNode{Content: "# Report"},
+		},
+	}
+
+	eng := newMockEngine()
+	params := map[string]any{"limit": "50"}
+	result, err := Execute(context.Background(), page, eng, params)
+	require.NoError(t, err)
+
+	// External param overrides frontmatter.
+	assert.Equal(t, "50", result.Variables["limit"])
+	// Frontmatter var preserved when no override.
+	assert.Equal(t, "us-east", result.Variables["region"])
+}

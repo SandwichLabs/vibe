@@ -3,6 +3,8 @@ package pages
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 // QueryEngine is the interface the executor needs to run SQL queries.
@@ -27,6 +29,7 @@ type Column struct {
 type ExecutedPage struct {
 	Frontmatter Frontmatter
 	Nodes       []ExecutedNode
+	Variables   map[string]any
 }
 
 // ExecutedNode pairs an AST node with its optional query result.
@@ -42,12 +45,22 @@ func Execute(ctx context.Context, page *Page, engine QueryEngine, params map[str
 		params = make(map[string]any)
 	}
 
+	// Build variable registry: frontmatter Extra first, then external params override.
+	variables := make(map[string]any)
+	for k, v := range page.Frontmatter.Extra {
+		variables[k] = v
+	}
+	for k, v := range params {
+		variables[k] = v
+	}
+
 	results := make(map[string]*ResultSet)
 	executed := &ExecutedPage{
 		Frontmatter: page.Frontmatter,
+		Variables:   variables,
 	}
 
-	nodes, err := executeNodes(ctx, page.Nodes, engine, params, results)
+	nodes, err := executeNodes(ctx, page.Nodes, engine, params, results, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +69,7 @@ func Execute(ctx context.Context, page *Page, engine QueryEngine, params map[str
 }
 
 // executeNodes processes a slice of nodes, executing SQL and resolving references.
-func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params map[string]any, results map[string]*ResultSet) ([]ExecutedNode, error) {
+func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params map[string]any, results map[string]*ResultSet, variables map[string]any) ([]ExecutedNode, error) {
 	var executed []ExecutedNode
 
 	for _, node := range nodes {
@@ -65,7 +78,8 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 			executed = append(executed, ExecutedNode{Node: n})
 
 		case *SQLBlockNode:
-			rs, err := engine.Execute(ctx, n.SQL, params)
+			sql := substituteSQL(n.SQL, variables)
+			rs, err := engine.Execute(ctx, sql, params)
 			if err != nil {
 				return nil, fmt.Errorf("line %d: failed to execute SQL block %q: %w", n.Line, n.Name, err)
 			}
@@ -82,6 +96,7 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 					if !ok {
 						return nil, fmt.Errorf("line %d: metric sql must be a string", n.Line)
 					}
+					sqlStr = substituteSQL(sqlStr, variables)
 					rs, err := engine.Execute(ctx, sqlStr, params)
 					if err != nil {
 						return nil, fmt.Errorf("line %d: failed to execute inline metric SQL: %w", n.Line, err)
@@ -107,7 +122,7 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 
 		case *ConditionalNode:
 			// Execute children recursively.
-			children, err := executeNodes(ctx, n.Children, engine, params, results)
+			children, err := executeNodes(ctx, n.Children, engine, params, results, variables)
 			if err != nil {
 				return nil, err
 			}
@@ -135,4 +150,83 @@ func extractNodes(executed []ExecutedNode) []Node {
 		nodes[i] = en.Node
 	}
 	return nodes
+}
+
+// varPattern matches ${varname} placeholders in SQL.
+var varPattern = regexp.MustCompile(`\$\{(\w+)\}`)
+
+// conditionalPattern matches {#if var}...{/if} blocks in SQL.
+var conditionalPattern = regexp.MustCompile(`(?s)\{#if\s+(\w+)\}(.*?)\{/if\}`)
+
+// substituteSQL replaces ${varname} placeholders and {#if var}...{/if} conditional
+// blocks in SQL text using the provided variable map.
+func substituteSQL(sql string, variables map[string]any) string {
+	// Process conditionals first.
+	sql = conditionalPattern.ReplaceAllStringFunc(sql, func(match string) string {
+		sub := conditionalPattern.FindStringSubmatch(match)
+		if len(sub) != 3 {
+			return match
+		}
+		varName := sub[1]
+		body := sub[2]
+		if isVarSet(variables, varName) {
+			return body
+		}
+		return ""
+	})
+
+	// Then substitute ${var} placeholders.
+	sql = varPattern.ReplaceAllStringFunc(sql, func(match string) string {
+		sub := varPattern.FindStringSubmatch(match)
+		if len(sub) != 2 {
+			return match
+		}
+		varName := sub[1]
+		val, ok := variables[varName]
+		if !ok || val == nil {
+			return "NULL"
+		}
+		return formatSQLValue(val)
+	})
+
+	return sql
+}
+
+// isVarSet returns true if the variable exists and is non-empty/non-nil/non-false.
+func isVarSet(variables map[string]any, name string) bool {
+	val, ok := variables[name]
+	if !ok || val == nil {
+		return false
+	}
+	switch v := val.(type) {
+	case string:
+		return v != ""
+	case bool:
+		return v
+	default:
+		return true
+	}
+}
+
+// formatSQLValue formats a Go value for safe inclusion in SQL text.
+func formatSQLValue(val any) string {
+	switch v := val.(type) {
+	case string:
+		escaped := strings.ReplaceAll(v, "'", "''")
+		return "'" + escaped + "'"
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", v)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", v)
+	case float32, float64:
+		return fmt.Sprintf("%g", v)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	default:
+		escaped := strings.ReplaceAll(fmt.Sprintf("%v", v), "'", "''")
+		return "'" + escaped + "'"
+	}
 }
