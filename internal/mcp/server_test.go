@@ -19,10 +19,11 @@ type mockContainer struct {
 }
 
 func (m *mockContainer) SQLiteDB() *sql.DB { return m.db }
+func (m *mockContainer) DuckDBDB() *sql.DB { return m.db }
 
 type mockEngine struct{}
 
-func (m *mockEngine) Execute(_ context.Context, sqlStr string, eng string, params map[string]any) (*engine.ResultSet, error) {
+func (m *mockEngine) Execute(_ context.Context, sqlStr string, params map[string]any) (*engine.ResultSet, error) {
 	return &engine.ResultSet{
 		Columns: []engine.Column{{Name: "id", Type: "INTEGER"}},
 		Rows:    [][]any{{1}},

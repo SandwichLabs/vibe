@@ -16,9 +16,8 @@ type mockEngine struct {
 }
 
 type mockCall struct {
-	SQL        string
-	EngineName string
-	Params     map[string]any
+	SQL    string
+	Params map[string]any
 }
 
 func newMockEngine() *mockEngine {
@@ -31,8 +30,8 @@ func (m *mockEngine) AddResult(sql string, rs *ResultSet) {
 	m.results[sql] = rs
 }
 
-func (m *mockEngine) Execute(_ context.Context, sql string, engineName string, params map[string]any) (*ResultSet, error) {
-	m.calls = append(m.calls, mockCall{SQL: sql, EngineName: engineName, Params: params})
+func (m *mockEngine) Execute(_ context.Context, sql string, params map[string]any) (*ResultSet, error) {
+	m.calls = append(m.calls, mockCall{SQL: sql, Params: params})
 	if rs, ok := m.results[sql]; ok {
 		return rs, nil
 	}
@@ -43,10 +42,9 @@ func TestExecuteSQLBlocks(t *testing.T) {
 	page := &Page{
 		Nodes: []Node{
 			&SQLBlockNode{
-				Name:   "revenue",
-				Engine: "duckdb",
-				SQL:    "SELECT month, total FROM sales",
-				Line:   1,
+				Name: "revenue",
+				SQL:  "SELECT month, total FROM sales",
+				Line: 1,
 			},
 		},
 	}
@@ -64,17 +62,16 @@ func TestExecuteSQLBlocks(t *testing.T) {
 
 	assert.Equal(t, expected, result.Nodes[0].Result)
 	require.Len(t, engine.calls, 1)
-	assert.Equal(t, "duckdb", engine.calls[0].EngineName)
+	assert.Equal(t, "SELECT month, total FROM sales", engine.calls[0].SQL)
 }
 
 func TestExecuteDirectiveReferencesValidResult(t *testing.T) {
 	page := &Page{
 		Nodes: []Node{
 			&SQLBlockNode{
-				Name:   "data",
-				Engine: "duckdb",
-				SQL:    "SELECT 1 AS val",
-				Line:   1,
+				Name: "data",
+				SQL:  "SELECT 1 AS val",
+				Line: 1,
 			},
 			&DirectiveNode{
 				Type:   "table",
@@ -149,6 +146,7 @@ func TestExecuteInlineMetricSQL(t *testing.T) {
 }
 
 func TestExecuteInlineMetricWithEngine(t *testing.T) {
+	// engine config is accepted but ignored; all queries run on DuckDB
 	page := &Page{
 		Nodes: []Node{
 			&DirectiveNode{
@@ -173,7 +171,7 @@ func TestExecuteInlineMetricWithEngine(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, engine.calls, 1)
-	assert.Equal(t, "sqlite", engine.calls[0].EngineName)
+	assert.Equal(t, "SELECT COUNT(*) FROM users", engine.calls[0].SQL)
 }
 
 func TestExecuteTextNodesPassThrough(t *testing.T) {
@@ -199,10 +197,9 @@ func TestExecuteSQLBlockError(t *testing.T) {
 	page := &Page{
 		Nodes: []Node{
 			&SQLBlockNode{
-				Name:   "bad_query",
-				Engine: "duckdb",
-				SQL:    "INVALID SQL",
-				Line:   3,
+				Name: "bad_query",
+				SQL:  "INVALID SQL",
+				Line: 3,
 			},
 		},
 	}
@@ -220,7 +217,7 @@ type failingEngine struct {
 	err error
 }
 
-func (e *failingEngine) Execute(_ context.Context, _ string, _ string, _ map[string]any) (*ResultSet, error) {
+func (e *failingEngine) Execute(_ context.Context, _ string, _ map[string]any) (*ResultSet, error) {
 	return nil, e.err
 }
 

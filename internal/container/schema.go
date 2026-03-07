@@ -31,7 +31,7 @@ var schemaDDL = []string{
 		id         TEXT PRIMARY KEY,
 		title      TEXT NOT NULL DEFAULT '',
 		sql        TEXT NOT NULL DEFAULT '',
-		engine     TEXT NOT NULL DEFAULT 'sqlite',
+		engine     TEXT NOT NULL DEFAULT 'duckdb',
 		parameters TEXT NOT NULL DEFAULT '{}',
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL

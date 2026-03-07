@@ -35,13 +35,14 @@ const (
 // ContainerAccess interface to avoid importing container directly.
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
+	DuckDBDB() *sql.DB
 	Save() error
 	Close() error
 }
 
 // EngineAccess interface for query execution.
 type EngineAccess interface {
-	Execute(ctx context.Context, sql string, eng string, params map[string]any) (*engine.ResultSet, error)
+	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
 // App is the top-level BubbleTea model for Vibe Studio.
@@ -112,20 +113,22 @@ func (a *App) LoadData() {
 		a.sidebar.SetPages(pages)
 	}
 
-	// Load user tables with row counts.
-	rows, err = db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%' ORDER BY name;")
-	if err == nil {
-		var tables []TableItem
-		for rows.Next() {
-			var t TableItem
-			if err := rows.Scan(&t.Name); err == nil {
-				// Get row count.
-				db.QueryRow("SELECT COUNT(*) FROM \"" + t.Name + "\";").Scan(&t.RowCount) //nolint:gosec,errcheck
-				tables = append(tables, t)
+	// Load user tables with row counts from DuckDB.
+	if duckDB := a.container.DuckDBDB(); duckDB != nil {
+		tblRows, tblErr := duckDB.Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;")
+		if tblErr == nil {
+			var tables []TableItem
+			for tblRows.Next() {
+				var t TableItem
+				if err := tblRows.Scan(&t.Name); err == nil {
+					// Get row count.
+					duckDB.QueryRow("SELECT COUNT(*) FROM \"" + t.Name + "\";").Scan(&t.RowCount) //nolint:gosec,errcheck
+					tables = append(tables, t)
+				}
 			}
+			tblRows.Close()
+			a.sidebar.SetTables(tables)
 		}
-		rows.Close()
-		a.sidebar.SetTables(tables)
 	}
 
 	// Load queries.
@@ -445,7 +448,7 @@ func (a *App) loadTableData(tableName string) tea.Cmd {
 
 		ctx := context.Background()
 		query := fmt.Sprintf("SELECT * FROM %q LIMIT 1000", tableName)
-		rs, err := a.engine.Execute(ctx, query, "sqlite", nil)
+		rs, err := a.engine.Execute(ctx, query, nil)
 		if err != nil {
 			return tableDataMsg{tableName: tableName, err: err}
 		}
@@ -489,9 +492,15 @@ func (a *App) loadTableData(tableName string) tea.Cmd {
 	}
 }
 
-// loadTableColumns gets column names for a table via PRAGMA table_info.
-func (a *App) loadTableColumns(db *sql.DB, tableName string) []string {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%q);", tableName))
+// loadTableColumns gets column names for a table via DuckDB information_schema.
+func (a *App) loadTableColumns(tableName string) []string {
+	duckDB := a.container.DuckDBDB()
+	if duckDB == nil {
+		return nil
+	}
+	rows, err := duckDB.Query(
+		"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
+		tableName)
 	if err != nil {
 		return nil
 	}
@@ -499,11 +508,8 @@ func (a *App) loadTableColumns(db *sql.DB, tableName string) []string {
 
 	var columns []string
 	for rows.Next() {
-		var cid int
 		var name, colType string
-		var notNull, pk int
-		var dfltValue sql.NullString
-		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err == nil {
+		if err := rows.Scan(&name, &colType); err == nil {
 			columns = append(columns, fmt.Sprintf("%s (%s)", name, colType))
 		}
 	}
@@ -518,7 +524,7 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 		}
 
 		ctx := context.Background()
-		rs, err := a.engine.Execute(ctx, query, "sqlite", nil)
+		rs, err := a.engine.Execute(ctx, query, nil)
 		if err != nil {
 			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
 		}

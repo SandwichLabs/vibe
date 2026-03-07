@@ -30,8 +30,8 @@ type engineAdapter struct {
 	mgr *engine.Manager
 }
 
-func (ea *engineAdapter) Execute(ctx context.Context, sql string, engineName string, params map[string]any) (*pages.ResultSet, error) {
-	rs, err := ea.mgr.Execute(ctx, sql, engineName, params)
+func (ea *engineAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*pages.ResultSet, error) {
+	rs, err := ea.mgr.Execute(ctx, sql, params)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (a *App) OpenFile(path, passphrase string) error {
 	}
 
 	a.container = c
-	a.engine = engine.NewManager(c.SQLiteDB(), c.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	runtime.EventsEmit(a.ctx, "file:opened")
@@ -159,7 +159,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	}
 
 	a.container = c
-	a.engine = engine.NewManager(c.SQLiteDB(), c.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	runtime.EventsEmit(a.ctx, "file:opened")
@@ -244,9 +244,12 @@ func (a *App) GetFileInfo() (*FileInfo, error) {
 	}
 
 	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&info.PageCount)           //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%'").Scan(&info.TableCount) //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount)        //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&info.PageCount)    //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount) //nolint:errcheck
+
+	if duckDB := a.container.DuckDBDB(); duckDB != nil {
+		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&info.TableCount) //nolint:errcheck
+	}
 
 	if fi, err := os.Stat(a.filePath); err == nil {
 		info.FileSize = fi.Size()
@@ -552,8 +555,11 @@ func (a *App) ListTables() ([]string, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	db := a.container.SQLiteDB()
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%' ORDER BY name")
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+	rows, err := db.Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tables: %w", err)
 	}
@@ -597,8 +603,13 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 		return nil, fmt.Errorf("invalid table name")
 	}
 
-	db := a.container.SQLiteDB()
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%q)", name))
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+	rows, err := db.Query(
+		"SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END AS not_null FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
+		name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe table: %w", err)
 	}
@@ -606,18 +617,16 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 
 	info := &TableInfo{Name: name}
 	for rows.Next() {
-		var cid int
 		var colName, colType string
-		var notNull, pk int
-		var dflt any
-		if err := rows.Scan(&cid, &colName, &colType, &notNull, &dflt, &pk); err != nil {
+		var notNull bool
+		if err := rows.Scan(&colName, &colType, &notNull); err != nil {
 			return nil, fmt.Errorf("failed to scan column: %w", err)
 		}
 		info.Columns = append(info.Columns, ColumnInfo{
 			Name:    colName,
 			Type:    colType,
-			NotNull: notNull == 1,
-			PK:      pk == 1,
+			NotNull: notNull,
+			PK:      false,
 		})
 	}
 	return info, rows.Err()
@@ -653,7 +662,10 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		pageSize = 50
 	}
 
-	db := a.container.SQLiteDB()
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
 
 	var totalRows int
 	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", name)).Scan(&totalRows); err != nil {
@@ -738,7 +750,11 @@ func (a *App) InsertRow(table string, values map[string]any) error {
 	}
 
 	query := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
-	_, err := a.container.SQLiteDB().Exec(query, args...)
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	_, err := ddb.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to insert row: %w", err)
 	}
@@ -766,7 +782,11 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) e
 	args = append(args, pkVal)
 
 	query := fmt.Sprintf("UPDATE %q SET %s WHERE %q = ?", table, strings.Join(setClauses, ", "), pkCol)
-	_, err := a.container.SQLiteDB().Exec(query, args...)
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	_, err := ddb.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update row: %w", err)
 	}
@@ -786,7 +806,11 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) error {
 	}
 
 	query := fmt.Sprintf("DELETE FROM %q WHERE %q = ?", table, pkCol)
-	_, err := a.container.SQLiteDB().Exec(query, args(pkVal)...)
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	_, err := ddb.Exec(query, args(pkVal)...)
 	if err != nil {
 		return fmt.Errorf("failed to delete row: %w", err)
 	}
@@ -820,7 +844,11 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	}
 
 	query := fmt.Sprintf("CREATE TABLE %q (%s)", name, strings.Join(colDefs, ", "))
-	_, err := a.container.SQLiteDB().Exec(query)
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	_, err := ddb.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -839,7 +867,11 @@ func (a *App) DropTable(name string) error {
 		return fmt.Errorf("invalid table name")
 	}
 
-	_, err := a.container.SQLiteDB().Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", name))
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	_, err := ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", name))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -856,8 +888,8 @@ type QueryResult struct {
 	RowCount int          `json:"row_count"`
 }
 
-// ExecuteQuery runs a SQL query on the specified engine.
-func (a *App) ExecuteQuery(sqlStr, engineName string) (*QueryResult, error) {
+// ExecuteQuery runs a SQL query on DuckDB.
+func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -865,12 +897,8 @@ func (a *App) ExecuteQuery(sqlStr, engineName string) (*QueryResult, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	if engineName == "" {
-		engineName = "sqlite"
-	}
-
 	start := time.Now()
-	rs, err := a.engine.Execute(context.Background(), sqlStr, engineName, nil)
+	rs, err := a.engine.Execute(context.Background(), sqlStr, nil)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -950,7 +978,7 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 }
 
 // SaveQuery creates or updates a saved query.
-func (a *App) SaveQuery(id, title, sqlStr, engineName, description string) error {
+func (a *App) SaveQuery(id, title, sqlStr, description string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -966,7 +994,7 @@ func (a *App) SaveQuery(id, title, sqlStr, engineName, description string) error
 		ID:         id,
 		Title:      title,
 		SQL:        sqlStr,
-		Engine:     engineName,
+		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
 
@@ -1029,9 +1057,12 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 	}
 
 	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&d.PageCount)           //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%'").Scan(&d.TableCount) //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount)        //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&d.PageCount)    //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount) //nolint:errcheck
+
+	if duckDB := a.container.DuckDBDB(); duckDB != nil {
+		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&d.TableCount) //nolint:errcheck
+	}
 
 	if fi, err := os.Stat(a.filePath); err == nil {
 		d.FileSize = fi.Size()
@@ -1060,7 +1091,7 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	rs, err := a.engine.Execute(context.Background(), query, "sqlite", nil)
+	rs, err := a.engine.Execute(context.Background(), query, nil)
 	if err != nil {
 		return &AgentResult{Error: err.Error()}, nil
 	}
@@ -1145,11 +1176,14 @@ func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 		headers[i] = strings.TrimSpace(headers[i])
 	}
 
-	db := a.container.SQLiteDB()
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
 
 	// Check if table exists; if not, create it.
 	var exists int
-	db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", tableName).Scan(&exists) //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1", tableName).Scan(&exists) //nolint:errcheck
 
 	if exists == 0 {
 		var colDefs []string
@@ -1232,8 +1266,11 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 		return "", nil
 	}
 
-	db := a.container.SQLiteDB()
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return "", fmt.Errorf("DuckDB not available")
+	}
+	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
 	if err != nil {
 		return "", fmt.Errorf("failed to query table: %w", err)
 	}
@@ -1297,8 +1334,11 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 		return "", nil
 	}
 
-	db := a.container.SQLiteDB()
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return "", fmt.Errorf("DuckDB not available")
+	}
+	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
 	if err != nil {
 		return "", fmt.Errorf("failed to query table: %w", err)
 	}
@@ -1388,8 +1428,8 @@ type engineAgentAdapter struct {
 	mgr *engine.Manager
 }
 
-func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, eng string, params map[string]any) (*engine.ResultSet, error) {
-	return ea.mgr.Execute(ctx, sql, eng, params)
+func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error) {
+	return ea.mgr.Execute(ctx, sql, params)
 }
 
 // StartMCPServer starts the MCP server for the currently open file.

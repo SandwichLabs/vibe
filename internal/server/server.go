@@ -14,11 +14,12 @@ import (
 // ContainerAccess is the interface needed from container (avoid direct import for now).
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
+	DuckDBDB() *sql.DB
 }
 
 // EngineAccess is the interface needed from engine.
 type EngineAccess interface {
-	Execute(ctx context.Context, sql string, eng string, params map[string]any) (*engine.ResultSet, error)
+	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
 // PageRenderer renders pages to HTML.

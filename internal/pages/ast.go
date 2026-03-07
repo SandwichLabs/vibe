@@ -39,11 +39,10 @@ func (n *TextNode) nodeType() string { return "text" }
 
 // SQLBlockNode represents a fenced SQL code block.
 type SQLBlockNode struct {
-	Name   string
-	Engine string        // "duckdb" | "sqlite", default "duckdb"
-	Cache  time.Duration
-	SQL    string
-	Line   int // source line number for error reporting
+	Name  string
+	Cache time.Duration
+	SQL   string
+	Line  int // source line number for error reporting
 }
 
 func (n *SQLBlockNode) nodeType() string { return "sql_block" }

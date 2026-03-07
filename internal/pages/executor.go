@@ -8,7 +8,7 @@ import (
 // QueryEngine is the interface the executor needs to run SQL queries.
 // It avoids importing the engine package directly to prevent circular imports.
 type QueryEngine interface {
-	Execute(ctx context.Context, sql string, engineName string, params map[string]any) (*ResultSet, error)
+	Execute(ctx context.Context, sql string, params map[string]any) (*ResultSet, error)
 }
 
 // ResultSet mirrors engine.ResultSet to avoid circular imports.
@@ -65,7 +65,7 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 			executed = append(executed, ExecutedNode{Node: n})
 
 		case *SQLBlockNode:
-			rs, err := engine.Execute(ctx, n.SQL, n.Engine, params)
+			rs, err := engine.Execute(ctx, n.SQL, params)
 			if err != nil {
 				return nil, fmt.Errorf("line %d: failed to execute SQL block %q: %w", n.Line, n.Name, err)
 			}
@@ -82,11 +82,7 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 					if !ok {
 						return nil, fmt.Errorf("line %d: metric sql must be a string", n.Line)
 					}
-					engineName := "duckdb"
-					if engVal, ok := n.Config["engine"]; ok {
-						engineName, _ = engVal.(string)
-					}
-					rs, err := engine.Execute(ctx, sqlStr, engineName, params)
+					rs, err := engine.Execute(ctx, sqlStr, params)
 					if err != nil {
 						return nil, fmt.Errorf("line %d: failed to execute inline metric SQL: %w", n.Line, err)
 					}

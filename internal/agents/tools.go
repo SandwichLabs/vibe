@@ -61,7 +61,6 @@ var Tools = []ToolDef{
 		Category:    "data",
 		Params: []ParamDef{
 			{Name: "sql", Type: "string", Required: true, Desc: "SQL query to execute"},
-			{Name: "engine", Type: "string", Required: false, Desc: "Query engine: sqlite or duckdb (default: sqlite)"},
 			{Name: "params", Type: "object", Required: false, Desc: "Named parameters for the query"},
 		},
 	},

@@ -5,7 +5,6 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
 const sqlText = ref('')
-const engineName = ref('sqlite')
 const result = ref<QueryResult | null>(null)
 const loading = ref(true)
 const running = ref(false)
@@ -29,7 +28,6 @@ async function selectQuery(id: string) {
   try {
     const q = await window.go.main.App.GetQuery(id)
     sqlText.value = q.sql
-    engineName.value = q.engine
     saveTitle.value = q.title
   } catch (e: any) {
     error.value = e.message || String(e)
@@ -42,7 +40,7 @@ async function runQuery() {
   error.value = ''
   result.value = null
   try {
-    result.value = await window.go.main.App.ExecuteQuery(sqlText.value, engineName.value)
+    result.value = await window.go.main.App.ExecuteQuery(sqlText.value)
   } catch (e: any) {
     error.value = e.message || String(e)
   }
@@ -52,7 +50,7 @@ async function runQuery() {
 async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
-    await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, engineName.value, '')
+    await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '')
     showSaveModal.value = false
     await loadQueries()
   } catch (e: any) {
@@ -85,7 +83,6 @@ async function confirmDeleteQuery() {
 function newQuery() {
   selectedId.value = null
   sqlText.value = ''
-  engineName.value = 'sqlite'
   result.value = null
   error.value = ''
   saveTitle.value = ''
@@ -125,7 +122,6 @@ watch(errorMessage, (msg) => {
         >
           <div class="min-w-0">
             <div class="truncate font-bold">{{ q.title }}</div>
-            <div class="badge mt-0.5">{{ q.engine }}</div>
           </div>
           <button @click.stop="deleteQuery(q.id)" class="hidden group-hover:block btn btn-ghost btn-sm text-error">Del</button>
         </div>
@@ -136,10 +132,6 @@ watch(errorMessage, (msg) => {
     <div class="flex-1 flex flex-col">
       <!-- Toolbar -->
       <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center gap-3">
-        <select v-model="engineName" class="field-input w-32">
-          <option value="sqlite">SQLite</option>
-          <option value="duckdb">DuckDB</option>
-        </select>
         <button @click="runQuery" :disabled="running" class="btn btn-primary">
           {{ running ? 'Running...' : 'Run (Ctrl+Enter)' }}
         </button>

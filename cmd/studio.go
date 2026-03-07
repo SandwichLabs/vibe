@@ -61,9 +61,8 @@ If the file does not exist, it will be created.`,
 		}
 		defer c.Close()
 
-		// Create the engine manager.
+		// Create the engine manager (DuckDB-only).
 		eng := engine.NewManager(
-			c.SQLiteDB(),
 			c.DuckDBDB(),
 			engine.WithLogger(logger),
 		)

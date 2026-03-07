@@ -142,8 +142,7 @@ func parseSQLBlock(lines []string, start int) (*SQLBlockNode, int, error) {
 	parts := strings.Fields(header)
 
 	node := &SQLBlockNode{
-		Engine: "duckdb", // default engine
-		Line:   start + 1,
+		Line: start + 1,
 	}
 
 	// parts[0] is "sql"
@@ -161,10 +160,8 @@ func parseSQLBlock(lines []string, start int) (*SQLBlockNode, int, error) {
 		}
 		switch key {
 		case "engine":
-			if val != "duckdb" && val != "sqlite" {
-				return nil, start, fmt.Errorf("line %d: invalid engine %q (must be duckdb or sqlite)", start+1, val)
-			}
-			node.Engine = val
+			// engine parameter is accepted for backward compatibility but ignored;
+			// all queries now run on DuckDB.
 		case "cache":
 			d, err := time.ParseDuration(val)
 			if err != nil {

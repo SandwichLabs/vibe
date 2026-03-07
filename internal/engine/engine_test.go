@@ -154,34 +154,23 @@ func TestResultSet_ColumnIndex(t *testing.T) {
 	assert.Equal(t, -1, rs.ColumnIndex("nonexistent"))
 }
 
-// --- Engine selection tests ---
+// --- Manager tests ---
 
-func TestManager_EngineSelection(t *testing.T) {
-	db := openTestDB(t)
-	m := NewManager(db, nil, WithLogger(slog.Default()))
+func TestManager_NilDuckDB(t *testing.T) {
+	m := NewManager(nil, WithLogger(slog.Default()))
 
-	eng, err := m.Engine("sqlite")
-	require.NoError(t, err)
-	assert.NotNil(t, eng)
-
-	_, err = m.Engine("duckdb")
+	ctx := context.Background()
+	_, err := m.Execute(ctx, "SELECT 1", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not available")
-
-	_, err = m.Engine("postgres")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown engine")
 }
 
-func TestManager_EngineSelectionWithDuckDB(t *testing.T) {
-	db := openTestDB(t)
-	// Use a second in-memory SQLite as a stand-in for DuckDB in tests.
+func TestManager_WithDuckDB(t *testing.T) {
+	// Use in-memory SQLite as a stand-in for DuckDB in tests.
 	duckDB := openTestDB(t)
-	m := NewManager(db, duckDB)
+	m := NewManager(duckDB)
 
-	eng, err := m.Engine("duckdb")
-	require.NoError(t, err)
-	assert.NotNil(t, eng)
+	assert.NotNil(t, m.duckdb)
 }
 
 // --- SQLite engine integration tests ---
@@ -225,10 +214,10 @@ func TestManager_ExecuteViaManager(t *testing.T) {
 	db := openTestDB(t)
 	seedTestDB(t, db)
 
-	m := NewManager(db, nil, WithLogger(slog.Default()))
+	m := NewManager(db, WithLogger(slog.Default()))
 	ctx := context.Background()
 
-	rs, err := m.Execute(ctx, "SELECT name FROM customers WHERE id = $id", "sqlite", map[string]any{
+	rs, err := m.Execute(ctx, "SELECT name FROM customers WHERE id = $id", map[string]any{
 		"id": 2,
 	})
 	require.NoError(t, err)

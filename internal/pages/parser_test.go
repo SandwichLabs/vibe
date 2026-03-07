@@ -51,7 +51,6 @@ func TestParseSQLBlock(t *testing.T) {
 	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
 	require.True(t, ok)
 	assert.Equal(t, "revenue_by_month", sqlNode.Name)
-	assert.Equal(t, "duckdb", sqlNode.Engine)
 	assert.Equal(t, 5*time.Minute, sqlNode.Cache)
 	assert.Contains(t, sqlNode.SQL, "SELECT month")
 	assert.Equal(t, 1, sqlNode.Line)
@@ -65,17 +64,18 @@ func TestParseSQLBlockDefaultEngine(t *testing.T) {
 	require.Len(t, page.Nodes, 1)
 
 	sqlNode := page.Nodes[0].(*SQLBlockNode)
-	assert.Equal(t, "duckdb", sqlNode.Engine)
+	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
-func TestParseSQLBlockSQLiteEngine(t *testing.T) {
+func TestParseSQLBlockEngineIgnored(t *testing.T) {
+	// engine parameter is accepted for backward compatibility but ignored
 	input := "```sql my_query engine=sqlite\nSELECT 1\n```"
 
 	page, err := Parse(input)
 	require.NoError(t, err)
 
 	sqlNode := page.Nodes[0].(*SQLBlockNode)
-	assert.Equal(t, "sqlite", sqlNode.Engine)
+	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
 func TestParseTableDirective(t *testing.T) {
@@ -222,12 +222,15 @@ func TestParseStrayEndIf(t *testing.T) {
 	assert.Contains(t, err.Error(), "unexpected {/if}")
 }
 
-func TestParseInvalidEngine(t *testing.T) {
+func TestParseEngineParamIgnored(t *testing.T) {
+	// Any engine value is accepted (ignored) for backward compatibility
 	input := "```sql my_query engine=postgres\nSELECT 1\n```"
 
-	_, err := Parse(input)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid engine")
+	page, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, page.Nodes, 1)
+	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
 func TestParseFullPage(t *testing.T) {

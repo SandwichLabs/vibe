@@ -55,27 +55,29 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Also list user tables (non _vibe_ tables).
-	tableRows, err := db.QueryContext(r.Context(),
-		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%' ORDER BY name;")
-	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list tables: %v", err))
-		return
-	}
-	defer tableRows.Close()
-
+	// Also list user tables from DuckDB.
 	var tables []string
-	for tableRows.Next() {
-		var name string
-		if err := tableRows.Scan(&name); err != nil {
-			s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to scan table: %v", err))
+	if duckDB := s.container.DuckDBDB(); duckDB != nil {
+		tableRows, err := duckDB.QueryContext(r.Context(),
+			"SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;")
+		if err != nil {
+			s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list tables: %v", err))
 			return
 		}
-		tables = append(tables, name)
-	}
-	if err := tableRows.Err(); err != nil {
-		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to iterate tables: %v", err))
-		return
+		defer tableRows.Close()
+
+		for tableRows.Next() {
+			var name string
+			if err := tableRows.Scan(&name); err != nil {
+				s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to scan table: %v", err))
+				return
+			}
+			tables = append(tables, name)
+		}
+		if err := tableRows.Err(); err != nil {
+			s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to iterate tables: %v", err))
+			return
+		}
 	}
 
 	data := map[string]any{
@@ -162,19 +164,14 @@ func (s *Server) handleFormSubmit(w http.ResponseWriter, r *http.Request) {
 
 	// Parse form config to get the SQL statement.
 	var formConfig struct {
-		SQL    string `json:"sql"`
-		Engine string `json:"engine"`
+		SQL string `json:"sql"`
 	}
 	if err := json.Unmarshal([]byte(config), &formConfig); err != nil {
 		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to parse form config: %v", err))
 		return
 	}
 
-	if formConfig.Engine == "" {
-		formConfig.Engine = "sqlite"
-	}
-
-	_, err = s.engine.Execute(r.Context(), formConfig.SQL, formConfig.Engine, params)
+	_, err = s.engine.Execute(r.Context(), formConfig.SQL, params)
 	if err != nil {
 		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to execute form query: %v", err))
 		return
@@ -215,7 +212,11 @@ func (s *Server) handleTableBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset := (page - 1) * pageSize
-	db := s.container.SQLiteDB()
+	db := s.container.DuckDBDB()
+	if db == nil {
+		s.renderError(w, http.StatusServiceUnavailable, "DuckDB not available")
+		return
+	}
 
 	// Sanitize table name to prevent SQL injection (only allow alphanumeric and underscore).
 	if !isValidIdentifier(tableName) {
@@ -308,7 +309,11 @@ func (s *Server) handleTableJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := s.container.SQLiteDB()
+	db := s.container.DuckDBDB()
+	if db == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "DuckDB not available")
+		return
+	}
 	rows, err := db.QueryContext(r.Context(),
 		fmt.Sprintf("SELECT * FROM %q;", tableName)) //nolint:gosec
 	if err != nil {
@@ -373,7 +378,11 @@ func (s *Server) handleTableCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := s.container.SQLiteDB()
+	db := s.container.DuckDBDB()
+	if db == nil {
+		http.Error(w, "DuckDB not available", http.StatusServiceUnavailable)
+		return
+	}
 	rows, err := db.QueryContext(r.Context(),
 		fmt.Sprintf("SELECT * FROM %q;", tableName)) //nolint:gosec
 	if err != nil {
@@ -438,7 +447,6 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		SQL    string         `json:"sql"`
-		Engine string         `json:"engine"`
 		Params map[string]any `json:"params"`
 	}
 
@@ -452,11 +460,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Engine == "" {
-		req.Engine = "sqlite"
-	}
-
-	rs, err := s.engine.Execute(r.Context(), req.SQL, req.Engine, req.Params)
+	rs, err := s.engine.Execute(r.Context(), req.SQL, req.Params)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -489,11 +493,15 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := s.container.SQLiteDB()
+	db := s.container.DuckDBDB()
+	if db == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "DuckDB not available")
+		return
+	}
 
-	// Get all tables and their columns.
+	// Get all user tables and their columns from DuckDB.
 	tableRows, err := db.QueryContext(r.Context(),
-		"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;")
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list tables: %v", err))
 		return
@@ -520,9 +528,10 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Get column info for each table.
+		// Get column info from information_schema.
 		colRows, err := db.QueryContext(r.Context(),
-			fmt.Sprintf("PRAGMA table_info(%q);", name)) //nolint:gosec
+			"SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END AS not_null FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
+			name)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get table info: %v", err))
 			return
@@ -530,11 +539,9 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 
 		var cols []columnInfo
 		for colRows.Next() {
-			var cid int
 			var colName, colType string
-			var notNull, pk int
-			var dflt any
-			if err := colRows.Scan(&cid, &colName, &colType, &notNull, &dflt, &pk); err != nil {
+			var notNull bool
+			if err := colRows.Scan(&colName, &colType, &notNull); err != nil {
 				colRows.Close()
 				writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to scan column: %v", err))
 				return
@@ -542,8 +549,8 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 			cols = append(cols, columnInfo{
 				Name:    colName,
 				Type:    colType,
-				NotNull: notNull == 1,
-				PK:      pk == 1,
+				NotNull: notNull,
+				PK:      false,
 			})
 		}
 		colRows.Close()

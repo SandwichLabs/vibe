@@ -14,11 +14,12 @@ import (
 // ContainerAccess provides access to the container (interface to avoid circular imports).
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
+	DuckDBDB() *sql.DB
 }
 
 // EngineAccess provides query execution.
 type EngineAccess interface {
-	Execute(ctx context.Context, sql string, eng string, params map[string]any) (*engine.ResultSet, error)
+	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
 // Handler dispatches JSON-RPC requests to the appropriate tool handler.
@@ -28,6 +29,15 @@ type Handler struct {
 	sandbox   *SandboxConfig
 	approval  *ApprovalQueue
 	logger    *slog.Logger
+}
+
+// duckDB returns the DuckDB connection or an error response if unavailable.
+func (h *Handler) duckDB(reqID any) (*sql.DB, *Response) {
+	db := h.container.DuckDBDB()
+	if db == nil {
+		return nil, NewErrorResponse(reqID, ErrInternal, "DuckDB not available")
+	}
+	return db, nil
 }
 
 // NewHandler creates a new request handler.
@@ -136,8 +146,11 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 // --- Introspect handlers ---
 
 func (h *Handler) handleIntrospectSchema(ctx context.Context, req *Request) *Response {
-	db := h.container.SQLiteDB()
-	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%' ORDER BY name")
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
+	rows, err := db.QueryContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to query schema: %v", err))
 	}
@@ -156,9 +169,14 @@ func (h *Handler) handleIntrospectSchema(ctx context.Context, req *Request) *Res
 
 func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Response {
 	table := req.Params["table"].(string)
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	rows, err := db.QueryContext(ctx,
+		"SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END AS not_null FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
+		table)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", err))
 	}
@@ -166,18 +184,16 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 
 	var columns []map[string]any
 	for rows.Next() {
-		var cid int
 		var name, colType string
-		var notNull, pk int
-		var dfltValue sql.NullString
-		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+		var notNull bool
+		if err := rows.Scan(&name, &colType, &notNull); err != nil {
 			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to scan column info: %v", err))
 		}
 		columns = append(columns, map[string]any{
 			"name":     name,
 			"type":     colType,
-			"not_null": notNull == 1,
-			"pk":       pk == 1,
+			"not_null": notNull,
+			"pk":       false,
 		})
 	}
 	return NewResponse(req.ID, map[string]any{"table": table, "columns": columns})
@@ -241,16 +257,12 @@ func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response
 
 func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	sqlStr := req.Params["sql"].(string)
-	engine := "sqlite"
-	if e, ok := req.Params["engine"].(string); ok && e != "" {
-		engine = e
-	}
 	var params map[string]any
 	if p, ok := req.Params["params"].(map[string]any); ok {
 		params = p
 	}
 
-	rs, err := h.engine.Execute(ctx, sqlStr, engine, params)
+	rs, err := h.engine.Execute(ctx, sqlStr, params)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query execution failed: %v", err))
 	}
@@ -286,7 +298,10 @@ func (h *Handler) handleCreateRecord(ctx context.Context, req *Request) *Respons
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to create record: %v", err))
@@ -309,7 +324,10 @@ func (h *Handler) handleUpdateRecord(ctx context.Context, req *Request) *Respons
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", table, strings.Join(setClauses, ", "), where)
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to update record: %v", err))
@@ -324,7 +342,10 @@ func (h *Handler) handleDeleteRecord(ctx context.Context, req *Request) *Respons
 	where := req.Params["where"].(string)
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", table, where)
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	result, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to delete record: %v", err))
@@ -356,7 +377,10 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 	}
 	rowPlaceholder := "(" + strings.Join(placeholders, ", ") + ")"
 
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to begin transaction: %v", err))
@@ -452,7 +476,10 @@ func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response
 	}
 
 	query := fmt.Sprintf("CREATE TABLE %s (%s)", name, strings.Join(colDefs, ", "))
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	_, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to create table: %v", err))
@@ -466,7 +493,10 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 	colType := req.Params["type"].(string)
 
 	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, colType)
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	_, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to add column: %v", err))
@@ -478,7 +508,10 @@ func (h *Handler) handleDropTable(ctx context.Context, req *Request) *Response {
 	name := req.Params["name"].(string)
 
 	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", name)
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	_, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to drop table: %v", err))
@@ -504,7 +537,10 @@ func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
 		startIdx = 1
 	}
 
-	db := h.container.SQLiteDB()
+	db, errResp := h.duckDB(req.ID)
+	if errResp != nil {
+		return errResp
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to begin transaction: %v", err))
