@@ -19,6 +19,8 @@ const editorEl = ref<HTMLElement | null>(null)
 let editorInstance: VibeEditorInstance | null = null
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let renderGeneration = 0
+let rendering = false
 
 async function loadPage() {
   loading.value = true
@@ -35,29 +37,42 @@ async function loadPage() {
 }
 
 async function renderPreview() {
-  if (!page.value) return
+  if (!page.value || rendering) return
   previewLoading.value = true
+  rendering = true
+  const gen = ++renderGeneration
   try {
-    preview.value = await window.go.main.App.RenderPageContent(page.value.id, {})
+    await window.go.main.App.CancelRender()
+    const html = await window.go.main.App.RenderPageContent(page.value.id, {})
+    if (gen === renderGeneration) {
+      preview.value = html
+    }
   } catch (e: any) {
-    preview.value = `<div class="text-error font-semibold">Render error: ${e.message || e}</div>`
+    if (gen === renderGeneration) {
+      preview.value = `<div class="text-error font-semibold">Render error: ${e.message || e}</div>`
+    }
   }
   previewLoading.value = false
+  rendering = false
+  // If content changed during render, do one more render
+  if (renderGeneration > gen) {
+    renderPreview()
+  }
 }
 
-function debouncedPreview() {
+function debouncedSaveAndRender() {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(async () => {
     if (page.value) {
       try {
         await window.go.main.App.UpdatePage(page.value.id, title.value, content.value)
-        await renderPreview()
-      } catch { /* ignore preview errors */ }
+      } catch { /* ignore save errors during typing */ }
+      renderPreview()
     }
-  }, 500)
+  }, 1000)
 }
 
-watch(content, debouncedPreview)
+watch(content, debouncedSaveAndRender)
 
 /** Initialise CodeMirror once the editor container is in the DOM. */
 function initEditor() {

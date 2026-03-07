@@ -49,7 +49,7 @@ func (n *SQLBlockNode) nodeType() string { return "sql_block" }
 
 // DirectiveNode represents an inline directive like {table: ...}.
 type DirectiveNode struct {
-	Type   string         // "table" | "chart" | "metric" | "form" | "detail" | "if"
+	Type   string // "table" | "chart" | "metric" | "form" | "detail" | "if"
 	Config map[string]any
 	Line   int
 }
@@ -64,3 +64,12 @@ type ConditionalNode struct {
 }
 
 func (n *ConditionalNode) nodeType() string { return "conditional" }
+
+// RowNode represents a {row: cols=3} ... {/row} grid layout block.
+type RowNode struct {
+	Config   map[string]any
+	Children []Node
+	Line     int
+}
+
+func (n *RowNode) nodeType() string { return "row" }

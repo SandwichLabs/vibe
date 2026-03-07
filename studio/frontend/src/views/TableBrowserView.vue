@@ -26,7 +26,7 @@ const pendingDeleteRow = ref<any[] | null>(null)
 async function loadTables() {
   loading.value = true
   try {
-    tables.value = await window.go.main.App.ListTables()
+    tables.value = (await window.go.main.App.ListTables()) || []
   } catch { /* ignore */ }
   loading.value = false
 }
@@ -203,7 +203,12 @@ watch(errorMessage, (msg) => {
 
     <!-- Data area -->
     <div class="flex-1 overflow-auto flex flex-col">
-      <div v-if="!selectedTable" class="flex-1 flex items-center justify-center text-muted font-mono">Select a table</div>
+      <div v-if="!selectedTable && tables.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center text-muted gap-4">
+        <div class="text-4xl">&#128451;</div>
+        <div class="font-mono text-sm">No tables yet</div>
+        <button @click="showNewTableModal = true" class="btn btn-primary">Create Table</button>
+      </div>
+      <div v-else-if="!selectedTable" class="flex-1 flex items-center justify-center text-muted font-mono">Select a table</div>
       <template v-else>
         <!-- Toolbar -->
         <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center justify-between">
@@ -232,11 +237,16 @@ watch(errorMessage, (msg) => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, i) in tableData.rows" :key="i">
-                <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
-                <td>
-                  <button @click="deleteRow(row)" class="btn btn-ghost btn-sm text-error">Del</button>
-                </td>
+              <template v-if="tableData.rows && tableData.rows.length > 0">
+                <tr v-for="(row, i) in tableData.rows" :key="i">
+                  <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
+                  <td>
+                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm text-error">Del</button>
+                  </td>
+                </tr>
+              </template>
+              <tr v-else>
+                <td :colspan="tableData.columns.length + 1" class="text-center text-muted font-mono py-8">No rows</td>
               </tr>
             </tbody>
           </table>

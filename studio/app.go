@@ -54,6 +54,9 @@ type App struct {
 	filePath    string
 	mcpServer   *vibemcp.Server
 	initialFile string
+
+	renderMu     sync.Mutex
+	renderCancel context.CancelFunc
 }
 
 // NewApp creates a new App instance.
@@ -329,8 +332,27 @@ func (a *App) GetPage(id string) (*PageDetail, error) {
 	return &p, nil
 }
 
+// CancelRender cancels any in-flight page render, killing running DB queries.
+func (a *App) CancelRender() {
+	a.renderMu.Lock()
+	defer a.renderMu.Unlock()
+	if a.renderCancel != nil {
+		a.renderCancel()
+		a.renderCancel = nil
+	}
+}
+
 // RenderPageContent renders a page's content as HTML fragments.
 func (a *App) RenderPageContent(id string, params map[string]string) (string, error) {
+	// Cancel any previous render and create a new cancellable context.
+	a.renderMu.Lock()
+	if a.renderCancel != nil {
+		a.renderCancel()
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.renderCancel = cancel
+	a.renderMu.Unlock()
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -356,7 +378,7 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 		engineParams[k] = v
 	}
 
-	executed, err := pages.Execute(context.Background(), page, &engineAdapter{mgr: a.engine}, engineParams)
+	executed, err := pages.Execute(ctx, page, &engineAdapter{mgr: a.engine}, engineParams)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute page: %w", err)
 	}
@@ -372,9 +394,14 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 
 // renderExecutedNodes renders executed page nodes to HTML fragments.
 func (a *App) renderExecutedNodes(executed *pages.ExecutedPage, pageType string) (string, error) {
+	return a.renderNodeList(executed.Nodes, pageType)
+}
+
+// renderNodeList renders a slice of executed nodes to HTML.
+func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (string, error) {
 	var b strings.Builder
 
-	for _, en := range executed.Nodes {
+	for _, en := range nodes {
 		switch n := en.Node.(type) {
 		case *pages.TextNode:
 			if pageType == "html" {
@@ -399,9 +426,58 @@ func (a *App) renderExecutedNodes(executed *pages.ExecutedPage, pageType string)
 			}
 			b.WriteString(html)
 			b.WriteString("\n")
+
+		case *pages.RowNode:
+			html, err := a.renderRow(n, pageType)
+			if err != nil {
+				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering row: %s</div>\n", err))
+				continue
+			}
+			b.WriteString(html)
+			b.WriteString("\n")
 		}
 	}
 
+	return b.String(), nil
+}
+
+// renderRow renders a RowNode as a CSS grid container. Each direct child
+// becomes a grid cell. The "cols" config sets the column count (default 2).
+func (a *App) renderRow(node *pages.RowNode, pageType string) (string, error) {
+	cols := "2"
+	if c, ok := node.Config["cols"]; ok {
+		if s, ok := c.(string); ok && s != "" {
+			cols = s
+		}
+	}
+	gap := "1rem"
+	if g, ok := node.Config["gap"]; ok {
+		if s, ok := g.(string); ok && s != "" {
+			gap = s
+		}
+	}
+
+	// Convert children to ExecutedNodes for rendering.
+	childNodes := make([]pages.ExecutedNode, len(node.Children))
+	for i, child := range node.Children {
+		childNodes[i] = pages.ExecutedNode{Node: child}
+	}
+
+	// Render each child as a separate grid cell.
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("<div class=\"vibe-row\" style=\"grid-template-columns: repeat(%s, 1fr); gap: %s;\">", cols, gap))
+
+	for _, en := range childNodes {
+		cellHTML, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString("<div class=\"vibe-col\">")
+		b.WriteString(cellHTML)
+		b.WriteString("</div>")
+	}
+
+	b.WriteString("</div>")
 	return b.String(), nil
 }
 
@@ -425,9 +501,9 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 	case "table":
 		return a.renderer.RenderTable(&renderer.TableConfig{
 			Source:    getStringConfig(node.Config, "source"),
-			Sortable: true,
+			Sortable:  true,
 			ColumnFmt: getStringMapConfig(node.Config, "fmt"),
-			Result:   rrs,
+			Result:    rrs,
 		})
 
 	case "chart":
@@ -673,12 +749,12 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 
 // TableData holds paginated table data.
 type TableData struct {
-	Columns    []string   `json:"columns"`
-	Rows       [][]any    `json:"rows"`
-	Page       int        `json:"page"`
-	PageSize   int        `json:"page_size"`
-	TotalRows  int        `json:"total_rows"`
-	TotalPages int        `json:"total_pages"`
+	Columns    []string `json:"columns"`
+	Rows       [][]any  `json:"rows"`
+	Page       int      `json:"page"`
+	PageSize   int      `json:"page_size"`
+	TotalRows  int      `json:"total_rows"`
+	TotalPages int      `json:"total_pages"`
 }
 
 // GetTableData returns paginated data from a table.
@@ -1114,7 +1190,7 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 
 // AgentResult holds the result of an agent query.
 type AgentResult struct {
-	SQL      string  `json:"sql,omitempty"`
+	SQL      string   `json:"sql,omitempty"`
 	Columns  []string `json:"columns,omitempty"`
 	Rows     [][]any  `json:"rows,omitempty"`
 	Analysis string   `json:"analysis,omitempty"`

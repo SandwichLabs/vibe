@@ -140,6 +140,8 @@ const layoutTemplate = `<!DOCTYPE html>
     }
     .vibe-detail dt { font-weight: 600; }
     .vibe-detail dd { margin: 0; }
+    .vibe-row { display: grid; margin: 1rem 0; }
+    .vibe-col { min-width: 0; }
   </style>
 </head>
 <body>

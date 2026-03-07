@@ -59,4 +59,16 @@ export const vibeToolbarButtons: VibeToolbarButton[] = [
     tooltip: 'Insert Metric',
     snippet: '{metric: source=query_name, value=column_name, title="Metric Title"}\n',
   },
+  {
+    id: 'row-2',
+    icon: svg('<rect x="2" y="4" width="9" height="16"/><rect x="13" y="4" width="9" height="16"/>'),
+    tooltip: 'Insert 2-Column Row',
+    snippet: '{row: cols=2}\n\nColumn 1 content\n\nColumn 2 content\n\n{/row}\n',
+  },
+  {
+    id: 'row-3',
+    icon: svg('<rect x="1" y="4" width="6" height="16"/><rect x="9" y="4" width="6" height="16"/><rect x="17" y="4" width="6" height="16"/>'),
+    tooltip: 'Insert 3-Column Row',
+    snippet: '{row: cols=3}\n\nColumn 1\n\nColumn 2\n\nColumn 3\n\n{/row}\n',
+  },
 ]

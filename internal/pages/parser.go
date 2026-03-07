@@ -96,10 +96,10 @@ func walkGoldmark(doc ast.Node, source []byte, lineOffset int) ([]Node, error) {
 			trimmed := strings.TrimSpace(content)
 
 			if isDirectiveLine(trimmed) {
-				if isConditionalEnd(trimmed) {
+				if isBlockEnd(trimmed) {
 					// {/if} — shouldn't appear at top level.
 					line := lineOffset + getNodeLine(n, source) + 1
-					return nil, fmt.Errorf("line %d: unexpected {/if} without matching {if:}", line)
+					return nil, fmt.Errorf("line %d: unexpected %s without matching opening block", line, trimmed)
 				}
 
 				if isConditionalStart(trimmed) {
@@ -110,6 +110,18 @@ func walkGoldmark(doc ast.Node, source []byte, lineOffset int) ([]Node, error) {
 					}
 					nodes = append(nodes, condNode)
 					// Advance past the conditional block.
+					if nextSibling != nil {
+						child = nextSibling
+					}
+					continue
+				}
+
+				if isRowStart(trimmed) {
+					rowNode, nextSibling, err := parseRowFromAST(n, child, source, lineOffset)
+					if err != nil {
+						return nil, err
+					}
+					nodes = append(nodes, rowNode)
 					if nextSibling != nil {
 						child = nextSibling
 					}
@@ -291,7 +303,7 @@ func processASTNode(n ast.Node, source []byte, lineOffset int) ([]Node, error) {
 	case *ast.Paragraph:
 		content := extractParagraphText(node, source)
 		trimmed := strings.TrimSpace(content)
-		if isDirectiveLine(trimmed) && !isConditionalEnd(trimmed) && !isConditionalStart(trimmed) {
+		if isDirectiveLine(trimmed) && !isBlockEnd(trimmed) && !isConditionalStart(trimmed) && !isRowStart(trimmed) {
 			dirNode, err := parseDirective(trimmed, lineOffset+getNodeLine(node, source))
 			if err != nil {
 				return nil, err
@@ -415,9 +427,72 @@ func isConditionalStart(trimmed string) bool {
 	return strings.HasPrefix(inner, "if:")
 }
 
-// isConditionalEnd checks if a line is a {/if} closing tag.
-func isConditionalEnd(trimmed string) bool {
-	return trimmed == "{/if}"
+// isBlockEnd checks if a line is a block closing tag ({/if}, {/row}).
+func isBlockEnd(trimmed string) bool {
+	return trimmed == "{/if}" || trimmed == "{/row}"
+}
+
+// isRowStart checks if a directive line is a {row: ...} block start.
+func isRowStart(trimmed string) bool {
+	inner := trimmed[1 : len(trimmed)-1]
+	inner = strings.TrimSpace(inner)
+	return strings.HasPrefix(inner, "row:")
+}
+
+// parseRowFromAST parses a {row: ...} block by collecting sibling nodes
+// until a {/row} paragraph is found.
+func parseRowFromAST(startPara *ast.Paragraph, startChild ast.Node, source []byte, lineOffset int) (*RowNode, ast.Node, error) {
+	content := extractParagraphText(startPara, source)
+	trimmed := strings.TrimSpace(content)
+	inner := trimmed[1 : len(trimmed)-1]
+
+	config, err := parseDirectiveYAML(inner)
+	if err != nil {
+		line := lineOffset + getNodeLine(startPara, source) + 1
+		return nil, nil, fmt.Errorf("line %d: invalid row directive: %w", line, err)
+	}
+
+	// Remove the "row" key itself, keep the rest as config.
+	rowConfig := make(map[string]any)
+	for k, v := range config {
+		if k == "row" {
+			// If row has a value like "cols=3", parse it.
+			if s, ok := v.(string); ok && s != "" {
+				if key, val, isKV := strings.Cut(s, "="); isKV {
+					rowConfig[key] = val
+				}
+			}
+			continue
+		}
+		rowConfig[k] = v
+	}
+
+	var children []Node
+	var lastSibling ast.Node
+
+	for sibling := startChild.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+		lastSibling = sibling
+
+		if para, ok := sibling.(*ast.Paragraph); ok {
+			paraText := strings.TrimSpace(extractParagraphText(para, source))
+			if paraText == "{/row}" {
+				return &RowNode{
+					Config:   rowConfig,
+					Children: children,
+					Line:     lineOffset + getNodeLine(startPara, source) + 1,
+				}, lastSibling, nil
+			}
+		}
+
+		childNodes, err := processASTNode(sibling, source, lineOffset)
+		if err != nil {
+			return nil, nil, err
+		}
+		children = append(children, childNodes...)
+	}
+
+	line := lineOffset + getNodeLine(startPara, source) + 1
+	return nil, nil, fmt.Errorf("line %d: unclosed {row:} block (missing {/row})", line)
 }
 
 // parseDirective parses a single directive line into a DirectiveNode.
@@ -482,7 +557,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "metric", "form", "detail", "if"}
+	knownTypes := []string{"table", "chart", "metric", "form", "detail", "if", "row"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

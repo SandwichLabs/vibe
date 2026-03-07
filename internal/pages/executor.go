@@ -135,6 +135,19 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 				},
 			})
 
+		case *RowNode:
+			children, err := executeNodes(ctx, n.Children, engine, params, results, variables)
+			if err != nil {
+				return nil, err
+			}
+			executed = append(executed, ExecutedNode{
+				Node: &RowNode{
+					Config:   n.Config,
+					Children: extractNodes(children),
+					Line:     n.Line,
+				},
+			})
+
 		default:
 			executed = append(executed, ExecutedNode{Node: node})
 		}

@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {queries} from '../models';
 
+export function CancelRender():Promise<void>;
+
 export function CloseFile():Promise<void>;
 
 export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -36,6 +38,8 @@ export function GetAllMeta():Promise<Record<string, string>>;
 export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetFileInfo():Promise<main.FileInfo>;
+
+export function GetInitialFile():Promise<string>;
 
 export function GetMCPStatus():Promise<Record<string, any>>;
 
