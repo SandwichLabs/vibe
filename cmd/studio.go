@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
@@ -26,6 +28,12 @@ If the file does not exist, it will be created.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]
+
+		// Launch the desktop GUI if --gui is set.
+		gui, _ := cmd.Flags().GetBool("gui")
+		if gui {
+			return launchGUI(filePath)
+		}
 
 		// Determine if creating or opening.
 		_, statErr := os.Stat(filePath)
@@ -204,7 +212,31 @@ func startAgentListener(addr string, handler *agents.Handler, ctx context.Contex
 	return srv, nil
 }
 
+// launchGUI finds and executes the vibe-studio binary, replacing the current process.
+func launchGUI(filePath string) error {
+	const binName = "vibe-studio"
+	var searched []string
+
+	// First, look next to the current executable.
+	if exe, err := os.Executable(); err == nil {
+		beside := filepath.Join(filepath.Dir(exe), binName)
+		searched = append(searched, beside)
+		if _, err := os.Stat(beside); err == nil {
+			return syscall.Exec(beside, []string{binName, filePath}, os.Environ())
+		}
+	}
+
+	// Then, try PATH.
+	if found, err := exec.LookPath(binName); err == nil {
+		return syscall.Exec(found, []string{binName, filePath}, os.Environ())
+	}
+	searched = append(searched, "$PATH")
+
+	return fmt.Errorf("vibe-studio binary not found; searched: %s", strings.Join(searched, ", "))
+}
+
 func init() {
+	studioCmd.Flags().Bool("gui", false, "launch the desktop GUI instead of the TUI")
 	studioCmd.Flags().Bool("web", false, "start the embedded web server")
 	studioCmd.Flags().Int("port", 3456, "web server port")
 	studioCmd.Flags().String("host", "localhost", "web server host")

@@ -19,6 +19,9 @@ func main() {
 	}))
 
 	app := NewApp(logger)
+	if len(os.Args) > 1 {
+		app.initialFile = os.Args[1]
+	}
 
 	err := wails.Run(&options.App{
 		Title:  "Vibe Studio",

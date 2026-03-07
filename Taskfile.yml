@@ -66,6 +66,13 @@ tasks:
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
+  build:all:
+    desc: Build both CLI and Studio desktop app
+    cmds:
+      - task: build
+      - task: studio:install
+      - task: build:studio:linux
+
   build:studio:
     desc: Build Vibe Studio desktop app (macOS)
     dir: studio

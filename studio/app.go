@@ -44,15 +44,16 @@ func (ea *engineAdapter) Execute(ctx context.Context, sql string, params map[str
 
 // App is the main application struct bound to the Wails frontend.
 type App struct {
-	ctx       context.Context
-	logger    *slog.Logger
-	mu        sync.RWMutex
-	container *container.Container
-	engine    *engine.Manager
-	registry  *queries.Registry
-	renderer  *htmlrenderer.Renderer
-	filePath  string
-	mcpServer *vibemcp.Server
+	ctx         context.Context
+	logger      *slog.Logger
+	mu          sync.RWMutex
+	container   *container.Container
+	engine      *engine.Manager
+	registry    *queries.Registry
+	renderer    *htmlrenderer.Renderer
+	filePath    string
+	mcpServer   *vibemcp.Server
+	initialFile string
 }
 
 // NewApp creates a new App instance.
@@ -61,6 +62,11 @@ func NewApp(logger *slog.Logger) *App {
 		logger:   logger,
 		renderer: htmlrenderer.NewRenderer(logger),
 	}
+}
+
+// GetInitialFile returns the file path passed as a command-line argument, if any.
+func (a *App) GetInitialFile() string {
+	return a.initialFile
 }
 
 func (a *App) startup(ctx context.Context) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
+const props = defineProps<{ initialFile?: string }>()
 const emit = defineEmits<{ 'file-opened': [] }>()
 
 const mode = ref<'choose' | 'open' | 'create'>('choose')
@@ -9,9 +10,16 @@ const passphrase = ref('')
 const passphraseConfirm = ref('')
 const title = ref('')
 const description = ref('')
-const includeExamples = ref(true)
 const error = ref('')
 const loading = ref(false)
+
+// If initialFile is provided (e.g. from CLI arg), skip to open mode.
+watch(() => props.initialFile, (val) => {
+  if (val) {
+    filePath.value = val
+    mode.value = 'open'
+  }
+}, { immediate: true })
 
 async function selectFile() {
   try {
@@ -66,7 +74,7 @@ async function createFile() {
   loading.value = true
   error.value = ''
   try {
-    await window.go.main.App.CreateFile(filePath.value, passphrase.value, title.value, description.value, includeExamples.value)
+    await window.go.main.App.CreateFile(filePath.value, passphrase.value, title.value, description.value)
     emit('file-opened')
   } catch (e: any) {
     error.value = e.message || String(e)
@@ -131,10 +139,6 @@ function goBack() {
           <label class="field-label">Description</label>
           <input v-model="description" type="text" placeholder="Description (optional)" class="field-input" />
         </div>
-        <label class="flex items-center gap-2 cursor-pointer select-none">
-          <input v-model="includeExamples" type="checkbox" class="w-4 h-4 accent-yellow" />
-          <span class="text-sm font-medium">Include example data &amp; pages</span>
-        </label>
         <div>
           <label class="field-label">Passphrase</label>
           <input v-model="passphrase" type="password" placeholder="Set passphrase" class="field-input" />
