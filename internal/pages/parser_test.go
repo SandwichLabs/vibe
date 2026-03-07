@@ -231,6 +231,40 @@ func TestParseStrayEndIf(t *testing.T) {
 	assert.Contains(t, err.Error(), "unexpected {/if}")
 }
 
+func TestParseSQLBlockNameEquals(t *testing.T) {
+	input := "```sql name=query_name\nSELECT count(*) FROM t\n```"
+
+	page, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, page.Nodes, 1)
+
+	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	assert.Equal(t, "query_name", sqlNode.Name)
+}
+
+func TestParseSQLBlockNameEqualsWithCache(t *testing.T) {
+	input := "```sql name=my_query cache=10m\nSELECT 1\n```"
+
+	page, err := Parse(input)
+	require.NoError(t, err)
+
+	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	assert.Equal(t, "my_query", sqlNode.Name)
+	assert.Equal(t, 10*time.Minute, sqlNode.Cache)
+}
+
+func TestParseDirectiveSourceEquals(t *testing.T) {
+	input := "{table: source=query_name}"
+
+	page, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, page.Nodes, 1)
+
+	dir := page.Nodes[0].(*DirectiveNode)
+	assert.Equal(t, "table", dir.Type)
+	assert.Equal(t, "query_name", dir.Config["source"])
+}
+
 func TestParseEngineParamIgnored(t *testing.T) {
 	// Any engine value is accepted (ignored) for backward compatibility
 	input := "```sql my_query engine=postgres\nSELECT 1\n```"

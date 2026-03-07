@@ -159,15 +159,26 @@ func parseSQLFencedBlock(n *ast.FencedCodeBlock, source []byte, lang string, lin
 		return nil, fmt.Errorf("line %d: SQL block requires a name: ```sql block_name [cache=5m]", line)
 	}
 
-	node.Name = parts[1]
+	// Support both positional name (```sql my_query) and key=value (```sql name=my_query).
+	kvStart := 2
+	if key, val, isKV := strings.Cut(parts[1], "="); isKV {
+		// parts[1] is key=value — process it as an option, name must come from "name=".
+		kvStart = 1
+		_ = key
+		_ = val
+	} else {
+		node.Name = parts[1]
+	}
 
-	// Parse optional key=value pairs.
-	for _, part := range parts[2:] {
+	// Parse key=value pairs.
+	for _, part := range parts[kvStart:] {
 		key, val, ok := strings.Cut(part, "=")
 		if !ok {
 			return nil, fmt.Errorf("line %d: invalid SQL block option %q (expected key=value)", line, part)
 		}
 		switch key {
+		case "name":
+			node.Name = val
 		case "engine":
 			// Accepted for backward compatibility but ignored.
 		case "cache":
@@ -179,6 +190,10 @@ func parseSQLFencedBlock(n *ast.FencedCodeBlock, source []byte, lang string, lin
 		default:
 			return nil, fmt.Errorf("line %d: unknown SQL block option %q", line, key)
 		}
+	}
+
+	if node.Name == "" {
+		return nil, fmt.Errorf("line %d: SQL block requires a name: ```sql block_name or ```sql name=block_name", line)
 	}
 
 	// Collect the SQL body.
@@ -423,7 +438,17 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 	// Build the config map with "source" as the primary value.
 	result := make(map[string]any)
 	if source != nil {
-		result["source"] = source
+		// Support both "{table: query_name}" and "{table: source=query_name}" formats.
+		// If the primary value is a string containing "=", parse it as key=value config.
+		if s, ok := source.(string); ok {
+			if key, val, isKV := strings.Cut(s, "="); isKV {
+				result[key] = val
+			} else {
+				result["source"] = source
+			}
+		} else {
+			result["source"] = source
+		}
 	}
 	for k, v := range remaining {
 		result[k] = v
