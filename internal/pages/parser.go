@@ -510,6 +510,15 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		return nil, fmt.Errorf("line %d: empty directive", lineIdx+1)
 	}
 
+	// Chart type aliases: {pie_chart: ...} → {chart: type=pie ...}
+	if chartType, ok := strings.CutSuffix(dirType, "_chart"); ok {
+		dirType = "chart"
+		if remaining == nil {
+			remaining = make(map[string]any)
+		}
+		remaining["type"] = chartType
+	}
+
 	// Build the config map with "source" as the primary value.
 	result := make(map[string]any)
 	if source != nil {
@@ -557,7 +566,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "metric", "form", "detail", "if", "row"}
+	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "form", "detail", "if", "row"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

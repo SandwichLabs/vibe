@@ -107,6 +107,31 @@ func TestParseChartDirective(t *testing.T) {
 	assert.Equal(t, "total", dir.Config["y"])
 }
 
+func TestParseChartTypeAliases(t *testing.T) {
+	tests := []struct {
+		input     string
+		chartType string
+	}{
+		{"{pie_chart: sales_by_region}", "pie"},
+		{"{line_chart: revenue_trend, x: month, y: total}", "line"},
+		{"{bar_chart: top_products}", "bar"},
+		{"{area_chart: growth}", "area"},
+		{"{doughnut_chart: breakdown}", "doughnut"},
+		{"{scatter_chart: correlation}", "scatter"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.chartType, func(t *testing.T) {
+			page, err := Parse(tc.input)
+			require.NoError(t, err)
+			require.Len(t, page.Nodes, 1)
+
+			dir := page.Nodes[0].(*DirectiveNode)
+			assert.Equal(t, "chart", dir.Type)
+			assert.Equal(t, tc.chartType, dir.Config["type"])
+		})
+	}
+}
+
 func TestParseMetricDirective(t *testing.T) {
 	input := `{metric: total_sales, label: "Total Sales"}`
 
