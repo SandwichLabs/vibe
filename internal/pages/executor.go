@@ -34,8 +34,9 @@ type ExecutedPage struct {
 
 // ExecutedNode pairs an AST node with its optional query result.
 type ExecutedNode struct {
-	Node   Node
-	Result *ResultSet // non-nil for SQL blocks and inline metric queries
+	Node     Node
+	Result   *ResultSet     // non-nil for SQL blocks and inline metric queries
+	Children []ExecutedNode // non-nil for container nodes (RowNode)
 }
 
 // Execute walks a parsed page top-to-bottom, executing SQL blocks and resolving
@@ -141,11 +142,8 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 				return nil, err
 			}
 			executed = append(executed, ExecutedNode{
-				Node: &RowNode{
-					Config:   n.Config,
-					Children: extractNodes(children),
-					Line:     n.Line,
-				},
+				Node:     n,
+				Children: children,
 			})
 
 		default:

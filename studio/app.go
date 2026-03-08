@@ -428,7 +428,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			b.WriteString("\n")
 
 		case *pages.RowNode:
-			html, err := a.renderRow(n, pageType)
+			html, err := a.renderRow(n, en.Children, pageType)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering row: %s</div>\n", err))
 				continue
@@ -443,7 +443,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 
 // renderRow renders a RowNode as a CSS grid container. Each direct child
 // becomes a grid cell. The "cols" config sets the column count (default 2).
-func (a *App) renderRow(node *pages.RowNode, pageType string) (string, error) {
+func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, pageType string) (string, error) {
 	cols := "2"
 	if c, ok := node.Config["cols"]; ok {
 		if s, ok := c.(string); ok && s != "" {
@@ -457,17 +457,11 @@ func (a *App) renderRow(node *pages.RowNode, pageType string) (string, error) {
 		}
 	}
 
-	// Convert children to ExecutedNodes for rendering.
-	childNodes := make([]pages.ExecutedNode, len(node.Children))
-	for i, child := range node.Children {
-		childNodes[i] = pages.ExecutedNode{Node: child}
-	}
-
 	// Render each child as a separate grid cell.
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("<div class=\"vibe-row\" style=\"grid-template-columns: repeat(%s, 1fr); gap: %s;\">", cols, gap))
 
-	for _, en := range childNodes {
+	for _, en := range children {
 		cellHTML, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType)
 		if err != nil {
 			return "", err
