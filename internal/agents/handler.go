@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
@@ -203,7 +204,7 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 
 func (h *Handler) handleListPages(ctx context.Context, req *Request) *Response {
 	db := h.container.SQLiteDB()
-	rows, err := db.QueryContext(ctx, "SELECT name FROM _vibe_pages ORDER BY name")
+	rows, err := db.QueryContext(ctx, "SELECT title FROM _vibe_pages ORDER BY sort_order, title")
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list pages: %v", err))
 	}
@@ -225,7 +226,7 @@ func (h *Handler) handleGetPage(ctx context.Context, req *Request) *Response {
 	db := h.container.SQLiteDB()
 
 	var content string
-	err := db.QueryRowContext(ctx, "SELECT content FROM _vibe_pages WHERE name = ?", name).Scan(&content)
+	err := db.QueryRowContext(ctx, "SELECT content FROM _vibe_pages WHERE title = ?", name).Scan(&content)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to get page %q: %v", name, err))
 	}
@@ -234,7 +235,7 @@ func (h *Handler) handleGetPage(ctx context.Context, req *Request) *Response {
 
 func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response {
 	db := h.container.SQLiteDB()
-	rows, err := db.QueryContext(ctx, "SELECT name, sql_text, engine FROM _vibe_queries ORDER BY name")
+	rows, err := db.QueryContext(ctx, "SELECT title, sql, engine FROM _vibe_queries ORDER BY title")
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list queries: %v", err))
 	}
@@ -442,9 +443,13 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 func (h *Handler) handleCreatePage(ctx context.Context, req *Request) *Response {
 	name := req.Params["name"].(string)
 	content := req.Params["content"].(string)
+	now := nowISO()
 
 	db := h.container.SQLiteDB()
-	_, err := db.ExecContext(ctx, "INSERT INTO _vibe_pages (name, content) VALUES (?, ?)", name, content)
+	_, err := db.ExecContext(ctx,
+		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at, metadata) VALUES (?, ?, ?, 'markdown', 0, ?, ?, '{}')",
+		uuid.New().String(), name, content, now, now,
+	)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to create page: %v", err))
 	}
@@ -456,7 +461,10 @@ func (h *Handler) handleUpdatePage(ctx context.Context, req *Request) *Response 
 	content := req.Params["content"].(string)
 
 	db := h.container.SQLiteDB()
-	result, err := db.ExecContext(ctx, "UPDATE _vibe_pages SET content = ? WHERE name = ?", content, name)
+	result, err := db.ExecContext(ctx,
+		"UPDATE _vibe_pages SET content = ?, updated_at = ? WHERE title = ?",
+		content, nowISO(), name,
+	)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to update page: %v", err))
 	}
@@ -468,7 +476,7 @@ func (h *Handler) handleDeletePage(ctx context.Context, req *Request) *Response 
 	name := req.Params["name"].(string)
 
 	db := h.container.SQLiteDB()
-	result, err := db.ExecContext(ctx, "DELETE FROM _vibe_pages WHERE name = ?", name)
+	result, err := db.ExecContext(ctx, "DELETE FROM _vibe_pages WHERE title = ?", name)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to delete page: %v", err))
 	}
@@ -617,4 +625,9 @@ func extractTableParam(params map[string]any) string {
 // isWriteOperation returns true if the category involves modifications.
 func isWriteOperation(category string) bool {
 	return category == "data" || category == "page" || category == "schema"
+}
+
+// nowISO returns the current UTC time as an ISO 8601 string.
+func nowISO() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }

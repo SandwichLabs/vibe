@@ -222,14 +222,22 @@ func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create internal tables.
+	// Create internal tables matching the real schema.
 	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (name TEXT PRIMARY KEY, content TEXT);
-		CREATE TABLE _vibe_queries (name TEXT PRIMARY KEY, sql_text TEXT, engine TEXT);
+		CREATE TABLE _vibe_pages (
+			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
+			page_type TEXT NOT NULL DEFAULT 'markdown', sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}'
+		);
+		CREATE TABLE _vibe_queries (
+			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', sql TEXT NOT NULL DEFAULT '',
+			engine TEXT NOT NULL DEFAULT 'duckdb', parameters TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+		);
 		CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
 		INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');
-		INSERT INTO _vibe_pages (name, content) VALUES ('home', '# Welcome');
-		INSERT INTO _vibe_queries (name, sql_text, engine) VALUES ('all_users', 'SELECT * FROM users', 'sqlite');
+		INSERT INTO _vibe_pages (id, title, content, created_at, updated_at) VALUES ('p1', 'home', '# Welcome', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+		INSERT INTO _vibe_queries (id, title, sql, engine, created_at, updated_at) VALUES ('q1', 'all_users', 'SELECT * FROM users', 'sqlite', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 	`)
 	require.NoError(t, err)
 
