@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
 import { vibeToolbarButtons, insertSnippet } from '../lib/vibeToolbar'
+import { execScripts } from '../lib/execScripts'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,7 @@ const previewLoading = ref(false)
 const errorMessage = ref('')
 
 const editorEl = ref<HTMLElement | null>(null)
+const previewEl = ref<HTMLElement | null>(null)
 let editorInstance: VibeEditorInstance | null = null
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -131,6 +133,10 @@ onUnmounted(() => {
   }
 })
 
+watch(preview, () => {
+  nextTick(() => execScripts(previewEl.value))
+})
+
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
 })
@@ -173,7 +179,7 @@ watch(errorMessage, (msg) => {
           Preview {{ previewLoading ? '(updating...)' : '' }}
         </div>
         <div class="flex-1 overflow-auto p-4 bg-paper">
-          <div v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
+          <div ref="previewEl" v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
         </div>
       </div>
     </div>

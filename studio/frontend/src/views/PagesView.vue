@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { execScripts } from '../lib/execScripts'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,6 +18,7 @@ const errorMessage = ref('')
 const newPageType = ref<'markdown' | 'html'>('markdown')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
+const previewEl = ref<HTMLElement | null>(null)
 
 const selectedPageType = computed(() => {
   const p = pages.value.find(p => p.id === selectedId.value)
@@ -46,6 +48,10 @@ async function renderPage(id: string) {
 
 watch(selectedId, (id) => {
   if (id) renderPage(id)
+})
+
+watch(renderedContent, () => {
+  nextTick(() => execScripts(previewEl.value))
 })
 
 watch(errorMessage, (msg) => {
@@ -141,7 +147,7 @@ onMounted(async () => {
     <div class="flex-1 overflow-auto p-6">
       <div v-if="renderLoading" class="text-muted font-mono text-sm">Rendering...</div>
       <div v-else-if="!selectedId" class="text-muted text-center mt-20 font-mono">Select a page to view</div>
-      <div v-else v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
+      <div v-else ref="previewEl" v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
     </div>
 
     <!-- New page modal -->
