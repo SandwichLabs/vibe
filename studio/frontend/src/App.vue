@@ -48,7 +48,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen w-screen bg-cream text-black">
+  <div class="h-screen w-screen bg-warm-white text-black">
     <UnlockView v-if="!isOpen" :initial-file="initialFile" @file-opened="handleFileOpened" />
     <AppShell v-else @file-closed="handleFileClosed" />
   </div>

@@ -1,0 +1,205 @@
+/* ============================================================
+   SandwichLabs Brutalist — Colors & Type
+   Canonical CSS variables + semantic utility classes.
+   Source of truth for all SandwichLabs design work.
+   ============================================================ */
+
+/* --- Webfonts -------------------------------------------------
+   Space Grotesk is vendored as woff2 (see style.css @font-face).
+   IBM Plex Mono + IBM Plex Sans pulled from Google Fonts CDN
+   (@import lives at the top of style.css for ordering rules).
+   -------------------------------------------------------------- */
+
+:root {
+  /* ---------- Core palette ---------- */
+  --sl-signal-yellow:    #FFD700;  /* Primary accent, CTAs, highlights   */
+  --sl-signal-yellow-hi: #FFE85C;  /* Hover / focus lift                  */
+  --sl-signal-yellow-lo: #E6C200;  /* Pressed / active                    */
+  --sl-absolute-black:   #000000;  /* Text, borders, shadows              */
+  --sl-warm-white:       #FAFAF5;  /* Page background                     */
+  --sl-paper:            #FFFBEA;  /* Alt paper background (subtle yellow)*/
+  --sl-warm-gray:        #E8E5DD;  /* Card/secondary background           */
+  --sl-warm-gray-2:      #F5F0E8;  /* Cream — softer secondary surface    */
+  --sl-muted-brown:      #8B7355;  /* Secondary text / metadata           */
+  --sl-muted:            #777777;  /* Neutral muted text                  */
+  --sl-error:            #CC0000;  /* Destructive / errors                */
+  --sl-success:          #1F8A3B;  /* Confirmation (rarely used)          */
+
+  /* ---------- Semantic color tokens ---------- */
+  --sl-bg:               var(--sl-warm-white);
+  --sl-bg-alt:           var(--sl-warm-gray);
+  --sl-surface:          #FFFFFF;
+  --sl-surface-ink:      var(--sl-absolute-black);
+  --sl-accent:           var(--sl-signal-yellow);
+  --sl-ink:              var(--sl-absolute-black);
+  --sl-ink-2:            var(--sl-muted-brown);
+  --sl-ink-3:            var(--sl-muted);
+  --sl-border:           var(--sl-absolute-black);
+
+  /* ---------- Typography families ---------- */
+  --sl-font-display:     'Space Grotesk', system-ui, sans-serif;
+  --sl-font-body:        'Space Grotesk', system-ui, sans-serif;
+  --sl-font-mono:        'IBM Plex Mono', 'Courier New', monospace;
+  --sl-font-label:       'IBM Plex Sans', system-ui, sans-serif;
+
+  /* ---------- Type scale (static, not fluid — brutalism = committed) ---------- */
+  --sl-fs-xs:     11px;   /* micro labels */
+  --sl-fs-sm:     13px;
+  --sl-fs-base:   15px;   /* body */
+  --sl-fs-lg:     18px;
+  --sl-fs-xl:     22px;   /* card titles */
+  --sl-fs-2xl:    30px;   /* h3 */
+  --sl-fs-3xl:    44px;   /* h2 */
+  --sl-fs-4xl:    64px;   /* h1 / hero */
+  --sl-fs-5xl:    92px;   /* display */
+
+  /* ---------- Line heights ---------- */
+  --sl-lh-tight:  1.02;
+  --sl-lh-snug:   1.15;
+  --sl-lh-normal: 1.45;
+  --sl-lh-loose:  1.65;
+
+  /* ---------- Letter-spacing ---------- */
+  --sl-tracking-tight:  -0.02em;
+  --sl-tracking-normal: 0;
+  --sl-tracking-wide:   0.04em;
+  --sl-tracking-mono:   0.05em;  /* for ALL_CAPS_LABELS */
+
+  /* ---------- Borders ---------- */
+  --sl-border-thin:    2px solid var(--sl-border);
+  --sl-border-mid:     3px solid var(--sl-border);
+  --sl-border-thick:   4px solid var(--sl-border);
+  --sl-radius:         0;         /* ZERO. Sharp corners only. */
+  --sl-radius-pill:    9999px;   /* EXCEPTION: status badges only */
+
+  /* ---------- Hard drop shadows (no blur, no softness) ---------- */
+  --sl-shadow-xs:       2px 2px 0 0 var(--sl-absolute-black);
+  --sl-shadow-sm:       3px 3px 0 0 var(--sl-absolute-black);
+  --sl-shadow:          4px 4px 0 0 var(--sl-absolute-black);
+  --sl-shadow-lg:       6px 6px 0 0 var(--sl-absolute-black);
+  --sl-shadow-xl:       8px 8px 0 0 var(--sl-absolute-black);
+  --sl-shadow-yellow:   4px 4px 0 0 var(--sl-signal-yellow);
+  --sl-shadow-error:    4px 4px 0 0 var(--sl-error);
+
+  /* ---------- Spacing scale (tight — brutalism is dense) ---------- */
+  --sl-space-0:  0;
+  --sl-space-1:  4px;
+  --sl-space-2:  8px;
+  --sl-space-3:  12px;
+  --sl-space-4:  16px;
+  --sl-space-5:  20px;
+  --sl-space-6:  24px;
+  --sl-space-8:  32px;
+  --sl-space-10: 40px;
+  --sl-space-12: 48px;
+  --sl-space-16: 64px;
+
+  /* ---------- Motion (fast, snappy, no bounce) ---------- */
+  --sl-dur-fast: 80ms;
+  --sl-dur:      150ms;
+  --sl-ease:     cubic-bezier(0.2, 0, 0.1, 1);
+}
+
+/* ============================================================
+   Semantic typography classes
+   Use these instead of raw <h1>/<h2> so treatment stays
+   consistent across surfaces.
+   ============================================================ */
+
+.sl-display {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: var(--sl-fs-5xl);
+  line-height: var(--sl-lh-tight);
+  letter-spacing: var(--sl-tracking-tight);
+  text-transform: uppercase;
+  color: var(--sl-ink);
+}
+
+.sl-h1 {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: var(--sl-fs-4xl);
+  line-height: var(--sl-lh-tight);
+  letter-spacing: var(--sl-tracking-tight);
+  color: var(--sl-ink);
+}
+
+.sl-h2 {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: var(--sl-fs-3xl);
+  line-height: var(--sl-lh-snug);
+  letter-spacing: var(--sl-tracking-tight);
+  text-transform: uppercase;
+  color: var(--sl-ink);
+}
+
+.sl-h3 {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: var(--sl-fs-2xl);
+  line-height: var(--sl-lh-snug);
+  color: var(--sl-ink);
+}
+
+.sl-h4 {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: var(--sl-fs-xl);
+  line-height: var(--sl-lh-snug);
+  color: var(--sl-ink);
+}
+
+.sl-body {
+  font-family: var(--sl-font-body);
+  font-weight: 400;
+  font-size: var(--sl-fs-base);
+  line-height: var(--sl-lh-loose);
+  color: var(--sl-ink);
+}
+
+.sl-body-sm {
+  font-family: var(--sl-font-body);
+  font-weight: 400;
+  font-size: var(--sl-fs-sm);
+  line-height: var(--sl-lh-normal);
+  color: var(--sl-ink);
+}
+
+.sl-label {
+  font-family: var(--sl-font-mono);
+  font-weight: 700;
+  font-size: var(--sl-fs-xs);
+  line-height: 1;
+  letter-spacing: var(--sl-tracking-mono);
+  text-transform: uppercase;
+  color: var(--sl-ink);
+}
+
+.sl-metadata {
+  font-family: var(--sl-font-label);
+  font-weight: 500;
+  font-size: var(--sl-fs-sm);
+  line-height: var(--sl-lh-normal);
+  color: var(--sl-ink-2);
+}
+
+.sl-code,
+.sl-mono {
+  font-family: var(--sl-font-mono);
+  font-weight: 500;
+  font-size: 0.92em;
+  color: var(--sl-ink);
+}
+
+/* Inline code treatment — yellow fill, thick border */
+code.sl-inline-code,
+.sl-inline-code {
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  font-size: 0.9em;
+  background: var(--sl-signal-yellow);
+  padding: 0.05em 0.4em;
+  border: 2px solid var(--sl-absolute-black);
+}

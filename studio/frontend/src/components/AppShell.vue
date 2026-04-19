@@ -90,7 +90,7 @@ watch(errorMessage, (msg) => {
     </nav>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-auto bg-cream">
+    <main class="flex-1 overflow-auto bg-warm-white">
       <router-view />
     </main>
 
