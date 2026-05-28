@@ -46,7 +46,7 @@ func (r *Renderer) RenderChart(cfg *renderer.ChartConfig) (string, error) {
 	canvasID := fmt.Sprintf("vibe-chart-%s", cfg.Source)
 	color := cfg.Color
 	if color == "" {
-		color = "#4A90D9"
+		color = "#2F8F87" // SchoolHouse teal
 	}
 
 	title := html.EscapeString(cfg.Title)
