@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import Icon from '../components/Icon.vue'
 
 const tables = ref<string[]>([])
 const selectedTable = ref<string | null>(null)
@@ -180,47 +181,49 @@ watch(errorMessage, (msg) => {
 <template>
   <div class="flex h-full">
     <!-- Table list -->
-    <div class="w-56 border-r-3 border-black bg-white flex flex-col">
-      <div class="p-3 border-b-3 border-black flex items-center justify-between">
-        <h2 class="font-bold text-sm uppercase font-mono tracking-wide">Tables</h2>
-        <button @click="showNewTableModal = true" class="btn btn-primary btn-sm">+ New</button>
+    <div class="w-56 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
+      <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
+        <h2 class="sh-label" style="margin: 0;">Tables</h2>
+        <button @click="showNewTableModal = true" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
       </div>
       <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 text-muted font-mono text-sm">Loading...</div>
-        <div v-else-if="tables.length === 0" class="p-4 text-muted text-sm text-center font-mono">No tables</div>
+        <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
+        <div v-else-if="tables.length === 0" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No tables</div>
         <div
           v-for="t in tables"
           :key="t"
           @click="selectTable(t)"
-          class="px-3 py-2 cursor-pointer border-b-2 border-black/10 flex items-center justify-between group text-sm font-medium"
-          :class="selectedTable === t ? 'bg-yellow border-l-4 border-l-black' : 'hover:bg-cream'"
+          class="px-4 py-2 cursor-pointer border-b border-[rgba(31,35,48,0.12)] flex items-center justify-between group text-sm font-medium"
+          :class="selectedTable === t ? 'row-selected' : 'hover:bg-[rgba(31,35,48,0.04)]'"
         >
-          <span class="truncate">{{ t }}</span>
-          <button @click.stop="dropTable(t)" class="hidden group-hover:block btn btn-ghost btn-sm text-error">Drop</button>
+          <span class="truncate flex items-center gap-2"><Icon name="database" :size="14" /> {{ t }}</span>
+          <button @click.stop="dropTable(t)" class="hidden group-hover:block btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
         </div>
       </div>
     </div>
 
     <!-- Data area -->
     <div class="flex-1 overflow-auto flex flex-col">
-      <div v-if="!selectedTable && tables.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center text-muted gap-4">
-        <div class="text-4xl">&#128451;</div>
-        <div class="font-mono text-sm">No tables yet</div>
-        <button @click="showNewTableModal = true" class="btn btn-primary">Create Table</button>
+      <div v-if="!selectedTable && tables.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center gap-4">
+        <div class="empty-hero">
+          <div class="glyph"><Icon name="database" :size="48" /></div>
+          <h2>No tables yet</h2>
+          <p class="lead">Create a table or import a CSV to get started.</p>
+          <button @click="showNewTableModal = true" class="btn btn-primary"><Icon name="plus" :size="16" /> Create table</button>
+        </div>
       </div>
-      <div v-else-if="!selectedTable" class="flex-1 flex items-center justify-center text-muted font-mono">Select a table</div>
+      <div v-else-if="!selectedTable" class="flex-1 flex items-center justify-center text-[var(--sh-graphite)] sh-mono">Select a table</div>
       <template v-else>
         <!-- Toolbar -->
-        <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center justify-between">
-          <div class="font-bold text-sm">{{ selectedTable }}</div>
-          <div class="flex items-center gap-3">
-            <span v-if="tableData" class="badge">{{ tableData.total_rows }} rows</span>
-            <button @click="openAddRow" class="btn btn-primary btn-sm">+ Add Row</button>
-          </div>
+        <div class="page-subhead" style="padding: 14px 24px;">
+          <h1 style="font-size: 22px;">{{ selectedTable }}</h1>
+          <span class="flex-1"></span>
+          <span v-if="tableData" class="badge badge--teal">{{ tableData.total_rows }} rows</span>
+          <button @click="openAddRow" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> Add row</button>
         </div>
 
         <!-- Table -->
-        <div v-if="dataLoading" class="p-4 text-muted font-mono text-sm">Loading...</div>
+        <div v-if="dataLoading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
         <div v-else-if="tableData" class="flex-1 overflow-auto">
           <table class="brutal-table">
             <thead class="sticky top-0">
@@ -241,30 +244,30 @@ watch(errorMessage, (msg) => {
                 <tr v-for="(row, i) in tableData.rows" :key="i">
                   <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
                   <td>
-                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm text-error">Del</button>
+                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
                   </td>
                 </tr>
               </template>
               <tr v-else>
-                <td :colspan="tableData.columns.length + 1" class="text-center text-muted font-mono py-8">No rows</td>
+                <td :colspan="tableData.columns.length + 1" class="text-center text-[var(--sh-graphite)] sh-mono py-8">No rows</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <!-- Pagination -->
-        <div v-if="tableData && tableData.total_pages > 1" class="px-4 py-2 border-t-3 border-black bg-white flex items-center justify-between text-sm">
-          <button @click="prevPage" :disabled="currentPage <= 1" class="btn btn-sm">&larr; Prev</button>
-          <span class="font-mono text-xs text-muted">Page {{ currentPage }} of {{ tableData.total_pages }}</span>
-          <button @click="nextPage" :disabled="currentPage >= tableData.total_pages" class="btn btn-sm">Next &rarr;</button>
+        <div v-if="tableData && tableData.total_pages > 1" class="px-4 py-2 border-t-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex items-center justify-between text-sm">
+          <button @click="prevPage" :disabled="currentPage <= 1" class="btn btn-sm"><Icon name="arrowLeft" :size="14" /> Prev</button>
+          <span class="sh-mono text-xs text-[var(--sh-graphite)]">Page {{ currentPage }} of {{ tableData.total_pages }}</span>
+          <button @click="nextPage" :disabled="currentPage >= tableData.total_pages" class="btn btn-sm">Next <Icon name="arrowRight" :size="14" /></button>
         </div>
       </template>
     </div>
 
     <!-- New table modal -->
     <div v-if="showNewTableModal" class="modal-overlay" @click.self="showNewTableModal = false">
-      <div class="card w-full max-w-lg p-6">
-        <h3 class="text-lg font-bold mb-4">Create Table</h3>
+      <div class="card card-pad w-full max-w-lg">
+        <h3 class="card-title mb-4">Create table</h3>
         <input v-model="newTableName" placeholder="Table name" class="field-input mb-4" />
         <div class="space-y-2 mb-4">
           <div v-for="(col, i) in newTableCols" :key="i" class="flex gap-2">
@@ -275,9 +278,9 @@ watch(errorMessage, (msg) => {
               <option>REAL</option>
               <option>BLOB</option>
             </select>
-            <label class="flex items-center gap-1 text-xs font-bold font-mono"><input type="checkbox" v-model="col.pk" class="accent-yellow" /> PK</label>
+            <label class="flex items-center gap-1 text-xs font-semibold sh-mono"><input type="checkbox" v-model="col.pk" style="accent-color: var(--sh-teal);" /> PK</label>
           </div>
-          <button @click="addColumnDef" class="btn btn-ghost btn-sm">+ Add column</button>
+          <button @click="addColumnDef" class="btn btn-ghost btn-sm"><Icon name="plus" :size="14" /> Add column</button>
         </div>
         <div class="flex gap-3 justify-end">
           <button @click="showNewTableModal = false" class="btn btn-ghost">Cancel</button>
@@ -288,11 +291,11 @@ watch(errorMessage, (msg) => {
 
     <!-- Add row modal -->
     <div v-if="showAddRowModal && tableInfo" class="modal-overlay" @click.self="showAddRowModal = false">
-      <div class="card w-full max-w-lg p-6 max-h-[80vh] overflow-auto">
-        <h3 class="text-lg font-bold mb-4">Add Row to {{ selectedTable }}</h3>
+      <div class="card card-pad w-full max-w-lg max-h-[80vh] overflow-auto">
+        <h3 class="card-title mb-4">Add row to {{ selectedTable }}</h3>
         <div class="space-y-3 mb-4">
           <div v-for="col in tableInfo.columns" :key="col.name">
-            <label class="field-label">{{ col.name }} <span class="text-muted">({{ col.type }})</span></label>
+            <label class="field-label">{{ col.name }} <span class="text-[var(--sh-graphite)]">({{ col.type }})</span></label>
             <input v-model="newRowValues[col.name]" class="field-input" />
           </div>
         </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import Icon from '../components/Icon.vue'
 
 const meta = ref<Record<string, string>>({})
 const title = ref('')
@@ -80,46 +81,52 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-6 max-w-xl">
-    <h1 class="text-2xl font-bold mb-6">Settings</h1>
-
-    <div v-if="loading" class="text-muted font-mono text-sm">Loading...</div>
-
-    <div v-else class="space-y-4">
+  <div style="height: 100%; overflow-y: auto; padding: 32px;">
+    <div class="headrow">
       <div>
-        <label class="field-label">Title</label>
-        <input v-model="title" class="field-input" />
+        <div class="crumb">Studio <span class="sep">/</span> Settings</div>
+        <h1>Settings</h1>
       </div>
+    </div>
 
-      <div>
-        <label class="field-label">Description</label>
-        <textarea v-model="description" rows="3" class="field-input resize-none"></textarea>
-      </div>
+    <div v-if="loading" class="sh-mono text-[var(--sh-graphite)]">Loading…</div>
 
-      <button @click="save" :disabled="saving" class="btn btn-primary">
-        {{ saving ? 'Saving...' : 'Save Settings' }}
-      </button>
+    <div v-else class="max-w-xl space-y-6">
+      <div class="card card-pad space-y-4">
+        <div>
+          <label class="field-label">Title</label>
+          <input v-model="title" class="field-input" />
+        </div>
 
-      <div v-if="message" class="text-sm font-semibold" :class="message.startsWith('Error') ? 'text-error' : 'text-black'">
-        {{ message }}
+        <div>
+          <label class="field-label">Description</label>
+          <textarea v-model="description" rows="3" class="field-input resize-none"></textarea>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button @click="save" :disabled="saving" class="btn btn-primary">
+            <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save settings' }}
+          </button>
+          <span v-if="message" class="text-sm font-semibold" :style="{ color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">
+            {{ message }}
+          </span>
+        </div>
       </div>
 
       <!-- MCP Server -->
-      <div class="mt-8">
-        <h2 class="text-lg font-bold mb-3">MCP Server</h2>
-        <div class="card p-4">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="inline-block w-3 h-3 border-2 border-black" :class="mcpRunning ? 'bg-yellow' : 'bg-muted'"></span>
-            <span class="font-mono text-xs uppercase font-bold">{{ mcpRunning ? 'Running' : 'Stopped' }}</span>
+      <div>
+        <div class="sec-title"><h2 style="font-size: 22px;">MCP Server</h2></div>
+        <div class="card card-pad">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="status-dot" :class="mcpRunning ? 'ok' : 'off'"></span>
+            <span class="sh-label" style="margin: 0;">{{ mcpRunning ? 'Running' : 'Stopped' }}</span>
           </div>
 
           <div v-if="mcpRunning && mcpUrl" class="mb-3">
             <label class="field-label">Server URL</label>
             <div class="flex items-center gap-2">
-              <code class="flex-1 px-3 py-2 bg-cream border-3 border-black text-sm font-mono select-all break-all">{{ mcpUrl }}</code>
-              <button @click="copyMCPUrl" class="btn btn-sm">
-                {{ mcpCopied ? 'Copied' : 'Copy' }}
-              </button>
+              <code class="flex-1 select-all break-all" style="padding: 8px 12px;">{{ mcpUrl }}</code>
+              <button @click="copyMCPUrl" class="btn btn-sm"><Icon name="copy" :size="14" /> {{ mcpCopied ? 'Copied' : 'Copy' }}</button>
             </div>
           </div>
 
@@ -129,22 +136,22 @@ onMounted(() => {
             class="btn"
             :class="mcpRunning ? 'btn-danger' : 'btn-primary'"
           >
-            {{ mcpToggling ? '...' : (mcpRunning ? 'Stop' : 'Start') }}
+            {{ mcpToggling ? '…' : (mcpRunning ? 'Stop' : 'Start') }}
           </button>
 
-          <p class="mt-3 font-mono text-xs text-muted">
+          <p class="mt-3 sh-mono text-xs text-[var(--sh-graphite)]">
             Exposes container tools via MCP (Model Context Protocol) for AI clients. Server stops when the file is closed.
           </p>
         </div>
       </div>
 
       <!-- Raw metadata -->
-      <div class="mt-8">
-        <h2 class="text-lg font-bold mb-3">All Metadata</h2>
-        <div class="card p-4">
-          <div v-for="(v, k) in meta" :key="k" class="flex gap-4 py-1.5 border-b-2 border-black/10 last:border-0">
-            <span class="font-mono text-xs uppercase font-bold text-muted w-40 shrink-0">{{ k }}</span>
-            <span class="text-sm break-all">{{ v }}</span>
+      <div>
+        <div class="sec-title"><h2 style="font-size: 22px;">All metadata</h2></div>
+        <div class="card card-pad">
+          <div v-for="(v, k) in meta" :key="k" class="kv">
+            <span class="k" style="width: 160px; flex: none;">{{ k }}</span>
+            <span class="v break-all" style="text-align: right;">{{ v }}</span>
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
+import Icon from '../components/Icon.vue'
 import { vibeToolbarButtons, insertSnippet } from '../lib/vibeToolbar'
 import { execScripts } from '../lib/execScripts'
 
@@ -145,22 +146,22 @@ watch(errorMessage, (msg) => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Top Toolbar -->
-    <div class="px-4 py-2 border-b-3 border-black bg-white flex items-center gap-3">
-      <button @click="goBack" class="btn btn-ghost btn-sm">&larr; Back</button>
+    <div class="px-4 py-2 border-b-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex items-center gap-3">
+      <button @click="goBack" class="btn btn-ghost btn-sm"><Icon name="arrowLeft" :size="14" /> Back</button>
       <input v-model="title" class="field-input flex-1" placeholder="Page title" />
       <button @click="save" :disabled="saving" class="btn btn-primary">
-        {{ saving ? 'Saving...' : 'Save' }}
+        <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save' }}
       </button>
     </div>
 
-    <div v-if="loading" class="p-6 text-muted font-mono text-sm">Loading...</div>
+    <div v-if="loading" class="p-6 sh-mono text-[var(--sh-graphite)]">Loading…</div>
 
     <!-- Editor + Preview -->
     <div v-else class="flex flex-1 min-h-0">
-      <div class="w-1/2 flex flex-col border-r-3 border-black">
+      <div class="w-1/2 flex flex-col border-r-2 border-[var(--sh-ink)]">
         <!-- Source label + Vibe directive toolbar -->
-        <div class="px-3 py-1.5 bg-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black flex items-center gap-2">
-          <span>{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</span>
+        <div class="px-3 py-2 border-b-2 border-[var(--sh-ink)] flex items-center gap-2" style="background: var(--sh-paper-2);">
+          <span class="sh-label" style="margin: 0;">{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</span>
           <span class="flex-1"></span>
           <button
             v-for="btn in vibeToolbarButtons"
@@ -175,10 +176,10 @@ watch(errorMessage, (msg) => {
         <div ref="editorEl" class="flex-1 min-h-0 overflow-hidden"></div>
       </div>
       <div class="w-1/2 flex flex-col">
-        <div class="px-3 py-1.5 bg-black text-yellow text-xs font-bold font-mono uppercase tracking-wide border-b-3 border-black">
-          Preview {{ previewLoading ? '(updating...)' : '' }}
+        <div class="px-3 py-2 border-b-2 border-[var(--sh-ink)] sh-label" style="background: var(--sh-ink); color: var(--sh-paper); margin: 0;">
+          Preview {{ previewLoading ? '· updating…' : '' }}
         </div>
-        <div class="flex-1 overflow-auto p-4 bg-paper">
+        <div class="flex-1 overflow-auto p-5" style="background: var(--sh-paper);">
           <div ref="previewEl" v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
         </div>
       </div>
@@ -198,17 +199,18 @@ watch(errorMessage, (msg) => {
   width: 28px;
   height: 28px;
   padding: 4px;
-  background: #fff;
-  border: 2px solid #000;
+  background: var(--sh-surface);
+  border: 1.5px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
   cursor: pointer;
   transition: transform 0.08s, box-shadow 0.08s;
 }
 
 .vibe-toolbar-btn:hover {
-  background: #000;
-  color: #FFD700;
+  background: var(--sh-teal);
+  color: var(--sh-paper);
   transform: translate(-1px, -1px);
-  box-shadow: 2px 2px 0px #000;
+  box-shadow: 2px 2px 0 0 var(--sh-ink);
 }
 
 .vibe-toolbar-btn:active {

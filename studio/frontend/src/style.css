@@ -1,67 +1,58 @@
-/* IBM Plex Mono + Plex Sans from Google Fonts. @import rules must
-   come before any other rules aside from @charset and @layer. */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+/* Fonts first — CSS @import rules must precede all other statements. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Nunito:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* Canonical SandwichLabs Brutalist tokens + semantic type classes.
-   Defines --sl-* custom properties + .sl-h1/.sl-label/etc. */
-@import "./design-tokens.css";
+/* SchoolHouse design system — tokens + UI kit + hi-fi component styles.
+   Imported after Tailwind so its base/component rules win. */
+@import "./schoolhouse/colors_and_type.css";
+@import "./schoolhouse/kit.css";
+@import "./schoolhouse/hifi.css";
 
-/* === Vendored Fonts === */
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('./assets/fonts/SpaceGrotesk-Variable.woff2') format('woff2-variations');
-  font-weight: 300 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('./assets/fonts/SpaceGrotesk-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('./assets/fonts/SpaceGrotesk-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* === Tailwind @theme — utility classes wired to --sl-* tokens === */
+/* === Tailwind @theme — utility classes wired to SchoolHouse tokens === */
 @theme {
-  /* Colors */
-  --color-yellow:          #FFD700;
-  --color-yellow-hi:       #FFE85C;
-  --color-yellow-lo:       #E6C200;
-  --color-warm-white:      #FAFAF5;
-  --color-warm-gray:       #E8E5DD;
-  --color-cream:           #F5F0E8;  /* warm-gray-2 in design system */
-  --color-paper:           #FFFBEA;
-  --color-brown:           #8B7355;
-  --color-muted:           #777777;
-  --color-error:           #CC0000;
-  --color-success:         #1F8A3B;
+  /* Core */
+  --color-ink:        #1F2330;
+  --color-black:      #1F2330;   /* remap: SchoolHouse never uses pure #000 */
+  --color-paper:      #FAF7F0;
+  --color-paper-2:    #F2EDDF;
+  --color-surface:    #FFFFFF;
+  --color-graphite:   #5C6275;
+  --color-chalk:      #A8A89C;
+  --color-ember:      #C25A1F;
+
+  /* Accents */
+  --color-teal:       #2F8F87;
+  --color-teal-hi:    #3FA39B;
+  --color-teal-lo:    #236962;
+  --color-marigold:   #F2A93B;
+  --color-coral:      #E27262;
+
+  /* Status */
+  --color-success:    #2F7D4A;
+  --color-warn:       #B47800;
+  --color-error:      #B23B2E;
+  --color-info:       #2F6FA8;
+
+  /* Legacy aliases (keep older utility names rendering on-brand) */
+  --color-muted:      #5C6275;
+  --color-warm-white: #FAF7F0;
+  --color-cream:      #F2EDDF;
+  --color-yellow:     #F2A93B;
 
   /* Typography families */
-  --font-sans:  'Space Grotesk', system-ui, sans-serif;
-  --font-mono:  'IBM Plex Mono', 'Courier New', Courier, monospace;
-  --font-label: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-label:   'JetBrains Mono', monospace;
 
-  /* Shadows */
-  --shadow-brutal-xs:     2px 2px 0 0 #000000;
-  --shadow-brutal-sm:     3px 3px 0 0 #000000;
-  --shadow-brutal:        4px 4px 0 0 #000000;
-  --shadow-brutal-lg:     6px 6px 0 0 #000000;
-  --shadow-brutal-xl:     8px 8px 0 0 #000000;
-  --shadow-brutal-yellow: 4px 4px 0 0 #FFD700;
-  --shadow-brutal-error:  4px 4px 0 0 #CC0000;
+  /* Shadows — hard offset, graphite */
+  --shadow-brutal-xs: 1px 1px 0 0 rgba(31,35,48,0.85);
+  --shadow-brutal-sm: 2px 2px 0 0 rgba(31,35,48,0.85);
+  --shadow-brutal:    3px 3px 0 0 rgba(31,35,48,0.85);
+  --shadow-brutal-lg: 5px 5px 0 0 rgba(31,35,48,0.85);
+  --shadow-brutal-teal: 3px 3px 0 0 var(--color-teal);
 
-  /* Explicit border widths (brand: 2 thin, 3 default, 4 heavy) */
+  /* Border widths */
   --border-width-2: 2px;
   --border-width-3: 3px;
   --border-width-4: 4px;
@@ -70,376 +61,227 @@
   --ease-brutal: cubic-bezier(0.2, 0, 0.1, 1);
 }
 
-/* === Base Resets === */
+/* === Base === */
 @layer base {
-  *, *::before, *::after {
-    border-radius: 0 !important;
-  }
-
   body {
-    font-family: var(--sl-font-body);
+    font-family: var(--sh-font-body);
     -webkit-font-smoothing: antialiased;
-    color: var(--sl-ink);
-    background: var(--sl-bg);
+    color: var(--sh-ink);
+    background: var(--sh-paper);
   }
-
-  *:focus {
-    outline: none;
-  }
+  *:focus { outline: none; }
 }
 
-/* === Brutalist Component Classes === */
+/* === App-specific component classes built on SchoolHouse tokens === */
 @layer components {
-  /* Buttons */
-  .btn {
-    padding: 0.5rem 1.25rem;
-    font-weight: 700;
-    font-size: var(--sl-fs-sm);
-    border: var(--sl-border-mid);
-    box-shadow: var(--sl-shadow);
-    background: var(--sl-surface);
-    color: var(--sl-ink);
-    transition: transform var(--sl-dur-fast), box-shadow var(--sl-dur-fast);
-    cursor: pointer;
-    font-family: var(--sl-font-display);
-    letter-spacing: 0.02em;
-  }
-
-  .btn:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: var(--sl-shadow-lg);
-  }
-
-  .btn:active {
-    transform: translate(2px, 2px);
-    box-shadow: var(--sl-shadow-xs);
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: var(--sl-shadow);
-  }
-
-  .btn-primary {
-    background: var(--sl-signal-yellow);
-    color: var(--sl-ink);
-  }
-
-  .btn-inverted {
-    background: var(--sl-absolute-black);
-    color: var(--sl-signal-yellow);
-    box-shadow: var(--sl-shadow-yellow);
-  }
-
-  .btn-inverted:hover {
-    box-shadow: 6px 6px 0 0 var(--sl-signal-yellow);
-  }
-
-  .btn-inverted:active {
-    box-shadow: 2px 2px 0 0 var(--sl-signal-yellow);
-  }
-
-  .btn-danger {
-    background: var(--sl-error);
-    color: #fff;
-  }
-
-  .btn-ghost {
-    border: none;
-    box-shadow: none;
-    background: transparent;
-    color: var(--sl-ink);
-    font-weight: 600;
-  }
-
-  .btn-ghost:hover {
-    background: var(--sl-warm-gray-2);
-    transform: none;
-    box-shadow: none;
-  }
-
-  .btn-ghost:active {
-    transform: none;
-    box-shadow: none;
-  }
-
+  /* Small button size used across views */
   .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: var(--sl-fs-xs);
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 13px;
   }
-
-  /* Cards */
-  .card {
-    background: var(--sl-surface);
-    border: var(--sl-border-mid);
-    box-shadow: var(--sl-shadow);
-    padding: var(--sl-space-6);
+  .btn-danger,
+  .btn-destructive {
+    color: var(--sh-error);
+    border-color: var(--sh-error);
+    box-shadow: var(--sh-shadow-error);
+    background: var(--sh-surface);
   }
-
-  .card-alt {
-    background: var(--sl-warm-gray);
+  .btn-inverted {
+    background: var(--sh-ink);
+    color: var(--sh-paper);
+    border-color: var(--sh-ink);
   }
+  .btn-inverted:hover { box-shadow: var(--sh-shadow-lg); }
 
-  /* Inputs */
-  .field-input {
-    width: 100%;
-    border: var(--sl-border-mid);
-    padding: 0.625rem 0.875rem;
-    font-family: var(--sl-font-body);
-    font-size: var(--sl-fs-sm);
-    background: var(--sl-surface);
-    color: var(--sl-ink);
-    outline: none;
-  }
-
-  .field-input:focus {
-    box-shadow: var(--sl-shadow-yellow);
-  }
-
-  .field-input-error {
-    border-color: var(--sl-error);
-    box-shadow: var(--sl-shadow-error);
-  }
-
+  /* Form fields (kit uses .field; views use .field-input/.field-label) */
   .field-label {
     display: block;
-    font-family: var(--sl-font-mono);
-    font-size: var(--sl-fs-xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: var(--sl-tracking-mono);
-    margin-bottom: 0.375rem;
-    color: var(--sl-ink);
-  }
-
-  /* Badges */
-  .badge {
-    font-family: var(--sl-font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: var(--sl-tracking-mono);
-    padding: 0.2rem 0.5rem;
-    border: var(--sl-border-thin);
-    white-space: nowrap;
-    display: inline-block;
-  }
-
-  .badge-yellow {
-    background: var(--sl-signal-yellow);
-    color: var(--sl-ink);
-  }
-
-  .badge-black {
-    background: var(--sl-absolute-black);
-    color: var(--sl-signal-yellow);
-  }
-
-  .badge-gray {
-    background: var(--sl-warm-gray);
-    color: var(--sl-ink);
-  }
-
-  .badge-error {
-    background: var(--sl-error);
-    color: #fff;
-  }
-
-  /* Status pills — the ONE rule break: may be fully rounded */
-  .badge-pill {
-    border-radius: var(--sl-radius-pill) !important;
-    padding: 0.2rem 0.75rem;
-  }
-
-  /* Modal overlay */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-  }
-
-  /* Toasts */
-  .error-toast {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    background: var(--sl-error);
-    color: #fff;
-    padding: 0.625rem 1rem;
-    border: var(--sl-border-mid);
-    box-shadow: var(--sl-shadow);
-    font-size: var(--sl-fs-sm);
+    font-family: var(--sh-font-mono);
+    font-size: var(--sh-fs-xs);
     font-weight: 600;
-    z-index: 50;
+    text-transform: uppercase;
+    letter-spacing: var(--sh-track-mono-caps);
+    margin-bottom: 6px;
+    color: var(--sh-graphite);
   }
-
-  .success-toast {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    background: var(--sl-signal-yellow);
-    color: var(--sl-ink);
-    padding: 0.625rem 1rem;
-    border: var(--sl-border-mid);
-    box-shadow: var(--sl-shadow);
-    font-size: var(--sl-fs-sm);
-    font-weight: 600;
-    z-index: 50;
-  }
-
-  /* Data tables */
-  .brutal-table {
+  .field-input {
     width: 100%;
-    border-collapse: collapse;
-    font-size: var(--sl-fs-sm);
+    font-size: 15px;
+    padding: 10px 14px;
+    min-height: 44px;
+    border: 2px solid var(--sh-ink);
+    border-radius: var(--sh-radius-sm);
+    background: var(--sh-surface);
+    color: var(--sh-ink);
+    outline: none;
+  }
+  .field-input:focus { box-shadow: var(--sh-shadow-teal); }
+  .field-input-error {
+    border-color: var(--sh-error);
+    box-shadow: var(--sh-shadow-error);
   }
 
+  /* Data tables — alias kit's .table look under the legacy name */
+  .brutal-table { width: 100%; border-collapse: collapse; font-size: var(--sh-fs-sm); }
   .brutal-table th {
-    padding: 0.5rem 0.75rem;
-    background: var(--sl-signal-yellow);
-    border: var(--sl-border-thin);
-    text-align: left;
-    font-weight: 700;
-    font-family: var(--sl-font-mono);
-    font-size: var(--sl-fs-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--sl-tracking-mono);
+    background: var(--sh-paper-2);
+    font-family: var(--sh-font-mono); font-size: var(--sh-fs-xs); font-weight: 600;
+    text-transform: uppercase; letter-spacing: var(--sh-track-mono-caps);
+    text-align: left; padding: 10px 12px;
+    border-bottom: 2px solid var(--sh-ink);
     cursor: pointer;
+    position: sticky; top: 0;
   }
-
-  .brutal-table th:hover {
-    background: var(--sl-signal-yellow-lo);
-  }
-
+  .brutal-table th:hover { background: var(--sh-paper); }
   .brutal-table td {
-    padding: 0.375rem 0.75rem;
-    border: 1px solid var(--sl-absolute-black);
-    border-bottom: var(--sl-border-thin);
+    padding: 8px 12px;
+    border-bottom: 1.5px solid rgba(31,35,48,0.18);
+    font-size: var(--sh-fs-sm);
+  }
+  .brutal-table tbody tr:hover td { background: var(--sh-teal-8); }
+  .brutal-table tbody tr:last-child td { border-bottom: 0; }
+
+  /* Selected list-row state (replaces legacy bg-yellow selection) */
+  .row-selected {
+    background: var(--sh-teal-8) !important;
+    border-left: 4px solid var(--sh-teal) !important;
   }
 
-  .brutal-table tbody tr:nth-child(even) {
-    background: var(--sl-warm-gray);
+  /* Modal + toasts (not provided by the kit) */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: var(--sh-scrim);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50;
   }
-
-  .brutal-table tbody tr:hover {
-    background: var(--sl-paper);
+  .error-toast {
+    position: fixed; bottom: 16px; right: 16px;
+    background: var(--sh-error); color: var(--sh-paper);
+    padding: 10px 16px;
+    border: 2px solid var(--sh-ink);
+    border-radius: var(--sh-radius-sm);
+    box-shadow: var(--sh-shadow);
+    font-size: var(--sh-fs-sm); font-weight: 600;
+    z-index: 60;
+  }
+  .success-toast {
+    position: fixed; bottom: 16px; right: 16px;
+    background: var(--sh-teal); color: var(--sh-paper);
+    padding: 10px 16px;
+    border: 2px solid var(--sh-ink);
+    border-radius: var(--sh-radius-sm);
+    box-shadow: var(--sh-shadow);
+    font-size: var(--sh-fs-sm); font-weight: 600;
+    z-index: 60;
   }
 }
 
-/* === Vibe Content (rendered pages) — aligned to brand === */
+/* === Vibe Content (rendered pages) — aligned to SchoolHouse === */
 .vibe-content {
-  font-family: var(--sl-font-body);
-  color: var(--sl-ink);
+  font-family: var(--sh-font-body);
+  color: var(--sh-ink);
 }
-
 .vibe-content h1 {
-  font-family: var(--sl-font-display);
-  font-size: var(--sl-fs-3xl);
-  font-weight: 700;
-  letter-spacing: var(--sl-tracking-tight);
-  line-height: var(--sl-lh-snug);
-  text-transform: uppercase;
-  margin: 0 0 var(--sl-space-6);
-}
-
-.vibe-content h2 {
-  font-family: var(--sl-font-display);
-  font-size: var(--sl-fs-2xl);
-  font-weight: 700;
-  line-height: var(--sl-lh-snug);
-  margin: var(--sl-space-8) 0 var(--sl-space-3);
-}
-
-.vibe-content h3 {
-  font-family: var(--sl-font-display);
-  font-size: var(--sl-fs-xl);
-  font-weight: 700;
-  line-height: var(--sl-lh-snug);
-  margin: var(--sl-space-6) 0 var(--sl-space-3);
-}
-
-.vibe-content p {
-  font-size: var(--sl-fs-base);
-  line-height: var(--sl-lh-loose);
-  margin: 0 0 var(--sl-space-4);
-}
-
-.vibe-content code {
-  font-family: var(--sl-font-mono);
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-3xl);
   font-weight: 600;
-  font-size: 0.9em;
-  background: var(--sl-signal-yellow);
-  padding: 0.05em 0.4em;
-  border: var(--sl-border-thin);
+  letter-spacing: var(--sh-track-display);
+  line-height: var(--sh-lh-tight);
+  margin: 0 0 var(--sh-space-5);
 }
-
+.vibe-content h2 {
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-2xl);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  letter-spacing: var(--sh-track-display);
+  margin: var(--sh-space-6) 0 var(--sh-space-3);
+}
+.vibe-content h3 {
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-xl);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  margin: var(--sh-space-5) 0 var(--sh-space-3);
+}
+.vibe-content p {
+  font-size: var(--sh-fs-base);
+  line-height: var(--sh-lh-read);
+  margin: 0 0 var(--sh-space-4);
+}
+.vibe-content code {
+  font-family: var(--sh-font-mono);
+  font-size: 0.92em;
+  background: var(--sh-paper-2);
+  padding: 1px 6px;
+  border-radius: var(--sh-radius-sm);
+  border: 1.5px solid var(--sh-ink);
+}
 .vibe-content pre {
-  font-family: var(--sl-font-mono);
-  font-size: var(--sl-fs-sm);
-  background: var(--sl-warm-gray-2);
-  border: var(--sl-border-mid);
-  padding: var(--sl-space-4);
+  font-family: var(--sh-font-mono);
+  font-size: var(--sh-fs-sm);
+  background: var(--sh-ink);
+  color: var(--sh-paper);
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  padding: var(--sh-space-4);
   overflow-x: auto;
-  margin: var(--sl-space-4) 0;
+  margin: var(--sh-space-4) 0;
 }
-
 .vibe-content pre code {
   background: transparent;
   border: none;
   padding: 0;
+  color: inherit;
 }
 
-.vibe-content .vibe-table-container { overflow-x: auto; margin: var(--sl-space-4) 0; }
-.vibe-content .vibe-table { width: 100%; border-collapse: collapse; font-size: var(--sl-fs-sm); }
+.vibe-content .vibe-table-container { overflow-x: auto; margin: var(--sh-space-4) 0; }
+.vibe-content .vibe-table { width: 100%; border-collapse: collapse; font-size: var(--sh-fs-sm); }
 .vibe-content .vibe-table th,
 .vibe-content .vibe-table td {
-  padding: 0.5rem 0.75rem;
-  border: var(--sl-border-thin);
+  padding: 8px 12px;
+  border: 1.5px solid var(--sh-ink);
   text-align: left;
 }
 .vibe-content .vibe-table thead th {
-  background: var(--sl-signal-yellow);
-  font-weight: 700;
-  font-family: var(--sl-font-mono);
+  background: var(--sh-paper-2);
+  font-weight: 600;
+  font-family: var(--sh-font-mono);
   text-transform: uppercase;
-  font-size: var(--sl-fs-xs);
-  letter-spacing: var(--sl-tracking-mono);
+  font-size: var(--sh-fs-xs);
+  letter-spacing: var(--sh-track-mono-caps);
 }
-.vibe-content .vibe-table tbody tr:nth-child(even) { background: var(--sl-warm-gray); }
+.vibe-content .vibe-table tbody tr:nth-child(even) { background: var(--sh-paper-2); }
 
 .vibe-content .vibe-metric {
   display: inline-block;
-  padding: var(--sl-space-4) var(--sl-space-6);
-  background: var(--sl-surface);
-  border: var(--sl-border-mid);
-  box-shadow: var(--sl-shadow);
+  padding: var(--sh-space-4) var(--sh-space-5);
+  background: var(--sh-surface);
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  box-shadow: var(--sh-shadow);
   text-align: left;
-  margin: var(--sl-space-2);
+  margin: var(--sh-space-2);
   min-width: 160px;
 }
 .vibe-content .vibe-metric-value {
-  font-family: var(--sl-font-display);
-  font-size: var(--sl-fs-3xl);
-  font-weight: 700;
-  line-height: var(--sl-lh-tight);
-  letter-spacing: var(--sl-tracking-tight);
-  color: var(--sl-ink);
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-3xl);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  letter-spacing: var(--sh-track-display);
+  color: var(--sh-ink);
 }
 .vibe-content .vibe-metric-label {
-  font-family: var(--sl-font-mono);
-  font-size: var(--sl-fs-xs);
-  letter-spacing: var(--sl-tracking-mono);
+  font-family: var(--sh-font-mono);
+  font-size: var(--sh-fs-xs);
+  letter-spacing: var(--sh-track-mono-caps);
   text-transform: uppercase;
-  color: var(--sl-ink-2);
-  margin-top: 0.25rem;
+  color: var(--sh-graphite);
+  margin-top: 4px;
 }
 
-.vibe-content .vibe-chart-container { margin: var(--sl-space-4) 0; }
-.vibe-content .vibe-row { display: grid; gap: var(--sl-space-4); margin: var(--sl-space-4) 0; }
+.vibe-content .vibe-chart-container { margin: var(--sh-space-4) 0; }
+.vibe-content .vibe-row { display: grid; gap: var(--sh-space-4); margin: var(--sh-space-4) 0; }
 .vibe-content .vibe-col { min-width: 0; }

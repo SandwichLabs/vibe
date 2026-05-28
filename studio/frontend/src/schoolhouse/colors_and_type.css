@@ -1,0 +1,195 @@
+/* ============================================================
+   SchoolHouse Design System — Foundation Tokens
+   Brutalist-lineage education design. Load-bearing borders,
+   hard offset shadows, soft graphite ink, warm paper background.
+   Font @import is hoisted to style.css to satisfy CSS @import ordering.
+   ============================================================ */
+
+:root {
+  /* ---------- Color: Core ---------- */
+  --sh-ink:        #1F2330;   /* primary text, borders, shadows — never #000 */
+  --sh-paper:      #FAF7F0;   /* page background — warm off-white, newsprint */
+  --sh-paper-2:    #F2EDDF;   /* alternate row, secondary surface */
+  --sh-surface:    #FFFFFF;   /* card interior — only place pure white lives */
+  --sh-graphite:   #5C6275;   /* secondary text, metadata */
+  --sh-chalk:      #A8A89C;   /* disabled, divider on dark */
+  --sh-ember:      #C25A1F;   /* burnt orange — accent splash; pull-quotes, brand flourishes, key links */
+
+  /* ---------- Color: Accents ---------- */
+  --sh-teal:       #2F8F87;   /* primary brand */
+  --sh-teal-hi:    #3FA39B;   /* hover */
+  --sh-teal-lo:    #236962;   /* pressed */
+  --sh-marigold:   #F2A93B;   /* highlight, in-progress, chart-2 */
+  --sh-coral:      #E27262;   /* needs attention, chart-3 — NOT destructive */
+
+  /* ---------- Color: Status ---------- */
+  --sh-success:    #2F7D4A;   /* submitted, complete, passing */
+  --sh-warn:       #B47800;   /* late, due soon */
+  --sh-error:      #B23B2E;   /* failing, destructive confirm */
+  --sh-info:       #2F6FA8;   /* announcement, neutral banner */
+
+  /* ---------- Color: Subjects (cards/badges only, never page bg) ---------- */
+  --sh-subj-math:    #2F6FA8;
+  --sh-subj-ela:     #7A4FA0;
+  --sh-subj-science: #2F8F87;
+  --sh-subj-history: #A65A2C;
+  --sh-subj-art:     #C2528A;
+  --sh-subj-music:   #5B6FBF;
+  --sh-subj-pe:      #4A8C3E;
+  --sh-subj-world:   #B47800;
+
+  /* ---------- Color: Tints ---------- */
+  --sh-teal-8:      rgba(47, 143, 135, 0.08);   /* selected row */
+  --sh-marigold-8:  rgba(242, 169, 59, 0.10);
+  --sh-coral-8:     rgba(226, 114, 98, 0.10);
+  --sh-scrim:       rgba(31, 35, 48, 0.55);
+
+  /* ---------- Type: Families ---------- */
+  --sh-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --sh-font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --sh-font-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --sh-font-rounded: 'Nunito', system-ui, sans-serif;   /* K–5 only */
+
+  /* ---------- Type: Scale (static, not fluid) ---------- */
+  --sh-fs-xs:    12px;
+  --sh-fs-sm:    14px;
+  --sh-fs-base:  16px;
+  --sh-fs-lg:    18px;
+  --sh-fs-xl:    22px;
+  --sh-fs-2xl:   28px;
+  --sh-fs-3xl:   36px;
+  --sh-fs-4xl:   52px;
+  --sh-fs-5xl:   76px;
+
+  /* ---------- Type: Line height ---------- */
+  --sh-lh-tight:  1.1;    /* headlines */
+  --sh-lh-ui:     1.4;    /* UI text */
+  --sh-lh-read:   1.6;    /* reading content */
+
+  /* ---------- Type: Tracking ---------- */
+  --sh-track-display: -0.015em;
+  --sh-track-mono-caps: 0.06em;
+
+  /* ---------- Borders ---------- */
+  --sh-border-thin:  1.5px solid var(--sh-ink);
+  --sh-border:       2px solid var(--sh-ink);
+  --sh-border-thick: 3px solid var(--sh-ink);
+
+  /* ---------- Radii ---------- */
+  --sh-radius-sm:     2px;
+  --sh-radius:        4px;
+  --sh-radius-pill:   9999px;
+  --sh-radius-circle: 50%;
+
+  /* ---------- Shadows: hard offset, graphite at 85% (never blurred) ---------- */
+  --sh-shadow-xs:        1px 1px 0 0 rgba(31, 35, 48, 0.85);
+  --sh-shadow-sm:        2px 2px 0 0 rgba(31, 35, 48, 0.85);
+  --sh-shadow:           3px 3px 0 0 rgba(31, 35, 48, 0.85);
+  --sh-shadow-lg:        5px 5px 0 0 rgba(31, 35, 48, 0.85);
+  --sh-shadow-teal:      3px 3px 0 0 var(--sh-teal);
+  --sh-shadow-marigold:  3px 3px 0 0 var(--sh-marigold);
+  --sh-shadow-error:     3px 3px 0 0 var(--sh-error);
+  --sh-shadow-coral:     3px 3px 0 0 var(--sh-coral);
+
+  /* ---------- Spacing ---------- */
+  --sh-space-1:  4px;
+  --sh-space-2:  8px;
+  --sh-space-3:  12px;
+  --sh-space-4:  16px;   /* module gap */
+  --sh-space-5:  24px;   /* card interior padding default */
+  --sh-space-6:  32px;
+  --sh-space-8:  48px;
+  --sh-space-10: 64px;
+  --sh-space-12: 96px;   /* section break */
+
+  /* ---------- Motion ---------- */
+  --sh-dur-fast: 80ms;
+  --sh-dur:      120ms;
+  --sh-dur-slow: 180ms;
+  --sh-ease:     cubic-bezier(0.2, 0, 0.1, 1);
+}
+
+/* ============================================================
+   Semantic element resets — opt-in by adding `class="sh"` to body
+   ============================================================ */
+
+.sh {
+  background: var(--sh-paper);
+  color: var(--sh-ink);
+  font-family: var(--sh-font-body);
+  font-size: var(--sh-fs-base);
+  line-height: var(--sh-lh-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.sh h1, .sh h2, .sh h3, .sh h4 {
+  font-family: var(--sh-font-display);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  letter-spacing: var(--sh-track-display);
+  color: var(--sh-ink);
+  margin: 0;
+}
+.sh h1 { font-size: var(--sh-fs-4xl); }
+.sh h2 { font-size: var(--sh-fs-3xl); }
+.sh h3 { font-size: var(--sh-fs-2xl); }
+.sh h4 { font-size: var(--sh-fs-xl); }
+
+.sh p {
+  font-size: var(--sh-fs-base);
+  line-height: var(--sh-lh-read);
+  margin: 0;
+}
+
+.sh .sh-display {
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-5xl);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  letter-spacing: var(--sh-track-display);
+}
+
+.sh .sh-lead {
+  font-size: var(--sh-fs-lg);
+  line-height: var(--sh-lh-read);
+  color: var(--sh-ink);
+}
+
+.sh .sh-body { font-size: var(--sh-fs-base); line-height: var(--sh-lh-read); }
+.sh .sh-meta { font-size: var(--sh-fs-sm); color: var(--sh-graphite); }
+.sh .sh-micro { font-size: var(--sh-fs-xs); color: var(--sh-graphite); }
+
+.sh .sh-mono {
+  font-family: var(--sh-font-mono);
+  font-weight: 500;
+  font-size: var(--sh-fs-sm);
+}
+
+.sh .sh-label {
+  font-family: var(--sh-font-mono);
+  font-weight: 500;
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--sh-track-mono-caps);
+  color: var(--sh-graphite);
+}
+
+.sh code {
+  font-family: var(--sh-font-mono);
+  font-size: 0.92em;
+  background: var(--sh-paper-2);
+  padding: 1px 6px;
+  border-radius: var(--sh-radius-sm);
+  border: 1.5px solid var(--sh-ink);
+}
+
+.sh a {
+  color: var(--sh-teal);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.sh a:hover { color: var(--sh-teal-lo); }
+
+::selection { background: var(--sh-marigold); color: var(--sh-ink); }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import Icon from '../components/Icon.vue'
 
 const csvPath = ref('')
 const tableName = ref('')
@@ -35,35 +36,47 @@ async function importCSV() {
 </script>
 
 <template>
-  <div class="p-6 max-w-xl">
-    <h1 class="text-2xl font-bold mb-6">Import</h1>
-
-    <div class="space-y-4">
+  <div style="height: 100%; overflow-y: auto; padding: 32px;">
+    <div class="headrow">
       <div>
-        <label class="field-label">CSV File</label>
-        <div class="flex gap-3">
-          <input :value="csvPath" readonly class="field-input flex-1 bg-cream" placeholder="No file selected" />
-          <button @click="selectFile" class="btn btn-sm">Browse</button>
+        <div class="crumb">Studio <span class="sep">/</span> Import</div>
+        <h1>Import CSV</h1>
+      </div>
+    </div>
+
+    <div class="card card-pad max-w-xl">
+      <div class="space-y-4">
+        <div>
+          <label class="field-label">CSV file</label>
+          <div class="flex gap-3">
+            <input :value="csvPath" readonly class="field-input flex-1" style="background: var(--sh-paper-2);" placeholder="No file selected" />
+            <button @click="selectFile" class="btn btn-sm"><Icon name="fileText" :size="14" /> Browse</button>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <label class="field-label">Table Name</label>
-        <input v-model="tableName" class="field-input" placeholder="my_table" />
-      </div>
+        <div>
+          <label class="field-label">Table name</label>
+          <input v-model="tableName" class="field-input" placeholder="my_table" />
+        </div>
 
-      <button
-        @click="importCSV"
-        :disabled="loading || !csvPath || !tableName"
-        class="btn btn-primary w-full text-center"
-      >
-        {{ loading ? 'Importing...' : 'Import' }}
-      </button>
+        <button
+          @click="importCSV"
+          :disabled="loading || !csvPath || !tableName"
+          class="btn btn-primary w-full"
+          style="justify-content: center;"
+        >
+          <Icon name="download" :size="16" /> {{ loading ? 'Importing…' : 'Import' }}
+        </button>
 
-      <div v-if="error" class="p-3 bg-error/10 border-3 border-error text-error text-sm font-semibold">{{ error }}</div>
+        <div v-if="error" class="banner attn">
+          <div class="ico"><Icon name="alert" :size="22" /></div>
+          <div class="body"><div class="ttl">Import failed</div><div class="sub">{{ error }}</div></div>
+        </div>
 
-      <div v-if="result" class="p-3 bg-yellow/20 border-3 border-black text-sm font-semibold">
-        Imported {{ result.rows_imported }} rows into table "{{ result.table_name }}"
+        <div v-if="result" class="banner teal">
+          <div class="ico"><Icon name="check" :size="22" /></div>
+          <div class="body"><div class="ttl">Import complete</div><div class="sub">Imported {{ result.rows_imported }} rows into table "{{ result.table_name }}".</div></div>
+        </div>
       </div>
     </div>
   </div>

@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import Icon from '../components/Icon.vue'
 import { execScripts } from '../lib/execScripts'
 
 const router = useRouter()
@@ -116,53 +117,53 @@ onMounted(async () => {
 <template>
   <div class="flex h-full">
     <!-- Page list -->
-    <div class="w-72 border-r-3 border-black bg-white flex flex-col">
-      <div class="p-3 border-b-3 border-black flex items-center justify-between">
-        <h2 class="font-bold text-sm uppercase font-mono tracking-wide">Pages</h2>
-        <button @click="showNewModal = true" class="btn btn-primary btn-sm">+ New</button>
+    <div class="w-72 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
+      <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
+        <h2 class="sh-label" style="margin: 0;">Pages</h2>
+        <button @click="showNewModal = true" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
       </div>
       <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 text-muted font-mono text-sm">Loading...</div>
-        <div v-else-if="pages.length === 0" class="p-4 text-muted text-sm text-center font-mono">No pages yet</div>
+        <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
+        <div v-else-if="pages.length === 0" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No pages yet</div>
         <div
           v-for="page in pages"
           :key="page.id"
           @click="selectedId = page.id"
-          class="px-3 py-2.5 cursor-pointer border-b-2 border-black/10 flex items-center justify-between group"
-          :class="selectedId === page.id ? 'bg-yellow border-l-4 border-l-black' : 'hover:bg-cream'"
+          class="px-4 py-2.5 cursor-pointer border-b border-[rgba(31,35,48,0.12)] flex items-center justify-between group"
+          :class="selectedId === page.id ? 'row-selected' : 'hover:bg-[rgba(31,35,48,0.04)]'"
         >
           <div class="min-w-0">
-            <div class="text-sm font-bold truncate">{{ page.title || 'Untitled' }}</div>
-            <div class="badge mt-0.5">{{ page.page_type }}</div>
+            <div class="text-sm font-semibold truncate">{{ page.title || 'Untitled' }}</div>
+            <div class="badge badge--graphite mt-1">{{ page.page_type }}</div>
           </div>
           <div class="hidden group-hover:flex gap-1">
-            <button @click.stop="editPage(page.id)" class="btn btn-ghost btn-sm">Edit</button>
-            <button @click.stop="deletePage(page.id)" class="btn btn-ghost btn-sm text-error">Del</button>
+            <button @click.stop="editPage(page.id)" class="btn btn-ghost btn-sm"><Icon name="edit" :size="14" /></button>
+            <button @click.stop="deletePage(page.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Content area -->
-    <div class="flex-1 overflow-auto p-6">
-      <div v-if="renderLoading" class="text-muted font-mono text-sm">Rendering...</div>
-      <div v-else-if="!selectedId" class="text-muted text-center mt-20 font-mono">Select a page to view</div>
+    <div class="flex-1 overflow-auto p-8">
+      <div v-if="renderLoading" class="sh-mono text-[var(--sh-graphite)]">Rendering…</div>
+      <div v-else-if="!selectedId" class="sh-mono text-[var(--sh-graphite)] text-center mt-20">Select a page to view</div>
       <div v-else ref="previewEl" v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
     </div>
 
     <!-- New page modal -->
     <div v-if="showNewModal" class="modal-overlay" @click.self="showNewModal = false; newPageType = 'markdown'">
-      <div class="card w-full max-w-sm p-6">
-        <h3 class="text-lg font-bold mb-4">New Page</h3>
+      <div class="card card-pad w-full max-w-sm">
+        <h3 class="card-title mb-4">New page</h3>
         <input v-model="newTitle" placeholder="Page title" class="field-input" :class="{ 'field-input-error': titleError }" @keyup.enter="createPage" @input="titleError = false" autofocus />
-        <p v-if="titleError" class="text-error text-xs mt-1 font-semibold">Title is required</p>
+        <p v-if="titleError" class="text-xs mt-1 font-semibold" style="color: var(--sh-error);">Title is required</p>
         <div class="flex gap-4 mt-3">
           <label class="flex items-center gap-1.5 text-sm cursor-pointer font-medium">
-            <input type="radio" v-model="newPageType" value="markdown" class="accent-yellow" />
+            <input type="radio" v-model="newPageType" value="markdown" style="accent-color: var(--sh-teal);" />
             Markdown
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer font-medium">
-            <input type="radio" v-model="newPageType" value="html" class="accent-yellow" />
+            <input type="radio" v-model="newPageType" value="html" style="accent-color: var(--sh-teal);" />
             HTML
           </label>
         </div>

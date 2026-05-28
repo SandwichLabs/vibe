@@ -5,40 +5,41 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 
-/** Neo-brutalist theme for the CodeMirror editor. */
+/** SchoolHouse theme for the CodeMirror editor. */
+const MONO = "'JetBrains Mono', 'SF Mono', Menlo, monospace"
 const vibeTheme = EditorView.theme({
   '&': {
-    backgroundColor: '#fffbea',
-    color: '#000',
-    fontFamily: "'Courier New', Courier, monospace",
+    backgroundColor: '#FAF7F0',
+    color: '#1F2330',
+    fontFamily: MONO,
     fontSize: '14px',
     height: '100%',
   },
   '.cm-content': {
-    caretColor: '#000',
+    caretColor: '#1F2330',
     padding: '16px',
     minHeight: '100%',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#000',
+    borderLeftColor: '#1F2330',
     borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-    backgroundColor: '#FFD700 !important',
+    backgroundColor: 'rgba(47, 143, 135, 0.18) !important',
   },
   '.cm-activeLine': {
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    backgroundColor: 'rgba(47, 143, 135, 0.07)',
   },
   '.cm-gutters': {
-    backgroundColor: '#f5f0e8',
-    color: '#777',
-    borderRight: '3px solid #000',
-    fontFamily: "'Courier New', Courier, monospace",
+    backgroundColor: '#F2EDDF',
+    color: '#5C6275',
+    borderRight: '2px solid #1F2330',
+    fontFamily: MONO,
     fontSize: '12px',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: '#FFD700',
-    color: '#000',
+    backgroundColor: 'rgba(47, 143, 135, 0.14)',
+    color: '#1F2330',
   },
   '.cm-scroller': {
     overflow: 'auto',
@@ -48,21 +49,21 @@ const vibeTheme = EditorView.theme({
   },
 })
 
-/** Syntax highlighting colors matching the neo-brutalist palette. */
+/** Syntax highlighting colors matching the SchoolHouse palette. */
 const vibeHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: '700', color: '#000' },
-  { tag: tags.emphasis, fontStyle: 'italic', color: '#333' },
-  { tag: tags.strong, fontWeight: '700', color: '#000' },
-  { tag: tags.keyword, color: '#8b0000' },
-  { tag: tags.atom, color: '#8b0000' },
-  { tag: tags.number, color: '#005f87' },
-  { tag: tags.string, color: '#005f00' },
-  { tag: tags.comment, color: '#777', fontStyle: 'italic' },
-  { tag: tags.link, color: '#005f87', textDecoration: 'underline' },
-  { tag: tags.url, color: '#005f87' },
-  { tag: tags.monospace, fontFamily: "'Courier New', Courier, monospace" },
-  { tag: tags.processingInstruction, color: '#8b0000', fontWeight: '700' },
-  { tag: tags.meta, color: '#777' },
+  { tag: tags.heading, fontWeight: '700', color: '#1F2330' },
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#5C6275' },
+  { tag: tags.strong, fontWeight: '700', color: '#1F2330' },
+  { tag: tags.keyword, color: '#C25A1F' },
+  { tag: tags.atom, color: '#C25A1F' },
+  { tag: tags.number, color: '#2F6FA8' },
+  { tag: tags.string, color: '#2F7D4A' },
+  { tag: tags.comment, color: '#5C6275', fontStyle: 'italic' },
+  { tag: tags.link, color: '#2F8F87', textDecoration: 'underline' },
+  { tag: tags.url, color: '#2F8F87' },
+  { tag: tags.monospace, fontFamily: MONO },
+  { tag: tags.processingInstruction, color: '#C25A1F', fontWeight: '700' },
+  { tag: tags.meta, color: '#5C6275' },
 ])
 
 export interface VibeEditorOptions {
