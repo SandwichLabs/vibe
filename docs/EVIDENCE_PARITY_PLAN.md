@@ -2,6 +2,15 @@
 
 Goal: Bring Vibe's page/dashboard rendering to feature parity with Evidence's core authoring model. DuckDB-only engine. Markdown editor without autocomplete.
 
+> **Scope & status note (2026-05):** This plan covers the **reporting/dashboard** half of
+> Vibe and is **folded into Phase 3 of [`ms-access-parity-plan.md`](ms-access-parity-plan.md)**
+> (the live roadmap). Two of its assumptions have since been settled in the codebase:
+> 1. **Single-engine DuckDB is done** — the `engine=` option and SQLite query path were
+>    removed; WU-1 below is essentially complete.
+> 2. **The editor is CodeMirror, not OverType** — `PageEditorView.vue` uses a CodeMirror
+>    instance via `studio/frontend/src/composables/useVibeEditor.ts`, themed with the
+>    **SchoolHouse** design system. WU-12 is reframed accordingly (see its note).
+
 ## Current State (Vibe)
 
 **Page syntax:** Markdown with YAML frontmatter, SQL fenced blocks (```` ```sql name ```` ), single-line YAML directives (`{table: source}`), Go template expansion (`{{.Results.name}}`).
@@ -21,8 +30,8 @@ Goal: Bring Vibe's page/dashboard rendering to feature parity with Evidence's co
 
 ## Simplifications
 
-- **DuckDB only** — remove SQLite engine option from parser/executor. All queries run on DuckDB.
-- **No autocomplete** — OverType markdown editor (WYSIWYG textarea overlay), no schema-aware suggestions.
+- **DuckDB only** — SQLite engine option removed from parser/executor; all queries run on DuckDB (done).
+- **No autocomplete** — CodeMirror markdown editor (SchoolHouse theme), no schema-aware suggestions.
 - **No Markdoc syntax** — keep the existing `{directive}` YAML syntax rather than adopting `{% component %}`. It's simpler and already works.
 - **No SQL files** — queries live in pages (existing `_vibe_queries` table is for saved queries in the query editor, not page-level reuse).
 - **No access control / row-level security** — single-user app.
@@ -32,7 +41,7 @@ Goal: Bring Vibe's page/dashboard rendering to feature parity with Evidence's co
 
 | Evidence Component | Vibe Equivalent | Status |
 |---|---|---|
-| SQL code blocks | ```` ```sql name ```` | Done (remove engine= option) |
+| SQL code blocks | ```` ```sql name ```` | Done (engine= option removed) |
 | `{% bar_chart %}` | `{chart: source, type: bar}` | Needs: multi-series, stacking, axis config |
 | `{% line_chart %}` | `{chart: source, type: line}` | Needs: same as bar |
 | `{% area_chart %}` | `{chart: source, type: area}` | Needs: same as bar |
@@ -71,8 +80,9 @@ Goal: Bring Vibe's page/dashboard rendering to feature parity with Evidence's co
 
 ### Phase 1: Foundation (engine + formatting + variables)
 
-#### WU-1: DuckDB-Only Simplification
-Remove dual-engine complexity. All SQL blocks default to DuckDB, remove `engine=` parser option.
+#### WU-1: DuckDB-Only Simplification — ✅ done
+Dual-engine complexity removed. All SQL blocks run on DuckDB; the `engine=` parser option
+is gone and the SQLite query path is unused. Listed here for completeness; no further work.
 
 Files:
 - `internal/pages/parser.go` — remove engine validation, always set `Engine: "duckdb"`
@@ -279,8 +289,18 @@ Files:
 
 ### Phase 5: Frontend Integration
 
-#### WU-12: OverType Editor with Component Toolbar
-Replace the plain `<textarea>` in PageEditorView with [OverType](https://github.com/panphora/overtype) — a lightweight WYSIWYG markdown editor that overlays an invisible textarea on a styled preview. This gives users live-rendered markdown (bold, italic, headings, lists) while editing, without the complexity of a full rich-text editor.
+#### WU-12: Page Editor Component Toolbar
+
+> **Reconciliation note:** The editor decision landed on **CodeMirror**, not OverType.
+> `PageEditorView.vue` already runs a CodeMirror instance via the
+> `studio/frontend/src/composables/useVibeEditor.ts` composable (themed with the
+> **SchoolHouse** design system, with an `insertSnippet` seam for toolbar buttons).
+> OverType is *not* a dependency. The remaining deliverable for this WU is therefore the
+> **Vibe component-insertion toolbar** (the directive buttons in the table below), wired to
+> that composable. The OverType-specific prose that follows is retained for historical
+> context only — read "OverType" as "the CodeMirror editor" throughout.
+
+The original plan (superseded) was to replace the plain `<textarea>` in PageEditorView with [OverType](https://github.com/panphora/overtype) — a lightweight WYSIWYG markdown editor that overlays an invisible textarea on a styled preview. This gives users live-rendered markdown (bold, italic, headings, lists) while editing, without the complexity of a full rich-text editor.
 
 **Why OverType:**
 - ~117KB, framework-agnostic, drops into Vue with a `ref` target
@@ -399,7 +419,9 @@ function insertSnippet(editorEl, getValue, snippet) {
 ```
 
 **Theme integration:**
-Use a custom OverType theme that matches the Studio neo-brutalist design:
+The editor theme matches the Studio **SchoolHouse** design system and is already
+implemented in `useVibeEditor.ts`. (The OverType theme object below is historical; the
+live CodeMirror theme lives in that composable.)
 ```javascript
 {
   theme: {
@@ -420,22 +442,21 @@ Use a custom OverType theme that matches the Studio neo-brutalist design:
       hr: '#1a1a1a',
       syntaxMarker: '#9ca3af',
       cursor: '#1a1a1a',
-      selection: '#fef08a'  // yellow highlight matching neo-brutalist accent
+      selection: '#fef08a'  // highlight matching the SchoolHouse accent
     }
   }
 }
 ```
 
 **Preserving split-pane layout:**
-The left pane changes from raw textarea to OverType mount. The right pane (server-rendered preview) stays the same. OverType handles markdown formatting visually in the editor; the right pane shows the full executed output with charts, tables, and directives rendered.
+The left pane is the CodeMirror editor (`useVibeEditor.ts`); the toolbar sits above it. The right pane (server-rendered preview) stays the same — it shows the full executed output with charts, tables, and directives rendered.
 
 **Filter state in preview:**
 `RenderPageContent` already accepts a params map. When the rendered preview HTML contains filter elements (dropdowns, etc.), intercept their change events via `postMessage` or DOM event delegation, collect filter state, and re-call `RenderPageContent(pageID, filterState)`.
 
 Files:
-- `studio/frontend/package.json` — add `overtype` dependency
-- `studio/frontend/src/views/PageEditorView.vue` — replace textarea with OverType, add custom toolbar
-- `studio/frontend/src/composables/useOvertype.ts` — reusable OverType init + Vibe toolbar config
+- `studio/frontend/src/composables/useVibeEditor.ts` — existing CodeMirror setup + SchoolHouse theme; expose an `insertSnippet(snippet)` helper for the toolbar
+- `studio/frontend/src/views/PageEditorView.vue` — add the component-insertion toolbar above the CodeMirror editor
 - `studio/frontend/src/components/VibeToolbarIcons.ts` — SVG icons for component buttons
 - `studio/app.go` — `RenderPageContent` accepts params map for filter state
 
@@ -450,7 +471,7 @@ Files:
 - `studio/frontend/src/views/DashboardView.vue` — render HTML from Go instead of hardcoded stats
 
 #### WU-14: CSS Theme & Styling
-Create a cohesive default stylesheet for all rendered components, inspired by Evidence's clean look.
+Create a cohesive default stylesheet for all rendered components, aligned with the Studio **SchoolHouse** design system (`studio/frontend/src/schoolhouse/`) and Evidence's clean look.
 
 - Consistent spacing, typography, colors
 - Responsive grid for `{row}` layout
@@ -458,7 +479,7 @@ Create a cohesive default stylesheet for all rendered components, inspired by Ev
 - Clean table styles with pagination controls
 - Chart container sizing
 - Filter bar styling
-- Dark mode support (matches Studio theme)
+- Dark mode support (matches the Studio SchoolHouse theme)
 
 Files:
 - `internal/renderer/html/styles.go` — embedded CSS (or separate .css file)
@@ -478,12 +499,12 @@ WU-2 Formatting ────────┼── WU-4 Block directives    WU-6 
 WU-3 Variables ─────────┘── WU-5 Conditionals        WU-8 Table ──┼── WU-10 Dropdown ──── WU-13 Dashboard
                                                      WU-9 Charts ─┘   WU-11 Inputs ────── WU-14 CSS Theme
 
-WU-12 OverType Editor ──────────────────────────────────────────────────────────────────────┘
-  (can start in Phase 1, toolbar buttons added incrementally as components land)
+WU-12 Editor Toolbar ──────────────────────────────────────────────────────────────────────┘
+  (CodeMirror is in place; component-insertion buttons added incrementally as components land)
 ```
 
 - Phase 1 has no internal dependencies, all 3 WUs can be done in parallel
-- **WU-12 (OverType editor) can start immediately** — initial integration replaces the textarea with OverType + standard markdown toolbar. Custom Vibe component buttons are added incrementally as each component WU lands. No blocker.
+- **WU-12 (editor toolbar) can start immediately** — the CodeMirror editor (`useVibeEditor.ts`) is already in place; this WU adds the component-insertion toolbar, with custom Vibe component buttons added incrementally as each component WU lands. No blocker.
 - Phase 2 depends on Phase 1 (block parsing needs the simplified parser, conditionals need variables)
 - Phase 3 depends on WU-2 (formatting) but can run parallel to Phase 2
 - Phase 4 depends on WU-3 (variables) and Phase 3 components

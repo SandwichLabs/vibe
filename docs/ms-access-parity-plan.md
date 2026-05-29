@@ -103,7 +103,7 @@
 ### Phase 3 — Reports & dashboards
 *Goal: banded reporting + fold in the Evidence dashboard parity work.*
 
-- **3.1 Fold in `EVIDENCE_PARITY_PLAN.md`.** Execute its WUs (value formatting, variables, block layout/tabs/callout, conditional eval, `{value}`, enhanced metric/table, multi-series/stacked charts, input filters, OverType editor, CSS theme). This is the *live dashboard* stream.
+- **3.1 Fold in `EVIDENCE_PARITY_PLAN.md`.** Execute its WUs (value formatting, variables, block layout/tabs/callout, conditional eval, `{value}`, enhanced metric/table, multi-series/stacked charts, input filters, editor component toolbar, CSS theme). This is the *live dashboard* stream.
 - **3.2 Banded report model.** `_vibe_reports`: report/page/group header-footer + detail bands; group levels; aggregate expressions (`=Sum/Count/Avg` over group/all); sort/group. Files: `internal/container/schema.go`, new `internal/reports/`.
 - **3.3 Banded renderer + print.** Extend `internal/renderer/html` with band layout, print CSS, pagination, page numbers/dates. Files: new `internal/renderer/html/report.go`.
 - **3.4 Print/PDF & Office Links.** Print-to-PDF (Wails/headless), export report → PDF/HTML/xlsx, one-click "Analyze in Excel/Sheets." Files: `studio/app.go`.
@@ -181,4 +181,3 @@ These layer on top of v1.0 without reworking it: the CRUD path (P1) and capabili
 | App-Mode lockdown is in-process (not a separate binary) | Capability gating in `app.go` + forced agent sandbox; document the boundary | P4 |
 | Form/report spec sprawl (many new `_vibe_*` tables) | Keep specs as versioned JSON; reuse `_vibe_components`/`_vibe_pages` where possible | all |
 | Scope creep vs. true Access parity | Each phase has a concrete acceptance app (order-entry, grouped report, locked switchboard) | all |
-```

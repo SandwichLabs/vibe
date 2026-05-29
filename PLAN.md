@@ -4,11 +4,18 @@
 **Structure:** 6 phases, each with concrete deliverables, files to create, and acceptance criteria.
 **Convention:** All packages live under `internal/` per Sandwich Labs Go conventions (not `pkg/` as in the spec's diagrams).
 
+> **Status (2026-05):** These foundational phases (0–6) are **largely complete** — the
+> container, encryption, page engine, TUI, web preview, agent/MCP, and Wails GUI all
+> exist. The *next* arc is **MS Access application parity** (forms with write-back,
+> relational schema, banded reports, switchboard/app-mode, macros). That roadmap lives
+> in **[`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md)** and supersedes
+> this document for forward planning.
+
 ---
 
 ## Phase 0 — Foundation
 
-**Goal:** Open, read, write, and close `.vibe` files. Prove the container format and dual-engine architecture.
+**Goal:** Open, read, write, and close `.vibe` files. Prove the container format (SQLCipher envelope + materialized DuckDB blob).
 
 ### 0.1 Project Scaffold
 
@@ -90,14 +97,16 @@ internal/config/
 
 ### 1.1 Query Engine
 
-Unified interface that routes queries to DuckDB or SQLite.
+Query interface executing against DuckDB. *(As-built note: the original dual-engine
+design routed to DuckDB **or** SQLite; this was simplified to a single DuckDB engine.
+`sqlite.go` remains in the tree but is unused.)*
 
 **Files:**
 ```
 internal/engine/
-  engine.go                     # Engine interface: Execute(sql, engine, params) → ResultSet
+  engine.go                     # Manager: Execute(sql, params) → ResultSet (DuckDB)
   duckdb.go                     # DuckDB driver implementation
-  sqlite.go                     # SQLite driver implementation (queries against SQLCipher db)
+  sqlite.go                     # legacy SQLite driver — present but unused
   params.go                     # Parameter binding, $param substitution, sanitization
   result.go                     # ResultSet type: Columns []Column, Rows [][]any
   engine_test.go
@@ -105,9 +114,8 @@ internal/engine/
 
 **Acceptance:**
 - Execute a SELECT against DuckDB → returns ResultSet with typed columns.
-- Execute a SELECT against SQLite → same ResultSet interface.
 - Parameter binding: `$customer_id` replaced safely, no SQL injection.
-- Engine selection via string `"duckdb"` or `"sqlite"`.
+- All page SQL blocks and CRUD run on DuckDB (no engine selection).
 
 ### 1.2 Named Query Registry
 
@@ -142,7 +150,6 @@ type Node interface{ nodeType() string }
 type TextNode struct{ Content string }
 type SQLBlockNode struct {
     Name   string
-    Engine string        // "duckdb" | "sqlite"
     Cache  time.Duration
     SQL    string
 }
@@ -332,43 +339,36 @@ cmd/
 
 ---
 
-## Phase 5 — Vibe Viewer (Desktop GUI)
+## Phase 5 — Desktop App (Wails GUI)
 
-**Goal:** Non-technical users can open `.vibe` files in a polished desktop application.
+**Goal:** A polished Wails desktop app for both builders (Studio Mode) and non-technical users (App Mode). *(As-built: this became the `studio/` Wails app with a Vue 3 frontend and a runtime Studio/App mode toggle, not a separate `cmd/vibe-viewer` binary.)*
 
 ### 5.1 Wails Application
 
 **Files:**
 ```
-cmd/vibe-viewer/
+studio/
   main.go                       # Wails bootstrap, file association
-  app.go                        # Go backend: Container + Engine + page execution
-  handlers.go                   # Methods exposed via Wails bindings (see spec §8.5)
+  app.go                        # Go backend: Container + Engine + page execution + CRUD + agent
 ```
 
-### 5.2 React Frontend
+### 5.2 Vue 3 Frontend
 
 **Files:**
 ```
-cmd/vibe-viewer/frontend/
+studio/frontend/
   index.html
   package.json
   src/
-    App.jsx                     # Root: routing between Unlock and Main
-    pages/
-      Unlock.jsx                # Passphrase entry
-      PageView.jsx              # Rendered page (HTML from backend)
-      TableBrowser.jsx          # Sortable/filterable table explorer
-    components/
-      Sidebar.jsx               # Page navigation
-      Chart.jsx                 # Chart.js wrapper
-      DataTable.jsx             # Paginated sortable table
-      Form.jsx                  # Dynamic form renderer
-      Metric.jsx                # Metric card
-      Detail.jsx                # Record detail view
-    lib/
-      wails.js                  # Wails runtime bindings
-      theme.js                  # Dark/light theme toggle
+    App.vue                     # Root: routes by mode (Unlock → Studio/App shell)
+    views/
+      UnlockView.vue            # Passphrase entry
+      PageEditorView.vue        # Page editor + live preview (Studio Mode)
+      DashboardView.vue         # Rendered dashboard
+      TableBrowserView.vue      # Sortable/filterable table explorer + CRUD
+      QueryEditorView.vue, ImportView.vue, SettingsView.vue, PagesView.vue
+    components/                 # Chart, DataTable, Form, Metric, Detail, …
+    router/                     # mode-aware routing + capability gating
 ```
 
 ### 5.3 Platform Integration
@@ -378,13 +378,13 @@ cmd/vibe-viewer/frontend/
 - Linux: `.desktop` file with `MimeType=application/x-vibe`.
 
 **Acceptance:**
-- Double-click a `.vibe` file → Viewer opens, prompts for passphrase.
+- Double-click a `.vibe` file → app opens, prompts for passphrase.
 - Correct passphrase → sidebar shows pages, content renders with charts/tables/metrics.
 - Form submission works (insert/update).
 - Table browser with sort/filter/pagination.
 - Export: CSV, JSON, print-to-PDF.
 - Dark/light theme toggle.
-- Viewer cannot edit pages, run SQL, or access internal tables.
+- In **App Mode**, the user cannot edit pages, run SQL, or access internal tables.
 
 ---
 
@@ -430,7 +430,7 @@ cmd/
 - `.goreleaser.yaml` for cross-platform builds (macOS, Windows, Linux).
 - Signed binaries.
 - `ldflags` version injection.
-- Installers for Viewer (DMG, MSI, AppImage).
+- Installers for the desktop app (DMG, MSI, AppImage).
 
 **Acceptance:**
 - All utility commands work correctly.
@@ -455,7 +455,7 @@ TUI Shell      Web Server            Agent Interface
    │              │                      │
    └──────┬───────┘                      │
           ▼                              │
-       Phase 5 ── Vibe Viewer ◄──────────┘
+       Phase 5 ── Desktop App ◄──────────┘
           │
           ▼
        Phase 6 ── Hardening & Release
@@ -473,6 +473,6 @@ Phases 2, 3, and 4 can proceed in parallel once Phase 1 is complete — they all
 | go-duckdb serialize/deserialize stability | Write stress tests for blob round-trips | 0 |
 | Temp file cleanup on crash | `defer` + signal handler + startup orphan detection | 0, 6 |
 | BubbleTea complexity for nested interactive widgets | Keep widgets stateless where possible; isolate state per pane | 2 |
-| Chart.js bundle size in Viewer | Vendor a minimal Chart.js build; tree-shake unused chart types | 3, 5 |
+| Chart.js bundle size in the app | Vendor a minimal Chart.js build; tree-shake unused chart types | 3, 5 |
 | Wails cross-platform CGO (SQLCipher + DuckDB) | Test CI builds for all three platforms early | 5 |
 | DuckDB memory spikes on large aggregations | Default `memory_limit=512MB`, expose in config | 1, 6 |

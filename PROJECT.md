@@ -2,16 +2,31 @@
 
 **Version:** 0.1.0-draft
 **Date:** March 2026
-**Status:** Pre-implementation specification
+**Status:** Original MVP specification — substantially implemented.
+
+> **Direction note (2026-05):** This document is the *original* spec and remains the
+> reference for the `.vibe` file format, runtime, and agent protocol. Two things have
+> since evolved:
+> 1. **Single-engine DuckDB.** The dual-engine (SQLite + DuckDB) design here was
+>    simplified — all queries and CRUD run on DuckDB; SQLCipher is the encrypted
+>    container envelope only.
+> 2. **One app, two modes.** "Vibe Studio" and "Vibe Viewer" are unified into a single
+>    Wails app (Vue 3 frontend) with a **Studio Mode** and a locked-down **App Mode**,
+>    rather than two binaries.
+>
+> The product's north star is now explicit **Microsoft Access 97 application parity**
+> (forms, relational schema, reports, switchboard navigation), with multi-user/Tailscale
+> deferred to **v1.1**. See **[`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md)**
+> for the current roadmap and **[`CLAUDE.md`](CLAUDE.md)** for the up-to-date architecture.
 
 ---
 
 ## 1. Vision
 
-Vibe is a modern, single-user reimagining of Microsoft Access: a portable, encrypted application container that bundles data, interactive pages, and an AI agent interface into a single `.vibe` file. The ecosystem is split into two applications — like the distinction between a PDF editor and a PDF viewer:
+Vibe is a modern, single-user reimagining of Microsoft Access: a portable, encrypted application container that bundles data, interactive pages, forms, reports, and an AI agent interface into a single `.vibe` file. One desktop app presents two modes — like the editor/reader distinction in a PDF tool, but in a single program:
 
-- **Vibe Studio** — a Charm-based TUI for technical users to create, edit, and manage `.vibe` files. Includes a built-in web server for previewing pages in a browser. This is where data apps are built, either by hand or with AI agents.
-- **Vibe Viewer** — a Wails desktop GUI for non-technical users to open, interact with, and use `.vibe` files. Double-click a `.vibe` file, enter the passphrase, and use the forms, dashboards, and notebooks inside. No terminal, no code, no build step.
+- **Studio Mode** — the builder surface (Wails v2 + Vue 3) for technical and citizen developers to create, edit, and manage `.vibe` files: schema, pages, forms, reports, queries, and agent chat. A built-in web server previews pages in a browser. This is where data apps are built, by hand or with AI agents. A terminal-native **BubbleTea TUI** offers the same building blocks for power users.
+- **App Mode** — the locked-down end-user surface in the *same* app. Open a `.vibe` file, enter the passphrase, and use the switchboard, forms, dashboards, and reports inside. No terminal, no SQL, no schema, no code.
 
 ### 1.1 Design Principles
 
@@ -22,21 +37,25 @@ Vibe is a modern, single-user reimagining of Microsoft Access: a portable, encry
 
 ### 1.2 Target Users
 
-**Vibe Studio (TUI):** Power-user individuals who can leverage AI agents to build portable data applications. Engineers sharing datasets, analysts building interactive reports, developers who currently reach for a Jupyter notebook + SQLite combo but want something more structured and shareable.
+**Studio Mode (builders):** Power-user individuals — citizen developers and studio developers — who leverage AI agents to build portable data applications. Engineers sharing datasets, analysts building interactive reports, operations leads who currently reach for a Jupyter notebook + SQLite combo (or an Access `.mdb`) but want something more structured and shareable.
 
-**Vibe Viewer (GUI):** The recipients. A project manager who receives a `.vibe` file with a team dashboard. An operations lead who fills out data entry forms packaged by an engineer. A client who opens an interactive report. These users never see SQL, never touch a terminal, and never need to understand the internals.
+**App Mode (data-entry workers):** The recipients. A project manager who receives a `.vibe` file with a team dashboard. An operations lead who fills out data-entry forms packaged by a builder. A client who opens an interactive report. These users never see SQL, never edit schema, and never need to understand the internals — they get a locked-down switchboard, forms, and reports. App Mode is a runtime toggle inside the same app, not a separate program.
 
 ### 1.3 Product Analogy
 
 ```
                   PDF Ecosystem          Vibe Ecosystem
                   ─────────────          ──────────────
-  Author tool:    Adobe Acrobat Pro      Vibe Studio (TUI + agents)
-  Viewer tool:    Preview / Reader       Vibe Viewer (Wails GUI)
+  Author mode:    Adobe Acrobat Pro      Studio Mode (builder + agents)
+  Reader mode:    Preview / Reader       App Mode (locked-down end user)
   File format:    .pdf                   .vibe
   Key trait:      Portable, self-        Portable, encrypted,
                   contained documents    self-contained data apps
 ```
+
+> Unlike the PDF analogy's two separate programs, Studio Mode and App Mode are
+> two faces of **one** Wails desktop app (a terminal-native BubbleTea TUI also
+> exists for builders). The mode boundary is enforced at the application layer.
 
 ---
 
@@ -57,11 +76,14 @@ my_project.vibe
     ├── _vibe_agent_config  — agent permissions and tool surface
     ├── _vibe_secrets       — encrypted connection strings
     ├── _vibe_assets        — binary assets (images, files)
-    ├── _vibe_duckdb        — serialized DuckDB database (BLOB)
-    └── [user tables]       — optional SQLite-native tables
+    └── _vibe_duckdb        — serialized DuckDB database (BLOB)
 ```
 
-All internal tables use the `_vibe_` prefix to avoid collision with user data.
+All internal tables use the `_vibe_` prefix. **User data and analytics live inside
+the DuckDB blob, not in SQLite-native tables** — the SQLCipher database is the
+encrypted *container envelope* (config + the DuckDB blob), not a second query engine.
+(The original design allowed optional SQLite-native user tables with per-block engine
+routing; this was simplified to a single DuckDB engine. See §10.)
 
 ### 2.2 SQLite Schema
 
@@ -238,7 +260,7 @@ Introductory prose renders as styled text in both TUI and web.
 
 ## Revenue Overview
 
-'''sql revenue_by_month [engine=duckdb]
+'''sql revenue_by_month
 SELECT strftime(order_date, '%Y-%m') AS month,
        SUM(amount) AS total
 FROM orders
@@ -273,13 +295,13 @@ Fenced code blocks with the `sql` language tag produce named result sets.
 
 **Syntax:**
 ````
-```sql <result_name> [engine=duckdb|sqlite] [cache=<duration>]
+```sql <result_name> [cache=<duration>]
 SELECT ...
 ```
 ````
 
 - `result_name` is required. It becomes a named dataset available to directives.
-- `engine` is optional, defaults to `duckdb`.
+- All blocks execute on **DuckDB** (single engine). The original `engine=duckdb|sqlite` option was removed.
 - `cache` is optional. If set, results are cached for the specified duration (e.g., `cache=5m`).
 - SQL blocks execute top-to-bottom. Later blocks can reference earlier result names as CTEs (implementation detail: the runtime injects previous results as temp views).
 
@@ -389,51 +411,53 @@ In the TUI, these render as navigable links. In the web view, standard anchor ta
 
 ## 5. Runtime Architecture
 
-### 5.1 Shared Core vs. Application Split
+### 5.1 Shared Core vs. Mode Split
 
-Both Vibe Studio and Vibe Viewer share the same core library (`pkg/vibe`). The split is about capability surface, not code duplication.
+All surfaces share the same core packages under `internal/`. The split is about
+**capability surface (Studio Mode vs. App Mode)**, not separate binaries — the Wails
+app gates privileged operations at runtime, and a terminal-native TUI reuses the same
+core for builders.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                      pkg/vibe (shared)                       │
+│                  internal/ (shared core)                     │
 │  container/ — file open/close/save/migrate                   │
-│  engine/    — DuckDB + SQLite query execution                │
+│  engine/    — DuckDB query execution (single engine)         │
 │  pages/     — parser, AST, executor                          │
-│  renderer/  — TUI + HTML rendering                           │
+│  renderer/  — html/ (web + GUI) + tui/ rendering             │
 │  queries/   — named query registry                           │
 │  agents/    — agent tool surface + transport                 │
+│  mcp/       — MCP server (SSE)                                │
 │  server/    — embedded HTTP server                           │
-└──────────┬───────────────────────────────────┬───────────────┘
-           │                                   │
-   ┌───────┴──────────┐              ┌─────────┴────────────┐
-   │  Vibe Studio     │              │  Vibe Viewer         │
-   │  (cmd/vibe)      │              │  (cmd/vibe-viewer)   │
-   │                  │              │                      │
-   │  Charm TUI       │              │  Wails GUI           │
-   │  ├─ full r/w     │              │  ├─ read + interact  │
-   │  ├─ page editor  │              │  ├─ forms submit     │
-   │  ├─ SQL REPL     │              │  ├─ no SQL access    │
-   │  ├─ table mgmt   │              │  ├─ no page editing  │
-   │  ├─ agent host   │              │  ├─ no table mgmt    │
-   │  ├─ schema edit  │              │  ├─ no agent support │
-   │  └─ web preview  │              │  └─ export only      │
-   └──────────────────┘              └──────────────────────┘
+└──────────┬───────────────────────────┬─────────────┬─────────┘
+           │                           │             │
+   ┌───────┴──────────┐    ┌───────────┴─────────────┴────────┐
+   │  TUI (internal/  │    │   Wails app (studio/)            │
+   │  tui) — builders │    │  ┌────────────┬───────────────┐  │
+   │  ├─ page editor  │    │  │ Studio Mode│ App Mode       │  │
+   │  ├─ SQL REPL     │    │  │ full r/w   │ read+interact  │  │
+   │  ├─ table mgmt   │    │  │ page/form  │ forms submit   │  │
+   │  ├─ agent host   │    │  │  editors   │ no SQL/schema  │  │
+   │  └─ web preview  │    │  │ schema edit│ no agent write │  │
+   └──────────────────┘    │  │ agent chat │ switchboard nav│  │
+                           │  └────────────┴───────────────┘  │
+                           └──────────────────────────────────┘
 ```
 
-### 5.2 Core Library (`pkg/vibe`)
+### 5.2 Core Library (`internal/`)
 
 ```
-pkg/
+internal/
 ├── container/           # .vibe file lifecycle
 │   ├── container.go     # Open(path, passphrase) → *Container
 │   ├── schema.go        # internal table DDL, migrations
 │   ├── crypto.go        # SQLCipher PRAGMA setup
 │   └── duckdb.go        # blob ↔ temp file lifecycle
 │
-├── engine/              # query execution
-│   ├── engine.go        # unified query interface
+├── engine/              # query execution (DuckDB single-engine)
+│   ├── engine.go        # query interface (Manager routes to DuckDB)
 │   ├── duckdb.go        # DuckDB driver, connection pool
-│   ├── sqlite.go        # SQLite driver (for config queries)
+│   ├── sqlite.go        # legacy SQLite driver — present but unused
 │   └── params.go        # parameter binding, sanitization
 │
 ├── pages/               # page format
@@ -460,7 +484,10 @@ pkg/
 ├── agents/              # AI agent interface
 │   ├── tools.go         # tool definitions
 │   ├── server.go        # stdio + socket transport
-│   └── sandbox.go       # permission enforcement
+│   ├── sandbox.go       # permission enforcement
+│   └── approval.go      # approval queue for write ops
+│
+├── mcp/                 # MCP server (SSE) bridging to the agent tools
 │
 ├── server/              # built-in web server
 │   ├── server.go        # HTTP server, routes
@@ -511,7 +538,6 @@ Page Render Request
     │
     ├── Parse page content → AST
     ├── For each SQLBlock node (top to bottom):
-    │   ├── Resolve engine (duckdb or sqlite)
     │   ├── Bind parameters ($param_name → value)
     │   ├── Check cache (if cache directive set)
     │   ├── Execute query → ResultSet{columns, rows}
@@ -599,7 +625,7 @@ The TUI is a BubbleTea application with a persistent layout and swappable conten
 
 **Query Editor** — Selected from sidebar under "QUERIES." Shows saved queries. Selecting one opens a split view: query SQL on top, results on bottom. Execute with `Ctrl+Enter`.
 
-**SQL REPL** — Bottom panel toggled with `` ` ``. Single-line by default, expand to multiline with `Ctrl+E`. History with `↑↓`. Results display inline. Supports both DuckDB and SQLite queries (prefix with `@sqlite:` to target SQLite, defaults to DuckDB).
+**SQL REPL** — Bottom panel toggled with `` ` ``. Single-line by default, expand to multiline with `Ctrl+E`. History with `↑↓`. Results display inline. All queries run on DuckDB (single engine).
 
 **Agent Panel** — Side panel toggled with `a`. Shows:
 - Agent connection status (connected/disconnected).
@@ -631,7 +657,7 @@ Pressing `n` opens a step-through wizard:
 
 ### 7.1 Overview
 
-Vibe Studio includes an embedded HTTP server for previewing pages in a browser during authoring. This is the "live preview" counterpart to the TUI's editing environment — analogous to a markdown editor's preview pane, but running as a local web server so the author can see exactly what Vibe Viewer users will experience. Starting the server is a single keypress (`w`) and serves on `localhost:<port>`.
+Studio Mode includes an embedded HTTP server for previewing pages in a browser during authoring. This is the "live preview" counterpart to the TUI's editing environment — analogous to a markdown editor's preview pane, but running as a local web server so the author can see exactly what App Mode users will experience. Starting the server is a single keypress (`w`) and serves on `localhost:<port>`.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -648,7 +674,7 @@ Vibe Studio includes an embedded HTTP server for previewing pages in a browser d
 └──────────────────────────────────────────┘
 ```
 
-The preview server shares the same HTML renderer used by Vibe Viewer. What you see in the browser during Studio preview is what Viewer users will see.
+The preview server shares the same HTML renderer used by App Mode. What you see in the browser during Studio Mode preview is what App Mode users will see.
 
 ### 7.2 Routes
 
@@ -694,7 +720,7 @@ Browser: User fills form, clicks Submit
     ├── Parse form data
     ├── Validate against field definitions (required, type)
     ├── Generate INSERT or UPDATE SQL
-    ├── Execute against target engine (duckdb or sqlite)
+    ├── Execute against DuckDB
     ├── on_submit == refresh → redirect to same page
     ├── on_submit == redirect:X → redirect to page X
     └── on_submit == noop → return 200 with success message
@@ -723,11 +749,20 @@ This gives a tight authoring loop: edit a page in the TUI, save, and the browser
 
 ---
 
-## 8. Vibe Viewer — Wails Desktop GUI
+## 8. App Mode — The Locked-Down End-User Experience
+
+> **Reconciliation note:** This section originally described a separate "Vibe Viewer"
+> binary. It is now realized as **App Mode** — a runtime mode of the single Wails desktop
+> app (`studio/`), gated at the application layer. The capabilities, boundaries, and
+> bindings below describe that mode; the standalone-binary framing is historical.
 
 ### 8.1 Overview
 
-Vibe Viewer is a standalone desktop application built with Wails. It is the consumer-facing counterpart to Vibe Studio. When a user double-clicks a `.vibe` file, Viewer opens, prompts for the passphrase, and presents the application inside — pages, forms, dashboards — in a polished, native-feeling GUI. No terminal. No SQL. No awareness of the underlying file format.
+App Mode is the consumer-facing face of the Wails desktop app. When a builder hands off a
+`.vibe` file (or sets it to launch in App Mode), the user opens it, enters the passphrase,
+and is presented with the application inside — switchboard navigation, forms, dashboards,
+reports — in a polished, native-feeling GUI. No terminal. No SQL. No awareness of the
+underlying file format.
 
 The mental model is: someone hands you a `.vibe` file the way someone hands you a PDF. You open it and use it.
 
@@ -776,10 +811,10 @@ Double-click invoice-tracker.vibe
 
 ### 8.3 Capabilities and Boundaries
 
-**What Viewer CAN do:**
+**What App Mode CAN do:**
 
 - Open `.vibe` files with passphrase authentication.
-- Navigate between pages via sidebar.
+- Navigate between pages via the switchboard / sidebar.
 - View rendered dashboards with full chart interactivity (hover, zoom, filter).
 - Submit forms (data entry, updates).
 - Browse tables with sorting, filtering, and pagination.
@@ -788,50 +823,44 @@ Double-click invoice-tracker.vibe
 - View detail pages for individual records.
 - Dark/light theme toggle.
 
-**What Viewer CANNOT do:**
+**What App Mode CANNOT do:**
 
 - Edit page definitions (no access to the markdown source).
 - Run arbitrary SQL.
 - Create, rename, or delete pages.
 - Modify the database schema (add/drop tables or columns).
 - Manage data sources or connections.
-- Connect AI agents.
-- Change encryption settings or passphrase (redirect to Studio).
+- Invoke destructive agent tools (the agent sandbox is forced to read-only / read-write).
+- Change encryption settings or passphrase (Studio Mode only).
 - Access `_vibe_` internal tables.
 
-This boundary is enforced at the application layer, not the file format. Viewer opens the same SQLCipher database with the same key — it simply doesn't expose editing UI. This keeps the shared core simple.
+This boundary is enforced at the application layer, not the file format. App Mode opens the same SQLCipher database with the same key — it simply gates the privileged `studio/app.go` methods and switches the UI to the switchboard shell. Switching back to Studio Mode (Access's Shift-to-bypass equivalent) restores full capability.
 
 ### 8.4 Wails Architecture
 
+App Mode is not a separate project — it is the App-Mode view set of the single Wails app:
+
 ```
-cmd/vibe-viewer/
+studio/
 ├── main.go              # Wails app bootstrap, file association
-├── app.go               # Go backend: container, engine, page execution
-├── handlers.go          # Methods exposed to frontend via Wails bindings
-└── frontend/
-    ├── index.html       # Single-page app shell
-    ├── src/
-    │   ├── App.jsx      # Root component
-    │   ├── pages/
-    │   │   ├── Unlock.jsx       # Passphrase entry
-    │   │   ├── PageView.jsx     # Rendered page display
-    │   │   └── TableBrowser.jsx # Datasette-style table explorer
-    │   ├── components/
-    │   │   ├── Sidebar.jsx      # Page navigation
-    │   │   ├── Chart.jsx        # Chart.js wrapper
-    │   │   ├── DataTable.jsx    # Sortable/filterable table
-    │   │   ├── Form.jsx         # Dynamic form renderer
-    │   │   ├── Metric.jsx       # Large-number metric card
-    │   │   └── Detail.jsx       # Record detail view
-    │   └── lib/
-    │       ├── wails.js         # Wails runtime bindings
-    │       └── theme.js         # Dark/light theme state
-    └── package.json
+├── app.go               # Go backend: container, engine, page execution,
+│                        #   CRUD, agent/MCP — gated per mode
+└── frontend/            # Vue 3 SPA (shared by Studio Mode + App Mode)
+    └── src/
+        ├── App.vue              # Root; routes by mode
+        ├── views/
+        │   ├── UnlockView.vue    # Passphrase entry
+        │   ├── AppShellView.vue  # App Mode switchboard shell
+        │   ├── PageEditorView.vue, DashboardView.vue, …
+        │   └── TableBrowserView.vue
+        ├── components/           # Chart, DataTable, Form, Metric, Detail, …
+        └── router/               # mode-aware routing + capability gating
 ```
 
 ### 8.5 Go ↔ Frontend Bindings
 
-Wails exposes Go methods to the JavaScript frontend. Viewer exposes a read-oriented subset:
+Wails exposes Go methods (`studio/app.go`) to the Vue frontend. In App Mode the frontend
+calls a read/interact subset of those methods (others are gated):
 
 ```go
 // app.go — methods bound to frontend
@@ -866,17 +895,18 @@ func (a *App) CloseFile() error
 
 ### 8.6 File Association
 
-Viewer registers as the default handler for `.vibe` files on install:
+The app registers as the default handler for `.vibe` files on install:
 
 - **macOS:** `Info.plist` declares `CFBundleDocumentTypes` for `.vibe`.
-- **Windows:** Registry entries associate `.vibe` extension with the Viewer executable.
+- **Windows:** Registry entries associate `.vibe` extension with the executable.
 - **Linux:** `.desktop` file with `MimeType=application/x-vibe`.
 
-Double-clicking a `.vibe` file opens Viewer with the file path as an argument. If Viewer is already running, it opens in a new window (Wails supports multi-window).
+Double-clicking a `.vibe` file opens the app with the file path as an argument; a file's
+`_vibe_meta.default_mode` (App vs. Studio) decides which mode it opens in.
 
 ### 8.7 Offline-First
 
-Viewer has zero network dependencies. All rendering happens locally. Chart.js and any CSS framework are bundled into the binary. The only network activity occurs if DuckDB remote connectors are configured in the `.vibe` file (e.g., `httpfs` for remote parquet files), and even then, the user is warned before any outbound connection.
+The app has zero network dependencies. All rendering happens locally. Chart.js and the CSS framework are bundled into the binary. The only network activity occurs if DuckDB remote connectors are configured in the `.vibe` file (e.g., `httpfs` for remote parquet files), and even then, the user is warned before any outbound connection.
 
 ---
 
@@ -954,7 +984,7 @@ Request/response JSON, one object per line (JSON-RPC 2.0 compatible):
 
 | Method | Description | Params |
 |--------|-------------|--------|
-| `introspect_schema` | All tables, columns, types, primary keys | `engine?: duckdb\|sqlite` |
+| `introspect_schema` | All tables, columns, types, primary keys | _(none)_ |
 | `describe_table` | Detailed info for one table | `table: string` |
 | `list_pages` | All page definitions with metadata | — |
 | `get_page` | Full page content (markdown source) | `page_id: string` |
@@ -1033,20 +1063,24 @@ The tool surface is designed to be forward-compatible with MCP (Model Context Pr
 
 ### 10.1 Role Separation
 
-DuckDB and SQLite serve complementary roles within a `.vibe` file:
+SQLCipher and DuckDB serve **non-overlapping** roles. SQLCipher is the encrypted
+*container*; DuckDB is the *single query/data engine*. There is no engine routing — all
+queries and CRUD run on DuckDB.
 
 ```
 SQLite (via SQLCipher)              DuckDB
 ──────────────────────              ──────
-Application spine                   Analytical engine
-_vibe_* config tables               User data tables
-Page definitions                    Views, materialized queries
-Agent config                        Remote data connectors
-Encryption container                Columnar storage, fast aggregation
+Encrypted container only            The single query + data engine
+_vibe_* config tables               ALL user data tables
+Page/form/report definitions        Views, materialized queries, CRUD
+Agent config, secrets, assets       Remote data connectors
+The DuckDB blob (at rest)           Columnar storage, fast aggregation
 Always on disk (encrypted)          Materialized at runtime from blob
 ```
 
-Users can also store data in SQLite-native tables (useful for small lookup tables or configuration data that doesn't benefit from columnar storage). The `engine` flag on SQL blocks and queries controls routing.
+SQLCipher is **not queried for user data** — it stores the `_vibe_*` metadata and the
+serialized DuckDB blob. The original per-block `engine` flag (and SQLite-native user
+tables) were removed when the design collapsed to a single engine.
 
 ### 10.2 Lifecycle Management
 
@@ -1056,9 +1090,6 @@ Container.Open()
     ├── Read _vibe_duckdb.data (BLOB, ~N MB)
     ├── Write to temp file: /tmp/vibe-<uuid>/data.duckdb
     ├── Open DuckDB connection to temp file
-    ├── Attach SQLite for cross-engine queries:
-    │   INSTALL sqlite; LOAD sqlite;
-    │   ATTACH 'original.vibe' AS sqlite_data (TYPE SQLITE, READ_ONLY);
     └── Return engine ready
 
     ... session ...
@@ -1067,7 +1098,7 @@ Container.Save()
     │
     ├── CHECKPOINT (force DuckDB WAL flush)
     ├── Read temp file into memory ([]byte)
-    ├── BEGIN IMMEDIATE on SQLite
+    ├── BEGIN IMMEDIATE on the SQLCipher container
     ├── UPDATE _vibe_duckdb SET data = ?
     ├── COMMIT
     └── Return
@@ -1079,21 +1110,13 @@ Container.Close()
     └── Remove temp directory
 ```
 
-### 10.3 Cross-Engine Queries
+### 10.3 Cross-Engine Queries — dropped
 
-DuckDB's SQLite scanner allows queries that join across engines:
-
-```sql
--- In a page SQL block with engine=duckdb:
-SELECT o.id, o.amount, c.name
-FROM orders o
-JOIN sqlite_data._vibe_meta c ON ...  -- probably not useful, but possible
-
--- More practically: DuckDB reads its own tables, SQLite scanner
--- lets DuckDB read SQLite-native user tables without data duplication
-```
-
-For MVP, keep it simple: each SQL block targets one engine. Cross-engine joins are a power-user feature for v2.
+This subsection originally described joining DuckDB against SQLite-native tables via the
+DuckDB `sqlite` scanner. With the move to a **single DuckDB engine**, there are no
+SQLite-native user tables and nothing to cross-join — all data already lives in DuckDB.
+The mechanism is retained only conceptually for the rare case of reading an *external*
+SQLite file via `ATTACH ... (TYPE SQLITE)`, which is just another remote connector (§10.4).
 
 ### 10.4 Remote Connectors
 
@@ -1123,9 +1146,9 @@ Remote connector support is a natural extension point. For MVP, focus on local d
 ### 10.5 Performance Considerations
 
 - **Blob size:** DuckDB databases can grow large with heavy data. For MVP, set a soft warning at 100MB and a hard limit at 1GB for the blob. Beyond that, the user should use remote connectors.
-- **Materialization time:** Opening a `.vibe` file with a 100MB DuckDB blob takes a few seconds to write the temp file. Show a progress indicator in both Studio and Viewer.
+- **Materialization time:** Opening a `.vibe` file with a 100MB DuckDB blob takes a few seconds to write the temp file. Show a progress indicator in both Studio Mode and App Mode.
 - **Memory:** DuckDB is memory-efficient for analytical queries but can spike during large aggregations. Consider setting `SET memory_limit='512MB'` as a default, configurable in `_vibe_meta`.
-- **Concurrent access:** Single-user design means no concurrent write concerns. DuckDB and SQLite both have single-writer models that align with this.
+- **Concurrent access:** Single-user design means no concurrent write concerns (multi-user mesh is v1.1). DuckDB and the SQLCipher container both have single-writer models that align with this.
 
 ---
 
@@ -1152,13 +1175,16 @@ Opens the TUI for the given `.vibe` file. If the file doesn't exist, creates a n
 | `--allow-sql` | Enable the ad-hoc SQL API endpoint on the web server |
 | `--no-encrypt` | Create an unencrypted `.vibe` file (development only) |
 
-### 11.2 Vibe Viewer CLI
+### 11.2 Desktop App / App Mode launch
 
 ```bash
-vibe-viewer [file.vibe]
+vibe studio [file.vibe]            # launch the Wails app (opens in the file's default mode)
+vibe studio --app-mode [file.vibe] # force App Mode (locked-down end-user shell)
 ```
 
-Opens the Viewer GUI. If a file is provided, opens it directly (prompts for passphrase). If no file is provided, shows a file picker.
+Launches the Wails desktop app. If a file is provided, opens it directly (prompts for
+passphrase); the file's `_vibe_meta.default_mode` decides Studio vs. App Mode unless
+`--app-mode` overrides it. With no file, shows a file picker.
 
 ### 11.3 Utility Commands
 
@@ -1172,7 +1198,7 @@ vibe export <file.vibe> --table <name> --format csv > data.csv
 vibe export <file.vibe> --page <id> --format html > page.html
 vibe import <file.vibe> --table <name> --csv data.csv
 vibe rekey <file.vibe>         # Change passphrase
-vibe compact <file.vibe>       # VACUUM both SQLite and DuckDB, reduce file size
+vibe compact <file.vibe>       # VACUUM the DuckDB blob + SQLCipher container, reduce file size
 vibe dump <file.vibe>          # Dump schema + page definitions to stdout (for backup/debug)
 
 # New file creation
@@ -1207,10 +1233,10 @@ vibe init my_project.vibe --import data.csv      # Create with initial data
 **Goal:** Parse pages, execute SQL blocks, resolve directives into a renderable AST.
 
 **Deliverables:**
-- `pkg/pages/parser`: Markdown + SQL blocks + directive parsing.
-- `pkg/pages/ast`: Node types for all directive kinds.
-- `pkg/pages/executor`: Execute SQL blocks top-to-bottom, bind named results to directives.
-- `pkg/engine`: Unified query interface routing to DuckDB or SQLite.
+- `internal/pages/parser`: Markdown + SQL blocks + directive parsing.
+- `internal/pages/ast`: Node types for all directive kinds.
+- `internal/pages/executor`: Execute SQL blocks top-to-bottom, bind named results to directives.
+- `internal/engine`: Query interface executing against DuckDB (single engine).
 - Parameter binding and sanitization.
 - Test suite: parse → execute → verify result structure for each directive type.
 
@@ -1263,15 +1289,15 @@ vibe init my_project.vibe --import data.csv      # Create with initial data
 - Agent panel in TUI.
 - Test with: a Python script agent, Claude Code, a custom GPT wrapper.
 
-### Phase 5 — Vibe Viewer (Weeks 17–22)
+### Phase 5 — Desktop App & App Mode (Weeks 17–22)
 
-**Goal:** Non-technical users can open and use `.vibe` files in a desktop GUI.
+**Goal:** Non-technical users can open and use `.vibe` files in the desktop GUI's locked-down App Mode.
 
 **Deliverables:**
 - Wails application scaffold.
 - Passphrase entry screen.
-- Page renderer (React frontend consuming Go backend via Wails bindings).
-- Sidebar navigation.
+- Page renderer (Vue 3 frontend consuming Go backend via Wails bindings).
+- Sidebar / switchboard navigation.
 - Chart interactivity (hover, zoom via Chart.js).
 - Form submission.
 - Table browser with sort/filter.
@@ -1289,7 +1315,7 @@ vibe init my_project.vibe --import data.csv      # Create with initial data
 - Encrypted DuckDB temp file VFS (upgrade from plaintext temp).
 - Performance profiling: large datasets (100MB+ blobs), many pages.
 - Error handling audit: corrupt files, invalid pages, malformed SQL.
-- Accessibility: keyboard navigation in Viewer, screen reader support.
+- Accessibility: keyboard navigation in App Mode, screen reader support.
 - Documentation: user guide, page format reference, agent API reference.
 - Sample `.vibe` files: project tracker, expense report, survey tool, dataset explorer.
 - Release pipeline: signed binaries for macOS, Windows, Linux.
@@ -1300,21 +1326,22 @@ vibe init my_project.vibe --import data.csv      # Create with initial data
 
 ### 13.1 Resolved for MVP
 
-- **Single vs. multi-user:** Single-user. No concurrent access, no conflict resolution.
-- **Editor vs. viewer separation:** Two apps. Studio (TUI) edits, Viewer (GUI) consumes.
+- **Single vs. multi-user:** Single-user for v1.0. No concurrent access, no conflict resolution (multi-user Tailscale mesh is v1.1).
+- **Editor vs. consumer separation:** **One app, two modes.** Studio Mode edits; App Mode consumes (locked-down, gated at the app layer). A terminal-native TUI also serves builders. *(Superseded the original "two separate binaries" decision.)*
+- **Query engine:** **Single-engine DuckDB** for both analytics and CRUD. *(Superseded the original dual SQLite+DuckDB routing.)*
 - **DuckDB temp file encryption:** Plaintext temp for MVP. Encrypted VFS in Phase 6.
-- **UI framework for Viewer:** Wails with React frontend.
-- **Agent protocol:** JSON-RPC over stdio/socket. MCP-compatible naming.
+- **UI framework:** Wails v2 with a **Vue 3** frontend. *(Superseded the original React choice.)*
+- **Agent protocol:** JSON-RPC over stdio/socket, plus an MCP server (SSE).
 
 ### 13.2 Open for Future Versions
 
 - **Collaboration:** Could `.vibe` files support a "publish" mode where Studio pushes pages to a shared server? This would move toward a lightweight BI tool.
 - **Versioning/history:** Track page edit history within the file. Git-like diffing of page content.
-- **Custom themes:** Allow `.vibe` files to include CSS themes that Viewer applies. Brand a data app.
+- **Custom themes:** Allow `.vibe` files to include CSS themes that App Mode applies. Brand a data app.
 - **Plugin system:** Let pages include custom JavaScript components (sandboxed). Extends beyond the built-in chart/form/table primitives.
-- **Mobile viewer:** A lightweight Viewer for iOS/Android using a webview-based approach.
+- **Mobile App Mode:** A lightweight mobile build (iOS/Android) of App Mode using a webview-based approach.
 - **Template marketplace:** Share `.vibe` templates (empty data, pre-built pages) for common use cases: CRM, inventory, project tracker.
-- **Remote connectors in Viewer:** Currently only Studio manages connections. Viewer could allow configured remote sources to refresh data (with appropriate security controls).
+- **Remote connectors in App Mode:** Currently only Studio Mode manages connections. App Mode could allow configured remote sources to refresh data (with appropriate security controls).
 - **Multi-file references:** A `.vibe` file that imports data from another `.vibe` file. Composable data apps.
 
 ---
@@ -1438,15 +1465,16 @@ ORDER BY order_date DESC
 
 | Component | Library | Language | Purpose |
 |-----------|---------|----------|---------|
-| SQLite + encryption | go-sqlcipher | Go (CGO) | Encrypted container |
-| DuckDB | go-duckdb | Go (CGO) | Analytical engine |
+| SQLite + encryption | go-sqlcipher | Go (CGO) | Encrypted container envelope (not a query engine) |
+| DuckDB | go-duckdb | Go (CGO) | Single query + data engine (analytics + CRUD) |
 | TUI framework | BubbleTea | Go | Terminal UI |
 | TUI styling | Lipgloss | Go | Component styling |
 | TUI markdown | Glamour | Go | Markdown rendering |
 | Web framework | net/http (stdlib) | Go | Preview server |
 | HTML templates | html/template (stdlib) | Go | Page rendering |
-| Desktop GUI | Wails v2 | Go + JS | Viewer application |
-| Frontend UI | React | JavaScript | Viewer frontend |
+| Desktop GUI | Wails v2 | Go + JS | Studio app (Studio Mode + App Mode) |
+| Frontend UI | Vue 3 | JavaScript | App frontend |
+| MCP server | mark3labs/mcp-go | Go | Agent tool surface over SSE |
 | Charts (web) | Chart.js | JavaScript | Chart rendering |
 | Key derivation | SQLCipher (internal) | C | PBKDF2-HMAC-SHA512 |
 | Temp file crypto | golang.org/x/crypto | Go | ChaCha20-Poly1305 (v2) |
