@@ -24,6 +24,9 @@ const (
 	IntentExport      = "export"
 	IntentEmailObject = "email_object"
 	IntentSetValue    = "set_value"
+	// IntentOpenSwitchboard is the UI intent an OpenSwitchboard action surfaces as
+	// (the canonical AutoExec startup intent the App Shell applies).
+	IntentOpenSwitchboard = "open_switchboard"
 	// IntentSetFilter is the UI-intent kind a server-side SetFilter is forwarded
 	// as: the Wails layer translates each AppliedFilter into a set_filter intent
 	// the frontend merges onto a subsequent form/report navigation as a "where"
@@ -220,6 +223,9 @@ func (e *Executor) runAction(ctx context.Context, action MacroAction, res *Resul
 		return nil
 	case ActionEmailObject:
 		res.Intents = append(res.Intents, e.uiIntent(IntentEmailObject, action))
+		return nil
+	case ActionOpenSwitchboard:
+		res.Intents = append(res.Intents, e.uiIntent(IntentOpenSwitchboard, action))
 		return nil
 	case ActionSetValue:
 		// SetValue is UI-bound, not a DuckDB mutation. In Access, SetValue assigns

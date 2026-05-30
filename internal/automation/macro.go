@@ -23,6 +23,10 @@ const (
 	ActionExport      = "Export"
 	ActionEmailObject = "EmailObject"
 	ActionRunMacro    = "RunMacro"
+	// ActionOpenSwitchboard navigates the App Shell to the switchboard (plan §5.3,
+	// the canonical AutoExec startup action). UI-bound: surfaced as an
+	// open_switchboard UIIntent.
+	ActionOpenSwitchboard = "OpenSwitchboard"
 )
 
 // macroSpecVersion is the current version stamped onto stored macro specs so
@@ -41,8 +45,9 @@ var knownActionKinds = map[string]struct{}{
 	ActionSetFilter:   {},
 	ActionMsgBox:      {},
 	ActionExport:      {},
-	ActionEmailObject: {},
-	ActionRunMacro:    {},
+	ActionEmailObject:     {},
+	ActionRunMacro:        {},
+	ActionOpenSwitchboard: {},
 }
 
 // ErrMacroNotFound is returned by MacroStore.Get when no macro has the given id.

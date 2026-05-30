@@ -21,6 +21,24 @@ type FormSpec struct {
 	OnSubmit  string          `json:"on_submit"` // refresh | redirect:<page> | noop
 	Fields    []FormFieldSpec `json:"fields"`
 	Subform   *SubformSpec    `json:"subform,omitempty"`
+	// Events binds form/record lifecycle events (plan §5.3) to macro ids:
+	// on_open / on_load (FormView lifecycle) and before_insert / before_update /
+	// after_insert / after_update (the write path). Additive + omitempty so
+	// existing stored forms round-trip unchanged when no events are bound.
+	Events *FormEvents `json:"events,omitempty"`
+}
+
+// FormEvents binds form/record lifecycle events to macro ids (plan §5.3). Each
+// field is a macro id; an empty field means "no hook". before_* hooks run before
+// the write and may veto it (by returning an error); after_* hooks run only on a
+// successful write.
+type FormEvents struct {
+	OnOpen       string `json:"on_open,omitempty"`
+	OnLoad       string `json:"on_load,omitempty"`
+	BeforeInsert string `json:"before_insert,omitempty"`
+	AfterInsert  string `json:"after_insert,omitempty"`
+	BeforeUpdate string `json:"before_update,omitempty"`
+	AfterUpdate  string `json:"after_update,omitempty"`
 }
 
 // FormFieldSpec is a single bound control on a form or subform.
