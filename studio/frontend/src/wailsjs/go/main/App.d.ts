@@ -5,6 +5,14 @@ import {crud} from '../models';
 import {schema} from '../models';
 import {queries} from '../models';
 
+export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function AddForeignKey(arg1:main.ForeignKeySpec):Promise<string>;
+
+export function AddIndex(arg1:string,arg2:string,arg3:Array<string>,arg4:boolean):Promise<void>;
+
+export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function CancelRender():Promise<void>;
 
 export function CloseFile():Promise<void>;
@@ -24,6 +32,8 @@ export function DeleteQuery(arg1:string):Promise<void>;
 export function DeleteRow(arg1:string,arg2:string,arg3:any):Promise<crud.WriteResult>;
 
 export function DescribeTable(arg1:string):Promise<main.TableInfo>;
+
+export function DropColumn(arg1:string,arg2:string):Promise<void>;
 
 export function DropTable(arg1:string):Promise<void>;
 
@@ -55,6 +65,8 @@ export function GetQuery(arg1:string):Promise<queries.Query>;
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
+export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
+
 export function ImportCSV(arg1:string,arg2:string):Promise<main.ImportResult>;
 
 export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.WriteResult>;
@@ -67,13 +79,21 @@ export function ListPages():Promise<Array<main.PageSummary>>;
 
 export function ListQueries():Promise<Array<main.QuerySummary>>;
 
+export function ListRelationships():Promise<Array<schema.Relationship>>;
+
 export function ListTables():Promise<Array<string>>;
 
 export function OpenFile(arg1:string,arg2:string):Promise<void>;
 
+export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
+
+export function RemoveForeignKey(arg1:string):Promise<void>;
+
 export function RenderPageContent(arg1:string,arg2:Record<string, string>):Promise<string>;
 
 export function SaveFile():Promise<void>;
+
+export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SaveForm(arg1:schema.FormSpec):Promise<void>;
 

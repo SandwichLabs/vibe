@@ -246,6 +246,16 @@ func parseConditionalFromAST(startPara *ast.Paragraph, startChild ast.Node, sour
 		return nil, nil, fmt.Errorf("line %d: conditional expression must be a string", line)
 	}
 
+	// Optional "condition" mode selects which branch survives.
+	// "rows_present" (default) survives when the result set has >0 rows;
+	// "no_rows" survives when the result set is empty.
+	mode := "rows_present"
+	if modeVal, ok := config["condition"]; ok {
+		if modeStr, ok := modeVal.(string); ok && modeStr != "" {
+			mode = modeStr
+		}
+	}
+
 	var children []Node
 	var lastSibling ast.Node
 
@@ -258,6 +268,7 @@ func parseConditionalFromAST(startPara *ast.Paragraph, startChild ast.Node, sour
 			if paraText == "{/if}" {
 				return &ConditionalNode{
 					Condition: condStr,
+					Mode:      mode,
 					Children:  children,
 					Line:      lineOffset + getNodeLine(startPara, source) + 1,
 				}, lastSibling, nil

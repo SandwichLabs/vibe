@@ -58,7 +58,8 @@ func (n *DirectiveNode) nodeType() string { return "directive" }
 
 // ConditionalNode represents an {if: ...} ... {/if} block.
 type ConditionalNode struct {
-	Condition string // SQL expression
+	Condition string // name of the SQL result set to test
+	Mode      string // "rows_present" (default) | "no_rows"
 	Children  []Node
 	Line      int
 }

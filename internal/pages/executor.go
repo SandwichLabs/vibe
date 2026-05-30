@@ -122,19 +122,27 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 			executed = append(executed, en)
 
 		case *ConditionalNode:
-			// Execute children recursively.
+			// Evaluate the condition against an already-executed SQL result set.
+			rs, exists := results[n.Condition]
+			if !exists {
+				return nil, fmt.Errorf("line %d: conditional references undefined result %q", n.Line, n.Condition)
+			}
+			hasRows := len(rs.Rows) > 0
+			survives := hasRows
+			if n.Mode == "no_rows" {
+				survives = !hasRows
+			}
+			if !survives {
+				// Dropped branch contributes nothing.
+				continue
+			}
+			// Inline the surviving branch's children directly into the output so
+			// downstream rendering never has to handle a ConditionalNode.
 			children, err := executeNodes(ctx, n.Children, engine, params, results, variables)
 			if err != nil {
 				return nil, err
 			}
-			// Wrap the conditional node with its executed children.
-			executed = append(executed, ExecutedNode{
-				Node: &ConditionalNode{
-					Condition: n.Condition,
-					Children:  extractNodes(children),
-					Line:      n.Line,
-				},
-			})
+			executed = append(executed, children...)
 
 		case *RowNode:
 			children, err := executeNodes(ctx, n.Children, engine, params, results, variables)
@@ -152,15 +160,6 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 	}
 
 	return executed, nil
-}
-
-// extractNodes pulls the raw Node values out of executed nodes.
-func extractNodes(executed []ExecutedNode) []Node {
-	nodes := make([]Node, len(executed))
-	for i, en := range executed {
-		nodes[i] = en.Node
-	}
-	return nodes
 }
 
 // varPattern matches ${varname} placeholders in SQL.

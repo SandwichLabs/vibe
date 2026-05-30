@@ -105,6 +105,76 @@ export namespace main {
 	        this.file_size = source["file_size"];
 	    }
 	}
+	export class FilterCondition {
+	    column: string;
+	    op: string;
+	    value: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilterCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.op = source["op"];
+	        this.value = source["value"];
+	    }
+	}
+	export class FilterSpec {
+	    combinator: string;
+	    conditions: FilterCondition[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FilterSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.combinator = source["combinator"];
+	        this.conditions = this.convertValues(source["conditions"], FilterCondition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ForeignKeySpec {
+	    child_table: string;
+	    child_column: string;
+	    parent_table: string;
+	    parent_column: string;
+	    on_delete: string;
+	    on_update: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ForeignKeySpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.child_table = source["child_table"];
+	        this.child_column = source["child_column"];
+	        this.parent_table = source["parent_table"];
+	        this.parent_column = source["parent_column"];
+	        this.on_delete = source["on_delete"];
+	        this.on_update = source["on_update"];
+	    }
+	}
 	export class FormSubmitRow {
 	    table: string;
 	    values: Record<string, any>;
@@ -496,6 +566,34 @@ export namespace schema {
 		    }
 		    return a;
 		}
+	}
+	export class Relationship {
+	    id: string;
+	    parent_table: string;
+	    parent_column: string;
+	    child_table: string;
+	    child_column: string;
+	    on_delete: string;
+	    on_update: string;
+	    enforce_integrity: boolean;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Relationship(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.parent_table = source["parent_table"];
+	        this.parent_column = source["parent_column"];
+	        this.child_table = source["child_table"];
+	        this.child_column = source["child_column"];
+	        this.on_delete = source["on_delete"];
+	        this.on_update = source["on_update"];
+	        this.enforce_integrity = source["enforce_integrity"];
+	        this.created_at = source["created_at"];
+	    }
 	}
 
 }
