@@ -3,6 +3,11 @@ import { ref, onMounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 
+// Autofocus + select directive for the inline cell editor.
+const vFocus = {
+  mounted: (el: HTMLInputElement) => { el.focus(); el.select() },
+}
+
 const tables = ref<string[]>([])
 const selectedTable = ref<string | null>(null)
 const tableInfo = ref<TableInfo | null>(null)
@@ -23,6 +28,12 @@ const showConfirmDrop = ref(false)
 const pendingDropTable = ref<string | null>(null)
 const showConfirmDeleteRow = ref(false)
 const pendingDeleteRow = ref<any[] | null>(null)
+
+// Inline edit-in-place state. editing identifies the cell currently being
+// edited by row index + column index; editValue holds the in-flight string.
+const editing = ref<{ row: number; col: number } | null>(null)
+const editValue = ref('')
+const savingCell = ref(false)
 
 async function loadTables() {
   loading.value = true
@@ -171,6 +182,64 @@ async function confirmDeleteRow() {
   }
 }
 
+// pkColumn returns the primary-key ColumnInfo for the selected table, if any.
+function pkColumn(): ColumnInfo | undefined {
+  return tableInfo.value?.columns.find(c => c.pk)
+}
+
+// startEdit opens an inline editor for a cell. Editing is only allowed when the
+// table has a primary key (so UpdateRow has something to target) and the cell
+// being edited is not itself the primary-key column (PKs are immutable here).
+function startEdit(rowIdx: number, colIdx: number) {
+  if (!tableData.value) return
+  const pk = pkColumn()
+  if (!pk) {
+    errorMessage.value = 'Cannot edit: no primary key column found'
+    return
+  }
+  if (tableData.value.columns[colIdx] === pk.name) return
+  const cell = tableData.value.rows[rowIdx][colIdx]
+  editValue.value = cell == null ? '' : String(cell)
+  editing.value = { row: rowIdx, col: colIdx }
+}
+
+function cancelEdit() {
+  editing.value = null
+  editValue.value = ''
+}
+
+async function saveEdit() {
+  const cur = editing.value
+  if (!cur || !selectedTable.value || !tableData.value) return
+  const pk = pkColumn()
+  if (!pk) { cancelEdit(); return }
+  const pkIdx = tableData.value.columns.indexOf(pk.name)
+  if (pkIdx < 0) { cancelEdit(); return }
+
+  const colName = tableData.value.columns[cur.col]
+  const row = tableData.value.rows[cur.row]
+  const original = row[cur.col]
+  const next = editValue.value
+  // No change → just close the editor; avoid a needless round-trip.
+  if ((original == null ? '' : String(original)) === next) { cancelEdit(); return }
+
+  savingCell.value = true
+  // Optimistic update: reflect the new value immediately, then persist.
+  row[cur.col] = next === '' ? null : next
+  editing.value = null
+  try {
+    await window.go.main.App.UpdateRow(
+      selectedTable.value, pk.name, row[pkIdx], { [colName]: next }
+    )
+    await loadData()
+  } catch (e: any) {
+    row[cur.col] = original // revert optimistic change
+    errorMessage.value = 'Failed: ' + (e.message || e)
+  } finally {
+    savingCell.value = false
+  }
+}
+
 onMounted(loadTables)
 
 watch(errorMessage, (msg) => {
@@ -242,7 +311,24 @@ watch(errorMessage, (msg) => {
             <tbody>
               <template v-if="tableData.rows && tableData.rows.length > 0">
                 <tr v-for="(row, i) in tableData.rows" :key="i">
-                  <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
+                  <td
+                    v-for="(cell, j) in row"
+                    :key="j"
+                    @dblclick="startEdit(i, j)"
+                    :class="{ 'cell-editing': editing && editing.row === i && editing.col === j }"
+                  >
+                    <input
+                      v-if="editing && editing.row === i && editing.col === j"
+                      v-model="editValue"
+                      class="cell-input"
+                      :disabled="savingCell"
+                      @keydown.enter.prevent="saveEdit"
+                      @keydown.esc.prevent="cancelEdit"
+                      @blur="saveEdit"
+                      v-focus
+                    />
+                    <template v-else>{{ cell ?? '' }}</template>
+                  </td>
                   <td>
                     <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
                   </td>
@@ -327,3 +413,22 @@ watch(errorMessage, (msg) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.brutal-table td {
+  cursor: text;
+}
+.brutal-table td.cell-editing {
+  padding: 0;
+}
+.cell-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 2px solid var(--sh-teal);
+  background: var(--sh-paper);
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--sh-ink);
+  outline: none;
+}
+</style>
