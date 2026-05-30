@@ -43,6 +43,10 @@ function destinationFor(
     case 'open_page':
       // Runtime page viewer — NOT the builderOnly /pages/:id/edit editor.
       return { path: `/page/${target}`, query: { id: target } }
+    case 'open_switchboard':
+      // AutoExec / navigation back to the switchboard shell (P5.7). Mirrors
+      // AppShellView.destinationFor's open_switchboard mapping.
+      return { path: '/', query: { switchboard: target } }
     default:
       return null
   }
@@ -67,7 +71,8 @@ export function useMacroIntents(router: () => MacroRouter | undefined) {
       switch (intent.kind) {
         case 'open_form':
         case 'open_report':
-        case 'open_page': {
+        case 'open_page':
+        case 'open_switchboard': {
           const dest = destinationFor(intent.kind, intent.target)
           if (!dest) break
           const where = filters.get(intent.target)

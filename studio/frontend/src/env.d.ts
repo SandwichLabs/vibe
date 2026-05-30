@@ -50,6 +50,15 @@ declare global {
           GetForm(id: string): Promise<FormSpec>
           ListForms(): Promise<FormSummary[]>
           SubmitForm(parent: FormSubmitRow, children: FormSubmitRow[]): Promise<void>
+          SubmitFormFor(formID: string, parent: FormSubmitRow, children: FormSubmitRow[]): Promise<void>
+          UpdateRowFor(formID: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
+          FireFormOpen(formID: string): Promise<MacroRunResult>
+          RunMacro(id: string): Promise<MacroRunResult>
+          RunAutoExec(): Promise<MacroRunResult>
+          SaveMacro(spec: any): Promise<void>
+          GetMacro(id: string): Promise<any>
+          ListMacro(): Promise<any[]>
+          DeleteMacro(id: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
           SaveQuery(id: string, title: string, sql: string, engine: string, description: string): Promise<void>
@@ -127,6 +136,23 @@ interface FormSpec {
   on_submit: string
   fields: FormFieldSpec[]
   subform?: SubformSpec | null
+  events?: FormEvents | null
+}
+
+// FormEvents binds form/record lifecycle events to macro ids (P5.7).
+interface FormEvents {
+  on_open?: string
+  on_load?: string
+  before_insert?: string
+  after_insert?: string
+  before_update?: string
+  after_update?: string
+}
+
+// MacroRunResult / MacroIntent mirror studio.MacroRunResult — the ordered UI
+// intent list RunMacro / RunAutoExec / FireFormOpen return for the frontend.
+interface MacroRunResult {
+  intents: { kind: string; target: string; args?: Record<string, string> }[]
 }
 
 interface FormSummary {

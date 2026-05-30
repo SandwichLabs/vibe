@@ -15,6 +15,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/sandwich-labs/vibe-app/internal/automation"
@@ -179,39 +181,47 @@ func (a *App) RunMacro(id string) (*MacroRunResult, error) {
 		return nil, fmt.Errorf("failed to run macro %q: %w", id, err)
 	}
 
-	out := &MacroRunResult{}
-	for _, in := range res.Intents {
-		out.Intents = append(out.Intents, MacroIntent{Kind: in.Kind, Target: in.Target, Args: in.Args})
-	}
-	// Forward server-side SetFilter applications to the frontend as set_filter
-	// intents. The Executor records SetFilter actions in res.Filters (keyed by
-	// the action's "filter" arg); the frontend's applyMacroIntents consumes them
-	// under the "where" arg key, merging the predicate onto the matching form/
-	// report/page navigation. Translating here is what wires the SetFilter path
-	// end-to-end (P5.4): without it, App.RunMacro could never emit a set_filter
-	// intent in production.
-	for _, f := range res.Filters {
-		out.Intents = append(out.Intents, MacroIntent{
-			Kind:   automation.IntentSetFilter,
-			Target: f.Target,
-			Args:   map[string]string{"where": f.Filter},
-		})
-	}
-	return out, nil
+	// resultToRunResult forwards server-side SetFilter applications to the frontend
+	// as set_filter intents (keyed under the "where" arg the frontend's
+	// applyMacroIntents consumes) alongside the ordered navigation/dialog intents.
+	return resultToRunResult(res), nil
 }
 
 // RunAutoExec runs the configured AutoExec startup macro (plan §5.3): the macro
 // id stored in _vibe_meta under "autoexec_macro" is loaded and run on file open,
 // returning the startup UI intents (e.g. open_switchboard) for the App Shell to
 // apply. When no autoexec_macro is configured it returns an empty result.
+//
+// This is the exported Wails binding the Vue App Shell invokes on the
+// "file:opened" event so the startup macro actually drives the shell. OpenFile /
+// CreateFile additionally emit an "app:autoexec" event carrying the same intents
+// via runAutoExecLocked, so the feature functions even before the shell mounts.
 func (a *App) RunAutoExec() (*MacroRunResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+	return a.runAutoExecLocked()
+}
+
+// runAutoExecLocked is the lock-free core of RunAutoExec. It reads
+// autoexec_macro from _vibe_meta, runs the bound macro against the live engine,
+// and returns the startup UI intents. Callers either hold a.mu (RunAutoExec) or
+// are inside the OpenFile/CreateFile critical section that already holds the
+// write lock (the open lifecycle), so this must NOT take the lock itself.
+func (a *App) runAutoExecLocked() (*MacroRunResult, error) {
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	macroID, err := a.container.Meta("autoexec_macro")
+	// A missing autoexec_macro key (the common case) means "no startup macro" — a
+	// no-op, not an error. We read directly (lock-free) since callers already hold
+	// a.mu; an unset key returns ("", nil) rather than a not-found error.
+	var macroID string
+	err := a.container.SQLiteDB().
+		QueryRow(`SELECT value FROM _vibe_meta WHERE key = 'autoexec_macro';`).
+		Scan(&macroID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &MacroRunResult{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to read autoexec_macro: %w", err)
 	}
@@ -223,7 +233,12 @@ func (a *App) RunAutoExec() (*MacroRunResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to run autoexec macro %q: %w", macroID, err)
 	}
+	return resultToRunResult(res), nil
+}
 
+// resultToRunResult flattens an automation.Result (ordered intents + recorded
+// SetFilter applications) into the exported MacroRunResult the frontend consumes.
+func resultToRunResult(res *automation.Result) *MacroRunResult {
 	out := &MacroRunResult{}
 	for _, in := range res.Intents {
 		out.Intents = append(out.Intents, MacroIntent{Kind: in.Kind, Target: in.Target, Args: in.Args})
@@ -235,7 +250,7 @@ func (a *App) RunAutoExec() (*MacroRunResult, error) {
 			Args:   map[string]string{"where": f.Filter},
 		})
 	}
-	return out, nil
+	return out
 }
 
 // runMacroByID loads a macro spec and runs it against the live DuckDB engine,
@@ -288,18 +303,51 @@ func (a *App) formEventsFor(formID string) schema.FormEvents {
 	return *spec.Events
 }
 
-// SubmitFormFor performs a form submit (parent + children) bound to the named
-// form, firing the form's before_insert event hook before the write and its
-// after_insert hook only on success (plan §5.3). A before_insert hook that
-// returns an error vetoes the write — SubmitForm is never called, so no row is
-// left behind.
-func (a *App) SubmitFormFor(formID string, parent FormSubmitRow, children []FormSubmitRow) error {
+// FireFormOpen runs a bound form's on_open then on_load event hooks (plan §5.3)
+// and returns any UI intents they produce for the shell to apply. It is the
+// real binding the Vue FormView calls when a form opens, so on_open/on_load are
+// wired end-to-end (an on_open macro that opens a filtered subform, msg_box,
+// etc. surfaces here). A form without those hooks yields an empty result.
+func (a *App) FireFormOpen(formID string) (*MacroRunResult, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	events := a.formEventsFor(formID)
+	out := &MacroRunResult{}
+	for _, hookID := range []string{events.OnOpen, events.OnLoad} {
+		if hookID == "" {
+			continue
+		}
+		res, err := a.runMacroByID(context.Background(), hookID)
+		if err != nil {
+			return nil, fmt.Errorf("form open hook %q failed: %w", hookID, err)
+		}
+		merged := resultToRunResult(res)
+		out.Intents = append(out.Intents, merged.Intents...)
+	}
+	return out, nil
+}
+
+// SubmitFormFor is the form-aware submit the Vue FormView calls (the real
+// write path for bound forms): it performs the same atomic parent+children
+// SubmitForm write, firing the form's before_insert hook BEFORE the write and
+// its after_insert hook only on success (plan §5.3). A before_insert hook that
+// returns an error vetoes the submit — the write is never attempted, so no row
+// is left behind (skip semantics: the hook executor runs on the engine
+// connection, not the write transaction, so the guarantee is "no orphan row",
+// equivalent to a rollback of a write that never started).
+func (a *App) SubmitFormFor(formID string, parent FormSubmitRow, children []FormSubmitRow) error {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
 		return fmt.Errorf("no file open")
 	}
-	ctx := context.Background()
 	events := a.formEventsFor(formID)
+	a.mu.RUnlock()
 
+	ctx := context.Background()
 	if err := a.fireHook(ctx, events.BeforeInsert); err != nil {
 		return fmt.Errorf("before_insert hook vetoed submit: %w", err)
 	}
@@ -312,21 +360,29 @@ func (a *App) SubmitFormFor(formID string, parent FormSubmitRow, children []Form
 	return nil
 }
 
-// UpdateRowFor updates a row by primary key bound to the named form, firing the
-// form's before_update event hook before the write and its after_update hook only
-// on success (plan §5.3). A before_update hook that returns an error vetoes the
-// write (UpdateRow is never called).
+// UpdateRowFor is the form-aware update the Vue FormView calls (the real write
+// path for bound forms): it resolves the form's bound table, fires the form's
+// before_update hook BEFORE the write, performs the same UpdateRow write, and
+// fires after_update only on success (plan §5.3). A before_update hook that
+// returns an error vetoes the write (UpdateRow is never called).
 func (a *App) UpdateRowFor(formID, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
+	a.mu.RLock()
 	if a.container == nil {
+		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
 	}
-	ctx := context.Background()
 	events := a.formEventsFor(formID)
+	table, err := a.tableForForm(formID)
+	a.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
 
+	ctx := context.Background()
 	if err := a.fireHook(ctx, events.BeforeUpdate); err != nil {
 		return nil, fmt.Errorf("before_update hook vetoed update: %w", err)
 	}
-	res, err := a.UpdateRow(table4Form(a, formID), pkCol, pkVal, values)
+	res, err := a.UpdateRow(table, pkCol, pkVal, values)
 	if err != nil {
 		return nil, err
 	}
@@ -336,16 +392,27 @@ func (a *App) UpdateRowFor(formID, pkCol string, pkVal any, values map[string]an
 	return res, nil
 }
 
-// table4Form resolves a form's bound table for the form-aware write stubs. On any
-// lookup failure it returns the formID unchanged (the stub path); the real P5.7
-// implementation resolves and validates the bound table.
-func table4Form(a *App, formID string) string {
+// tableForForm resolves and validates a form's bound table for the form-aware
+// write path. It loads the form spec, requires a non-empty bound table, and
+// validates the table is a real identifier — so a malformed/missing form can
+// never be used to drive a write against an arbitrary string. Callers hold the
+// App lock (the form store reads SQLCipher metadata).
+func (a *App) tableForForm(formID string) (string, error) {
 	store := schema.NewFormStore(a.container.SQLiteDB())
 	spec, err := store.GetForm(formID)
-	if err != nil || spec == nil {
-		return formID
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve form %q: %w", formID, err)
 	}
-	return spec.Table
+	if spec == nil {
+		return "", fmt.Errorf("form %q not found", formID)
+	}
+	if spec.Table == "" {
+		return "", fmt.Errorf("form %q has no bound table", formID)
+	}
+	if !isValidIdentifier(spec.Table) {
+		return "", fmt.Errorf("form %q bound to invalid table %q", formID, spec.Table)
+	}
+	return spec.Table, nil
 }
 
 // assertMacroAppSafe walks a macro (and its sub-macros) and returns

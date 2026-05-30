@@ -1,3 +1,91 @@
+export namespace automation {
+	
+	export class MacroCondition {
+	    expr: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MacroCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expr = source["expr"];
+	    }
+	}
+	export class MacroAction {
+	    kind: string;
+	    args?: Record<string, string>;
+	    condition?: MacroCondition;
+	
+	    static createFrom(source: any = {}) {
+	        return new MacroAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.args = source["args"];
+	        this.condition = this.convertValues(source["condition"], MacroCondition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class MacroSpec {
+	    id: string;
+	    title: string;
+	    version: number;
+	    actions: MacroAction[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MacroSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.version = source["version"];
+	        this.actions = this.convertValues(source["actions"], MacroAction);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace crud {
 	
 	export class WriteResult {
@@ -236,6 +324,52 @@ export namespace main {
 	        this.rows_imported = source["rows_imported"];
 	        this.table_name = source["table_name"];
 	    }
+	}
+	export class MacroIntent {
+	    kind: string;
+	    target: string;
+	    args?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new MacroIntent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.target = source["target"];
+	        this.args = source["args"];
+	    }
+	}
+	export class MacroRunResult {
+	    intents: MacroIntent[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MacroRunResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.intents = this.convertValues(source["intents"], MacroIntent);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class NavTarget {
 	    kind: string;
@@ -542,6 +676,28 @@ export namespace schema {
 	        this.sort_order = source["sort_order"];
 	    }
 	}
+	export class FormEvents {
+	    on_open?: string;
+	    on_load?: string;
+	    before_insert?: string;
+	    after_insert?: string;
+	    before_update?: string;
+	    after_update?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormEvents(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.on_open = source["on_open"];
+	        this.on_load = source["on_load"];
+	        this.before_insert = source["before_insert"];
+	        this.after_insert = source["after_insert"];
+	        this.before_update = source["before_update"];
+	        this.after_update = source["after_update"];
+	    }
+	}
 	export class FormFieldSpec {
 	    name: string;
 	    caption: string;
@@ -602,6 +758,7 @@ export namespace schema {
 	    on_submit: string;
 	    fields: FormFieldSpec[];
 	    subform?: SubformSpec;
+	    events?: FormEvents;
 	
 	    static createFrom(source: any = {}) {
 	        return new FormSpec(source);
@@ -616,6 +773,7 @@ export namespace schema {
 	        this.on_submit = source["on_submit"];
 	        this.fields = this.convertValues(source["fields"], FormFieldSpec);
 	        this.subform = this.convertValues(source["subform"], SubformSpec);
+	        this.events = this.convertValues(source["events"], FormEvents);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

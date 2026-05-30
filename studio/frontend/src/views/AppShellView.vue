@@ -212,6 +212,18 @@ async function activate(item: NavItem) {
 onMounted(async () => {
   await load()
 
+  // AutoExec (P5.7 §5.3): run the configured startup macro on file open and
+  // apply its UI intents (e.g. open_switchboard). The backend also emits an
+  // "app:autoexec" event on OpenFile/CreateFile for shells already mounted; this
+  // mount-time call covers the shell-mounts-after-open ordering. Both paths feed
+  // the SAME applyMacroIntents dispatcher.
+  try {
+    const auto = await window.go.main.App.RunAutoExec()
+    applyMacroIntents((auto?.intents as MacroIntent[]) || [])
+  } catch (err) {
+    errorMessage.value = `Failed to run AutoExec: ${err}`
+  }
+
   // App Mode: honor startup_object as the initial landing screen.
   if (isAppMode.value) {
     try {

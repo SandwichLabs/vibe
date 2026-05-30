@@ -46,6 +46,10 @@ export function CreateTable(arg1, arg2) {
   return window['go']['main']['App']['CreateTable'](arg1, arg2);
 }
 
+export function DeleteMacro(arg1) {
+  return window['go']['main']['App']['DeleteMacro'](arg1);
+}
+
 export function DeleteNavItem(arg1) {
   return window['go']['main']['App']['DeleteNavItem'](arg1);
 }
@@ -98,6 +102,10 @@ export function ExportTableJSON(arg1) {
   return window['go']['main']['App']['ExportTableJSON'](arg1);
 }
 
+export function FireFormOpen(arg1) {
+  return window['go']['main']['App']['FireFormOpen'](arg1);
+}
+
 export function GetAgentStatus() {
   return window['go']['main']['App']['GetAgentStatus']();
 }
@@ -132,6 +140,10 @@ export function GetInitialFile() {
 
 export function GetMCPStatus() {
   return window['go']['main']['App']['GetMCPStatus']();
+}
+
+export function GetMacro(arg1) {
+  return window['go']['main']['App']['GetMacro'](arg1);
 }
 
 export function GetNav(arg1) {
@@ -176,6 +188,10 @@ export function IsFileOpen() {
 
 export function ListForms() {
   return window['go']['main']['App']['ListForms']();
+}
+
+export function ListMacro() {
+  return window['go']['main']['App']['ListMacro']();
 }
 
 export function ListNav() {
@@ -230,6 +246,14 @@ export function RenderReportContentFiltered(arg1, arg2) {
   return window['go']['main']['App']['RenderReportContentFiltered'](arg1, arg2);
 }
 
+export function RunAutoExec() {
+  return window['go']['main']['App']['RunAutoExec']();
+}
+
+export function RunMacro(arg1) {
+  return window['go']['main']['App']['RunMacro'](arg1);
+}
+
 export function SaveFile() {
   return window['go']['main']['App']['SaveFile']();
 }
@@ -240,6 +264,10 @@ export function SaveFilterAsQuery(arg1, arg2, arg3, arg4) {
 
 export function SaveForm(arg1) {
   return window['go']['main']['App']['SaveForm'](arg1);
+}
+
+export function SaveMacro(arg1) {
+  return window['go']['main']['App']['SaveMacro'](arg1);
 }
 
 export function SaveNav(arg1) {
@@ -298,10 +326,18 @@ export function SubmitForm(arg1, arg2) {
   return window['go']['main']['App']['SubmitForm'](arg1, arg2);
 }
 
+export function SubmitFormFor(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SubmitFormFor'](arg1, arg2, arg3);
+}
+
 export function UpdatePage(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdatePage'](arg1, arg2, arg3);
 }
 
 export function UpdateRow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateRow'](arg1, arg2, arg3, arg4);
+}
+
+export function UpdateRowFor(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateRowFor'](arg1, arg2, arg3, arg4);
 }

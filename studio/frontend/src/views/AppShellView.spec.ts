@@ -42,6 +42,7 @@ interface AppMocks {
   OpenForm?: ReturnType<typeof vi.fn>
   OpenReport?: ReturnType<typeof vi.fn>
   RunMacro?: ReturnType<typeof vi.fn>
+  RunAutoExec?: ReturnType<typeof vi.fn>
 }
 
 function seedNav(): NavItem[] {
@@ -96,6 +97,8 @@ function makeApp(opts: { nav?: NavItem[]; startup?: string } = {}): AppMocks {
     })),
     OpenForm: vi.fn(async () => {}),
     OpenReport: vi.fn(async () => {}),
+    // AutoExec (P5.7) runs on mount; default to no startup macro.
+    RunAutoExec: vi.fn(async () => ({ intents: [] })),
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
   ;(window as any).go = { main: { App: app } }
@@ -371,6 +374,24 @@ describe('AppShellView Switchboard runtime (P4.7 — App Mode)', () => {
     // editor (/pages/pg_home/edit) which is locked out in App Mode.
     expect(path).toBe('/page/pg_home')
     expect(path).not.toContain('/edit')
+  })
+
+  it('runs AutoExec on mount and applies its open_switchboard startup intent (P5.7)', async () => {
+    // The AutoExec macro returns an open_switchboard intent; the shell must apply
+    // it through the shared dispatcher on mount (the "AutoExec opens the
+    // switchboard maximized on file open" acceptance).
+    const app = makeApp()
+    app.RunAutoExec = vi.fn(async () => ({
+      intents: [{ kind: 'open_switchboard', target: 'main' }],
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(app.RunAutoExec).toHaveBeenCalledTimes(1)
+    const landed = pushed.find((p) => JSON.stringify(p).includes('switchboard'))
+    expect(landed, 'AutoExec open_switchboard intent must drive navigation on open').toBeTruthy()
+    expect((landed as any).query.switchboard).toBe('main')
+    void wrapper
   })
 
   it('honors startup_object as the initial switchboard / landing screen', async () => {

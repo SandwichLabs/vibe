@@ -3,6 +3,7 @@
 import {main} from '../models';
 import {crud} from '../models';
 import {schema} from '../models';
+import {automation} from '../models';
 import {queries} from '../models';
 import {reports} from '../models';
 
@@ -27,6 +28,8 @@ export function CreateHTMLPage(arg1:string,arg2:string):Promise<string>;
 export function CreatePage(arg1:string,arg2:string):Promise<string>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
+
+export function DeleteMacro(arg1:string):Promise<void>;
 
 export function DeleteNavItem(arg1:string):Promise<void>;
 
@@ -54,6 +57,8 @@ export function ExportTableCSV(arg1:string):Promise<string>;
 
 export function ExportTableJSON(arg1:string):Promise<string>;
 
+export function FireFormOpen(arg1:string):Promise<main.MacroRunResult>;
+
 export function GetAgentStatus():Promise<Record<string, any>>;
 
 export function GetAllMeta():Promise<Record<string, string>>;
@@ -71,6 +76,8 @@ export function GetForm(arg1:string):Promise<schema.FormSpec>;
 export function GetInitialFile():Promise<string>;
 
 export function GetMCPStatus():Promise<Record<string, any>>;
+
+export function GetMacro(arg1:string):Promise<automation.MacroSpec>;
 
 export function GetNav(arg1:string):Promise<Array<schema.NavItem>>;
 
@@ -93,6 +100,8 @@ export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.Wri
 export function IsFileOpen():Promise<boolean>;
 
 export function ListForms():Promise<Array<main.FormSummary>>;
+
+export function ListMacro():Promise<Array<automation.MacroSpec>>;
 
 export function ListNav():Promise<Array<schema.NavItem>>;
 
@@ -120,11 +129,17 @@ export function RenderReportContent(arg1:string):Promise<string>;
 
 export function RenderReportContentFiltered(arg1:string,arg2:Record<string, string>):Promise<string>;
 
+export function RunAutoExec():Promise<main.MacroRunResult>;
+
+export function RunMacro(arg1:string):Promise<main.MacroRunResult>;
+
 export function SaveFile():Promise<void>;
 
 export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SaveForm(arg1:schema.FormSpec):Promise<void>;
+
+export function SaveMacro(arg1:automation.MacroSpec):Promise<void>;
 
 export function SaveNav(arg1:Array<schema.NavItem>):Promise<void>;
 
@@ -154,6 +169,10 @@ export function StopMCPServer():Promise<void>;
 
 export function SubmitForm(arg1:main.FormSubmitRow,arg2:Array<main.FormSubmitRow>):Promise<void>;
 
+export function SubmitFormFor(arg1:string,arg2:main.FormSubmitRow,arg3:Array<main.FormSubmitRow>):Promise<void>;
+
 export function UpdatePage(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function UpdateRow(arg1:string,arg2:string,arg3:any,arg4:Record<string, any>):Promise<crud.WriteResult>;
+
+export function UpdateRowFor(arg1:string,arg2:string,arg3:any,arg4:Record<string, any>):Promise<crud.WriteResult>;

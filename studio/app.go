@@ -69,6 +69,13 @@ type App struct {
 
 	renderMu     sync.Mutex
 	renderCancel context.CancelFunc
+
+	// emit publishes a frontend event. In production it is nil and emitEvent
+	// falls back to the Wails runtime.EventsEmit (which requires the real Wails
+	// lifecycle context). Tests inject a sink so the open lifecycle — including
+	// the AutoExec "app:autoexec" startup intents — can be asserted without a
+	// live Wails runtime.
+	emit func(event string, data ...any)
 }
 
 // NewApp creates a new App instance.
@@ -86,6 +93,17 @@ func (a *App) GetInitialFile() string {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// emitEvent publishes a frontend event, using the injected emitter (tests) when
+// set and otherwise the Wails runtime. Centralizing emission lets the open
+// lifecycle (and its AutoExec startup intents) be exercised in unit tests.
+func (a *App) emitEvent(event string, data ...any) {
+	if a.emit != nil {
+		a.emit(event, data...)
+		return
+	}
+	runtime.EventsEmit(a.ctx, event, data...)
 }
 
 func (a *App) shutdown(_ context.Context) {
@@ -156,7 +174,8 @@ func (a *App) OpenFile(path, passphrase string) error {
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	a.initModeFromMeta()
-	runtime.EventsEmit(a.ctx, "file:opened")
+	a.emitEvent("file:opened")
+	a.emitAutoExec()
 	return nil
 }
 
@@ -185,8 +204,27 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	a.initModeFromMeta()
-	runtime.EventsEmit(a.ctx, "file:opened")
+	a.emitEvent("file:opened")
+	a.emitAutoExec()
 	return nil
+}
+
+// emitAutoExec runs the configured AutoExec startup macro (plan §5.3) and emits
+// its startup UI intents on the "app:autoexec" event so the App Shell applies
+// them on file open (the AutoExec-opens-switchboard acceptance). It is called
+// from OpenFile/CreateFile while a.mu is held, so it uses the lock-free
+// runAutoExecLocked. Failures are logged, not fatal — a broken startup macro
+// must not block opening the file.
+func (a *App) emitAutoExec() {
+	res, err := a.runAutoExecLocked()
+	if err != nil {
+		a.logger.Warn("autoexec macro failed on open", "error", err)
+		return
+	}
+	if res == nil || len(res.Intents) == 0 {
+		return
+	}
+	a.emitEvent("app:autoexec", res.Intents)
 }
 
 // CloseFile saves and closes the current file.

@@ -13,15 +13,22 @@
 //   SubmitForm              — atomic header + line write-back
 //   DeleteRow               — delete the current header record
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import { useMacroIntents, type MacroIntent } from '../composables/useMacroIntents'
 
 // The switchboard (P4.7) binds a nav button to a specific form and navigates
 // here with ?id=<formId>. Honor that query so the bound form opens, rather than
 // always defaulting to the first form. The route may be absent when mounted
 // without a router (unit tests).
 const route = useRoute() ?? ({ query: {} } as ReturnType<typeof useRoute>)
+const router = useRouter()
+
+// on_open / on_load form event hooks (P5.7) return UI intents (open a filtered
+// subform, msg_box, …) applied through the same shared dispatcher the macro
+// runtime uses.
+const { msgBox: formMsgBox, applyMacroIntents } = useMacroIntents(() => router)
 
 const forms = ref<FormSummary[]>([])
 const selectedFormId = ref<string | null>(null)
@@ -90,6 +97,11 @@ async function selectForm(id: string) {
   selectedFormId.value = id
   try {
     spec.value = await window.go.main.App.GetForm(id)
+    // Fire the form's on_open / on_load event hooks (P5.7) and apply any UI
+    // intents they return before loading records, mirroring Access's Form_Open /
+    // Form_Load sequence.
+    const openRes = await window.go.main.App.FireFormOpen(id)
+    applyMacroIntents((openRes?.intents as MacroIntent[]) || [])
     await loadHeaderRecords()
   } catch (e: any) {
     errorMessage.value = 'Failed to open form: ' + (e.message || e)
@@ -183,27 +195,34 @@ function removeChildRow(i: number) {
   childRows.value.splice(i, 1)
 }
 
-// saveRecord commits the header + all subform child rows in a single atomic
-// SubmitForm transaction. The child rows are stamped with the master key so the
-// FK link is preserved.
+// saveRecord commits the current record. A NEW record is written as a single
+// atomic SubmitFormFor transaction (header + subform child rows stamped with the
+// master key). An EDIT of an existing record updates the header in place via
+// UpdateRowFor. Both go through the form-aware *For bindings so the bound form's
+// before_/after_ event hooks fire on the real write path (P5.7).
 async function saveRecord() {
   if (!spec.value) return
   saving.value = true
   errorMessage.value = ''
   try {
-    const parent: FormSubmitRow = { table: spec.value.table, values: { ...headerValues.value } }
-    const sf = subform.value
-    const children: FormSubmitRow[] = []
-    if (sf) {
-      const masterVal = headerValues.value[sf.parent_key]
-      for (const row of childRows.value) {
-        children.push({
-          table: sf.child_table,
-          values: { ...row, [sf.child_key]: masterVal },
-        })
+    if (isNew.value) {
+      const parent: FormSubmitRow = { table: spec.value.table, values: { ...headerValues.value } }
+      const sf = subform.value
+      const children: FormSubmitRow[] = []
+      if (sf) {
+        const masterVal = headerValues.value[sf.parent_key]
+        for (const row of childRows.value) {
+          children.push({
+            table: sf.child_table,
+            values: { ...row, [sf.child_key]: masterVal },
+          })
+        }
       }
+      await window.go.main.App.SubmitFormFor(spec.value.id, parent, children)
+    } else {
+      const pkVal = headerValues.value[pkCol.value]
+      await window.go.main.App.UpdateRowFor(spec.value.id, pkCol.value, pkVal, { ...headerValues.value })
     }
-    await window.go.main.App.SubmitForm(parent, children)
     await loadHeaderRecords()
   } catch (e: any) {
     errorMessage.value = 'Save failed: ' + (e.message || e)
@@ -387,5 +406,16 @@ watch(errorMessage, (msg) => { if (msg) setTimeout(() => { errorMessage.value = 
       @confirm="confirmDelete"
       @cancel="showConfirmDelete = false"
     />
+
+    <!-- MsgBox dialog raised by an on_open / on_load form event hook (P5.7). -->
+    <div
+      v-if="formMsgBox !== null"
+      data-testid="form-msgbox"
+      class="macro-msgbox sh-card"
+      role="dialog"
+    >
+      <p class="macro-msgbox-text">{{ formMsgBox }}</p>
+      <button class="sh-btn" @click="formMsgBox = null">OK</button>
+    </div>
   </div>
 </template>
