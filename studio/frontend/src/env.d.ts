@@ -30,6 +30,8 @@ declare global {
           ListTables(): Promise<string[]>
           DescribeTable(name: string): Promise<TableInfo>
           GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
+          GetTableDataFiltered(name: string, spec: FilterSpec, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
+          SaveFilterAsQuery(name: string, spec: FilterSpec, columns: string[], title: string): Promise<string>
           InsertRow(table: string, values: Record<string, any>): Promise<WriteResult>
           UpdateRow(table: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
           DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
@@ -37,6 +39,11 @@ declare global {
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string): Promise<QueryResult>
           GetFieldMeta(table: string): Promise<FieldMeta[]>
+          SetFieldMeta(table: string, column: string, meta: FieldMeta): Promise<void>
+          AddColumn(table: string, column: string, colType: string): Promise<void>
+          DropColumn(table: string, column: string): Promise<void>
+          AddIndex(table: string, indexName: string, columns: string[], unique: boolean): Promise<void>
+          AlterColumnType(table: string, column: string, newType: string): Promise<void>
           SaveForm(spec: FormSpec): Promise<void>
           GetForm(id: string): Promise<FormSpec>
           ListForms(): Promise<FormSummary[]>
@@ -167,6 +174,20 @@ interface ColumnInfo {
 interface TableInfo {
   name: string
   columns: ColumnInfo[]
+}
+
+// FilterCondition / FilterSpec mirror studio.FilterCondition / studio.FilterSpec
+// (the SQL-free datasheet visual-querying unit behind Filter-by-Selection and
+// Filter-by-Form, plan §2.3 / P2.5).
+interface FilterCondition {
+  column: string
+  op: string
+  value?: any
+}
+
+interface FilterSpec {
+  combinator: string
+  conditions: FilterCondition[]
 }
 
 interface TableData {

@@ -50,6 +50,30 @@ const fieldMeta = ref<Record<string, FieldMeta>>({})
 // the hidden stored value (PK / value_col) and the human-readable label.
 const lookupOptions = ref<Record<string, { value: any; label: string }[]>>({})
 
+// --- P2.9 datasheet visual querying ---
+// activeFilter holds the currently applied structured FilterSpec (null = no
+// filter). When set, loadData routes through GetTableDataFiltered so both the
+// rows AND the record-count bar reflect the filtered total.
+const activeFilter = ref<FilterSpec | null>(null)
+// filteredTotal is the backend-reported total for the active filter; it drives
+// the record-count bar (distinct from the unfiltered total_rows).
+const filteredTotal = ref<number | null>(null)
+// Filter-by-Form panel state: a list of editable condition rows.
+const showFbF = ref(false)
+const fbfCombinator = ref<'AND' | 'OR'>('AND')
+const fbfConditions = ref<{ column: string; op: string; value: string }[]>([])
+const FILTER_OPS = [
+  { value: 'eq', label: '=' },
+  { value: 'neq', label: '≠' },
+  { value: 'lt', label: '<' },
+  { value: 'gt', label: '>' },
+  { value: 'lte', label: '≤' },
+  { value: 'gte', label: '≥' },
+  { value: 'like', label: 'like' },
+  { value: 'is_null', label: 'is null' },
+  { value: 'is_not_null', label: 'is not null' },
+]
+
 // Cell-level validation feedback: which cell failed and the message to show.
 // This is independent of the global errorMessage toast so the user sees WHICH
 // cell rejected without the change being persisted.
@@ -128,6 +152,7 @@ async function selectTable(name: string) {
   currentPage.value = 1
   sortCol.value = ''
   sortDir.value = 'ASC'
+  clearFilter()
   try {
     tableInfo.value = await window.go.main.App.DescribeTable(name)
   } catch { tableInfo.value = null }
@@ -139,11 +164,87 @@ async function loadData() {
   if (!selectedTable.value) return
   dataLoading.value = true
   try {
-    tableData.value = await window.go.main.App.GetTableData(
-      selectedTable.value, currentPage.value, pageSize.value, sortCol.value, sortDir.value
-    )
+    if (activeFilter.value) {
+      tableData.value = await window.go.main.App.GetTableDataFiltered(
+        selectedTable.value, activeFilter.value, currentPage.value, pageSize.value, sortCol.value, sortDir.value
+      )
+      filteredTotal.value = tableData.value?.total_rows ?? null
+    } else {
+      tableData.value = await window.go.main.App.GetTableData(
+        selectedTable.value, currentPage.value, pageSize.value, sortCol.value, sortDir.value
+      )
+    }
   } catch { tableData.value = null }
   dataLoading.value = false
+}
+
+// applyFilter sets the active FilterSpec and reloads from page 1 so the rows
+// and the record-count bar both reflect the filtered result.
+async function applyFilter(spec: FilterSpec) {
+  activeFilter.value = spec
+  currentPage.value = 1
+  await loadData()
+}
+
+// clearFilter removes any active filter and reverts to the unfiltered view.
+function clearFilter() {
+  activeFilter.value = null
+  filteredTotal.value = null
+  showFbF.value = false
+  fbfConditions.value = []
+}
+
+// filterBySelection applies a single eq condition on the clicked cell's column
+// and value (Access Filter-by-Selection).
+async function filterBySelection(colName: string, value: any) {
+  await applyFilter({
+    combinator: 'AND',
+    conditions: [{ column: colName, op: 'eq', value }],
+  })
+}
+
+// openFbF opens the Filter-by-Form panel, seeding one empty condition row per
+// the first table column so the builder can pick column/op/value.
+function openFbF() {
+  if (!tableInfo.value) return
+  const cols = tableInfo.value.columns
+  fbfCombinator.value = 'AND'
+  fbfConditions.value = [
+    { column: cols[0]?.name ?? '', op: 'eq', value: '' },
+    { column: cols[1]?.name ?? cols[0]?.name ?? '', op: 'eq', value: '' },
+  ]
+  showFbF.value = true
+}
+
+function addFbFCondition() {
+  const cols = tableInfo.value?.columns ?? []
+  fbfConditions.value.push({ column: cols[0]?.name ?? '', op: 'eq', value: '' })
+}
+
+// applyFbF builds a FilterSpec from the panel's condition rows, dropping any
+// rows with no column or (for value-bearing ops) no value.
+async function applyFbF() {
+  const conditions = fbfConditions.value
+    .filter(c => c.column && (c.op === 'is_null' || c.op === 'is_not_null' || c.value !== ''))
+    .map(c => (c.op === 'is_null' || c.op === 'is_not_null')
+      ? { column: c.column, op: c.op }
+      : { column: c.column, op: c.op, value: c.value })
+  if (conditions.length === 0) return
+  showFbF.value = false
+  await applyFilter({ combinator: fbfCombinator.value, conditions })
+}
+
+// saveFilterAsQuery persists the active filter as a named query (P2.6).
+async function saveFilterAsQuery() {
+  if (!activeFilter.value || !selectedTable.value) return
+  const columns = tableData.value?.columns ?? []
+  try {
+    await window.go.main.App.SaveFilterAsQuery(
+      selectedTable.value, activeFilter.value, columns, `${selectedTable.value} (filtered)`
+    )
+  } catch (e: any) {
+    errorMessage.value = 'Failed: ' + (e.message || e)
+  }
 }
 
 function toggleSort(col: string) {
@@ -391,8 +492,46 @@ watch(errorMessage, (msg) => {
         <div class="page-subhead" style="padding: 14px 24px;">
           <h1 style="font-size: 22px;">{{ selectedTable }}</h1>
           <span class="flex-1"></span>
-          <span v-if="tableData" class="badge badge--teal">{{ tableData.total_rows }} rows</span>
+          <button @click="openFbF" class="btn btn-sm"><Icon name="filter" :size="14" /> Filter by Form</button>
+          <button v-if="activeFilter" @click="saveFilterAsQuery" class="btn btn-sm"><Icon name="save" :size="14" /> Save as query</button>
+          <button v-if="activeFilter" @click="(clearFilter(), loadData())" class="btn btn-ghost btn-sm"><Icon name="x" :size="14" /> Clear filter</button>
           <button @click="openAddRow" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> Add row</button>
+        </div>
+
+        <!-- Record-count bar -->
+        <div class="record-count-bar px-6 py-1.5 border-b border-[rgba(31,35,48,0.12)] sh-mono text-xs text-[var(--sh-graphite)] flex items-center gap-2">
+          <span v-if="activeFilter" class="badge badge--teal">Filtered</span>
+          <span>{{ (activeFilter ? (filteredTotal ?? 0) : (tableData?.total_rows ?? 0)) }} records</span>
+        </div>
+
+        <!-- Filter-by-Form panel -->
+        <div v-if="showFbF" class="px-6 py-3 border-b-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)]">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="sh-label" style="margin:0;">Filter by Form</span>
+            <select v-model="fbfCombinator" class="field-input fbf-combinator w-24">
+              <option value="AND">AND</option>
+              <option value="OR">OR</option>
+            </select>
+          </div>
+          <div v-for="(cond, i) in fbfConditions" :key="i" class="flex gap-2 mb-2">
+            <select v-model="cond.column" class="field-input fbf-column flex-1">
+              <option v-for="c in (tableInfo?.columns || [])" :key="c.name" :value="c.name">{{ c.name }}</option>
+            </select>
+            <select v-model="cond.op" class="field-input fbf-op w-28">
+              <option v-for="op in FILTER_OPS" :key="op.value" :value="op.value">{{ op.label }}</option>
+            </select>
+            <input
+              v-model="cond.value"
+              class="field-input fbf-value flex-1"
+              :disabled="cond.op === 'is_null' || cond.op === 'is_not_null'"
+              placeholder="value"
+            />
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button @click="addFbFCondition" class="btn btn-ghost btn-sm"><Icon name="plus" :size="14" /> Condition</button>
+            <button @click="showFbF = false" class="btn btn-ghost btn-sm">Cancel</button>
+            <button @click="applyFbF" class="btn btn-primary btn-sm">Apply</button>
+          </div>
         </div>
 
         <!-- Table -->
@@ -494,6 +633,15 @@ watch(errorMessage, (msg) => {
                         class="cell-checkbox"
                       />
                       <span v-else>{{ cell ?? '' }}</span>
+                      <!-- Filter-by-Selection affordance: a funnel that filters
+                           the datasheet to rows where this column equals this
+                           cell's value (Access right-click "Filter by Selection"). -->
+                      <button
+                        class="filter-selection-btn"
+                        data-filter-selection
+                        :title="`Filter by ${tableData.columns[j]} = ${cell}`"
+                        @click.stop="filterBySelection(tableData.columns[j], cell)"
+                      >{{ cell ?? '' }}<Icon name="filter" :size="11" /></button>
                     </template>
                     <div
                       v-if="cellError && cellError.row === i && cellError.col === j"
@@ -604,6 +752,27 @@ watch(errorMessage, (msg) => {
 }
 .cell-checkbox {
   accent-color: var(--sh-teal);
+}
+/* Filter-by-Selection affordance: an inline funnel button that only reveals
+   itself on cell hover, so the datasheet stays clean until the user reaches
+   for it. The cell text is rendered by the adjacent span; this button repeats
+   the value purely so the funnel sits next to the value it filters on. */
+.filter-selection-btn {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--sh-teal);
+  background: var(--sh-paper);
+  color: var(--sh-teal);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.brutal-table td:hover .filter-selection-btn {
+  display: inline-flex;
 }
 .brutal-table td.cell-error {
   outline: 2px solid var(--sh-error);
