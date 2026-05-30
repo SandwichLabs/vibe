@@ -23,7 +23,7 @@ import AppShell from './AppShell.vue'
 // Builder-only routes that must be locked (unreachable) in App Mode, plus the
 // app-facing routes that must stay reachable.
 const BUILDER_ROUTES = ['schema', 'tables', 'relationships', 'queries', 'pages', 'import', 'settings']
-const APP_ROUTES = ['dashboard', 'forms', 'reports']
+const APP_ROUTES = ['switchboard', 'dashboard', 'forms', 'reports']
 
 const BUILDER_LINKS = ['Schema', 'Tables', 'Queries', 'Pages', 'Import', 'Settings']
 
@@ -181,7 +181,7 @@ describe('AppShell mode-aware chrome (P4.6)', () => {
       expect(
         router.currentRoute.value.name,
         `blocked builder route "${name}" must land on the switchboard`,
-      ).toBe('dashboard')
+      ).toBe('switchboard')
     }
   })
 

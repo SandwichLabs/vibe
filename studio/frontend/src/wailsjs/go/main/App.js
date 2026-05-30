@@ -46,6 +46,10 @@ export function CreateTable(arg1, arg2) {
   return window['go']['main']['App']['CreateTable'](arg1, arg2);
 }
 
+export function DeleteNavItem(arg1) {
+  return window['go']['main']['App']['DeleteNavItem'](arg1);
+}
+
 export function DeletePage(arg1) {
   return window['go']['main']['App']['DeletePage'](arg1);
 }
@@ -102,6 +106,10 @@ export function GetAllMeta() {
   return window['go']['main']['App']['GetAllMeta']();
 }
 
+export function GetAppConfig() {
+  return window['go']['main']['App']['GetAppConfig']();
+}
+
 export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
 }
@@ -124,6 +132,10 @@ export function GetInitialFile() {
 
 export function GetMCPStatus() {
   return window['go']['main']['App']['GetMCPStatus']();
+}
+
+export function GetNav(arg1) {
+  return window['go']['main']['App']['GetNav'](arg1);
 }
 
 export function GetPage(arg1) {
@@ -164,6 +176,14 @@ export function IsFileOpen() {
 
 export function ListForms() {
   return window['go']['main']['App']['ListForms']();
+}
+
+export function ListNav() {
+  return window['go']['main']['App']['ListNav']();
+}
+
+export function ListNavTargets() {
+  return window['go']['main']['App']['ListNavTargets']();
 }
 
 export function ListPages() {
@@ -222,6 +242,14 @@ export function SaveForm(arg1) {
   return window['go']['main']['App']['SaveForm'](arg1);
 }
 
+export function SaveNav(arg1) {
+  return window['go']['main']['App']['SaveNav'](arg1);
+}
+
+export function SaveNavItem(arg1) {
+  return window['go']['main']['App']['SaveNavItem'](arg1);
+}
+
 export function SaveQuery(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4);
 }
@@ -242,12 +270,20 @@ export function SendAgentQuery(arg1) {
   return window['go']['main']['App']['SendAgentQuery'](arg1);
 }
 
+export function SetAppConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetAppConfig'](arg1, arg2, arg3);
+}
+
 export function SetFieldMeta(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetFieldMeta'](arg1, arg2, arg3);
 }
 
 export function SetMeta(arg1, arg2) {
   return window['go']['main']['App']['SetMeta'](arg1, arg2);
+}
+
+export function SetMode(arg1) {
+  return window['go']['main']['App']['SetMode'](arg1);
 }
 
 export function StartMCPServer() {

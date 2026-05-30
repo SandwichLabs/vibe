@@ -2,7 +2,16 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { setCachedMode } from '../router/index'
+import { useAppMode } from '../composables/useAppMode'
 import Icon from './Icon.vue'
+
+// The AppShell is the single place that reads/flips the live app mode. It keeps
+// THREE consumers in sync: this chrome (appConfig), the router guard
+// (setCachedMode), and the shared useAppMode composable that App-Mode views
+// (AppShellView switchboard runtime, ReportView Edit-SQL gate) read from. Before
+// this wiring the composable defaulted to "studio" forever, so the runtime
+// switchboard never rendered its buttons even in App Mode.
+const { setMode: setComposableMode } = useAppMode()
 
 const emit = defineEmits<{ 'file-closed': [] }>()
 const route = useRoute()
@@ -25,6 +34,7 @@ const unlockPassphrase = ref('')
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'home' },
+  { path: '/switchboard', label: 'Switchboard', icon: 'apps' },
   { path: '/pages', label: 'Pages', icon: 'fileText' },
   { path: '/tables', label: 'Tables', icon: 'database' },
   { path: '/relationships', label: 'Relationships', icon: 'gitMerge' },
@@ -53,8 +63,11 @@ async function loadFileInfo() {
 async function loadAppConfig() {
   try {
     appConfig.value = await window.go.main.App.GetAppConfig()
-    // Keep the route-locking guard in sync with the live mode (P4.6).
-    setCachedMode(appConfig.value?.mode === 'app' ? 'app' : 'studio')
+    // Keep the route-locking guard AND the shared composable in sync with the
+    // live mode (P4.6 / P4.7).
+    const live = appConfig.value?.mode === 'app' ? 'app' : 'studio'
+    setCachedMode(live)
+    setComposableMode(live)
   } catch { /* ignore — fall back to Studio Mode */ }
 }
 
@@ -66,9 +79,10 @@ async function enterAppMode() {
     await window.go.main.App.SetMode('app')
     setCachedMode('app')
     await loadAppConfig()
-    if (route.meta?.builderOnly) {
-      router.replace({ name: 'dashboard' })
-    }
+    // App Mode lands on the switchboard (the runtime home). If we were on a
+    // builder-only surface the guard would bounce us anyway; navigate explicitly
+    // so the end-user always sees the switchboard first.
+    router.replace({ name: 'switchboard' })
   } catch (e: any) {
     errorMessage.value = 'Could not enter App Mode: ' + (e.message || e)
   }

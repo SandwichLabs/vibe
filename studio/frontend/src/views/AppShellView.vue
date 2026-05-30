@@ -36,8 +36,10 @@ const MAX_PER_PAGE = 8
 
 const { isAppMode, isStudio } = useAppMode()
 
-// Reach the injected router (tests inject it as the `$router` mock; at runtime
-// vue-router provides the same proxy property).
+// Reach the router. At runtime vue-router exposes it on the instance proxy as
+// `$router`; the unit spec injects the same `$router` mock so navigation is
+// observable without standing up a full router. We deliberately use the proxy
+// property (not useRouter()) so the presentational unit test stays lightweight.
 const instance = getCurrentInstance()
 function router(): { push: (to: unknown) => unknown } | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +103,60 @@ function addItem() {
   newLabel.value = ''
 }
 
+// removeItem deletes a nav item from the working set and re-packs sort_order so
+// the remaining items stay 0..n-1 contiguous.
+function removeItem(item: NavItem) {
+  navItems.value = navItems.value.filter((n) => n.id !== item.id)
+  renumber()
+}
+
+// startEdit/commitEdit drive inline relabeling of a nav item's button caption.
+const editingId = ref<string | null>(null)
+const editLabel = ref('')
+function startEdit(item: NavItem) {
+  editingId.value = item.id
+  editLabel.value = item.label
+}
+function commitEdit(item: NavItem) {
+  const next = editLabel.value.trim()
+  if (next) item.label = next
+  editingId.value = null
+  editLabel.value = ''
+}
+
+// move shifts an item up (-1) or down (+1) within its switchboard page and
+// rewrites sort_order on every sibling so the persisted order matches the UI.
+function move(item: NavItem, delta: number) {
+  const ordered = pageItems.value
+  const idx = ordered.findIndex((n) => n.id === item.id)
+  const swapWith = idx + delta
+  if (idx < 0 || swapWith < 0 || swapWith >= ordered.length) return
+  // Swap the sort_order of the two siblings, then renumber to be safe.
+  const a = ordered[idx]
+  const b = ordered[swapWith]
+  const tmp = a.sort_order
+  a.sort_order = b.sort_order
+  b.sort_order = tmp
+  renumber()
+}
+
+// renumber rewrites sort_order to a contiguous 0..n-1 sequence per switchboard
+// page, honouring the current visual order.
+function renumber() {
+  const pages = new Map<string, NavItem[]>()
+  for (const n of navItems.value) {
+    const list = pages.get(n.parent_id) ?? []
+    list.push(n)
+    pages.set(n.parent_id, list)
+  }
+  for (const list of pages.values()) {
+    list
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .forEach((n, i) => { n.sort_order = i })
+  }
+}
+
 async function save() {
   errorMessage.value = ''
   try {
@@ -119,7 +175,9 @@ function destinationFor(item: NavItem): unknown | null {
     case 'open_report':
       return { path: `/reports`, query: { id: item.target_id } }
     case 'open_page':
-      return { path: `/pages/${item.target_id}/edit`, query: { id: item.target_id } }
+      // Runtime page viewer — NOT the builderOnly /pages/:id/edit editor, which
+      // is locked out in App Mode.
+      return { path: `/page/${item.target_id}`, query: { id: item.target_id } }
     case 'open_switchboard':
       return { path: `/`, query: { switchboard: item.target_id } }
     default:
@@ -165,7 +223,7 @@ onMounted(async () => {
           style="min-height: 44px; background: var(--sh-marigold);"
           @click="activate(item)"
         >
-          <Icon name="square" :size="20" />
+          <Icon name="apps" :size="20" />
           <span class="switchboard-button-label">{{ item.label }}</span>
         </button>
       </div>
@@ -181,13 +239,53 @@ onMounted(async () => {
 
       <ul class="nav-item-list">
         <li
-          v-for="item in pageItems"
+          v-for="(item, idx) in pageItems"
           :key="item.id"
           data-testid="nav-item"
           class="nav-item sh-card"
         >
-          <span class="nav-item-label">{{ item.label }}</span>
-          <span class="nav-item-action sh-muted">{{ item.action_kind }}</span>
+          <span class="nav-item-handle sh-muted">{{ item.sort_order + 1 }}.</span>
+          <template v-if="editingId === item.id">
+            <input
+              v-model="editLabel"
+              data-testid="edit-item-label"
+              class="sh-input nav-item-edit"
+              type="text"
+              @keyup.enter="commitEdit(item)"
+            />
+            <button data-testid="commit-edit" class="sh-btn sh-btn-sm" @click="commitEdit(item)">Done</button>
+          </template>
+          <template v-else>
+            <span class="nav-item-label">{{ item.label }}</span>
+            <span class="nav-item-action sh-muted">{{ item.action_kind }}</span>
+            <span class="nav-item-spacer"></span>
+            <button
+              data-testid="move-up"
+              class="sh-btn sh-btn-sm"
+              :disabled="idx === 0"
+              title="Move up"
+              aria-label="Move up"
+              @click="move(item, -1)"
+            >
+              <Icon name="arrowLeft" :size="14" />
+            </button>
+            <button
+              data-testid="move-down"
+              class="sh-btn sh-btn-sm"
+              :disabled="idx === pageItems.length - 1"
+              title="Move down"
+              aria-label="Move down"
+              @click="move(item, 1)"
+            >
+              <Icon name="arrowRight" :size="14" />
+            </button>
+            <button data-testid="edit-item" class="sh-btn sh-btn-sm" title="Rename" @click="startEdit(item)">
+              <Icon name="edit" :size="14" />
+            </button>
+            <button data-testid="remove-item" class="sh-btn sh-btn-sm" title="Remove" @click="removeItem(item)">
+              <Icon name="trash" :size="14" />
+            </button>
+          </template>
         </li>
       </ul>
 
@@ -247,8 +345,17 @@ onMounted(async () => {
 .nav-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--sh-space-2, 0.5rem);
   padding: var(--sh-space-2, 0.5rem) var(--sh-space-3, 0.75rem);
+}
+.nav-item-spacer {
+  flex: 1;
+}
+.nav-item-edit {
+  flex: 1;
+}
+.sh-btn-sm {
+  padding: 2px 6px;
 }
 .builder-add {
   display: flex;

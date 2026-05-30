@@ -7,9 +7,11 @@
 //   - the AppShell (Studio-Mode shell) sidebar exposes a link to /relationships
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { router } from './index'
+import { router, setCachedMode } from './index'
 import RelationshipsView from '../views/RelationshipsView.vue'
 import SchemaDesignerView from '../views/SchemaDesignerView.vue'
+import AppShellView from '../views/AppShellView.vue'
+import PageRuntimeView from '../views/PageRuntimeView.vue'
 import AppShell from '../components/AppShell.vue'
 
 describe('router wiring (P2.8 regression guard)', () => {
@@ -23,6 +25,35 @@ describe('router wiring (P2.8 regression guard)', () => {
     const resolved = router.resolve('/schema')
     expect(resolved.name).toBe('schema')
     expect(resolved.matched[0]?.components?.default).toBe(SchemaDesignerView)
+  })
+
+  // P4.7 regression guard: the Switchboard (AppShellView) must be a registered
+  // route, not dead code reachable only by its own spec. It is the App-Mode home.
+  it('the /switchboard route resolves to AppShellView and is NOT builderOnly', () => {
+    const resolved = router.resolve('/switchboard')
+    expect(resolved.name).toBe('switchboard')
+    expect(resolved.matched[0]?.components?.default).toBe(AppShellView)
+    // Must stay reachable in App Mode — the guard redirects blocked routes here.
+    expect(resolved.meta?.builderOnly).toBeFalsy()
+  })
+
+  // P4.7: the runtime page viewer (open_page target) must be a real route and
+  // must NOT be builderOnly (so App Mode can open a bound page).
+  it('the /page/:id runtime route resolves to PageRuntimeView and is NOT builderOnly', () => {
+    const resolved = router.resolve('/page/pg_home')
+    expect(resolved.name).toBe('page-runtime')
+    expect(resolved.matched[0]?.components?.default).toBe(PageRuntimeView)
+    expect(resolved.meta?.builderOnly).toBeFalsy()
+  })
+
+  // P4.7: in App Mode the switchboard is reachable; navigating to it is not
+  // redirected away.
+  it('App Mode: the /switchboard route is reachable (not redirected)', async () => {
+    setCachedMode('app')
+    await router.push('/switchboard')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('switchboard')
+    setCachedMode('studio')
   })
 
   it('the Studio-Mode sidebar exposes a link to /relationships', () => {

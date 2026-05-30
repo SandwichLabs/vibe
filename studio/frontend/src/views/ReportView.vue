@@ -9,6 +9,7 @@
 //     bindings
 // Translated into Vue + SchoolHouse from the #11 report-main mockup.
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { useAppMode } from '../composables/useAppMode'
 
@@ -19,6 +20,11 @@ interface ReportSummary {
 }
 
 const { isStudio } = useAppMode()
+
+// The switchboard (P4.7) navigates here with ?id=<reportId> to open a bound
+// report. Honor it instead of always defaulting to the first report. The route
+// may be absent when this view is mounted without a router (unit tests).
+const route = useRoute() ?? ({ query: {} } as ReturnType<typeof useRoute>)
 
 const reportsList = ref<ReportSummary[]>([])
 const selectedID = ref('')
@@ -56,7 +62,10 @@ async function loadReports() {
   errorMessage.value = ''
   try {
     reportsList.value = (await window.go.main.App.ListReports()) || []
-    if (reportsList.value.length && !selectedID.value) {
+    const wanted = queryReportId()
+    if (wanted && reportsList.value.some((r) => r.id === wanted)) {
+      await selectReport(wanted)
+    } else if (reportsList.value.length && !selectedID.value) {
       await selectReport(reportsList.value[0].id)
     }
   } catch (e: unknown) {
@@ -210,7 +219,22 @@ watch(filterValue, () => {
   rerender()
 })
 
+function queryReportId(): string | null {
+  const q = route.query.id
+  const id = Array.isArray(q) ? q[0] : q
+  return id ? String(id) : null
+}
+
 const hasSelection = computed(() => !!selectedID.value)
+
+// Re-select when the switchboard navigates to a different bound report without
+// remounting the view.
+watch(() => route.query.id, (q) => {
+  const id = Array.isArray(q) ? q[0] : q
+  if (id && reportsList.value.some((r) => r.id === String(id)) && selectedID.value !== String(id)) {
+    selectReport(String(id))
+  }
+})
 
 onMounted(loadReports)
 </script>

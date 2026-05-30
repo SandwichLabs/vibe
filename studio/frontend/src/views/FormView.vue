@@ -13,8 +13,15 @@
 //   SubmitForm              — atomic header + line write-back
 //   DeleteRow               — delete the current header record
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+
+// The switchboard (P4.7) binds a nav button to a specific form and navigates
+// here with ?id=<formId>. Honor that query so the bound form opens, rather than
+// always defaulting to the first form. The route may be absent when mounted
+// without a router (unit tests).
+const route = useRoute() ?? ({ query: {} } as ReturnType<typeof useRoute>)
 
 const forms = ref<FormSummary[]>([])
 const selectedFormId = ref<string | null>(null)
@@ -55,11 +62,22 @@ function colIndex(col: string): number {
 // record key (Access convention: the bound table's PK leads the field list).
 const pkCol = computed(() => headerCols.value[0] ?? 'id')
 
+function queryFormId(): string | null {
+  const q = route.query.id
+  const id = Array.isArray(q) ? q[0] : q
+  return id ? String(id) : null
+}
+
 async function loadForms() {
   loading.value = true
   try {
     forms.value = await window.go.main.App.ListForms()
-    if (forms.value.length > 0 && !selectedFormId.value) {
+    // Prefer a form bound via the switchboard (?id=…); otherwise default to the
+    // first form so the view is never empty.
+    const wanted = queryFormId()
+    if (wanted && forms.value.some((f) => f.id === wanted)) {
+      await selectForm(wanted)
+    } else if (forms.value.length > 0 && !selectedFormId.value) {
       await selectForm(forms.value[0].id)
     }
   } catch (e: any) {
@@ -222,6 +240,16 @@ function controlType(t: string): string {
 }
 
 onMounted(loadForms)
+
+// Re-select when the switchboard navigates to a different bound form while the
+// view is already mounted (route.query.id changes without a remount).
+watch(() => route.query.id, (q) => {
+  const id = Array.isArray(q) ? q[0] : q
+  if (id && forms.value.some((f) => f.id === String(id)) && selectedFormId.value !== String(id)) {
+    selectForm(String(id))
+  }
+})
+
 watch(errorMessage, (msg) => { if (msg) setTimeout(() => { errorMessage.value = '' }, 4000) })
 </script>
 

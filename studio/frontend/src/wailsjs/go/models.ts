@@ -37,6 +37,24 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class AppConfig {
+	    mode: string;
+	    default_mode: string;
+	    startup_object: string;
+	    app_title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.default_mode = source["default_mode"];
+	        this.startup_object = source["startup_object"];
+	        this.app_title = source["app_title"];
+	    }
+	}
 	export class ColumnInfo {
 	    name: string;
 	    type: string;
@@ -217,6 +235,22 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rows_imported = source["rows_imported"];
 	        this.table_name = source["table_name"];
+	    }
+	}
+	export class NavTarget {
+	    kind: string;
+	    id: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NavTarget(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.id = source["id"];
+	        this.label = source["label"];
 	    }
 	}
 	export class PageDetail {
@@ -601,6 +635,28 @@ export namespace schema {
 		    }
 		    return a;
 		}
+	}
+	export class NavItem {
+	    id: string;
+	    parent_id: string;
+	    label: string;
+	    action_kind: string;
+	    target_id: string;
+	    sort_order: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new NavItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.parent_id = source["parent_id"];
+	        this.label = source["label"];
+	        this.action_kind = source["action_kind"];
+	        this.target_id = source["target_id"];
+	        this.sort_order = source["sort_order"];
+	    }
 	}
 	export class Relationship {
 	    id: string;

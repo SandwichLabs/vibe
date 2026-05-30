@@ -28,6 +28,8 @@ export function CreatePage(arg1:string,arg2:string):Promise<string>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
 
+export function DeleteNavItem(arg1:string):Promise<void>;
+
 export function DeletePage(arg1:string):Promise<void>;
 
 export function DeleteQuery(arg1:string):Promise<void>;
@@ -56,6 +58,8 @@ export function GetAgentStatus():Promise<Record<string, any>>;
 
 export function GetAllMeta():Promise<Record<string, string>>;
 
+export function GetAppConfig():Promise<main.AppConfig>;
+
 export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetFieldMeta(arg1:string):Promise<Array<schema.FieldMeta>>;
@@ -67,6 +71,8 @@ export function GetForm(arg1:string):Promise<schema.FormSpec>;
 export function GetInitialFile():Promise<string>;
 
 export function GetMCPStatus():Promise<Record<string, any>>;
+
+export function GetNav(arg1:string):Promise<Array<schema.NavItem>>;
 
 export function GetPage(arg1:string):Promise<main.PageDetail>;
 
@@ -87,6 +93,10 @@ export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.Wri
 export function IsFileOpen():Promise<boolean>;
 
 export function ListForms():Promise<Array<main.FormSummary>>;
+
+export function ListNav():Promise<Array<schema.NavItem>>;
+
+export function ListNavTargets():Promise<Array<main.NavTarget>>;
 
 export function ListPages():Promise<Array<main.PageSummary>>;
 
@@ -116,6 +126,10 @@ export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<st
 
 export function SaveForm(arg1:schema.FormSpec):Promise<void>;
 
+export function SaveNav(arg1:Array<schema.NavItem>):Promise<void>;
+
+export function SaveNavItem(arg1:schema.NavItem):Promise<void>;
+
 export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SelectCSVFile():Promise<string>;
@@ -126,9 +140,13 @@ export function SelectVibeFile():Promise<string>;
 
 export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 
+export function SetAppConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function SetFieldMeta(arg1:string,arg2:string,arg3:schema.FieldMeta):Promise<void>;
 
 export function SetMeta(arg1:string,arg2:string):Promise<void>;
+
+export function SetMode(arg1:string):Promise<void>;
 
 export function StartMCPServer():Promise<string>;
 

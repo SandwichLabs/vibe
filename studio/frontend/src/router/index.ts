@@ -10,6 +10,8 @@ import ReportView from '../views/ReportView.vue'
 import QueryEditorView from '../views/QueryEditorView.vue'
 import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import AppShellView from '../views/AppShellView.vue'
+import PageRuntimeView from '../views/PageRuntimeView.vue'
 
 // Phase 4 / P4.6 — builder-only routes are locked in App Mode. Routes flagged
 // `meta.builderOnly` expose schema/SQL/destructive surfaces and must be
@@ -17,8 +19,15 @@ import SettingsView from '../views/SettingsView.vue'
 // (router.beforeEach below) redirects them to the switchboard/dashboard home.
 const routes = [
   { path: '/', name: 'dashboard', component: DashboardView },
+  // The Switchboard (P4.7). In Studio Mode it is the builder canvas; in App Mode
+  // it is the runtime landing/home shell. It is NOT builderOnly — it is the
+  // App-Mode home the route-locking guard redirects blocked routes to.
+  { path: '/switchboard', name: 'switchboard', component: AppShellView },
   { path: '/pages', name: 'pages', component: PagesView, meta: { builderOnly: true } },
   { path: '/pages/:id/edit', name: 'page-editor', component: PageEditorView, meta: { builderOnly: true } },
+  // Runtime page viewer (App-Mode safe — render only, no edit/schema/SQL). The
+  // switchboard's open_page action targets this, never the builderOnly editor.
+  { path: '/page/:id', name: 'page-runtime', component: PageRuntimeView },
   { path: '/tables', name: 'tables', component: TableBrowserView, meta: { builderOnly: true } },
   { path: '/relationships', name: 'relationships', component: RelationshipsView, meta: { builderOnly: true } },
   { path: '/schema', name: 'schema', component: SchemaDesignerView, meta: { builderOnly: true } },
@@ -67,7 +76,7 @@ async function resolveMode(): Promise<string> {
 router.beforeEach(async (to) => {
   const mode = await resolveMode()
   if (mode === 'app' && to.meta?.builderOnly) {
-    return { name: 'dashboard' }
+    return { name: 'switchboard' }
   }
   return true
 })
