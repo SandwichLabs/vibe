@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -838,69 +839,164 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}, rows.Err()
 }
 
-// InsertRow inserts a row into a table.
-func (a *App) InsertRow(table string, values map[string]any) error {
+// WriteResult reports the outcome of a single CRUD write (rows affected).
+type WriteResult struct {
+	Affected int64 `json:"affected"`
+}
+
+// WriteError is a structured, field-keyed CRUD failure suitable for per-field
+// UI feedback. Fields maps a column name to a human-readable problem; Message
+// is a fallback for non-field-specific failures. It must be returned instead of
+// a raw SQL error string so the form UI can highlight the offending controls.
+type WriteError struct {
+	Message string            `json:"message"`
+	Fields  map[string]string `json:"fields,omitempty"`
+}
+
+func (e *WriteError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+// FormSubmitRow describes one row to write as part of an atomic form submit.
+type FormSubmitRow struct {
+	Table  string         `json:"table"`
+	Values map[string]any `json:"values"`
+}
+
+// InsertRow inserts a row into a table, coercing all-string form inputs to the
+// column's type (via information_schema) and enforcing the Access-style
+// _vibe_field_meta required + validation_rule constraints server-side. On a
+// validation failure it returns a field-keyed *WriteError so the form UI can
+// highlight the offending controls instead of surfacing a raw SQL string.
+func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	ddb, colTypes, metas, err := a.prepareWrite(table)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := ddb.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	res, err := insertRowTx(tx, colTypes, metas, table, values)
+	if err != nil {
+		tx.Rollback() //nolint:errcheck
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit insert: %w", err)
+	}
+	return res, nil
+}
+
+// UpdateRow updates a row in a table by primary key, applying the same coercion
+// and validation as InsertRow. A 0-affected-row outcome (PK mismatch) is
+// surfaced as an error rather than a silent no-op.
+func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if !isValidIdentifier(pkCol) {
+		return nil, fmt.Errorf("invalid primary key column")
+	}
+
+	ddb, colTypes, metas, err := a.prepareWrite(table)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := ddb.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	res, err := updateRowTx(tx, colTypes, metas, table, pkCol, pkVal, values)
+	if err != nil {
+		tx.Rollback() //nolint:errcheck
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit update: %w", err)
+	}
+	return res, nil
+}
+
+// SubmitForm writes a parent row plus zero or more child rows as a single
+// atomic logical submit (Access-style form + subform). All writes run in one
+// DuckDB transaction: if any child fails coercion/validation, the whole submit
+// rolls back so no orphaned parent is left behind.
+func (a *App) SubmitForm(parent FormSubmitRow, children []FormSubmitRow) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(table) {
-		return fmt.Errorf("invalid table name")
-	}
-
-	cols := make([]string, 0, len(values))
-	placeholders := make([]string, 0, len(values))
-	args := make([]any, 0, len(values))
-	for k, v := range values {
-		cols = append(cols, fmt.Sprintf("%q", k))
-		placeholders = append(placeholders, "?")
-		args = append(args, v)
-	}
-
-	query := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	_, err := ddb.Exec(query, args...)
+
+	tx, err := ddb.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to insert row: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	rows := append([]FormSubmitRow{parent}, children...)
+	for _, row := range rows {
+		if !isValidIdentifier(row.Table) {
+			tx.Rollback() //nolint:errcheck
+			return fmt.Errorf("invalid table name")
+		}
+		colTypes, err := columnTypes(ddb, row.Table)
+		if err != nil {
+			tx.Rollback() //nolint:errcheck
+			return err
+		}
+		metas, err := fieldMetaMap(schema.NewStore(a.container.SQLiteDB()), row.Table)
+		if err != nil {
+			tx.Rollback() //nolint:errcheck
+			return err
+		}
+		if _, err := insertRowTx(tx, colTypes, metas, row.Table, row.Values); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit form submit: %w", err)
 	}
 	return nil
 }
 
-// UpdateRow updates a row in a table.
-func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
+// prepareWrite validates the open container + table and loads the column types
+// and field metadata needed by the transactional write helpers.
+func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]schema.FieldMeta, error) {
 	if a.container == nil {
-		return fmt.Errorf("no file open")
+		return nil, nil, nil, fmt.Errorf("no file open")
 	}
 	if !isValidIdentifier(table) {
-		return fmt.Errorf("invalid table name")
+		return nil, nil, nil, fmt.Errorf("invalid table name")
 	}
-
-	setClauses := make([]string, 0, len(values))
-	args := make([]any, 0, len(values)+1)
-	for k, v := range values {
-		setClauses = append(setClauses, fmt.Sprintf("%q = ?", k))
-		args = append(args, v)
-	}
-	args = append(args, pkVal)
-
-	query := fmt.Sprintf("UPDATE %q SET %s WHERE %q = ?", table, strings.Join(setClauses, ", "), pkCol)
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
-		return fmt.Errorf("DuckDB not available")
+		return nil, nil, nil, fmt.Errorf("DuckDB not available")
 	}
-	_, err := ddb.Exec(query, args...)
+	colTypes, err := columnTypes(ddb, table)
 	if err != nil {
-		return fmt.Errorf("failed to update row: %w", err)
+		return nil, nil, nil, err
 	}
-	return nil
+	metas, err := fieldMetaMap(schema.NewStore(a.container.SQLiteDB()), table)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return ddb, colTypes, metas, nil
 }
 
 // DeleteRow deletes a row from a table.
