@@ -5,6 +5,7 @@ import { createVibeEditor, type VibeEditorInstance } from '../composables/useVib
 import Icon from '../components/Icon.vue'
 import { vibeToolbarButtons, insertSnippet } from '../lib/vibeToolbar'
 import { execScripts } from '../lib/execScripts'
+import { wireInputFilters } from '../lib/wireInputFilters'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,11 @@ const loading = ref(true)
 const saving = ref(false)
 const previewLoading = ref(false)
 const errorMessage = ref('')
+
+// P3.6: collected interactive input-filter values, threaded into every render
+// so selections persist across the Option A full re-render. An absent key means
+// the variable is unset (=> unfiltered, matching the backend {#if var}).
+const filterParams = ref<Record<string, string>>({})
 
 const editorEl = ref<HTMLElement | null>(null)
 const previewEl = ref<HTMLElement | null>(null)
@@ -46,7 +52,7 @@ async function renderPreview() {
   const gen = ++renderGeneration
   try {
     await window.go.main.App.CancelRender()
-    const html = await window.go.main.App.RenderPageContent(page.value.id, {})
+    const html = await window.go.main.App.RenderPageContent(page.value.id, { ...filterParams.value })
     if (gen === renderGeneration) {
       preview.value = html
     }
@@ -102,6 +108,21 @@ watch(loading, (isLoading) => {
   }
 })
 
+/**
+ * P3.6: a rendered input filter changed. Update the reactive filter-params map
+ * (an empty value removes the key => unfiltered) and trigger a full re-render
+ * (Option A) so the threaded value persists in the control and the downstream
+ * SQL re-filters.
+ */
+function onFilterChange(name: string, value: string) {
+  if (value === '') {
+    delete filterParams.value[name]
+  } else {
+    filterParams.value[name] = value
+  }
+  renderPreview()
+}
+
 function handleToolbarClick(snippet: string) {
   if (editorInstance) {
     insertSnippet(editorInstance.view, snippet)
@@ -134,8 +155,22 @@ onUnmounted(() => {
   }
 })
 
+/** Run inline scripts and (re-)attach input-filter listeners on the rendered
+ *  preview DOM. Called after every render and once the preview pane mounts. */
+function hydratePreview() {
+  execScripts(previewEl.value)
+  wireInputFilters(previewEl.value, onFilterChange)
+}
+
 watch(preview, () => {
-  nextTick(() => execScripts(previewEl.value))
+  nextTick(hydratePreview)
+})
+
+// The preview pane (and previewEl) only mounts once loading flips false. The
+// first render's preview is produced while loading is still true, so re-hydrate
+// here to guarantee the input-filter listeners are attached to the live DOM.
+watch(loading, (isLoading) => {
+  if (!isLoading) nextTick(hydratePreview)
 })
 
 watch(errorMessage, (msg) => {

@@ -763,8 +763,26 @@ func (a *App) renderInput(node *pages.DirectiveNode, rrs *renderer.ResultSet, va
 		}
 	}
 
+	// Round-trip contract (see frontend wireInputFilters): every control lives
+	// inside a wrapper carrying data-vibe-input=<variable name>. The wrapper also
+	// declares which value the toggle maps to in its two states so an unchecked
+	// toggle has a well-defined param mapping (default: checked => "true",
+	// unchecked => "" which the collector treats as "remove the param" =>
+	// unfiltered). text_input maps an empty string the same way (absent param =>
+	// unfiltered). This makes the round-trip well-defined for every control type.
+	checkedValue := getStringConfig(node.Config, "checked_value")
+	if checkedValue == "" {
+		checkedValue = "true"
+	}
+	uncheckedValue := getStringConfig(node.Config, "unchecked_value") // default "" => param removed
+
 	var b strings.Builder
-	b.WriteString("<div class=\"vibe-input\" data-vibe-input=\"" + html.EscapeString(name) + "\">")
+	b.WriteString("<div class=\"vibe-input\" data-vibe-input=\"" + html.EscapeString(name) + "\"")
+	if node.Type == "toggle" {
+		b.WriteString(attr("data-vibe-checked-value", checkedValue))
+		b.WriteString(" data-vibe-unchecked-value=\"" + html.EscapeString(uncheckedValue) + "\"")
+	}
+	b.WriteString(">")
 	if title != "" {
 		b.WriteString("<label class=\"vibe-input-label\">" + html.EscapeString(title) + "</label>")
 	}
@@ -803,7 +821,7 @@ func (a *App) renderInput(node *pages.DirectiveNode, rrs *renderer.ResultSet, va
 
 	case "toggle":
 		checked := ""
-		if current == "true" || current == "1" {
+		if current == checkedValue || current == "true" || current == "1" {
 			checked = " checked"
 		}
 		b.WriteString("<input type=\"checkbox\" class=\"vibe-toggle\"" + checked + " />")
