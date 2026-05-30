@@ -127,6 +127,16 @@ func TestAppModeCapabilityGating(t *testing.T) {
 	assert.True(t, isCapabilityDenied(err), "ExecuteQuery DROP must be capability-denied in App Mode, got: %v", err)
 	assert.Equal(t, baseTables, userTableCount(t, app), "ExecuteQuery DROP must not drop a table in App Mode")
 
+	// SendAgentQuery (raw SQL — the most dangerous DDL/DML surface). It runs
+	// arbitrary SQL via a.engine.Execute and must be gated exactly like
+	// ExecuteQuery; a benign SELECT is denied and a DROP must make no mutation.
+	_, err = app.SendAgentQuery("SELECT 1")
+	assert.True(t, isCapabilityDenied(err), "SendAgentQuery (raw SQL) must be capability-denied in App Mode, got: %v", err)
+
+	_, err = app.SendAgentQuery("DROP TABLE order_items")
+	assert.True(t, isCapabilityDenied(err), "SendAgentQuery DROP must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseTables, userTableCount(t, app), "SendAgentQuery DROP must not drop a table in App Mode")
+
 	// DeletePage (page editing) — create a page in Studio Mode first via a direct
 	// insert is not available; instead prove the binding is gated.
 	err = app.DeletePage("nonexistent-page-id")

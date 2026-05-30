@@ -60,7 +60,13 @@ func (a *App) SetMode(mode string) error {
 	if mode != modeStudio && mode != modeApp {
 		return fmt.Errorf("failed to set mode: invalid mode %q", mode)
 	}
+	// Write a.mode under the lock: StartMCPServer/StopMCPServer/GetMCPStatus and
+	// the guardStudioOnly readers all access a.mode under a.mu, so a bare write
+	// here would race with a concurrent reader. Release the lock before
+	// restartMCPForMode, which manages a.mu itself via Stop/Start.
+	a.mu.Lock()
 	a.mode = mode
+	a.mu.Unlock()
 	a.logger.Info("app mode flipped", "mode", mode)
 
 	// Re-derive the agent sandbox for the new mode. The MCP handler captures its

@@ -2604,6 +2604,13 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
+	// SendAgentQuery runs arbitrary raw SQL (DDL/DML) via a.engine.Execute, so it
+	// is a Studio-only privileged surface exactly like ExecuteQuery and must be
+	// capability-gated in App Mode (P4.4).
+	if err := a.guardStudioOnly("SendAgentQuery"); err != nil {
+		return nil, err
+	}
+
 	rs, err := a.engine.Execute(context.Background(), query, nil)
 	if err != nil {
 		return &AgentResult{Error: err.Error()}, nil
