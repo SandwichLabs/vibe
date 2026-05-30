@@ -839,6 +839,186 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}, rows.Err()
 }
 
+// FilterCondition is one structured datasheet filter clause (plan §2.3). It is
+// the SQL-free unit behind Filter-by-Selection (a single eq) and Filter-by-Form
+// (multiple conditions). Op is one of eq/neq/lt/gt/lte/gte/like/is_null/
+// is_not_null; Value is ignored for the is_null/is_not_null operators.
+type FilterCondition struct {
+	Column string `json:"column"`
+	Op     string `json:"op"`
+	Value  any    `json:"value"`
+}
+
+// FilterSpec is a set of FilterConditions joined by a single combinator
+// ("AND" or "OR"). It is translated to a parameterized WHERE clause.
+type FilterSpec struct {
+	Combinator string            `json:"combinator"`
+	Conditions []FilterCondition `json:"conditions"`
+}
+
+// GetTableDataFiltered returns paginated, structured-filter-driven table data
+// plus an accurate total-row count for the record-count bar (plan §2.3, P2.5).
+//
+// Translation rules:
+//   - each condition's column is validated against the table's real columns
+//     (case-sensitive ident allowlist) — no SQL injection via identifier
+//   - values are bound as parameters (?), never interpolated — no injection via
+//     value (a single quote matches literally)
+//   - is_null / is_not_null are value-less and bind no parameter
+//   - conditions join with the spec combinator (AND/OR; defaults to AND)
+func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize int, sortCol, sortDir string) (*TableData, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	if !isValidIdentifier(name) {
+		return nil, fmt.Errorf("invalid table name")
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 1000 {
+		pageSize = 50
+	}
+
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+
+	// Build an allowlist of real columns to validate filter/sort identifiers.
+	cols, err := tableColumns(db, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to introspect columns for filter: %w", err)
+	}
+	known := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		known[c.Name] = true
+	}
+
+	whereClause, args, err := buildFilterWhere(spec, known)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalRows int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q%s", name, whereClause)
+	if err := db.QueryRow(countQuery, args...).Scan(&totalRows); err != nil {
+		return nil, fmt.Errorf("failed to count filtered rows: %w", err)
+	}
+
+	orderClause := ""
+	if sortCol != "" && isValidIdentifier(sortCol) && known[sortCol] {
+		dir := "ASC"
+		if strings.ToUpper(sortDir) == "DESC" {
+			dir = "DESC"
+		}
+		orderClause = fmt.Sprintf(" ORDER BY %q %s", sortCol, dir)
+	}
+
+	offset := (page - 1) * pageSize
+	query := fmt.Sprintf("SELECT * FROM %q%s%s LIMIT ? OFFSET ?", name, whereClause, orderClause)
+	queryArgs := append(append([]any{}, args...), pageSize, offset)
+	rows, err := db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query filtered table: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get columns: %w", err)
+	}
+
+	var data [][]any
+	for rows.Next() {
+		values := make([]any, len(columns))
+		valuePtrs := make([]any, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		for i, v := range values {
+			if b, ok := v.([]byte); ok {
+				values[i] = string(b)
+			}
+		}
+		data = append(data, values)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate filtered rows: %w", err)
+	}
+
+	totalPages := (totalRows + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &TableData{
+		Columns:    columns,
+		Rows:       data,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalRows:  totalRows,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// filterOps maps a FilterCondition.Op to its SQL comparison operator. Value-less
+// operators (is_null/is_not_null) are handled separately.
+var filterOps = map[string]string{
+	"eq":   "=",
+	"neq":  "<>",
+	"lt":   "<",
+	"gt":   ">",
+	"lte":  "<=",
+	"gte":  ">=",
+	"like": "LIKE",
+}
+
+// buildFilterWhere translates a FilterSpec into a parameterized WHERE clause
+// (leading " WHERE ...", or "" when there are no conditions) plus its bound
+// args. Column identifiers are validated against the known-columns allowlist;
+// values are always bound, never interpolated.
+func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, error) {
+	if len(spec.Conditions) == 0 {
+		return "", nil, nil
+	}
+
+	combinator := strings.ToUpper(strings.TrimSpace(spec.Combinator))
+	if combinator != "OR" {
+		combinator = "AND"
+	}
+
+	var clauses []string
+	var args []any
+	for _, c := range spec.Conditions {
+		if !known[c.Column] {
+			return "", nil, fmt.Errorf("unknown filter column %q", c.Column)
+		}
+		switch c.Op {
+		case "is_null":
+			clauses = append(clauses, fmt.Sprintf("%q IS NULL", c.Column))
+		case "is_not_null":
+			clauses = append(clauses, fmt.Sprintf("%q IS NOT NULL", c.Column))
+		default:
+			sqlOp, ok := filterOps[c.Op]
+			if !ok {
+				return "", nil, fmt.Errorf("unsupported filter operator %q", c.Op)
+			}
+			clauses = append(clauses, fmt.Sprintf("%q %s ?", c.Column, sqlOp))
+			args = append(args, c.Value)
+		}
+	}
+
+	return " WHERE " + strings.Join(clauses, " "+combinator+" "), args, nil
+}
+
 // FormSubmitRow describes one row to write as part of an atomic form submit.
 type FormSubmitRow struct {
 	Table  string         `json:"table"`
