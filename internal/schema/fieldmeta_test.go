@@ -107,9 +107,10 @@ func TestFieldMetaRoundTrip(t *testing.T) {
 	assert.Equal(t, "SELECT id,name FROM statuses", reopened[0].LookupSQL)
 }
 
-// TestFieldMetaMigrationBackwardCompatible asserts the additive migration is
-// backward compatible: a .vibe created before _vibe_field_meta existed still
-// opens, and the table is present after reopen (IF NOT EXISTS additive migration).
+// TestFieldMetaMigrationBackwardCompatible proves the additive migration truly
+// adds _vibe_field_meta to a file that does NOT already have it. We simulate a
+// genuinely pre-migration .vibe by dropping the table after Create, then
+// Close+Open and assert runMigrations re-adds it via the IF NOT EXISTS DDL.
 func TestFieldMetaMigrationBackwardCompatible(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "preexisting.vibe")
@@ -119,10 +120,18 @@ func TestFieldMetaMigrationBackwardCompatible(t *testing.T) {
 		container.WithLogger(testLogger()),
 	)
 	require.NoError(t, err)
+
+	// Simulate a pre-migration container: remove the table so the file on disk
+	// genuinely lacks _vibe_field_meta before reopen.
+	_, err = c.SQLiteDB().Exec("DROP TABLE _vibe_field_meta;")
+	require.NoError(t, err)
+	require.False(t, tableExists(t, c, "_vibe_field_meta"),
+		"_vibe_field_meta should be absent after drop (simulating an old file)")
+
 	require.NoError(t, c.Save())
 	require.NoError(t, c.Close())
 
-	// Reopening an existing file must succeed (additive migration is safe to re-run).
+	// Reopening must succeed and the additive migration must re-add the table.
 	c2, err := container.Open(path,
 		container.WithPassphrase(testPassphrase),
 		container.WithLogger(testLogger()),
@@ -131,5 +140,5 @@ func TestFieldMetaMigrationBackwardCompatible(t *testing.T) {
 	defer c2.Close() //nolint:errcheck
 
 	assert.True(t, tableExists(t, c2, "_vibe_field_meta"),
-		"_vibe_field_meta should exist after reopening")
+		"additive migration must re-add _vibe_field_meta to a file that lacked it")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/pages"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	htmlrenderer "github.com/sandwich-labs/vibe-app/internal/renderer/html"
+	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yuin/goldmark"
 
@@ -1528,6 +1529,36 @@ func (a *App) SetMeta(key, value string) error {
 		return fmt.Errorf("no file open")
 	}
 	return a.container.SetMeta(key, value)
+}
+
+// --- Field Metadata (Access-parity, plan §1.3) ---
+
+// GetFieldMeta returns the Access-style field metadata for every column of the
+// given table, ordered by sort_order then column_name.
+func (a *App) GetFieldMeta(table string) ([]schema.FieldMeta, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+
+	store := schema.NewStore(a.container.SQLiteDB())
+	return store.GetFieldMeta(table)
+}
+
+// SetFieldMeta upserts the Access-style field metadata for a single
+// (table, column) pair.
+func (a *App) SetFieldMeta(table, column string, meta schema.FieldMeta) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+
+	store := schema.NewStore(a.container.SQLiteDB())
+	return store.SetFieldMeta(table, column, meta)
 }
 
 // --- MCP Server ---
