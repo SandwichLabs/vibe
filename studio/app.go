@@ -3752,6 +3752,18 @@ func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	path, err := a.copyToXLSX(source, dst)
+	if err != nil {
+		return "", fmt.Errorf("failed to export report %q to spreadsheet: %w", reportID, err)
+	}
+	a.logger.Info("exported report spreadsheet", "report", reportID, "path", path)
+	return path, nil
+}
+
+// copyToXLSX writes the result of the given SELECT source to an .xlsx via the
+// DuckDB excel extension, falling back to CSV when the extension is unavailable.
+// It returns the written path (.xlsx or .csv). Caller must hold a.mu (R or W).
+func (a *App) copyToXLSX(source, dst string) (string, error) {
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
@@ -3770,11 +3782,9 @@ func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
 	copyXLSX := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT xlsx, HEADER true)",
 		source, strings.ReplaceAll(xlsxPath, "'", "''"))
 	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err == nil {
-		a.logger.Info("exported report XLSX", "report", reportID, "path", xlsxPath)
 		return xlsxPath, nil
 	} else {
-		a.logger.Warn("xlsx export unavailable, falling back to CSV",
-			"report", reportID, "error", err)
+		a.logger.Warn("xlsx export unavailable, falling back to CSV", "error", err)
 	}
 
 	// CSV fallback.
@@ -3782,9 +3792,8 @@ func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
 	copyCSV := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT csv, HEADER true)",
 		source, strings.ReplaceAll(csvPath, "'", "''"))
 	if _, err := ddb.ExecContext(a.ctx, copyCSV); err != nil {
-		return "", fmt.Errorf("failed to export report %q to spreadsheet: %w", reportID, err)
+		return "", err
 	}
-	a.logger.Info("exported report CSV (xlsx fallback)", "report", reportID, "path", csvPath)
 	return csvPath, nil
 }
 
@@ -3792,6 +3801,60 @@ func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
 // ExportReportXLSX (plan §3.4 / P3.9).
 func (a *App) AnalyzeInExcel(reportID, dst string) (string, error) {
 	return a.ExportReportXLSX(reportID, dst)
+}
+
+// ExportTableXLSX exports an arbitrary table to an .xlsx via the DuckDB excel
+// extension (CSV fallback if unavailable), returning the written path
+// (plan §6.2 / P6.5).
+func (a *App) ExportTableXLSX(tableName, dst string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if tableName == "" {
+		return "", fmt.Errorf("table name is required")
+	}
+
+	// Quote the identifier to handle reserved words / case; escape embedded quotes.
+	source := fmt.Sprintf(`SELECT * FROM "%s"`, strings.ReplaceAll(tableName, `"`, `""`))
+	path, err := a.copyToXLSX(source, dst)
+	if err != nil {
+		return "", fmt.Errorf("failed to export table %q to spreadsheet: %w", tableName, err)
+	}
+	a.logger.Info("exported table spreadsheet", "table", tableName, "path", path)
+	return path, nil
+}
+
+// ExportQueryXLSX exports a saved query's result to an .xlsx via the DuckDB excel
+// extension (CSV fallback if unavailable), returning the written path
+// (plan §6.2 / P6.5).
+func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+
+	q, err := a.registry.Get(context.Background(), queryID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load query %q: %w", queryID, err)
+	}
+
+	path, err := a.copyToXLSX(q.SQL, dst)
+	if err != nil {
+		return "", fmt.Errorf("failed to export query %q to spreadsheet: %w", queryID, err)
+	}
+	a.logger.Info("exported query spreadsheet", "query", queryID, "path", path)
+	return path, nil
+}
+
+// AnalyzeQueryInExcel is the one-click "Analyze in Excel/Sheets" alias for
+// ExportQueryXLSX (plan §6.2 / P6.5).
+func (a *App) AnalyzeQueryInExcel(queryID, dst string) (string, error) {
+	return a.ExportQueryXLSX(queryID, dst)
 }
 
 // ExportReportPDF renders the banded report HTML and prints it to a PDF at dst
