@@ -182,6 +182,20 @@ func (a *App) RunMacro(id string) (*MacroRunResult, error) {
 	for _, in := range res.Intents {
 		out.Intents = append(out.Intents, MacroIntent{Kind: in.Kind, Target: in.Target, Args: in.Args})
 	}
+	// Forward server-side SetFilter applications to the frontend as set_filter
+	// intents. The Executor records SetFilter actions in res.Filters (keyed by
+	// the action's "filter" arg); the frontend's applyMacroIntents consumes them
+	// under the "where" arg key, merging the predicate onto the matching form/
+	// report/page navigation. Translating here is what wires the SetFilter path
+	// end-to-end (P5.4): without it, App.RunMacro could never emit a set_filter
+	// intent in production.
+	for _, f := range res.Filters {
+		out.Intents = append(out.Intents, MacroIntent{
+			Kind:   automation.IntentSetFilter,
+			Target: f.Target,
+			Args:   map[string]string{"where": f.Filter},
+		})
+	}
 	return out, nil
 }
 

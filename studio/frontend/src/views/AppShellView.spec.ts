@@ -393,8 +393,13 @@ describe('AppShellView Switchboard run_macro dispatch (P5.4 — App Mode)', () =
   })
 
   // A run_macro nav item: clicking it must call App.RunMacro(target_id) and
-  // apply the returned UI intents (navigation for open_form/open_report/
-  // open_page, a dialog for msg_box, a route query for set_filter).
+  // apply the returned UI intents. The intent shapes mocked here mirror exactly
+  // what the Go backend (studio/macro_bindings.go RunMacro) actually emits:
+  // navigation intents (open_form/open_report) the Executor produces from
+  // UI-bound actions, a msg_box dialog intent, and a set_filter intent the Wails
+  // layer forwards from a server-side SetFilter (AppliedFilter -> {kind:
+  // 'set_filter', target, args:{where}}). See TestMacroBindingsSetFilterForwarded
+  // for the Go-side assertion of that same contract.
   function macroNav(): NavItem[] {
     return [
       {

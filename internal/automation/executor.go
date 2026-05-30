@@ -24,6 +24,11 @@ const (
 	IntentExport      = "export"
 	IntentEmailObject = "email_object"
 	IntentSetValue    = "set_value"
+	// IntentSetFilter is the UI-intent kind a server-side SetFilter is forwarded
+	// as: the Wails layer translates each AppliedFilter into a set_filter intent
+	// the frontend merges onto a subsequent form/report navigation as a "where"
+	// predicate.
+	IntentSetFilter = "set_filter"
 )
 
 // Column describes a single column in a query result returned to the Executor.

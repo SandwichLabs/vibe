@@ -98,6 +98,64 @@ func hasIntent(intents []MacroIntent, kind, target string) bool {
 	return false
 }
 
+// findIntent returns the first intent of the given kind targeting target, or
+// nil if absent.
+func findIntent(intents []MacroIntent, kind, target string) *MacroIntent {
+	for i := range intents {
+		if intents[i].Kind == kind && intents[i].Target == target {
+			return &intents[i]
+		}
+	}
+	return nil
+}
+
+// openThenFilterMacro opens a form and then applies a SetFilter to it — the
+// canonical "open this form filtered" command button.
+func openThenFilterMacro() automation.MacroSpec {
+	return automation.MacroSpec{
+		ID:    "open_orders_filtered",
+		Title: "Open Orders (filtered)",
+		Actions: []automation.MacroAction{
+			{Kind: automation.ActionOpenForm, Args: map[string]string{
+				"target": "frm_orders",
+			}},
+			{Kind: automation.ActionSetFilter, Args: map[string]string{
+				"target": "frm_orders",
+				"filter": "total > 50",
+			}},
+		},
+	}
+}
+
+// TestMacroBindingsSetFilterForwarded proves the SetFilter path is wired
+// end-to-end: a macro whose SetFilter action the Executor records in
+// res.Filters must be forwarded by App.RunMacro as a set_filter UI intent
+// carrying the predicate under the "where" arg key the frontend consumes. A
+// regression in the forwarding code (or an arg-key mismatch) fails this test.
+func TestMacroBindingsSetFilterForwarded(t *testing.T) {
+	app := newOpenApp(t)
+	app.initModeFromMeta()
+
+	require.NoError(t, app.SaveMacro(openThenFilterMacro()))
+
+	res, err := app.RunMacro("open_orders_filtered")
+	require.NoError(t, err, "RunMacro must succeed for an open+filter macro")
+	require.NotNil(t, res)
+
+	// The OpenForm action surfaces as an open_form intent.
+	assert.True(t, hasIntent(res.Intents, "open_form", "frm_orders"),
+		"expected an open_form intent, got: %+v", res.Intents)
+
+	// The SetFilter action must be forwarded as a set_filter intent targeting the
+	// same form, carrying the predicate under the "where" key (the contract the
+	// frontend's applyMacroIntents consumes).
+	sf := findIntent(res.Intents, automation.IntentSetFilter, "frm_orders")
+	require.NotNil(t, sf,
+		"SetFilter must be forwarded as a set_filter intent; got: %+v", res.Intents)
+	assert.Equal(t, "total > 50", sf.Args["where"],
+		"set_filter intent must carry the predicate under the \"where\" arg key, got: %+v", sf.Args)
+}
+
 // TestMacroBindings is the headline P5.3 acceptance test.
 func TestMacroBindings(t *testing.T) {
 	app := newOpenApp(t)
