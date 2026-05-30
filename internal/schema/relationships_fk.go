@@ -172,11 +172,23 @@ func constraintColumns(db *sql.DB, table, constraintType string) (map[string]boo
 // rebuildTableWithFK recreates a child table with the same columns, preserving
 // types / NOT NULL / PRIMARY KEY, optionally adding an inline FK REFERENCES on
 // spec.ChildColumn (when spec.ParentTable is set). Existing rows are copied into
-// the rebuilt table, then the original is dropped and the rebuild renamed into
-// place. Done in a single transaction so a failure (e.g. an FK that orphan rows
-// would violate) leaves the original table untouched.
+// the rebuilt table.
+//
+// CRITICAL: the rebuilt child table is created directly under its FINAL name
+// (the original is renamed aside to a temp first, then dropped) — it is NOT
+// created under a temp name and renamed into place. DuckDB records a FK as a
+// dependency on the PARENT table keyed by the CHILD table's name AT CREATE TIME,
+// and a subsequent ALTER ... RENAME of the child does NOT rewrite that recorded
+// dependency. Creating the child as "orders__fk_rebuild" then renaming it to
+// "orders" therefore left the parent ("customers") with a dependency pointing at
+// the now-dropped "orders__fk_rebuild", which bricked ALL deletes on the parent
+// (even unreferenced rows) with a "Table ... does not exist" catalog error.
+// Building under the final name keeps the parent's FK dependency graph correct,
+// so RESTRICT blocks only referenced-parent deletes and unreferenced-parent
+// deletes succeed. Done in a single transaction so a failure (e.g. an FK that
+// orphan rows would violate) leaves the original table untouched.
 func rebuildTableWithFK(db *sql.DB, spec ForeignKeySpec, cols []FKColumn) error {
-	tmp := spec.ChildTable + "__fk_rebuild"
+	stash := spec.ChildTable + "__fk_rebuild"
 
 	var defs []string
 	for _, c := range cols {
@@ -199,20 +211,23 @@ func rebuildTableWithFK(db *sql.DB, spec ForeignKeySpec, cols []FKColumn) error 
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", tmp)); err != nil {
+	// Drop any stale stash, then move the original child aside under the stash
+	// name. The rebuilt table is created under the ORIGINAL (final) name so the
+	// parent's recorded FK dependency points at the correct, surviving table.
+	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", stash)); err != nil {
 		return fmt.Errorf("failed to drop stale rebuild table: %w", err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf("CREATE TABLE %q (%s)", tmp, strings.Join(defs, ", "))); err != nil {
-		return fmt.Errorf("failed to create rebuild table: %w", err)
+	if _, err := tx.Exec(fmt.Sprintf("ALTER TABLE %q RENAME TO %q", spec.ChildTable, stash)); err != nil {
+		return fmt.Errorf("failed to stash original table: %w", err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %q SELECT * FROM %q", tmp, spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to copy rows into rebuild table: %w", err)
+	if _, err := tx.Exec(fmt.Sprintf("CREATE TABLE %q (%s)", spec.ChildTable, strings.Join(defs, ", "))); err != nil {
+		return fmt.Errorf("failed to create rebuilt table: %w", err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE %q", spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to drop original table: %w", err)
+	if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %q SELECT * FROM %q", spec.ChildTable, stash)); err != nil {
+		return fmt.Errorf("failed to copy rows into rebuilt table: %w", err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf("ALTER TABLE %q RENAME TO %q", tmp, spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to rename rebuild table: %w", err)
+	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE %q", stash)); err != nil {
+		return fmt.Errorf("failed to drop stashed original table: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit table rebuild: %w", err)

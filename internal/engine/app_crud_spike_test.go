@@ -32,6 +32,7 @@ package engine_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +45,24 @@ import (
 )
 
 const appCRUDPassphrase = "p4-app-crud-spike-12345"
+
+// isFKViolation reports whether err is a genuine DuckDB foreign-key / referential
+// integrity rejection (RESTRICT), NOT an unrelated error such as a
+// "Table ... does not exist" catalog error (which is exactly the dangling-FK
+// dependency defect that previously masqueraded as RESTRICT).
+func isFKViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "does not exist") {
+		return false
+	}
+	return strings.Contains(msg, "foreign key") ||
+		strings.Contains(msg, "violates foreign key") ||
+		(strings.Contains(msg, "constraint") && strings.Contains(msg, "key")) ||
+		strings.Contains(msg, "referenced")
+}
 
 func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	dir := t.TempDir()
@@ -135,9 +154,41 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	t.Logf("P4.0 FINDING: orphan-child insert rejected by FK = %v (err=%v)", orphanRejected, orphanErr)
 	assert.True(t, orphanRejected, "FK must reject an order referencing a non-existent customer")
 
-	// --- (4) deleting a referenced parent must be BLOCKED (RESTRICT) ---
+	// --- (4) RESTRICT semantics: an UNREFERENCED parent delete must SUCCEED, and
+	// a REFERENCED parent delete must be BLOCKED specifically by an FK violation.
+	//
+	// The CONTROL ASSERTION (unreferenced parent delete succeeds) is mandatory:
+	// without it, the dangling-FK-dependency defect found in adversarial review
+	// (where the rebuilt child renamed into place left the parent's recorded FK
+	// dependency pointing at a dropped temp table, so ALL parent deletes errored
+	// with a "Table ... does not exist" catalog error) would masquerade as
+	// RESTRICT. A genuine RESTRICT must allow unreferenced deletes AND block
+	// referenced ones via a real referential-integrity rejection.
 	custColTypes, err := crud.ColumnTypes(ddb, "customers")
 	require.NoError(t, err, "read customers column types")
+
+	// Pick a customer that is NOT referenced by any surviving order. (Orders
+	// 401-500 were deleted in step (2); customer_id = (i % 50) + 1 means some
+	// customers may now be unreferenced.) Insert a guaranteed-unreferenced
+	// customer so the control is deterministic.
+	_, err = ddb.Exec(`INSERT INTO customers (id, name) VALUES (9999, 'no-orders');`)
+	require.NoError(t, err, "seed an unreferenced parent customer")
+	var unrefCount int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id = 9999;`).Scan(&unrefCount))
+	require.Equal(t, 0, unrefCount, "precondition: customer 9999 is referenced by no orders")
+
+	tx, err = ddb.Begin()
+	require.NoError(t, err, "begin tx for unreferenced parent delete")
+	_, unrefDelErr := crud.DeleteRowTx(tx, custColTypes, "customers", "id", 9999)
+	if unrefDelErr == nil {
+		require.NoError(t, tx.Commit(), "commit unreferenced parent delete")
+	} else {
+		_ = tx.Rollback()
+	}
+	unreferencedParentDeleteAllowed := unrefDelErr == nil
+	t.Logf("P4.0 FINDING: unreferenced-parent delete allowed = %v (err=%v)", unreferencedParentDeleteAllowed, unrefDelErr)
+	require.NoError(t, unrefDelErr,
+		"deleting an UNREFERENCED parent row MUST succeed (proves no dangling FK dependency; guards against the false-positive RESTRICT)")
 
 	// customer 2 is referenced by surviving orders -> RESTRICT should block it.
 	var refCount int
@@ -153,9 +204,20 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 		_ = tx.Commit()
 	}
 
+	// Only classify as RESTRICT when the referenced-parent delete fails with a
+	// genuine foreign-key/constraint violation AND the row survives — NOT on any
+	// error (a catalog/"does not exist" error must NOT count as RESTRICT).
 	var observedParentDeleteBehavior string
 	if parentDelErr != nil {
-		observedParentDeleteBehavior = engine.FKParentDeleteRestrict
+		var refAfter int
+		require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM customers WHERE id = 2;`).Scan(&refAfter))
+		if isFKViolation(parentDelErr) && refAfter == 1 && unreferencedParentDeleteAllowed {
+			observedParentDeleteBehavior = engine.FKParentDeleteRestrict
+		} else {
+			// Errored, but not a clean RESTRICT (e.g. a dangling-dependency
+			// catalog error, or it also blocked the unreferenced delete).
+			observedParentDeleteBehavior = engine.FKParentDeleteUnenforced
+		}
 	} else {
 		var after int
 		require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id = 2;`).Scan(&after))
@@ -166,8 +228,10 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 		}
 	}
 	t.Logf("P4.0 FINDING: referenced-parent delete behavior = %s (err=%v)", observedParentDeleteBehavior, parentDelErr)
+	assert.True(t, isFKViolation(parentDelErr),
+		"referenced-parent delete must fail with a foreign-key/constraint violation, got: %v", parentDelErr)
 	assert.Equal(t, engine.FKParentDeleteRestrict, observedParentDeleteBehavior,
-		"FK must block (RESTRICT) deleting a customer that still has orders")
+		"FK must block (RESTRICT) deleting a customer that still has orders, while allowing unreferenced-parent deletes")
 
 	// --- (5) durability: Save (checkpoint -> re-serialize blob) + Close + reopen ---
 	require.NoError(t, c.Save(), "save checkpoints DuckDB into the encrypted blob")

@@ -61,8 +61,14 @@ const (
 //   - 100 per-row DELETEs by PK through crud.DeleteRowTx succeed.
 //   - An orphan-child INSERT (child referencing a non-existent parent PK)
 //     through crud.InsertRowTx is REJECTED by the FK constraint.
-//   - Deleting a parent row still referenced by a child is RESTRICTed (DuckDB
-//     errors out; it does not silently orphan or cascade).
+//   - RESTRICT is clean: deleting a parent row still referenced by a child is
+//     rejected with a genuine foreign-key constraint violation, WHILE deleting an
+//     UNREFERENCED parent row SUCCEEDS. (This control distinguishes real RESTRICT
+//     from the dangling-FK-dependency defect once present in the FK-emit rebuild,
+//     where the child was created under a temp name and renamed into place,
+//     leaving the parent's recorded FK dependency pointing at a dropped table so
+//     ALL parent deletes errored. The fix builds the rebuilt child under its
+//     final name; see internal/schema/relationships_fk.go.)
 //   - All valid per-row writes survive Save (checkpoint -> re-serialize blob) +
 //     Close + reopen, and the FK constraint keeps rejecting orphans after the
 //     blob round-trip.
