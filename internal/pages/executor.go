@@ -37,6 +37,22 @@ type ExecutedNode struct {
 	Node     Node
 	Result   *ResultSet     // non-nil for SQL blocks and inline metric queries
 	Children []ExecutedNode // non-nil for container nodes (RowNode)
+
+	// InlineValues holds resolved inline {value: ...} directives for a TextNode.
+	// Each entry maps a placeholder token (embedded into the node's text content)
+	// to a raw scalar value and the format code to render it with. The renderer
+	// substitutes formatted <span> elements for the placeholders after markdown
+	// conversion so they can embed within prose / report bands.
+	InlineValues []InlineValue
+}
+
+// InlineValue is a resolved inline {value: ...} directive: a placeholder token
+// embedded in a TextNode's content, the raw scalar resolved for it, and the
+// Evidence-compatible format code to render it with.
+type InlineValue struct {
+	Placeholder string // unique sentinel embedded in the TextNode content
+	Value       any    // resolved scalar (nil when missing/empty → safe placeholder)
+	Fmt         string // format code passed to renderer.Format
 }
 
 // Execute walks a parsed page top-to-bottom, executing SQL blocks and resolving
@@ -76,7 +92,11 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 	for _, node := range nodes {
 		switch n := node.(type) {
 		case *TextNode:
-			executed = append(executed, ExecutedNode{Node: n})
+			en, err := resolveInlineValues(ctx, n, engine, params, results, variables)
+			if err != nil {
+				return nil, err
+			}
+			executed = append(executed, en)
 
 		case *SQLBlockNode:
 			sql := substituteSQL(n.SQL, variables)
@@ -154,6 +174,138 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 	}
 
 	return executed, nil
+}
+
+// inlineValuePattern matches inline {value: ...} directives embedded within
+// prose text, e.g. "Revenue is {value: source=totals, column: total, fmt: usd2}".
+// It is non-greedy so multiple directives on one line resolve independently.
+var inlineValuePattern = regexp.MustCompile(`\{value:[^{}]*\}`)
+
+// resolveInlineValues scans a TextNode for inline {value: ...} directives,
+// resolves each (either from a named SQL result via source+column, or by
+// executing inline SQL), and rewrites the node's content to embed an opaque
+// placeholder per directive. The resolved scalar + format code are attached to
+// the returned ExecutedNode for the renderer to format. Resolution failures
+// (missing column, empty result) degrade to a nil value (safe placeholder)
+// rather than aborting the page.
+func resolveInlineValues(ctx context.Context, n *TextNode, engine QueryEngine, params map[string]any, results map[string]*ResultSet, variables map[string]any) (ExecutedNode, error) {
+	en := ExecutedNode{Node: n}
+	if !strings.Contains(n.Content, "{value:") {
+		return en, nil
+	}
+
+	var inlineValues []InlineValue
+	var resolveErr error
+	idx := 0
+
+	newContent := inlineValuePattern.ReplaceAllStringFunc(n.Content, func(match string) string {
+		if resolveErr != nil {
+			return match
+		}
+		// Strip the leading "{value:" and trailing "}" to get the inner config.
+		inner := strings.TrimSuffix(strings.TrimPrefix(match, "{value:"), "}")
+		config, err := parseDirectiveYAML(inner)
+		if err != nil {
+			resolveErr = fmt.Errorf("line: invalid inline {value} directive %q: %w", match, err)
+			return match
+		}
+		// Normalize bare "key=value" tokens (e.g. "source=totals"), which YAML
+		// parses as a key with a nil value, into proper map entries — matching
+		// the directive-line parsing convention.
+		for k, v := range config {
+			if v == nil {
+				if key, val, isKV := strings.Cut(k, "="); isKV {
+					delete(config, k)
+					config[key] = val
+				}
+			}
+		}
+
+		val, fmtCode, err := resolveInlineValueConfig(ctx, config, engine, params, results, variables)
+		if err != nil {
+			resolveErr = err
+			return match
+		}
+
+		placeholder := fmt.Sprintf("xVIBEVALUEx%dx", idx)
+		idx++
+		inlineValues = append(inlineValues, InlineValue{
+			Placeholder: placeholder,
+			Value:       val,
+			Fmt:         fmtCode,
+		})
+		return placeholder
+	})
+	if resolveErr != nil {
+		return en, resolveErr
+	}
+
+	// Replace the node's content in place so downstream rendering uses the
+	// placeholder-bearing text.
+	n.Content = newContent
+	en.InlineValues = inlineValues
+	return en, nil
+}
+
+// resolveInlineValueConfig resolves a single inline {value} directive's config
+// into a scalar value and a format code. Two forms are supported:
+//
+//  1. source=<block>, column=<col> — reads the named, already-executed SQL
+//     result and pulls the first row's <col> value.
+//  2. sql="SELECT ..." — executes inline SQL (like the metric directive) and
+//     pulls the first cell of the first row.
+//
+// A missing column or empty result resolves to a nil value (safe placeholder),
+// not an error.
+func resolveInlineValueConfig(ctx context.Context, config map[string]any, engine QueryEngine, params map[string]any, results map[string]*ResultSet, variables map[string]any) (any, string, error) {
+	fmtCode, _ := config["fmt"].(string)
+
+	// Form 2: inline SQL.
+	if sqlVal, ok := config["sql"]; ok {
+		sqlStr, ok := sqlVal.(string)
+		if !ok {
+			return nil, fmtCode, fmt.Errorf("inline {value} sql must be a string")
+		}
+		sqlStr = substituteSQL(sqlStr, variables)
+		rs, err := engine.Execute(ctx, sqlStr, params)
+		if err != nil {
+			return nil, fmtCode, fmt.Errorf("failed to execute inline {value} SQL: %w", err)
+		}
+		if rs != nil && len(rs.Rows) > 0 && len(rs.Rows[0]) > 0 {
+			return rs.Rows[0][0], fmtCode, nil
+		}
+		return nil, fmtCode, nil
+	}
+
+	// Form 1: source + column.
+	sourceName, _ := config["source"].(string)
+	if sourceName == "" {
+		return nil, fmtCode, fmt.Errorf("inline {value} requires either sql or source")
+	}
+	rs, exists := results[sourceName]
+	if !exists {
+		return nil, fmtCode, fmt.Errorf("inline {value} references undefined result %q", sourceName)
+	}
+	column, _ := config["column"].(string)
+	if column == "" {
+		// No column → first cell of first row.
+		if rs != nil && len(rs.Rows) > 0 && len(rs.Rows[0]) > 0 {
+			return rs.Rows[0][0], fmtCode, nil
+		}
+		return nil, fmtCode, nil
+	}
+	// Locate the column by name; missing column degrades to nil (safe placeholder).
+	colIdx := -1
+	for i, c := range rs.Columns {
+		if c.Name == column {
+			colIdx = i
+			break
+		}
+	}
+	if colIdx == -1 || len(rs.Rows) == 0 || colIdx >= len(rs.Rows[0]) {
+		return nil, fmtCode, nil
+	}
+	return rs.Rows[0][colIdx], fmtCode, nil
 }
 
 // equalityPattern matches variable-equality conditions of the form

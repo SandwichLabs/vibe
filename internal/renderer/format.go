@@ -147,6 +147,15 @@ func ToFloat64(v any) float64 {
 		var f float64
 		fmt.Sscanf(val, "%f", &f)
 		return f
+	case interface{ Float64() float64 }:
+		// Covers numeric wrapper types like duckdb.Decimal (and *Decimal),
+		// which expose a Float64() accessor.
+		return val.Float64()
+	case fmt.Stringer:
+		// Last-resort numeric parse for stringer-backed numeric types.
+		var f float64
+		fmt.Sscanf(val.String(), "%f", &f)
+		return f
 	default:
 		return 0
 	}
@@ -156,6 +165,11 @@ func ToFloat64(v any) float64 {
 func formatNumberWithDecimals(v float64, decimals int) string {
 	negative := v < 0
 	v = math.Abs(v)
+
+	// Round half away from zero (matching spreadsheet/Access conventions) rather
+	// than Go's default round-half-to-even, so e.g. num0(1234.5) == "1,235".
+	pow := math.Pow(10, float64(decimals))
+	v = math.Floor(v*pow+0.5) / pow
 
 	// Format with the specified decimal places
 	s := fmt.Sprintf("%.*f", decimals, v)

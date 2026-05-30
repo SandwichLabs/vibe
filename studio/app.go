@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"os"
 	"strings"
@@ -406,16 +407,22 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 	for _, en := range nodes {
 		switch n := en.Node.(type) {
 		case *pages.TextNode:
+			var rendered string
 			if pageType == "html" {
-				b.WriteString(n.Content)
+				rendered = n.Content
 			} else {
 				var mdBuf bytes.Buffer
 				if err := goldmark.Convert([]byte(n.Content), &mdBuf); err != nil {
-					b.WriteString("<div class=\"prose\">" + n.Content + "</div>\n")
+					rendered = "<div class=\"prose\">" + n.Content + "</div>\n"
 				} else {
-					b.WriteString("<div class=\"prose\">" + mdBuf.String() + "</div>\n")
+					rendered = "<div class=\"prose\">" + mdBuf.String() + "</div>\n"
 				}
 			}
+			// Substitute resolved inline {value:} directive placeholders with
+			// formatted inline <span> elements (post-markdown so they survive
+			// goldmark untouched and can embed within prose).
+			rendered = substituteInlineValues(rendered, en.InlineValues)
+			b.WriteString(rendered)
 
 		case *pages.SQLBlockNode:
 			// SQL blocks don't render directly (they produce result sets for directives).
@@ -559,6 +566,26 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 	default:
 		return fmt.Sprintf("<div>Unknown directive: %s</div>", node.Type), nil
 	}
+}
+
+// substituteInlineValues replaces resolved inline {value:} placeholders in
+// already-rendered HTML with formatted inline <span> elements. Each value is
+// formatted via the shared renderer.Format codes; a nil value (missing column /
+// empty result) renders as a safe em-dash placeholder rather than crashing.
+func substituteInlineValues(rendered string, values []pages.InlineValue) string {
+	for _, iv := range values {
+		var text string
+		if iv.Value == nil {
+			text = "—" // em-dash placeholder for missing/empty values
+		} else if iv.Fmt != "" {
+			text = renderer.Format(iv.Value, iv.Fmt)
+		} else {
+			text = fmt.Sprintf("%v", iv.Value)
+		}
+		span := "<span class=\"vibe-value\">" + html.EscapeString(text) + "</span>"
+		rendered = strings.ReplaceAll(rendered, iv.Placeholder, span)
+	}
+	return rendered
 }
 
 func getStringConfig(config map[string]any, key string) string {

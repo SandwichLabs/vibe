@@ -97,8 +97,9 @@ func ExpandTemplates(executed *ExecutedPage, params map[string]any) (*ExecutedPa
 		}
 
 		expanded.Nodes[i] = ExecutedNode{
-			Node:   &TextNode{Content: output},
-			Result: en.Result,
+			Node:         &TextNode{Content: output},
+			Result:       en.Result,
+			InlineValues: en.InlineValues,
 		}
 	}
 
