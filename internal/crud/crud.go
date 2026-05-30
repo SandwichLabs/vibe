@@ -171,8 +171,12 @@ func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]s
 			continue
 		}
 		base, args := candidateRow(colTypes, values)
+		// Access-style rules may be column-relative (e.g. LIKE '%@%' or > 0),
+		// in which case the column is the implicit left operand. Full
+		// expressions that already name a column (e.g. qty > 0) are used as-is.
+		expr := normalizeRule(col, rule)
 		// COALESCE so a NULL rule result (unknown) is treated as passing.
-		query := fmt.Sprintf("SELECT COALESCE((%s), TRUE) FROM (%s) AS candidate", rule, base)
+		query := fmt.Sprintf("SELECT COALESCE((%s), TRUE) FROM (%s) AS candidate", expr, base)
 		var ok bool
 		if err := exec.QueryRow(query, args...).Scan(&ok); err != nil {
 			return nil, fmt.Errorf("failed to evaluate validation rule for %q.%q: %w", m.TableName, col, err)
@@ -186,6 +190,23 @@ func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]s
 	}
 	we.Message = "validation failed"
 	return we, nil
+}
+
+// normalizeRule turns an Access-style validation rule into a complete SQL
+// boolean expression. A rule that begins with a comparison/predicate operator
+// (LIKE, IN, BETWEEN, IS, NOT, or a relational operator) is column-relative:
+// the column is its implicit left operand, so we prepend the quoted column
+// reference. A rule that already starts with anything else (e.g. an identifier
+// as in "qty > 0", or a function call) is treated as a full expression.
+func normalizeRule(col, rule string) string {
+	upper := strings.ToUpper(rule)
+	relativePrefixes := []string{"LIKE", "IN ", "IN(", "BETWEEN", "IS ", "NOT ", "NOT(", "<>", "!=", ">=", "<=", "=", "<", ">"}
+	for _, p := range relativePrefixes {
+		if strings.HasPrefix(upper, p) {
+			return fmt.Sprintf("%q %s", col, rule)
+		}
+	}
+	return rule
 }
 
 func validationMessage(m schema.FieldMeta) string {
