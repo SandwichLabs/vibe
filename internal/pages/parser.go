@@ -128,6 +128,18 @@ func walkGoldmark(doc ast.Node, source []byte, lineOffset int) ([]Node, error) {
 					continue
 				}
 
+				if kind := blockStartKind(trimmed); kind != "" {
+					blockNode, nextSibling, err := parseBlockFromAST(kind, n, child, source, lineOffset)
+					if err != nil {
+						return nil, err
+					}
+					nodes = append(nodes, blockNode)
+					if nextSibling != nil {
+						child = nextSibling
+					}
+					continue
+				}
+
 				dirNode, err := parseDirective(trimmed, lineOffset+getNodeLine(n, source))
 				if err != nil {
 					return nil, err
@@ -318,7 +330,7 @@ func processASTNode(n ast.Node, source []byte, lineOffset int) ([]Node, error) {
 	case *ast.Paragraph:
 		content := extractParagraphText(node, source)
 		trimmed := strings.TrimSpace(content)
-		if isDirectiveLine(trimmed) && !isBlockEnd(trimmed) && !isConditionalStart(trimmed) && !isRowStart(trimmed) {
+		if isDirectiveLine(trimmed) && !isBlockEnd(trimmed) && !isConditionalStart(trimmed) && !isRowStart(trimmed) && blockStartKind(trimmed) == "" && !isTabMarker(trimmed) {
 			dirNode, err := parseDirective(trimmed, lineOffset+getNodeLine(node, source))
 			if err != nil {
 				return nil, err
@@ -442,9 +454,174 @@ func isConditionalStart(trimmed string) bool {
 	return strings.HasPrefix(inner, "if:")
 }
 
-// isBlockEnd checks if a line is a block closing tag ({/if}, {/row}).
+// isBlockEnd checks if a line is a block closing tag ({/if}, {/row}, {/stack}, …).
 func isBlockEnd(trimmed string) bool {
-	return trimmed == "{/if}" || trimmed == "{/row}"
+	switch trimmed {
+	case "{/if}", "{/row}", "{/stack}", "{/tabs}", "{/callout}":
+		return true
+	}
+	return false
+}
+
+// layoutBlockKinds enumerates the generalized layout blocks (P3.5) parsed via
+// the sibling-collection-until-{/x} mechanism. {row} keeps its dedicated path.
+var layoutBlockKinds = []string{"stack", "tabs", "callout"}
+
+// blockStartKind returns the layout-block kind for an opening directive line
+// (e.g. "{stack}", "{tabs}", "{callout: type: warning}"), or "" if the line is
+// not a layout-block start.
+func blockStartKind(trimmed string) string {
+	inner := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	for _, kind := range layoutBlockKinds {
+		// Match bare ("{stack}") or with config ("{callout: type: warning}").
+		if inner == kind || strings.HasPrefix(inner, kind+":") {
+			return kind
+		}
+	}
+	return ""
+}
+
+// isTabMarker reports whether a directive line is a {tab: ...} section marker.
+func isTabMarker(trimmed string) bool {
+	inner := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	return strings.HasPrefix(inner, "tab:")
+}
+
+// parseBlockConfig parses the config of a layout-block opening directive given
+// the block kind and the directive's inner text (e.g. kind="callout",
+// inner=`callout: type: warning`). It strips the leading "kind" token and parses
+// the remainder, supporting both nested-YAML (`type: warning`) and bare
+// "key=value" (`type=warning`) forms. A label-only form (`tab: "Overview"`)
+// yields {kind: "Overview"} so callers can read the primary value back.
+func parseBlockConfig(kind, inner string) (map[string]any, error) {
+	rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(inner), kind))
+	rest = strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+
+	result := make(map[string]any)
+	if rest == "" {
+		return result, nil
+	}
+
+	// Bare "key=value" config (e.g. {row}-style "cols=3").
+	if key, val, isKV := strings.Cut(rest, "="); isKV && !strings.Contains(rest, ":") {
+		result[key] = val
+		return result, nil
+	}
+
+	// A quoted-string label (e.g. {tab: "Overview"}) → primary value under kind.
+	if strings.HasPrefix(rest, "\"") || strings.HasPrefix(rest, "'") {
+		var label string
+		if err := yaml.Unmarshal([]byte(rest), &label); err == nil {
+			result[kind] = label
+			return result, nil
+		}
+	}
+
+	// Nested YAML config (e.g. "type: warning"). Wrap as a flow-friendly block.
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(rest), &parsed); err != nil {
+		// Fall back to treating the remainder as the primary value.
+		result[kind] = rest
+		return result, nil
+	}
+	for k, v := range parsed {
+		if v == nil {
+			if key, val, isKV := strings.Cut(k, "="); isKV {
+				result[key] = val
+				continue
+			}
+		}
+		result[k] = v
+	}
+	return result, nil
+}
+
+// parseBlockFromAST parses a generalized layout block ({stack}, {tabs}, {callout})
+// by collecting sibling nodes until the matching {/kind} closing tag, mirroring
+// the {row} parser. For {tabs}, {tab:} markers segment the children into nested
+// "tab" BlockNodes carrying their label in Config["tab"].
+func parseBlockFromAST(kind string, startPara *ast.Paragraph, startChild ast.Node, source []byte, lineOffset int) (*BlockNode, ast.Node, error) {
+	startLine := lineOffset + getNodeLine(startPara, source) + 1
+
+	content := strings.TrimSpace(extractParagraphText(startPara, source))
+	inner := content[1 : len(content)-1]
+	config, err := parseBlockConfig(kind, inner)
+	if err != nil {
+		return nil, nil, fmt.Errorf("line %d: invalid %s directive: %w", startLine, kind, err)
+	}
+
+	closeTag := "{/" + kind + "}"
+
+	var children []Node
+	var lastSibling ast.Node
+
+	// For {tabs}, accumulate children into the currently-open {tab:} section.
+	var currentTab *BlockNode
+
+	flushTab := func() {
+		if currentTab != nil {
+			children = append(children, currentTab)
+			currentTab = nil
+		}
+	}
+
+	addChild := func(n Node) {
+		if currentTab != nil {
+			currentTab.Children = append(currentTab.Children, n)
+			return
+		}
+		children = append(children, n)
+	}
+
+	for sibling := startChild.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+		lastSibling = sibling
+
+		if para, ok := sibling.(*ast.Paragraph); ok {
+			paraText := strings.TrimSpace(extractParagraphText(para, source))
+
+			if paraText == closeTag {
+				flushTab()
+				return &BlockNode{
+					Kind:     kind,
+					Config:   config,
+					Children: children,
+					Line:     startLine,
+				}, lastSibling, nil
+			}
+
+			// Within {tabs}, a {tab: "Label"} marker opens a new tab section.
+			if kind == "tabs" && isDirectiveLine(paraText) && isTabMarker(paraText) {
+				flushTab()
+				tabInner := strings.TrimSpace(paraText[1 : len(paraText)-1])
+				tabConfig, err := parseBlockConfig("tab", tabInner)
+				if err != nil {
+					tabLine := lineOffset + getNodeLine(para, source) + 1
+					return nil, nil, fmt.Errorf("line %d: invalid tab directive: %w", tabLine, err)
+				}
+				// Preserve the tab label under Config["tab"].
+				label := ""
+				if labelVal, ok := tabConfig["tab"].(string); ok {
+					label = labelVal
+				}
+				currentTab = &BlockNode{
+					Kind:   "tab",
+					Config: map[string]any{"tab": label},
+					Line:   lineOffset + getNodeLine(para, source) + 1,
+				}
+				continue
+			}
+		}
+
+		childNodes, err := processASTNode(sibling, source, lineOffset)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, cn := range childNodes {
+			addChild(cn)
+		}
+	}
+
+	return nil, nil, fmt.Errorf("line %d: unclosed {%s:} block (missing %s)", startLine, kind, closeTag)
 }
 
 // isRowStart checks if a directive line is a {row: ...} block start.

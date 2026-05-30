@@ -74,3 +74,20 @@ type RowNode struct {
 }
 
 func (n *RowNode) nodeType() string { return "row" }
+
+// BlockNode is the generalized layout-block AST node (P3.5). It represents
+// {stack}...{/stack}, {tabs}{tab:..}...{/tabs}, and {callout: type:..}...{/callout}
+// blocks, reusing the {row} sibling-collection-until-{/x} mechanism. Kind names
+// the block type ("stack", "tabs", "tab", "callout"); Config carries directive
+// options; Children holds the collected nodes.
+//
+// STUB (TDD RED, P3.5): type declared so the parser/executor/render tests
+// compile and fail on assertions; no parser/executor/render wiring exists yet.
+type BlockNode struct {
+	Kind     string
+	Config   map[string]any
+	Children []Node
+	Line     int
+}
+
+func (n *BlockNode) nodeType() string { return "block" }

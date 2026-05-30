@@ -192,6 +192,16 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 				Children: children,
 			})
 
+		case *BlockNode:
+			children, err := executeNodes(ctx, n.Children, engine, params, results, variables)
+			if err != nil {
+				return nil, err
+			}
+			executed = append(executed, ExecutedNode{
+				Node:     n,
+				Children: children,
+			})
+
 		default:
 			executed = append(executed, ExecutedNode{Node: node})
 		}

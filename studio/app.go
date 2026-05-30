@@ -445,6 +445,15 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			b.WriteString(html)
 			b.WriteString("\n")
 
+		case *pages.BlockNode:
+			html, err := a.renderBlock(n, en.Children, pageType)
+			if err != nil {
+				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Kind, err))
+				continue
+			}
+			b.WriteString(html)
+			b.WriteString("\n")
+
 		case *pages.ConditionalNode:
 			// Defensive: pages.Execute resolves conditionals by inlining the
 			// surviving branch's children, so a ConditionalNode should never
@@ -499,6 +508,88 @@ func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, page
 
 	b.WriteString("</div>")
 	return b.String(), nil
+}
+
+// renderBlock renders a generalized layout BlockNode (P3.5): {stack}, {tabs}
+// (with {tab:} sections), and {callout}. Each block wraps its already-executed
+// children, recursing through renderNodeList so nested directives/SQL resolve.
+func (a *App) renderBlock(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+	switch node.Kind {
+	case "tabs":
+		return a.renderTabs(node, children, pageType)
+	case "callout":
+		return a.renderCallout(node, children, pageType)
+	default: // "stack" and any future vertical container.
+		inner, err := a.renderNodeList(children, pageType)
+		if err != nil {
+			return "", err
+		}
+		return "<div class=\"vibe-stack\">" + inner + "</div>", nil
+	}
+}
+
+// renderTabs renders a {tabs} block as a tab header bar plus one switchable
+// panel per {tab:} section. Each "tab" child BlockNode contributes a header
+// (its label) and a corresponding vibe-tab-panel wrapping its own children.
+func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+	var headers strings.Builder
+	var panels strings.Builder
+
+	tabIdx := 0
+	for _, en := range children {
+		tab, ok := en.Node.(*pages.BlockNode)
+		if !ok || tab.Kind != "tab" {
+			// Stray non-tab content inside {tabs} renders before the panels.
+			stray, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType)
+			if err != nil {
+				return "", err
+			}
+			panels.WriteString(stray)
+			continue
+		}
+
+		label, _ := tab.Config["tab"].(string)
+		active := ""
+		if tabIdx == 0 {
+			active = " active"
+		}
+		headers.WriteString(fmt.Sprintf(
+			"<button type=\"button\" class=\"vibe-tab-header%s\" data-tab-index=\"%d\">%s</button>",
+			active, tabIdx, html.EscapeString(label)))
+
+		panelInner, err := a.renderNodeList(en.Children, pageType)
+		if err != nil {
+			return "", err
+		}
+		panels.WriteString(fmt.Sprintf(
+			"<div class=\"vibe-tab-panel%s\" data-tab-index=\"%d\">%s</div>",
+			active, tabIdx, panelInner))
+		tabIdx++
+	}
+
+	var b strings.Builder
+	b.WriteString("<div class=\"vibe-tabs\">")
+	b.WriteString("<div class=\"vibe-tab-headers\">")
+	b.WriteString(headers.String())
+	b.WriteString("</div>")
+	b.WriteString(panels.String())
+	b.WriteString("</div>")
+	return b.String(), nil
+}
+
+// renderCallout renders a {callout: type: warning} block as a typed container
+// wrapping its prose/children. The type defaults to "info".
+func (a *App) renderCallout(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+	calloutType := "info"
+	if t, ok := node.Config["type"].(string); ok && t != "" {
+		calloutType = t
+	}
+	inner, err := a.renderNodeList(children, pageType)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("<div class=\"vibe-callout vibe-callout-%s\">%s</div>",
+		html.EscapeString(calloutType), inner), nil
 }
 
 // renderDirective renders a single directive node to HTML. For a standalone

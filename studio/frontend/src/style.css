@@ -285,3 +285,27 @@
 .vibe-content .vibe-chart-container { margin: var(--sh-space-4) 0; }
 .vibe-content .vibe-row { display: grid; gap: var(--sh-space-4); margin: var(--sh-space-4) 0; }
 .vibe-content .vibe-col { min-width: 0; }
+
+/* P3.5 block layouts: stack, tabs, callout. */
+.vibe-content .vibe-stack { display: flex; flex-direction: column; gap: var(--sh-space-4); margin: var(--sh-space-4) 0; }
+
+.vibe-content .vibe-tabs { margin: var(--sh-space-4) 0; }
+.vibe-content .vibe-tab-headers { display: flex; gap: var(--sh-space-1); border-bottom: 1px solid var(--sh-ink-3); margin-bottom: var(--sh-space-4); }
+.vibe-content .vibe-tab-header {
+  appearance: none; background: transparent; border: none; cursor: pointer;
+  padding: var(--sh-space-2) var(--sh-space-4); font: inherit; color: var(--sh-ink-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.vibe-content .vibe-tab-header:hover { color: var(--sh-ink-1); }
+.vibe-content .vibe-tab-header.active { color: var(--sh-accent); border-bottom-color: var(--sh-accent); font-weight: 600; }
+.vibe-content .vibe-tab-panel { display: none; }
+.vibe-content .vibe-tab-panel.active { display: block; }
+
+.vibe-content .vibe-callout {
+  border-left: 4px solid var(--sh-ink-3); border-radius: var(--sh-radius-1);
+  background: var(--sh-paper-2); padding: var(--sh-space-3) var(--sh-space-4); margin: var(--sh-space-4) 0;
+}
+.vibe-content .vibe-callout-info { border-left-color: var(--sh-accent); }
+.vibe-content .vibe-callout-warning { border-left-color: #d97706; background: #fffbeb; }
+.vibe-content .vibe-callout-success { border-left-color: #16a34a; background: #f0fdf4; }
+.vibe-content .vibe-callout-error { border-left-color: #dc2626; background: #fef2f2; }
