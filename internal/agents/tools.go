@@ -193,6 +193,44 @@ var Tools = []ToolDef{
 			{Name: "subform", Type: "object", Required: false, Desc: "master_detail subform link: {child_table, child_key, parent_key, fields}"},
 		},
 	},
+
+	// Schema Wizard tool (plan §2.1 / §4.3). Applies a real DuckDB foreign key
+	// (child.<child_column> -> parent.<parent_column>) and persists the
+	// relationship to _vibe_relationships.
+	{
+		Name:        "create_relationship",
+		Description: "Schema Wizard: create a relationship (foreign key) linking a child table column to a parent table column. Applies a real DuckDB foreign-key constraint (RESTRICT) so orphan child records are rejected, and persists the relationship to _vibe_relationships.",
+		Category:    "schema",
+		Params: []ParamDef{
+			{Name: "parent_table", Type: "string", Required: true, Desc: "The referenced (one) table"},
+			{Name: "parent_column", Type: "string", Required: true, Desc: "The referenced column (must be PRIMARY KEY or UNIQUE)"},
+			{Name: "child_table", Type: "string", Required: true, Desc: "The referencing (many) table"},
+			{Name: "child_column", Type: "string", Required: true, Desc: "The referencing column"},
+			{Name: "on_delete", Type: "string", Required: false, Desc: "Referential action on delete: RESTRICT | CASCADE | SET NULL | NO ACTION (DuckDB enforces RESTRICT)"},
+			{Name: "on_update", Type: "string", Required: false, Desc: "Referential action on update (stored as metadata)"},
+		},
+	},
+	{
+		Name:        "list_relationships",
+		Description: "List all stored foreign-key relationships in the container.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+
+	// Query Wizard tool (plan §2.4 / §4.3). Builds a named query from a QBE-style
+	// filter spec and persists it to the _vibe_queries registry.
+	{
+		Name:        "build_query",
+		Description: "Query Wizard (QBE): build and save a named query over a table from SQL-free filter conditions. Conditions are objects {column, op, value}; op is one of eq | neq | lt | gt | lte | gte | like | is_null | is_not_null. The rendered SQL is persisted to the named-query registry and runnable via run_query.",
+		Category:    "schema",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Name/title for the saved query"},
+			{Name: "table", Type: "string", Required: true, Desc: "Table the query selects from"},
+			{Name: "conditions", Type: "array", Required: false, Desc: "QBE filter conditions: objects {column, op, value}"},
+			{Name: "combinator", Type: "string", Required: false, Desc: "How to join conditions: AND | OR (default AND)"},
+			{Name: "columns", Type: "array", Required: false, Desc: "Projection column names (default: all columns)"},
+		},
+	},
 }
 
 // toolIndex is a lookup map built at init time.

@@ -152,6 +152,14 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "create_form":
 		return h.handleCreateForm(ctx, req)
 
+	// Schema / Query Wizard
+	case "create_relationship":
+		return h.handleCreateRelationship(ctx, req)
+	case "list_relationships":
+		return h.handleListRelationships(ctx, req)
+	case "build_query":
+		return h.handleBuildQuery(ctx, req)
+
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))
 	}
