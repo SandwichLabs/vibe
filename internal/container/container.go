@@ -160,6 +160,16 @@ func (c *Container) DuckDBDB() *sql.DB {
 	return c.duckDB.db
 }
 
+// DuckDBTempDir returns the filesystem path of the temp directory backing the
+// materialized DuckDB database for this session (P6.8). Returns "" if there is
+// no live DuckDB session.
+func (c *Container) DuckDBTempDir() string {
+	if c.duckDB == nil {
+		return ""
+	}
+	return c.duckDB.tempDir
+}
+
 // Save checkpoints DuckDB and writes the blob back into the SQLCipher container.
 func (c *Container) Save() error {
 	if c.readOnly {
