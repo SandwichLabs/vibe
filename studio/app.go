@@ -3049,6 +3049,22 @@ func isValidIdentifier(name string) bool {
 	return true
 }
 
+// ListReports returns every stored banded-report definition as a lightweight
+// {id, title, source} summary for the Report View picker (plan §3.4 / P3.10).
+func (a *App) ListReports() ([]reports.ReportSummary, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	summaries, err := store.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list reports: %w", err)
+	}
+	return summaries, nil
+}
+
 // RenderReportContent loads a banded report spec via the ReportStore, runs its
 // bound query on the real engine, computes the band tree, and renders banded
 // HTML (plan §3.3 / P3.8).

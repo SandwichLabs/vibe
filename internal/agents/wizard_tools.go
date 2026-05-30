@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/reports"
 	"github.com/sandwich-labs/vibe-app/internal/schema"
 )
 
@@ -147,6 +148,143 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		"sql":     sqlStr,
 		"created": true,
 	})
+}
+
+// handleCreateReport is the Report Wizard tool: it assembles an Access-style
+// banded report spec (grouping/sort/detail/aggregates) and persists it to
+// _vibe_reports via the shared reports.ReportStore (plan §3.4 / §4.3).
+func (h *Handler) handleCreateReport(_ context.Context, req *Request) *Response {
+	id := stringParam(req.Params["id"])
+	if id == "" {
+		id = uuid.New().String()
+	}
+
+	spec := reports.ReportSpec{
+		ID:     id,
+		Title:  stringParam(req.Params["title"]),
+		Source: stringParam(req.Params["source"]),
+		Groups: extractGroupLevels(req.Params["group_by"]),
+		Sort:   extractSortSpecs(req.Params["sort"]),
+		Detail: reports.DetailBand{
+			Columns: extractReportColumns(req.Params["columns"]),
+		},
+		GroupFooterAggregates:  extractAggregates(req.Params["aggregates"]),
+		ReportFooterAggregates: extractAggregates(req.Params["report_aggregates"]),
+	}
+
+	store := reports.NewReportStore(h.container.SQLiteDB())
+	if err := store.Save(spec); err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to persist report: %v", err))
+	}
+
+	h.logger.Info("created report", "id", spec.ID, "title", spec.Title, "source", spec.Source)
+	return NewResponse(req.ID, map[string]any{
+		"id":      spec.ID,
+		"title":   spec.Title,
+		"source":  spec.Source,
+		"created": true,
+	})
+}
+
+// extractGroupLevels converts a params list ([]any of {field, sort_dir}) into
+// reports.GroupLevel entries.
+func extractGroupLevels(raw any) []reports.GroupLevel {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]reports.GroupLevel, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		field := stringParam(m["field"])
+		if field == "" {
+			continue
+		}
+		out = append(out, reports.GroupLevel{
+			Field:   field,
+			SortDir: stringParam(m["sort_dir"]),
+		})
+	}
+	return out
+}
+
+// extractSortSpecs converts a params list ([]any of {field, dir}) into
+// reports.SortSpec entries.
+func extractSortSpecs(raw any) []reports.SortSpec {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]reports.SortSpec, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		field := stringParam(m["field"])
+		if field == "" {
+			continue
+		}
+		out = append(out, reports.SortSpec{
+			Field: field,
+			Dir:   stringParam(m["dir"]),
+		})
+	}
+	return out
+}
+
+// extractReportColumns converts a params list ([]any of {field, caption}) into
+// reports.ReportColumn entries.
+func extractReportColumns(raw any) []reports.ReportColumn {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]reports.ReportColumn, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		field := stringParam(m["field"])
+		if field == "" {
+			continue
+		}
+		out = append(out, reports.ReportColumn{
+			Field:   field,
+			Caption: stringParam(m["caption"]),
+		})
+	}
+	return out
+}
+
+// extractAggregates converts a params list ([]any of {name, func, field}) into
+// reports.Aggregate entries.
+func extractAggregates(raw any) []reports.Aggregate {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]reports.Aggregate, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := stringParam(m["name"])
+		if name == "" {
+			continue
+		}
+		out = append(out, reports.Aggregate{
+			Name:  name,
+			Func:  reports.AggFunc(stringParam(m["func"])),
+			Field: stringParam(m["field"]),
+		})
+	}
+	return out
 }
 
 // extractFilterConditions converts a params list ([]any of {column, op, value})

@@ -18,6 +18,10 @@ export function AlterColumnType(arg1, arg2, arg3) {
   return window['go']['main']['App']['AlterColumnType'](arg1, arg2, arg3);
 }
 
+export function AnalyzeInExcel(arg1, arg2) {
+  return window['go']['main']['App']['AnalyzeInExcel'](arg1, arg2);
+}
+
 export function CancelRender() {
   return window['go']['main']['App']['CancelRender']();
 }
@@ -68,6 +72,18 @@ export function DropTable(arg1) {
 
 export function ExecuteQuery(arg1) {
   return window['go']['main']['App']['ExecuteQuery'](arg1);
+}
+
+export function ExportReportHTML(arg1, arg2) {
+  return window['go']['main']['App']['ExportReportHTML'](arg1, arg2);
+}
+
+export function ExportReportPDF(arg1, arg2) {
+  return window['go']['main']['App']['ExportReportPDF'](arg1, arg2);
+}
+
+export function ExportReportXLSX(arg1, arg2) {
+  return window['go']['main']['App']['ExportReportXLSX'](arg1, arg2);
 }
 
 export function ExportTableCSV(arg1) {
@@ -154,6 +170,10 @@ export function ListRelationships() {
   return window['go']['main']['App']['ListRelationships']();
 }
 
+export function ListReports() {
+  return window['go']['main']['App']['ListReports']();
+}
+
 export function ListTables() {
   return window['go']['main']['App']['ListTables']();
 }
@@ -172,6 +192,10 @@ export function RemoveForeignKey(arg1) {
 
 export function RenderPageContent(arg1, arg2) {
   return window['go']['main']['App']['RenderPageContent'](arg1, arg2);
+}
+
+export function RenderReportContent(arg1) {
+  return window['go']['main']['App']['RenderReportContent'](arg1);
 }
 
 export function SaveFile() {

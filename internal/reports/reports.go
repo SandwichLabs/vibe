@@ -178,6 +178,37 @@ func (s *ReportStore) Get(id string) (*ReportSpec, error) {
 	return &spec, nil
 }
 
+// ReportSummary is a lightweight listing entry (id + title + source) for the
+// report picker, avoiding a full spec deserialize per row.
+type ReportSummary struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Source string `json:"source"`
+}
+
+// List returns every stored report definition as a lightweight summary, ordered
+// by title.
+func (s *ReportStore) List() ([]ReportSummary, error) {
+	rows, err := s.db.Query(`SELECT id, title, source FROM _vibe_reports ORDER BY title;`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list reports: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ReportSummary
+	for rows.Next() {
+		var r ReportSummary
+		if err := rows.Scan(&r.ID, &r.Title, &r.Source); err != nil {
+			return nil, fmt.Errorf("failed to scan report summary: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate reports: %w", err)
+	}
+	return out, nil
+}
+
 // ComputeBands groups + sorts + aggregates a query ResultSet into an ordered
 // band tree. It currently supports a single top-level grouping level (the first
 // entry in spec.Groups), which matches the Access "sales by rep" archetype.

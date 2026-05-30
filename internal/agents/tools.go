@@ -231,6 +231,25 @@ var Tools = []ToolDef{
 			{Name: "columns", Type: "array", Required: false, Desc: "Projection column names (default: all columns)"},
 		},
 	},
+
+	// Report Wizard tool (plan §3.4 / §4.3). Builds an Access-style banded report
+	// spec (report/group/detail bands with group-footer subtotals) and persists it
+	// to _vibe_reports.
+	{
+		Name:        "create_report",
+		Description: "Report Wizard: build and save an Access-style banded report over a table. Groups detail rows by one or more fields, sorts within a group, projects detail columns, and computes group-footer (and report-footer) aggregates. Persisted to _vibe_reports and renderable as banded HTML.",
+		Category:    "schema",
+		Params: []ParamDef{
+			{Name: "id", Type: "string", Required: false, Desc: "Stable report id (defaults to a generated id)"},
+			{Name: "title", Type: "string", Required: true, Desc: "Report title shown in the report header"},
+			{Name: "source", Type: "string", Required: true, Desc: "Table or view the report selects from"},
+			{Name: "group_by", Type: "array", Required: false, Desc: "Grouping levels: objects {field, sort_dir}"},
+			{Name: "sort", Type: "array", Required: false, Desc: "Detail sort specs: objects {field, dir}"},
+			{Name: "columns", Type: "array", Required: false, Desc: "Detail-band columns: objects {field, caption}"},
+			{Name: "aggregates", Type: "array", Required: false, Desc: "Group-footer aggregates: objects {name, func, field}; func is one of sum | count | avg | min | max"},
+			{Name: "report_aggregates", Type: "array", Required: false, Desc: "Report-footer (grand total) aggregates: objects {name, func, field}"},
+		},
+	},
 }
 
 // toolIndex is a lookup map built at init time.

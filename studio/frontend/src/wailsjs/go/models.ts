@@ -431,6 +431,27 @@ export namespace queries {
 
 }
 
+export namespace reports {
+	
+	export class ReportSummary {
+	    id: string;
+	    title: string;
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReportSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.source = source["source"];
+	    }
+	}
+
+}
+
 export namespace schema {
 	
 	export class FieldMeta {

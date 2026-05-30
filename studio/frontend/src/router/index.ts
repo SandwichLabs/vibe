@@ -6,6 +6,7 @@ import TableBrowserView from '../views/TableBrowserView.vue'
 import RelationshipsView from '../views/RelationshipsView.vue'
 import SchemaDesignerView from '../views/SchemaDesignerView.vue'
 import FormView from '../views/FormView.vue'
+import ReportView from '../views/ReportView.vue'
 import QueryEditorView from '../views/QueryEditorView.vue'
 import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
@@ -18,6 +19,7 @@ const routes = [
   { path: '/relationships', name: 'relationships', component: RelationshipsView },
   { path: '/schema', name: 'schema', component: SchemaDesignerView },
   { path: '/forms', name: 'forms', component: FormView },
+  { path: '/reports', name: 'reports', component: ReportView },
   { path: '/queries', name: 'queries', component: QueryEditorView },
   { path: '/import', name: 'import', component: ImportView },
   { path: '/settings', name: 'settings', component: SettingsView },

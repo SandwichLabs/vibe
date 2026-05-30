@@ -160,6 +160,10 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "build_query":
 		return h.handleBuildQuery(ctx, req)
 
+	// Report Wizard
+	case "create_report":
+		return h.handleCreateReport(ctx, req)
+
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))
 	}

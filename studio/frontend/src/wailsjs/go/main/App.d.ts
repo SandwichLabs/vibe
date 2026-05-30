@@ -4,6 +4,7 @@ import {main} from '../models';
 import {crud} from '../models';
 import {schema} from '../models';
 import {queries} from '../models';
+import {reports} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -12,6 +13,8 @@ export function AddForeignKey(arg1:main.ForeignKeySpec):Promise<string>;
 export function AddIndex(arg1:string,arg2:string,arg3:Array<string>,arg4:boolean):Promise<void>;
 
 export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function AnalyzeInExcel(arg1:string,arg2:string):Promise<string>;
 
 export function CancelRender():Promise<void>;
 
@@ -38,6 +41,12 @@ export function DropColumn(arg1:string,arg2:string):Promise<void>;
 export function DropTable(arg1:string):Promise<void>;
 
 export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
+
+export function ExportReportHTML(arg1:string,arg2:string):Promise<string>;
+
+export function ExportReportPDF(arg1:string,arg2:string):Promise<string>;
+
+export function ExportReportXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function ExportTableCSV(arg1:string):Promise<string>;
 
@@ -81,6 +90,8 @@ export function ListQueries():Promise<Array<main.QuerySummary>>;
 
 export function ListRelationships():Promise<Array<schema.Relationship>>;
 
+export function ListReports():Promise<Array<reports.ReportSummary>>;
+
 export function ListTables():Promise<Array<string>>;
 
 export function OpenFile(arg1:string,arg2:string):Promise<void>;
@@ -90,6 +101,8 @@ export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<str
 export function RemoveForeignKey(arg1:string):Promise<void>;
 
 export function RenderPageContent(arg1:string,arg2:Record<string, string>):Promise<string>;
+
+export function RenderReportContent(arg1:string):Promise<string>;
 
 export function SaveFile():Promise<void>;
 
