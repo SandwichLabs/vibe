@@ -165,6 +165,20 @@ var schemaDDL = []string{
 		target_id   TEXT NOT NULL DEFAULT '',
 		sort_order  INTEGER NOT NULL DEFAULT 0
 	);`,
+
+	// _vibe_macros stores Access-style declarative macros (plan §5.1) as
+	// versioned JSON. A macro is an ordered list of actions (OpenForm,
+	// OpenReport, RunSQL, MsgBox, ...), each optionally guarded by an If/Then
+	// condition. The declarative action engine + command-button control (P5.2)
+	// read this store. Additive migration.
+	`CREATE TABLE IF NOT EXISTS _vibe_macros (
+		id         TEXT PRIMARY KEY,
+		title      TEXT NOT NULL DEFAULT '',
+		version    INTEGER NOT NULL DEFAULT 1,
+		spec       TEXT NOT NULL,
+		created_at TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT ''
+	);`,
 }
 
 // defaultMeta contains the default metadata entries seeded on creation.
