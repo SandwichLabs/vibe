@@ -35,7 +35,8 @@ declare global {
           DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
           CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
           DropTable(name: string): Promise<void>
-          ExecuteQuery(sql: string, engine: string): Promise<QueryResult>
+          ExecuteQuery(sql: string): Promise<QueryResult>
+          GetFieldMeta(table: string): Promise<FieldMeta[]>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
           SaveQuery(id: string, title: string, sql: string, engine: string, description: string): Promise<void>
@@ -70,6 +71,25 @@ interface WriteResult {
 interface WriteError {
   message: string
   fields?: Record<string, string>
+}
+
+// FieldMeta mirrors internal/schema.FieldMeta (Access-parity field properties).
+interface FieldMeta {
+  table_name: string
+  column_name: string
+  caption: string
+  control_type: string
+  default_value: string
+  required: boolean
+  format_code: string
+  validation_rule: string
+  validation_message: string
+  input_mask: string
+  lookup_sql: string
+  display_col: string
+  value_col: string
+  control_tip: string
+  sort_order: number
 }
 
 interface FileInfo {
