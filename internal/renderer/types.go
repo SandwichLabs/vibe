@@ -83,6 +83,19 @@ type DetailConfig struct {
 	Result *ResultSet
 }
 
+// SubformConfig holds master-detail subform directive configuration (plan §1.5).
+// The child datasheet is auto-filtered to the current master record via the FK
+// link child.<ChildKey> = master.<ParentKey> = MasterKey.
+//
+// STUB (TDD RED P1.6): shape only — no renderer behavior implemented yet.
+type SubformConfig struct {
+	ChildTable string // child table/source bound to the subform
+	ParentKey  string // master record key column (e.g. orders.id)
+	ChildKey   string // child FK column (e.g. order_items.order_id)
+	MasterKey  any    // the current master record's key value
+	Title      string // optional caption
+}
+
 // RenderContext provides context for rendering.
 type RenderContext struct {
 	PageID    string

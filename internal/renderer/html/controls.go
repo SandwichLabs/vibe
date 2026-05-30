@@ -76,6 +76,19 @@ func (r *engineOptionResolver) ResolveOptions(ctx context.Context, lookupSQL, va
 	return opts, nil
 }
 
+// runQuery executes an arbitrary read query on the engine, used by the
+// master-detail subform renderer to auto-filter the child datasheet.
+func (r *engineOptionResolver) runQuery(ctx context.Context, sql string) (*engine.ResultSet, error) {
+	if r.eng == nil {
+		return nil, fmt.Errorf("subform query: engine is not available")
+	}
+	rs, err := r.eng.Execute(ctx, sql, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute subform query: %w", err)
+	}
+	return rs, nil
+}
+
 // loadFieldMetaMap returns the field metadata for a table keyed by column name.
 func loadFieldMetaMap(store *schema.Store, table string) (map[string]schema.FieldMeta, error) {
 	metas, err := store.GetFieldMeta(table)

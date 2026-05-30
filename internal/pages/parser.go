@@ -535,6 +535,15 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		}
 	}
 	for k, v := range remaining {
+		// Support the "key=value" form for secondary config entries (used by the
+		// {subform} master-detail link, e.g. "link=order_id->id"). YAML parses
+		// such a token as a bare key with a nil value, so split it back here.
+		if v == nil {
+			if key, val, isKV := strings.Cut(k, "="); isKV {
+				result[key] = val
+				continue
+			}
+		}
 		result[k] = v
 	}
 
@@ -566,7 +575,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "form", "detail", "if", "row"}
+	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "form", "detail", "subform", "if", "row"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

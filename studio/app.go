@@ -1643,6 +1643,60 @@ func (a *App) SetFieldMeta(table, column string, meta schema.FieldMeta) error {
 	return store.SetFieldMeta(table, column, meta)
 }
 
+// FormSummary is a lightweight listing entry for _vibe_forms (plan §1.6).
+type FormSummary struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Archetype string `json:"archetype"`
+}
+
+// SaveForm upserts a form definition into _vibe_forms as versioned JSON.
+func (a *App) SaveForm(spec schema.FormSpec) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	store := schema.NewFormStore(a.container.SQLiteDB())
+	if err := store.SaveForm(spec); err != nil {
+		return fmt.Errorf("failed to save form %q: %w", spec.ID, err)
+	}
+	return nil
+}
+
+// GetForm reads a stored form definition by id from _vibe_forms.
+func (a *App) GetForm(id string) (*schema.FormSpec, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	store := schema.NewFormStore(a.container.SQLiteDB())
+	return store.GetForm(id)
+}
+
+// ListForms returns a summary of every stored form definition.
+func (a *App) ListForms() ([]FormSummary, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	store := schema.NewFormStore(a.container.SQLiteDB())
+	summaries, err := store.ListForms()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FormSummary, 0, len(summaries))
+	for _, s := range summaries {
+		out = append(out, FormSummary{ID: s.ID, Title: s.Title, Archetype: s.Archetype})
+	}
+	return out, nil
+}
+
 // --- MCP Server ---
 
 // engineAgentAdapter wraps engine.Manager to satisfy agents.EngineAccess.
