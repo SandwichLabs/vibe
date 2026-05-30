@@ -2963,6 +2963,148 @@ func (a *App) ListForms() ([]FormSummary, error) {
 	return out, nil
 }
 
+// --- Switchboard navigation (plan §4.2 / P4.2) — STUBS for TDD RED ---
+
+// NavTarget is one bindable object the switchboard builder can point a nav item
+// at: a form, report, or page. Kind is a nav action kind (open_form/
+// open_report/open_page).
+type NavTarget struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// ListNavTargets returns the catalog of bindable objects (forms + reports +
+// pages) the switchboard builder can point nav items at. Each target carries a
+// nav action kind (open_form / open_report / open_page), the object id, and a
+// human label.
+func (a *App) ListNavTargets() ([]NavTarget, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	db := a.container.SQLiteDB()
+
+	out := []NavTarget{}
+
+	// Forms.
+	forms, err := schema.NewFormStore(db).ListForms()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list form nav targets: %w", err)
+	}
+	for _, f := range forms {
+		label := f.Title
+		if label == "" {
+			label = f.ID
+		}
+		out = append(out, NavTarget{Kind: schema.NavOpenForm, ID: f.ID, Label: label})
+	}
+
+	// Reports.
+	rpts, err := reports.NewReportStore(db).List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list report nav targets: %w", err)
+	}
+	for _, r := range rpts {
+		label := r.Title
+		if label == "" {
+			label = r.ID
+		}
+		out = append(out, NavTarget{Kind: schema.NavOpenReport, ID: r.ID, Label: label})
+	}
+
+	// Pages (skip internal _-prefixed pages, matching ListPages).
+	rows, err := db.Query(`SELECT id, title FROM _vibe_pages WHERE id NOT LIKE '\_%' ESCAPE '\' ORDER BY sort_order, title`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list page nav targets: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	for rows.Next() {
+		var id, title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, fmt.Errorf("failed to scan page nav target: %w", err)
+		}
+		if title == "" {
+			title = id
+		}
+		out = append(out, NavTarget{Kind: schema.NavOpenPage, ID: id, Label: title})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate page nav targets: %w", err)
+	}
+
+	return out, nil
+}
+
+// SaveNav persists a whole switchboard by upserting each nav item in order.
+func (a *App) SaveNav(items []schema.NavItem) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	store := schema.NewNavStore(a.container.SQLiteDB())
+	for _, item := range items {
+		if err := store.SetNav(item); err != nil {
+			return fmt.Errorf("failed to save nav item %q: %w", item.ID, err)
+		}
+	}
+	return nil
+}
+
+// SaveNavItem upserts a single nav node keyed by id.
+func (a *App) SaveNavItem(item schema.NavItem) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	store := schema.NewNavStore(a.container.SQLiteDB())
+	if err := store.SetNav(item); err != nil {
+		return fmt.Errorf("failed to save nav item %q: %w", item.ID, err)
+	}
+	return nil
+}
+
+// ListNav returns every nav item across all switchboard pages.
+func (a *App) ListNav() ([]schema.NavItem, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	store := schema.NewNavStore(a.container.SQLiteDB())
+	return store.ListNav()
+}
+
+// GetNav returns the direct children of a switchboard page (empty parentID =
+// root-level items), ordered by sort order.
+func (a *App) GetNav(parentID string) ([]schema.NavItem, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	store := schema.NewNavStore(a.container.SQLiteDB())
+	return store.GetNav(parentID)
+}
+
+// DeleteNavItem removes a single nav node by id. Single-row delete: deleting a
+// parent orphans (does not cascade) its children.
+func (a *App) DeleteNavItem(id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	store := schema.NewNavStore(a.container.SQLiteDB())
+	if err := store.DeleteNav(id); err != nil {
+		return fmt.Errorf("failed to delete nav item %q: %w", id, err)
+	}
+	return nil
+}
+
 // --- MCP Server ---
 
 // engineAgentAdapter wraps engine.Manager to satisfy agents.EngineAccess.

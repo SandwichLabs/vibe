@@ -103,6 +103,15 @@ func (s *NavStore) GetNav(parentID string) ([]NavItem, error) {
 	return out, nil
 }
 
+// DeleteNav removes a single nav item by id. It performs a single-row delete
+// with no FK cascade: deleting a parent orphans (does not remove) its children.
+func (s *NavStore) DeleteNav(id string) error {
+	if _, err := s.db.Exec(`DELETE FROM _vibe_nav WHERE id = ?;`, id); err != nil {
+		return fmt.Errorf("failed to delete nav item %q: %w", id, err)
+	}
+	return nil
+}
+
 // ListNav returns every nav item across all switchboard pages, ordered by
 // (parent_id, sort_order), so callers can reconstruct the full tree.
 func (s *NavStore) ListNav() ([]NavItem, error) {
