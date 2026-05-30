@@ -176,6 +176,10 @@ var defaultMeta = map[string]string{
 	"title":          "",
 	"description":    "",
 	"agent_sandbox":  "read-only",
+	// default_mode is the persisted startup mode for the app shell (Phase 4
+	// dual-mode). New files default to "studio"; data-entry deployments may
+	// flip it to "app" via SetAppConfig.
+	"default_mode": "studio",
 }
 
 // runMigrations creates all _vibe_* tables and seeds default metadata.
@@ -194,6 +198,15 @@ func runMigrations(db *sql.DB) error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit migration transaction: %w", err)
+	}
+
+	// Seed app-shell startup metadata (idempotent) so existing files migrated
+	// forward also gain default_mode (Phase 4 dual-mode). seedMeta only runs on
+	// Create; this INSERT OR IGNORE backfills opened files.
+	if _, err := db.Exec(
+		"INSERT OR IGNORE INTO _vibe_meta (key, value) VALUES ('default_mode', 'studio');",
+	); err != nil {
+		return fmt.Errorf("failed to seed default_mode meta: %w", err)
 	}
 
 	// Seed system pages (idempotent) so the Studio Home / Dashboard can render

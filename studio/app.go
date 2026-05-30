@@ -62,6 +62,11 @@ type App struct {
 	mcpServer   *vibemcp.Server
 	initialFile string
 
+	// mode is the live runtime app mode ("studio" | "app"), initialized from
+	// the persisted default_mode on file open and flipped at runtime by
+	// SetMode. Capability gating (P4.4) and the App Shell UI (P4.5) key off it.
+	mode string
+
 	renderMu     sync.Mutex
 	renderCancel context.CancelFunc
 }
@@ -150,6 +155,7 @@ func (a *App) OpenFile(path, passphrase string) error {
 	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
+	a.initModeFromMeta()
 	runtime.EventsEmit(a.ctx, "file:opened")
 	return nil
 }
@@ -178,6 +184,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
+	a.initModeFromMeta()
 	runtime.EventsEmit(a.ctx, "file:opened")
 	return nil
 }
