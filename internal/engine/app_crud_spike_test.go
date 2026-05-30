@@ -1,0 +1,230 @@
+package engine_test
+
+// P4.0: DuckDB-as-CRUD risk spike — per-row UPDATE/DELETE + FK relationship
+// pattern on a real .vibe (parity plan §8 / §4.1, gating Phase 4 App Shell /
+// Switchboard / dual-mode).
+//
+// This is the MANDATORY first unit before building further on
+// DuckDB-as-transactional-store. Unlike the P1.0 spike (raw ddb.Exec) and the
+// P2.1 spike (relationship DDL surface), P4.0 drives the *production* write
+// path that App Mode's switchboard/forms actually navigate to:
+//
+//   - the shared FK-emit path:   schema.ApplyForeignKey
+//   - the transactional CRUD core: crud.InsertRowTx / UpdateRowTx / DeleteRowTx
+//     run inside ddb.Begin() ... tx.Commit() exactly as studio/app.go and
+//     internal/server/handlers.go invoke them.
+//
+// It validates, against a REAL encrypted .vibe + REAL DuckDB (no mocks):
+//   (1) N=500 per-row UPDATEs by PK through crud.UpdateRowTx succeed + the
+//       batch latency is recorded as an SMB-scale viability signal,
+//   (2) 100 per-row DELETEs by PK through crud.DeleteRowTx succeed,
+//   (3) an orphan child INSERT (non-existent customer_id) is REJECTED by the FK,
+//   (4) deleting a referenced parent is BLOCKED (RESTRICT),
+//   (5) all valid writes + the FK constraint survive Save (checkpoint ->
+//       re-serialize blob) + Close + reopen.
+//
+// CONCLUSION (recorded for the later P4.x units): the spike must populate
+// engine.AppCRUDViabilitySpikeVerdict() with a concrete go/no-go —
+// "app-mode-crud-viable" only if per-row CRUD is durable AND the FK keeps
+// enforcing integrity after the blob round-trip; otherwise "blocking-crud-risk"
+// (a BLOCKING finding that stops the rest of Phase 4).
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/crud"
+	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/schema"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const appCRUDPassphrase = "p4-app-crud-spike-12345"
+
+func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "p4-app-crud.vibe")
+
+	c, err := container.Create(path, container.WithPassphrase(appCRUDPassphrase))
+	require.NoError(t, err, "should create encrypted .vibe container")
+	require.NotNil(t, c.DuckDBDB(), "DuckDB should be materialized")
+
+	ddb := c.DuckDBDB()
+	_ = engine.NewManager(ddb)
+	ctx := context.Background()
+	_ = ctx
+
+	// --- DDL: parent (customers, PK) + child (orders) ---
+	_, err = ddb.Exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);`)
+	require.NoError(t, err, "create customers")
+	_, err = ddb.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, total DOUBLE);`)
+	require.NoError(t, err, "create orders")
+
+	// --- seed: 50 customers + 500 orders (each order -> a valid customer) ---
+	for i := 1; i <= 50; i++ {
+		_, err = ddb.Exec(`INSERT INTO customers (id, name) VALUES (?, ?);`, i, "cust")
+		require.NoError(t, err, "seed customer %d", i)
+	}
+	for i := 1; i <= 500; i++ {
+		custID := (i % 50) + 1
+		_, err = ddb.Exec(`INSERT INTO orders (id, customer_id, total) VALUES (?, ?, ?);`, i, custID, 0.0)
+		require.NoError(t, err, "seed order %d", i)
+	}
+
+	// --- apply the FK via the shared production FK-emit path ---
+	// (DuckDB cannot ALTER a FK onto an existing table; ApplyForeignKey rebuilds
+	// the child table with the FK declared inline. This is the same path used by
+	// studio/app.go AddForeignKey and the agent create_relationship tool.)
+	err = schema.ApplyForeignKey(ddb, schema.ForeignKeySpec{
+		ChildTable:   "orders",
+		ChildColumn:  "customer_id",
+		ParentTable:  "customers",
+		ParentColumn: "id",
+		OnDelete:     "RESTRICT",
+	})
+	require.NoError(t, err, "ApplyForeignKey should apply an inline FK orders.customer_id -> customers.id")
+
+	// Field metadata is empty for these tables; the CRUD core tolerates that.
+	store := schema.NewStore(c.SQLiteDB())
+	orderColTypes, err := crud.ColumnTypes(ddb, "orders")
+	require.NoError(t, err, "read orders column types")
+	orderMetas, err := crud.FieldMetaMap(store, "orders")
+	require.NoError(t, err, "read orders field meta (may be empty)")
+
+	// --- (1) N=500 per-row UPDATEs by PK through the production CRUD core ---
+	start := time.Now()
+	for i := 1; i <= 500; i++ {
+		tx, err := ddb.Begin()
+		require.NoError(t, err, "begin tx for update %d", i)
+		_, werr := crud.UpdateRowTx(tx, orderColTypes, orderMetas, "orders", "id", i,
+			map[string]any{"total": float64(i)})
+		require.NoError(t, werr, "crud.UpdateRowTx by PK should succeed for order %d", i)
+		require.NoError(t, tx.Commit(), "commit update %d", i)
+	}
+	batchElapsed := time.Since(start)
+	t.Logf("P4.0 VIABILITY SIGNAL: 500 per-row UPDATEs through crud.UpdateRowTx took %s", batchElapsed)
+
+	// Spot-check a few updated values persisted in-session.
+	var total float64
+	require.NoError(t, ddb.QueryRow(`SELECT total FROM orders WHERE id = 250;`).Scan(&total))
+	assert.InDelta(t, 250.0, total, 0.001, "per-row UPDATE must persist in-session")
+
+	// --- (2) 100 per-row DELETEs by PK through the production CRUD core ---
+	for i := 401; i <= 500; i++ {
+		tx, err := ddb.Begin()
+		require.NoError(t, err, "begin tx for delete %d", i)
+		_, werr := crud.DeleteRowTx(tx, orderColTypes, "orders", "id", i)
+		require.NoError(t, werr, "crud.DeleteRowTx by PK should succeed for order %d", i)
+		require.NoError(t, tx.Commit(), "commit delete %d", i)
+	}
+	var remaining int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders;`).Scan(&remaining))
+	assert.Equal(t, 400, remaining, "100 per-row DELETEs must remove exactly 100 of 500 orders")
+
+	// --- (3) orphan child INSERT (non-existent customer_id) must be REJECTED ---
+	tx, err := ddb.Begin()
+	require.NoError(t, err, "begin tx for orphan insert")
+	_, orphanErr := crud.InsertRowTx(tx, orderColTypes, orderMetas, "orders",
+		map[string]any{"id": 99999, "customer_id": 4242, "total": 1.0})
+	_ = tx.Rollback()
+	orphanRejected := orphanErr != nil
+	t.Logf("P4.0 FINDING: orphan-child insert rejected by FK = %v (err=%v)", orphanRejected, orphanErr)
+	assert.True(t, orphanRejected, "FK must reject an order referencing a non-existent customer")
+
+	// --- (4) deleting a referenced parent must be BLOCKED (RESTRICT) ---
+	custColTypes, err := crud.ColumnTypes(ddb, "customers")
+	require.NoError(t, err, "read customers column types")
+
+	// customer 2 is referenced by surviving orders -> RESTRICT should block it.
+	var refCount int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id = 2;`).Scan(&refCount))
+	require.Greater(t, refCount, 0, "precondition: customer 2 is still referenced")
+
+	tx, err = ddb.Begin()
+	require.NoError(t, err, "begin tx for parent delete")
+	_, parentDelErr := crud.DeleteRowTx(tx, custColTypes, "customers", "id", 2)
+	if parentDelErr != nil {
+		_ = tx.Rollback()
+	} else {
+		_ = tx.Commit()
+	}
+
+	var observedParentDeleteBehavior string
+	if parentDelErr != nil {
+		observedParentDeleteBehavior = engine.FKParentDeleteRestrict
+	} else {
+		var after int
+		require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id = 2;`).Scan(&after))
+		if after == 0 {
+			observedParentDeleteBehavior = engine.FKParentDeleteCascade
+		} else {
+			observedParentDeleteBehavior = engine.FKParentDeleteUnenforced
+		}
+	}
+	t.Logf("P4.0 FINDING: referenced-parent delete behavior = %s (err=%v)", observedParentDeleteBehavior, parentDelErr)
+	assert.Equal(t, engine.FKParentDeleteRestrict, observedParentDeleteBehavior,
+		"FK must block (RESTRICT) deleting a customer that still has orders")
+
+	// --- (5) durability: Save (checkpoint -> re-serialize blob) + Close + reopen ---
+	require.NoError(t, c.Save(), "save checkpoints DuckDB into the encrypted blob")
+	require.NoError(t, c.Close(), "close container")
+
+	c2, err := container.Open(path, container.WithPassphrase(appCRUDPassphrase))
+	require.NoError(t, err, "should reopen encrypted .vibe container")
+	require.NotNil(t, c2.DuckDBDB(), "DuckDB should be materialized on reopen")
+	defer c2.Close() //nolint:errcheck
+	ddb2 := c2.DuckDBDB()
+
+	// per-row writes survived the round-trip
+	var orderCount, custCount int
+	require.NoError(t, ddb2.QueryRow(`SELECT COUNT(*) FROM orders;`).Scan(&orderCount))
+	require.NoError(t, ddb2.QueryRow(`SELECT COUNT(*) FROM customers;`).Scan(&custCount))
+	assert.Equal(t, 400, orderCount, "order count must survive Save+Close+reopen")
+	assert.Equal(t, 50, custCount, "customer count must survive Save+Close+reopen")
+
+	var reopenedTotal float64
+	require.NoError(t, ddb2.QueryRow(`SELECT total FROM orders WHERE id = 250;`).Scan(&reopenedTotal))
+	assert.InDelta(t, 250.0, reopenedTotal, 0.001, "updated value must persist across reopen")
+	perRowWriteDurable := orderCount == 400 && custCount == 50
+
+	// the FK constraint must still enforce integrity after the blob round-trip
+	_, orphanErr2 := ddb2.Exec(`INSERT INTO orders (id, customer_id, total) VALUES (88888, 4242, 1.0);`)
+	fkSurvives := orphanErr2 != nil
+	t.Logf("P4.0 FINDING: FK still rejects orphan after reopen = %v (err=%v)", fkSurvives, orphanErr2)
+	assert.True(t, fkSurvives, "FK constraint must survive the DuckDB-blob serialize/reopen round-trip")
+
+	// --- recorded go/no-go verdict the rest of Phase 4 builds on ---
+	// The stub returns the zero value, so these assertions fail until the GREEN
+	// step records the real findings.
+	verdict := engine.AppCRUDViabilitySpikeVerdict()
+
+	assert.Equal(t, orphanRejected, verdict.OrphanInsertRejected,
+		"recorded verdict must match observed orphan-insert behavior")
+	assert.Equal(t, observedParentDeleteBehavior, verdict.ParentDeleteBehavior,
+		"recorded verdict must match observed parent-delete behavior")
+	assert.Equal(t, fkSurvives, verdict.FKSurvivesRoundTrip,
+		"recorded verdict must match observed FK round-trip survival")
+	assert.Equal(t, perRowWriteDurable, verdict.PerRowWriteDurable,
+		"recorded verdict must match observed per-row write durability")
+	assert.Contains(t,
+		[]string{engine.AppCRUDRecommendViable, engine.AppCRUDRecommendBlocking},
+		verdict.Recommendation,
+		"spike must record a concrete go/no-go recommendation for Phase 4")
+
+	// The recommendation must be self-consistent with the observations: App-Mode
+	// CRUD is only "viable" if per-row writes are durable AND the FK keeps
+	// enforcing integrity across the blob round-trip; otherwise it is BLOCKING.
+	viable := perRowWriteDurable && fkSurvives && orphanRejected &&
+		observedParentDeleteBehavior == engine.FKParentDeleteRestrict
+	if viable {
+		assert.Equal(t, engine.AppCRUDRecommendViable, verdict.Recommendation,
+			"if per-row CRUD is durable and FK survives, spike should mark App-Mode CRUD viable")
+	} else {
+		assert.Equal(t, engine.AppCRUDRecommendBlocking, verdict.Recommendation,
+			"if a viability problem is found, spike must surface a BLOCKING finding")
+	}
+}
