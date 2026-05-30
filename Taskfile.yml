@@ -26,10 +26,17 @@ tasks:
       - go build -o {{.BINARY}} ./
 
   test:
-    desc: Run all tests
+    desc: Run all tests (Go + Studio frontend)
     aliases: [t]
     cmds:
       - go test ./...
+      - task: test:frontend
+
+  test:frontend:
+    desc: Run Studio frontend component tests (vitest)
+    dir: studio/frontend
+    cmds:
+      - npm run test
 
   test:coverage:
     desc: Run tests with coverage report

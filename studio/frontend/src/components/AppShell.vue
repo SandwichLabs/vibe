@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { setCachedMode } from '../router/index'
 import Icon from './Icon.vue'
 
 const emit = defineEmits<{ 'file-closed': [] }>()
 const route = useRoute()
+const router = useRouter()
 
 const fileInfo = ref<FileInfo | null>(null)
 const saving = ref(false)
@@ -51,14 +53,22 @@ async function loadFileInfo() {
 async function loadAppConfig() {
   try {
     appConfig.value = await window.go.main.App.GetAppConfig()
+    // Keep the route-locking guard in sync with the live mode (P4.6).
+    setCachedMode(appConfig.value?.mode === 'app' ? 'app' : 'studio')
   } catch { /* ignore — fall back to Studio Mode */ }
 }
 
-// enterAppMode flips the live mode to the locked-down App Mode.
+// enterAppMode flips the live mode to the locked-down App Mode. After flipping,
+// if the current route is a builder-only surface, bounce to the switchboard so
+// the guard's lock takes effect immediately.
 async function enterAppMode() {
   try {
     await window.go.main.App.SetMode('app')
+    setCachedMode('app')
     await loadAppConfig()
+    if (route.meta?.builderOnly) {
+      router.replace({ name: 'dashboard' })
+    }
   } catch (e: any) {
     errorMessage.value = 'Could not enter App Mode: ' + (e.message || e)
   }
@@ -74,6 +84,7 @@ function requestStudioMode() {
 async function confirmUnlock() {
   try {
     await window.go.main.App.SetMode('studio')
+    setCachedMode('studio')
     await loadAppConfig()
     showUnlock.value = false
     unlockPassphrase.value = ''

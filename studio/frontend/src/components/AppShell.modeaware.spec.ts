@@ -17,8 +17,13 @@
 // assertions fail on behaviour (not on compile).
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { router } from '../router/index'
+import { router, setCachedMode } from '../router/index'
 import AppShell from './AppShell.vue'
+
+// Builder-only routes that must be locked (unreachable) in App Mode, plus the
+// app-facing routes that must stay reachable.
+const BUILDER_ROUTES = ['schema', 'tables', 'relationships', 'queries', 'pages', 'import', 'settings']
+const APP_ROUTES = ['dashboard', 'forms', 'reports']
 
 const BUILDER_LINKS = ['Schema', 'Tables', 'Queries', 'Pages', 'Import', 'Settings']
 
@@ -71,8 +76,15 @@ function hasLink(wrapper: any, label: string) {
 }
 
 describe('AppShell mode-aware chrome (P4.6)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useRealTimers()
+    // Reset the module-level mode cache and router position between tests so
+    // each case starts from a known state.
+    setCachedMode('studio')
+    if (router.currentRoute.value.name !== 'dashboard') {
+      await router.push('/')
+      await router.isReady()
+    }
   })
 
   it('reads the live mode from GetAppConfig on mount', async () => {
@@ -150,5 +162,52 @@ describe('AppShell mode-aware chrome (P4.6)', () => {
     // immediately calling SetMode('studio'): an unlock entrypoint must be shown.
     const unlock = wrapper.find('.unlock-prompt, [data-testid="unlock-prompt"], input[type="password"]')
     expect(unlock.exists(), 'expected the unlock entrypoint when returning to Studio').toBe(true)
+  })
+
+  // Route-locking is the strongest acceptance criterion: hiding the nav link is
+  // not enough — direct hash navigation to a builder route must be blocked. The
+  // guard in router/index.ts redirects builderOnly routes to the switchboard
+  // (dashboard) when the live mode is App.
+  it('App Mode: builder routes are unreachable (redirected to switchboard)', async () => {
+    setCachedMode('app')
+    for (const name of BUILDER_ROUTES) {
+      await router.push({ name })
+      await router.isReady()
+      await flushPromises()
+      expect(
+        router.currentRoute.value.name,
+        `builder route "${name}" must be unreachable in App Mode`,
+      ).not.toBe(name)
+      expect(
+        router.currentRoute.value.name,
+        `blocked builder route "${name}" must land on the switchboard`,
+      ).toBe('dashboard')
+    }
+  })
+
+  it('App Mode: switchboard / forms / reports remain reachable', async () => {
+    setCachedMode('app')
+    for (const name of APP_ROUTES) {
+      await router.push({ name })
+      await router.isReady()
+      await flushPromises()
+      expect(
+        router.currentRoute.value.name,
+        `app route "${name}" must remain reachable in App Mode`,
+      ).toBe(name)
+    }
+  })
+
+  it('Studio Mode: all builder routes remain reachable', async () => {
+    setCachedMode('studio')
+    for (const name of BUILDER_ROUTES) {
+      await router.push({ name })
+      await router.isReady()
+      await flushPromises()
+      expect(
+        router.currentRoute.value.name,
+        `builder route "${name}" must be reachable in Studio Mode`,
+      ).toBe(name)
+    }
   })
 })
