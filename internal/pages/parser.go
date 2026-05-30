@@ -711,8 +711,17 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		remaining["type"] = chartType
 	}
 
-	// Build the config map with "source" as the primary value.
+	// Build the config map. The primary positional value normally becomes
+	// "source" (the named query a directive renders). Input-filter directives
+	// (dropdown, button_group, slider, text_input, toggle) instead use the
+	// primary value as the variable NAME they register, with the options query
+	// supplied via an explicit "source=" token — so it must not collide with the
+	// source key.
 	result := make(map[string]any)
+	primaryKey := "source"
+	if isInputDirective(dirType) {
+		primaryKey = "name"
+	}
 	if source != nil {
 		// Support both "{table: query_name}" and "{table: source=query_name}" formats.
 		// If the primary value is a string containing "=", parse it as key=value config.
@@ -720,10 +729,10 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 			if key, val, isKV := strings.Cut(s, "="); isKV {
 				result[key] = val
 			} else {
-				result["source"] = source
+				result[primaryKey] = source
 			}
 		} else {
-			result["source"] = source
+			result[primaryKey] = source
 		}
 	}
 	for k, v := range remaining {
@@ -744,6 +753,18 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		Config: result,
 		Line:   lineIdx + 1,
 	}, nil
+}
+
+// isInputDirective reports whether the directive type is an interactive input
+// filter (P3.6). For these, the primary positional value is the variable name
+// the control registers rather than a named-query source reference.
+func isInputDirective(dirType string) bool {
+	switch dirType {
+	case "dropdown", "button_group", "slider", "text_input", "toggle":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseDirectiveYAML parses the inner content of a directive as YAML.
@@ -767,7 +788,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "value", "form", "detail", "subform", "if", "row"}
+	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "value", "form", "detail", "subform", "if", "row", "dropdown", "button_group", "slider", "text_input", "toggle"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

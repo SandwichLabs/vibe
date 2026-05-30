@@ -395,13 +395,15 @@ func (a *App) RenderPageContent(id string, params map[string]string) (string, er
 	return a.renderExecutedNodes(executed, pageType)
 }
 
-// renderExecutedNodes renders executed page nodes to HTML fragments.
+// renderExecutedNodes renders executed page nodes to HTML fragments. The page's
+// resolved variable registry (frontmatter + params) is threaded down so input
+// filters (P3.6) can mark their current selection as selected/checked.
 func (a *App) renderExecutedNodes(executed *pages.ExecutedPage, pageType string) (string, error) {
-	return a.renderNodeList(executed.Nodes, pageType)
+	return a.renderNodeList(executed.Nodes, pageType, executed.Variables)
 }
 
 // renderNodeList renders a slice of executed nodes to HTML.
-func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (string, error) {
+func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
 	var b strings.Builder
 
 	for _, en := range nodes {
@@ -428,7 +430,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			// SQL blocks don't render directly (they produce result sets for directives).
 
 		case *pages.DirectiveNode:
-			html, err := a.renderDirective(n, en.Result, en.InlineValues)
+			html, err := a.renderDirective(n, en.Result, en.InlineValues, vars)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Type, err))
 				continue
@@ -437,7 +439,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			b.WriteString("\n")
 
 		case *pages.RowNode:
-			html, err := a.renderRow(n, en.Children, pageType)
+			html, err := a.renderRow(n, en.Children, pageType, vars)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering row: %s</div>\n", err))
 				continue
@@ -446,7 +448,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			b.WriteString("\n")
 
 		case *pages.BlockNode:
-			html, err := a.renderBlock(n, en.Children, pageType)
+			html, err := a.renderBlock(n, en.Children, pageType, vars)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Kind, err))
 				continue
@@ -460,7 +462,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			// reach here. If one does (e.g. a future code path that skips the
 			// executor), render its already-executed children rather than
 			// silently swallowing the node.
-			html, err := a.renderNodeList(en.Children, pageType)
+			html, err := a.renderNodeList(en.Children, pageType, vars)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering conditional: %s</div>\n", err))
 				continue
@@ -478,7 +480,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 
 // renderRow renders a RowNode as a CSS grid container. Each direct child
 // becomes a grid cell. The "cols" config sets the column count (default 2).
-func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, pageType string) (string, error) {
+func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
 	cols := "2"
 	if c, ok := node.Config["cols"]; ok {
 		if s, ok := c.(string); ok && s != "" {
@@ -497,7 +499,7 @@ func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, page
 	b.WriteString(fmt.Sprintf("<div class=\"vibe-row\" style=\"grid-template-columns: repeat(%s, 1fr); gap: %s;\">", cols, gap))
 
 	for _, en := range children {
-		cellHTML, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType)
+		cellHTML, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType, vars)
 		if err != nil {
 			return "", err
 		}
@@ -513,14 +515,14 @@ func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, page
 // renderBlock renders a generalized layout BlockNode (P3.5): {stack}, {tabs}
 // (with {tab:} sections), and {callout}. Each block wraps its already-executed
 // children, recursing through renderNodeList so nested directives/SQL resolve.
-func (a *App) renderBlock(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+func (a *App) renderBlock(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
 	switch node.Kind {
 	case "tabs":
-		return a.renderTabs(node, children, pageType)
+		return a.renderTabs(node, children, pageType, vars)
 	case "callout":
-		return a.renderCallout(node, children, pageType)
+		return a.renderCallout(node, children, pageType, vars)
 	default: // "stack" and any future vertical container.
-		inner, err := a.renderNodeList(children, pageType)
+		inner, err := a.renderNodeList(children, pageType, vars)
 		if err != nil {
 			return "", err
 		}
@@ -531,7 +533,7 @@ func (a *App) renderBlock(node *pages.BlockNode, children []pages.ExecutedNode, 
 // renderTabs renders a {tabs} block as a tab header bar plus one switchable
 // panel per {tab:} section. Each "tab" child BlockNode contributes a header
 // (its label) and a corresponding vibe-tab-panel wrapping its own children.
-func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
 	var headers strings.Builder
 	var panels strings.Builder
 
@@ -540,7 +542,7 @@ func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, p
 		tab, ok := en.Node.(*pages.BlockNode)
 		if !ok || tab.Kind != "tab" {
 			// Stray non-tab content inside {tabs} renders before the panels.
-			stray, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType)
+			stray, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType, vars)
 			if err != nil {
 				return "", err
 			}
@@ -557,7 +559,7 @@ func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, p
 			"<button type=\"button\" class=\"vibe-tab-header%s\" data-tab-index=\"%d\">%s</button>",
 			active, tabIdx, html.EscapeString(label)))
 
-		panelInner, err := a.renderNodeList(en.Children, pageType)
+		panelInner, err := a.renderNodeList(en.Children, pageType, vars)
 		if err != nil {
 			return "", err
 		}
@@ -579,12 +581,12 @@ func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, p
 
 // renderCallout renders a {callout: type: warning} block as a typed container
 // wrapping its prose/children. The type defaults to "info".
-func (a *App) renderCallout(node *pages.BlockNode, children []pages.ExecutedNode, pageType string) (string, error) {
+func (a *App) renderCallout(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
 	calloutType := "info"
 	if t, ok := node.Config["type"].(string); ok && t != "" {
 		calloutType = t
 	}
-	inner, err := a.renderNodeList(children, pageType)
+	inner, err := a.renderNodeList(children, pageType, vars)
 	if err != nil {
 		return "", err
 	}
@@ -595,7 +597,7 @@ func (a *App) renderCallout(node *pages.BlockNode, children []pages.ExecutedNode
 // renderDirective renders a single directive node to HTML. For a standalone
 // {value:} directive, the scalar is pre-resolved by the executor and arrives in
 // inlineValues; all other directive types ignore it.
-func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet, inlineValues []pages.InlineValue) (string, error) {
+func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet, inlineValues []pages.InlineValue, vars map[string]any) (string, error) {
 	// Convert pages.ResultSet to renderer.ResultSet.
 	var rrs *renderer.ResultSet
 	if result != nil {
@@ -732,9 +734,132 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		}
 		return "<span class=\"vibe-value\">" + html.EscapeString(text) + "</span>", nil
 
+	case "dropdown", "button_group", "slider", "text_input", "toggle":
+		// Interactive input filters (P3.6). Each registers a named variable; its
+		// current value (from the page params/frontmatter threaded down in vars)
+		// is rendered as the control's selection so it persists across the full
+		// re-render (Option A reactivity).
+		return a.renderInput(node, rrs, vars), nil
+
 	default:
 		return fmt.Sprintf("<div>Unknown directive: %s</div>", node.Type), nil
 	}
+}
+
+// renderInput renders an interactive input-filter directive (P3.6) to an HTML
+// control wired for full-page-re-render reactivity (Option A). Each control
+// registers the variable named by the directive's primary value (`name`) and
+// emits a `data-vibe-input` attribute carrying that name so the frontend can
+// collect the new value and re-invoke RenderPageContent with it. The control's
+// current value comes from the threaded variable registry so the selection
+// persists after re-render.
+func (a *App) renderInput(node *pages.DirectiveNode, rrs *renderer.ResultSet, vars map[string]any) string {
+	name := getStringConfig(node.Config, "name")
+	title := getStringConfig(node.Config, "title")
+	current := ""
+	if vars != nil {
+		if v, ok := vars[name]; ok && v != nil {
+			current = fmt.Sprintf("%v", v)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("<div class=\"vibe-input\" data-vibe-input=\"" + html.EscapeString(name) + "\">")
+	if title != "" {
+		b.WriteString("<label class=\"vibe-input-label\">" + html.EscapeString(title) + "</label>")
+	}
+
+	switch node.Type {
+	case "button_group":
+		b.WriteString("<div class=\"vibe-button-group\" role=\"group\">")
+		for _, opt := range inputOptions(node, rrs) {
+			active := ""
+			if opt == current {
+				active = " active"
+			}
+			b.WriteString(fmt.Sprintf(
+				"<button type=\"button\" class=\"vibe-button-group-item%s\" data-vibe-value=\"%s\">%s</button>",
+				active, html.EscapeString(opt), html.EscapeString(opt)))
+		}
+		b.WriteString("</div>")
+
+	case "slider":
+		min := getStringConfig(node.Config, "min")
+		max := getStringConfig(node.Config, "max")
+		step := getStringConfig(node.Config, "step")
+		val := current
+		if val == "" {
+			val = getStringConfig(node.Config, "default")
+		}
+		b.WriteString(fmt.Sprintf(
+			"<input type=\"range\" class=\"vibe-slider\"%s%s%s%s />",
+			attr("min", min), attr("max", max), attr("step", step), attr("value", val)))
+
+	case "text_input":
+		placeholder := getStringConfig(node.Config, "placeholder")
+		b.WriteString(fmt.Sprintf(
+			"<input type=\"text\" class=\"vibe-text-input\"%s%s />",
+			attr("placeholder", placeholder), attr("value", current)))
+
+	case "toggle":
+		checked := ""
+		if current == "true" || current == "1" {
+			checked = " checked"
+		}
+		b.WriteString("<input type=\"checkbox\" class=\"vibe-toggle\"" + checked + " />")
+
+	default: // "dropdown"
+		b.WriteString("<select class=\"vibe-dropdown\">")
+		for _, opt := range inputOptions(node, rrs) {
+			selected := ""
+			if opt == current {
+				selected = " selected"
+			}
+			b.WriteString(fmt.Sprintf(
+				"<option value=\"%s\"%s>%s</option>",
+				html.EscapeString(opt), selected, html.EscapeString(opt)))
+		}
+		b.WriteString("</select>")
+	}
+
+	b.WriteString("</div>")
+	return b.String()
+}
+
+// inputOptions extracts the distinct option values for an input control from its
+// bound source result set, reading the column named by the directive's `column`
+// config (defaulting to the first column).
+func inputOptions(node *pages.DirectiveNode, rrs *renderer.ResultSet) []string {
+	if rrs == nil || len(rrs.Rows) == 0 {
+		return nil
+	}
+	col := getStringConfig(node.Config, "column")
+	idx := 0
+	if col != "" {
+		for i, c := range rrs.Columns {
+			if c.Name == col {
+				idx = i
+				break
+			}
+		}
+	}
+	opts := make([]string, 0, len(rrs.Rows))
+	for _, row := range rrs.Rows {
+		if idx >= len(row) || row[idx] == nil {
+			continue
+		}
+		opts = append(opts, fmt.Sprintf("%v", row[idx]))
+	}
+	return opts
+}
+
+// attr renders an optional HTML attribute, emitting nothing when the value is
+// empty so controls degrade cleanly when config is omitted.
+func attr(name, value string) string {
+	if value == "" {
+		return ""
+	}
+	return fmt.Sprintf(" %s=\"%s\"", name, html.EscapeString(value))
 }
 
 // substituteInlineValues replaces resolved inline {value:} placeholders in
