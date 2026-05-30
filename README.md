@@ -102,6 +102,7 @@ go test -v ./internal/container/
 | [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md) | **Current** phased roadmap to Access parity |
 | [`docs/ms-access-ux-research.txt`](docs/ms-access-ux-research.txt) | UX research grounding the parity target |
 | [`docs/EVIDENCE_PARITY_PLAN.md`](docs/EVIDENCE_PARITY_PLAN.md) | Dashboard/reporting component plan (folded into roadmap Phase 3) |
+| [`docs/reference/`](docs/reference/) | **v1.0 reference**: page directives, forms, reports, macros, import/Office Links, starter templates |
 
 ## Design principles
 

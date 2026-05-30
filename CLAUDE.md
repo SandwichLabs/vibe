@@ -14,6 +14,8 @@ Vibe is a portable, encrypted application container (`.vibe` files) that bundles
 
 A **BubbleTea TUI** (`internal/tui`) provides terminal-native page/table/query workflows for technical users.
 
+**Reference docs:** the shipped v1.0 surface reference lives in `docs/reference/` (page directives, forms, reports, macros, import/Office Links, and starter templates). A docs-consistency test in `internal/docsref/` keeps it in sync with the code.
+
 **Status:** Substantially implemented (container, encryption, pages/directives, DuckDB engine, CRUD methods, Wails+Vue Studio, agent + MCP all working). The next arc is MS Access *application* parity — forms with write-back, relational schema, reports, and the app shell. Multi-user / Tailscale mesh is deferred to **v1.1**. See `PROJECT.md` for the original MVP spec, `PLAN.md` for the build phases, and `docs/ms-access-parity-plan.md` for the current roadmap.
 
 ## Tech Stack
