@@ -122,15 +122,9 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 			executed = append(executed, en)
 
 		case *ConditionalNode:
-			// Evaluate the condition against an already-executed SQL result set.
-			rs, exists := results[n.Condition]
-			if !exists {
-				return nil, fmt.Errorf("line %d: conditional references undefined result %q", n.Line, n.Condition)
-			}
-			hasRows := len(rs.Rows) > 0
-			survives := hasRows
-			if n.Mode == "no_rows" {
-				survives = !hasRows
+			survives, err := evalCondition(n, results, variables)
+			if err != nil {
+				return nil, err
 			}
 			if !survives {
 				// Dropped branch contributes nothing.
@@ -160,6 +154,60 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 	}
 
 	return executed, nil
+}
+
+// equalityPattern matches variable-equality conditions of the form
+// `{{var}} == 'literal'` or `{{var}} != "literal"`. Whitespace is flexible and
+// either single or double quotes may delimit the RHS string literal.
+var equalityPattern = regexp.MustCompile(`^\{\{\s*(\w+)\s*\}\}\s*(==|!=)\s*(['"])(.*)(['"])$`)
+
+// evalCondition decides whether a ConditionalNode's branch survives.
+//
+// Two condition forms are supported:
+//
+//  1. Variable-equality expression — `{{var}} == 'x'` or `{{var}} != "x"`.
+//     The {{var}} placeholder is resolved from the variables map (stringified),
+//     compared against the RHS string literal, and the result drives survival.
+//     The Mode/no_rows inversion does NOT apply to this form (it only makes
+//     sense for the row-count form); use `!=` to express the inverse instead.
+//
+//  2. Bare identifier — the name of an already-executed SQL result set. The
+//     branch survives when that result set has rows (or has zero rows when
+//     Mode == "no_rows").
+func evalCondition(n *ConditionalNode, results map[string]*ResultSet, variables map[string]any) (bool, error) {
+	cond := strings.TrimSpace(n.Condition)
+
+	// Form 1: variable-equality expression.
+	if m := equalityPattern.FindStringSubmatch(cond); m != nil {
+		if m[3] != m[5] {
+			return false, fmt.Errorf("line %d: mismatched quotes in conditional expression %q", n.Line, cond)
+		}
+		varName := m[1]
+		op := m[2]
+		literal := m[4]
+
+		var actual string
+		if v, ok := variables[varName]; ok && v != nil {
+			actual = fmt.Sprintf("%v", v)
+		}
+		equal := actual == literal
+		if op == "!=" {
+			return !equal, nil
+		}
+		return equal, nil
+	}
+
+	// Form 2: bare identifier referencing a named result set (row-count form).
+	rs, exists := results[cond]
+	if !exists {
+		return false, fmt.Errorf("line %d: conditional references undefined result %q", n.Line, cond)
+	}
+	hasRows := len(rs.Rows) > 0
+	survives := hasRows
+	if n.Mode == "no_rows" {
+		survives = !hasRows
+	}
+	return survives, nil
 }
 
 // varPattern matches ${varname} placeholders in SQL.

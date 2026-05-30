@@ -53,3 +53,40 @@ func TestRenderPageContentEvaluatesConditional(t *testing.T) {
 	assert.False(t, strings.Contains(html, "NO_ORDERS_BRANCH"),
 		"rendered HTML must omit the dropped no_rows branch text")
 }
+
+// TestRenderPageContentEvaluatesVariableEquality drives the variable-equality
+// condition form through the production Wails-bound RenderPageContent path,
+// asserting the matched branch renders and the unmatched branch is dropped.
+func TestRenderPageContentEvaluatesVariableEquality(t *testing.T) {
+	app := newOpenApp(t)
+
+	content := "" +
+		"{if: \"{{status}} == 'active'\"}\n\n" +
+		"ACTIVE_EQ_BRANCH\n\n" +
+		"{/if}\n\n" +
+		"{if: \"{{status}} != 'active'\"}\n\n" +
+		"NOT_ACTIVE_BRANCH\n\n" +
+		"{/if}\n"
+
+	_, err := app.container.SQLiteDB().Exec(
+		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'notebook', 0, datetime('now'), datetime('now'))",
+		"vareq", "VarEq", content,
+	)
+	require.NoError(t, err)
+
+	// status == "active": the == branch renders, the != branch is dropped.
+	html, err := app.RenderPageContent("vareq", map[string]string{"status": "active"})
+	require.NoError(t, err)
+	assert.True(t, strings.Contains(html, "ACTIVE_EQ_BRANCH"),
+		"== branch must render when the variable equals the literal")
+	assert.False(t, strings.Contains(html, "NOT_ACTIVE_BRANCH"),
+		"!= branch must be dropped when the variable equals the literal")
+
+	// status != "active": the != branch renders, the == branch is dropped.
+	html2, err := app.RenderPageContent("vareq", map[string]string{"status": "archived"})
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(html2, "ACTIVE_EQ_BRANCH"),
+		"== branch must be dropped when the variable differs from the literal")
+	assert.True(t, strings.Contains(html2, "NOT_ACTIVE_BRANCH"),
+		"!= branch must render when the variable differs from the literal")
+}

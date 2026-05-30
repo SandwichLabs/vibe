@@ -135,3 +135,61 @@ func TestConditionalEvaluatesRowsPresentBranch(t *testing.T) {
 	assert.False(t, containsTextNode(executed2.Nodes, "ORDERS_PRESENT_BRANCH"),
 		"the rows-present branch must NOT survive when the query returns zero rows")
 }
+
+// varEqPageSrc exercises the variable-equality condition form using both `==`
+// and `!=` against a {{status}} variable.
+const varEqPageSrc = "" +
+	"{if: \"{{status}} == 'active'\"}\n\n" +
+	"ACTIVE_EQ_BRANCH\n\n" +
+	"{/if}\n\n" +
+	"{if: \"{{status}} != 'active'\"}\n\n" +
+	"NOT_ACTIVE_BRANCH\n\n" +
+	"{/if}\n"
+
+func TestConditionalEvaluatesVariableEquality(t *testing.T) {
+	eng, _ := newRealEngine(t)
+
+	page, err := pages.Parse(varEqPageSrc)
+	require.NoError(t, err)
+
+	// When status == "active": the == branch survives, the != branch is dropped.
+	executed, err := pages.Execute(context.Background(), page, eng, map[string]any{"status": "active"})
+	require.NoError(t, err)
+	assert.True(t, containsTextNode(executed.Nodes, "ACTIVE_EQ_BRANCH"),
+		"== branch must survive when the variable equals the literal")
+	assert.False(t, containsTextNode(executed.Nodes, "NOT_ACTIVE_BRANCH"),
+		"!= branch must be dropped when the variable equals the literal")
+	for _, en := range executed.Nodes {
+		_, isCond := en.Node.(*pages.ConditionalNode)
+		assert.False(t, isCond, "conditional nodes must be evaluated away")
+	}
+
+	// When status != "active": the == branch is dropped, the != branch survives.
+	executed2, err := pages.Execute(context.Background(), page, eng, map[string]any{"status": "archived"})
+	require.NoError(t, err)
+	assert.False(t, containsTextNode(executed2.Nodes, "ACTIVE_EQ_BRANCH"),
+		"== branch must be dropped when the variable differs from the literal")
+	assert.True(t, containsTextNode(executed2.Nodes, "NOT_ACTIVE_BRANCH"),
+		"!= branch must survive when the variable differs from the literal")
+
+	// When status is unset, it resolves to empty string: both differ from
+	// "active", so only the != branch survives.
+	executed3, err := pages.Execute(context.Background(), page, eng, nil)
+	require.NoError(t, err)
+	assert.False(t, containsTextNode(executed3.Nodes, "ACTIVE_EQ_BRANCH"),
+		"== branch must be dropped when the variable is unset")
+	assert.True(t, containsTextNode(executed3.Nodes, "NOT_ACTIVE_BRANCH"),
+		"!= branch must survive when the variable is unset (empty != 'active')")
+}
+
+// TestConditionalRejectsUnknownMode verifies the parser rejects an unknown
+// condition mode rather than silently accepting it.
+func TestConditionalRejectsUnknownMode(t *testing.T) {
+	src := "" +
+		"{if: \"orders\", condition: \"sometimes\"}\n\n" +
+		"BRANCH\n\n" +
+		"{/if}\n"
+	_, err := pages.Parse(src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown conditional mode")
+}

@@ -255,6 +255,10 @@ func parseConditionalFromAST(startPara *ast.Paragraph, startChild ast.Node, sour
 			mode = modeStr
 		}
 	}
+	if mode != "rows_present" && mode != "no_rows" {
+		line := lineOffset + getNodeLine(startPara, source) + 1
+		return nil, nil, fmt.Errorf("line %d: unknown conditional mode %q (expected \"rows_present\" or \"no_rows\")", line, mode)
+	}
 
 	var children []Node
 	var lastSibling ast.Node

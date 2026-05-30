@@ -437,6 +437,23 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			}
 			b.WriteString(html)
 			b.WriteString("\n")
+
+		case *pages.ConditionalNode:
+			// Defensive: pages.Execute resolves conditionals by inlining the
+			// surviving branch's children, so a ConditionalNode should never
+			// reach here. If one does (e.g. a future code path that skips the
+			// executor), render its already-executed children rather than
+			// silently swallowing the node.
+			html, err := a.renderNodeList(en.Children, pageType)
+			if err != nil {
+				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering conditional: %s</div>\n", err))
+				continue
+			}
+			b.WriteString(html)
+
+		default:
+			// Unknown node types are dropped intentionally; SQLBlockNode is the
+			// only other expected case and renders nothing on its own.
 		}
 	}
 
