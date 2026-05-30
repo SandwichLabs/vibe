@@ -70,8 +70,16 @@ export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
 }
 
+export function GetFieldMeta(arg1) {
+  return window['go']['main']['App']['GetFieldMeta'](arg1);
+}
+
 export function GetFileInfo() {
   return window['go']['main']['App']['GetFileInfo']();
+}
+
+export function GetForm(arg1) {
+  return window['go']['main']['App']['GetForm'](arg1);
 }
 
 export function GetInitialFile() {
@@ -106,6 +114,10 @@ export function IsFileOpen() {
   return window['go']['main']['App']['IsFileOpen']();
 }
 
+export function ListForms() {
+  return window['go']['main']['App']['ListForms']();
+}
+
 export function ListPages() {
   return window['go']['main']['App']['ListPages']();
 }
@@ -130,6 +142,10 @@ export function SaveFile() {
   return window['go']['main']['App']['SaveFile']();
 }
 
+export function SaveForm(arg1) {
+  return window['go']['main']['App']['SaveForm'](arg1);
+}
+
 export function SaveQuery(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4);
 }
@@ -150,6 +166,10 @@ export function SendAgentQuery(arg1) {
   return window['go']['main']['App']['SendAgentQuery'](arg1);
 }
 
+export function SetFieldMeta(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetFieldMeta'](arg1, arg2, arg3);
+}
+
 export function SetMeta(arg1, arg2) {
   return window['go']['main']['App']['SetMeta'](arg1, arg2);
 }
@@ -160,6 +180,10 @@ export function StartMCPServer() {
 
 export function StopMCPServer() {
   return window['go']['main']['App']['StopMCPServer']();
+}
+
+export function SubmitForm(arg1, arg2) {
+  return window['go']['main']['App']['SubmitForm'](arg1, arg2);
 }
 
 export function UpdatePage(arg1, arg2, arg3) {

@@ -78,14 +78,62 @@ func (r *Renderer) RenderForm(cfg *renderer.FormConfig) (string, error) {
 		b.WriteString("  </div>\n")
 	}
 
+	writeFormActions(&b, cfg.Archetype)
+	b.WriteString("</form>")
+
+	return b.String(), nil
+}
+
+// writeFormActions emits the form's action footer. For the columnar archetype
+// (Access single-record form) it emits a full record-navigation bar with
+// first/prev/next/last/new/save/delete controls plus Find Record (plan §1.5).
+// Other archetypes get a plain submit button.
+func writeFormActions(b *strings.Builder, archetype string) {
+	if archetype == "columnar" {
+		writeRecordNavBar(b)
+		return
+	}
 	b.WriteString(`  <div class="vibe-form-actions">`)
 	b.WriteString("\n")
 	b.WriteString(`    <button type="submit" class="vibe-btn vibe-btn-primary">Submit</button>`)
 	b.WriteString("\n")
 	b.WriteString("  </div>\n")
-	b.WriteString("</form>")
+}
 
-	return b.String(), nil
+// writeRecordNavBar emits the Access-style columnar record-navigation bar:
+// |< first  < prev   next >   last >|   New  Save  Delete   Find Record.
+// The buttons carry stable data-nav action names so the App-Mode FormView can
+// wire them to record navigation / CRUD without re-parsing labels.
+func writeRecordNavBar(b *strings.Builder) {
+	b.WriteString(`  <div class="vibe-record-nav" role="toolbar" aria-label="Record navigation">` + "\n")
+
+	// Record-positioning controls.
+	navButtons := []struct {
+		action, label, title string
+	}{
+		{"first", "|&lt;", "First record"},
+		{"prev", "&lt;", "Previous record"},
+		{"next", "&gt;", "Next record"},
+		{"last", "&gt;|", "Last record"},
+	}
+	for _, n := range navButtons {
+		b.WriteString(fmt.Sprintf(
+			`    <button type="button" class="vibe-btn vibe-nav-btn" data-nav="%s" title="%s" aria-label="%s">%s</button>`+"\n",
+			n.action, n.title, n.title, n.label))
+	}
+
+	// CRUD controls.
+	b.WriteString(`    <span class="vibe-record-nav-sep"></span>` + "\n")
+	b.WriteString(`    <button type="button" class="vibe-btn vibe-nav-btn" data-nav="new" title="New record">New</button>` + "\n")
+	b.WriteString(`    <button type="submit" class="vibe-btn vibe-btn-primary vibe-nav-btn" data-nav="save" title="Save record">Save</button>` + "\n")
+	b.WriteString(`    <button type="button" class="vibe-btn vibe-nav-btn" data-nav="delete" title="Delete record">Delete</button>` + "\n")
+
+	// Find Record.
+	b.WriteString(`    <span class="vibe-record-nav-sep"></span>` + "\n")
+	b.WriteString(`    <input type="search" class="vibe-find-record" data-nav="find" placeholder="Find Record" aria-label="Find Record">` + "\n")
+	b.WriteString(`    <button type="button" class="vibe-btn vibe-nav-btn" data-nav="find-go" title="Find Record">Find</button>` + "\n")
+
+	b.WriteString("  </div>\n")
 }
 
 // renderSelectField writes a <select> element with options.

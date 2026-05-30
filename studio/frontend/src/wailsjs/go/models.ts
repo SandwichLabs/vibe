@@ -1,3 +1,20 @@
+export namespace crud {
+	
+	export class WriteResult {
+	    affected: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WriteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.affected = source["affected"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class AgentResult {
@@ -86,6 +103,36 @@ export namespace main {
 	        this.table_count = source["table_count"];
 	        this.query_count = source["query_count"];
 	        this.file_size = source["file_size"];
+	    }
+	}
+	export class FormSubmitRow {
+	    table: string;
+	    values: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormSubmitRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = source["table"];
+	        this.values = source["values"];
+	    }
+	}
+	export class FormSummary {
+	    id: string;
+	    title: string;
+	    archetype: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.archetype = source["archetype"];
 	    }
 	}
 	export class ImportResult {
@@ -291,6 +338,145 @@ export namespace queries {
 	        this.parameters = this.convertValues(source["parameters"], Param);
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace schema {
+	
+	export class FieldMeta {
+	    table_name: string;
+	    column_name: string;
+	    caption: string;
+	    control_type: string;
+	    default_value: string;
+	    required: boolean;
+	    format_code: string;
+	    validation_rule: string;
+	    validation_message: string;
+	    input_mask: string;
+	    lookup_sql: string;
+	    display_col: string;
+	    value_col: string;
+	    control_tip: string;
+	    sort_order: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new FieldMeta(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table_name = source["table_name"];
+	        this.column_name = source["column_name"];
+	        this.caption = source["caption"];
+	        this.control_type = source["control_type"];
+	        this.default_value = source["default_value"];
+	        this.required = source["required"];
+	        this.format_code = source["format_code"];
+	        this.validation_rule = source["validation_rule"];
+	        this.validation_message = source["validation_message"];
+	        this.input_mask = source["input_mask"];
+	        this.lookup_sql = source["lookup_sql"];
+	        this.display_col = source["display_col"];
+	        this.value_col = source["value_col"];
+	        this.control_tip = source["control_tip"];
+	        this.sort_order = source["sort_order"];
+	    }
+	}
+	export class FormFieldSpec {
+	    name: string;
+	    caption: string;
+	    control_type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormFieldSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.caption = source["caption"];
+	        this.control_type = source["control_type"];
+	    }
+	}
+	export class SubformSpec {
+	    child_table: string;
+	    child_key: string;
+	    parent_key: string;
+	    fields: FormFieldSpec[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SubformSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.child_table = source["child_table"];
+	        this.child_key = source["child_key"];
+	        this.parent_key = source["parent_key"];
+	        this.fields = this.convertValues(source["fields"], FormFieldSpec);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class FormSpec {
+	    id: string;
+	    title: string;
+	    table: string;
+	    archetype: string;
+	    on_submit: string;
+	    fields: FormFieldSpec[];
+	    subform?: SubformSpec;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.table = source["table"];
+	        this.archetype = source["archetype"];
+	        this.on_submit = source["on_submit"];
+	        this.fields = this.convertValues(source["fields"], FormFieldSpec);
+	        this.subform = this.convertValues(source["subform"], SubformSpec);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

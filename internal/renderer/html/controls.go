@@ -78,11 +78,11 @@ func (r *engineOptionResolver) ResolveOptions(ctx context.Context, lookupSQL, va
 
 // runQuery executes an arbitrary read query on the engine, used by the
 // master-detail subform renderer to auto-filter the child datasheet.
-func (r *engineOptionResolver) runQuery(ctx context.Context, sql string) (*engine.ResultSet, error) {
+func (r *engineOptionResolver) runQuery(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error) {
 	if r.eng == nil {
 		return nil, fmt.Errorf("subform query: engine is not available")
 	}
-	rs, err := r.eng.Execute(ctx, sql, nil)
+	rs, err := r.eng.Execute(ctx, sql, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute subform query: %w", err)
 	}
@@ -148,11 +148,7 @@ func (r *Renderer) RenderFormWithOptions(ctx context.Context, cfg *renderer.Form
 		b.WriteString("  </div>\n")
 	}
 
-	b.WriteString(`  <div class="vibe-form-actions">`)
-	b.WriteString("\n")
-	b.WriteString(`    <button type="submit" class="vibe-btn vibe-btn-primary">Submit</button>`)
-	b.WriteString("\n")
-	b.WriteString("  </div>\n")
+	writeFormActions(&b, cfg.Archetype)
 	b.WriteString("</form>")
 
 	return b.String(), nil

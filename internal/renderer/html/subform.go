@@ -15,7 +15,7 @@ import (
 // engineOptionResolver satisfies this so RenderSubform can reuse the same
 // engine-backed resolver the {form} controls already use.
 type subformQueryRunner interface {
-	runQuery(ctx context.Context, sql string) (*engine.ResultSet, error)
+	runQuery(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
 // RenderSubform renders an Access-style master-detail subform: an FK-linked
@@ -40,10 +40,13 @@ func (r *Renderer) RenderSubform(ctx context.Context, cfg *renderer.SubformConfi
 		return "", fmt.Errorf("subform requires an engine-backed option resolver")
 	}
 
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = %s",
-		cfg.ChildTable, cfg.ChildKey, sqlLiteral(cfg.MasterKey))
+	// The child table/key are validated bare identifiers (isSubformIdentifier);
+	// the master key value is passed as a bound parameter ($master_key) so it is
+	// never string-concatenated into the SQL — the idiomatic DuckDB-engine path.
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = $master_key",
+		cfg.ChildTable, cfg.ChildKey)
 
-	rs, err := runner.runQuery(ctx, sql)
+	rs, err := runner.runQuery(ctx, sql, map[string]any{"master_key": cfg.MasterKey})
 	if err != nil {
 		return "", fmt.Errorf("failed to load subform child rows: %w", err)
 	}
@@ -70,29 +73,6 @@ func (r *Renderer) RenderSubform(ctx context.Context, cfg *renderer.SubformConfi
 	b.WriteString(table)
 	b.WriteString(`</div>`)
 	return b.String(), nil
-}
-
-// sqlLiteral renders a master-key value as a SQL literal for the auto-filter
-// WHERE clause. Numeric keys are emitted bare; everything else is single-quoted
-// with quotes doubled.
-func sqlLiteral(v any) string {
-	switch n := v.(type) {
-	case nil:
-		return "NULL"
-	case int:
-		return fmt.Sprintf("%d", n)
-	case int32:
-		return fmt.Sprintf("%d", n)
-	case int64:
-		return fmt.Sprintf("%d", n)
-	case float32:
-		return fmt.Sprintf("%v", n)
-	case float64:
-		return fmt.Sprintf("%v", n)
-	default:
-		s := fmt.Sprintf("%v", v)
-		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-	}
 }
 
 // isSubformIdentifier reports whether s is a safe bare SQL identifier

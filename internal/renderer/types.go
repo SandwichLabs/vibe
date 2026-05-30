@@ -69,11 +69,12 @@ type SelectOption struct {
 
 // FormConfig holds form directive configuration.
 type FormConfig struct {
-	Table    string
-	Fields   []FormField
-	OnSubmit string // refresh | redirect:<page_id> | noop
-	PageID   string
-	FormID   string
+	Table     string
+	Fields    []FormField
+	OnSubmit  string // refresh | redirect:<page_id> | noop
+	PageID    string
+	FormID    string
+	Archetype string // columnar | continuous | datasheet | master_detail (plan §1.5)
 }
 
 // DetailConfig holds detail directive configuration.

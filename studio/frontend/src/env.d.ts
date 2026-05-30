@@ -37,6 +37,10 @@ declare global {
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string): Promise<QueryResult>
           GetFieldMeta(table: string): Promise<FieldMeta[]>
+          SaveForm(spec: FormSpec): Promise<void>
+          GetForm(id: string): Promise<FormSpec>
+          ListForms(): Promise<FormSummary[]>
+          SubmitForm(parent: FormSubmitRow, children: FormSubmitRow[]): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
           SaveQuery(id: string, title: string, sql: string, engine: string, description: string): Promise<void>
@@ -90,6 +94,42 @@ interface FieldMeta {
   value_col: string
   control_tip: string
   sort_order: number
+}
+
+// FormSpec mirrors internal/schema.FormSpec (Access-parity form definition).
+interface FormFieldSpec {
+  name: string
+  caption: string
+  control_type: string
+}
+
+interface SubformSpec {
+  child_table: string
+  child_key: string
+  parent_key: string
+  fields: FormFieldSpec[]
+}
+
+interface FormSpec {
+  id: string
+  title: string
+  table: string
+  archetype: string // columnar | continuous | datasheet | master_detail
+  on_submit: string
+  fields: FormFieldSpec[]
+  subform?: SubformSpec | null
+}
+
+interface FormSummary {
+  id: string
+  title: string
+  archetype: string
+}
+
+// FormSubmitRow mirrors studio.FormSubmitRow — one row in an atomic submit.
+interface FormSubmitRow {
+  table: string
+  values: Record<string, any>
 }
 
 interface FileInfo {

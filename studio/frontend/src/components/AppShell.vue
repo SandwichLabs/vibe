@@ -14,6 +14,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: 'home' },
   { path: '/pages', label: 'Pages', icon: 'fileText' },
   { path: '/tables', label: 'Tables', icon: 'database' },
+  { path: '/forms', label: 'Forms', icon: 'form' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
   { path: '/import', label: 'Import', icon: 'download' },
   { path: '/settings', label: 'Settings', icon: 'settings' },
