@@ -29,6 +29,7 @@ import (
 
 	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver registers "sqlite3"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/automation"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/reports"
 	"github.com/sandwich-labs/vibe-app/internal/schema"
@@ -233,6 +234,85 @@ func TestCreateSwitchboardTool_EnforcesMaxItems(t *testing.T) {
 	require.NotNil(t, resp)
 	require.NotNil(t, resp.Error,
 		"create_switchboard must reject more than 8 items per switchboard page")
+}
+
+// seedSwitchboardMacro saves a macro into the container's _vibe_macros store so a
+// run_macro switchboard item has a valid macro target to bind to (P5.4).
+func seedSwitchboardMacro(t *testing.T, c *container.Container, id string) {
+	t.Helper()
+	require.NoError(t, automation.NewMacroStore(c.SQLiteDB()).Save(automation.MacroSpec{
+		ID:    id,
+		Title: "Backup",
+		Actions: []automation.MacroAction{
+			{Kind: automation.ActionMsgBox, Args: map[string]string{"message": "done"}},
+		},
+	}))
+}
+
+// TestCreateSwitchboardTool_AcceptsRunMacroTarget (P5.4 RED) asserts that
+// create_switchboard accepts a run_macro item whose target is a macro saved via
+// the MacroStore — i.e. validateNavTarget covers schema.NavRunMacro and no
+// longer rejects it as an "unsupported switchboard action". The persisted nav
+// item must carry action_kind=run_macro and the macro id as its target.
+func TestCreateSwitchboardTool_AcceptsRunMacroTarget(t *testing.T) {
+	handler, c := newWizardFixture(t, agents.ModeFull)
+	seedSwitchboardTargets(t, c)
+	seedSwitchboardMacro(t, c, "backup_macro")
+	ctx := context.Background()
+
+	const pageID = "macro_menu"
+	resp := handler.Handle(ctx, &agents.Request{
+		JSONRPC: "2.0",
+		ID:      6,
+		Method:  "create_switchboard",
+		Params: map[string]any{
+			"id":    pageID,
+			"title": "Macro Menu",
+			"items": []any{
+				map[string]any{"label": "Run Backup", "action": schema.NavRunMacro, "target": "backup_macro"},
+			},
+		},
+	})
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error,
+		"create_switchboard must accept a run_macro item bound to an existing macro: %+v", resp.Error)
+
+	store := schema.NewNavStore(c.SQLiteDB())
+	items, err := store.GetNav(pageID)
+	require.NoError(t, err)
+	require.Len(t, items, 1, "the run_macro switchboard item must be persisted")
+	assert.Equal(t, schema.NavRunMacro, items[0].ActionKind)
+	assert.Equal(t, "backup_macro", items[0].TargetID)
+}
+
+// TestCreateSwitchboardTool_RejectsMissingRunMacroTarget (P5.4 RED) asserts that
+// a run_macro item targeting a macro absent from the MacroStore is rejected, and
+// that nothing is persisted for the rejected switchboard page.
+func TestCreateSwitchboardTool_RejectsMissingRunMacroTarget(t *testing.T) {
+	handler, c := newWizardFixture(t, agents.ModeFull)
+	seedSwitchboardTargets(t, c)
+	ctx := context.Background()
+
+	resp := handler.Handle(ctx, &agents.Request{
+		JSONRPC: "2.0",
+		ID:      7,
+		Method:  "create_switchboard",
+		Params: map[string]any{
+			"id":    "ghost_macro_menu",
+			"title": "Ghost Macro Menu",
+			"items": []any{
+				map[string]any{"label": "Run Ghost", "action": schema.NavRunMacro, "target": "no_such_macro"},
+			},
+		},
+	})
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Error,
+		"create_switchboard must reject a run_macro item bound to a nonexistent macro")
+
+	store := schema.NewNavStore(c.SQLiteDB())
+	items, err := store.GetNav("ghost_macro_menu")
+	require.NoError(t, err)
+	assert.Empty(t, items, "no nav items should be persisted when the macro target is invalid")
 }
 
 // TestCreateSwitchboardTool_DeniedReadWrite asserts create_switchboard is

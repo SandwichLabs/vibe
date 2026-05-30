@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/sandwich-labs/vibe-app/internal/automation"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/reports"
 	"github.com/sandwich-labs/vibe-app/internal/schema"
@@ -219,6 +220,7 @@ func (h *Handler) handleCreateSwitchboard(_ context.Context, req *Request) *Resp
 	formStore := schema.NewFormStore(db)
 	reportStore := reports.NewReportStore(db)
 	navStore := schema.NewNavStore(db)
+	macroStore := automation.NewMacroStore(db)
 
 	// Validate every item target against the nav-target catalog before
 	// persisting anything, so a rejected switchboard leaves no partial nav rows.
@@ -227,7 +229,7 @@ func (h *Handler) handleCreateSwitchboard(_ context.Context, req *Request) *Resp
 			return NewErrorResponse(req.ID, ErrInvalidParams,
 				fmt.Sprintf("switchboard item %d is missing a label", i))
 		}
-		if err := validateNavTarget(formStore, reportStore, navStore, it.Action, it.Target); err != nil {
+		if err := validateNavTarget(formStore, reportStore, navStore, macroStore, it.Action, it.Target); err != nil {
 			return NewErrorResponse(req.ID, ErrInvalidParams,
 				fmt.Sprintf("switchboard item %q: %v", it.Label, err))
 		}
@@ -264,6 +266,7 @@ func validateNavTarget(
 	formStore *schema.FormStore,
 	reportStore *reports.ReportStore,
 	navStore *schema.NavStore,
+	macroStore *automation.MacroStore,
 	action, target string,
 ) error {
 	switch action {
@@ -274,6 +277,10 @@ func validateNavTarget(
 	case schema.NavOpenReport:
 		if _, err := reportStore.Get(target); err != nil {
 			return fmt.Errorf("report target %q not found", target)
+		}
+	case schema.NavRunMacro:
+		if _, err := macroStore.Get(target); err != nil {
+			return fmt.Errorf("macro target %q not found", target)
 		}
 	case schema.NavOpenSwitchboard:
 		// A switchboard page exists if it already has at least one nav item.

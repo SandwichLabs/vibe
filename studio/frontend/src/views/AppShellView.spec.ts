@@ -41,6 +41,7 @@ interface AppMocks {
   GetAppConfig: ReturnType<typeof vi.fn>
   OpenForm?: ReturnType<typeof vi.fn>
   OpenReport?: ReturnType<typeof vi.fn>
+  RunMacro?: ReturnType<typeof vi.fn>
 }
 
 function seedNav(): NavItem[] {
@@ -381,5 +382,91 @@ describe('AppShellView Switchboard runtime (P4.7 — App Mode)', () => {
 
     const landed = pushed.find((p) => JSON.stringify(p).includes('rpt_sales'))
     expect(landed, 'expected startup_object to drive the initial landing screen').toBeTruthy()
+  })
+})
+
+describe('AppShellView Switchboard run_macro dispatch (P5.4 — App Mode)', () => {
+  beforeEach(() => {
+    pushed.length = 0
+    routerMock.push.mockClear()
+    useAppMode().setMode('app')
+  })
+
+  // A run_macro nav item: clicking it must call App.RunMacro(target_id) and
+  // apply the returned UI intents (navigation for open_form/open_report/
+  // open_page, a dialog for msg_box, a route query for set_filter).
+  function macroNav(): NavItem[] {
+    return [
+      {
+        id: 'nav_macro',
+        parent_id: '',
+        label: 'Run Backup',
+        action_kind: 'run_macro',
+        target_id: 'm1',
+        sort_order: 0,
+      },
+    ]
+  }
+
+  it('invokes App.RunMacro and routes on an open_form intent', async () => {
+    const app = makeApp({ nav: macroNav() })
+    app.RunMacro = vi.fn(async () => ({
+      intents: [{ kind: 'open_form', target: 'frm_orders', args: {} }],
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="switchboard-button"]')[0].trigger('click')
+    await flushPromises()
+
+    // RunMacro called with the item's target_id.
+    expect(app.RunMacro).toHaveBeenCalledWith('m1')
+
+    // The returned open_form intent is applied as a route push to /forms?id=...
+    expect(routerMock.push).toHaveBeenCalled()
+    const nav = pushed.at(-1)
+    expect(JSON.stringify(nav)).toContain('forms')
+    expect(JSON.stringify(nav)).toContain('frm_orders')
+  })
+
+  it('renders a dialog for a msg_box intent', async () => {
+    const app = makeApp({ nav: macroNav() })
+    app.RunMacro = vi.fn(async () => ({
+      intents: [{ kind: 'msg_box', target: '', args: { message: 'Backup complete' } }],
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="switchboard-button"]')[0].trigger('click')
+    await flushPromises()
+
+    expect(app.RunMacro).toHaveBeenCalledWith('m1')
+    // A MsgBox dialog surfaces with the message text.
+    const dialog = wrapper.find('[data-testid="macro-msgbox"]')
+    expect(dialog.exists(), 'expected a MsgBox dialog to render for a msg_box intent').toBe(true)
+    expect(dialog.text()).toContain('Backup complete')
+  })
+
+  it('applies a set_filter intent as a route query when opening a form', async () => {
+    const app = makeApp({ nav: macroNav() })
+    app.RunMacro = vi.fn(async () => ({
+      intents: [
+        { kind: 'open_form', target: 'frm_orders', args: {} },
+        { kind: 'set_filter', target: 'frm_orders', args: { where: 'total > 50' } },
+      ],
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="switchboard-button"]')[0].trigger('click')
+    await flushPromises()
+
+    expect(app.RunMacro).toHaveBeenCalledWith('m1')
+    // The set_filter intent must be reflected in the pushed route query.
+    const matched = pushed.find((p) => JSON.stringify(p).includes('total > 50'))
+    expect(matched, 'expected set_filter applied as a route query').toBeTruthy()
   })
 })

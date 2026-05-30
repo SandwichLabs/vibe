@@ -185,7 +185,72 @@ function destinationFor(item: NavItem): unknown | null {
   }
 }
 
-function activate(item: NavItem) {
+// macroMsgBox holds the message for a MsgBox dialog raised by a run_macro intent.
+const macroMsgBox = ref<string | null>(null)
+
+// MacroIntent is one UI instruction returned by App.RunMacro: a navigation
+// (open_form/open_report/open_page), a message dialog (msg_box), or a filter to
+// apply to a subsequently-opened form (set_filter).
+interface MacroIntent {
+  kind: string
+  target: string
+  args?: Record<string, string>
+}
+
+// applyMacroIntents executes the ordered UI intents returned by a macro run.
+// open_* intents navigate; set_filter is merged as a `where` route query onto
+// the matching form navigation; msg_box raises a dialog.
+function applyMacroIntents(intents: MacroIntent[]) {
+  // First collect any set_filter where-clauses keyed by their target so they can
+  // be merged onto the matching form/report/page navigation.
+  const filters = new Map<string, string>()
+  for (const intent of intents) {
+    if (intent.kind === 'set_filter' && intent.args?.where) {
+      filters.set(intent.target, intent.args.where)
+    }
+  }
+
+  for (const intent of intents) {
+    switch (intent.kind) {
+      case 'open_form':
+      case 'open_report':
+      case 'open_page': {
+        const dest = destinationFor({
+          id: '',
+          parent_id: '',
+          label: '',
+          action_kind: intent.kind,
+          target_id: intent.target,
+          sort_order: 0,
+        }) as { path: string; query: Record<string, string> } | null
+        if (!dest) break
+        const where = filters.get(intent.target)
+        if (where) dest.query = { ...dest.query, where }
+        router()?.push(dest)
+        break
+      }
+      case 'msg_box':
+        macroMsgBox.value = intent.args?.message ?? ''
+        break
+      default:
+        break
+    }
+  }
+}
+
+async function activate(item: NavItem) {
+  // run_macro items dispatch through the backend macro runner and apply the
+  // returned UI intents (P5.4).
+  if (item.action_kind === 'run_macro') {
+    try {
+      const result = await window.go.main.App.RunMacro(item.target_id)
+      applyMacroIntents((result?.intents as MacroIntent[]) || [])
+    } catch (err) {
+      errorMessage.value = `Failed to run macro: ${err}`
+    }
+    return
+  }
+
   const dest = destinationFor(item)
   if (!dest) return
   router()?.push(dest)
@@ -228,6 +293,17 @@ onMounted(async () => {
         </button>
       </div>
       <p v-if="!pageItems.length" class="sh-muted">No navigation items defined.</p>
+
+      <!-- MsgBox dialog raised by a run_macro msg_box intent (P5.4). -->
+      <div
+        v-if="macroMsgBox !== null"
+        data-testid="macro-msgbox"
+        class="macro-msgbox sh-card"
+        role="dialog"
+      >
+        <p class="macro-msgbox-text">{{ macroMsgBox }}</p>
+        <button class="sh-btn" @click="macroMsgBox = null">OK</button>
+      </div>
     </div>
 
     <!-- Studio Mode: switchboard builder -->
