@@ -52,6 +52,13 @@ type FormField struct {
 	Required bool
 	Source   string // SQL for select options
 	Options  []SelectOption
+
+	// Access-parity bound-control metadata (plan §1.4).
+	ControlType string // combo, lookup, checkbox, date, datetime, textarea, ...
+	LookupSQL   string // SQL resolved server-side to populate combo/lookup options
+	ValueCol    string // column whose value is submitted (the hidden/stored value)
+	DisplayCol  string // column whose text is shown to the user
+	ControlTip  string // help text surfaced as the control's title attribute
 }
 
 // SelectOption represents an option in a select field.
