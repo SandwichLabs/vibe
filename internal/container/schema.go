@@ -77,6 +77,28 @@ var schemaDDL = []string{
 		data    BLOB NOT NULL,
 		updated TEXT NOT NULL
 	);`,
+
+	// _vibe_field_meta stores Access-style field properties (plan §1.3):
+	// human captions, control types, defaults, validation rules, input masks,
+	// and lookup sources — keyed by (table_name, column_name). Additive migration.
+	`CREATE TABLE IF NOT EXISTS _vibe_field_meta (
+		table_name         TEXT NOT NULL,
+		column_name        TEXT NOT NULL,
+		caption            TEXT NOT NULL DEFAULT '',
+		control_type       TEXT NOT NULL DEFAULT '',
+		default_value      TEXT NOT NULL DEFAULT '',
+		required           INTEGER NOT NULL DEFAULT 0,
+		format_code        TEXT NOT NULL DEFAULT '',
+		validation_rule    TEXT NOT NULL DEFAULT '',
+		validation_message TEXT NOT NULL DEFAULT '',
+		input_mask         TEXT NOT NULL DEFAULT '',
+		lookup_sql         TEXT NOT NULL DEFAULT '',
+		display_col        TEXT NOT NULL DEFAULT '',
+		value_col          TEXT NOT NULL DEFAULT '',
+		control_tip        TEXT NOT NULL DEFAULT '',
+		sort_order         INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (table_name, column_name)
+	);`,
 }
 
 // defaultMeta contains the default metadata entries seeded on creation.
