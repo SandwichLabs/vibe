@@ -30,12 +30,19 @@ type ChartConfig struct {
 	Source string
 	Type   string // bar, line, area, scatter, pie
 	X      string
-	Y      string
+	Y      string // single Y column (legacy / single-series path)
 	XFmt   string // Evidence-compatible format code for X axis labels
 	YFmt   string // Evidence-compatible format code for Y axis labels
 	Title  string
 	Color  string
 	Result *ResultSet
+
+	// Multi-series / stacked / styled charts (plan §3, Evidence WU-9).
+	YColumns []string // multiple Y columns -> one dataset per column
+	Series   string   // categorical column that splits a single Y into one dataset per distinct value
+	Stacked  bool     // stack datasets (sets Chart.js scales.{x,y}.stacked = true)
+	XTitle   string   // x-axis title text
+	YTitle   string   // y-axis title text
 }
 
 // MetricConfig holds metric directive configuration.

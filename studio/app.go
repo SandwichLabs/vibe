@@ -533,14 +533,24 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		})
 
 	case "chart":
+		// {chart: y: ...} accepts either a single column ("revenue") or a list
+		// ("[revenue, cost]"). A list produces one dataset per column.
+		ySingle, yList := getStringOrSliceConfig(node.Config, "y")
 		return a.renderer.RenderChart(&renderer.ChartConfig{
-			Source: getStringConfig(node.Config, "source"),
-			Type:   getStringConfig(node.Config, "type"),
-			X:      getStringConfig(node.Config, "x"),
-			Y:      getStringConfig(node.Config, "y"),
-			Title:  getStringConfig(node.Config, "title"),
-			Color:  getStringConfig(node.Config, "color"),
-			Result: rrs,
+			Source:   getStringConfig(node.Config, "source"),
+			Type:     getStringConfig(node.Config, "type"),
+			X:        getStringConfig(node.Config, "x"),
+			Y:        ySingle,
+			YColumns: yList,
+			Series:   getStringConfig(node.Config, "series"),
+			Stacked:  getBoolConfig(node.Config, "stacked"),
+			XFmt:     getStringConfig(node.Config, "x_fmt"),
+			YFmt:     getStringConfig(node.Config, "y_fmt"),
+			XTitle:   getStringConfig(node.Config, "x_title"),
+			YTitle:   getStringConfig(node.Config, "y_title"),
+			Title:    getStringConfig(node.Config, "title"),
+			Color:    getStringConfig(node.Config, "color"),
+			Result:   rrs,
 		})
 
 	case "metric":
@@ -713,6 +723,35 @@ func getStringConfig(config map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+// getStringOrSliceConfig reads a config value that may be either a scalar string
+// or a YAML flow list. A scalar (e.g. "revenue") is returned as the single
+// value with a nil slice; a list (e.g. [revenue, cost]) is returned as the slice
+// with an empty single value. This lets the chart directive accept both
+// `y: revenue` (single-series) and `y: [revenue, cost]` (multi-series).
+func getStringOrSliceConfig(config map[string]any, key string) (single string, list []string) {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return "", nil
+	}
+	switch t := v.(type) {
+	case string:
+		return t, nil
+	case []any:
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				list = append(list, s)
+			} else {
+				list = append(list, fmt.Sprintf("%v", item))
+			}
+		}
+		return "", list
+	case []string:
+		return "", t
+	default:
+		return fmt.Sprintf("%v", v), nil
+	}
 }
 
 // getStringMapConfig extracts a map[string]string from a config map value.
