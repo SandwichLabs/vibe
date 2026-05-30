@@ -21,6 +21,8 @@
 .topbar .pill .dot.warn { background: var(--sh-marigold); box-shadow: 0 0 0 2px rgba(242,169,59,0.30); }
 .topbar .pill .dot.err { background: var(--sh-coral); box-shadow: 0 0 0 2px rgba(226,114,98,0.28); }
 .topbar .pill .dot.studio { background: var(--sh-teal); box-shadow: 0 0 0 2px rgba(47,143,135,0.30); }
+/* App-Mode pill (P4.6) — marigold accent signals the locked, task-only context. */
+.topbar .pill .dot.app { background: var(--sh-marigold); box-shadow: 0 0 0 2px rgba(242,169,59,0.30); }
 
 /* App-mode top bar (white chrome, ink text) */
 .topbar.app {

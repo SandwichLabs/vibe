@@ -20,6 +20,8 @@ declare global {
           SaveFile(): Promise<void>
           IsFileOpen(): Promise<boolean>
           GetFileInfo(): Promise<FileInfo>
+          GetAppConfig(): Promise<AppConfig>
+          SetMode(mode: string): Promise<void>
           ListPages(): Promise<PageSummary[]>
           GetPage(id: string): Promise<PageDetail>
           RenderPageContent(id: string, params: Record<string, string>): Promise<string>
@@ -137,6 +139,16 @@ interface FormSummary {
 interface FormSubmitRow {
   table: string
   values: Record<string, any>
+}
+
+// AppConfig mirrors studio.AppConfig (Phase 4 dual-mode). `mode` is the live
+// runtime mode ("studio" | "app"); default_mode / startup_object / app_title are
+// persisted in _vibe_meta.
+interface AppConfig {
+  mode: string
+  default_mode: string
+  startup_object: string
+  app_title: string
 }
 
 interface FileInfo {
