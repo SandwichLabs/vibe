@@ -115,6 +115,23 @@ var schemaDDL = []string{
 		created_at TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL DEFAULT ''
 	);`,
+
+	// _vibe_relationships stores Access-style foreign-key relationship
+	// definitions (plan §2.1/§4.5): child.<child_column> references
+	// parent.<parent_column>, with referential-action and enforce-integrity
+	// flags. This is the metadata source of truth that the relationship diagram
+	// and FK-emit logic (P2.3) read from. Additive migration.
+	`CREATE TABLE IF NOT EXISTS _vibe_relationships (
+		id                TEXT PRIMARY KEY,
+		parent_table      TEXT NOT NULL DEFAULT '',
+		parent_column     TEXT NOT NULL DEFAULT '',
+		child_table       TEXT NOT NULL DEFAULT '',
+		child_column      TEXT NOT NULL DEFAULT '',
+		on_delete         TEXT NOT NULL DEFAULT 'NO ACTION',
+		on_update         TEXT NOT NULL DEFAULT 'NO ACTION',
+		enforce_integrity INTEGER NOT NULL DEFAULT 1,
+		created_at        TEXT NOT NULL DEFAULT ''
+	);`,
 }
 
 // defaultMeta contains the default metadata entries seeded on creation.
