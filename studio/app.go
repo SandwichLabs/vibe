@@ -9,6 +9,7 @@ import (
 	"html"
 	"log/slog"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -3088,4 +3089,147 @@ func (a *App) RenderReportContent(reportID string) (string, error) {
 		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
 	}
 	return htmlOut, nil
+}
+
+// ExportReportHTML renders the banded report HTML (P3.8) and writes it to dst,
+// returning the written path (plan §3.4 / P3.9).
+func (a *App) ExportReportHTML(reportID, dst string) (string, error) {
+	htmlOut, err := a.RenderReportContent(reportID)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(dst, []byte(htmlOut), 0o644); err != nil {
+		return "", fmt.Errorf("failed to write report HTML to %q: %w", dst, err)
+	}
+	a.logger.Info("exported report HTML", "report", reportID, "path", dst)
+	return dst, nil
+}
+
+// reportSource loads a report spec and returns its bound query source SQL.
+func (a *App) reportSource(reportID string) (string, error) {
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return "", fmt.Errorf("report %q not found", reportID)
+	}
+	if strings.TrimSpace(spec.Source) == "" {
+		return "", fmt.Errorf("report %q has no bound query", reportID)
+	}
+	return spec.Source, nil
+}
+
+// ExportReportXLSX writes the report's bound query result to an .xlsx via the
+// DuckDB excel extension (CSV fallback if unavailable), returning the written
+// path (plan §3.4 / P3.9).
+func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	source, err := a.reportSource(reportID)
+	if err != nil {
+		return "", err
+	}
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return "", fmt.Errorf("DuckDB not available")
+	}
+
+	// Best-effort load of the excel extension (bundled/autoloadable in this
+	// build). If it is unavailable we fall back to CSV.
+	_, _ = ddb.ExecContext(a.ctx, "LOAD excel")
+
+	// COPY (query) TO 'file.xlsx' WITH (FORMAT xlsx). Escape single quotes in the
+	// destination path to keep the SQL literal well-formed.
+	xlsxPath := dst
+	if !strings.HasSuffix(strings.ToLower(xlsxPath), ".xlsx") {
+		xlsxPath += ".xlsx"
+	}
+	copyXLSX := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT xlsx, HEADER true)",
+		source, strings.ReplaceAll(xlsxPath, "'", "''"))
+	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err == nil {
+		a.logger.Info("exported report XLSX", "report", reportID, "path", xlsxPath)
+		return xlsxPath, nil
+	} else {
+		a.logger.Warn("xlsx export unavailable, falling back to CSV",
+			"report", reportID, "error", err)
+	}
+
+	// CSV fallback.
+	csvPath := strings.TrimSuffix(dst, ".xlsx") + ".csv"
+	copyCSV := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT csv, HEADER true)",
+		source, strings.ReplaceAll(csvPath, "'", "''"))
+	if _, err := ddb.ExecContext(a.ctx, copyCSV); err != nil {
+		return "", fmt.Errorf("failed to export report %q to spreadsheet: %w", reportID, err)
+	}
+	a.logger.Info("exported report CSV (xlsx fallback)", "report", reportID, "path", csvPath)
+	return csvPath, nil
+}
+
+// AnalyzeInExcel is the one-click "Analyze in Excel/Sheets" alias for
+// ExportReportXLSX (plan §3.4 / P3.9).
+func (a *App) AnalyzeInExcel(reportID, dst string) (string, error) {
+	return a.ExportReportXLSX(reportID, dst)
+}
+
+// ExportReportPDF renders the banded report HTML and prints it to a PDF at dst
+// via a headless-print backend, returning the written path; degrades gracefully
+// with a clear error if no backend is available (plan §3.4 / P3.9).
+func (a *App) ExportReportPDF(reportID, dst string) (string, error) {
+	htmlOut, err := a.RenderReportContent(reportID)
+	if err != nil {
+		return "", err
+	}
+
+	backend := detectPrintBackend()
+	if backend == "" {
+		return "", fmt.Errorf("no headless-print backend available: install a Chromium/Chrome browser to enable PDF export")
+	}
+
+	// Write the HTML to a temp file and drive the headless browser to print it.
+	tmp, err := os.CreateTemp("", "vibe-report-*.html")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp HTML for PDF export: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.WriteString(htmlOut); err != nil {
+		tmp.Close()
+		return "", fmt.Errorf("failed to write temp HTML for PDF export: %w", err)
+	}
+	tmp.Close()
+
+	cmd := exec.CommandContext(a.ctx, backend,
+		"--headless",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--print-to-pdf="+dst,
+		"file://"+tmpPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("headless print failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if _, err := os.Stat(dst); err != nil {
+		return "", fmt.Errorf("headless print produced no PDF at %q: %w", dst, err)
+	}
+	a.logger.Info("exported report PDF", "report", reportID, "path", dst, "backend", backend)
+	return dst, nil
+}
+
+// detectPrintBackend returns the path to a headless-print-capable Chromium/Chrome
+// binary, or "" if none is available.
+func detectPrintBackend() string {
+	for _, name := range []string{
+		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome",
+	} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
 }
