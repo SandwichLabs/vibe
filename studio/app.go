@@ -1712,6 +1712,154 @@ func (a *App) SaveQuery(id, title, sqlStr, description string) error {
 	return nil
 }
 
+// PreviewFilterSQL renders a FilterSpec (plus optional selected columns from the
+// QBE grid) into a deterministic SQL string WITHOUT persisting it (plan §2.4,
+// P2.6). The generated SQL is the single rendering path shared with
+// SaveFilterAsQuery, so the preview shown to the builder is byte-for-byte the
+// SQL that gets stored.
+func (a *App) PreviewFilterSQL(name string, spec FilterSpec, columns []string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.generateFilterSQL(name, spec, columns)
+}
+
+// SaveFilterAsQuery renders a FilterSpec into deterministic SQL and persists it
+// as a named query via the existing queries.Registry, returning the new query id
+// (plan §2.4, P2.6). It reuses the same rendering path as PreviewFilterSQL so the
+// stored SQL equals the previewed SQL.
+func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, title string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	sqlStr, err := a.generateFilterSQL(name, spec, columns)
+	if err != nil {
+		return "", err
+	}
+
+	id := uuid.New().String()
+	q := &queries.Query{
+		ID:         id,
+		Title:      title,
+		SQL:        sqlStr,
+		Engine:     "duckdb",
+		Parameters: []queries.Param{},
+	}
+	if err := a.registry.Create(context.Background(), q); err != nil {
+		return "", fmt.Errorf("failed to save filter as query: %w", err)
+	}
+	a.logger.Info("saved filter as named query", "id", id, "table", name, "title", title)
+	return id, nil
+}
+
+// generateFilterSQL is the single, deterministic FilterSpec → SQL renderer behind
+// both PreviewFilterSQL and SaveFilterAsQuery. Unlike GetTableDataFiltered (which
+// binds parameters at execution time), a saved query is a standalone SQL string,
+// so literal values are safely inlined here. Column identifiers (filter columns
+// and the optional projection) are validated against the table's real columns —
+// no SQL injection via identifier or value. The caller must hold a.mu.
+func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) (string, error) {
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if !isValidIdentifier(name) {
+		return "", fmt.Errorf("invalid table name")
+	}
+
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return "", fmt.Errorf("DuckDB not available")
+	}
+
+	cols, err := tableColumns(db, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to introspect columns for filter: %w", err)
+	}
+	known := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		known[c.Name] = true
+	}
+
+	// Projection: SELECT * unless the QBE grid selected explicit columns.
+	projection := "*"
+	if len(columns) > 0 {
+		parts := make([]string, 0, len(columns))
+		for _, col := range columns {
+			if !known[col] {
+				return "", fmt.Errorf("unknown selected column %q", col)
+			}
+			parts = append(parts, fmt.Sprintf("%q", col))
+		}
+		projection = strings.Join(parts, ", ")
+	}
+
+	whereClause, err := buildFilterWhereInline(spec, known)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("SELECT %s FROM %q%s", projection, name, whereClause), nil
+}
+
+// buildFilterWhereInline mirrors buildFilterWhere but inlines literal values into
+// the SQL (for a persistable, standalone query string) instead of binding them as
+// parameters. Identifiers are validated against the allowlist; string literals are
+// single-quote escaped so a value can never break out of the literal.
+func buildFilterWhereInline(spec FilterSpec, known map[string]bool) (string, error) {
+	if len(spec.Conditions) == 0 {
+		return "", nil
+	}
+
+	combinator := strings.ToUpper(strings.TrimSpace(spec.Combinator))
+	if combinator != "OR" {
+		combinator = "AND"
+	}
+
+	var clauses []string
+	for _, c := range spec.Conditions {
+		if !known[c.Column] {
+			return "", fmt.Errorf("unknown filter column %q", c.Column)
+		}
+		switch c.Op {
+		case "is_null":
+			clauses = append(clauses, fmt.Sprintf("%q IS NULL", c.Column))
+		case "is_not_null":
+			clauses = append(clauses, fmt.Sprintf("%q IS NOT NULL", c.Column))
+		default:
+			sqlOp, ok := filterOps[c.Op]
+			if !ok {
+				return "", fmt.Errorf("unsupported filter operator %q", c.Op)
+			}
+			clauses = append(clauses, fmt.Sprintf("%q %s %s", c.Column, sqlOp, sqlLiteral(c.Value)))
+		}
+	}
+
+	return " WHERE " + strings.Join(clauses, " "+combinator+" "), nil
+}
+
+// sqlLiteral renders a FilterCondition value as a safe inline SQL literal. Numeric
+// and boolean values render bare; everything else (including string-typed numeric
+// inputs from the all-string form path) renders as a single-quote-escaped string
+// literal, which DuckDB coerces to the column type on comparison.
+func sqlLiteral(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "NULL"
+	case bool:
+		if t {
+			return "TRUE"
+		}
+		return "FALSE"
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", t)
+	case float32, float64:
+		return fmt.Sprintf("%v", t)
+	case string:
+		return "'" + strings.ReplaceAll(t, "'", "''") + "'"
+	default:
+		return "'" + strings.ReplaceAll(fmt.Sprintf("%v", t), "'", "''") + "'"
+	}
+}
+
 // DeleteQuery deletes a saved query.
 func (a *App) DeleteQuery(id string) error {
 	a.mu.Lock()
