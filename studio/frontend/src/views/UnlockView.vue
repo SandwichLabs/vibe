@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
 
 const props = defineProps<{ initialFile?: string }>()
@@ -13,6 +13,21 @@ const title = ref('')
 const description = ref('')
 const error = ref('')
 const loading = ref(false)
+
+// Quick-start template picker (P6.7). selectedTemplate is the chosen bundled
+// template name, or '' for a blank database.
+const templates = ref<TemplateInfo[]>([])
+const selectedTemplate = ref('')
+
+onMounted(async () => {
+  try {
+    templates.value = await window.go.main.App.ListTemplates()
+  } catch (e: any) {
+    // A missing template registry is non-fatal: the create flow still works for
+    // a blank database.
+    templates.value = []
+  }
+})
 
 // If initialFile is provided (e.g. from CLI arg), skip to open mode.
 watch(() => props.initialFile, (val) => {
@@ -75,7 +90,11 @@ async function createFile() {
   loading.value = true
   error.value = ''
   try {
-    await window.go.main.App.CreateFile(filePath.value, passphrase.value, title.value, description.value)
+    if (selectedTemplate.value) {
+      await window.go.main.App.CreateFromTemplate(filePath.value, passphrase.value, selectedTemplate.value)
+    } else {
+      await window.go.main.App.CreateFile(filePath.value, passphrase.value, title.value, description.value)
+    }
     emit('file-opened')
   } catch (e: any) {
     error.value = e.message || String(e)
@@ -84,10 +103,15 @@ async function createFile() {
   }
 }
 
+function selectTemplate(name: string) {
+  selectedTemplate.value = selectedTemplate.value === name ? '' : name
+}
+
 function goBack() {
   mode.value = 'choose'
   passphrase.value = ''
   passphraseConfirm.value = ''
+  selectedTemplate.value = ''
   error.value = ''
 }
 </script>
@@ -138,11 +162,41 @@ function goBack() {
       <!-- Create file form -->
       <div v-if="mode === 'create'" class="col" style="gap: var(--sh-space-4);">
         <div class="url-tile" style="font-size: 13px;">{{ filePath }}</div>
-        <div>
+
+        <!-- Quick-start template picker (P6.7) -->
+        <div v-if="templates.length" class="col" style="gap: var(--sh-space-2);">
+          <label class="field-label">Start from a template</label>
+          <div class="col" style="gap: var(--sh-space-2);">
+            <button
+              type="button"
+              class="card card-pad"
+              :class="{ 'is-selected': selectedTemplate === '' }"
+              :style="selectedTemplate === '' ? 'border-color: var(--sh-teal); text-align: left;' : 'text-align: left;'"
+              @click="selectedTemplate = ''"
+            >
+              <div style="font-weight: 600;">Blank database</div>
+              <div class="sh-meta">Start empty and design your own tables.</div>
+            </button>
+            <button
+              v-for="tmpl in templates"
+              :key="tmpl.name"
+              type="button"
+              class="card card-pad"
+              :class="{ 'is-selected': selectedTemplate === tmpl.name }"
+              :style="selectedTemplate === tmpl.name ? 'border-color: var(--sh-teal); text-align: left;' : 'text-align: left;'"
+              @click="selectTemplate(tmpl.name)"
+            >
+              <div style="font-weight: 600;">{{ tmpl.description || tmpl.name }}</div>
+              <div class="sh-meta">{{ tmpl.name }}</div>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!selectedTemplate">
           <label class="field-label">Title</label>
           <input v-model="title" type="text" placeholder="Title (optional)" class="field-input" />
         </div>
-        <div>
+        <div v-if="!selectedTemplate">
           <label class="field-label">Description</label>
           <input v-model="description" type="text" placeholder="Description (optional)" class="field-input" />
         </div>

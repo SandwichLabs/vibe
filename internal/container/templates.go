@@ -106,6 +106,17 @@ func ListTemplates() []string {
 	return names
 }
 
+// TemplateDescription returns a human-readable description for a registered
+// starter template (used by the Studio Home quick-start cards). The boolean
+// reports whether the name is registered.
+func TemplateDescription(name string) (string, bool) {
+	tmpl, ok := templateRegistry[name]
+	if !ok {
+		return "", false
+	}
+	return tmpl.Title, true
+}
+
 // applyTemplate seeds the named starter template into a freshly created
 // container: DuckDB user tables + sample data, and the Access-style metadata in
 // SQLCipher. It returns a wrapped error if the template name is unknown.

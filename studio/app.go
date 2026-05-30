@@ -94,17 +94,31 @@ func (a *App) GetInitialFile() string {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// In production, route frontend events through the live Wails runtime using
+	// the real lifecycle context. Tests inject their own emit sink and never call
+	// startup, so emitEvent stays runtime-free under test.
+	if a.emit == nil {
+		a.emit = func(event string, data ...any) {
+			runtime.EventsEmit(a.ctx, event, data...)
+		}
+	}
 }
 
 // emitEvent publishes a frontend event, using the injected emitter (tests) when
 // set and otherwise the Wails runtime. Centralizing emission lets the open
 // lifecycle (and its AutoExec startup intents) be exercised in unit tests.
 func (a *App) emitEvent(event string, data ...any) {
-	if a.emit != nil {
-		a.emit(event, data...)
+	if a.emit == nil {
+		// No emit sink: either a unit test that did not inject one, or a call
+		// before startup wired the Wails runtime emitter. Skip emission rather
+		// than invoking runtime.EventsEmit with a non-lifecycle context (which
+		// log.Fatals). Production always installs the runtime emitter in startup.
+		if a.logger != nil {
+			a.logger.Debug("emitEvent skipped: no emit sink", "event", event)
+		}
 		return
 	}
-	runtime.EventsEmit(a.ctx, event, data...)
+	a.emit(event, data...)
 }
 
 func (a *App) shutdown(_ context.Context) {
@@ -252,7 +266,7 @@ func (a *App) CloseFile() error {
 	a.engine = nil
 	a.registry = nil
 	a.filePath = ""
-	runtime.EventsEmit(a.ctx, "file:closed")
+	a.emitEvent("file:closed")
 	return nil
 }
 

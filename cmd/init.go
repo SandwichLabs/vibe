@@ -101,12 +101,70 @@ create with initial CSV data (these are mutually exclusive).`,
 	},
 }
 
-// initFromTemplate creates a new .vibe file by copying a template file and rekeying.
-func initFromTemplate(filePath, templatePath, passphrase, title, description string, out io.Writer) error {
-	// Verify template exists.
-	if _, err := os.Stat(templatePath); err != nil {
-		return fmt.Errorf("template file not found: %w", err)
+// initFromTemplate creates a new .vibe file from --from. The value is resolved
+// deterministically: a registered bundled template name (P6.6 registry) is built
+// from the template; otherwise it is treated as a path to an existing .vibe file
+// to clone. An unknown value that is neither yields an actionable error listing
+// the available template names.
+func initFromTemplate(filePath, from, passphrase, title, description string, out io.Writer) error {
+	if isRegisteredTemplate(from) {
+		return initFromBundledTemplate(filePath, from, passphrase, title, description, out)
 	}
+
+	// Not a registered template name: treat as a path to clone. If it is also not
+	// an existing file, surface an actionable error listing the template names.
+	if _, err := os.Stat(from); err != nil {
+		return fmt.Errorf(
+			"unknown template or file %q: not a registered template and not an existing file; available templates: %s",
+			from, strings.Join(container.ListTemplates(), ", "))
+	}
+	return initCloneFromFile(filePath, from, passphrase, title, description, out)
+}
+
+// isRegisteredTemplate reports whether name is a bundled starter template.
+func isRegisteredTemplate(name string) bool {
+	for _, n := range container.ListTemplates() {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// initFromBundledTemplate creates a new encrypted .vibe seeded from a bundled
+// starter template (P6.6 registry).
+func initFromBundledTemplate(filePath, name, passphrase, title, description string, out io.Writer) error {
+	fmt.Fprintf(out, "Creating %s from template %q...\n", filePath, name)
+
+	opts := []container.Option{
+		container.WithPassphrase(passphrase),
+		container.WithTitle(title),
+		container.WithLogger(logger),
+		container.WithTemplate(name),
+	}
+	if description != "" {
+		opts = append(opts, container.WithDescription(description))
+	}
+
+	c, err := container.Create(filePath, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to create container from template %q: %w", name, err)
+	}
+
+	if err := c.Save(); err != nil {
+		c.Close() //nolint:errcheck
+		return fmt.Errorf("failed to save container: %w", err)
+	}
+	if err := c.Close(); err != nil {
+		return fmt.Errorf("failed to close container: %w", err)
+	}
+
+	fmt.Fprintf(out, "Created %s (title: %q)\n", filePath, title)
+	return nil
+}
+
+// initCloneFromFile creates a new .vibe file by copying a template file and rekeying.
+func initCloneFromFile(filePath, templatePath, passphrase, title, description string, out io.Writer) error {
 
 	fmt.Fprintf(out, "Creating %s from template %s...\n", filePath, templatePath)
 
@@ -171,7 +229,7 @@ func initFromTemplate(filePath, templatePath, passphrase, title, description str
 func init() {
 	initCmd.Flags().String("title", "", "set the container title")
 	initCmd.Flags().String("description", "", "set the container description")
-	initCmd.Flags().String("from", "", "clone from a template .vibe file")
+	initCmd.Flags().String("from", "", "create from a bundled template name (e.g. order-entry) or clone from a .vibe file path")
 	initCmd.Flags().String("import", "", "import CSV data into the new container")
 	initCmd.Flags().Bool("examples", false, "include example data, pages, and queries")
 	rootCmd.AddCommand(initCmd)

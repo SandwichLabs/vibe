@@ -16,6 +16,8 @@ declare global {
           SelectNewVibeFile(): Promise<string>
           OpenFile(path: string, passphrase: string): Promise<void>
           CreateFile(path: string, passphrase: string, title: string, desc: string): Promise<void>
+          ListTemplates(): Promise<TemplateInfo[]>
+          CreateFromTemplate(path: string, passphrase: string, template: string): Promise<void>
           CloseFile(): Promise<void>
           SaveFile(): Promise<void>
           IsFileOpen(): Promise<boolean>
@@ -175,6 +177,13 @@ interface AppConfig {
   default_mode: string
   startup_object: string
   app_title: string
+}
+
+// TemplateInfo mirrors studio.TemplateInfo (P6.7): a bundled starter-template
+// descriptor surfaced to the Home/Unlock quick-start template picker cards.
+interface TemplateInfo {
+  name: string
+  description: string
 }
 
 interface FileInfo {

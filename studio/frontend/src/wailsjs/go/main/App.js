@@ -22,6 +22,10 @@ export function AnalyzeInExcel(arg1, arg2) {
   return window['go']['main']['App']['AnalyzeInExcel'](arg1, arg2);
 }
 
+export function AnalyzeQueryInExcel(arg1, arg2) {
+  return window['go']['main']['App']['AnalyzeQueryInExcel'](arg1, arg2);
+}
+
 export function CancelRender() {
   return window['go']['main']['App']['CancelRender']();
 }
@@ -32,6 +36,10 @@ export function CloseFile() {
 
 export function CreateFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateFile'](arg1, arg2, arg3, arg4);
+}
+
+export function CreateFromTemplate(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateFromTemplate'](arg1, arg2, arg3);
 }
 
 export function CreateHTMLPage(arg1, arg2) {
@@ -82,6 +90,10 @@ export function ExecuteQuery(arg1) {
   return window['go']['main']['App']['ExecuteQuery'](arg1);
 }
 
+export function ExportQueryXLSX(arg1, arg2) {
+  return window['go']['main']['App']['ExportQueryXLSX'](arg1, arg2);
+}
+
 export function ExportReportHTML(arg1, arg2) {
   return window['go']['main']['App']['ExportReportHTML'](arg1, arg2);
 }
@@ -100,6 +112,10 @@ export function ExportTableCSV(arg1) {
 
 export function ExportTableJSON(arg1) {
   return window['go']['main']['App']['ExportTableJSON'](arg1);
+}
+
+export function ExportTableXLSX(arg1, arg2) {
+  return window['go']['main']['App']['ExportTableXLSX'](arg1, arg2);
 }
 
 export function FireFormOpen(arg1) {
@@ -178,6 +194,10 @@ export function ImportCSV(arg1, arg2) {
   return window['go']['main']['App']['ImportCSV'](arg1, arg2);
 }
 
+export function ImportSpreadsheet(arg1) {
+  return window['go']['main']['App']['ImportSpreadsheet'](arg1);
+}
+
 export function InsertRow(arg1, arg2) {
   return window['go']['main']['App']['InsertRow'](arg1, arg2);
 }
@@ -222,12 +242,20 @@ export function ListTables() {
   return window['go']['main']['App']['ListTables']();
 }
 
+export function ListTemplates() {
+  return window['go']['main']['App']['ListTemplates']();
+}
+
 export function OpenFile(arg1, arg2) {
   return window['go']['main']['App']['OpenFile'](arg1, arg2);
 }
 
 export function PreviewFilterSQL(arg1, arg2, arg3) {
   return window['go']['main']['App']['PreviewFilterSQL'](arg1, arg2, arg3);
+}
+
+export function PreviewSpreadsheet(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PreviewSpreadsheet'](arg1, arg2, arg3);
 }
 
 export function RemoveForeignKey(arg1) {
@@ -288,6 +316,10 @@ export function SelectCSVFile() {
 
 export function SelectNewVibeFile() {
   return window['go']['main']['App']['SelectNewVibeFile']();
+}
+
+export function SelectSpreadsheetFile() {
+  return window['go']['main']['App']['SelectSpreadsheetFile']();
 }
 
 export function SelectVibeFile() {

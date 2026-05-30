@@ -17,11 +17,15 @@ export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<voi
 
 export function AnalyzeInExcel(arg1:string,arg2:string):Promise<string>;
 
+export function AnalyzeQueryInExcel(arg1:string,arg2:string):Promise<string>;
+
 export function CancelRender():Promise<void>;
 
 export function CloseFile():Promise<void>;
 
 export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function CreateFromTemplate(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function CreateHTMLPage(arg1:string,arg2:string):Promise<string>;
 
@@ -47,6 +51,8 @@ export function DropTable(arg1:string):Promise<void>;
 
 export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
 
+export function ExportQueryXLSX(arg1:string,arg2:string):Promise<string>;
+
 export function ExportReportHTML(arg1:string,arg2:string):Promise<string>;
 
 export function ExportReportPDF(arg1:string,arg2:string):Promise<string>;
@@ -56,6 +62,8 @@ export function ExportReportXLSX(arg1:string,arg2:string):Promise<string>;
 export function ExportTableCSV(arg1:string):Promise<string>;
 
 export function ExportTableJSON(arg1:string):Promise<string>;
+
+export function ExportTableXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function FireFormOpen(arg1:string):Promise<main.MacroRunResult>;
 
@@ -95,6 +103,8 @@ export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:numbe
 
 export function ImportCSV(arg1:string,arg2:string):Promise<main.ImportResult>;
 
+export function ImportSpreadsheet(arg1:main.ImportSpreadsheetOptions):Promise<main.ImportResult>;
+
 export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.WriteResult>;
 
 export function IsFileOpen():Promise<boolean>;
@@ -117,9 +127,13 @@ export function ListReports():Promise<Array<reports.ReportSummary>>;
 
 export function ListTables():Promise<Array<string>>;
 
+export function ListTemplates():Promise<Array<main.TemplateInfo>>;
+
 export function OpenFile(arg1:string,arg2:string):Promise<void>;
 
 export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
+
+export function PreviewSpreadsheet(arg1:string,arg2:string,arg3:boolean):Promise<main.SpreadsheetPreview>;
 
 export function RemoveForeignKey(arg1:string):Promise<void>;
 
@@ -150,6 +164,8 @@ export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promi
 export function SelectCSVFile():Promise<string>;
 
 export function SelectNewVibeFile():Promise<string>;
+
+export function SelectSpreadsheetFile():Promise<string>;
 
 export function SelectVibeFile():Promise<string>;
 

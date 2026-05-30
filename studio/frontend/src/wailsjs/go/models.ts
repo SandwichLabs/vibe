@@ -311,6 +311,22 @@ export namespace main {
 	        this.archetype = source["archetype"];
 	    }
 	}
+	export class ImportColumnMapping {
+	    source: string;
+	    target: string;
+	    type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportColumnMapping(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.target = source["target"];
+	        this.type = source["type"];
+	    }
+	}
 	export class ImportResult {
 	    rows_imported: number;
 	    table_name: string;
@@ -324,6 +340,46 @@ export namespace main {
 	        this.rows_imported = source["rows_imported"];
 	        this.table_name = source["table_name"];
 	    }
+	}
+	export class ImportSpreadsheetOptions {
+	    path: string;
+	    sheet: string;
+	    has_header: boolean;
+	    table_name: string;
+	    mode: string;
+	    columns: ImportColumnMapping[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportSpreadsheetOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.sheet = source["sheet"];
+	        this.has_header = source["has_header"];
+	        this.table_name = source["table_name"];
+	        this.mode = source["mode"];
+	        this.columns = this.convertValues(source["columns"], ImportColumnMapping);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MacroIntent {
 	    kind: string;
@@ -491,6 +547,56 @@ export namespace main {
 	        this.rows = source["rows"];
 	    }
 	}
+	export class SpreadsheetColumn {
+	    name: string;
+	    type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SpreadsheetColumn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	    }
+	}
+	export class SpreadsheetPreview {
+	    sheets: string[];
+	    sheet: string;
+	    columns: SpreadsheetColumn[];
+	    rows: any[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new SpreadsheetPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sheets = source["sheets"];
+	        this.sheet = source["sheet"];
+	        this.columns = this.convertValues(source["columns"], SpreadsheetColumn);
+	        this.rows = source["rows"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TableData {
 	    columns: string[];
 	    rows: any[][];
@@ -544,6 +650,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class TemplateInfo {
+	    name: string;
+	    description: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TemplateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	    }
 	}
 
 }
