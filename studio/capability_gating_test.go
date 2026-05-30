@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,6 +49,24 @@ func userTableCount(t *testing.T, app *App) int {
 	return n
 }
 
+// queryCount counts named queries in the registry. Used to prove a denied
+// SaveQuery/SaveFilterAsQuery/DeleteQuery made no mutation.
+func queryCount(t *testing.T, app *App) int {
+	t.Helper()
+	qs, err := app.ListQueries()
+	require.NoError(t, err)
+	return len(qs)
+}
+
+// navCount counts nav items in the switchboard store. Used to prove a denied
+// SaveNavItem/DeleteNavItem made no mutation.
+func navCount(t *testing.T, app *App) int {
+	t.Helper()
+	items, err := app.ListNav()
+	require.NoError(t, err)
+	return len(items)
+}
+
 // TestAppModeCapabilityGating is the headline P4.4 acceptance test.
 func TestAppModeCapabilityGating(t *testing.T) {
 	app := newOpenApp(t)
@@ -62,7 +81,17 @@ func TestAppModeCapabilityGating(t *testing.T) {
 	// definition edits and must be denied once we flip to App Mode).
 	require.NoError(t, app.SaveForm(orderEntryFormSpec()))
 
+	// Seed a page, a named query, and a nav item in Studio Mode so the denied
+	// page-edit / query / nav bindings have an existing target and we can prove
+	// no mutation against a stable baseline.
+	seedPageID, err := app.CreatePage("Seed Page", "# seed")
+	require.NoError(t, err, "seed a page in Studio Mode")
+	require.NoError(t, app.SaveQuery("seed-query", "Seed Query", "SELECT 1", ""), "seed a named query in Studio Mode")
+	require.NoError(t, app.SaveNavItem(schema.NavItem{ID: "seed-nav", Label: "Seed", ActionKind: "open_form", TargetID: "order_entry"}), "seed a nav item in Studio Mode")
+
 	baseTables := userTableCount(t, app)
+	baseQueries := queryCount(t, app)
+	baseNav := navCount(t, app)
 
 	// --- flip to App Mode ---
 	require.NoError(t, app.SetMode("app"))
@@ -117,6 +146,75 @@ func TestAppModeCapabilityGating(t *testing.T) {
 	err = app.SaveNav(nil)
 	assert.True(t, isCapabilityDenied(err), "SaveNav must be capability-denied in App Mode, got: %v", err)
 
+	// CreatePage (page edit — must not write _vibe_pages)
+	pageCountSQL := func() int {
+		var n int
+		require.NoError(t, app.container.SQLiteDB().QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&n))
+		return n
+	}
+	basePages := pageCountSQL()
+	_, err = app.CreatePage("Should Not Exist", "# nope")
+	assert.True(t, isCapabilityDenied(err), "CreatePage must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, basePages, pageCountSQL(), "CreatePage must not write _vibe_pages in App Mode")
+
+	// CreateHTMLPage (page edit)
+	_, err = app.CreateHTMLPage("Should Not Exist HTML", "<p>nope</p>")
+	assert.True(t, isCapabilityDenied(err), "CreateHTMLPage must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, basePages, pageCountSQL(), "CreateHTMLPage must not write _vibe_pages in App Mode")
+
+	// UpdatePage (page edit — must not mutate the seeded page)
+	err = app.UpdatePage(seedPageID, "Hacked Title", "# hacked")
+	assert.True(t, isCapabilityDenied(err), "UpdatePage must be capability-denied in App Mode, got: %v", err)
+	{
+		var gotTitle string
+		require.NoError(t, app.container.SQLiteDB().
+			QueryRow("SELECT title FROM _vibe_pages WHERE id = ?", seedPageID).Scan(&gotTitle))
+		assert.Equal(t, "Seed Page", gotTitle, "UpdatePage must not mutate the seeded page in App Mode")
+	}
+
+	// SaveQuery (SQL/definition surface — must not add a named query)
+	err = app.SaveQuery("", "Injected Query", "SELECT 42", "")
+	assert.True(t, isCapabilityDenied(err), "SaveQuery must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseQueries, queryCount(t, app), "SaveQuery must not add a named query in App Mode")
+
+	// SaveFilterAsQuery (SQL/definition surface — must not add a named query)
+	_, err = app.SaveFilterAsQuery("orders", FilterSpec{}, nil, "Injected Filter Query")
+	assert.True(t, isCapabilityDenied(err), "SaveFilterAsQuery must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseQueries, queryCount(t, app), "SaveFilterAsQuery must not add a named query in App Mode")
+
+	// DeleteQuery (SQL/definition surface — must not remove the seeded query)
+	err = app.DeleteQuery("seed-query")
+	assert.True(t, isCapabilityDenied(err), "DeleteQuery must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseQueries, queryCount(t, app), "DeleteQuery must not remove a named query in App Mode")
+
+	// RemoveForeignKey (schema edit)
+	err = app.RemoveForeignKey("nonexistent-fk-id")
+	assert.True(t, isCapabilityDenied(err), "RemoveForeignKey must be capability-denied in App Mode, got: %v", err)
+
+	// SetMeta (definition/metadata edit — must not flip default_mode/app_title).
+	// app_title is unset in this fixture; a denied SetMeta must leave it unset
+	// (Meta returns a not-found error) rather than writing "Pwned".
+	err = app.SetMeta("app_title", "Pwned")
+	assert.True(t, isCapabilityDenied(err), "SetMeta must be capability-denied in App Mode, got: %v", err)
+	{
+		got, _ := app.container.Meta("app_title")
+		assert.NotEqual(t, "Pwned", got, "SetMeta must not change app_title in App Mode")
+	}
+
+	// SetFieldMeta (definition/metadata edit)
+	err = app.SetFieldMeta("orders", "customer_id", schema.FieldMeta{Caption: "Hacked"})
+	assert.True(t, isCapabilityDenied(err), "SetFieldMeta must be capability-denied in App Mode, got: %v", err)
+
+	// SaveNavItem (nav definition edit — must not change the nav store)
+	err = app.SaveNavItem(schema.NavItem{ID: "injected-nav", Label: "Injected", ActionKind: "open_form", TargetID: "order_entry"})
+	assert.True(t, isCapabilityDenied(err), "SaveNavItem must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseNav, navCount(t, app), "SaveNavItem must not add a nav item in App Mode")
+
+	// DeleteNavItem (nav definition edit — must not remove the seeded nav item)
+	err = app.DeleteNavItem("seed-nav")
+	assert.True(t, isCapabilityDenied(err), "DeleteNavItem must be capability-denied in App Mode, got: %v", err)
+	assert.Equal(t, baseNav, navCount(t, app), "DeleteNavItem must not remove a nav item in App Mode")
+
 	// --- agent sandbox is forced to at most read-write in App Mode ---
 	// (Asserted before the permitted-op require()s so it is always exercised,
 	// independent of the bound-table data path.)
@@ -139,6 +237,23 @@ func TestAppModeCapabilityGating(t *testing.T) {
 	sbStudio := agentSandboxForMode("studio")
 	require.NotNil(t, sbStudio)
 	assert.Equal(t, agents.ModeFull, sbStudio.Mode, "Studio Mode agent sandbox grants full access")
+
+	// --- live mid-session downgrade restarts the MCP server with a capped sandbox ---
+	// Start the MCP server while in Studio Mode (ModeFull), then flip to App Mode and
+	// confirm the running server was restarted (its handler must not retain ModeFull).
+	require.NoError(t, app.SetMode("studio"))
+	studioURL, err := app.StartMCPServer()
+	require.NoError(t, err, "start MCP server in Studio Mode")
+	require.NotEmpty(t, studioURL)
+	require.True(t, app.GetMCPStatus()["running"].(bool), "MCP server should be running")
+
+	require.NoError(t, app.SetMode("app"))
+	appURL := app.GetMCPStatus()["url"].(string)
+	require.True(t, app.GetMCPStatus()["running"].(bool), "MCP server should still be running after mode flip")
+	assert.NotEqual(t, studioURL, appURL,
+		"flipping Studio->App must restart the MCP server (fresh address) so the handler sandbox is re-derived and never retains ModeFull")
+	require.NoError(t, app.StopMCPServer())
+	require.NoError(t, app.SetMode("app")) // restore App Mode for the permitted-op assertions below
 
 	// --- App-Mode-permitted operations must still succeed ---
 

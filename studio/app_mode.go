@@ -62,7 +62,32 @@ func (a *App) SetMode(mode string) error {
 	}
 	a.mode = mode
 	a.logger.Info("app mode flipped", "mode", mode)
+
+	// Re-derive the agent sandbox for the new mode. The MCP handler captures its
+	// sandbox at construction time, so a live mid-session mode change must restart
+	// the running server; otherwise a Studio-Mode (ModeFull) handler would survive
+	// a downgrade to App Mode, violating "ModeFull is never used while mode==app".
+	a.restartMCPForMode()
 	return nil
+}
+
+// restartMCPForMode restarts a running MCP server so its agent sandbox tracks the
+// current live mode. No-op when the server is not running. Uses the lock-managing
+// Stop/Start bindings, so it must NOT be called while a.mu is held.
+func (a *App) restartMCPForMode() {
+	a.mu.RLock()
+	running := a.mcpServer != nil
+	a.mu.RUnlock()
+	if !running {
+		return
+	}
+	if err := a.StopMCPServer(); err != nil {
+		a.logger.Warn("failed to stop MCP server during mode flip", "error", err)
+		return
+	}
+	if _, err := a.StartMCPServer(); err != nil {
+		a.logger.Warn("failed to restart MCP server during mode flip", "error", err)
+	}
 }
 
 // SetAppConfig persists default_mode, startup_object, and app_title in

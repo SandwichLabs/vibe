@@ -1192,6 +1192,10 @@ func (a *App) CreatePage(title, content string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("CreatePage"); err != nil {
+		return "", err
+	}
+
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
 	}
@@ -1213,6 +1217,10 @@ func (a *App) CreateHTMLPage(title, content string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("CreateHTMLPage"); err != nil {
+		return "", err
+	}
+
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
 	}
@@ -1233,6 +1241,10 @@ func (a *App) CreateHTMLPage(title, content string) (string, error) {
 func (a *App) UpdatePage(id, title, content string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("UpdatePage"); err != nil {
+		return err
+	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
@@ -1974,6 +1986,10 @@ func (a *App) RemoveForeignKey(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("RemoveForeignKey"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2319,6 +2335,10 @@ func (a *App) SaveQuery(id, title, sqlStr, description string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("SaveQuery"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2361,6 +2381,10 @@ func (a *App) PreviewFilterSQL(name string, spec FilterSpec, columns []string) (
 func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, title string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("SaveFilterAsQuery"); err != nil {
+		return "", err
+	}
 
 	sqlStr, err := a.generateFilterSQL(name, spec, columns)
 	if err != nil {
@@ -2495,6 +2519,10 @@ func sqlLiteral(v any) string {
 func (a *App) DeleteQuery(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("DeleteQuery"); err != nil {
+		return err
+	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
@@ -2904,6 +2932,10 @@ func (a *App) SetMeta(key, value string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("SetMeta"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2931,6 +2963,10 @@ func (a *App) GetFieldMeta(table string) ([]schema.FieldMeta, error) {
 func (a *App) SetFieldMeta(table, column string, meta schema.FieldMeta) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("SetFieldMeta"); err != nil {
+		return err
+	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
@@ -3095,6 +3131,9 @@ func (a *App) SaveNav(items []schema.NavItem) error {
 func (a *App) SaveNavItem(item schema.NavItem) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err := a.guardStudioOnly("SaveNavItem"); err != nil {
+		return err
+	}
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -3133,6 +3172,9 @@ func (a *App) GetNav(parentID string) ([]schema.NavItem, error) {
 func (a *App) DeleteNavItem(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err := a.guardStudioOnly("DeleteNavItem"); err != nil {
+		return err
+	}
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}

@@ -52,14 +52,19 @@ func (s *Server) Start(addr string) error {
 	}
 	s.listener = ln
 
-	s.httpServer = &http.Server{
+	httpServer := &http.Server{
 		Handler: sseServer,
 	}
+	s.httpServer = httpServer
 
 	s.logger.Info("MCP server starting", "addr", ln.Addr().String())
 
+	// Capture httpServer/ln as locals so the serve goroutine never reads the
+	// struct fields that Stop() nils out concurrently (avoids a nil-pointer race
+	// when Start and Stop happen in quick succession, e.g. an MCP restart on a
+	// live mode flip).
 	go func() {
-		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("MCP server error", "error", err)
 		}
 	}()

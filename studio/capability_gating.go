@@ -3,11 +3,11 @@ package main
 // Phase 4 / unit P4.4: "Capability gating: deny privileged app.go methods +
 // force agent sandbox in App Mode" (parity plan §4.3, risk §8).
 //
-// STUB ONLY (TDD RED). These symbols exist so the capability-gating integration
-// test compiles. They intentionally do NOT yet enforce lockdown — guardStudioOnly
-// is not wired into the privileged bindings and agentSandboxForMode does not yet
-// cap App Mode at read-write. The RED test asserts the intended behavior and must
-// FAIL until P4.4 is implemented.
+// guardStudioOnly is wired into every privileged schema/SQL/page/definition-edit
+// and import binding so they return errCapabilityDenied and make no mutation when
+// the live mode is "app". agentSandboxForMode caps the agent sandbox at read-write
+// in App Mode (never ModeFull), and SetMode restarts any running MCP server so the
+// handler's sandbox tracks live mode changes.
 
 import (
 	"errors"
