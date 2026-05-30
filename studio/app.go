@@ -94,6 +94,9 @@ func (a *App) GetInitialFile() string {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Reclaim DuckDB temp dirs left behind by crashed Vibe processes (P6.8
+	// orphan recovery). Best-effort: logs but never blocks startup.
+	container.StartupSweep(a.logger)
 	// In production, route frontend events through the live Wails runtime using
 	// the real lifecycle context. Tests inject their own emit sink and never call
 	// startup, so emitEvent stays runtime-free under test.

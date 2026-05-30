@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,6 +30,13 @@ Two applications share one file format:
   - Vibe Studio (TUI) for creating and editing .vibe files
   - Vibe Viewer (GUI) for opening and interacting with .vibe files`,
 	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
+	// PersistentPreRun runs after cobra.OnInitialize (initConfig) has wired the
+	// logger, so orphan-temp recovery from crashed processes happens once per
+	// CLI invocation, before any command opens a container. Best-effort: it logs
+	// but never blocks command execution.
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		container.StartupSweep(logger)
+	},
 }
 
 // Execute runs the root command.

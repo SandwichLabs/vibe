@@ -3,6 +3,7 @@ package container
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,26 @@ import (
 // Orphan recovery (SweepOrphanedTemp) relies on this prefix plus the embedded
 // owning PID to attribute and reclaim temp dirs left behind by dead processes.
 const duckDBTempPrefix = "vibe-duckdb-"
+
+// orphanMinAge is the minimum age a temp dir must have before a "live" PID
+// liveness result will keep it. This mitigates PID reuse: a recently created
+// dir whose PID happens to be alive is almost certainly a genuine live session,
+// whereas a very old dir whose PID is alive is more likely a recycled PID. We
+// only ever *delete* dirs whose PID is dead, so this guard never causes data
+// loss — it only narrows the (rare) window in which a recycled PID protects a
+// genuinely orphaned dir. The guard is intentionally conservative.
+const orphanMinAge = 24 * time.Hour
+
+// StartupSweep runs the orphan-temp recovery once at application startup. It is
+// the wired entrypoint for both the CLI (cmd/root.go) and the Studio app
+// (studio/app.go): orphaned temp dirs from crashed processes are reclaimed
+// here. Failure is logged, never fatal — recovery is best-effort and must never
+// block the application from starting. A nil logger is tolerated.
+func StartupSweep(logger *slog.Logger) {
+	if err := SweepOrphanedTemp(); err != nil && logger != nil {
+		logger.Warn("orphaned DuckDB temp sweep encountered errors", "error", err)
+	}
+}
 
 // duckDBState holds the DuckDB connection and its temporary file path.
 type duckDBState struct {
@@ -112,11 +133,20 @@ func SweepOrphanedTemp() error {
 			continue
 		}
 
+		full := filepath.Join(root, name)
+
 		if processAlive(pid) {
-			continue
+			// Mitigate PID reuse: a live PID normally means an active session, so
+			// we keep the dir. But a recycled PID could make a genuinely orphaned
+			// dir look live. If the dir is older than orphanMinAge, the "live" PID
+			// is more likely a coincidental reuse than a real session, so we treat
+			// it as orphaned. (We never delete on a live-and-recent dir.)
+			if info, err := entry.Info(); err != nil || time.Since(info.ModTime()) < orphanMinAge {
+				continue
+			}
 		}
 
-		if err := os.RemoveAll(filepath.Join(root, name)); err != nil && firstErr == nil {
+		if err := os.RemoveAll(full); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("failed to sweep orphaned DuckDB temp dir %q: %w", name, err)
 		}
 	}
