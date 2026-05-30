@@ -12,6 +12,7 @@ import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import AppShellView from '../views/AppShellView.vue'
 import PageRuntimeView from '../views/PageRuntimeView.vue'
+import MacroBuilderView from '../views/MacroBuilderView.vue'
 
 // Phase 4 / P4.6 — builder-only routes are locked in App Mode. Routes flagged
 // `meta.builderOnly` expose schema/SQL/destructive surfaces and must be
@@ -34,6 +35,8 @@ const routes = [
   { path: '/forms', name: 'forms', component: FormView },
   { path: '/reports', name: 'reports', component: ReportView },
   { path: '/queries', name: 'queries', component: QueryEditorView, meta: { builderOnly: true } },
+  // Macro builder (P5.9) — Studio-only; locked away in App Mode.
+  { path: '/macros', name: 'macros', component: MacroBuilderView, meta: { builderOnly: true } },
   { path: '/import', name: 'import', component: ImportView, meta: { builderOnly: true } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { builderOnly: true } },
 ]

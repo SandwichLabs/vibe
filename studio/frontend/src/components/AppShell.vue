@@ -41,6 +41,7 @@ const navItems = [
   { path: '/schema', label: 'Schema', icon: 'columns' },
   { path: '/forms', label: 'Forms', icon: 'form' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
+  { path: '/macros', label: 'Macros', icon: 'play' },
   { path: '/import', label: 'Import', icon: 'download' },
   { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
