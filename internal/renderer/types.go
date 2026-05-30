@@ -137,6 +137,17 @@ type FormConfig struct {
 	Archetype string // columnar | continuous | datasheet | master_detail (plan §1.5)
 }
 
+// ButtonConfig holds {button:} command-button directive configuration (plan §5,
+// unit P5.5). Label is the visible button text; Action is the macro id the GUI
+// runtime invokes via RunMacro when the button is pressed.
+//
+// STUB (TDD RED, P5.5): type declared so the renderer tests compile and fail on
+// assertions; no production rendering exists yet.
+type ButtonConfig struct {
+	Label  string
+	Action string
+}
+
 // DetailConfig holds detail directive configuration.
 type DetailConfig struct {
 	Source string

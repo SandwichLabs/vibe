@@ -748,6 +748,18 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		result[k] = v
 	}
 
+	// {button:} command-button validation (plan §5, unit P5.5): a button must
+	// carry both a visible label and an action (macro target) so the GUI runtime
+	// has something to render and something to invoke.
+	if dirType == "button" {
+		if label, ok := result["label"].(string); !ok || strings.TrimSpace(label) == "" {
+			return nil, fmt.Errorf("line %d: button directive requires a label", lineIdx+1)
+		}
+		if action, ok := result["action"].(string); !ok || strings.TrimSpace(action) == "" {
+			return nil, fmt.Errorf("line %d: button directive requires an action (macro target)", lineIdx+1)
+		}
+	}
+
 	return &DirectiveNode{
 		Type:   dirType,
 		Config: result,
@@ -788,7 +800,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "value", "form", "detail", "subform", "if", "row", "dropdown", "button_group", "slider", "text_input", "toggle"}
+	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "value", "form", "detail", "subform", "button", "if", "row", "dropdown", "button_group", "slider", "text_input", "toggle"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

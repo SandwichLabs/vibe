@@ -154,6 +154,30 @@ func (r *Renderer) RenderFormWithOptions(ctx context.Context, cfg *renderer.Form
 	return b.String(), nil
 }
 
+// RenderButton renders a {button:} command-button (plan §5, unit P5.5).
+//
+// The button carries a data-macro-id (and data-action) hook attribute the Vue
+// GUI runtime binds to invoke RunMacro(action) when pressed. There is NO inline
+// JS (no onclick=), keeping it consistent with the other bound controls. The
+// visible label is HTML-escaped.
+func (r *Renderer) RenderButton(cfg *renderer.ButtonConfig) (string, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("button config is required")
+	}
+	if strings.TrimSpace(cfg.Label) == "" {
+		return "", fmt.Errorf("button config requires a label")
+	}
+	if strings.TrimSpace(cfg.Action) == "" {
+		return "", fmt.Errorf("button config requires an action (macro target)")
+	}
+
+	action := html.EscapeString(cfg.Action)
+	return fmt.Sprintf(
+		`<button type="button" class="vibe-button" data-macro-id="%s" data-action="%s">%s</button>`,
+		action, action, html.EscapeString(cfg.Label),
+	), nil
+}
+
 // RenderEditCell renders a single bound control for a datasheet inline-edit
 // cell, reusing the SAME control implementation as the form renderer so there is
 // no duplicate control logic.
