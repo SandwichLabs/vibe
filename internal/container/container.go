@@ -72,15 +72,27 @@ func Create(path string, opts ...Option) (*Container, error) {
 		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
 	}
 
-	o.Logger.Info("container created successfully", "path", path)
-
-	return &Container{
+	c := &Container{
 		path:     path,
 		sqliteDB: db,
 		duckDB:   duckState,
 		logger:   o.Logger,
 		readOnly: false,
-	}, nil
+	}
+
+	// Seed a bundled starter template if requested (P6.6). This writes user
+	// tables + sample data into DuckDB and Access-style metadata into SQLCipher.
+	if o.Template != "" {
+		if err := applyTemplate(c, o.Template); err != nil {
+			c.Close()       //nolint:errcheck
+			os.Remove(path) //nolint:errcheck
+			return nil, fmt.Errorf("failed to apply template: %w", err)
+		}
+	}
+
+	o.Logger.Info("container created successfully", "path", path)
+
+	return c, nil
 }
 
 // Open opens an existing .vibe file at the given path.

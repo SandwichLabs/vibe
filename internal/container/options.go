@@ -10,6 +10,7 @@ type Options struct {
 	Description string
 	ReadOnly    bool
 	ExampleData bool
+	Template    string
 }
 
 // Option is a functional option for configuring a Container.
@@ -47,6 +48,15 @@ func WithDescription(description string) Option {
 func WithExampleData(v bool) Option {
 	return func(o *Options) {
 		o.ExampleData = v
+	}
+}
+
+// WithTemplate seeds a named Access-style starter template (e.g. "contacts",
+// "inventory", "order-entry") into a new container. See ListTemplates for the
+// registered names.
+func WithTemplate(name string) Option {
+	return func(o *Options) {
+		o.Template = name
 	}
 }
 
