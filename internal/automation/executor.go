@@ -23,6 +23,7 @@ const (
 	IntentMsgBox      = "msg_box"
 	IntentExport      = "export"
 	IntentEmailObject = "email_object"
+	IntentSetValue    = "set_value"
 )
 
 // Column describes a single column in a query result returned to the Executor.
@@ -216,8 +217,16 @@ func (e *Executor) runAction(ctx context.Context, action MacroAction, res *Resul
 		res.Intents = append(res.Intents, e.uiIntent(IntentEmailObject, action))
 		return nil
 	case ActionSetValue:
-		// SetValue mutates UI-bound form state; surface as an intent.
-		res.Intents = append(res.Intents, UIIntent{Kind: "set_value", Target: action.Args["target"], Args: action.Args})
+		// SetValue is UI-bound, not a DuckDB mutation. In Access, SetValue assigns
+		// a control/form/property value (e.g. [Forms]![f]![ctl] = expr) — it mutates
+		// live UI state, not persisted table data. We therefore surface it as a
+		// structured "set_value" intent for the frontend to apply, rather than
+		// executing SQL against DuckDB. (Persisting a field belongs to an explicit
+		// RunSQL UPDATE, not SetValue.) This intentionally diverges from the
+		// acceptance-criteria parenthetical that groups SetValue with the
+		// server-side actions: server-side write-back is not part of SetValue's
+		// semantics here.
+		res.Intents = append(res.Intents, e.uiIntent(IntentSetValue, action))
 		return nil
 
 	default:

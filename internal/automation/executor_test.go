@@ -144,6 +144,116 @@ func TestExecutorServerAndUIActions(t *testing.T) {
 	assert.Equal(t, "cust_form", openForms[0].Target)
 }
 
+// TestExecutorConditionGatingSkipsFalseBranch is the negative-branch counterpart
+// to the gating assertion in TestExecutorServerAndUIActions. It proves that a
+// FALSE condition GATES (skips) the dependent action — the half of acceptance
+// criterion #3 that the positive-only test cannot verify. A regressed executor
+// that ignored conditions and always ran the action would FAIL this test.
+//
+// The seeded `customers` table contains no 'platinum' rows, so the guarding
+// RunQuery COUNT(*) is 0 and the `> 0` comparison is FALSE. We assert that the
+// guarded SetFilter did NOT fire (no AppliedFilter, no intent) and that DuckDB
+// was not mutated. A paired TRUE-condition action in the same spec confirms the
+// executor still fires when the condition holds, so the difference in outcome is
+// attributable to the condition, not to the executor being broken outright.
+func TestExecutorConditionGatingSkipsFalseBranch(t *testing.T) {
+	qe, ddb := newExecutorEnv(t)
+	ctx := context.Background()
+
+	exec := automation.NewExecutor(automation.WithQueryEngine(qe))
+
+	spec := automation.MacroSpec{
+		ID:    "tier_filters",
+		Title: "Conditionally apply tier filters",
+		Actions: []automation.MacroAction{
+			// FALSE branch: there are no 'platinum' customers, so COUNT(*) == 0
+			// and `> 0` is false. This SetFilter MUST be skipped.
+			{
+				Kind: automation.ActionSetFilter,
+				Args: map[string]string{
+					"target": "customers",
+					"filter": "tier = 'platinum'",
+				},
+				Condition: &automation.MacroCondition{
+					Expr: "RunQuery(SELECT COUNT(*) AS n FROM customers WHERE tier = 'platinum') > 0",
+				},
+			},
+			// TRUE branch (paired control): all 3 seeded rows are 'free', so
+			// COUNT(*) == 3 and `> 0` is true. This SetFilter MUST fire.
+			{
+				Kind: automation.ActionSetFilter,
+				Args: map[string]string{
+					"target": "customers",
+					"filter": "tier = 'free'",
+				},
+				Condition: &automation.MacroCondition{
+					Expr: "RunQuery(SELECT COUNT(*) AS n FROM customers WHERE tier = 'free') > 0",
+				},
+			},
+		},
+	}
+
+	res, err := exec.Run(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	// Only the TRUE-branch SetFilter fired; the FALSE-branch one was gated out.
+	// If condition gating regressed (action always runs), len would be 2 and the
+	// 'platinum' filter would be present — this assertion is the regression trap.
+	require.Len(t, res.Filters, 1, "only the true-condition SetFilter must fire; the false-condition one must be skipped")
+	assert.Equal(t, "customers", res.Filters[0].Target)
+	assert.Equal(t, "tier = 'free'", res.Filters[0].Filter, "the surviving filter must be the true-condition one, not the gated platinum one")
+
+	// No intents were produced (SetFilter is server-side), and DuckDB is unchanged
+	// by a pure SetFilter macro (SetFilter records intent, does not mutate rows).
+	assert.Empty(t, res.Intents, "SetFilter actions produce no UI intents")
+	var n int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM customers WHERE tier <> 'free';`).Scan(&n))
+	assert.Equal(t, 0, n, "gated/SetFilter actions must not mutate DuckDB rows")
+}
+
+// TestExecutorSetValueSurfacesAsIntent documents and verifies the interpretation
+// of SetValue: it is UI-bound (it assigns a control/form value, like Access's
+// SetValue), so it is surfaced as a structured "set_value" UI intent rather than
+// executed as a DuckDB mutation. See executor.go ActionSetValue for the rationale
+// and the deliberate divergence from the acceptance-criteria parenthetical.
+func TestExecutorSetValueSurfacesAsIntent(t *testing.T) {
+	qe, ddb := newExecutorEnv(t)
+	ctx := context.Background()
+
+	exec := automation.NewExecutor(automation.WithQueryEngine(qe))
+
+	spec := automation.MacroSpec{
+		ID: "set_status",
+		Actions: []automation.MacroAction{
+			{
+				Kind: automation.ActionSetValue,
+				Args: map[string]string{
+					"target": "status_label",
+					"value":  "Promoted",
+				},
+			},
+		},
+	}
+
+	res, err := exec.Run(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	// SetValue is surfaced as exactly one structured set_value intent — not dropped.
+	require.Len(t, res.Intents, 1, "SetValue must surface as exactly one UI intent")
+	assert.Equal(t, automation.IntentSetValue, res.Intents[0].Kind)
+	assert.Equal(t, "status_label", res.Intents[0].Target)
+	assert.Equal(t, "Promoted", res.Intents[0].Args["value"], "SetValue args must be carried through to the intent")
+
+	// SetValue does NOT write back to DuckDB: no AppliedFilter, and (since the
+	// target is not even a table) the data store is untouched.
+	assert.Empty(t, res.Filters, "SetValue is not a server-side filter")
+	var cnt int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM customers WHERE tier <> 'free';`).Scan(&cnt))
+	assert.Equal(t, 0, cnt, "SetValue must not mutate DuckDB rows")
+}
+
 // TestExecutorRunMacroCycleRejected asserts RunMacro recursion is bounded: a
 // macro cycle (A calls B calls A) is rejected with a depth/cycle error and does
 // not silently spin or partially mutate beyond already-committed prior actions.
@@ -175,14 +285,27 @@ func TestExecutorRunMacroCycleRejected(t *testing.T) {
 		return s, nil
 	}
 
+	// MaxDepth is set to 64 — far above the 2-macro cycle length — so termination
+	// CANNOT come from the depth cap. The only way to terminate before depth 64 is
+	// the visited-set cycle detection in executor.run. This isolates the cycle
+	// detector from the depth fallback: a regression that removed the visited-set
+	// check would spin to depth 64 (still ErrMacroCycle, but) — so we additionally
+	// assert the error message names the cycling macro rather than reporting a bare
+	// depth overflow, proving the visited-set path fired.
 	exec := automation.NewExecutor(
 		automation.WithQueryEngine(qe),
 		automation.WithMacroResolver(resolver),
+		automation.WithMaxDepth(64),
 	)
 
 	_, err := exec.Run(ctx, specs["A"])
 	require.Error(t, err, "an A->B->A macro cycle must be rejected")
 	assert.ErrorIs(t, err, automation.ErrMacroCycle, "cycle must surface as ErrMacroCycle")
+	// The visited-set detector reports the macro id already on the stack; the
+	// depth-cap fallback reports a "depth N" overflow. Asserting the former proves
+	// cycle detection fired before the depth cap could.
+	assert.Contains(t, err.Error(), "already on stack",
+		"cycle must be caught by the visited-set detector, not the depth cap")
 
 	// No customers were mutated by the (purely RunMacro) cycle.
 	var n int
