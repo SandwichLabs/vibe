@@ -1,24 +1,45 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+// P3.10: Studio Home / Dashboard. The body is rendered by the SAME page
+// pipeline used by the page editor/preview — it renders the `_dashboard`
+// system page (seeded by the container migration) via RenderPageContent, so the
+// home screen is data-driven (live {metric:}/{table:} directives executed on
+// DuckDB) rather than carrying hardcoded stats from GetDashboard().
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 
-const router = useRouter()
-const data = ref<DashboardData | null>(null)
-const loading = ref(true)
+// Stable id of the seeded `_dashboard` system page (see container schema
+// DashboardPageID). The page pipeline renders this through the standard
+// SQL-block + directive path.
+const DASHBOARD_PAGE_ID = '_dashboard'
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
+const router = useRouter()
+const title = ref('Dashboard')
+const description = ref('')
+const rendered = ref('')
+const loading = ref(true)
+const errorMessage = ref('')
 
 async function load() {
   loading.value = true
+  errorMessage.value = ''
   try {
-    data.value = await window.go.main.App.GetDashboard()
-  } catch { /* ignore */ }
+    // File metadata still comes from GetFileInfo for the crumb/lead; the BODY
+    // is rendered through the page pipeline.
+    const info = await window.go.main.App.GetFileInfo()
+    title.value = info?.title || 'Dashboard'
+    description.value = info?.description || ''
+  } catch {
+    /* metadata is best-effort */
+  }
+  try {
+    rendered.value = await window.go.main.App.RenderPageContent(DASHBOARD_PAGE_ID, {})
+  } catch (e: unknown) {
+    rendered.value = ''
+    errorMessage.value = String(e)
+  }
   loading.value = false
+  await nextTick()
 }
 
 onMounted(load)
@@ -29,7 +50,7 @@ onMounted(load)
     <div class="page-head">
       <div>
         <div class="crumb">Studio <span class="sep">/</span> Home</div>
-        <h1>{{ data?.title || 'Dashboard' }}</h1>
+        <h1>{{ title }}</h1>
       </div>
       <div class="row">
         <button class="btn" @click="router.push('/import')">
@@ -41,82 +62,51 @@ onMounted(load)
       </div>
     </div>
 
-    <p v-if="data?.description" class="sh-lead" style="margin-bottom: 24px; max-width: 720px;">
-      {{ data.description }}
+    <p v-if="description" class="sh-lead" style="margin-bottom: 24px; max-width: 720px;">
+      {{ description }}
+    </p>
+
+    <p v-if="errorMessage" class="sh-mono" role="alert" style="color: var(--sh-coral, #e5604a);">
+      {{ errorMessage }}
     </p>
 
     <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
 
-    <template v-else-if="data">
-      <div class="stats">
-        <div class="stat">
-          <div class="label">Pages</div>
-          <div class="num">{{ data.page_count }}</div>
-        </div>
-        <div class="stat">
-          <div class="label">Tables</div>
-          <div class="num">{{ data.table_count }}</div>
-        </div>
-        <div class="stat">
-          <div class="label">Queries</div>
-          <div class="num">{{ data.query_count }}</div>
-        </div>
-        <div class="stat">
-          <div class="label">File size</div>
-          <div class="num">{{ formatBytes(data.file_size) }}</div>
-        </div>
-      </div>
+    <!-- Dashboard body, rendered through the page pipeline (no hardcoded stats). -->
+    <!-- eslint-disable-next-line vue/no-v-html -->
+    <div
+      v-else
+      class="dashboard-rendered vibe-content prose"
+      data-testid="dashboard-rendered"
+      v-html="rendered"
+    ></div>
 
-      <div class="sec-title">
-        <h2>Quick actions</h2>
-        <span class="label">Jump back in</span>
+    <div class="sec-title" style="margin-top: 32px;">
+      <h2>Quick actions</h2>
+      <span class="label">Jump back in</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/pages')">
+        <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
+          <Icon name="fileText" :size="22" />
+        </div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Pages</div>
+        <div class="sh-meta" style="margin-top: 4px;">Author markdown & HTML pages</div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/pages')">
-          <div class="row" style="justify-content: space-between; align-items: flex-start;">
-            <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
-              <Icon name="fileText" :size="22" />
-            </div>
-          </div>
-          <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Pages</div>
-          <div class="sh-meta" style="margin-top: 4px;">Author markdown & HTML pages</div>
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-science);" @click="router.push('/tables')">
+        <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
+          <Icon name="database" :size="22" />
         </div>
-        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-science);" @click="router.push('/tables')">
-          <div class="row" style="justify-content: space-between; align-items: flex-start;">
-            <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
-              <Icon name="database" :size="22" />
-            </div>
-          </div>
-          <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Tables</div>
-          <div class="sh-meta" style="margin-top: 4px;">Browse & edit your data</div>
-        </div>
-        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-math);" @click="router.push('/queries')">
-          <div class="row" style="justify-content: space-between; align-items: flex-start;">
-            <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
-              <Icon name="terminal" :size="22" />
-            </div>
-          </div>
-          <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Queries</div>
-          <div class="sh-meta" style="margin-top: 4px;">Run SQL on DuckDB & SQLite</div>
-        </div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Tables</div>
+        <div class="sh-meta" style="margin-top: 4px;">Browse & edit your data</div>
       </div>
-
-      <div v-if="data.created_at || data.updated_at" class="card" style="margin-top: 24px;">
-        <div class="card-head">
-          <h3 class="card-title">File details</h3>
-          <span class="sh-label">Metadata</span>
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-math);" @click="router.push('/queries')">
+        <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
+          <Icon name="terminal" :size="22" />
         </div>
-        <div style="padding: 6px 22px 14px;">
-          <div v-if="data.created_at" class="row" style="justify-content: space-between; padding: 6px 0;">
-            <span class="sh-label">Created</span>
-            <span class="sh-mono">{{ data.created_at }}</span>
-          </div>
-          <div v-if="data.updated_at" class="row" style="justify-content: space-between; padding: 6px 0;">
-            <span class="sh-label">Updated</span>
-            <span class="sh-mono">{{ data.updated_at }}</span>
-          </div>
-        </div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Queries</div>
+        <div class="sh-meta" style="margin-top: 4px;">Run SQL on DuckDB</div>
       </div>
-    </template>
+    </div>
   </div>
 </template>

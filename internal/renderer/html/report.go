@@ -38,6 +38,8 @@ func (r *Renderer) RenderReport(tree *reports.BandTree, spec reports.ReportSpec,
 
 	var b strings.Builder
 
+	b.WriteString(SharedComponentCSS)
+	b.WriteString("\n")
 	b.WriteString(reportPrintCSS)
 	b.WriteString("\n")
 
@@ -124,11 +126,6 @@ func (r *Renderer) writeAggregates(b *strings.Builder, cls string, aggs []report
 // are guarded by @media print and add page-break boundaries on groups plus a
 // running page number/date footer.
 const reportPrintCSS = `<style>
-.vibe-report { font-family: var(--font-body, sans-serif); }
-.vibe-report-header { font-weight: 700; }
-.vibe-report-detail { display: flex; gap: 1rem; }
-.vibe-group-footer, .vibe-report-footer { font-weight: 600; }
-.vibe-report-empty { padding: 1rem; color: var(--muted, #888); font-style: italic; }
 @media print {
   .vibe-report-header { page-break-after: avoid; }
   .vibe-report-group { page-break-inside: avoid; }

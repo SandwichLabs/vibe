@@ -134,6 +134,14 @@ export function GetQuery(arg1) {
   return window['go']['main']['App']['GetQuery'](arg1);
 }
 
+export function GetReportData(arg1, arg2) {
+  return window['go']['main']['App']['GetReportData'](arg1, arg2);
+}
+
+export function GetReportSQL(arg1) {
+  return window['go']['main']['App']['GetReportSQL'](arg1);
+}
+
 export function GetTableData(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetTableData'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -196,6 +204,10 @@ export function RenderPageContent(arg1, arg2) {
 
 export function RenderReportContent(arg1) {
   return window['go']['main']['App']['RenderReportContent'](arg1);
+}
+
+export function RenderReportContentFiltered(arg1, arg2) {
+  return window['go']['main']['App']['RenderReportContentFiltered'](arg1, arg2);
 }
 
 export function SaveFile() {

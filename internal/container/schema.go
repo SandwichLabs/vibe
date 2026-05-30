@@ -181,6 +181,54 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("failed to commit migration transaction: %w", err)
 	}
 
+	// Seed system pages (idempotent) so the Studio Home / Dashboard can render
+	// through the page pipeline rather than a hardcoded binding (P3.10).
+	if err := seedSystemPages(db); err != nil {
+		return fmt.Errorf("failed to seed system pages: %w", err)
+	}
+
+	return nil
+}
+
+// DashboardPageID is the stable id of the `_dashboard` system page that backs
+// the Studio Home / Dashboard screen. DashboardView renders this page through
+// the same page pipeline used by the page editor/preview (P3.10), so the home
+// screen is data-driven (live metric/table directives) instead of carrying
+// hardcoded stats.
+const DashboardPageID = "_dashboard"
+
+// dashboardPageContent is the markdown body of the `_dashboard` system page. It
+// uses the standard page directives ({metric:}/{table:}) so it executes through
+// the normal SQL-block + directive pipeline. The counts query the DuckDB
+// information_schema so the dashboard reflects live state.
+const dashboardPageContent = "# Dashboard\n\n" +
+	"Welcome to your Vibe workspace. The numbers below are computed live through the page pipeline.\n\n" +
+	"```sql counts\n" +
+	"SELECT\n" +
+	"  (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main') AS tables\n" +
+	"```\n\n" +
+	"{metric: source=counts, value=tables, label=Tables}\n\n" +
+	"## Tables in this workspace\n\n" +
+	"```sql table_list\n" +
+	"SELECT table_name AS \"Table\" FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name\n" +
+	"```\n\n" +
+	"{table: source=table_list}\n"
+
+// seedSystemPages inserts (idempotently) the built-in system pages, currently
+// just the `_dashboard` page. Uses INSERT OR IGNORE so user edits to an existing
+// `_dashboard` page are never clobbered and re-running migrations on an existing
+// container is a no-op.
+func seedSystemPages(db *sql.DB) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := db.Exec(
+		`INSERT OR IGNORE INTO _vibe_pages
+			(id, title, content, page_type, sort_order, created_at, updated_at, metadata)
+		 VALUES (?, ?, ?, 'notebook', -100, ?, ?, '{"system":true}');`,
+		DashboardPageID, "Dashboard", dashboardPageContent, now, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to seed %q page: %w", DashboardPageID, err)
+	}
 	return nil
 }
 

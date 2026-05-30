@@ -72,6 +72,10 @@ export function GetPage(arg1:string):Promise<main.PageDetail>;
 
 export function GetQuery(arg1:string):Promise<queries.Query>;
 
+export function GetReportData(arg1:string,arg2:Record<string, string>):Promise<main.ReportData>;
+
+export function GetReportSQL(arg1:string):Promise<string>;
+
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
 export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
@@ -103,6 +107,8 @@ export function RemoveForeignKey(arg1:string):Promise<void>;
 export function RenderPageContent(arg1:string,arg2:Record<string, string>):Promise<string>;
 
 export function RenderReportContent(arg1:string):Promise<string>;
+
+export function RenderReportContentFiltered(arg1:string,arg2:Record<string, string>):Promise<string>;
 
 export function SaveFile():Promise<void>;
 

@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -292,7 +294,9 @@ func (a *App) ListPages() ([]PageSummary, error) {
 	}
 
 	db := a.container.SQLiteDB()
-	rows, err := db.Query("SELECT id, title, page_type, sort_order FROM _vibe_pages ORDER BY sort_order, title")
+	// System pages (id prefixed with '_', e.g. the `_dashboard` page that backs
+	// the Studio Home) are excluded from the user-facing Pages list (P3.10).
+	rows, err := db.Query("SELECT id, title, page_type, sort_order FROM _vibe_pages WHERE id NOT LIKE '\\_%' ESCAPE '\\' ORDER BY sort_order, title")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pages: %w", err)
 	}
@@ -3068,10 +3072,48 @@ func (a *App) ListReports() ([]reports.ReportSummary, error) {
 // RenderReportContent loads a banded report spec via the ReportStore, runs its
 // bound query on the real engine, computes the band tree, and renders banded
 // HTML (plan §3.3 / P3.8).
-//
-// STUB ONLY (TDD RED): not implemented yet. Returns empty output so the
-// integration test fails on its assertions, not on a missing symbol.
 func (a *App) RenderReportContent(reportID string) (string, error) {
+	return a.RenderReportContentFiltered(reportID, nil)
+}
+
+// reportFilterCol matches a safe identifier (column name) for live filtering.
+var reportFilterCol = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// filteredSource wraps a report's bound query in a subquery and applies the
+// supplied column=value equality filters as a WHERE clause. Filter keys are
+// validated as plain identifiers and values are passed as bound parameters, so
+// the live Report View filters cannot inject SQL (plan §3.4 / mockup #11 "Live
+// DuckDB filters").
+func filteredSource(source string, filters map[string]string) (string, []any) {
+	var clauses []string
+	var args []any
+	// Stable ordering for deterministic SQL (and tests).
+	keys := make([]string, 0, len(filters))
+	for k, v := range filters {
+		if v == "" || !reportFilterCol.MatchString(k) {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i, k := range keys {
+		// Engine binds $name placeholders (see engine.BindParams); namedArgs
+		// produces matching p1, p2, … keys.
+		clauses = append(clauses, fmt.Sprintf("%q = $p%d", k, i+1))
+		args = append(args, filters[k])
+	}
+	if len(clauses) == 0 {
+		return source, nil
+	}
+	wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _vibe_report_src WHERE %s",
+		source, strings.Join(clauses, " AND "))
+	return wrapped, args
+}
+
+// RenderReportContentFiltered renders the banded report HTML after applying the
+// given live equality filters (column=value) to the report's bound query. An
+// empty/nil filter map renders the full report (plan §3.4 / mockup #11).
+func (a *App) RenderReportContentFiltered(reportID string, filters map[string]string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.container == nil {
@@ -3090,7 +3132,8 @@ func (a *App) RenderReportContent(reportID string) (string, error) {
 		return "", fmt.Errorf("report %q not found", reportID)
 	}
 
-	rs, err := a.engine.Execute(a.ctx, spec.Source, nil)
+	query, args := filteredSource(spec.Source, filters)
+	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
 	if err != nil {
 		return "", fmt.Errorf("failed to run report query for %q: %w", reportID, err)
 	}
@@ -3105,6 +3148,88 @@ func (a *App) RenderReportContent(reportID string) (string, error) {
 		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
 	}
 	return htmlOut, nil
+}
+
+// namedArgs converts positional WHERE args into the param map shape the engine
+// expects for "?" placeholders (p1, p2, …). Returns nil for no args.
+func namedArgs(args []any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	m := make(map[string]any, len(args))
+	for i, v := range args {
+		m[fmt.Sprintf("p%d", i+1)] = v
+	}
+	return m
+}
+
+// ReportData is a tabular view of a report's bound query result, used by the
+// Report View chart/table toggle and to populate live-filter option lists.
+type ReportData struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+}
+
+// GetReportData runs the report's bound query (with optional live filters) and
+// returns its raw tabular result, so the Report View can render either a chart
+// or a data table from the same data and derive filter options (plan §3.4 /
+// mockup #11). Studio-only "Edit SQL" reads the source via GetReportSQL.
+func (a *App) GetReportData(reportID string, filters map[string]string) (*ReportData, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	if a.engine == nil {
+		return nil, fmt.Errorf("no engine available")
+	}
+
+	source, err := a.reportSourceLocked(reportID)
+	if err != nil {
+		return nil, err
+	}
+
+	query, args := filteredSource(source, filters)
+	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
+	if err != nil {
+		return nil, fmt.Errorf("failed to run report query for %q: %w", reportID, err)
+	}
+
+	out := &ReportData{Columns: make([]string, 0, len(rs.Columns)), Rows: rs.Rows}
+	for _, c := range rs.Columns {
+		out.Columns = append(out.Columns, c.Name)
+	}
+	if out.Rows == nil {
+		out.Rows = [][]any{}
+	}
+	return out, nil
+}
+
+// GetReportSQL returns the report's bound query source SQL, backing the
+// Studio-only "Edit SQL" affordance in the Report View (plan §3.4 / mockup #11).
+func (a *App) GetReportSQL(reportID string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.reportSourceLocked(reportID)
+}
+
+// reportSourceLocked is the lock-free body shared by reportSource/GetReportSQL.
+func (a *App) reportSourceLocked(reportID string) (string, error) {
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return "", fmt.Errorf("report %q not found", reportID)
+	}
+	if strings.TrimSpace(spec.Source) == "" {
+		return "", fmt.Errorf("report %q has no bound query", reportID)
+	}
+	return spec.Source, nil
 }
 
 // ExportReportHTML renders the banded report HTML (P3.8) and writes it to dst,
@@ -3122,22 +3247,9 @@ func (a *App) ExportReportHTML(reportID, dst string) (string, error) {
 }
 
 // reportSource loads a report spec and returns its bound query source SQL.
+// Caller must hold a.mu (it is invoked under RLock by ExportReportXLSX).
 func (a *App) reportSource(reportID string) (string, error) {
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return "", fmt.Errorf("report %q not found", reportID)
-	}
-	if strings.TrimSpace(spec.Source) == "" {
-		return "", fmt.Errorf("report %q has no bound query", reportID)
-	}
-	return spec.Source, nil
+	return a.reportSourceLocked(reportID)
 }
 
 // ExportReportXLSX writes the report's bound query result to an .xlsx via the
