@@ -237,6 +237,24 @@ func updateRowTx(tx txExecer, colTypes map[string]string, metas map[string]schem
 	return &WriteResult{Affected: affected}, nil
 }
 
+// deleteRowTx deletes a single row by primary key within a transaction. The
+// pkVal is coerced to the PK column's type via CAST(? AS <type>) (mirroring
+// updateRowTx), and a 0-affected-row outcome (PK mismatch) is surfaced as a
+// structured *WriteError rather than a silent no-op.
+func deleteRowTx(tx txExecer, colTypes map[string]string, table, pkCol string, pkVal any) (*WriteResult, error) {
+	query := fmt.Sprintf("DELETE FROM %q WHERE %q = CAST(? AS %s)",
+		table, pkCol, castType(colTypes, pkCol))
+	res, err := tx.Exec(query, pkVal)
+	if err != nil {
+		return nil, &WriteError{Message: fmt.Sprintf("failed to delete from %q: %v", table, err)}
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return nil, &WriteError{Message: fmt.Sprintf("no row in %q matched %s = %v", table, pkCol, pkVal)}
+	}
+	return &WriteResult{Affected: affected}, nil
+}
+
 // castType returns the DuckDB cast target for a column, defaulting to VARCHAR
 // for unknown columns so the statement still parses (an unknown column will
 // fail at the INSERT/UPDATE with a clear error).

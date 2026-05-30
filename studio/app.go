@@ -999,31 +999,38 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string
 	return ddb, colTypes, metas, nil
 }
 
-// DeleteRow deletes a row from a table.
-func (a *App) DeleteRow(table, pkCol string, pkVal any) error {
+// DeleteRow deletes a row from a table by primary key. Consistent with
+// InsertRow/UpdateRow, it validates the pk column identifier, runs the DELETE
+// inside a transaction with rollback on error, coerces pkVal to the PK column's
+// type, and surfaces a 0-affected-row outcome (PK mismatch) as a structured
+// *WriteError rather than a raw SQL string.
+func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	if !isValidIdentifier(table) {
-		return fmt.Errorf("invalid table name")
+	if !isValidIdentifier(pkCol) {
+		return nil, fmt.Errorf("invalid primary key column")
 	}
 
-	query := fmt.Sprintf("DELETE FROM %q WHERE %q = ?", table, pkCol)
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return fmt.Errorf("DuckDB not available")
-	}
-	_, err := ddb.Exec(query, args(pkVal)...)
+	ddb, colTypes, _, err := a.prepareWrite(table)
 	if err != nil {
-		return fmt.Errorf("failed to delete row: %w", err)
+		return nil, err
 	}
-	return nil
-}
 
-func args(vals ...any) []any { return vals }
+	tx, err := ddb.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	res, err := deleteRowTx(tx, colTypes, table, pkCol, pkVal)
+	if err != nil {
+		tx.Rollback() //nolint:errcheck
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit delete: %w", err)
+	}
+	return res, nil
+}
 
 // CreateTable creates a new table with the given columns.
 func (a *App) CreateTable(name string, columns []ColumnInfo) error {

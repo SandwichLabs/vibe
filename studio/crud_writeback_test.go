@@ -4,7 +4,7 @@ package main
 // coercion and validation" (parity plan §1.1).
 //
 // This is a REAL integration test: it opens a real encrypted .vibe container,
-// materializes DuckDB, creates a typed table + _vibe_field_meta rules, and
+// materializes DuckDB, creates typed tables + _vibe_field_meta rules, and
 // drives the production Wails-bound write path (InsertRow/UpdateRow/DeleteRow
 // + the atomic multi-statement form submit). No mocks.
 //
@@ -13,8 +13,12 @@ package main
 //   - required + validation_rule from _vibe_field_meta are enforced server-side,
 //     returning a FIELD-KEYED structured error (not a raw SQL string)
 //   - UpdateRow surfaces a 0-affected-row PK mismatch as an error
+//   - DeleteRow runs transactionally, coerces the PK, validates the pk column
+//     identifier, and surfaces a 0-affected-row PK mismatch as a *WriteError
 //   - a failed child statement rolls back the whole logical submit (atomicity),
 //     leaving no orphaned parent row
+//   - FK behavior follows the P1.0 rely-on-duckdb-fk decision: an orphan child
+//     insert is rejected (RESTRICT) and rolls the parent back as well
 
 import (
 	"errors"
@@ -157,4 +161,93 @@ func TestCRUDAtomicSubmitRollback(t *testing.T) {
 	var childCount int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items;`).Scan(&childCount))
 	assert.Equal(t, 0, childCount, "no child rows committed")
+}
+
+// TestDeleteRowTransactional verifies DeleteRow is consistent with the
+// Insert/Update contract: it deletes the matching row, surfaces a non-existent
+// PK as a structured *WriteError (not a silent no-op), and rejects an invalid
+// pk column identifier rather than interpolating it into SQL.
+func TestDeleteRowTransactional(t *testing.T) {
+	app := newOpenApp(t)
+	createOrdersTable(t, app)
+
+	ddb := app.container.DuckDBDB()
+	_, err := ddb.Exec(`INSERT INTO orders (id, qty) VALUES (1, 5), (2, 7);`)
+	require.NoError(t, err)
+
+	// --- successful delete affects exactly the targeted row (PK coerced) ---
+	res, err := app.DeleteRow("orders", "id", "1")
+	require.NoError(t, err, "deleting an existing row must succeed")
+	require.NotNil(t, res)
+	assert.Equal(t, int64(1), res.Affected, "exactly one row deleted")
+
+	var count int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders;`).Scan(&count))
+	assert.Equal(t, 1, count, "only the targeted row should be gone")
+
+	// --- deleting a non-existent PK is a structured error, not a no-op ---
+	_, err = app.DeleteRow("orders", "id", "9999")
+	we := asWriteError(t, err)
+	assert.NotEmpty(t, we.Message, "PK mismatch must carry a message")
+
+	// --- an invalid pk column identifier is rejected (no SQL injection) ---
+	_, err = app.DeleteRow("orders", "id; DROP TABLE orders", "1")
+	require.Error(t, err, "invalid pk column must be rejected")
+
+	// The orders table must still exist and retain its surviving row.
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders;`).Scan(&count))
+	assert.Equal(t, 1, count, "invalid identifier must not have mutated the table")
+}
+
+// TestCRUDForeignKeyRestrict covers the P1.0 "rely-on-duckdb-fk" decision
+// through the production CRUD write path: a REFERENCES constraint must reject
+// an orphan child (RESTRICT) and, within an atomic SubmitForm, roll the parent
+// back when the FK-violating child insert fails — true referential-integrity
+// atomicity, not merely validation-rule rollback.
+func TestCRUDForeignKeyRestrict(t *testing.T) {
+	app := newOpenApp(t)
+	ddb := app.container.DuckDBDB()
+	require.NotNil(t, ddb)
+
+	_, err := ddb.Exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name VARCHAR);`)
+	require.NoError(t, err)
+	_, err = ddb.Exec(`CREATE TABLE invoices (
+		id INTEGER PRIMARY KEY,
+		customer_id INTEGER REFERENCES customers(id),
+		amount DECIMAL(10,2)
+	);`)
+	require.NoError(t, err)
+
+	// (a) Orphan child via InsertRow: customer_id=42 has no parent -> FK reject.
+	_, err = app.InsertRow("invoices", map[string]any{
+		"id":          "1",
+		"customer_id": "42",
+		"amount":      "10.00",
+	})
+	we := asWriteError(t, err)
+	assert.NotEmpty(t, we.Message, "FK violation must surface a structured error")
+
+	var invCount int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM invoices;`).Scan(&invCount))
+	assert.Equal(t, 0, invCount, "orphan invoice must be rejected (RESTRICT)")
+
+	// (b) Atomic submit: a valid parent customer + an FK-violating child invoice
+	// (pointing at a non-existent customer) must roll BOTH back — referential
+	// integrity, not a validation rule, triggers the rollback.
+	parent := FormSubmitRow{
+		Table:  "customers",
+		Values: map[string]any{"id": "100", "name": "Acme"},
+	}
+	children := []FormSubmitRow{
+		{Table: "invoices", Values: map[string]any{"id": "2", "customer_id": "999", "amount": "5.00"}},
+	}
+	err = app.SubmitForm(parent, children)
+	require.Error(t, err, "FK-violating child must fail the whole submit")
+
+	var custCount int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM customers WHERE id = 100;`).Scan(&custCount))
+	assert.Equal(t, 0, custCount, "parent must be rolled back when the FK child fails")
+
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM invoices;`).Scan(&invCount))
+	assert.Equal(t, 0, invCount, "no invoice committed")
 }

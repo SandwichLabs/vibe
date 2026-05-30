@@ -30,9 +30,9 @@ declare global {
           ListTables(): Promise<string[]>
           DescribeTable(name: string): Promise<TableInfo>
           GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
-          InsertRow(table: string, values: Record<string, any>): Promise<void>
-          UpdateRow(table: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<void>
-          DeleteRow(table: string, pkCol: string, pkVal: any): Promise<void>
+          InsertRow(table: string, values: Record<string, any>): Promise<WriteResult>
+          UpdateRow(table: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
+          DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
           CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string, engine: string): Promise<QueryResult>
@@ -56,6 +56,20 @@ declare global {
       }
     }
   }
+}
+
+// WriteResult is returned by the transactional CRUD methods
+// (InsertRow/UpdateRow/DeleteRow) and reports the number of affected rows.
+interface WriteResult {
+  affected: number
+}
+
+// WriteError is the structured, field-keyed CRUD failure surfaced by the
+// backend so the form UI can highlight the offending controls. It arrives as a
+// rejected promise (JSON-encoded) rather than the resolved value.
+interface WriteError {
+  message: string
+  fields?: Record<string, string>
 }
 
 interface FileInfo {
