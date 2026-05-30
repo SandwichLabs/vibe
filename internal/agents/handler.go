@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/schema"
 )
 
 // ContainerAccess provides access to the container (interface to avoid circular imports).
@@ -50,6 +51,12 @@ func NewHandler(container ContainerAccess, engine EngineAccess, sandbox *Sandbox
 		approval:  NewApprovalQueue(),
 		logger:    logger,
 	}
+}
+
+// Approvals returns the handler's approval queue so callers (and tests) can
+// drive the approval workflow (Pending/Approve/Reject) for gated write tools.
+func (h *Handler) Approvals() *ApprovalQueue {
+	return h.approval
 }
 
 // Handle processes a JSON-RPC request and returns a response.
@@ -140,6 +147,10 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 		return h.handleDropTable(ctx, req)
 	case "import_csv":
 		return h.handleImportCSV(ctx, req)
+
+	// Form Wizard
+	case "create_form":
+		return h.handleCreateForm(ctx, req)
 
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))
@@ -598,6 +609,129 @@ func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
 	}
 
 	return NewResponse(req.ID, map[string]any{"table": table, "rows_imported": inserted})
+}
+
+// --- Form Wizard handler ---
+
+// handleCreateForm is the Form Wizard tool: it builds a bound form spec for a
+// table, seeds humanized field-meta captions for the bound columns, and
+// persists the form to _vibe_forms (plan §1.6 / §4.3).
+func (h *Handler) handleCreateForm(_ context.Context, req *Request) *Response {
+	name := req.Params["name"].(string)
+	table := req.Params["table"].(string)
+	archetype := req.Params["archetype"].(string)
+
+	onSubmit := "refresh"
+	if v, ok := req.Params["on_submit"].(string); ok && v != "" {
+		onSubmit = v
+	}
+
+	fields := extractFormFields(req.Params["fields"])
+
+	spec := schema.FormSpec{
+		ID:        uuid.New().String(),
+		Title:     name,
+		Table:     table,
+		Archetype: archetype,
+		OnSubmit:  onSubmit,
+		Fields:    fields,
+	}
+
+	// master_detail forms carry a subform link to a child table.
+	if sf, ok := req.Params["subform"].(map[string]any); ok {
+		subform := &schema.SubformSpec{
+			ChildTable: stringParam(sf["child_table"]),
+			ChildKey:   stringParam(sf["child_key"]),
+			ParentKey:  stringParam(sf["parent_key"]),
+			Fields:     extractFormFields(sf["fields"]),
+		}
+		spec.Subform = subform
+	}
+
+	db := h.container.SQLiteDB()
+
+	// Seed humanized field-meta captions for the bound master columns.
+	metaStore := schema.NewStore(db)
+	for i, f := range spec.Fields {
+		caption := f.Caption
+		if caption == "" {
+			caption = humanizeColumn(f.Name)
+		}
+		if err := metaStore.SetFieldMeta(table, f.Name, schema.FieldMeta{
+			TableName:  table,
+			ColumnName: f.Name,
+			Caption:    caption,
+			SortOrder:  i,
+		}); err != nil {
+			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to seed field meta: %v", err))
+		}
+	}
+
+	formStore := schema.NewFormStore(db)
+	if err := formStore.SaveForm(spec); err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to persist form: %v", err))
+	}
+
+	h.logger.Info("created form", "id", spec.ID, "table", table, "archetype", archetype)
+	return NewResponse(req.ID, map[string]any{
+		"id":        spec.ID,
+		"name":      name,
+		"table":     table,
+		"archetype": archetype,
+		"created":   true,
+	})
+}
+
+// extractFormFields converts a params field list ([]any of {name,...}) into
+// FormFieldSpec entries.
+func extractFormFields(raw any) []schema.FormFieldSpec {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]schema.FormFieldSpec, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		fname := stringParam(m["name"])
+		if fname == "" {
+			continue
+		}
+		out = append(out, schema.FormFieldSpec{
+			Name:        fname,
+			Caption:     stringParam(m["caption"]),
+			ControlType: stringParam(m["control_type"]),
+		})
+	}
+	return out
+}
+
+// stringParam coerces an any value to a string, returning "" for nil.
+func stringParam(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// humanizeColumn derives a human-readable caption from a column name, e.g.
+// "order_id" -> "Order Id", "customer" -> "Customer".
+func humanizeColumn(col string) string {
+	parts := strings.FieldsFunc(col, func(r rune) bool {
+		return r == '_' || r == '-' || r == ' '
+	})
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 // --- Helpers ---

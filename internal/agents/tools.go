@@ -177,6 +177,22 @@ var Tools = []ToolDef{
 			{Name: "has_header", Type: "boolean", Required: false, Desc: "Whether the CSV has a header row (default: true)"},
 		},
 	},
+
+	// Form Wizard tool (plan §1.6 / §4.3). Generates a bound form spec for a
+	// table, seeds humanized field-meta captions, and persists to _vibe_forms.
+	{
+		Name:        "create_form",
+		Description: "Form Wizard: generate a bound form for a table. Supports archetypes columnar | continuous | datasheet | master_detail (with a subform link to a child table), seeds humanized field-meta captions, and persists the spec to _vibe_forms.",
+		Category:    "schema",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Form name / title"},
+			{Name: "table", Type: "string", Required: true, Desc: "Table the form is bound to"},
+			{Name: "archetype", Type: "string", Required: true, Desc: "Form archetype: columnar | continuous | datasheet | master_detail"},
+			{Name: "fields", Type: "array", Required: false, Desc: "Bound master fields; objects with a 'name' key. Defaults to all table columns."},
+			{Name: "on_submit", Type: "string", Required: false, Desc: "On-submit behavior: refresh | redirect:<page> | noop (default: refresh)"},
+			{Name: "subform", Type: "object", Required: false, Desc: "master_detail subform link: {child_table, child_key, parent_key, fields}"},
+		},
+	},
 }
 
 // toolIndex is a lookup map built at init time.
