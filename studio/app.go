@@ -1254,6 +1254,10 @@ func (a *App) DeletePage(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("DeletePage"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -1807,6 +1811,10 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("CreateTable"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -1861,6 +1869,10 @@ type ForeignKeySpec struct {
 func (a *App) AddForeignKey(spec ForeignKeySpec) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("AddForeignKey"); err != nil {
+		return "", err
+	}
 
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
@@ -2177,6 +2189,10 @@ func (a *App) DropTable(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("DropTable"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2209,6 +2225,10 @@ type QueryResult struct {
 func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+
+	if err := a.guardStudioOnly("ExecuteQuery"); err != nil {
+		return nil, err
+	}
 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
@@ -2618,6 +2638,10 @@ func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("ImportCSV"); err != nil {
+		return nil, err
+	}
+
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
@@ -2928,6 +2952,10 @@ func (a *App) SaveForm(spec schema.FormSpec) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if err := a.guardStudioOnly("SaveForm"); err != nil {
+		return err
+	}
+
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -3048,6 +3076,9 @@ func (a *App) ListNavTargets() ([]NavTarget, error) {
 func (a *App) SaveNav(items []schema.NavItem) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err := a.guardStudioOnly("SaveNav"); err != nil {
+		return err
+	}
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -3135,10 +3166,7 @@ func (a *App) StartMCPServer() (string, error) {
 		return fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()), nil
 	}
 
-	sandbox := &agents.SandboxConfig{
-		Mode:         agents.ModeFull,
-		MaxQueryRows: 10000,
-	}
+	sandbox := agentSandboxForMode(a.mode)
 	handler := agents.NewHandler(a.container, &engineAgentAdapter{mgr: a.engine}, sandbox, a.logger)
 
 	srv := vibemcp.New(handler, a.logger)
