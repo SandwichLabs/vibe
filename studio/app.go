@@ -20,6 +20,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/importer"
 	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/sandwich-labs/vibe-app/internal/pages"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
@@ -2698,6 +2699,228 @@ func (a *App) SelectCSVFile() (string, error) {
 		return "", fmt.Errorf("failed to open file dialog: %w", err)
 	}
 	return path, nil
+}
+
+// SpreadsheetColumn describes a single previewed spreadsheet column: its
+// detected header name and a suggested DuckDB type for the mapping step.
+// STUB for P6.3 (Import Spreadsheet Wizard backend) — not yet implemented.
+type SpreadsheetColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// SpreadsheetPreview is the result of PreviewSpreadsheet: the workbook's sheet
+// list plus the detected columns and sample rows for the requested sheet.
+// STUB for P6.3 — not yet implemented.
+type SpreadsheetPreview struct {
+	Sheets  []string            `json:"sheets"`
+	Sheet   string              `json:"sheet"`
+	Columns []SpreadsheetColumn `json:"columns"`
+	Rows    [][]any             `json:"rows"`
+}
+
+// ImportColumnMapping maps a source spreadsheet column to a target table column
+// and DuckDB type. STUB for P6.3 — not yet implemented.
+type ImportColumnMapping struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Type   string `json:"type"`
+}
+
+// ImportSpreadsheetOptions parameterizes ImportSpreadsheet: source file, sheet,
+// header detection, target table, mode ("create" or "append"), and the
+// column-type mapping. STUB for P6.3 — not yet implemented.
+type ImportSpreadsheetOptions struct {
+	Path      string                `json:"path"`
+	Sheet     string                `json:"sheet"`
+	HasHeader bool                  `json:"has_header"`
+	TableName string                `json:"table_name"`
+	Mode      string                `json:"mode"`
+	Columns   []ImportColumnMapping `json:"columns"`
+}
+
+// SelectSpreadsheetFile opens a file dialog for choosing an .xlsx workbook.
+// STUB for P6.3 — not yet implemented.
+func (a *App) SelectSpreadsheetFile() (string, error) {
+	return "", fmt.Errorf("SelectSpreadsheetFile not implemented")
+}
+
+// PreviewSpreadsheet returns the workbook's sheet list, the detected headers,
+// suggested DuckDB column types, and a bounded sample of rows for the requested
+// sheet. It drives the Import Spreadsheet Wizard's sheet-picker and
+// field-type-mapping steps (parity plan §6.3).
+func (a *App) PreviewSpreadsheet(path, sheet string, hasHeader bool) (*SpreadsheetPreview, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if err := a.guardStudioOnly("PreviewSpreadsheet"); err != nil {
+		return nil, err
+	}
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+
+	sheets, err := importer.ListXLSXSheets(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list spreadsheet sheets: %w", err)
+	}
+
+	prev, err := importer.PreviewXLSX(db, path, sheet, hasHeader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to preview spreadsheet: %w", err)
+	}
+
+	cols := make([]SpreadsheetColumn, 0, len(prev.Columns))
+	for _, c := range prev.Columns {
+		cols = append(cols, SpreadsheetColumn{Name: c.Name, Type: c.Type})
+	}
+
+	return &SpreadsheetPreview{
+		Sheets:  sheets,
+		Sheet:   sheet,
+		Columns: cols,
+		Rows:    prev.Rows,
+	}, nil
+}
+
+// ImportSpreadsheet loads a spreadsheet sheet into a table per the supplied
+// options. Mode "create" builds a new table using the caller's column-type
+// mapping (target name + DuckDB type); mode "append" loads rows into an
+// existing table without recreating it. Rows are read positionally in the
+// source-column order of the mapping (parity plan §6.3).
+func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if err := a.guardStudioOnly("ImportSpreadsheet"); err != nil {
+		return nil, err
+	}
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	if !isValidIdentifier(opts.TableName) {
+		return nil, fmt.Errorf("invalid table name")
+	}
+	if len(opts.Columns) == 0 {
+		return nil, fmt.Errorf("no column mapping provided")
+	}
+	mode := opts.Mode
+	if mode == "" {
+		mode = "create"
+	}
+	if mode != "create" && mode != "append" {
+		return nil, fmt.Errorf("invalid mode %q (want create or append)", mode)
+	}
+
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+
+	// Read the full sheet through the excel extension.
+	srcCols, rows, err := importer.ReadXLSXSheet(db, opts.Path, opts.Sheet, opts.HasHeader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read spreadsheet: %w", err)
+	}
+
+	// Map each mapping entry to a source-column index by name.
+	srcIndex := make(map[string]int, len(srcCols))
+	for i, c := range srcCols {
+		srcIndex[c.Name] = i
+	}
+	type boundCol struct {
+		target string
+		typ    string
+		srcIdx int
+	}
+	bound := make([]boundCol, 0, len(opts.Columns))
+	for _, m := range opts.Columns {
+		target := m.Target
+		if target == "" {
+			target = m.Source
+		}
+		if !isValidIdentifier(target) {
+			return nil, fmt.Errorf("invalid target column name %q", m.Target)
+		}
+		typ := strings.TrimSpace(m.Type)
+		if typ == "" {
+			typ = "VARCHAR"
+		}
+		idx, ok := srcIndex[m.Source]
+		if !ok {
+			return nil, fmt.Errorf("source column %q not found in sheet", m.Source)
+		}
+		bound = append(bound, boundCol{target: target, typ: typ, srcIdx: idx})
+	}
+
+	var tableExists int
+	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1", opts.TableName).Scan(&tableExists) //nolint:errcheck
+
+	if mode == "create" {
+		if tableExists > 0 {
+			if _, err := db.Exec(fmt.Sprintf("DROP TABLE %q", opts.TableName)); err != nil {
+				return nil, fmt.Errorf("failed to drop existing table: %w", err)
+			}
+		}
+		colDefs := make([]string, 0, len(bound))
+		for _, b := range bound {
+			colDefs = append(colDefs, fmt.Sprintf("%q %s", b.target, b.typ))
+		}
+		createSQL := fmt.Sprintf("CREATE TABLE %q (%s)", opts.TableName, strings.Join(colDefs, ", "))
+		if _, err := db.Exec(createSQL); err != nil {
+			return nil, fmt.Errorf("failed to create table: %w", err)
+		}
+	} else if tableExists == 0 {
+		return nil, fmt.Errorf("cannot append: table %q does not exist", opts.TableName)
+	}
+
+	colNames := make([]string, len(bound))
+	placeholders := make([]string, len(bound))
+	for i, b := range bound {
+		colNames[i] = fmt.Sprintf("%q", b.target)
+		placeholders[i] = "?"
+	}
+	insertSQL := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", opts.TableName,
+		strings.Join(colNames, ", "), strings.Join(placeholders, ", "))
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	stmt, err := tx.Prepare(insertSQL)
+	if err != nil {
+		tx.Rollback() //nolint:errcheck
+		return nil, fmt.Errorf("failed to prepare insert: %w", err)
+	}
+	defer stmt.Close()
+
+	imported := 0
+	for _, row := range rows {
+		args := make([]any, len(bound))
+		for i, b := range bound {
+			if b.srcIdx < len(row) {
+				args[i] = row[b.srcIdx]
+			}
+		}
+		if _, err := stmt.Exec(args...); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return nil, fmt.Errorf("failed to insert row: %w", err)
+		}
+		imported++
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit import: %w", err)
+	}
+
+	a.logger.Info("imported spreadsheet",
+		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode, "rows", imported)
+
+	return &ImportResult{RowsImported: imported, TableName: opts.TableName}, nil
 }
 
 // ImportResult holds CSV import results.

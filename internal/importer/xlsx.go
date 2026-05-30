@@ -5,8 +5,11 @@
 package importer
 
 import (
+	"archive/zip"
 	"database/sql"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -169,6 +172,50 @@ func ReadXLSXSheet(ddb *sql.DB, path, sheet string, hasHeader bool) ([]XLSXColum
 	}
 
 	return cols, data, nil
+}
+
+// ListXLSXSheets reads the workbook part of an .xlsx (which is a zip archive)
+// and returns the ordered list of worksheet names. This drives the wizard's
+// sheet picker without depending on a DuckDB sheet-enumeration function. A
+// missing or malformed workbook yields a clear, wrapped error.
+func ListXLSXSheets(path string) ([]string, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open xlsx %q: %w", path, err)
+	}
+	defer func() { _ = zr.Close() }()
+
+	var workbook io.ReadCloser
+	for _, f := range zr.File {
+		if f.Name == "xl/workbook.xml" {
+			workbook, err = f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open workbook part: %w", err)
+			}
+			break
+		}
+	}
+	if workbook == nil {
+		return nil, fmt.Errorf("xlsx %q has no workbook part", path)
+	}
+	defer func() { _ = workbook.Close() }()
+
+	var doc struct {
+		Sheets struct {
+			Sheet []struct {
+				Name string `xml:"name,attr"`
+			} `xml:"sheet"`
+		} `xml:"sheets"`
+	}
+	if err := xml.NewDecoder(workbook).Decode(&doc); err != nil {
+		return nil, fmt.Errorf("failed to parse workbook part of %q: %w", path, err)
+	}
+
+	names := make([]string, 0, len(doc.Sheets.Sheet))
+	for _, s := range doc.Sheets.Sheet {
+		names = append(names, s.Name)
+	}
+	return names, nil
 }
 
 // scanRows materializes all rows from a query result into [][]any.
