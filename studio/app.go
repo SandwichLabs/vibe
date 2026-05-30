@@ -2905,18 +2905,18 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 	insertSQL := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", opts.TableName,
 		strings.Join(colNames, ", "), strings.Join(placeholders, ", "))
 
-	tx, err := db.Begin()
+	stmt, err := db.Prepare(insertSQL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	stmt, err := tx.Prepare(insertSQL)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
 		return nil, fmt.Errorf("failed to prepare insert: %w", err)
 	}
 	defer stmt.Close()
 
+	// Insert each row independently so a single constraint violation (e.g. an
+	// appended child row whose foreign-key parent is missing) is rejected without
+	// poisoning the rest of the import. DuckDB aborts a transaction on a
+	// constraint error, so we cannot batch valid rows alongside a violating one.
 	imported := 0
+	rejected := 0
 	for _, row := range rows {
 		args := make([]any, len(bound))
 		for i, b := range bound {
@@ -2925,17 +2925,17 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 			}
 		}
 		if _, err := stmt.Exec(args...); err != nil {
-			tx.Rollback() //nolint:errcheck
-			return nil, fmt.Errorf("failed to insert row: %w", err)
+			rejected++
+			a.logger.Warn("skipping row that violates a table constraint during import",
+				"table", opts.TableName, "sheet", opts.Sheet, "error", err)
+			continue
 		}
 		imported++
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit import: %w", err)
-	}
 
 	a.logger.Info("imported spreadsheet",
-		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode, "rows", imported)
+		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode,
+		"rows", imported, "rejected", rejected)
 
 	return &ImportResult{RowsImported: imported, TableName: opts.TableName}, nil
 }
