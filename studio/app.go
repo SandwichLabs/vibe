@@ -522,10 +522,14 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 	switch node.Type {
 	case "table":
 		return a.renderer.RenderTable(&renderer.TableConfig{
-			Source:    getStringConfig(node.Config, "source"),
-			Sortable:  true,
-			ColumnFmt: getStringMapConfig(node.Config, "fmt"),
-			Result:    rrs,
+			Source:     getStringConfig(node.Config, "source"),
+			Title:      getStringConfig(node.Config, "title"),
+			Subtitle:   getStringConfig(node.Config, "subtitle"),
+			PageSize:   getIntConfig(node.Config, "page_size"),
+			RowShading: getBoolConfig(node.Config, "row_shading"),
+			Sortable:   true,
+			ColumnFmt:  getStringMapConfig(node.Config, "fmt"),
+			Result:     rrs,
 		})
 
 	case "chart":
@@ -546,12 +550,33 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		}
 		// Support both "fmt" key and legacy "format" key
 		fmtCode := getStringConfig(node.Config, "fmt")
-		return a.renderer.RenderMetric(&renderer.MetricConfig{
+		cfg := &renderer.MetricConfig{
 			Label:  getStringConfig(node.Config, "label"),
+			Title:  getStringConfig(node.Config, "title"),
 			Format: getStringConfig(node.Config, "format"),
 			Fmt:    fmtCode,
 			Value:  value,
-		})
+		}
+
+		// Comparison delta: resolve the prior baseline. Prefer an explicit "prior"
+		// column in the first row; otherwise the second column of the first row.
+		if comparison := getStringConfig(node.Config, "comparison"); comparison != "" && rrs != nil {
+			cfg.Comparison = comparison
+			cfg.PriorValue = metricPriorValue(rrs)
+		}
+
+		// Sparkline: build a numeric series from the result. For a two-column
+		// time-series, the second (numeric) column is the series.
+		if getBoolConfig(node.Config, "sparkline") && rrs != nil {
+			cfg.Sparkline = true
+			cfg.Series = metricSeries(rrs)
+			// For a time-series the "current" value is the latest point.
+			if len(cfg.Series) > 0 {
+				cfg.Value = cfg.Series[len(cfg.Series)-1]
+			}
+		}
+
+		return a.renderer.RenderMetric(cfg)
 
 	case "detail":
 		return a.renderer.RenderDetail(&renderer.DetailConfig{
@@ -608,6 +633,77 @@ func substituteInlineValues(rendered string, values []pages.InlineValue) string 
 		rendered = strings.ReplaceAll(rendered, iv.Placeholder, span)
 	}
 	return rendered
+}
+
+// metricPriorValue resolves the comparison baseline from a result set. It prefers
+// a column named "prior" (case-insensitive) in the first row, else falls back to
+// the second column of the first row.
+func metricPriorValue(rrs *renderer.ResultSet) any {
+	if rrs == nil || len(rrs.Rows) == 0 {
+		return nil
+	}
+	row := rrs.Rows[0]
+	for i, col := range rrs.Columns {
+		if i < len(row) && strings.EqualFold(col.Name, "prior") {
+			return row[i]
+		}
+	}
+	if len(row) > 1 {
+		return row[1]
+	}
+	return nil
+}
+
+// metricSeries extracts a numeric series for a sparkline. For a multi-column
+// result it uses the last column (the measure in a time-series); for a
+// single-column result it uses that column.
+func metricSeries(rrs *renderer.ResultSet) []float64 {
+	if rrs == nil || len(rrs.Columns) == 0 {
+		return nil
+	}
+	col := len(rrs.Columns) - 1
+	series := make([]float64, 0, len(rrs.Rows))
+	for _, row := range rrs.Rows {
+		if col < len(row) {
+			series = append(series, renderer.ToFloat64(row[col]))
+		}
+	}
+	return series
+}
+
+// getIntConfig extracts an int from a config map value, tolerating the numeric
+// types YAML decoding may produce (int, int64, float64).
+func getIntConfig(config map[string]any, key string) int {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+// getBoolConfig extracts a bool from a config map value, tolerating string forms.
+func getBoolConfig(config map[string]any, key string) bool {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return false
+	}
+	switch b := v.(type) {
+	case bool:
+		return b
+	case string:
+		return strings.EqualFold(b, "true")
+	default:
+		return false
+	}
 }
 
 func getStringConfig(config map[string]any, key string) string {

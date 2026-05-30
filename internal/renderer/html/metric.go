@@ -21,13 +21,107 @@ func (r *Renderer) RenderMetric(cfg *renderer.MetricConfig) (string, error) {
 	var b strings.Builder
 	b.WriteString(`<div class="vibe-metric">`)
 	b.WriteString("\n")
+
+	if cfg.Title != "" {
+		b.WriteString(fmt.Sprintf(`  <div class="vibe-metric-title">%s</div>`, html.EscapeString(cfg.Title)))
+		b.WriteString("\n")
+	}
+
 	b.WriteString(fmt.Sprintf(`  <div class="vibe-metric-value">%s</div>`, escapedValue))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(`  <div class="vibe-metric-label">%s</div>`, escapedLabel))
-	b.WriteString("\n")
+
+	if escapedLabel != "" {
+		b.WriteString(fmt.Sprintf(`  <div class="vibe-metric-label">%s</div>`, escapedLabel))
+		b.WriteString("\n")
+	}
+
+	// Comparison delta vs a prior value.
+	if cfg.Comparison != "" && cfg.PriorValue != nil {
+		b.WriteString(renderMetricDelta(cfg))
+	}
+
+	// Sparkline from a numeric series.
+	if cfg.Sparkline && len(cfg.Series) > 0 {
+		b.WriteString(renderMetricSparkline(cfg.Series))
+	}
+
 	b.WriteString("</div>")
 
 	return b.String(), nil
+}
+
+// renderMetricDelta renders the comparison delta element. The direction class
+// (up/down/flat) encodes the sign of the change vs the prior value, and the
+// element text carries the signed percent change.
+func renderMetricDelta(cfg *renderer.MetricConfig) string {
+	cur := renderer.ToFloat64(cfg.Value)
+	prior := renderer.ToFloat64(cfg.PriorValue)
+
+	direction := "flat"
+	sign := ""
+	switch {
+	case cur > prior:
+		direction = "up"
+		sign = "+"
+	case cur < prior:
+		direction = "down"
+	}
+
+	var pct float64
+	if prior != 0 {
+		pct = (cur - prior) / prior * 100
+	}
+
+	pctText := fmt.Sprintf("%s%.1f%%", sign, pct)
+
+	return fmt.Sprintf(
+		"  <div class=\"vibe-metric-delta %s\">%s</div>\n",
+		direction, html.EscapeString(pctText),
+	)
+}
+
+// renderMetricSparkline renders inline SVG sparkline markup for a numeric series.
+func renderMetricSparkline(series []float64) string {
+	const width, height = 100.0, 24.0
+
+	minV, maxV := series[0], series[0]
+	for _, v := range series {
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
+	span := maxV - minV
+	if span == 0 {
+		span = 1
+	}
+
+	var pts strings.Builder
+	for i, v := range series {
+		var x float64
+		if len(series) > 1 {
+			x = float64(i) / float64(len(series)-1) * width
+		}
+		y := height - (v-minV)/span*height
+		if i > 0 {
+			pts.WriteByte(' ')
+		}
+		pts.WriteString(fmt.Sprintf("%.2f,%.2f", x, y))
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(
+		"  <svg class=\"vibe-metric-sparkline\" viewBox=\"0 0 %g %g\" preserveAspectRatio=\"none\">\n",
+		width, height,
+	))
+	b.WriteString(fmt.Sprintf(
+		"    <polyline fill=\"none\" stroke=\"currentColor\" points=\"%s\" />\n",
+		pts.String(),
+	))
+	b.WriteString("  </svg>\n")
+	return b.String()
 }
 
 // formatMetricValue formats a metric value. If cfg.Fmt is set, uses the

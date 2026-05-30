@@ -15,11 +15,14 @@ type ResultSet struct {
 // TableConfig holds table directive configuration.
 type TableConfig struct {
 	Source     string
-	PageSize  int
-	Sortable  bool
+	Title      string // optional caption rendered above the table
+	Subtitle   string // optional secondary caption
+	PageSize   int    // client-side pagination page size (0 = no pagination scaffold)
+	Sortable   bool
 	Searchable bool
-	ColumnFmt map[string]string // Evidence-compatible format codes per column name
-	Result    *ResultSet
+	RowShading bool              // emit alternating-row markup when true
+	ColumnFmt  map[string]string // Evidence-compatible format codes per column name
+	Result     *ResultSet
 }
 
 // ChartConfig holds chart directive configuration.
@@ -38,9 +41,21 @@ type ChartConfig struct {
 // MetricConfig holds metric directive configuration.
 type MetricConfig struct {
 	Label  string
+	Title  string // optional headline rendered above the value
 	Format string // number, currency, percent, bytes, duration
 	Fmt    string // Evidence-compatible format code (e.g., num0, usd2, pct1)
 	Value  any
+
+	// Comparison delta (Evidence WU-7). When Comparison is set and PriorValue is
+	// non-nil, the metric renders a delta element with an up/down direction class
+	// and the signed percent change vs the prior value.
+	Comparison string // e.g. "prior_period" — any non-empty value enables the delta
+	PriorValue any    // the comparison baseline
+
+	// Sparkline (Evidence WU-7). When Sparkline is true and Series carries a
+	// time-series, the metric renders inline sparkline markup.
+	Sparkline bool
+	Series    []float64 // numeric series for the sparkline
 }
 
 // FormField holds form field configuration.
