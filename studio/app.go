@@ -21,6 +21,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/pages"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	htmlrenderer "github.com/sandwich-labs/vibe-app/internal/renderer/html"
+	"github.com/sandwich-labs/vibe-app/internal/reports"
 	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yuin/goldmark"
@@ -3045,4 +3046,46 @@ func isValidIdentifier(name string) bool {
 		return false
 	}
 	return true
+}
+
+// RenderReportContent loads a banded report spec via the ReportStore, runs its
+// bound query on the real engine, computes the band tree, and renders banded
+// HTML (plan §3.3 / P3.8).
+//
+// STUB ONLY (TDD RED): not implemented yet. Returns empty output so the
+// integration test fails on its assertions, not on a missing symbol.
+func (a *App) RenderReportContent(reportID string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if a.engine == nil {
+		return "", fmt.Errorf("no engine available")
+	}
+
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return "", fmt.Errorf("report %q not found", reportID)
+	}
+
+	rs, err := a.engine.Execute(a.ctx, spec.Source, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to run report query for %q: %w", reportID, err)
+	}
+
+	tree, err := reports.ComputeBands(rs, *spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute report bands for %q: %w", reportID, err)
+	}
+
+	htmlOut, err := a.renderer.RenderReport(tree, *spec, htmlrenderer.RenderReportOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
+	}
+	return htmlOut, nil
 }
