@@ -150,6 +150,21 @@ var schemaDDL = []string{
 		created_at TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL DEFAULT ''
 	);`,
+
+	// _vibe_nav stores Access-style Switchboard navigation (plan §4.2/§4.5). Each
+	// row is a single switchboard menu item belonging to a switchboard "page"
+	// (parent_id nesting for drill-down), carrying a human label, an action kind
+	// (open_form | open_report | open_page | open_switchboard | run_macro), a
+	// target id, and a sort order. The App Shell + switchboard generator read this
+	// store to render the locked-down navigation. Additive migration.
+	`CREATE TABLE IF NOT EXISTS _vibe_nav (
+		id          TEXT PRIMARY KEY,
+		parent_id   TEXT NOT NULL DEFAULT '',
+		label       TEXT NOT NULL DEFAULT '',
+		action_kind TEXT NOT NULL DEFAULT '',
+		target_id   TEXT NOT NULL DEFAULT '',
+		sort_order  INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 // defaultMeta contains the default metadata entries seeded on creation.
