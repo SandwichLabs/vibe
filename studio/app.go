@@ -3115,7 +3115,11 @@ func (a *App) ListNavTargets() ([]NavTarget, error) {
 	return out, nil
 }
 
-// SaveNav persists a whole switchboard by upserting each nav item in order.
+// SaveNav persists a whole switchboard by reconciling _vibe_nav to exactly the
+// supplied set in one transaction: items absent from the payload (i.e. removed
+// in the builder) are deleted, and the remaining items are upserted in order.
+// This makes reorder + remove atomic and idempotent so deletions survive a
+// save+reload.
 func (a *App) SaveNav(items []schema.NavItem) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -3126,10 +3130,8 @@ func (a *App) SaveNav(items []schema.NavItem) error {
 		return fmt.Errorf("no file open")
 	}
 	store := schema.NewNavStore(a.container.SQLiteDB())
-	for _, item := range items {
-		if err := store.SetNav(item); err != nil {
-			return fmt.Errorf("failed to save nav item %q: %w", item.ID, err)
-		}
+	if err := store.ReplaceNav(items); err != nil {
+		return fmt.Errorf("failed to save navigation: %w", err)
 	}
 	return nil
 }

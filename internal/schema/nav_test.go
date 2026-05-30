@@ -129,6 +129,81 @@ func TestNavStoreRoundTrip(t *testing.T) {
 	assert.Equal(t, "admin_page", reopenedRoot[2].TargetID)
 }
 
+// TestNavStoreReplaceNavReconciles is the regression test for the
+// remove-does-not-persist bug: SaveNav must reconcile the full nav set, not
+// merely upsert. We seed 2 items, then ReplaceNav with one removed (the
+// builder's "remove + save" path) and assert the removed item is gone after a
+// fresh ListNav and that sort_order stays contiguous. A plain upsert loop would
+// leave the removed row in place and fail this test.
+func TestNavStoreReplaceNavReconciles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nav_replace.vibe")
+
+	c, err := container.Create(path,
+		container.WithPassphrase(testPassphrase),
+		container.WithLogger(testLogger()),
+	)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	store := schema.NewNavStore(c.SQLiteDB())
+
+	// Seed two root items.
+	seed := []schema.NavItem{
+		{ID: "nav_orders", ParentID: "", Label: "Orders", ActionKind: schema.NavOpenForm, TargetID: "orders_form", SortOrder: 0},
+		{ID: "nav_sales", ParentID: "", Label: "Sales Report", ActionKind: schema.NavOpenReport, TargetID: "sales_report", SortOrder: 1},
+	}
+	require.NoError(t, store.ReplaceNav(seed))
+
+	all, err := store.ListNav()
+	require.NoError(t, err)
+	require.Len(t, all, 2, "both seeded items should persist after ReplaceNav")
+
+	// Remove "nav_orders" and renumber the survivor to 0 — exactly what the
+	// AppShellView builder sends when an item is removed and saved.
+	remaining := []schema.NavItem{
+		{ID: "nav_sales", ParentID: "", Label: "Sales Report", ActionKind: schema.NavOpenReport, TargetID: "sales_report", SortOrder: 0},
+	}
+	require.NoError(t, store.ReplaceNav(remaining))
+
+	after, err := store.ListNav()
+	require.NoError(t, err)
+	require.Len(t, after, 1, "removed nav item must NOT survive a reconcile save")
+	assert.Equal(t, "nav_sales", after[0].ID, "the surviving item is the one still in the payload")
+	assert.Equal(t, 0, after[0].SortOrder, "sort_order must be renumbered contiguous after removal")
+
+	// The removed id is truly gone, verified via GetNav on the root page.
+	rootChildren, err := store.GetNav("")
+	require.NoError(t, err)
+	require.Len(t, rootChildren, 1)
+	for _, it := range rootChildren {
+		assert.NotEqual(t, "nav_orders", it.ID, "removed item must not reappear on reload")
+	}
+
+	// Idempotent: re-running the same reconcile yields the same single row.
+	require.NoError(t, store.ReplaceNav(remaining))
+	again, err := store.ListNav()
+	require.NoError(t, err)
+	require.Len(t, again, 1, "ReplaceNav must be idempotent")
+
+	// Removed deletion survives Save/Close/reopen.
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := container.Open(path,
+		container.WithPassphrase(testPassphrase),
+		container.WithLogger(testLogger()),
+	)
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	store2 := schema.NewNavStore(c2.SQLiteDB())
+	reopened, err := store2.ListNav()
+	require.NoError(t, err)
+	require.Len(t, reopened, 1, "the removed nav item must stay gone across reopen")
+	assert.Equal(t, "nav_sales", reopened[0].ID)
+}
+
 // TestNavMigrationNoClobber proves re-running runMigrations on a populated
 // container is a no-op: the IF NOT EXISTS DDL must not drop or clobber existing
 // _vibe_nav rows. We reopen a populated .vibe (which re-runs migrations) and

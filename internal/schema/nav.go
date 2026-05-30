@@ -75,6 +75,80 @@ func (s *NavStore) SetNav(item NavItem) error {
 	return nil
 }
 
+// ReplaceNav reconciles the entire nav set to exactly the supplied items in a
+// single transaction: every row in _vibe_nav whose id is NOT present in the
+// payload is deleted, and every supplied item is upserted. This makes a builder
+// "Save" idempotent and atomic for reorder + remove + relabel — deletions
+// survive a save+reload, which a per-item upsert loop (SetNav) cannot achieve
+// because it never removes rows absent from the payload.
+func (s *NavStore) ReplaceNav(items []NavItem) (err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin nav reconcile tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback() //nolint:errcheck
+		}
+	}()
+
+	// Delete any persisted rows whose id is not in the incoming payload.
+	keep := make(map[string]struct{}, len(items))
+	for _, it := range items {
+		keep[it.ID] = struct{}{}
+	}
+	rows, err := tx.Query(`SELECT id FROM _vibe_nav;`)
+	if err != nil {
+		return fmt.Errorf("failed to read existing nav ids: %w", err)
+	}
+	var toDelete []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			_ = rows.Close() //nolint:errcheck
+			return fmt.Errorf("failed to scan existing nav id: %w", err)
+		}
+		if _, ok := keep[id]; !ok {
+			toDelete = append(toDelete, id)
+		}
+	}
+	if err = rows.Err(); err != nil {
+		_ = rows.Close() //nolint:errcheck
+		return fmt.Errorf("failed to iterate existing nav ids: %w", err)
+	}
+	if err = rows.Close(); err != nil {
+		return fmt.Errorf("failed to close existing nav ids: %w", err)
+	}
+	for _, id := range toDelete {
+		if _, err = tx.Exec(`DELETE FROM _vibe_nav WHERE id = ?;`, id); err != nil {
+			return fmt.Errorf("failed to delete stale nav item %q: %w", id, err)
+		}
+	}
+
+	// Upsert every supplied item.
+	for _, item := range items {
+		if _, err = tx.Exec(
+			`INSERT INTO _vibe_nav (
+				id, parent_id, label, action_kind, target_id, sort_order
+			) VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				parent_id   = excluded.parent_id,
+				label       = excluded.label,
+				action_kind = excluded.action_kind,
+				target_id   = excluded.target_id,
+				sort_order  = excluded.sort_order;`,
+			item.ID, item.ParentID, item.Label, item.ActionKind, item.TargetID, item.SortOrder,
+		); err != nil {
+			return fmt.Errorf("failed to upsert nav item %q: %w", item.ID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit nav reconcile tx: %w", err)
+	}
+	return nil
+}
+
 // GetNav returns the direct children of the given switchboard page id, ordered
 // by sort_order. Passing the empty string returns the root-level items.
 func (s *NavStore) GetNav(parentID string) ([]NavItem, error) {

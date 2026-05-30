@@ -75,11 +75,18 @@ function seedTargets(): NavTarget[] {
 }
 
 function makeApp(opts: { nav?: NavItem[]; startup?: string } = {}): AppMocks {
-  const nav = opts.nav ?? seedNav()
+  // Back the mock with a stateful store that mirrors the Go SaveNav reconcile
+  // contract: SaveNav REPLACES the persisted set with exactly the payload (rows
+  // absent from the payload are deleted). ListNav reads back from that store, so
+  // a remove+save genuinely round-trips and a non-reconciling save would be
+  // caught here — not masked by a stateless vi.fn.
+  let store: NavItem[] = (opts.nav ?? seedNav()).map((n) => ({ ...n }))
   const app: AppMocks = {
-    ListNav: vi.fn(async () => nav.map((n) => ({ ...n }))),
+    ListNav: vi.fn(async () => store.map((n) => ({ ...n }))),
     ListNavTargets: vi.fn(async () => seedTargets()),
-    SaveNav: vi.fn(async () => {}),
+    SaveNav: vi.fn(async (items: NavItem[]) => {
+      store = items.map((n) => ({ ...n }))
+    }),
     GetAppConfig: vi.fn(async () => ({
       mode: useAppMode().mode.value,
       default_mode: 'studio',
@@ -216,6 +223,19 @@ describe('AppShellView Switchboard builder (P4.7 — Studio Mode)', () => {
     expect(saved.find((n) => n.target_id === 'frm_orders')).toBeFalsy()
     const remaining = saved.find((n) => n.target_id === 'rpt_sales')!
     expect(remaining.sort_order).toBe(0)
+
+    // Round-trip the deletion through the (stateful) backing store: remount the
+    // view so it reloads via ListNav, and assert the removed item does NOT
+    // reappear. This is the regression guard — with a non-reconciling SaveNav
+    // (per-item upsert that never deletes), the removed row would survive and
+    // this assertion would fail.
+    const reloaded = mountView()
+    await flushPromises()
+    const reloadedItems = reloaded.findAll('[data-testid="nav-item"]')
+    expect(reloadedItems.length).toBe(1)
+    expect(reloadedItems[0].text()).toContain('Sales Report')
+    // The removed "Orders" item must not reappear in the persisted nav list.
+    expect(reloadedItems.some((i) => i.text().includes('Orders'))).toBe(false)
   })
 
   it('renames an item inline and persists the new label via SaveNav', async () => {
