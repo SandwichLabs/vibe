@@ -265,6 +265,27 @@ var Tools = []ToolDef{
 			{Name: "items", Type: "array", Required: true, Desc: "Up to 8 menu items: objects {label, action, target}; action is open_form | open_report | open_page | open_switchboard | run_macro"},
 		},
 	},
+
+	// Macro Wizard tools (plan §5.4 / §4.3). Build and persist an Access-style
+	// declarative macro (an ordered list of actions with optional If/Then
+	// conditions) to _vibe_macros via the shared automation.MacroStore. Every
+	// action target is validated against the relevant catalog before persisting.
+	{
+		Name:        "create_macro",
+		Description: "Macro Wizard: build and save an Access-style declarative macro (an ordered list of actions, each an action kind plus args, with an optional If/Then condition). Every action target is validated against the relevant catalog (OpenForm -> a form id, OpenReport -> a report id, RunMacro -> a macro id, RunQuery -> a named query) before the macro is persisted atomically to _vibe_macros.",
+		Category:    "automation",
+		Params: []ParamDef{
+			{Name: "id", Type: "string", Required: false, Desc: "Stable macro id (defaults to a generated id)"},
+			{Name: "title", Type: "string", Required: false, Desc: "Macro title"},
+			{Name: "actions", Type: "array", Required: true, Desc: "Ordered actions: objects {kind, args, condition}; kind is OpenForm | OpenReport | GoToRecord | FindRecord | RunQuery | RunSQL | SetValue | SetFilter | MsgBox | Export | EmailObject | RunMacro | OpenSwitchboard; args is a string map; condition is an optional {expr} If/Then guard"},
+		},
+	},
+	{
+		Name:        "list_macros",
+		Description: "List all stored macros in the container.",
+		Category:    "automation",
+		Params:      []ParamDef{},
+	},
 }
 
 // toolIndex is a lookup map built at init time.

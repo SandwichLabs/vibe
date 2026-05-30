@@ -36,12 +36,14 @@ var categoryPermissions = map[SandboxMode]map[string]bool{
 	ModeReadWrite: {
 		"introspect": true,
 		"data":       true,
+		"automation": true,
 	},
 	ModeFull: {
 		"introspect": true,
 		"data":       true,
 		"page":       true,
 		"schema":     true,
+		"automation": true,
 	},
 }
 

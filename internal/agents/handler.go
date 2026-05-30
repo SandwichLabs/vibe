@@ -168,6 +168,12 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "create_switchboard":
 		return h.handleCreateSwitchboard(ctx, req)
 
+	// Macro Wizard
+	case "create_macro":
+		return h.handleCreateMacro(ctx, req)
+	case "list_macros":
+		return h.handleListMacros(ctx, req)
+
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))
 	}
@@ -774,7 +780,7 @@ func extractTableParam(params map[string]any) string {
 
 // isWriteOperation returns true if the category involves modifications.
 func isWriteOperation(category string) bool {
-	return category == "data" || category == "page" || category == "schema"
+	return category == "data" || category == "page" || category == "schema" || category == "automation"
 }
 
 // nowISO returns the current UTC time as an ISO 8601 string.

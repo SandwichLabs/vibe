@@ -260,6 +260,149 @@ func (h *Handler) handleCreateSwitchboard(_ context.Context, req *Request) *Resp
 	})
 }
 
+// handleCreateMacro is the Macro Wizard tool: it assembles an Access-style
+// declarative macro spec, validates every action target against the relevant
+// catalog (forms / reports / macros / named queries) BEFORE persisting, then
+// writes the spec atomically via the shared automation.MacroStore. A rejected
+// spec leaves no persisted macro (plan §5.4 / §4.3).
+func (h *Handler) handleCreateMacro(ctx context.Context, req *Request) *Response {
+	id := stringParam(req.Params["id"])
+	if id == "" {
+		id = uuid.New().String()
+	}
+
+	spec := automation.MacroSpec{
+		ID:      id,
+		Title:   stringParam(req.Params["title"]),
+		Actions: extractMacroActions(req.Params["actions"]),
+	}
+
+	if err := spec.Validate(); err != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid macro spec: %v", err))
+	}
+
+	db := h.container.SQLiteDB()
+	formStore := schema.NewFormStore(db)
+	reportStore := reports.NewReportStore(db)
+	macroStore := automation.NewMacroStore(db)
+	registry := queries.NewRegistry(db, h.logger)
+
+	// Validate every action target against its catalog before persisting, so a
+	// rejected macro leaves no partial state.
+	for i, a := range spec.Actions {
+		if err := h.validateMacroActionTarget(ctx, formStore, reportStore, macroStore, registry, a); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams,
+				fmt.Sprintf("macro action %d (%s): %v", i, a.Kind, err))
+		}
+	}
+
+	if err := macroStore.Save(spec); err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to persist macro: %v", err))
+	}
+
+	h.logger.Info("created macro", "id", spec.ID, "title", spec.Title, "actions", len(spec.Actions))
+	return NewResponse(req.ID, map[string]any{
+		"id":      spec.ID,
+		"title":   spec.Title,
+		"actions": len(spec.Actions),
+		"created": true,
+	})
+}
+
+// validateMacroActionTarget confirms a macro action's bound target exists in the
+// relevant catalog. Actions without a catalog-bound target are accepted as-is.
+func (h *Handler) validateMacroActionTarget(
+	ctx context.Context,
+	formStore *schema.FormStore,
+	reportStore *reports.ReportStore,
+	macroStore *automation.MacroStore,
+	registry *queries.Registry,
+	a automation.MacroAction,
+) error {
+	switch a.Kind {
+	case automation.ActionOpenForm:
+		target := a.Args["form"]
+		if _, err := formStore.GetForm(target); err != nil {
+			return fmt.Errorf("form target %q not found", target)
+		}
+	case automation.ActionOpenReport:
+		target := a.Args["report"]
+		if _, err := reportStore.Get(target); err != nil {
+			return fmt.Errorf("report target %q not found", target)
+		}
+	case automation.ActionRunMacro:
+		target := a.Args["macro"]
+		if _, err := macroStore.Get(target); err != nil {
+			return fmt.Errorf("macro target %q not found", target)
+		}
+	case automation.ActionRunQuery:
+		target := a.Args["query"]
+		if _, err := registry.Get(ctx, target); err != nil {
+			return fmt.Errorf("query target %q not found", target)
+		}
+	}
+	return nil
+}
+
+// handleListMacros reads back every stored macro definition via the shared store.
+func (h *Handler) handleListMacros(_ context.Context, req *Request) *Response {
+	store := automation.NewMacroStore(h.container.SQLiteDB())
+	specs, err := store.List()
+	if err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list macros: %v", err))
+	}
+
+	out := make([]map[string]any, 0, len(specs))
+	for _, s := range specs {
+		out = append(out, map[string]any{
+			"id":      s.ID,
+			"title":   s.Title,
+			"version": s.Version,
+			"actions": len(s.Actions),
+		})
+	}
+	return NewResponse(req.ID, map[string]any{"macros": out})
+}
+
+// extractMacroActions converts a params list ([]any of {kind, args, condition})
+// into automation.MacroAction entries.
+func extractMacroActions(raw any) []automation.MacroAction {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]automation.MacroAction, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		action := automation.MacroAction{
+			Kind: stringParam(m["kind"]),
+			Args: extractStringMap(m["args"]),
+		}
+		if cond, ok := m["condition"].(map[string]any); ok {
+			action.Condition = &automation.MacroCondition{Expr: stringParam(cond["expr"])}
+		}
+		out = append(out, action)
+	}
+	return out
+}
+
+// extractStringMap converts a params object (map[string]any) into a
+// map[string]string, coercing each value to a string.
+func extractStringMap(raw any) map[string]string {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = stringParam(v)
+	}
+	return out
+}
+
 // validateNavTarget confirms a switchboard item's target exists in the nav-target
 // catalog for its action kind.
 func validateNavTarget(
