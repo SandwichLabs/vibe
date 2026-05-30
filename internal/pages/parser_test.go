@@ -145,6 +145,29 @@ func TestParseMetricDirective(t *testing.T) {
 	assert.Equal(t, "Total Sales", dir.Config["label"])
 }
 
+// TestParseStandaloneValueDirective verifies a standalone-line {value: ...}
+// parses as a DirectiveNode{Type:"value"} with its source/column/fmt config
+// intact. Because the directive type is recovered from a Go map (random
+// iteration order), "value" must be registered as a known directive type so the
+// type is NOT mistakenly resolved to "column" or "fmt"; this loops to make the
+// would-be nondeterministic mis-parse deterministically caught.
+func TestParseStandaloneValueDirective(t *testing.T) {
+	input := `{value: source=totals, column: total, fmt: usd2}`
+
+	for i := 0; i < 50; i++ {
+		page, err := Parse(input)
+		require.NoError(t, err)
+		require.Len(t, page.Nodes, 1)
+
+		dir, ok := page.Nodes[0].(*DirectiveNode)
+		require.True(t, ok)
+		assert.Equal(t, "value", dir.Type)
+		assert.Equal(t, "totals", dir.Config["source"])
+		assert.Equal(t, "total", dir.Config["column"])
+		assert.Equal(t, "usd2", dir.Config["fmt"])
+	}
+}
+
 func TestParseFormDirective(t *testing.T) {
 	input := `{form: add_record, target: records, fields: [{name: title, type: text}, {name: amount, type: number}]}`
 

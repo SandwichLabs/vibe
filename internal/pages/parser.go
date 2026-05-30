@@ -590,7 +590,7 @@ func extractDirectiveType(config map[string]any) (string, any, map[string]any) {
 
 	// To get a stable first key, we look at the keys and use a heuristic:
 	// known directive types get priority.
-	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "form", "detail", "subform", "if", "row"}
+	knownTypes := []string{"table", "chart", "pie_chart", "line_chart", "bar_chart", "area_chart", "scatter_chart", "doughnut_chart", "metric", "value", "form", "detail", "subform", "if", "row"}
 	for _, t := range knownTypes {
 		if val, ok := config[t]; ok {
 			remaining := make(map[string]any)

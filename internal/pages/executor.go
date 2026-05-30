@@ -5,7 +5,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync/atomic"
 )
+
+// inlineValueSeq provides process-wide unique placeholder tokens for inline
+// {value:} directives. Using a monotonic counter (rather than a per-TextNode
+// idx) guarantees placeholders never collide even if a future change batches
+// substitution across multiple nodes.
+var inlineValueSeq atomic.Uint64
 
 // QueryEngine is the interface the executor needs to run SQL queries.
 // It avoids importing the engine package directly to prevent circular imports.
@@ -110,6 +117,23 @@ func executeNodes(ctx context.Context, nodes []Node, engine QueryEngine, params 
 		case *DirectiveNode:
 			en := ExecutedNode{Node: n}
 
+			// A standalone-line {value: ...} directive (the natural form for
+			// embedding a single scalar in a report detail band) resolves like an
+			// inline value: it supports inline `sql:` or `source`+`column`, and a
+			// missing column / empty result degrades to a nil value (safe
+			// placeholder) rather than aborting the page. We must handle it here
+			// because `fmt`/`column` are NOT source references and would otherwise
+			// fall into the generic source-resolution branch below and error.
+			if n.Type == "value" {
+				val, fmtCode, err := resolveInlineValueConfig(ctx, n.Config, engine, params, results, variables)
+				if err != nil {
+					return nil, fmt.Errorf("line %d: %w", n.Line, err)
+				}
+				en.InlineValues = []InlineValue{{Value: val, Fmt: fmtCode}}
+				executed = append(executed, en)
+				continue
+			}
+
 			// Check for metric directive with inline SQL.
 			if n.Type == "metric" {
 				if sqlVal, ok := n.Config["sql"]; ok {
@@ -196,7 +220,6 @@ func resolveInlineValues(ctx context.Context, n *TextNode, engine QueryEngine, p
 
 	var inlineValues []InlineValue
 	var resolveErr error
-	idx := 0
 
 	newContent := inlineValuePattern.ReplaceAllStringFunc(n.Content, func(match string) string {
 		if resolveErr != nil {
@@ -227,8 +250,7 @@ func resolveInlineValues(ctx context.Context, n *TextNode, engine QueryEngine, p
 			return match
 		}
 
-		placeholder := fmt.Sprintf("xVIBEVALUEx%dx", idx)
-		idx++
+		placeholder := fmt.Sprintf("xVIBEVALUEx%dx", inlineValueSeq.Add(1))
 		inlineValues = append(inlineValues, InlineValue{
 			Placeholder: placeholder,
 			Value:       val,

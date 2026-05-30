@@ -428,7 +428,7 @@ func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string) (strin
 			// SQL blocks don't render directly (they produce result sets for directives).
 
 		case *pages.DirectiveNode:
-			html, err := a.renderDirective(n, en.Result)
+			html, err := a.renderDirective(n, en.Result, en.InlineValues)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Type, err))
 				continue
@@ -501,8 +501,10 @@ func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, page
 	return b.String(), nil
 }
 
-// renderDirective renders a single directive node to HTML.
-func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet) (string, error) {
+// renderDirective renders a single directive node to HTML. For a standalone
+// {value:} directive, the scalar is pre-resolved by the executor and arrives in
+// inlineValues; all other directive types ignore it.
+func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet, inlineValues []pages.InlineValue) (string, error) {
 	// Convert pages.ResultSet to renderer.ResultSet.
 	var rrs *renderer.ResultSet
 	if result != nil {
@@ -562,6 +564,26 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		return a.renderer.RenderForm(&renderer.FormConfig{
 			Table: getStringConfig(node.Config, "table"),
 		})
+
+	case "value":
+		// A standalone-line {value:} directive: the executor pre-resolved the
+		// scalar (source+column or inline sql) into inlineValues. Render it as an
+		// inline <span> mirroring the inline-prose path, with a nil value (missing
+		// column / empty result) degrading to a safe em-dash placeholder rather
+		// than crashing.
+		var iv pages.InlineValue
+		if len(inlineValues) > 0 {
+			iv = inlineValues[0]
+		}
+		var text string
+		if iv.Value == nil {
+			text = "—" // em-dash placeholder for missing/empty values
+		} else if iv.Fmt != "" {
+			text = renderer.Format(iv.Value, iv.Fmt)
+		} else {
+			text = fmt.Sprintf("%v", iv.Value)
+		}
+		return "<span class=\"vibe-value\">" + html.EscapeString(text) + "</span>", nil
 
 	default:
 		return fmt.Sprintf("<div>Unknown directive: %s</div>", node.Type), nil

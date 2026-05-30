@@ -105,3 +105,88 @@ func TestRenderPageContentInlineValueMissingColumn(t *testing.T) {
 	assert.Contains(t, html, "Missing:")
 	assert.Contains(t, html, "end.")
 }
+
+// TestRenderPageContentStandaloneValueDirective covers a {value: ...} that
+// occupies a full line on its own — the natural form for embedding a single
+// scalar in a report detail band. isDirectiveLine parses this as a
+// DirectiveNode{Type:"value"}, so it must be resolved by the executor and
+// dispatched by renderDirective's `case "value":` (NOT the inline-prose path).
+// The source+column form is the realistic standalone form (inline-SQL with its
+// nested colons cannot be a YAML directive line — same limitation as the metric
+// directive — so that form stays inline-in-prose). A standalone {value}
+// previously CRASHED the whole page (executor treated fmt/column as undefined
+// source references) — this asserts it renders an inline <span> instead.
+func TestRenderPageContentStandaloneValueDirective(t *testing.T) {
+	app := newOpenApp(t)
+
+	ddb := app.container.DuckDBDB()
+	require.NotNil(t, ddb)
+	_, err := ddb.Exec(`CREATE TABLE sales (id INTEGER, amount DECIMAL(12,2));`)
+	require.NoError(t, err)
+	_, err = ddb.Exec(`INSERT INTO sales (id, amount) VALUES (1, 1000.00), (2, 234.50);`)
+	require.NoError(t, err)
+
+	content := "" +
+		"```sql totals\n" +
+		"SELECT SUM(amount) AS total FROM sales\n" +
+		"```\n\n" +
+		"{value: source=totals, column: total, fmt: usd2}\n"
+
+	_, err = app.container.SQLiteDB().Exec(
+		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'notebook', 0, datetime('now'), datetime('now'))",
+		"valstand", "StandaloneValue", content,
+	)
+	require.NoError(t, err)
+
+	html, err := app.RenderPageContent("valstand", nil)
+	require.NoError(t, err, "a standalone-line {value} must not abort the page render")
+
+	// source+column formatted via renderer.Format usd2.
+	assert.Contains(t, html, "$1,234.50",
+		"standalone source/column {value} must resolve + format via renderer.Format usd2")
+	// Must render as an inline <span>, mirroring the inline-prose path.
+	assert.Contains(t, strings.ToLower(html), "<span",
+		"standalone {value} must render via renderDirective as an inline <span>")
+	// Must NOT fall through to the default branch's literal text.
+	assert.NotContains(t, html, "Unknown directive",
+		"standalone {value} must be dispatched, not hit renderDirective's default branch")
+}
+
+// TestRenderPageContentStandaloneValueMissingColumn asserts a standalone-line
+// {value} referencing a non-existent column degrades to a safe em-dash
+// placeholder rather than erroring out / aborting the page.
+func TestRenderPageContentStandaloneValueMissingColumn(t *testing.T) {
+	app := newOpenApp(t)
+
+	ddb := app.container.DuckDBDB()
+	require.NotNil(t, ddb)
+	_, err := ddb.Exec(`CREATE TABLE sales (id INTEGER, amount DECIMAL(12,2));`)
+	require.NoError(t, err)
+	_, err = ddb.Exec(`INSERT INTO sales (id, amount) VALUES (1, 1000.00);`)
+	require.NoError(t, err)
+
+	content := "" +
+		"```sql totals\n" +
+		"SELECT SUM(amount) AS total FROM sales\n" +
+		"```\n\n" +
+		"Before line.\n\n" +
+		"{value: source=totals, column: nonexistent, fmt: usd2}\n\n" +
+		"After line.\n"
+
+	_, err = app.container.SQLiteDB().Exec(
+		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'notebook', 0, datetime('now'), datetime('now'))",
+		"valstandmiss", "StandaloneValueMissing", content,
+	)
+	require.NoError(t, err)
+
+	html, err := app.RenderPageContent("valstandmiss", nil)
+	require.NoError(t, err, "a standalone-line {value} with a missing column must not abort the page")
+
+	// Surrounding prose still renders, proving the page wasn't aborted.
+	assert.Contains(t, html, "Before line.")
+	assert.Contains(t, html, "After line.")
+	// The missing value degrades to the safe em-dash placeholder span.
+	assert.Contains(t, html, "—",
+		"missing column in a standalone {value} must render the em-dash safe placeholder")
+	assert.NotContains(t, html, "Unknown directive")
+}
