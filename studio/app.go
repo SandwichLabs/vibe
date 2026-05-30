@@ -839,27 +839,6 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}, rows.Err()
 }
 
-// WriteResult reports the outcome of a single CRUD write (rows affected).
-type WriteResult struct {
-	Affected int64 `json:"affected"`
-}
-
-// WriteError is a structured, field-keyed CRUD failure suitable for per-field
-// UI feedback. Fields maps a column name to a human-readable problem; Message
-// is a fallback for non-field-specific failures. It must be returned instead of
-// a raw SQL error string so the form UI can highlight the offending controls.
-type WriteError struct {
-	Message string            `json:"message"`
-	Fields  map[string]string `json:"fields,omitempty"`
-}
-
-func (e *WriteError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
-
 // FormSubmitRow describes one row to write as part of an atomic form submit.
 type FormSubmitRow struct {
 	Table  string         `json:"table"`

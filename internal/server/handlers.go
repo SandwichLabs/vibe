@@ -1,13 +1,19 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/crud"
+	"github.com/sandwich-labs/vibe-app/internal/schema"
 )
 
 const defaultPageSize = 50
@@ -123,7 +129,34 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	s.renderTemplate(w, "page.html", data)
 }
 
-// handleFormSubmit processes a form POST submission.
+// formField is one declared, bound control of a form definition.
+type formField struct {
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+}
+
+// formConfig is the bound-form definition stored in _vibe_components.config. A
+// form binds to a single table, names its primary key column, declares its
+// fields, and carries an on_submit mode (refresh | redirect:<page> | noop).
+type formConfig struct {
+	Table    string      `json:"table"`
+	PK       string      `json:"pk"`
+	OnSubmit string      `json:"on_submit"`
+	Fields   []formField `json:"fields"`
+}
+
+// handleFormSubmit processes a bound-form POST submission. It resolves the
+// form's binding from _vibe_components, coerces and validates the submitted
+// values, and routes the write through the transactional CRUD layer
+// (crud.InsertRowTx / crud.UpdateRowTx) — it does NOT execute arbitrary SQL.
+//
+// New record (no/empty PK value) -> INSERT; PK present -> UPDATE. On a
+// validation failure it re-renders the form (HTTP 200) with per-field errors
+// and the previously entered values preserved, writing nothing. The successful
+// response honors on_submit: redirect:<page> (303 to /page/<page>), refresh
+// (303 back to the hosting page), or noop (204 ack, no redirect).
 func (s *Server) handleFormSubmit(w http.ResponseWriter, r *http.Request) {
 	pageID := r.PathValue("id")
 	formID := r.PathValue("formID")
@@ -132,7 +165,7 @@ func (s *Server) handleFormSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.container == nil || s.engine == nil {
+	if s.container == nil {
 		s.renderError(w, http.StatusServiceUnavailable, "container or engine not available")
 		return
 	}
@@ -142,46 +175,235 @@ func (s *Server) handleFormSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Collect form values as parameters.
-	params := make(map[string]any)
-	for k, v := range r.PostForm {
-		if len(v) == 1 {
-			params[k] = v[0]
-		} else {
-			params[k] = v
-		}
-	}
-
-	// Look up the form's SQL from _vibe_components.
-	db := s.container.SQLiteDB()
-	var config string
-	err := db.QueryRowContext(r.Context(),
-		"SELECT config FROM _vibe_components WHERE id = ? AND type = 'form';", formID).Scan(&config)
-	if err != nil {
+	// Look up and parse the form's bound definition from _vibe_components.
+	sdb := s.container.SQLiteDB()
+	var rawConfig string
+	if err := sdb.QueryRowContext(r.Context(),
+		"SELECT config FROM _vibe_components WHERE id = ? AND type = 'form';", formID).Scan(&rawConfig); err != nil {
 		s.renderError(w, http.StatusNotFound, fmt.Sprintf("form %q not found: %v", formID, err))
 		return
 	}
 
-	// Parse form config to get the SQL statement.
-	var formConfig struct {
-		SQL string `json:"sql"`
-	}
-	if err := json.Unmarshal([]byte(config), &formConfig); err != nil {
+	var cfg formConfig
+	if err := json.Unmarshal([]byte(rawConfig), &cfg); err != nil {
 		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to parse form config: %v", err))
 		return
 	}
+	if cfg.Table == "" {
+		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("form %q has no bound table", formID))
+		return
+	}
+	if cfg.PK == "" {
+		cfg.PK = "id"
+	}
 
-	_, err = s.engine.Execute(r.Context(), formConfig.SQL, params)
-	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("failed to execute form query: %v", err))
+	// Collect the submitted values for the form's declared fields only.
+	values := make(map[string]any, len(cfg.Fields))
+	for _, f := range cfg.Fields {
+		if f.Name == "" {
+			continue
+		}
+		values[f.Name] = r.PostForm.Get(f.Name)
+	}
+
+	// Determine insert vs. update by the bound primary-key value.
+	pkRaw, _ := values[cfg.PK].(string)
+	isUpdate := strings.TrimSpace(pkRaw) != ""
+
+	// Enforce form-declared required fields up front so we can re-render with
+	// per-field feedback even when the table has no _vibe_field_meta rows.
+	fieldErrs := s.validateFormRequired(cfg, values, isUpdate)
+	if len(fieldErrs) == 0 {
+		if writeErr := s.writeFormRow(r, cfg, values, isUpdate, pkRaw); writeErr != nil {
+			if len(writeErr.Fields) > 0 {
+				fieldErrs = writeErr.Fields
+			} else {
+				s.renderFormErrors(w, pageID, formID, cfg, values, map[string]string{"_form": writeErr.Message})
+				return
+			}
+		}
+	}
+
+	if len(fieldErrs) > 0 {
+		s.renderFormErrors(w, pageID, formID, cfg, values, fieldErrs)
 		return
 	}
 
-	// Broadcast reload event after data modification.
+	// Broadcast reload event after a successful data modification.
 	s.sse.Broadcast("reload")
 
-	// Redirect back to the page.
-	http.Redirect(w, r, "/page/"+pageID, http.StatusSeeOther)
+	s.respondOnSubmit(w, r, pageID, cfg.OnSubmit)
+}
+
+// validateFormRequired enforces the form-declared `required` flags. For an
+// update only present-but-blank fields are violations (partial updates allowed),
+// excluding the primary key itself which is never user-required.
+func (s *Server) validateFormRequired(cfg formConfig, values map[string]any, isUpdate bool) map[string]string {
+	errs := map[string]string{}
+	for _, f := range cfg.Fields {
+		if !f.Required || f.Name == cfg.PK {
+			continue
+		}
+		v, _ := values[f.Name].(string)
+		if strings.TrimSpace(v) == "" {
+			label := f.Label
+			if label == "" {
+				label = f.Name
+			}
+			errs[f.Name] = fmt.Sprintf("%s is required", label)
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+// writeFormRow routes the submitted values through the transactional CRUD core,
+// coercing string inputs to column types and enforcing _vibe_field_meta rules.
+func (s *Server) writeFormRow(r *http.Request, cfg formConfig, values map[string]any, isUpdate bool, pkRaw string) *crud.WriteError {
+	ddb := s.container.DuckDBDB()
+	if ddb == nil {
+		return &crud.WriteError{Message: "DuckDB not available"}
+	}
+
+	colTypes, err := crud.ColumnTypes(ddb, cfg.Table)
+	if err != nil {
+		return &crud.WriteError{Message: err.Error()}
+	}
+	metas, err := crud.FieldMetaMap(schema.NewStore(s.container.SQLiteDB()), cfg.Table)
+	if err != nil {
+		return &crud.WriteError{Message: err.Error()}
+	}
+
+	tx, err := ddb.Begin()
+	if err != nil {
+		return &crud.WriteError{Message: fmt.Sprintf("failed to begin transaction: %v", err)}
+	}
+
+	var writeErr error
+	if isUpdate {
+		// The PK is the WHERE target, not a SET column.
+		setValues := make(map[string]any, len(values))
+		for k, v := range values {
+			if k == cfg.PK {
+				continue
+			}
+			setValues[k] = v
+		}
+		_, writeErr = crud.UpdateRowTx(tx, colTypes, metas, cfg.Table, cfg.PK, pkRaw, setValues)
+	} else {
+		// New record: the PK is empty. If it is an integer key, auto-number it
+		// (Access AutoNumber parity) since DuckDB does not auto-increment a bare
+		// INTEGER PRIMARY KEY; otherwise drop it so a column default can apply.
+		insertValues := make(map[string]any, len(values))
+		for k, v := range values {
+			if k == cfg.PK {
+				if sv, _ := v.(string); strings.TrimSpace(sv) == "" {
+					continue
+				}
+			}
+			insertValues[k] = v
+		}
+		if _, hasPK := insertValues[cfg.PK]; !hasPK {
+			if next, ok := nextIntegerPK(tx, colTypes, cfg.Table, cfg.PK); ok {
+				insertValues[cfg.PK] = next
+			}
+		}
+		_, writeErr = crud.InsertRowTx(tx, colTypes, metas, cfg.Table, insertValues)
+	}
+
+	if writeErr != nil {
+		_ = tx.Rollback()
+		var we *crud.WriteError
+		if errors.As(writeErr, &we) {
+			return we
+		}
+		return &crud.WriteError{Message: writeErr.Error()}
+	}
+	if err := tx.Commit(); err != nil {
+		return &crud.WriteError{Message: fmt.Sprintf("failed to commit form submit: %v", err)}
+	}
+	return nil
+}
+
+// nextIntegerPK returns the next auto-number value (MAX(pk)+1, or 1 for an
+// empty table) for an integer primary key, mirroring Access AutoNumber. It
+// reports ok=false for non-integer keys so a string/UUID PK is left to its
+// column default instead.
+func nextIntegerPK(tx crud.TxExecer, colTypes map[string]string, table, pk string) (int64, bool) {
+	t := strings.ToUpper(colTypes[pk])
+	switch {
+	case strings.Contains(t, "INT"), strings.Contains(t, "BIGINT"), strings.Contains(t, "HUGEINT"):
+	default:
+		return 0, false
+	}
+	var next sql.NullInt64
+	query := fmt.Sprintf(`SELECT COALESCE(MAX(%q), 0) + 1 FROM %q`, pk, table)
+	if err := tx.QueryRow(query).Scan(&next); err != nil {
+		return 0, false
+	}
+	if !next.Valid {
+		return 1, true
+	}
+	return next.Int64, true
+}
+
+// respondOnSubmit issues the success response per the form's on_submit mode.
+func (s *Server) respondOnSubmit(w http.ResponseWriter, r *http.Request, pageID, onSubmit string) {
+	switch {
+	case onSubmit == "noop":
+		// Write succeeded; acknowledge without redirecting.
+		w.WriteHeader(http.StatusNoContent)
+	case strings.HasPrefix(onSubmit, "redirect:"):
+		target := strings.TrimPrefix(onSubmit, "redirect:")
+		http.Redirect(w, r, "/page/"+target, http.StatusSeeOther)
+	default:
+		// "refresh" (and any unspecified mode) re-displays the hosting page.
+		http.Redirect(w, r, "/page/"+pageID, http.StatusSeeOther)
+	}
+}
+
+// renderFormErrors re-renders the bound form (HTTP 200) with per-field error
+// messages and the previously entered values preserved, so no input is lost on
+// a validation failure. No row is written in this path.
+func (s *Server) renderFormErrors(w http.ResponseWriter, pageID, formID string, cfg formConfig, values map[string]any, fieldErrs map[string]string) {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(`<form method="post" action="/page/%s/submit/%s" class="vibe-form" data-form-id=%q>`,
+		template.HTMLEscapeString(pageID), template.HTMLEscapeString(formID), formID))
+	if msg, ok := fieldErrs["_form"]; ok {
+		b.WriteString(fmt.Sprintf(`<div class="form-error" role="alert">%s</div>`, template.HTMLEscapeString(msg)))
+	}
+	for _, f := range cfg.Fields {
+		val, _ := values[f.Name].(string)
+		typ := f.Type
+		if typ == "" {
+			typ = "text"
+		}
+		if typ == "hidden" {
+			b.WriteString(fmt.Sprintf(`<input type="hidden" name=%q value=%q>`,
+				f.Name, template.HTMLEscapeString(val)))
+			continue
+		}
+		label := f.Label
+		if label == "" {
+			label = f.Name
+		}
+		b.WriteString(`<div class="form-field">`)
+		b.WriteString(fmt.Sprintf(`<label for=%q>%s</label>`, f.Name, template.HTMLEscapeString(label)))
+		b.WriteString(fmt.Sprintf(`<input type="text" id=%q name=%q value=%q>`,
+			f.Name, f.Name, template.HTMLEscapeString(val)))
+		if msg, ok := fieldErrs[f.Name]; ok {
+			b.WriteString(fmt.Sprintf(`<span class="field-error" data-field=%q>%s</span>`,
+				f.Name, template.HTMLEscapeString(msg)))
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`<button type="submit">Save</button></form>`)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, b.String())
 }
 
 // handleTableBrowser renders a paginated table view.
