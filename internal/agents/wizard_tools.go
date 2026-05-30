@@ -186,6 +186,132 @@ func (h *Handler) handleCreateReport(_ context.Context, req *Request) *Response 
 	})
 }
 
+// maxSwitchboardItems is the Access constraint of at most 8 items per
+// switchboard page.
+const maxSwitchboardItems = 8
+
+// switchboardItemInput is a parsed {label, action, target} switchboard item.
+type switchboardItemInput struct {
+	Label  string
+	Action string
+	Target string
+}
+
+// handleCreateSwitchboard is the Switchboard Wizard tool: it validates each item
+// target against the nav-target catalog (forms + reports + switchboard pages +
+// pages), enforces the Access ≤8-items-per-page constraint, and persists the
+// items hierarchically to _vibe_nav under the switchboard page id (plan §4.4 /
+// §4.3).
+func (h *Handler) handleCreateSwitchboard(_ context.Context, req *Request) *Response {
+	pageID := stringParam(req.Params["id"])
+	if pageID == "" {
+		pageID = uuid.New().String()
+	}
+	title := stringParam(req.Params["title"])
+
+	items := extractSwitchboardItems(req.Params["items"])
+	if len(items) > maxSwitchboardItems {
+		return NewErrorResponse(req.ID, ErrInvalidParams,
+			fmt.Sprintf("a switchboard page may have at most %d items (got %d)", maxSwitchboardItems, len(items)))
+	}
+
+	db := h.container.SQLiteDB()
+	formStore := schema.NewFormStore(db)
+	reportStore := reports.NewReportStore(db)
+	navStore := schema.NewNavStore(db)
+
+	// Validate every item target against the nav-target catalog before
+	// persisting anything, so a rejected switchboard leaves no partial nav rows.
+	for i, it := range items {
+		if it.Label == "" {
+			return NewErrorResponse(req.ID, ErrInvalidParams,
+				fmt.Sprintf("switchboard item %d is missing a label", i))
+		}
+		if err := validateNavTarget(formStore, reportStore, navStore, it.Action, it.Target); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams,
+				fmt.Sprintf("switchboard item %q: %v", it.Label, err))
+		}
+	}
+
+	// Persist the items hierarchically under the page id.
+	for i, it := range items {
+		navItem := schema.NavItem{
+			ID:         fmt.Sprintf("%s_%d", pageID, i),
+			ParentID:   pageID,
+			Label:      it.Label,
+			ActionKind: it.Action,
+			TargetID:   it.Target,
+			SortOrder:  i,
+		}
+		if err := navStore.SetNav(navItem); err != nil {
+			return NewErrorResponse(req.ID, ErrInternal,
+				fmt.Sprintf("failed to persist switchboard item %q: %v", it.Label, err))
+		}
+	}
+
+	h.logger.Info("created switchboard", "id", pageID, "title", title, "items", len(items))
+	return NewResponse(req.ID, map[string]any{
+		"id":      pageID,
+		"title":   title,
+		"items":   len(items),
+		"created": true,
+	})
+}
+
+// validateNavTarget confirms a switchboard item's target exists in the nav-target
+// catalog for its action kind.
+func validateNavTarget(
+	formStore *schema.FormStore,
+	reportStore *reports.ReportStore,
+	navStore *schema.NavStore,
+	action, target string,
+) error {
+	switch action {
+	case schema.NavOpenForm:
+		if _, err := formStore.GetForm(target); err != nil {
+			return fmt.Errorf("form target %q not found", target)
+		}
+	case schema.NavOpenReport:
+		if _, err := reportStore.Get(target); err != nil {
+			return fmt.Errorf("report target %q not found", target)
+		}
+	case schema.NavOpenSwitchboard:
+		// A switchboard page exists if it already has at least one nav item.
+		items, err := navStore.GetNav(target)
+		if err != nil {
+			return fmt.Errorf("failed to resolve switchboard target %q: %w", target, err)
+		}
+		if len(items) == 0 {
+			return fmt.Errorf("switchboard target %q not found", target)
+		}
+	default:
+		return fmt.Errorf("unsupported switchboard action %q", action)
+	}
+	return nil
+}
+
+// extractSwitchboardItems converts a params list ([]any of {label, action,
+// target}) into switchboardItemInput entries.
+func extractSwitchboardItems(raw any) []switchboardItemInput {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]switchboardItemInput, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, switchboardItemInput{
+			Label:  stringParam(m["label"]),
+			Action: stringParam(m["action"]),
+			Target: stringParam(m["target"]),
+		})
+	}
+	return out
+}
+
 // extractGroupLevels converts a params list ([]any of {field, sort_dir}) into
 // reports.GroupLevel entries.
 func extractGroupLevels(raw any) []reports.GroupLevel {

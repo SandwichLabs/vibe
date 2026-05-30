@@ -250,6 +250,21 @@ var Tools = []ToolDef{
 			{Name: "report_aggregates", Type: "array", Required: false, Desc: "Report-footer (grand total) aggregates: objects {name, func, field}"},
 		},
 	},
+
+	// Switchboard Wizard tool (plan §4.4 / §4.3). Builds an Access-style
+	// switchboard page (a hierarchical menu of ≤8 items) and persists its items
+	// to _vibe_nav. Each item binds to a validated nav target (form, report, or
+	// another switchboard page).
+	{
+		Name:        "create_switchboard",
+		Description: "Switchboard Wizard: create an Access-style switchboard page (a hierarchical navigation menu) and persist its items to _vibe_nav. Each item binds to a validated target: action open_form -> a form id, open_report -> a report id, open_switchboard -> another switchboard page id, open_page -> a page title. Enforces the Access constraint of at most 8 items per switchboard page.",
+		Category:    "schema",
+		Params: []ParamDef{
+			{Name: "id", Type: "string", Required: false, Desc: "Stable switchboard page id (defaults to a generated id)"},
+			{Name: "title", Type: "string", Required: true, Desc: "Switchboard page title"},
+			{Name: "items", Type: "array", Required: true, Desc: "Up to 8 menu items: objects {label, action, target}; action is open_form | open_report | open_page | open_switchboard | run_macro"},
+		},
+	},
 }
 
 // toolIndex is a lookup map built at init time.

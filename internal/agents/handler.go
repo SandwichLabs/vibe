@@ -164,6 +164,10 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "create_report":
 		return h.handleCreateReport(ctx, req)
 
+	// Switchboard Wizard
+	case "create_switchboard":
+		return h.handleCreateSwitchboard(ctx, req)
+
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))
 	}
