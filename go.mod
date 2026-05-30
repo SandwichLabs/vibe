@@ -14,14 +14,13 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.0
 	github.com/stretchr/testify v1.11.0
-	github.com/wailsapp/wails/v2 v2.12.0
+	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/yuin/goldmark v1.7.16
 	golang.org/x/term v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/apache/arrow-go/v18 v18.4.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect

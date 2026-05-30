@@ -44,12 +44,12 @@ async function importCSV() {
       </div>
     </div>
 
-    <div class="card card-pad max-w-xl">
-      <div class="space-y-4">
+    <div class="card card-pad" style="max-width: 36rem;">
+      <div class="col">
         <div>
           <label class="field-label">CSV file</label>
-          <div class="flex gap-3">
-            <input :value="csvPath" readonly class="field-input flex-1" style="background: var(--sh-paper-2);" placeholder="No file selected" />
+          <div class="row">
+            <input :value="csvPath" readonly class="field-input" style="flex: 1; background: var(--sh-paper-2);" placeholder="No file selected" />
             <button @click="selectFile" class="btn btn-sm"><Icon name="fileText" :size="14" /> Browse</button>
           </div>
         </div>
@@ -62,8 +62,8 @@ async function importCSV() {
         <button
           @click="importCSV"
           :disabled="loading || !csvPath || !tableName"
-          class="btn btn-primary w-full"
-          style="justify-content: center;"
+          class="btn btn-primary"
+          style="width: 100%; justify-content: center;"
         >
           <Icon name="download" :size="16" /> {{ loading ? 'Importing…' : 'Import' }}
         </button>

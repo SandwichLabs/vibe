@@ -15,6 +15,7 @@ const saveTitle = ref('')
 const errorMessage = ref('')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
+const hoveredId = ref<string | null>(null)
 
 async function loadQueries() {
   loading.value = true
@@ -104,37 +105,42 @@ watch(errorMessage, (msg) => {
 </script>
 
 <template>
-  <div class="flex h-full">
+  <div class="row" style="height: 100%; gap: 0; align-items: stretch;">
     <!-- Query list -->
-    <div class="w-56 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
-      <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
+    <div class="col" style="width: 224px; gap: 0; border-right: var(--sh-border); background: var(--sh-paper-2);">
+      <div class="row" style="justify-content: space-between; padding: 12px 16px; border-bottom: var(--sh-border);">
         <h2 class="sh-label" style="margin: 0;">Queries</h2>
         <button @click="newQuery" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
       </div>
-      <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
-        <div v-else-if="queries.length === 0" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No saved queries</div>
+      <div style="flex: 1; overflow: auto;">
+        <div v-if="loading" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Loading…</div>
+        <div v-else-if="queries.length === 0" class="sh-mono" style="padding: 16px; color: var(--sh-graphite); text-align: center;">No saved queries</div>
         <div
           v-for="q in queries"
           :key="q.id"
           @click="selectQuery(q.id)"
-          class="px-4 py-2 cursor-pointer border-b border-[rgba(31,35,48,0.12)] flex items-center justify-between group text-sm"
-          :class="selectedId === q.id ? 'row-selected' : 'hover:bg-[rgba(31,35,48,0.04)]'"
+          @mouseenter="hoveredId = q.id"
+          @mouseleave="hoveredId = null"
+          class="row"
+          :style="[
+            'justify-content: space-between; padding: 8px 16px; cursor: pointer; border-bottom: 1px solid rgba(31,35,48,0.12); font-size: 14px;',
+            selectedId === q.id ? 'background: var(--sh-teal-8); box-shadow: inset 3px 0 0 var(--sh-teal);' : (hoveredId === q.id ? 'background: rgba(31,35,48,0.04);' : '')
+          ]"
         >
-          <div class="min-w-0">
-            <div class="truncate font-semibold">{{ q.title }}</div>
+          <div style="min-width: 0;">
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">{{ q.title }}</div>
           </div>
-          <button @click.stop="deleteQuery(q.id)" class="hidden group-hover:block btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+          <button v-show="hoveredId === q.id" @click.stop="deleteQuery(q.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
         </div>
       </div>
     </div>
 
     <!-- Editor area -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="col" style="flex: 1; gap: 0; min-width: 0;">
       <!-- Toolbar -->
       <div class="page-subhead" style="padding: 12px 24px;">
         <span class="sh-label" style="margin: 0;">Query Explorer</span>
-        <span class="flex-1"></span>
+        <span class="spacer"></span>
         <button @click="showSaveModal = true" class="btn btn-sm"><Icon name="save" :size="14" /> Save</button>
         <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm">
           <Icon name="play" :size="14" /> {{ running ? 'Running…' : 'Run · Ctrl+Enter' }}
@@ -142,29 +148,28 @@ watch(errorMessage, (msg) => {
       </div>
 
       <!-- SQL editor -->
-      <div class="border-b-2 border-[var(--sh-ink)] editor">
+      <div class="editor" style="border-bottom: var(--sh-border);">
         <textarea
           v-model="sqlText"
           @keydown="handleKeydown"
-          class="w-full h-40 resize-none focus:outline-none"
-          style="background: var(--sh-ink); color: var(--sh-paper); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
+          style="width: 100%; height: 160px; resize: none; outline: none; background: var(--sh-ink); color: var(--sh-paper); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
           placeholder="Enter SQL query…"
           spellcheck="false"
         ></textarea>
       </div>
 
       <!-- Results -->
-      <div class="flex-1 overflow-auto min-h-0">
-        <div v-if="error" class="p-4 text-sm font-semibold" style="color: var(--sh-error);">{{ error }}</div>
-        <div v-else-if="running" class="p-4 sh-mono text-[var(--sh-graphite)]">Running query…</div>
-        <div v-else-if="result" class="flex flex-col h-full">
+      <div style="flex: 1; overflow: auto; min-height: 0;">
+        <div v-if="error" style="padding: 16px; font-size: 14px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
+        <div v-else-if="running" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Running query…</div>
+        <div v-else-if="result" class="col" style="gap: 0; height: 100%;">
           <div class="result-bar">
             <span><span class="big ok">{{ result.row_count }}</span> rows</span>
             <span><span class="big">{{ result.duration }}</span></span>
           </div>
-          <div class="flex-1 overflow-auto">
-            <table class="brutal-table">
-              <thead class="sticky top-0">
+          <div style="flex: 1; overflow: auto;">
+            <table class="table">
+              <thead>
                 <tr>
                   <th v-for="col in result.columns" :key="col.name">{{ col.name }}</th>
                 </tr>
@@ -187,10 +192,10 @@ watch(errorMessage, (msg) => {
 
     <!-- Save modal -->
     <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false">
-      <div class="card card-pad w-full max-w-sm">
-        <h3 class="card-title mb-4">Save query</h3>
-        <input v-model="saveTitle" placeholder="Query name" class="field-input mb-4" @keyup.enter="saveQuery" autofocus />
-        <div class="flex gap-3 justify-end">
+      <div class="card card-pad" style="width: 100%; max-width: 384px;">
+        <h3 class="card-title" style="margin-bottom: 16px;">Save query</h3>
+        <input v-model="saveTitle" placeholder="Query name" class="field-input" style="margin-bottom: 16px;" @keyup.enter="saveQuery" autofocus />
+        <div class="row" style="gap: 12px; justify-content: flex-end;">
           <button @click="showSaveModal = false" class="btn btn-ghost">Cancel</button>
           <button @click="saveQuery" class="btn btn-primary">Save</button>
         </div>

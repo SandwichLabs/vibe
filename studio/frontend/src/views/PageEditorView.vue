@@ -52,7 +52,7 @@ async function renderPreview() {
     }
   } catch (e: any) {
     if (gen === renderGeneration) {
-      preview.value = `<div class="text-error font-semibold">Render error: ${e.message || e}</div>`
+      preview.value = `<div class="badge badge--error">Render error: ${e.message || e}</div>`
     }
   }
   previewLoading.value = false
@@ -144,25 +144,25 @@ watch(errorMessage, (msg) => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div style="display: flex; flex-direction: column; height: 100%;">
     <!-- Top Toolbar -->
-    <div class="px-4 py-2 border-b-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex items-center gap-3">
+    <div class="row" style="padding: var(--sh-space-2) var(--sh-space-4); border-bottom: var(--sh-border); background: var(--sh-paper-2);">
       <button @click="goBack" class="btn btn-ghost btn-sm"><Icon name="arrowLeft" :size="14" /> Back</button>
-      <input v-model="title" class="field-input flex-1" placeholder="Page title" />
+      <input v-model="title" class="field-input" style="flex: 1;" placeholder="Page title" />
       <button @click="save" :disabled="saving" class="btn btn-primary">
         <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save' }}
       </button>
     </div>
 
-    <div v-if="loading" class="p-6 sh-mono text-[var(--sh-graphite)]">Loading…</div>
+    <div v-if="loading" class="sh-mono" style="padding: var(--sh-space-6); color: var(--sh-graphite);">Loading…</div>
 
     <!-- Editor + Preview -->
-    <div v-else class="flex flex-1 min-h-0">
-      <div class="w-1/2 flex flex-col border-r-2 border-[var(--sh-ink)]">
+    <div v-else style="display: flex; flex: 1; min-height: 0;">
+      <div style="width: 50%; display: flex; flex-direction: column; border-right: var(--sh-border);">
         <!-- Source label + Vibe directive toolbar -->
-        <div class="px-3 py-2 border-b-2 border-[var(--sh-ink)] flex items-center gap-2" style="background: var(--sh-paper-2);">
+        <div class="row" style="padding: var(--sh-space-2) var(--sh-space-3); border-bottom: var(--sh-border); background: var(--sh-paper-2); gap: var(--sh-space-2);">
           <span class="sh-label" style="margin: 0;">{{ page?.page_type === 'html' ? 'HTML Source' : 'Markdown Source' }}</span>
-          <span class="flex-1"></span>
+          <span class="spacer"></span>
           <button
             v-for="btn in vibeToolbarButtons"
             :key="btn.id"
@@ -173,14 +173,14 @@ watch(errorMessage, (msg) => {
           ></button>
         </div>
         <!-- CodeMirror editor container -->
-        <div ref="editorEl" class="flex-1 min-h-0 overflow-hidden"></div>
+        <div ref="editorEl" style="flex: 1; min-height: 0; overflow: hidden;"></div>
       </div>
-      <div class="w-1/2 flex flex-col">
-        <div class="px-3 py-2 border-b-2 border-[var(--sh-ink)] sh-label" style="background: var(--sh-ink); color: var(--sh-paper); margin: 0;">
+      <div style="width: 50%; display: flex; flex-direction: column;">
+        <div class="sh-label" style="padding: var(--sh-space-2) var(--sh-space-3); border-bottom: var(--sh-border); background: var(--sh-ink); color: var(--sh-paper); margin: 0;">
           Preview {{ previewLoading ? '· updating…' : '' }}
         </div>
-        <div class="flex-1 overflow-auto p-5" style="background: var(--sh-paper);">
-          <div ref="previewEl" v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
+        <div style="flex: 1; overflow: auto; padding: var(--sh-space-5); background: var(--sh-paper);">
+          <div ref="previewEl" v-html="preview" :class="[page?.page_type === 'html' ? '' : 'prose', 'vibe-content']" style="max-width: none;"></div>
         </div>
       </div>
     </div>

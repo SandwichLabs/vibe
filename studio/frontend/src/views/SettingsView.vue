@@ -89,10 +89,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="loading" class="sh-mono text-[var(--sh-graphite)]">Loading…</div>
+    <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
 
-    <div v-else class="max-w-xl space-y-6">
-      <div class="card card-pad space-y-4">
+    <div v-else class="col" style="max-width: 36rem; gap: var(--sh-space-6);">
+      <div class="card card-pad col" style="gap: var(--sh-space-4);">
         <div>
           <label class="field-label">Title</label>
           <input v-model="title" class="field-input" />
@@ -100,14 +100,14 @@ onMounted(() => {
 
         <div>
           <label class="field-label">Description</label>
-          <textarea v-model="description" rows="3" class="field-input resize-none"></textarea>
+          <textarea v-model="description" rows="3" class="field-input" style="resize: none;"></textarea>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="row">
           <button @click="save" :disabled="saving" class="btn btn-primary">
             <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save settings' }}
           </button>
-          <span v-if="message" class="text-sm font-semibold" :style="{ color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">
+          <span v-if="message" class="sh-body" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">
             {{ message }}
           </span>
         </div>
@@ -117,15 +117,15 @@ onMounted(() => {
       <div>
         <div class="sec-title"><h2 style="font-size: 22px;">MCP Server</h2></div>
         <div class="card card-pad">
-          <div class="flex items-center gap-2 mb-3">
+          <div class="row" style="gap: var(--sh-space-2); margin-bottom: var(--sh-space-3);">
             <span class="status-dot" :class="mcpRunning ? 'ok' : 'off'"></span>
             <span class="sh-label" style="margin: 0;">{{ mcpRunning ? 'Running' : 'Stopped' }}</span>
           </div>
 
-          <div v-if="mcpRunning && mcpUrl" class="mb-3">
+          <div v-if="mcpRunning && mcpUrl" style="margin-bottom: var(--sh-space-3);">
             <label class="field-label">Server URL</label>
-            <div class="flex items-center gap-2">
-              <code class="flex-1 select-all break-all" style="padding: 8px 12px;">{{ mcpUrl }}</code>
+            <div class="row" style="gap: var(--sh-space-2);">
+              <code class="break-all" style="flex: 1; user-select: all; padding: 8px 12px;">{{ mcpUrl }}</code>
               <button @click="copyMCPUrl" class="btn btn-sm"><Icon name="copy" :size="14" /> {{ mcpCopied ? 'Copied' : 'Copy' }}</button>
             </div>
           </div>
@@ -134,12 +134,12 @@ onMounted(() => {
             @click="toggleMCP"
             :disabled="mcpToggling"
             class="btn"
-            :class="mcpRunning ? 'btn-danger' : 'btn-primary'"
+            :class="mcpRunning ? 'btn-destructive' : 'btn-primary'"
           >
             {{ mcpToggling ? '…' : (mcpRunning ? 'Stop' : 'Start') }}
           </button>
 
-          <p class="mt-3 sh-mono text-xs text-[var(--sh-graphite)]">
+          <p class="sh-micro sh-mono" style="margin-top: var(--sh-space-3); color: var(--sh-graphite);">
             Exposes container tools via MCP (Model Context Protocol) for AI clients. Server stops when the file is closed.
           </p>
         </div>

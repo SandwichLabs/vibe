@@ -403,3 +403,85 @@ input, select, textarea { font-family: inherit; }
 .row { display: flex; gap: 12px; align-items: center; }
 .col { display: flex; flex-direction: column; gap: 12px; }
 .spacer { flex: 1; }
+
+/* ============================================================
+   Enable-phase additions — named classes referenced by migrated
+   views that were missing from all schoolhouse CSS files.
+   Built only from existing --sh-* tokens for visual consistency
+   (2px borders, hard-offset shadows never blurred).
+
+   NOTE: .page-subhead and .empty-hero ALREADY exist in hifi.css
+   and are NOT redefined here — views should rely on those.
+   ============================================================ */
+
+/* ---- Modal overlay / scrim ----
+   Full-screen backdrop that centers a modal dialog. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--sh-scrim);
+  overflow-y: auto;
+}
+
+/* ---- Field label / input ----
+   Standalone equivalents of the descendant `.field label` /
+   `.field input` rules, for markup that puts the class directly
+   on the control instead of wrapping it in `.field`. */
+.field-label {
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sh-ink);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.field-input {
+  width: 100%;
+  font-size: 16px;
+  padding: 10px 12px;
+  min-height: 44px;
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-surface);
+  color: var(--sh-ink);
+  outline: none;
+}
+.field-input:focus { box-shadow: var(--sh-shadow-teal); }
+textarea.field-input { min-height: 88px; resize: vertical; }
+
+/* ---- Error toast ----
+   Transient error notification, coloured with --sh-error. */
+.error-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-family: var(--sh-font-body);
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--sh-error);
+  color: var(--sh-paper);
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  box-shadow: var(--sh-shadow);
+}
+
+/* ---- Selected table row ----
+   Highlighted/active row state for `.table`. Apply to the <tr>. */
+.table tr.row-selected td,
+tr.row-selected td {
+  background: var(--sh-teal-8);
+  box-shadow: inset 3px 0 0 var(--sh-teal);
+}

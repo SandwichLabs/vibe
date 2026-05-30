@@ -26,7 +26,7 @@ onMounted(load)
 
 <template>
   <div style="height: 100%; overflow-y: auto; padding: 32px;">
-    <div class="headrow">
+    <div class="page-head">
       <div>
         <div class="crumb">Studio <span class="sep">/</span> Home</div>
         <h1>{{ data?.title || 'Dashboard' }}</h1>
@@ -72,7 +72,7 @@ onMounted(load)
         <span class="label">Jump back in</span>
       </div>
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-        <div class="card stripe" style="padding: 20px 20px 18px 28px; cursor: pointer;" @click="router.push('/pages')">
+        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/pages')">
           <div class="row" style="justify-content: space-between; align-items: flex-start;">
             <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
               <Icon name="fileText" :size="22" />
@@ -81,7 +81,7 @@ onMounted(load)
           <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Pages</div>
           <div class="sh-meta" style="margin-top: 4px;">Author markdown & HTML pages</div>
         </div>
-        <div class="card stripe science" style="padding: 20px 20px 18px 28px; cursor: pointer;" @click="router.push('/tables')">
+        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-science);" @click="router.push('/tables')">
           <div class="row" style="justify-content: space-between; align-items: flex-start;">
             <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
               <Icon name="database" :size="22" />
@@ -90,7 +90,7 @@ onMounted(load)
           <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Tables</div>
           <div class="sh-meta" style="margin-top: 4px;">Browse & edit your data</div>
         </div>
-        <div class="card stripe math" style="padding: 20px 20px 18px 28px; cursor: pointer;" @click="router.push('/queries')">
+        <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-math);" @click="router.push('/queries')">
           <div class="row" style="justify-content: space-between; align-items: flex-start;">
             <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
               <Icon name="terminal" :size="22" />
@@ -107,13 +107,13 @@ onMounted(load)
           <span class="sh-label">Metadata</span>
         </div>
         <div style="padding: 6px 22px 14px;">
-          <div v-if="data.created_at" class="kv">
-            <span class="k">Created</span>
-            <span class="v">{{ data.created_at }}</span>
+          <div v-if="data.created_at" class="row" style="justify-content: space-between; padding: 6px 0;">
+            <span class="sh-label">Created</span>
+            <span class="sh-mono">{{ data.created_at }}</span>
           </div>
-          <div v-if="data.updated_at" class="kv">
-            <span class="k">Updated</span>
-            <span class="v">{{ data.updated_at }}</span>
+          <div v-if="data.updated_at" class="row" style="justify-content: space-between; padding: 6px 0;">
+            <span class="sh-label">Updated</span>
+            <span class="sh-mono">{{ data.updated_at }}</span>
           </div>
         </div>
       </div>

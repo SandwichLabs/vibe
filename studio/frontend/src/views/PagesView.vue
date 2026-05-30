@@ -20,6 +20,7 @@ const newPageType = ref<'markdown' | 'html'>('markdown')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const previewEl = ref<HTMLElement | null>(null)
+const hoveredId = ref<string | null>(null)
 
 const selectedPageType = computed(() => {
   const p = pages.value.find(p => p.id === selectedId.value)
@@ -42,7 +43,7 @@ async function renderPage(id: string) {
   try {
     renderedContent.value = await window.go.main.App.RenderPageContent(id, {})
   } catch (e: any) {
-    renderedContent.value = `<div class="text-error font-semibold">Error: ${e.message || e}</div>`
+    renderedContent.value = `<div style="color: var(--sh-error); font-weight: 600;">Error: ${e.message || e}</div>`
   }
   renderLoading.value = false
 }
@@ -115,28 +116,37 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex h-full">
+  <div class="row" style="height: 100%; align-items: stretch; gap: 0;">
     <!-- Page list -->
-    <div class="w-72 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
-      <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
+    <div class="col" style="width: 288px; border-right: var(--sh-border); background: var(--sh-paper-2); gap: 0;">
+      <div class="row" style="justify-content: space-between; padding: var(--sh-space-3) var(--sh-space-4); border-bottom: var(--sh-border);">
         <h2 class="sh-label" style="margin: 0;">Pages</h2>
         <button @click="showNewModal = true" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
       </div>
-      <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
-        <div v-else-if="pages.length === 0" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No pages yet</div>
+      <div style="flex: 1; overflow: auto;">
+        <div v-if="loading" class="sh-mono" style="padding: var(--sh-space-4); color: var(--sh-graphite);">Loading…</div>
+        <div v-else-if="pages.length === 0" class="sh-mono" style="padding: var(--sh-space-4); color: var(--sh-graphite); text-align: center;">No pages yet</div>
         <div
           v-for="page in pages"
           :key="page.id"
           @click="selectedId = page.id"
-          class="px-4 py-2.5 cursor-pointer border-b border-[rgba(31,35,48,0.12)] flex items-center justify-between group"
-          :class="selectedId === page.id ? 'row-selected' : 'hover:bg-[rgba(31,35,48,0.04)]'"
+          @mouseenter="hoveredId = page.id"
+          @mouseleave="hoveredId = null"
+          class="row"
+          :class="{ 'row-selected': selectedId === page.id }"
+          :style="{
+            justifyContent: 'space-between',
+            padding: 'var(--sh-space-2) var(--sh-space-4)',
+            cursor: 'pointer',
+            borderBottom: 'var(--sh-border-thin)',
+            background: selectedId !== page.id && hoveredId === page.id ? 'rgba(31,35,48,0.04)' : '',
+          }"
         >
-          <div class="min-w-0">
-            <div class="text-sm font-semibold truncate">{{ page.title || 'Untitled' }}</div>
-            <div class="badge badge--graphite mt-1">{{ page.page_type }}</div>
+          <div style="min-width: 0;">
+            <div style="font-size: var(--sh-fs-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ page.title || 'Untitled' }}</div>
+            <div class="badge badge--graphite" style="margin-top: var(--sh-space-1);">{{ page.page_type }}</div>
           </div>
-          <div class="hidden group-hover:flex gap-1">
+          <div v-show="hoveredId === page.id" class="row" style="gap: var(--sh-space-1);">
             <button @click.stop="editPage(page.id)" class="btn btn-ghost btn-sm"><Icon name="edit" :size="14" /></button>
             <button @click.stop="deletePage(page.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
           </div>
@@ -145,29 +155,29 @@ onMounted(async () => {
     </div>
 
     <!-- Content area -->
-    <div class="flex-1 overflow-auto p-8">
-      <div v-if="renderLoading" class="sh-mono text-[var(--sh-graphite)]">Rendering…</div>
-      <div v-else-if="!selectedId" class="sh-mono text-[var(--sh-graphite)] text-center mt-20">Select a page to view</div>
-      <div v-else ref="previewEl" v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'max-w-none vibe-content']"></div>
+    <div style="flex: 1; overflow: auto; padding: var(--sh-space-6);">
+      <div v-if="renderLoading" class="sh-mono" style="color: var(--sh-graphite);">Rendering…</div>
+      <div v-else-if="!selectedId" class="sh-mono" style="color: var(--sh-graphite); text-align: center; margin-top: var(--sh-space-10);">Select a page to view</div>
+      <div v-else ref="previewEl" v-html="renderedContent" :class="[selectedPageType === 'html' ? '' : 'prose', 'vibe-content']" style="max-width: none;"></div>
     </div>
 
     <!-- New page modal -->
     <div v-if="showNewModal" class="modal-overlay" @click.self="showNewModal = false; newPageType = 'markdown'">
-      <div class="card card-pad w-full max-w-sm">
-        <h3 class="card-title mb-4">New page</h3>
+      <div class="card card-pad" style="width: 100%; max-width: 384px;">
+        <h3 class="card-title" style="margin: 0 0 var(--sh-space-4);">New page</h3>
         <input v-model="newTitle" placeholder="Page title" class="field-input" :class="{ 'field-input-error': titleError }" @keyup.enter="createPage" @input="titleError = false" autofocus />
-        <p v-if="titleError" class="text-xs mt-1 font-semibold" style="color: var(--sh-error);">Title is required</p>
-        <div class="flex gap-4 mt-3">
-          <label class="flex items-center gap-1.5 text-sm cursor-pointer font-medium">
+        <p v-if="titleError" style="font-size: var(--sh-fs-xs); margin-top: var(--sh-space-1); font-weight: 600; color: var(--sh-error);">Title is required</p>
+        <div class="row" style="gap: var(--sh-space-4); margin-top: var(--sh-space-3);">
+          <label class="row" style="gap: var(--sh-space-1); font-size: var(--sh-fs-sm); cursor: pointer; font-weight: 500;">
             <input type="radio" v-model="newPageType" value="markdown" style="accent-color: var(--sh-teal);" />
             Markdown
           </label>
-          <label class="flex items-center gap-1.5 text-sm cursor-pointer font-medium">
+          <label class="row" style="gap: var(--sh-space-1); font-size: var(--sh-fs-sm); cursor: pointer; font-weight: 500;">
             <input type="radio" v-model="newPageType" value="html" style="accent-color: var(--sh-teal);" />
             HTML
           </label>
         </div>
-        <div class="flex gap-3 justify-end mt-4">
+        <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-4);">
           <button @click="showNewModal = false; newPageType = 'markdown'" class="btn btn-ghost">Cancel</button>
           <button @click="createPage" :disabled="!newTitle.trim()" class="btn btn-primary">Create</button>
         </div>

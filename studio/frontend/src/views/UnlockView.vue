@@ -93,9 +93,9 @@ function goBack() {
 </script>
 
 <template>
-  <div class="flex items-center justify-center h-full" style="background: var(--sh-paper);">
-    <div class="card card-pad w-full max-w-md" style="box-shadow: var(--sh-shadow-lg);">
-      <div class="flex flex-col items-center text-center mb-6">
+  <div class="row" style="justify-content: center; height: 100%; background: var(--sh-paper);">
+    <div class="card card-pad" style="width: 100%; max-width: 28rem; box-shadow: var(--sh-shadow-lg);">
+      <div class="col" style="align-items: center; text-align: center; gap: var(--sh-space-1); margin-bottom: var(--sh-space-5);">
         <span style="width: 48px; height: 48px; background: var(--sh-teal); color: var(--sh-paper); border: 2px solid var(--sh-ink); border-radius: var(--sh-radius-sm); box-shadow: 3px 3px 0 0 var(--sh-ink); font-family: var(--sh-font-display); font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center;">V</span>
         <h1 style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px; letter-spacing: -0.015em; margin-top: 14px;">
           Vibe <span style="border-bottom: 3px solid var(--sh-teal); padding-bottom: 1px;">Studio</span>
@@ -104,17 +104,17 @@ function goBack() {
       </div>
 
       <!-- File chooser -->
-      <div v-if="mode === 'choose'" class="space-y-3">
-        <button @click="selectFile" class="btn btn-primary w-full" style="justify-content: center;">
+      <div v-if="mode === 'choose'" class="col" style="gap: var(--sh-space-3);">
+        <button @click="selectFile" class="btn btn-primary" style="width: 100%; justify-content: center;">
           <Icon name="lock" :size="16" /> Open file
         </button>
-        <button @click="selectNewFile" class="btn w-full" style="justify-content: center;">
+        <button @click="selectNewFile" class="btn" style="width: 100%; justify-content: center;">
           <Icon name="plus" :size="16" /> Create new
         </button>
       </div>
 
       <!-- Open file form -->
-      <div v-if="mode === 'open'" class="space-y-4">
+      <div v-if="mode === 'open'" class="col" style="gap: var(--sh-space-4);">
         <div class="url-tile" style="font-size: 13px;">{{ filePath }}</div>
         <div>
           <label class="field-label">Passphrase</label>
@@ -127,16 +127,16 @@ function goBack() {
             autofocus
           />
         </div>
-        <div class="flex gap-3">
-          <button @click="goBack" class="btn flex-1" style="justify-content: center;">Back</button>
-          <button @click="openFile" :disabled="loading" class="btn btn-primary flex-1" style="justify-content: center;">
+        <div class="row" style="gap: var(--sh-space-3);">
+          <button @click="goBack" class="btn" style="flex: 1; justify-content: center;">Back</button>
+          <button @click="openFile" :disabled="loading" class="btn btn-primary" style="flex: 1; justify-content: center;">
             {{ loading ? 'Opening…' : 'Open' }}
           </button>
         </div>
       </div>
 
       <!-- Create file form -->
-      <div v-if="mode === 'create'" class="space-y-4">
+      <div v-if="mode === 'create'" class="col" style="gap: var(--sh-space-4);">
         <div class="url-tile" style="font-size: 13px;">{{ filePath }}</div>
         <div>
           <label class="field-label">Title</label>
@@ -160,15 +160,15 @@ function goBack() {
             @keyup.enter="createFile"
           />
         </div>
-        <div class="flex gap-3">
-          <button @click="goBack" class="btn flex-1" style="justify-content: center;">Back</button>
-          <button @click="createFile" :disabled="loading" class="btn btn-primary flex-1" style="justify-content: center;">
+        <div class="row" style="gap: var(--sh-space-3);">
+          <button @click="goBack" class="btn" style="flex: 1; justify-content: center;">Back</button>
+          <button @click="createFile" :disabled="loading" class="btn btn-primary" style="flex: 1; justify-content: center;">
             {{ loading ? 'Creating…' : 'Create' }}
           </button>
         </div>
       </div>
 
-      <div v-if="error" class="banner attn mt-4">
+      <div v-if="error" class="banner attn" style="margin-top: var(--sh-space-4);">
         <div class="ico"><Icon name="alert" :size="22" /></div>
         <div class="body"><div class="sub" style="color: var(--sh-ink);">{{ error }}</div></div>
       </div>
