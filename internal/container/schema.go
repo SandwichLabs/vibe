@@ -132,6 +132,24 @@ var schemaDDL = []string{
 		enforce_integrity INTEGER NOT NULL DEFAULT 1,
 		created_at        TEXT NOT NULL DEFAULT ''
 	);`,
+
+	// _vibe_reports stores Access-style banded report definitions (plan §3.2 /
+	// P3.7) as versioned JSON. A report binds a SQL source to grouping levels
+	// (group header/footer bands), a detail-row sort, detail columns, and
+	// group-footer / report-footer aggregate expressions. The grouping/sort/band
+	// portions are split into dedicated JSON columns so they can be queried or
+	// migrated independently. Additive migration.
+	`CREATE TABLE IF NOT EXISTS _vibe_reports (
+		id         TEXT PRIMARY KEY,
+		title      TEXT NOT NULL DEFAULT '',
+		source     TEXT NOT NULL DEFAULT '',
+		groups     TEXT NOT NULL DEFAULT '[]',
+		sort       TEXT NOT NULL DEFAULT '[]',
+		bands      TEXT NOT NULL DEFAULT '{}',
+		version    INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT ''
+	);`,
 }
 
 // defaultMeta contains the default metadata entries seeded on creation.
