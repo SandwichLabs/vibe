@@ -41,8 +41,46 @@ type ChartConfig struct {
 	YColumns []string // multiple Y columns -> one dataset per column
 	Series   string   // categorical column that splits a single Y into one dataset per distinct value
 	Stacked  bool     // stack datasets (sets Chart.js scales.{x,y}.stacked = true)
-	XTitle   string   // x-axis title text
-	YTitle   string   // y-axis title text
+	// StackMode carries the raw stacking mode so the "100%" normalized form is not
+	// collapsed to a plain bool. Empty means no stacking; "true" means plain
+	// stacking; "100%" means normalized (percentage) stacking. Stacked is kept in
+	// sync (true for both "true" and "100%") for backward compatibility.
+	StackMode string
+	XTitle    string // x-axis title text
+	YTitle    string // y-axis title text
+
+	// YRange constrains the Y axis: [min, max]. A nil entry leaves that bound
+	// auto. When both are nil the axis is auto-scaled (no min/max emitted).
+	YRange [2]*float64
+
+	// Colors is a custom palette overriding the built-in series palette, applied
+	// to datasets in order. SeriesColors maps a specific series/dataset label to a
+	// color, taking precedence over the palette for that label.
+	Colors       []string
+	SeriesColors map[string]string
+
+	// Legend toggles the Chart.js legend. nil leaves the Chart.js default; a
+	// non-nil value emits options.plugins.legend.display explicitly.
+	Legend *bool
+
+	// DataLabels, when true, emits the chartjs-plugin-datalabels config so point
+	// values are drawn on the chart.
+	DataLabels bool
+
+	// RefLines are horizontal reference lines emitted as Chart.js annotation
+	// plugin entries.
+	RefLines []RefLine
+
+	// Horizontal, when true, renders a horizontal bar chart (Chart.js type "bar"
+	// with indexAxis "y"). Set by the `type: horizontal_bar` directive.
+	Horizontal bool
+}
+
+// RefLine is a single horizontal reference line on a chart (Evidence WU-9),
+// emitted via the Chart.js annotation plugin.
+type RefLine struct {
+	Value float64
+	Label string
 }
 
 // MetricConfig holds metric directive configuration.

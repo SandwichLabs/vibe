@@ -536,21 +536,42 @@ func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet
 		// {chart: y: ...} accepts either a single column ("revenue") or a list
 		// ("[revenue, cost]"). A list produces one dataset per column.
 		ySingle, yList := getStringOrSliceConfig(node.Config, "y")
+
+		// `stacked` accepts a bool or a string; the "100%" normalized-stacking
+		// mode must survive verbatim. stackMode is "", "true", or "100%".
+		stackMode := getStackMode(node.Config, "stacked")
+
+		// `type: horizontal_bar` maps to a Chart.js bar chart with indexAxis "y".
+		chartType := getStringConfig(node.Config, "type")
+		horizontal := false
+		if strings.EqualFold(chartType, "horizontal_bar") {
+			chartType = "bar"
+			horizontal = true
+		}
+
 		return a.renderer.RenderChart(&renderer.ChartConfig{
-			Source:   getStringConfig(node.Config, "source"),
-			Type:     getStringConfig(node.Config, "type"),
-			X:        getStringConfig(node.Config, "x"),
-			Y:        ySingle,
-			YColumns: yList,
-			Series:   getStringConfig(node.Config, "series"),
-			Stacked:  getBoolConfig(node.Config, "stacked"),
-			XFmt:     getStringConfig(node.Config, "x_fmt"),
-			YFmt:     getStringConfig(node.Config, "y_fmt"),
-			XTitle:   getStringConfig(node.Config, "x_title"),
-			YTitle:   getStringConfig(node.Config, "y_title"),
-			Title:    getStringConfig(node.Config, "title"),
-			Color:    getStringConfig(node.Config, "color"),
-			Result:   rrs,
+			Source:       getStringConfig(node.Config, "source"),
+			Type:         chartType,
+			X:            getStringConfig(node.Config, "x"),
+			Y:            ySingle,
+			YColumns:     yList,
+			Series:       getStringConfig(node.Config, "series"),
+			Stacked:      stackMode != "",
+			StackMode:    stackMode,
+			XFmt:         getStringConfig(node.Config, "x_fmt"),
+			YFmt:         getStringConfig(node.Config, "y_fmt"),
+			XTitle:       getStringConfig(node.Config, "x_title"),
+			YTitle:       getStringConfig(node.Config, "y_title"),
+			YRange:       getFloatRangeConfig(node.Config, "y_range"),
+			Colors:       getStringSliceConfig(node.Config, "colors"),
+			SeriesColors: getStringMapConfig(node.Config, "series_colors"),
+			Legend:       getBoolPtrConfig(node.Config, "legend"),
+			DataLabels:   getBoolConfig(node.Config, "data_labels"),
+			RefLines:     getRefLinesConfig(node.Config, "ref_lines"),
+			Horizontal:   horizontal,
+			Title:        getStringConfig(node.Config, "title"),
+			Color:        getStringConfig(node.Config, "color"),
+			Result:       rrs,
 		})
 
 	case "metric":
@@ -714,6 +735,148 @@ func getBoolConfig(config map[string]any, key string) bool {
 	default:
 		return false
 	}
+}
+
+// getStackMode reads a stacking config value that may be a bool or a string.
+// It returns "" (no stacking), "true" (plain stacking), or "100%" (normalized
+// stacking). Any truthy string other than "100%" maps to "true".
+func getStackMode(config map[string]any, key string) string {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch b := v.(type) {
+	case bool:
+		if b {
+			return "true"
+		}
+		return ""
+	case string:
+		s := strings.TrimSpace(b)
+		if s == "100%" {
+			return "100%"
+		}
+		if strings.EqualFold(s, "true") {
+			return "true"
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+// getBoolPtrConfig reads an optional bool. It returns nil when the key is
+// absent so callers can distinguish "unset" from "false".
+func getBoolPtrConfig(config map[string]any, key string) *bool {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return nil
+	}
+	var b bool
+	switch t := v.(type) {
+	case bool:
+		b = t
+	case string:
+		b = strings.EqualFold(strings.TrimSpace(t), "true")
+	default:
+		return nil
+	}
+	return &b
+}
+
+// toFloatPtr converts a YAML-decoded scalar to a *float64, or nil if it is not
+// numeric.
+func toFloatPtr(v any) *float64 {
+	switch n := v.(type) {
+	case float64:
+		return &n
+	case int:
+		f := float64(n)
+		return &f
+	case int64:
+		f := float64(n)
+		return &f
+	case string:
+		var f float64
+		if _, err := fmt.Sscanf(strings.TrimSpace(n), "%g", &f); err == nil {
+			return &f
+		}
+	}
+	return nil
+}
+
+// getFloatRangeConfig reads a [min, max] numeric range (e.g. y_range: [0, 100]).
+// Either bound may be null to leave it auto.
+func getFloatRangeConfig(config map[string]any, key string) [2]*float64 {
+	var out [2]*float64
+	v, ok := config[key]
+	if !ok || v == nil {
+		return out
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return out
+	}
+	if len(list) > 0 {
+		out[0] = toFloatPtr(list[0])
+	}
+	if len(list) > 1 {
+		out[1] = toFloatPtr(list[1])
+	}
+	return out
+}
+
+// getStringSliceConfig reads a YAML flow list of strings (e.g. colors: [a, b]).
+func getStringSliceConfig(config map[string]any, key string) []string {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			} else {
+				out = append(out, fmt.Sprintf("%v", item))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// getRefLinesConfig reads ref_lines: [{value: 50000, label: "Target"}] into a
+// slice of renderer.RefLine.
+func getRefLinesConfig(config map[string]any, key string) []renderer.RefLine {
+	v, ok := config[key]
+	if !ok || v == nil {
+		return nil
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]renderer.RefLine, 0, len(list))
+	for _, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		rl := renderer.RefLine{}
+		if fp := toFloatPtr(m["value"]); fp != nil {
+			rl.Value = *fp
+		}
+		if s, ok := m["label"].(string); ok {
+			rl.Label = s
+		}
+		out = append(out, rl)
+	}
+	return out
 }
 
 func getStringConfig(config map[string]any, key string) string {
