@@ -641,7 +641,7 @@ watch(errorMessage, (msg) => {
                         data-filter-selection
                         :title="`Filter by ${tableData.columns[j]} = ${cell}`"
                         @click.stop="filterBySelection(tableData.columns[j], cell)"
-                      >{{ cell ?? '' }}<Icon name="filter" :size="11" /></button>
+                      ><Icon name="filter" :size="11" /></button>
                     </template>
                     <div
                       v-if="cellError && cellError.row === i && cellError.col === j"

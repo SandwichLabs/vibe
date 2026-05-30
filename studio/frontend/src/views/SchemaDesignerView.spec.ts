@@ -147,4 +147,43 @@ describe('SchemaDesignerView (P2.9)', () => {
     expect(conveyed).toContain('email')
     expect(conveyed).toContain('VARCHAR')
   })
+
+  it('adding an index calls AddIndex with name, columns and unique flag', async () => {
+    const { app } = makeApp()
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const indexBtn = wrapper.findAll('button').find((b: any) => /add index/i.test(b.text()))
+    expect(indexBtn, 'expected an "Add index" button').toBeTruthy()
+    await indexBtn!.trigger('click')
+    await flushPromises()
+
+    const nameInput = wrapper.find('input.addindex-name')
+    expect(nameInput.exists(), 'expected an index-name input').toBe(true)
+    await nameInput.setValue('idx_name')
+
+    // Select the "name" column for the index.
+    const colChecks = wrapper.findAll('input.addindex-col')
+    expect(colChecks.length, 'expected per-column checkboxes for the index').toBeGreaterThan(0)
+    const nameCol = colChecks.find((c: any) => c.attributes('value') === 'name')
+    expect(nameCol, 'expected a checkbox for the "name" column').toBeTruthy()
+    await nameCol!.setValue(true)
+
+    // Mark it unique.
+    const uniqueCheck = wrapper.find('input.addindex-unique')
+    expect(uniqueCheck.exists(), 'expected a unique flag').toBe(true)
+    await uniqueCheck.setValue(true)
+
+    const confirmBtn = wrapper.find('button.addindex-confirm')
+    expect(confirmBtn.exists(), 'expected a confirm button to create the index').toBe(true)
+    await confirmBtn.trigger('click')
+    await flushPromises()
+
+    expect(app.AddIndex).toHaveBeenCalledTimes(1)
+    const [tbl, idxName, cols, unique] = app.AddIndex.mock.calls[0]
+    expect(tbl).toBe('people')
+    expect(idxName).toBe('idx_name')
+    expect(cols).toEqual(['name'])
+    expect(unique).toBe(true)
+  })
 })

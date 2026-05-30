@@ -31,6 +31,12 @@ const showAddCol = ref(false)
 const addColName = ref('')
 const addColType = ref('VARCHAR')
 
+// Add-index inline form: a name, one or more selected columns, and a unique flag.
+const showAddIndex = ref(false)
+const addIndexName = ref('')
+const addIndexCols = ref<string[]>([])
+const addIndexUnique = ref(false)
+
 // Drop-column confirmation.
 const showConfirmDrop = ref(false)
 const pendingDropCol = ref<string | null>(null)
@@ -68,6 +74,7 @@ async function selectTable(name: string) {
   selectedColumn.value = null
   editMeta.value = null
   showAddCol.value = false
+  showAddIndex.value = false
   try {
     tableInfo.value = await window.go.main.App.DescribeTable(name)
   } catch { tableInfo.value = null }
@@ -120,6 +127,28 @@ async function confirmAddCol() {
     await window.go.main.App.AddColumn(selectedTable.value, addColName.value.trim(), addColType.value)
     showAddCol.value = false
     await selectTable(selectedTable.value)
+  } catch (e: any) {
+    errorMessage.value = 'Failed: ' + (e.message || e)
+  }
+}
+
+function openAddIndex() {
+  addIndexName.value = ''
+  addIndexCols.value = []
+  addIndexUnique.value = false
+  showAddIndex.value = true
+}
+
+async function confirmAddIndex() {
+  if (!selectedTable.value || !addIndexName.value.trim() || addIndexCols.value.length === 0) return
+  try {
+    await window.go.main.App.AddIndex(
+      selectedTable.value,
+      addIndexName.value.trim(),
+      [...addIndexCols.value],
+      addIndexUnique.value,
+    )
+    showAddIndex.value = false
   } catch (e: any) {
     errorMessage.value = 'Failed: ' + (e.message || e)
   }
@@ -181,6 +210,7 @@ onMounted(loadTables)
         <div class="page-subhead" style="padding: 14px 24px;">
           <h1 style="font-size: 22px;">{{ selectedTable }}</h1>
           <span class="flex-1"></span>
+          <button @click="openAddIndex" class="btn btn-ghost btn-sm"><Icon name="key" :size="14" /> Add index</button>
           <button @click="openAddCol" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> Add column</button>
         </div>
 
@@ -197,6 +227,42 @@ onMounted(loadTables)
           </div>
           <button @click="confirmAddCol" class="btn btn-primary">Add</button>
           <button @click="showAddCol = false" class="btn btn-ghost">Cancel</button>
+        </div>
+
+        <div v-if="showAddIndex" class="px-6 py-3 border-b-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col gap-2">
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <label class="field-label">Index name</label>
+              <input v-model="addIndexName" class="field-input addindex-name" placeholder="idx_name" />
+            </div>
+            <label class="flex items-center gap-2 text-sm font-medium pb-2">
+              <input type="checkbox" v-model="addIndexUnique" class="addindex-unique" style="accent-color: var(--sh-teal);" />
+              Unique
+            </label>
+          </div>
+          <div>
+            <label class="field-label">Columns</label>
+            <div class="flex flex-wrap gap-3 pt-1">
+              <label
+                v-for="col in (tableInfo?.columns || [])"
+                :key="col.name"
+                class="flex items-center gap-1 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  :value="col.name"
+                  v-model="addIndexCols"
+                  class="addindex-col"
+                  style="accent-color: var(--sh-teal);"
+                />
+                {{ col.name }}
+              </label>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button @click="confirmAddIndex" class="btn btn-primary addindex-confirm">Create index</button>
+            <button @click="showAddIndex = false" class="btn btn-ghost">Cancel</button>
+          </div>
         </div>
 
         <div class="flex-1 overflow-auto">

@@ -62,6 +62,7 @@ export const ICON_PATHS: Record<string, string> = {
   tableIcon: '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   pieChart: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   gitMerge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  columns: '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M12 3v18"/>',
 }
 
 export type IconName = keyof typeof ICON_PATHS

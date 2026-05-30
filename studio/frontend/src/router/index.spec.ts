@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { router } from './index'
 import RelationshipsView from '../views/RelationshipsView.vue'
+import SchemaDesignerView from '../views/SchemaDesignerView.vue'
 import AppShell from '../components/AppShell.vue'
 
 describe('router wiring (P2.8 regression guard)', () => {
@@ -16,6 +17,12 @@ describe('router wiring (P2.8 regression guard)', () => {
     const resolved = router.resolve('/relationships')
     expect(resolved.name).toBe('relationships')
     expect(resolved.matched[0]?.components?.default).toBe(RelationshipsView)
+  })
+
+  it('the /schema route resolves to SchemaDesignerView', () => {
+    const resolved = router.resolve('/schema')
+    expect(resolved.name).toBe('schema')
+    expect(resolved.matched[0]?.components?.default).toBe(SchemaDesignerView)
   })
 
   it('the Studio-Mode sidebar exposes a link to /relationships', () => {
@@ -38,5 +45,12 @@ describe('router wiring (P2.8 regression guard)', () => {
       .find((a) => a.attributes('href')?.includes('/relationships'))
     expect(relLink, 'expected a sidebar link to /relationships').toBeTruthy()
     expect(relLink!.text()).toContain('Relationships')
+
+    // …and a router-link to /schema (the SchemaDesignerView, P2.9).
+    const schemaLink = wrapper
+      .findAll('a')
+      .find((a) => a.attributes('href')?.includes('/schema'))
+    expect(schemaLink, 'expected a sidebar link to /schema').toBeTruthy()
+    expect(schemaLink!.text()).toContain('Schema')
   })
 })

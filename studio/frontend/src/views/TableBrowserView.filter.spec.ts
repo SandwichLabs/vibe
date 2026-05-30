@@ -97,7 +97,7 @@ describe('TableBrowserView visual querying (P2.9)', () => {
     // should add an eq filter on that column/value.
     const cityCell = wrapper.findAll('tbody tr')[0]
       .findAll('[data-filter-selection]')
-      .find((w: any) => w.text().includes('London'))
+      .find((w: any) => w.attributes('title')?.includes('London'))
     expect(cityCell, 'expected a Filter-by-Selection affordance on the cell value').toBeTruthy()
     await cityCell!.trigger('click')
     await flushPromises()
@@ -119,7 +119,7 @@ describe('TableBrowserView visual querying (P2.9)', () => {
 
     const cityCell = wrapper.findAll('tbody tr')[0]
       .findAll('[data-filter-selection]')
-      .find((w: any) => w.text().includes('London'))
+      .find((w: any) => w.attributes('title')?.includes('London'))
     await cityCell!.trigger('click')
     await flushPromises()
 
@@ -178,7 +178,7 @@ describe('TableBrowserView visual querying (P2.9)', () => {
     // Apply a Filter-by-Selection first so there is an active filter to save.
     const cityCell = wrapper.findAll('tbody tr')[0]
       .findAll('[data-filter-selection]')
-      .find((w: any) => w.text().includes('London'))
+      .find((w: any) => w.attributes('title')?.includes('London'))
     await cityCell!.trigger('click')
     await flushPromises()
 
