@@ -7,6 +7,8 @@
 - **App Mode (the locked-down end-user experience) ships as a runtime *mode toggle inside the Studio app*** — not a separate Viewer binary. One binary, lockdown enforced at runtime via capability gating.
 - **First milestone = Forms & CRUD write-back** (Phase 1).
 
+**Design reference:** UX wireframes + hi-fi mockups for all 11 MVP screens live in `tmp/design/` (see §9 for the inventory and the mockup → phase map).
+
 ---
 
 ## 1. Reconciling the three source docs
@@ -181,3 +183,39 @@ These layer on top of v1.0 without reworking it: the CRUD path (P1) and capabili
 | App-Mode lockdown is in-process (not a separate binary) | Capability gating in `app.go` + forced agent sandbox; document the boundary | P4 |
 | Form/report spec sprawl (many new `_vibe_*` tables) | Keep specs as versioned JSON; reuse `_vibe_components`/`_vibe_pages` where possible | all |
 | Scope creep vs. true Access parity | Each phase has a concrete acceptance app (order-entry, grouped report, locked switchboard) | all |
+
+---
+
+## 9. Design mockups (`tmp/design/`)
+
+A full design pass exists for the 11 MVP screens (the "Vibe Studio — Request for Design" brief, `tmp/design/uploads/vibe-studio-design-brief.md`), delivered as two rendered React canvases — one lo-fi, one hi-fi:
+
+| Artifact | Open this | Component sources |
+|---|---|---|
+| **Wireframes** (lo-fi, structure-first) | `tmp/design/Vibe Studio Wireframes.html` | `wf-*.jsx` + `wireframe.css` |
+| **Hi-fi mockups** (full SchoolHouse system) | `tmp/design/Vibe Studio Mockups.html` | `hifi/hifi-*.jsx` + `hifi/hifi.css` |
+
+Both render the same 11 screens on a `DesignCanvas` (`design-canvas.jsx`); `main.jsx` is the artboard registry/layout. Personas the screens serve: **Maria** (data entry), **James** (citizen dev), **Priya** (studio dev).
+
+> **The mockups are React/JSX only as a rendering convenience — this is NOT a framework decision.** React was just the quickest way to lay out interactive artboards on a canvas. The Studio frontend stays **Vue 3 + Wails v2** (per `CLAUDE.md`); these screens are translated into the existing Vue + SchoolHouse stack, not ported to React. Treat the `.jsx` files as visual/UX specs, not as code to adopt.
+
+**Design-system note (matches the as-built Studio).** The hi-fi set uses **SchoolHouse** (Fraunces display / Inter body / JetBrains Mono labels, warm paper, load-bearing borders + hard-offset shadows) — the same system the Studio frontend already adopted. Three colors carry *meaning* system-wide: **Teal = Studio Mode**, **Marigold = App Mode**, **Coral = Attention** (errors/conflicts — explicitly *not* destructive-red).
+
+### Mockup → phase map
+
+| # | Screen (artboard ids) | Maps to | Notes |
+|---|---|---|---|
+| 1 | **Onboarding · Node Setup Wizard** (`onb-*`, `err-*`) | **v1.1** (mesh) | Tailscale join + node URL is deferred mesh work. The **AI model select** (local vs. remote API tabs, hi-fi `1.3a/1.3b`) and **storage path** steps are the v1.0-relevant slices. Error states: Tailscale-missing / low-RAM / storage-denied. |
+| 2 | **Studio Home / Dashboard** (`home-pop`, `home-empty`) | cross-cutting → **P6** | Studio shell: app card grid, recent activity, node-status widget, quick-start templates. Populated + empty states. |
+| 3 | **Schema Builder** (`schema-main`, `stream-1..3`) | **P2** + agent Wizard | Split-pane conversational chat ↔ live ER diagram. The 3-frame `StreamingFrame` sequence shows tables appearing as the agent narrates — the **agent-as-Wizard** pattern (§4.3). |
+| 4 | **Form Builder** (`form-mainpage`) | **P1** ⭐ | Field list · live preview · properties panel. Renders the **Master-Detail / subform** archetype — the core P1 acceptance pattern. |
+| 5 | **App Shell Builder · Switchboard** (`sw-main`) | **P4** | Canvas of screens; access rules tucked under "advanced". The Access Switchboard Manager homage. |
+| 6 | **App Mode · Maria's view** (`app-desktop`, `app-mobile`) | **P4** | Locked tab bar, no sidebar, 44px hit targets, marigold accent. Desktop Master-Detail form + phone PWA (PWA is Phase-4/v1.1 horizon). |
+| M | **Mode toggle · annotated flow** (`mode-flow`) | **P4** | Studio ↔ App transition on one HVAC app — the dual-mode capability gating made visible. |
+| 7 | **Agent Chat Panel** (`agent-panel`) | cross-cutting (Wizard) | Slide-in right panel, streaming tool-use log (collapsible for trust/debug), pin-context. |
+| 8 | **Query Explorer** (`query-main`) | exists today + **P2** | SQL editor + sticky results + schema tree (mostly built); P2 adds visual querying / QBE around it. |
+| 9 | **Node Manager** (`nodes-main`) | **v1.1** (mesh) | Hub-and-spoke topology + node inspector. Deferred with multi-user. |
+| 10 | **Conflict Resolution** (`conf-all`, `conf-field`) | **v1.1** (mesh) | Plain-language merge dialog, apply-all + field-by-field paths. Deferred (optimistic-concurrency UI, §7). |
+| 11 | **Report View** (`report-main`) | **P3** | Live DuckDB filters, chart ↔ table toggle, "Edit SQL" Studio-only. Absorbs the Evidence parity stream. |
+
+**Takeaway for sequencing:** the mockups that drive **v1.0** are #4 (P1), #3/#8 (P2), #11 (P3), and #5/#6/M (P4) — plus the cross-cutting agent panel (#7) and Studio home (#2). Screens #1 (Tailscale steps), #9, and #10 are **v1.1** mesh/multi-user surfaces (§7) and should not pull scope into v1.0.
