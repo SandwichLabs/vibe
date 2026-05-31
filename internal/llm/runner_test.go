@@ -213,6 +213,20 @@ func MessageRoleFor(role string) string {
 	return "user"
 }
 
+func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
+	full := systemPromptFor(SandboxFull)
+	assert.Contains(t, full, "create_table")
+	assert.Contains(t, full, "FULL WRITE ACCESS")
+	assert.NotContains(t, full, "READ-ONLY access:")
+
+	rw := systemPromptFor(SandboxReadWrite)
+	assert.Contains(t, rw, "FULL WRITE ACCESS")
+
+	ro := systemPromptFor(SandboxReadOnly)
+	assert.Contains(t, ro, "READ-ONLY access:")
+	assert.NotContains(t, ro, "create_table:")
+}
+
 func TestWithPinned(t *testing.T) {
 	assert.Equal(t, "hi", withPinned("hi", ""))
 	assert.Equal(t, "hi", withPinned("hi", "   "))

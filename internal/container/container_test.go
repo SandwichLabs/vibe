@@ -190,7 +190,8 @@ func TestMeta_ContainsRequiredKeys(t *testing.T) {
 
 	sandbox, err := c.Meta("agent_sandbox")
 	require.NoError(t, err)
-	assert.Equal(t, "read-only", sandbox)
+	// The in-app wizard agent (Studio-only) defaults to full write access.
+	assert.Equal(t, "full", sandbox)
 }
 
 func TestCreate_MissingPassphrase_Error(t *testing.T) {

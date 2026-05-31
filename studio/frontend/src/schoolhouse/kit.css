@@ -158,7 +158,7 @@ input, select, textarea { font-family: inherit; }
   margin-bottom: 8px;
 }
 .page-head .crumb a { color: var(--sh-graphite); text-decoration: none; }
-.page-head .crumb .sep { padding: 0 6px; color: var(--sh-chalk); }
+.page-head .crumb .sep { padding: 0 6px; color: var(--sh-graphite); }
 
 /* ---- Buttons ---- */
 .btn {

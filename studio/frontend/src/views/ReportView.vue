@@ -173,7 +173,7 @@ function drawChart(cols: string[], rows: unknown[][]) {
     type: 'bar',
     data: {
       labels,
-      datasets: [{ label: cols[valueIdx] || 'value', data: values, backgroundColor: '#2F8F87' }],
+      datasets: [{ label: cols[valueIdx] || 'value', data: values, backgroundColor: '#1F7268' }],
     },
     options: { responsive: true, maintainAspectRatio: false },
   })
@@ -367,7 +367,7 @@ onMounted(loadReports)
 .report-view__title { font-family: var(--font-display, serif); font-size: 1.75rem; margin: 0; }
 .report-view__actions { display: flex; gap: 0.5rem; align-items: center; }
 .report-view__toggle { display: inline-flex; }
-.report-view__toggle-btn.is-active { background: var(--color-teal, #2f8f87); color: #fff; }
+.report-view__toggle-btn.is-active { background: var(--sh-teal); color: #fff; }
 .report-view__error { color: var(--color-coral, #e5604a); font-weight: 600; }
 .report-view__body { display: flex; gap: 1rem; flex: 1; min-height: 0; }
 .report-view__picker { width: 16rem; flex-shrink: 0; overflow-y: auto; }
@@ -382,7 +382,7 @@ onMounted(loadReports)
   border: 2px solid var(--color-border, #1a1a1a); background: var(--color-paper, #fdfaf3);
   box-shadow: 3px 3px 0 var(--color-border, #1a1a1a);
 }
-.report-view__list-item.is-active { background: var(--color-teal, #2f8f87); color: #fff; }
+.report-view__list-item.is-active { background: var(--sh-teal); color: #fff; }
 .report-view__list-title { font-weight: 600; }
 .report-view__list-source { font-family: var(--font-mono, monospace); font-size: 0.75rem; opacity: 0.8; }
 .report-view__canvas { flex: 1; overflow: auto; border: 2px solid var(--color-border, #1a1a1a); background: #fff; padding: 1.5rem; }

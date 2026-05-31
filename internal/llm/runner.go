@@ -98,9 +98,29 @@ func NewRunner(deps Deps, logger *slog.Logger) *Runner {
 	return &Runner{deps: deps, logger: logger}
 }
 
-const systemPrompt = `You are the Vibe wizard — the agent layer of Vibe, a local-first, encrypted application container that is the spiritual successor to Microsoft Access 97. You help a small-business builder design and query a relational database stored in a single .vibe file backed by DuckDB.
+const baseSystemPrompt = `You are the Vibe wizard — the agent layer of Vibe, a local-first, encrypted application container that is the spiritual successor to Microsoft Access 97. You help a small-business builder design and query a relational database stored in a single .vibe file backed by DuckDB.
 
-Use the provided tools to inspect the schema before answering questions about data, and to make changes when asked. Prefer reading the schema (list_tables, describe_table) before writing SQL. Keep answers concise and practical. When you create or change schema, briefly confirm what you did.`
+Prefer reading the schema (list_tables, describe_table) before writing SQL or making changes. Keep answers concise and practical. When you create or change schema, briefly confirm what you did.`
+
+// systemPromptFor builds a capability-aware system prompt so the model knows
+// exactly what it can do given the active sandbox. Without this the model tends
+// to wrongly claim it is "read-only" and ask the user to run DDL by hand,
+// instead of using the create_table tool it actually has.
+func systemPromptFor(sandbox string) string {
+	var b strings.Builder
+	b.WriteString(baseSystemPrompt)
+	b.WriteString("\n\nYour available tools and what you are allowed to do:\n")
+	b.WriteString("- list_tables: list the tables in the database.\n")
+	b.WriteString("- describe_table: inspect a table's columns.\n")
+	b.WriteString("- query: run a READ-ONLY SQL SELECT (no DDL/DML through this tool).\n")
+	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
+		b.WriteString("- create_table: create a new table. ")
+		b.WriteString("YOU HAVE FULL WRITE ACCESS to this database. When the user asks you to build or create a table, DO IT by calling create_table directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through the read-only `query` tool; use create_table for schema changes.\n")
+	} else {
+		b.WriteString("\nYou currently have READ-ONLY access: you can inspect and query data but cannot modify the schema. If the user asks to create or change tables, explain that they can enable write access in the agent settings, and offer the SQL they could run.\n")
+	}
+	return b.String()
+}
 
 // recorder accumulates tool steps during a single Generate call. Tools may run
 // in parallel, so it is mutex-guarded.
@@ -168,7 +188,7 @@ func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder) (fan
 	}
 
 	return fantasy.NewAgent(languageModel,
-		fantasy.WithSystemPrompt(systemPrompt),
+		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox)),
 		fantasy.WithTools(r.buildTools(cfg.Sandbox, rec)...),
 		fantasy.WithStopConditions(fantasy.StepCountIs(maxSteps)),
 	), nil

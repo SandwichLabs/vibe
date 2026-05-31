@@ -189,7 +189,11 @@ var defaultMeta = map[string]string{
 	"updated_at":     "", // set at runtime
 	"title":          "",
 	"description":    "",
-	"agent_sandbox":  "read-only",
+	// The in-app wizard agent (W0) is Studio-only (builder context) and is the
+	// "wizard layer" meant to build schema, so it defaults to full write access.
+	// Users can restrict it via SetAgentConfig. (The legacy JSON-RPC agent derives
+	// its sandbox from the live app mode, not this key.)
+	"agent_sandbox":  "full",
 	// default_mode is the persisted startup mode for the app shell (Phase 4
 	// dual-mode). New files default to "studio"; data-entry deployments may
 	// flip it to "app" via SetAppConfig.

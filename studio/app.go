@@ -2699,7 +2699,7 @@ func (a *App) GetAgentStatus() map[string]any {
 
 	status := map[string]any{
 		"available": a.container != nil,
-		"mode":      a.metaOr("agent_sandbox", "read-only"),
+		"mode":      a.metaOr("agent_sandbox", "full"),
 		"endpoint":  a.metaOr("llm_endpoint", defaultLLMEndpoint),
 		"model":     a.metaOr("llm_model", defaultLLMModel),
 	}
@@ -2743,7 +2743,7 @@ func (a *App) GetAgentConfig() (*AgentConfig, error) {
 		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
 		Model:    a.metaOr("llm_model", defaultLLMModel),
 		APIKey:   a.metaOr("llm_api_key", ""),
-		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}, nil
 }
 
@@ -2805,7 +2805,7 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
 		Model:    a.metaOr("llm_model", defaultLLMModel),
 		APIKey:   a.metaOr("llm_api_key", ""),
-		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
 	a.mu.RUnlock()
 
@@ -2846,7 +2846,7 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
 		Model:    a.metaOr("llm_model", defaultLLMModel),
 		APIKey:   a.metaOr("llm_api_key", ""),
-		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
 	a.mu.RUnlock()
 

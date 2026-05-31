@@ -16,7 +16,9 @@
   --sh-ember:      #C25A1F;   /* burnt orange — accent splash; pull-quotes, brand flourishes, key links */
 
   /* ---------- Color: Accents ---------- */
-  --sh-teal:       #2F8F87;   /* primary brand */
+  --sh-teal:       #1F7268;   /* primary brand — darkened for AA contrast: readable
+                                 as text on paper AND behind paper button text (the
+                                 old #2F8F87 was ~3.3:1 in both roles). */
   --sh-teal-hi:    #3FA39B;   /* hover */
   --sh-teal-lo:    #236962;   /* pressed */
   --sh-marigold:   #F2A93B;   /* highlight, in-progress, chart-2 */
