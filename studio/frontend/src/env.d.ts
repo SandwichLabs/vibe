@@ -121,6 +121,12 @@ interface FormFieldSpec {
   name: string
   caption: string
   control_type: string
+  // Form Builder (parity W2) properties — all optional/additive.
+  placeholder?: string
+  required?: boolean
+  visibility?: string
+  validation?: string
+  help?: string
 }
 
 interface SubformSpec {

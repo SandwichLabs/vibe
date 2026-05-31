@@ -42,10 +42,23 @@ type FormEvents struct {
 }
 
 // FormFieldSpec is a single bound control on a form or subform.
+//
+// Name / Caption / ControlType are the original binding triple. The remaining
+// properties are authored in the Form Builder's properties panel (parity plan
+// W2) and are all additive + omitempty so forms stored before the builder
+// existed round-trip unchanged: Placeholder seeds the empty-control hint,
+// Required drives client-side required validation, Visibility is a show/hide
+// rule ("Always show" by default), Validation is a human-readable constraint,
+// and Help is the control-tip text shown under the field.
 type FormFieldSpec struct {
 	Name        string `json:"name"`
 	Caption     string `json:"caption"`
 	ControlType string `json:"control_type"`
+	Placeholder string `json:"placeholder,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	Visibility  string `json:"visibility,omitempty"`
+	Validation  string `json:"validation,omitempty"`
+	Help        string `json:"help,omitempty"`
 }
 
 // SubformSpec is the master-detail link for an embedded child datasheet.

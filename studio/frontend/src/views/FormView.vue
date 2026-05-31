@@ -17,6 +17,11 @@ import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useMacroIntents, type MacroIntent } from '../composables/useMacroIntents'
+import { useAppMode } from '../composables/useAppMode'
+
+// Studio-only: the player exposes a "Design" jump into the Form Builder (W2).
+// In App Mode the builder route is locked, so the affordance is hidden.
+const { isStudio } = useAppMode()
 
 // The switchboard (P4.7) binds a nav button to a specific form and navigates
 // here with ?id=<formId>. Honor that query so the bound form opens, rather than
@@ -305,6 +310,13 @@ watch(errorMessage, (msg) => { if (msg) setTimeout(() => { errorMessage.value = 
       <div class="page-subhead" style="padding: 12px 24px;">
         <span class="sh-label" style="margin: 0;">{{ spec?.title || 'Form' }}</span>
         <span class="spacer"></span>
+        <button
+          v-if="isStudio && spec"
+          class="btn btn-sm"
+          data-testid="form-design"
+          title="Open in Form Builder"
+          @click="router?.push({ path: `/forms/${spec.id}/edit` })"
+        ><Icon name="edit" :size="14" /> Design</button>
         <span class="sh-mono" style="font-size: 11px; color: var(--sh-graphite);">{{ recordLabel }}</span>
       </div>
 
