@@ -13,6 +13,8 @@ export function AddForeignKey(arg1:main.ForeignKeySpec):Promise<string>;
 
 export function AddIndex(arg1:string,arg2:string,arg3:Array<string>,arg4:boolean):Promise<void>;
 
+export function AgentChat(arg1:string,arg2:string):Promise<main.AgentChatResult>;
+
 export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function AnalyzeInExcel(arg1:string,arg2:string):Promise<string>;
@@ -66,6 +68,8 @@ export function ExportTableJSON(arg1:string):Promise<string>;
 export function ExportTableXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function FireFormOpen(arg1:string):Promise<main.MacroRunResult>;
+
+export function GetAgentConfig():Promise<main.AgentConfig>;
 
 export function GetAgentStatus():Promise<Record<string, any>>;
 
@@ -170,6 +174,8 @@ export function SelectSpreadsheetFile():Promise<string>;
 export function SelectVibeFile():Promise<string>;
 
 export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
+
+export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 
 export function SetAppConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
 

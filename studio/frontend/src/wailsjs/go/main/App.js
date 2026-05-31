@@ -14,6 +14,10 @@ export function AddIndex(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddIndex'](arg1, arg2, arg3, arg4);
 }
 
+export function AgentChat(arg1, arg2) {
+  return window['go']['main']['App']['AgentChat'](arg1, arg2);
+}
+
 export function AlterColumnType(arg1, arg2, arg3) {
   return window['go']['main']['App']['AlterColumnType'](arg1, arg2, arg3);
 }
@@ -120,6 +124,10 @@ export function ExportTableXLSX(arg1, arg2) {
 
 export function FireFormOpen(arg1) {
   return window['go']['main']['App']['FireFormOpen'](arg1);
+}
+
+export function GetAgentConfig() {
+  return window['go']['main']['App']['GetAgentConfig']();
 }
 
 export function GetAgentStatus() {
@@ -328,6 +336,10 @@ export function SelectVibeFile() {
 
 export function SendAgentQuery(arg1) {
   return window['go']['main']['App']['SendAgentQuery'](arg1);
+}
+
+export function SetAgentConfig(arg1) {
+  return window['go']['main']['App']['SetAgentConfig'](arg1);
 }
 
 export function SetAppConfig(arg1, arg2, arg3) {

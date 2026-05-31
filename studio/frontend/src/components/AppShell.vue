@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { setCachedMode } from '../router/index'
 import { useAppMode } from '../composables/useAppMode'
 import Icon from './Icon.vue'
+import AgentPanel from './AgentPanel.vue'
+
+// Agent wizard panel (W0) — a slide-in chat available across Studio Mode screens.
+const agentOpen = ref(false)
 
 // The AppShell is the single place that reads/flips the live app mode. It keeps
 // THREE consumers in sync: this chrome (appConfig), the router guard
@@ -156,6 +160,14 @@ watch(errorMessage, (msg) => {
         <span v-if="isAppMode" class="pill app"><span class="dot app"></span>App Mode</span>
         <span v-else class="pill studio"><span class="dot studio"></span>Studio Mode</span>
         <span class="pill"><span class="dot ok"></span>Local · Encrypted</span>
+        <button
+          v-if="!isAppMode"
+          class="btn btn-inverted agent-toggle"
+          data-testid="agent-toggle"
+          @click="agentOpen = !agentOpen"
+        >
+          <Icon name="bot" :size="16" /> Agent
+        </button>
         <span class="avatar-sq">VS</span>
       </div>
     </div>
@@ -242,6 +254,10 @@ watch(errorMessage, (msg) => {
         </div>
       </div>
     </div>
+
+    <!-- Agent wizard slide-in (W0) — Studio Mode only; not rendered at all in
+         App Mode so the locked-down end-user surface has no agent affordance. -->
+    <AgentPanel v-if="!isAppMode" :open="agentOpen" @close="agentOpen = false" />
 
     <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>
   </div>

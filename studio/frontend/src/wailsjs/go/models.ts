@@ -105,6 +105,72 @@ export namespace crud {
 
 export namespace main {
 	
+	export class AgentToolStep {
+	    tool: string;
+	    input: string;
+	    output: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentToolStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tool = source["tool"];
+	        this.input = source["input"];
+	        this.output = source["output"];
+	    }
+	}
+	export class AgentChatResult {
+	    text: string;
+	    steps: AgentToolStep[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentChatResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.steps = this.convertValues(source["steps"], AgentToolStep);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AgentConfig {
+	    endpoint: string;
+	    model: string;
+	    api_key: string;
+	    sandbox: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.endpoint = source["endpoint"];
+	        this.model = source["model"];
+	        this.api_key = source["api_key"];
+	        this.sandbox = source["sandbox"];
+	    }
+	}
 	export class AgentResult {
 	    sql?: string;
 	    columns?: string[];
@@ -125,6 +191,7 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	
 	export class AppConfig {
 	    mode: string;
 	    default_mode: string;

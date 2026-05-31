@@ -21,6 +21,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
+	"github.com/sandwich-labs/vibe-app/internal/llm"
 	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/sandwich-labs/vibe-app/internal/pages"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
@@ -2690,16 +2691,189 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 	return result, nil
 }
 
-// GetAgentStatus returns agent status info.
+// GetAgentStatus returns agent status info, including the configured LLM
+// endpoint so the agent panel can show what it's talking to.
 func (a *App) GetAgentStatus() map[string]any {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	status := map[string]any{
 		"available": a.container != nil,
-		"mode":      "read-only",
+		"mode":      a.metaOr("agent_sandbox", "read-only"),
+		"endpoint":  a.metaOr("llm_endpoint", defaultLLMEndpoint),
+		"model":     a.metaOr("llm_model", defaultLLMModel),
 	}
 	return status
+}
+
+const (
+	defaultLLMEndpoint = "http://localhost:8080/v1"
+	defaultLLMModel    = "local"
+)
+
+// metaOr reads a _vibe_meta key, returning def when no file is open or the key
+// is absent (e.g. files created before the key existed). Caller holds a.mu.
+func (a *App) metaOr(key, def string) string {
+	if a.container == nil {
+		return def
+	}
+	v, err := a.container.Meta(key)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+// AgentConfig is the editable LLM endpoint configuration surfaced to Settings.
+type AgentConfig struct {
+	Endpoint string `json:"endpoint"`
+	Model    string `json:"model"`
+	APIKey   string `json:"api_key"`
+	Sandbox  string `json:"sandbox"`
+}
+
+// GetAgentConfig returns the persisted LLM/agent configuration.
+func (a *App) GetAgentConfig() (*AgentConfig, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	return &AgentConfig{
+		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
+		Model:    a.metaOr("llm_model", defaultLLMModel),
+		APIKey:   a.metaOr("llm_api_key", ""),
+		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+	}, nil
+}
+
+// SetAgentConfig persists the LLM/agent configuration. Studio-only.
+func (a *App) SetAgentConfig(cfg AgentConfig) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	if err := a.guardStudioOnly("SetAgentConfig"); err != nil {
+		return err
+	}
+	for k, v := range map[string]string{
+		"llm_endpoint":  cfg.Endpoint,
+		"llm_model":     cfg.Model,
+		"llm_api_key":   cfg.APIKey,
+		"agent_sandbox": cfg.Sandbox,
+	} {
+		if err := a.container.SetMeta(k, v); err != nil {
+			return fmt.Errorf("failed to set %s: %w", k, err)
+		}
+	}
+	return nil
+}
+
+// AgentToolStep is one tool invocation the agent made during a chat turn.
+type AgentToolStep struct {
+	Tool   string `json:"tool"`
+	Input  string `json:"input"`
+	Output string `json:"output"`
+}
+
+// AgentChatResult is the panel-facing result of one agent turn.
+type AgentChatResult struct {
+	Text  string          `json:"text"`
+	Steps []AgentToolStep `json:"steps"`
+}
+
+// AgentChat runs one turn of the conversational wizard agent against the
+// configured OpenAI-compatible LLM endpoint, driving a real tool-calling loop
+// (internal/llm). pinnedContext is optional context the user pinned in the
+// panel. Studio-only: the agent can run SQL and mutate schema.
+//
+// The config snapshot + capability guard happen under a.mu, which is released
+// before the (slow, network-bound) LLM call so the agent's tools — which take
+// their own locks via the public App methods — don't deadlock.
+func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error) {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("no file open")
+	}
+	if err := a.guardStudioOnly("AgentChat"); err != nil {
+		a.mu.RUnlock()
+		return nil, err
+	}
+	cfg := llm.Config{
+		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
+		Model:    a.metaOr("llm_model", defaultLLMModel),
+		APIKey:   a.metaOr("llm_api_key", ""),
+		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+	}
+	a.mu.RUnlock()
+
+	runner := llm.NewRunner(&llmDeps{app: a}, a.logger)
+	res, err := runner.Chat(a.ctx, cfg, message, pinnedContext)
+	if err != nil {
+		return nil, err
+	}
+	out := &AgentChatResult{Text: res.Text}
+	for _, s := range res.Steps {
+		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output})
+	}
+	return out, nil
+}
+
+// llmDeps adapts *App to the narrow llm.Deps interface so internal/llm never
+// imports the studio package.
+type llmDeps struct{ app *App }
+
+func (d *llmDeps) ListTables(_ context.Context) ([]string, error) {
+	return d.app.ListTables()
+}
+
+func (d *llmDeps) DescribeTable(_ context.Context, table string) (string, error) {
+	ti, err := d.app.DescribeTable(table)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "table %s:\n", ti.Name)
+	for _, c := range ti.Columns {
+		fmt.Fprintf(&b, "  %s %s", c.Name, c.Type)
+		if c.PK {
+			b.WriteString(" PRIMARY KEY")
+		}
+		if c.NotNull {
+			b.WriteString(" NOT NULL")
+		}
+		b.WriteString("\n")
+	}
+	return b.String(), nil
+}
+
+func (d *llmDeps) Query(_ context.Context, sqlStr string) (*llm.QueryResult, error) {
+	qr, err := d.app.ExecuteQuery(sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	out := &llm.QueryResult{}
+	for _, c := range qr.Columns {
+		out.Columns = append(out.Columns, c.Name)
+	}
+	for _, row := range qr.Rows {
+		strRow := make([]string, len(row))
+		for i, v := range row {
+			strRow[i] = fmt.Sprintf("%v", v)
+		}
+		out.Rows = append(out.Rows, strRow)
+	}
+	return out, nil
+}
+
+func (d *llmDeps) CreateTable(_ context.Context, spec llm.TableSpec) error {
+	cols := make([]ColumnInfo, 0, len(spec.Columns))
+	for _, c := range spec.Columns {
+		cols = append(cols, ColumnInfo{Name: c.Name, Type: c.Type, PK: c.PrimaryKey, NotNull: c.NotNull})
+	}
+	return d.app.CreateTable(spec.Name, cols)
 }
 
 // --- Import/Export ---
