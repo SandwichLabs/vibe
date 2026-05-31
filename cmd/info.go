@@ -74,13 +74,13 @@ Use --json for machine-readable JSON output.`,
 
 		if jsonOutput {
 			result := map[string]any{
-				"file":          filePath,
-				"size":          fi.Size(),
-				"size_human":    formatBytes(fi.Size()),
-				"pages":         pageCount,
-				"tables":        tableCount,
-				"queries":       queryCount,
-				"duckdb_size":   duckdbSize,
+				"file":        filePath,
+				"size":        fi.Size(),
+				"size_human":  formatBytes(fi.Size()),
+				"pages":       pageCount,
+				"tables":      tableCount,
+				"queries":     queryCount,
+				"duckdb_size": duckdbSize,
 			}
 			for k, v := range meta {
 				result[k] = v

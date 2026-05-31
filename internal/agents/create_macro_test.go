@@ -244,8 +244,8 @@ func TestCreateMacroTool_SandboxCheckBlocksReadOnly(t *testing.T) {
 // routed through the approval queue when RequireApproval is set: rejecting the
 // pending approval yields an approval-needed error and persists no macro.
 func TestCreateMacroTool_GatedByApprovalQueue(t *testing.T) {
-	handler, c := newWizardFixture(t, agents.ModeFull)
-	handler = agents.NewHandler(c, nil, &agents.SandboxConfig{
+	_, c := newWizardFixture(t, agents.ModeFull)
+	handler := agents.NewHandler(c, nil, &agents.SandboxConfig{
 		Mode:            agents.ModeFull,
 		MaxQueryRows:    1000,
 		RequireApproval: true,

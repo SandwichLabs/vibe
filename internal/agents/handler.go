@@ -204,7 +204,7 @@ func (h *Handler) handleIntrospectSchema(ctx context.Context, req *Request) *Res
 }
 
 func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
+	table, _ := req.Params["table"].(string)
 	db, errResp := h.duckDB(req.ID)
 	if errResp != nil {
 		return errResp
@@ -255,7 +255,7 @@ func (h *Handler) handleListPages(ctx context.Context, req *Request) *Response {
 }
 
 func (h *Handler) handleGetPage(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
+	name, _ := req.Params["name"].(string)
 	db := h.container.SQLiteDB()
 
 	var content string
@@ -311,7 +311,7 @@ func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
 // --- Data handlers ---
 
 func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
-	sqlStr := req.Params["sql"].(string)
+	sqlStr, _ := req.Params["sql"].(string)
 	var params map[string]any
 	if p, ok := req.Params["params"].(map[string]any); ok {
 		params = p
@@ -340,8 +340,8 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 }
 
 func (h *Handler) handleCreateRecord(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
-	values := req.Params["values"].(map[string]any)
+	table, _ := req.Params["table"].(string)
+	values, _ := req.Params["values"].(map[string]any)
 
 	cols := make([]string, 0, len(values))
 	placeholders := make([]string, 0, len(values))
@@ -367,9 +367,9 @@ func (h *Handler) handleCreateRecord(ctx context.Context, req *Request) *Respons
 }
 
 func (h *Handler) handleUpdateRecord(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
-	values := req.Params["values"].(map[string]any)
-	where := req.Params["where"].(string)
+	table, _ := req.Params["table"].(string)
+	values, _ := req.Params["values"].(map[string]any)
+	where, _ := req.Params["where"].(string)
 
 	setClauses := make([]string, 0, len(values))
 	args := make([]any, 0, len(values))
@@ -393,8 +393,8 @@ func (h *Handler) handleUpdateRecord(ctx context.Context, req *Request) *Respons
 }
 
 func (h *Handler) handleDeleteRecord(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
-	where := req.Params["where"].(string)
+	table, _ := req.Params["table"].(string)
+	where, _ := req.Params["where"].(string)
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", table, where)
 	db, errResp := h.duckDB(req.ID)
@@ -411,7 +411,7 @@ func (h *Handler) handleDeleteRecord(ctx context.Context, req *Request) *Respons
 }
 
 func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
+	table, _ := req.Params["table"].(string)
 	columns, ok := req.Params["columns"].([]any)
 	if !ok {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "columns must be an array of strings")
@@ -444,7 +444,7 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", table, strings.Join(colNames, ", "), rowPlaceholder)
 	stmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to prepare statement: %v", err))
 	}
 	defer stmt.Close()
@@ -453,12 +453,12 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 	for _, row := range rows {
 		rowVals, ok := row.([]any)
 		if !ok {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return NewErrorResponse(req.ID, ErrInvalidParams, "each row must be an array")
 		}
 		_, err := stmt.ExecContext(ctx, rowVals...)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to insert row: %v", err))
 		}
 		inserted++
@@ -474,8 +474,8 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 // --- Page handlers ---
 
 func (h *Handler) handleCreatePage(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
-	content := req.Params["content"].(string)
+	name, _ := req.Params["name"].(string)
+	content, _ := req.Params["content"].(string)
 	now := nowISO()
 
 	db := h.container.SQLiteDB()
@@ -490,8 +490,8 @@ func (h *Handler) handleCreatePage(ctx context.Context, req *Request) *Response 
 }
 
 func (h *Handler) handleUpdatePage(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
-	content := req.Params["content"].(string)
+	name, _ := req.Params["name"].(string)
+	content, _ := req.Params["content"].(string)
 
 	db := h.container.SQLiteDB()
 	result, err := db.ExecContext(ctx,
@@ -506,7 +506,7 @@ func (h *Handler) handleUpdatePage(ctx context.Context, req *Request) *Response 
 }
 
 func (h *Handler) handleDeletePage(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
+	name, _ := req.Params["name"].(string)
 
 	db := h.container.SQLiteDB()
 	result, err := db.ExecContext(ctx, "DELETE FROM _vibe_pages WHERE title = ?", name)
@@ -520,7 +520,7 @@ func (h *Handler) handleDeletePage(ctx context.Context, req *Request) *Response 
 // --- Schema handlers ---
 
 func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
+	name, _ := req.Params["name"].(string)
 	columns, ok := req.Params["columns"].([]any)
 	if !ok {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "columns must be an array")
@@ -550,9 +550,9 @@ func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response
 }
 
 func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
-	name := req.Params["name"].(string)
-	colType := req.Params["type"].(string)
+	table, _ := req.Params["table"].(string)
+	name, _ := req.Params["name"].(string)
+	colType, _ := req.Params["type"].(string)
 
 	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, colType)
 	db, errResp := h.duckDB(req.ID)
@@ -567,7 +567,7 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 }
 
 func (h *Handler) handleDropTable(ctx context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
+	name, _ := req.Params["name"].(string)
 
 	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", name)
 	db, errResp := h.duckDB(req.ID)
@@ -582,8 +582,8 @@ func (h *Handler) handleDropTable(ctx context.Context, req *Request) *Response {
 }
 
 func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
-	table := req.Params["table"].(string)
-	data := req.Params["data"].(string)
+	table, _ := req.Params["table"].(string)
+	data, _ := req.Params["data"].(string)
 	hasHeader := true
 	if h, ok := req.Params["has_header"].(bool); ok {
 		hasHeader = h
@@ -620,7 +620,7 @@ func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
 		query := fmt.Sprintf("INSERT INTO %s VALUES (%s)", table, strings.Join(placeholders, ", "))
 		_, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to import row %d: %v", i, err))
 		}
 		inserted++
@@ -639,9 +639,9 @@ func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
 // table, seeds humanized field-meta captions for the bound columns, and
 // persists the form to _vibe_forms (plan §1.6 / §4.3).
 func (h *Handler) handleCreateForm(_ context.Context, req *Request) *Response {
-	name := req.Params["name"].(string)
-	table := req.Params["table"].(string)
-	archetype := req.Params["archetype"].(string)
+	name, _ := req.Params["name"].(string)
+	table, _ := req.Params["table"].(string)
+	archetype, _ := req.Params["archetype"].(string)
 
 	onSubmit := "refresh"
 	if v, ok := req.Params["on_submit"].(string); ok && v != "" {

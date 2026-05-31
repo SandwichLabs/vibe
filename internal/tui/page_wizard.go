@@ -27,14 +27,14 @@ var pageTemplates = map[string][]string{
 
 // PageWizardModel walks the user through creating a new page.
 type PageWizardModel struct {
-	step         wizardStep
-	pageType     string
-	title        string
-	template     string
-	typeCursor   int
-	tmplCursor   int
-	titleInput   string
-	active       bool
+	step       wizardStep
+	pageType   string
+	title      string
+	template   string
+	typeCursor int
+	tmplCursor int
+	titleInput string
+	active     bool
 }
 
 // NewPageWizardModel creates a new page wizard.

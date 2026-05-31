@@ -194,7 +194,7 @@ func (c *Container) Close() error {
 
 	var firstErr error
 
-	if err := cleanupDuckDB(c.duckDB); err != nil && firstErr == nil {
+	if err := cleanupDuckDB(c.duckDB); err != nil {
 		firstErr = fmt.Errorf("failed to cleanup DuckDB: %w", err)
 	}
 	c.duckDB = nil

@@ -22,7 +22,7 @@ func TestSidebarModel_Navigation(t *testing.T) {
 	idx := s.list.Index()
 	items := s.list.Items()
 	if idx < len(items) {
-		si := items[idx].(sidebarItem)
+		si, _ := items[idx].(sidebarItem)
 		// After jumping, we should be past PAGES section.
 		assert.True(t, idx > 1, "should have jumped past PAGES section")
 		_ = si

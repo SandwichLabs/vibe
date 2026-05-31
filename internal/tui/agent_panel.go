@@ -25,11 +25,10 @@ type ToolCallEntry struct {
 
 // AgentPanelModel manages the agent connection status and tool call log.
 type AgentPanelModel struct {
-	status   AgentStatus
-	errMsg   string
-	toolLog  []ToolCallEntry
-	scrollY  int
-	visible  bool
+	status  AgentStatus
+	errMsg  string
+	toolLog []ToolCallEntry
+	visible bool
 }
 
 // NewAgentPanelModel creates a new agent panel.

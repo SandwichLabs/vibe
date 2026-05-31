@@ -29,7 +29,9 @@ func TestExpandTemplatesRange(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Contains(t, text, "| North | 100 |")
 	assert.Contains(t, text, "| South | 200 |")
 }
@@ -53,7 +55,9 @@ func TestExpandTemplatesIf(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "ALERTS FOUND", text)
 }
 
@@ -73,7 +77,9 @@ func TestExpandTemplatesIfEmpty(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "NO ALERTS", text)
 }
 
@@ -91,7 +97,9 @@ func TestExpandTemplatesParams(t *testing.T) {
 	result, err := ExpandTemplates(executed, params)
 	require.NoError(t, err)
 
-	text := result.Nodes[0].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[0].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "# Report for March", text)
 }
 
@@ -109,7 +117,9 @@ func TestExpandTemplatesVars(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[0].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[0].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "Report for Acme Corp in US-East", text)
 }
 
@@ -124,7 +134,9 @@ func TestExpandTemplatesNoSyntax(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should pass through unchanged.
-	text := result.Nodes[0].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[0].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "# Plain markdown\nNo templates here.", text)
 }
 
@@ -147,7 +159,9 @@ func TestExpandTemplatesFuncCell(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "Value: 42", text)
 }
 
@@ -170,7 +184,9 @@ func TestExpandTemplatesFuncCount(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "Total: 3", text)
 }
 
@@ -193,7 +209,9 @@ func TestExpandTemplatesFuncSum(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[1].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "Sum: 400", text)
 }
 
@@ -209,7 +227,9 @@ func TestExpandTemplatesFuncCurrency(t *testing.T) {
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
 
-	text := result.Nodes[0].Node.(*TextNode).Content
+	tmp, ok := result.Nodes[0].Node.(*TextNode)
+	require.True(t, ok)
+	text := tmp.Content
 	assert.Equal(t, "$1,234.56", text)
 }
 
@@ -222,7 +242,9 @@ func TestExpandTemplatesFuncPercent(t *testing.T) {
 
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "42.0%", result.Nodes[0].Node.(*TextNode).Content)
+	node, ok := result.Nodes[0].Node.(*TextNode)
+	require.True(t, ok)
+	assert.Equal(t, "42.0%", node.Content)
 }
 
 func TestExpandTemplatesFuncCol(t *testing.T) {
@@ -243,7 +265,9 @@ func TestExpandTemplatesFuncCol(t *testing.T) {
 
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "Header: name | age", result.Nodes[1].Node.(*TextNode).Content)
+	node, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	assert.Equal(t, "Header: name | age", node.Content)
 }
 
 func TestExpandTemplatesInvalidSyntax(t *testing.T) {
@@ -276,7 +300,9 @@ func TestExpandTemplatesColNames(t *testing.T) {
 
 	result, err := ExpandTemplates(executed, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "a b ", result.Nodes[1].Node.(*TextNode).Content)
+	node, ok := result.Nodes[1].Node.(*TextNode)
+	require.True(t, ok)
+	assert.Equal(t, "a b ", node.Content)
 }
 
 func TestFormatCommas(t *testing.T) {

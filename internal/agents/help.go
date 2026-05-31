@@ -4,10 +4,10 @@ import "strings"
 
 // HelpEntry is a single help topic.
 type HelpEntry struct {
-	Topic    string   // short identifier
-	Title    string   // human-readable title
-	Tags     []string // keywords for matching
-	Content  string   // full help text (markdown)
+	Topic   string   // short identifier
+	Title   string   // human-readable title
+	Tags    []string // keywords for matching
+	Content string   // full help text (markdown)
 }
 
 // HelpEntries contains all built-in help documentation.

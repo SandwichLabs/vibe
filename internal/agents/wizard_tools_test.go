@@ -224,7 +224,7 @@ func TestWizardTools_BuildQuery(t *testing.T) {
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error, "list_queries should succeed: %+v", resp.Error)
 
-	result := resp.Result.(map[string]any)
+	result, _ := resp.Result.(map[string]any)
 	queries, ok := result["queries"].([]map[string]any)
 	require.True(t, ok, "queries should be a []map[string]any, got %T", result["queries"])
 
@@ -246,7 +246,7 @@ func TestWizardTools_BuildQuery(t *testing.T) {
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error, "the query built by build_query should be runnable: %+v", resp.Error)
 
-	runResult := resp.Result.(map[string]any)
+	runResult, _ := resp.Result.(map[string]any)
 	rows, ok := runResult["rows"].([][]any)
 	require.True(t, ok, "run_query rows should be [][]any, got %T", runResult["rows"])
 	require.Len(t, rows, 1, "only the order with total > 50 should match")

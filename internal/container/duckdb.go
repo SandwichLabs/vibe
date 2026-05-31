@@ -223,7 +223,7 @@ func cleanupDuckDB(state *duckDBState) error {
 	var firstErr error
 
 	if state.db != nil {
-		if err := state.db.Close(); err != nil && firstErr == nil {
+		if err := state.db.Close(); err != nil {
 			firstErr = fmt.Errorf("failed to close DuckDB: %w", err)
 		}
 	}

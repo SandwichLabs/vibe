@@ -24,9 +24,9 @@ type RelationshipVerdict struct {
 
 // Recorded relationship-strategy recommendation constants.
 const (
-	RelRecommendRelyOnDuckDB   = "rely-on-duckdb-fk"
-	RelRecommendRecreateForFK  = "recreate-table-for-fk"
-	RelRecommendEnforceInCRUD  = "enforce-in-crud-layer"
+	RelRecommendRelyOnDuckDB  = "rely-on-duckdb-fk"
+	RelRecommendRecreateForFK = "recreate-table-for-fk"
+	RelRecommendEnforceInCRUD = "enforce-in-crud-layer"
 )
 
 // RelationshipSpikeVerdict returns the recorded conclusion of the Phase-2 DuckDB

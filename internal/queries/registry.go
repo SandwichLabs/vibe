@@ -14,7 +14,7 @@ type Query struct {
 	ID         string  `json:"id"`
 	Title      string  `json:"title"`
 	SQL        string  `json:"sql"`
-	Engine     string  `json:"engine"`     // "duckdb" | "sqlite"
+	Engine     string  `json:"engine"` // "duckdb" | "sqlite"
 	Parameters []Param `json:"parameters"`
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`

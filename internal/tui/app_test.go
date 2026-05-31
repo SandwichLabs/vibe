@@ -59,19 +59,19 @@ func TestApp_HelpToggle(t *testing.T) {
 	assert.False(t, app.showHelp)
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.True(t, app.showHelp)
 
 	// Any key should dismiss help.
 	model, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.False(t, app.showHelp)
 }
 
 func TestApp_WindowSizeMsg(t *testing.T) {
 	app := NewApp(nil, nil, nil)
 	model, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.Equal(t, 120, app.width)
 	assert.Equal(t, 40, app.height)
 }
@@ -102,7 +102,7 @@ func TestApp_TableDataMsg(t *testing.T) {
 		rows:      nil,
 		err:       nil,
 	})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.False(t, app.tableBrowser.loading)
 }
 
@@ -111,7 +111,7 @@ func TestApp_NewKeyOpensWizard(t *testing.T) {
 	assert.False(t, app.pageWizard.IsActive())
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.True(t, app.pageWizard.IsActive())
 
 	// View should show wizard overlay.
@@ -127,7 +127,7 @@ func TestApp_WizardEscCancels(t *testing.T) {
 	assert.True(t, app.pageWizard.IsActive())
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.False(t, app.pageWizard.IsActive())
 }
 
@@ -150,7 +150,7 @@ func TestApp_EditorFinishedMsg(t *testing.T) {
 		pageID:  "test-page-1",
 		content: "# Edited Content\n\nHello world.",
 	})
-	app = model.(*App)
+	app, _ = model.(*App)
 	assert.Equal(t, viewPage, app.activeView)
 	assert.Equal(t, focusContent, app.focus)
 }
@@ -163,7 +163,7 @@ func TestApp_EditorFinishedMsgError(t *testing.T) {
 		pageID: "test-page-1",
 		err:    fmt.Errorf("editor crashed"),
 	})
-	app = model.(*App)
+	app, _ = model.(*App)
 	// Should still be on whatever view was before, not crash.
 	assert.NotNil(t, app)
 }

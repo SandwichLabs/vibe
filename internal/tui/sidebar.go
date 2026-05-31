@@ -62,8 +62,8 @@ func (i sidebarItem) FilterValue() string {
 // sidebarDelegate renders sidebar items.
 type sidebarDelegate struct{}
 
-func (d sidebarDelegate) Height() int                         { return 1 }
-func (d sidebarDelegate) Spacing() int                        { return 0 }
+func (d sidebarDelegate) Height() int                             { return 1 }
+func (d sidebarDelegate) Spacing() int                            { return 0 }
 func (d sidebarDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d sidebarDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -193,8 +193,8 @@ func (s *SidebarModel) SelectedItem() *sidebarItem {
 	if item == nil {
 		return nil
 	}
-	si := item.(sidebarItem)
-	if si.isHeader {
+	si, ok := item.(sidebarItem)
+	if !ok || si.isHeader {
 		return nil
 	}
 	return &si
@@ -259,8 +259,8 @@ func (s *SidebarModel) jumpToNextSection() {
 	foundHeader := false
 	for i := 1; i < n; i++ {
 		idx := (current + i) % n
-		si := items[idx].(sidebarItem)
-		if si.isHeader && strings.TrimSpace(si.headerText) != "" && !strings.HasPrefix(si.headerText, "  ") {
+		si, ok := items[idx].(sidebarItem)
+		if ok && si.isHeader && strings.TrimSpace(si.headerText) != "" && !strings.HasPrefix(si.headerText, "  ") {
 			foundHeader = true
 			// Select the item after this header (or the header itself if it's the last).
 			nextIdx := (idx + 1) % n
@@ -286,8 +286,8 @@ func (s *SidebarModel) jumpToPrevSection() {
 	headerCount := 0
 	for i := 1; i < n; i++ {
 		idx := (current - i + n) % n
-		si := items[idx].(sidebarItem)
-		if si.isHeader && strings.TrimSpace(si.headerText) != "" && !strings.HasPrefix(si.headerText, "  ") {
+		si, ok := items[idx].(sidebarItem)
+		if ok && si.isHeader && strings.TrimSpace(si.headerText) != "" && !strings.HasPrefix(si.headerText, "  ") {
 			headerCount++
 			if headerCount == 1 {
 				// This is the header of our current section, skip to previous.

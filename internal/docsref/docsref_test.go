@@ -145,14 +145,14 @@ func TestReferenceDocsCoverRequiredSections(t *testing.T) {
 	root := repoRoot(t)
 	docs := readReferenceDocs(t, root)
 	required := []string{
-		"directive",     // page directives
-		"form",          // form archetypes / bound controls
-		"archetype",     // columnar/continuous/datasheet/master-detail
-		"report",        // banded reports
-		"macro",         // macros / actions
-		"import",        // Import Spreadsheet Wizard
-		"office",        // Office Links
-		"template",      // starter templates
+		"directive", // page directives
+		"form",      // form archetypes / bound controls
+		"archetype", // columnar/continuous/datasheet/master-detail
+		"report",    // banded reports
+		"macro",     // macros / actions
+		"import",    // Import Spreadsheet Wizard
+		"office",    // Office Links
+		"template",  // starter templates
 	}
 	for _, kw := range required {
 		assert.Contains(t, docs, kw,

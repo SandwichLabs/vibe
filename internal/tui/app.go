@@ -492,30 +492,6 @@ func (a *App) loadTableData(tableName string) tea.Cmd {
 	}
 }
 
-// loadTableColumns gets column names for a table via DuckDB information_schema.
-func (a *App) loadTableColumns(tableName string) []string {
-	duckDB := a.container.DuckDBDB()
-	if duckDB == nil {
-		return nil
-	}
-	rows, err := duckDB.Query(
-		"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
-		tableName)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	var columns []string
-	for rows.Next() {
-		var name, colType string
-		if err := rows.Scan(&name, &colType); err == nil {
-			columns = append(columns, fmt.Sprintf("%s (%s)", name, colType))
-		}
-	}
-	return columns
-}
-
 // executeREPLQuery runs a SQL query through the engine and returns the result.
 func (a *App) executeREPLQuery(query string) tea.Cmd {
 	return func() tea.Msg {

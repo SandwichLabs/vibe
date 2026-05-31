@@ -62,7 +62,8 @@ func TestParseSQLBlockDefaultEngine(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
@@ -73,7 +74,8 @@ func TestParseSQLBlockEngineIgnored(t *testing.T) {
 	page, err := Parse(input)
 	require.NoError(t, err)
 
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
@@ -99,7 +101,8 @@ func TestParseChartDirective(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "chart", dir.Type)
 	assert.Equal(t, "revenue_by_month", dir.Config["source"])
 	assert.Equal(t, "bar", dir.Config["type"])
@@ -125,7 +128,8 @@ func TestParseChartTypeAliases(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, page.Nodes, 1)
 
-			dir := page.Nodes[0].(*DirectiveNode)
+			dir, ok := page.Nodes[0].(*DirectiveNode)
+			require.True(t, ok)
 			assert.Equal(t, "chart", dir.Type)
 			assert.Equal(t, tc.chartType, dir.Config["type"])
 		})
@@ -139,7 +143,8 @@ func TestParseMetricDirective(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "metric", dir.Type)
 	assert.Equal(t, "total_sales", dir.Config["source"])
 	assert.Equal(t, "Total Sales", dir.Config["label"])
@@ -175,7 +180,8 @@ func TestParseFormDirective(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "form", dir.Type)
 	assert.Equal(t, "add_record", dir.Config["source"])
 	assert.Equal(t, "records", dir.Config["target"])
@@ -197,7 +203,8 @@ func TestParseDetailDirective(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "detail", dir.Type)
 	assert.Equal(t, "order_info", dir.Config["source"])
 }
@@ -246,7 +253,8 @@ func TestParseUnclosedSQLBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 	assert.Equal(t, "SELECT 1", sqlNode.SQL)
 }
@@ -286,7 +294,8 @@ func TestParseSQLBlockNameEquals(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "query_name", sqlNode.Name)
 }
 
@@ -296,7 +305,8 @@ func TestParseSQLBlockNameEqualsWithCache(t *testing.T) {
 	page, err := Parse(input)
 	require.NoError(t, err)
 
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 	assert.Equal(t, 10*time.Minute, sqlNode.Cache)
 }
@@ -308,7 +318,8 @@ func TestParseDirectiveSourceEquals(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "table", dir.Type)
 	assert.Equal(t, "query_name", dir.Config["source"])
 }
@@ -320,7 +331,8 @@ func TestParseEngineParamIgnored(t *testing.T) {
 	page, err := Parse(input)
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 }
 
@@ -356,18 +368,21 @@ func TestParseNestedFormFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Nodes, 1)
 
-	dir := page.Nodes[0].(*DirectiveNode)
+	dir, ok := page.Nodes[0].(*DirectiveNode)
+	require.True(t, ok)
 	assert.Equal(t, "form", dir.Type)
 
 	fields, ok := dir.Config["fields"].([]any)
 	require.True(t, ok)
 	require.Len(t, fields, 2)
 
-	field0 := fields[0].(map[string]any)
+	field0, ok := fields[0].(map[string]any)
+	require.True(t, ok)
 	assert.Equal(t, "email", field0["name"])
 	assert.Equal(t, true, field0["required"])
 
-	field1 := fields[1].(map[string]any)
+	field1, ok := fields[1].(map[string]any)
+	require.True(t, ok)
 	assert.Equal(t, "select", field1["type"])
 }
 
@@ -379,7 +394,8 @@ func TestParseSQLBlockWithFrontmatter(t *testing.T) {
 	assert.Equal(t, "Test", page.Frontmatter.Title)
 
 	require.Len(t, page.Nodes, 1)
-	sqlNode := page.Nodes[0].(*SQLBlockNode)
+	sqlNode, ok := page.Nodes[0].(*SQLBlockNode)
+	require.True(t, ok)
 	assert.Equal(t, "my_query", sqlNode.Name)
 	assert.Equal(t, "SELECT 1", sqlNode.SQL)
 }

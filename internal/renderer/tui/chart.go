@@ -134,4 +134,3 @@ func extractChartValues(cfg *renderer.ChartConfig) (labels []string, values []fl
 
 	return labels, values
 }
-

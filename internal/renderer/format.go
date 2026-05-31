@@ -145,7 +145,7 @@ func ToFloat64(v any) float64 {
 		return float64(val)
 	case string:
 		var f float64
-		fmt.Sscanf(val, "%f", &f)
+		_, _ = fmt.Sscanf(val, "%f", &f)
 		return f
 	case interface{ Float64() float64 }:
 		// Covers numeric wrapper types like duckdb.Decimal (and *Decimal),
@@ -154,7 +154,7 @@ func ToFloat64(v any) float64 {
 	case fmt.Stringer:
 		// Last-resort numeric parse for stringer-backed numeric types.
 		var f float64
-		fmt.Sscanf(val.String(), "%f", &f)
+		_, _ = fmt.Sscanf(val.String(), "%f", &f)
 		return f
 	default:
 		return 0

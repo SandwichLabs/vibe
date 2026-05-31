@@ -193,7 +193,7 @@ var defaultMeta = map[string]string{
 	// "wizard layer" meant to build schema, so it defaults to full write access.
 	// Users can restrict it via SetAgentConfig. (The legacy JSON-RPC agent derives
 	// its sandbox from the live app mode, not this key.)
-	"agent_sandbox":  "full",
+	"agent_sandbox": "full",
 	// default_mode is the persisted startup mode for the app shell (Phase 4
 	// dual-mode). New files default to "studio"; data-entry deployments may
 	// flip it to "app" via SetAppConfig.
@@ -323,17 +323,4 @@ func seedMeta(db *sql.DB, title, description string) error {
 	}
 
 	return nil
-}
-
-// getSchemaVersion returns the current schema version from _vibe_meta, or empty string if not set.
-func getSchemaVersion(db *sql.DB) (string, error) {
-	var version string
-	err := db.QueryRow("SELECT value FROM _vibe_meta WHERE key = 'schema_version';").Scan(&version)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("failed to read schema version: %w", err)
-	}
-	return version, nil
 }

@@ -311,8 +311,8 @@ func TestHandler_DispatchListPages(t *testing.T) {
 	resp := handler.Handle(ctx, req)
 
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
-	pages := result["pages"].([]string)
+	result, _ := resp.Result.(map[string]any)
+	pages, _ := result["pages"].([]string)
 	assert.Contains(t, pages, "home")
 }
 
@@ -329,7 +329,7 @@ func TestHandler_DispatchGetPage(t *testing.T) {
 	resp := handler.Handle(ctx, req)
 
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
+	result, _ := resp.Result.(map[string]any)
 	assert.Equal(t, "# Welcome", result["content"])
 }
 
@@ -346,8 +346,8 @@ func TestHandler_DispatchListQueries(t *testing.T) {
 	resp := handler.Handle(ctx, req)
 
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
-	queries := result["queries"].([]map[string]any)
+	result, _ := resp.Result.(map[string]any)
+	queries, _ := result["queries"].([]map[string]any)
 	assert.Len(t, queries, 1)
 	assert.Equal(t, "all_users", queries[0]["name"])
 }
@@ -365,7 +365,7 @@ func TestHandler_DispatchRunQuery(t *testing.T) {
 	resp := handler.Handle(ctx, req)
 
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
+	result, _ := resp.Result.(map[string]any)
 	assert.NotNil(t, result["columns"])
 	assert.NotNil(t, result["rows"])
 }
@@ -459,7 +459,7 @@ func TestHandler_CreateAndDeleteRecord(t *testing.T) {
 	}
 	resp = handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
+	result, _ := resp.Result.(map[string]any)
 	assert.Equal(t, int64(1), result["rows_affected"])
 }
 
@@ -496,6 +496,6 @@ func TestHandler_CreateAndUpdatePage(t *testing.T) {
 	}
 	resp = handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
-	result := resp.Result.(map[string]any)
+	result, _ := resp.Result.(map[string]any)
 	assert.Equal(t, "# About Us", result["content"])
 }

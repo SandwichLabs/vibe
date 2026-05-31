@@ -171,7 +171,7 @@ func templateFuncs() template.FuncMap {
 				f = -f
 			}
 			whole := int64(f)
-			cents := int64((f - float64(whole)) * 100 + 0.5)
+			cents := int64((f-float64(whole))*100 + 0.5)
 			if cents >= 100 {
 				whole++
 				cents -= 100
@@ -261,7 +261,7 @@ func toFloat64(v any) float64 {
 		return float64(n)
 	case string:
 		var f float64
-		fmt.Sscanf(n, "%f", &f)
+		_, _ = fmt.Sscanf(n, "%f", &f)
 		return f
 	default:
 		return 0
