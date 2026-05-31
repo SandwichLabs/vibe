@@ -5,6 +5,7 @@ import { setCachedMode } from '../router/index'
 import { useAppMode } from '../composables/useAppMode'
 import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
+import { destinationFor, iconFor, type NavItem } from '../lib/nav'
 
 // Agent wizard panel (W0) — a slide-in chat available across Studio Mode screens.
 const agentOpen = ref(false)
@@ -33,8 +34,46 @@ const appConfig = ref<AppConfig | null>(null)
 const mode = computed(() => appConfig.value?.mode === 'app' ? 'app' : 'studio')
 const isAppMode = computed(() => mode.value === 'app')
 const appTitle = computed(() => appConfig.value?.app_title || 'Untitled App')
+const appInitial = computed(() => (appTitle.value.trim().charAt(0) || 'A').toUpperCase())
 const showUnlock = ref(false)
 const unlockPassphrase = ref('')
+
+// App-Mode top tab strip (W1) — the locked shell exposes the switchboard's
+// top-level nav items as tabs (no sidebar). Loaded only in App Mode; the route
+// mapping is shared with the runtime switchboard via lib/nav.ts so a tab and its
+// switchboard button always go to the same place.
+const appTabs = ref<NavItem[]>([])
+async function loadAppTabs() {
+  try {
+    const items = ((await window.go.main.App.ListNav()) || []) as NavItem[]
+    appTabs.value = items
+      .filter((n) => n.parent_id === '')
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+  } catch {
+    appTabs.value = []
+  }
+}
+
+function isTabActive(item: NavItem): boolean {
+  const dest = destinationFor(item)
+  if (!dest) return false
+  if (typeof dest.path === 'string' && route.path !== dest.path) return false
+  const id = (dest.query as Record<string, unknown> | undefined)?.id
+  return id == null || route.query?.id === id
+}
+
+function activateTab(item: NavItem) {
+  const dest = destinationFor(item)
+  // run_macro (and any non-navigating kind) has no direct route — fall back to
+  // the switchboard home, which owns the macro-runner dispatch.
+  router.push(dest ?? { name: 'switchboard' })
+}
+
+function goHome() {
+  router.push({ name: 'switchboard' })
+}
+const homeActive = computed(() => route.name === 'switchboard')
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'home' },
@@ -74,6 +113,9 @@ async function loadAppConfig() {
     const live = appConfig.value?.mode === 'app' ? 'app' : 'studio'
     setCachedMode(live)
     setComposableMode(live)
+    // The locked shell's tab strip is driven by the switchboard nav; load it
+    // whenever we're (or land) in App Mode.
+    if (live === 'app') await loadAppTabs()
   } catch { /* ignore — fall back to Studio Mode */ }
 }
 
@@ -150,19 +192,65 @@ watch(errorMessage, (msg) => {
 
 <template>
   <div class="app" :class="{ 'app-mode': isAppMode }">
-    <!-- Top bar -->
-    <div class="topbar" :class="{ app: isAppMode }" style="height: 64px;">
+    <!-- Top bar — App Mode renders the locked white/marigold chrome (W1):
+         brand-block + locked tab strip + lock pill + role line. Studio Mode
+         keeps the dark builder chrome. -->
+    <div v-if="isAppMode" class="topbar app" data-testid="app-topbar" style="height: 64px;">
+      <div class="brand-block">
+        <span class="mark">{{ appInitial }}</span>
+        <div>
+          <div class="name">{{ appTitle }}</div>
+          <div class="role">App user · Locked</div>
+        </div>
+      </div>
+      <nav class="tabstrip" data-testid="app-tabstrip">
+        <a
+          class="tab"
+          :class="{ on: homeActive }"
+          data-testid="app-tab"
+          role="button"
+          tabindex="0"
+          @click="goHome"
+          @keyup.enter="goHome"
+        >
+          <Icon name="home" :size="15" /> Home
+        </a>
+        <a
+          v-for="item in appTabs"
+          :key="item.id"
+          class="tab"
+          :class="{ on: isTabActive(item) }"
+          data-testid="app-tab"
+          role="button"
+          tabindex="0"
+          @click="activateTab(item)"
+          @keyup.enter="activateTab(item)"
+        >
+          <Icon :name="iconFor(item)" :size="15" /> {{ item.label }}
+        </a>
+      </nav>
+      <div class="right">
+        <span class="lockpill" data-testid="app-lockpill"><Icon name="lock" :size="14" /> Locked · Encrypted</span>
+        <span class="avatar-sq" style="border-color: var(--sh-ink);">{{ appInitial }}</span>
+        <button
+          class="btn btn-app-exit"
+          data-testid="app-exit"
+          title="Exit App Mode (requires passphrase)"
+          @click="requestStudioMode"
+        >
+          <Icon name="settings" :size="16" /> Exit
+        </button>
+      </div>
+    </div>
+    <div v-else class="topbar" style="height: 64px;">
       <div class="brand">
-        <span class="mark">{{ isAppMode ? appTitle.charAt(0) : 'V' }}</span>
-        <span v-if="isAppMode" class="word">{{ appTitle }}</span>
-        <span v-else class="word">Vibe<span class="last">Studio</span></span>
+        <span class="mark">V</span>
+        <span class="word">Vibe<span class="last">Studio</span></span>
       </div>
       <div class="topright" style="gap: 10px;">
-        <span v-if="isAppMode" class="pill app"><span class="dot app"></span>App Mode</span>
-        <span v-else class="pill studio"><span class="dot studio"></span>Studio Mode</span>
+        <span class="pill studio"><span class="dot studio"></span>Studio Mode</span>
         <span class="pill"><span class="dot ok"></span>Local · Encrypted</span>
         <button
-          v-if="!isAppMode"
           class="btn btn-inverted agent-toggle"
           data-testid="agent-toggle"
           @click="agentOpen = !agentOpen"
@@ -173,38 +261,33 @@ watch(errorMessage, (msg) => {
       </div>
     </div>
 
-    <!-- Sidebar (builder nav — Studio Mode only; locked away in App Mode) -->
-    <aside class="sidebar" style="display: flex; flex-direction: column;">
-      <template v-if="!isAppMode">
-        <div class="side-section">Workspace</div>
-        <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="side-link"
-          :class="{ active: isActive(item.path) }"
-        >
-          <Icon :name="item.icon" :size="18" />
-          <span>{{ item.label }}</span>
-        </router-link>
+    <!-- Sidebar (builder nav) — Studio Mode only. In App Mode it is removed from
+         the DOM entirely and the grid collapses to a single column (W1); the
+         locked shell navigates via the top tab strip instead. -->
+    <aside v-if="!isAppMode" class="sidebar" style="display: flex; flex-direction: column;">
+      <div class="side-section">Workspace</div>
+      <router-link
+        v-for="item in navItems"
+        :key="item.path"
+        :to="item.path"
+        class="side-link"
+        :class="{ active: isActive(item.path) }"
+      >
+        <Icon :name="item.icon" :size="18" />
+        <span>{{ item.label }}</span>
+      </router-link>
 
-        <div style="flex: 1;"></div>
+      <div style="flex: 1;"></div>
 
-        <div class="nav-pill">
-          <span class="label"><span class="dot"></span>Open file</span>
-          <span class="url">{{ fileName }}</span>
-        </div>
-      </template>
-      <template v-else>
-        <div class="side-section">{{ appTitle }}</div>
-        <div style="flex: 1;"></div>
-      </template>
+      <div class="nav-pill">
+        <span class="label"><span class="dot"></span>Open file</span>
+        <span class="url">{{ fileName }}</span>
+      </div>
 
       <div style="padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px;">
-        <!-- Mode toggle: Studio→App previews the locked shell; App→Studio routes
-             through the unlock entrypoint (P4.4). -->
+        <!-- Mode toggle: Studio→App previews the locked shell. (App→Studio is in
+             the App-Mode topbar and routes through the unlock entrypoint, P4.4.) -->
         <button
-          v-if="!isAppMode"
           @click="enterAppMode"
           class="btn btn-inverted"
           style="width: 100%; justify-content: center;"
@@ -212,21 +295,12 @@ watch(errorMessage, (msg) => {
           <Icon name="lock" :size="16" />
           Switch to App Mode
         </button>
-        <button
-          v-else
-          @click="requestStudioMode"
-          class="btn btn-inverted"
-          style="width: 100%; justify-content: center;"
-        >
-          <Icon name="settings" :size="16" />
-          Exit App Mode (Studio Mode)
-        </button>
 
-        <button v-if="!isAppMode" @click="save" :disabled="saving" class="btn btn-primary" style="width: 100%; justify-content: center;">
+        <button @click="save" :disabled="saving" class="btn btn-primary" style="width: 100%; justify-content: center;">
           <Icon name="save" :size="16" />
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
-        <button v-if="!isAppMode" @click="closeFile" class="btn btn-inverted" style="width: 100%; justify-content: center;">
+        <button @click="closeFile" class="btn btn-inverted" style="width: 100%; justify-content: center;">
           Close File
         </button>
       </div>
@@ -265,6 +339,31 @@ watch(errorMessage, (msg) => {
 </template>
 
 <style scoped>
+/* App Mode (W1): collapse the 240px sidebar gutter — the locked shell has no
+   sidebar, so the grid becomes a single full-width column under the topbar.
+   The scoped attribute selector outranks the global `.app` rule in kit.css. */
+.app-mode {
+  grid-template-columns: 1fr;
+}
+
+/* The top tab strip behaves as nav — make tabs feel clickable and keep their
+   hit target tall (App-Mode 44/52px rule). */
+.topbar.app .tabstrip .tab {
+  cursor: pointer;
+}
+.topbar.app .tabstrip .tab:hover {
+  background: var(--sh-paper-2);
+}
+.topbar.app .tabstrip .tab.on:hover {
+  background: var(--sh-marigold);
+}
+
+/* Exit-to-Studio control in the locked topbar — compact, ink-outlined. */
+.btn-app-exit {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
 .unlock-prompt {
   position: fixed;
   inset: 0;

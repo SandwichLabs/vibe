@@ -16,15 +16,7 @@ import { ref, computed, onMounted, getCurrentInstance } from 'vue'
 import Icon from '../components/Icon.vue'
 import { useAppMode } from '../composables/useAppMode'
 import { useMacroIntents, type MacroIntent } from '../composables/useMacroIntents'
-
-interface NavItem {
-  id: string
-  parent_id: string
-  label: string
-  action_kind: string
-  target_id: string
-  sort_order: number
-}
+import { destinationFor, type NavItem } from '../lib/nav'
 
 interface NavTarget {
   kind: string
@@ -167,24 +159,8 @@ async function save() {
   }
 }
 
-// Map a nav item to a router destination. JSON of the destination carries both
-// the route segment (forms/reports/pages) and the bound target id.
-function destinationFor(item: NavItem): unknown | null {
-  switch (item.action_kind) {
-    case 'open_form':
-      return { path: `/forms`, query: { id: item.target_id } }
-    case 'open_report':
-      return { path: `/reports`, query: { id: item.target_id } }
-    case 'open_page':
-      // Runtime page viewer — NOT the builderOnly /pages/:id/edit editor, which
-      // is locked out in App Mode.
-      return { path: `/page/${item.target_id}`, query: { id: item.target_id } }
-    case 'open_switchboard':
-      return { path: `/`, query: { switchboard: item.target_id } }
-    default:
-      return null
-  }
-}
+// destinationFor (route mapping) is shared with the App-Mode tab strip — see
+// lib/nav.ts — so the locked-shell tabs and these buttons never diverge.
 
 // Shared macro intent dispatcher (P5.6) — the SAME applier the page/form runtime
 // uses, so there is exactly one dispatcher. macroMsgBox holds the message for a

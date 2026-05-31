@@ -179,6 +179,9 @@ input, select, textarea { font-family: inherit; }
 .btn:hover { transform: translate(-1px,-1px); box-shadow: var(--sh-shadow-lg); }
 .btn:active { transform: translate(1px,1px); box-shadow: var(--sh-shadow-xs); }
 .btn-primary { background: var(--sh-teal); color: var(--sh-paper); }
+/* App-Mode primary action (W1) — marigold fill, ink text/border. The locked
+   end-user shell's main CTA (Save record, etc.). */
+.btn-app-primary { background: var(--sh-marigold); color: var(--sh-ink); border-color: var(--sh-ink); }
 .btn-ghost { border-color: transparent; box-shadow: none; color: var(--sh-teal); background: transparent; }
 .btn-ghost:hover { background: var(--sh-paper-2); transform: none; box-shadow: none; }
 .btn-destructive { color: var(--sh-error); border-color: var(--sh-error); box-shadow: var(--sh-shadow-error); }
