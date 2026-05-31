@@ -167,6 +167,8 @@ export function SaveNavItem(arg1:schema.NavItem):Promise<void>;
 
 export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
+export function SaveReport(arg1:reports.ReportSpec):Promise<void>;
+
 export function SelectCSVFile():Promise<string>;
 
 export function SelectNewVibeFile():Promise<string>;

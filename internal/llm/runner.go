@@ -61,6 +61,55 @@ type QueryResult struct {
 	Rows    [][]string
 }
 
+// FormFieldDef is one bound control on a form.
+type FormFieldDef struct {
+	Name        string
+	Caption     string
+	ControlType string
+}
+
+// FormDef describes a form for create_form.
+type FormDef struct {
+	Title     string
+	Table     string
+	Archetype string // columnar | continuous | datasheet | master_detail
+	Fields    []FormFieldDef
+	// Optional master-detail subform.
+	SubformTable     string
+	SubformChildKey  string
+	SubformParentKey string
+}
+
+// QueryDef describes a named query for save_query.
+type QueryDef struct {
+	Title       string
+	SQL         string
+	Description string
+}
+
+// ReportColumnDef is one column in a report's detail band.
+type ReportColumnDef struct {
+	Field   string
+	Caption string
+}
+
+// ReportDef describes a banded report for create_report.
+type ReportDef struct {
+	Title   string
+	Source  string // the report's SQL
+	GroupBy []string
+	Columns []ReportColumnDef
+}
+
+// RelationshipDef describes a foreign key for add_relationship.
+type RelationshipDef struct {
+	ChildTable   string
+	ChildColumn  string
+	ParentTable  string
+	ParentColumn string
+	OnDelete     string
+}
+
 // Deps is the narrow capability surface the agent's tools call into. studio
 // implements this against the open container/engine.
 type Deps interface {
@@ -68,6 +117,10 @@ type Deps interface {
 	DescribeTable(ctx context.Context, table string) (string, error)
 	Query(ctx context.Context, sql string) (*QueryResult, error)
 	CreateTable(ctx context.Context, spec TableSpec) error
+	CreateForm(ctx context.Context, def FormDef) error
+	SaveQuery(ctx context.Context, def QueryDef) error
+	CreateReport(ctx context.Context, def ReportDef) error
+	AddRelationship(ctx context.Context, def RelationshipDef) error
 }
 
 // ToolStep is a single tool invocation surfaced to the UI so the panel can show
@@ -114,8 +167,12 @@ func systemPromptFor(sandbox string) string {
 	b.WriteString("- describe_table: inspect a table's columns.\n")
 	b.WriteString("- query: run a READ-ONLY SQL SELECT (no DDL/DML through this tool).\n")
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
-		b.WriteString("- create_table: create a new table. ")
-		b.WriteString("YOU HAVE FULL WRITE ACCESS to this database. When the user asks you to build or create a table, DO IT by calling create_table directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through the read-only `query` tool; use create_table for schema changes.\n")
+		b.WriteString("- create_table: create a new table.\n")
+		b.WriteString("- add_relationship: declare a foreign key linking two tables.\n")
+		b.WriteString("- create_form: build a data-entry form bound to a table (columnar/continuous/datasheet/master-detail).\n")
+		b.WriteString("- save_query: save a named SQL query for reuse.\n")
+		b.WriteString("- create_report: build a banded report from a SQL query.\n")
+		b.WriteString("YOU HAVE FULL WRITE ACCESS to this database — you can build whole applications: tables, relationships, forms, queries, and reports. When the user asks you to build or create something, DO IT by calling the matching tool directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through the read-only `query` tool; use create_table for schema changes.\n")
 	} else {
 		b.WriteString("\nYou currently have READ-ONLY access: you can inspect and query data but cannot modify the schema. If the user asks to create or change tables, explain that they can enable write access in the agent settings, and offer the SQL they could run.\n")
 	}
@@ -306,7 +363,13 @@ func (r *Runner) buildTools(sandbox string, rec *recorder) []fantasy.AgentTool {
 		r.queryTool(rec),
 	}
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
-		tools = append(tools, r.createTableTool(rec))
+		tools = append(tools,
+			r.createTableTool(rec),
+			r.createFormTool(rec),
+			r.saveQueryTool(rec),
+			r.createReportTool(rec),
+			r.addRelationshipTool(rec),
+		)
 	}
 	return tools
 }
@@ -382,8 +445,8 @@ type createTableInput struct {
 	Columns []struct {
 		Name       string `json:"name" description:"Column name."`
 		Type       string `json:"type" description:"DuckDB column type, e.g. TEXT, INTEGER, DOUBLE, DATE, BOOLEAN."`
-		PrimaryKey bool   `json:"primary_key" description:"Whether this column is the primary key."`
-		NotNull    bool   `json:"not_null" description:"Whether this column is NOT NULL."`
+		PrimaryKey bool   `json:"primary_key,omitempty" description:"Whether this column is the primary key."`
+		NotNull    bool   `json:"not_null,omitempty" description:"Whether this column is NOT NULL."`
 	} `json:"columns" description:"The columns of the new table."`
 }
 
@@ -408,6 +471,128 @@ func (r *Runner) createTableTool(rec *recorder) fantasy.AgentTool {
 			}
 			out := fmt.Sprintf("created table %q with %d column(s)", spec.Name, len(spec.Columns))
 			rec.add(ToolStep{Tool: "create_table", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type createFormInput struct {
+	Title     string `json:"title" description:"Human title for the form."`
+	Table     string `json:"table" description:"The table this form is bound to."`
+	Archetype string `json:"archetype" description:"Form layout: columnar, continuous, datasheet, or master_detail."`
+	Fields    []struct {
+		Name        string `json:"name" description:"Column name to bind."`
+		Caption     string `json:"caption,omitempty" description:"Field label."`
+		ControlType string `json:"control_type,omitempty" description:"Control type, e.g. text, number, date, checkbox, select."`
+	} `json:"fields" description:"The fields to show on the form."`
+	SubformTable     string `json:"subform_table,omitempty" description:"Optional child table for a master-detail subform."`
+	SubformChildKey  string `json:"subform_child_key,omitempty" description:"Child table FK column linking to the master."`
+	SubformParentKey string `json:"subform_parent_key,omitempty" description:"Master table key column the child links to."`
+}
+
+func (r *Runner) createFormTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"create_form",
+		"Create a data-entry form bound to a table (columnar, continuous, datasheet, or master-detail with an optional subform).",
+		func(ctx context.Context, in createFormInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			def := FormDef{
+				Title:            in.Title,
+				Table:            in.Table,
+				Archetype:        in.Archetype,
+				SubformTable:     in.SubformTable,
+				SubformChildKey:  in.SubformChildKey,
+				SubformParentKey: in.SubformParentKey,
+			}
+			for _, f := range in.Fields {
+				def.Fields = append(def.Fields, FormFieldDef{Name: f.Name, Caption: f.Caption, ControlType: f.ControlType})
+			}
+			inputJSON, _ := json.Marshal(in)
+			if err := r.deps.CreateForm(ctx, def); err != nil {
+				rec.add(ToolStep{Tool: "create_form", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("created %s form %q on table %q", def.Archetype, def.Title, def.Table)
+			rec.add(ToolStep{Tool: "create_form", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type saveQueryInput struct {
+	Title       string `json:"title" description:"Name for the saved query."`
+	SQL         string `json:"sql" description:"The SQL the query runs."`
+	Description string `json:"description,omitempty" description:"Optional description of what the query is for."`
+}
+
+func (r *Runner) saveQueryTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"save_query",
+		"Save a named SQL query for reuse. The SQL may be any valid DuckDB query.",
+		func(ctx context.Context, in saveQueryInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			inputJSON, _ := json.Marshal(in)
+			if err := r.deps.SaveQuery(ctx, QueryDef(in)); err != nil {
+				rec.add(ToolStep{Tool: "save_query", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("saved query %q", in.Title)
+			rec.add(ToolStep{Tool: "save_query", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type createReportInput struct {
+	Title   string   `json:"title" description:"Report title."`
+	Source  string   `json:"source" description:"The SQL query that produces the report's rows."`
+	GroupBy []string `json:"group_by,omitempty" description:"Optional column names to group/band by, outermost first."`
+	Columns []struct {
+		Field   string `json:"field" description:"Column name from the source query."`
+		Caption string `json:"caption,omitempty" description:"Column header."`
+	} `json:"columns" description:"Columns to show in the detail band."`
+}
+
+func (r *Runner) createReportTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"create_report",
+		"Create a banded report from a SQL query, with optional grouping and detail columns.",
+		func(ctx context.Context, in createReportInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			def := ReportDef{Title: in.Title, Source: in.Source, GroupBy: in.GroupBy}
+			for _, c := range in.Columns {
+				def.Columns = append(def.Columns, ReportColumnDef{Field: c.Field, Caption: c.Caption})
+			}
+			inputJSON, _ := json.Marshal(in)
+			if err := r.deps.CreateReport(ctx, def); err != nil {
+				rec.add(ToolStep{Tool: "create_report", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("created report %q", in.Title)
+			rec.add(ToolStep{Tool: "create_report", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type addRelationshipInput struct {
+	ChildTable   string `json:"child_table" description:"The table holding the foreign key."`
+	ChildColumn  string `json:"child_column" description:"The FK column on the child table."`
+	ParentTable  string `json:"parent_table" description:"The referenced (parent) table."`
+	ParentColumn string `json:"parent_column" description:"The referenced column on the parent (usually its primary key)."`
+	OnDelete     string `json:"on_delete,omitempty" description:"Optional ON DELETE behavior: CASCADE, SET NULL, or RESTRICT."`
+}
+
+func (r *Runner) addRelationshipTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"add_relationship",
+		"Declare a foreign-key relationship between two tables (child.column references parent.column).",
+		func(ctx context.Context, in addRelationshipInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			inputJSON, _ := json.Marshal(in)
+			def := RelationshipDef(in)
+			if err := r.deps.AddRelationship(ctx, def); err != nil {
+				rec.add(ToolStep{Tool: "add_relationship", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("linked %s.%s -> %s.%s", in.ChildTable, in.ChildColumn, in.ParentTable, in.ParentColumn)
+			rec.add(ToolStep{Tool: "add_relationship", Input: string(inputJSON), Output: out})
 			return fantasy.NewTextResponse(out), nil
 		},
 	)

@@ -18,6 +18,10 @@ import (
 type fakeDeps struct {
 	tables       []string
 	created      []TableSpec
+	forms        []FormDef
+	queries      []QueryDef
+	reports      []ReportDef
+	rels         []RelationshipDef
 	lastQuery    string
 	queryResult  *QueryResult
 	describeText string
@@ -33,6 +37,22 @@ func (f *fakeDeps) Query(_ context.Context, sql string) (*QueryResult, error) {
 }
 func (f *fakeDeps) CreateTable(_ context.Context, spec TableSpec) error {
 	f.created = append(f.created, spec)
+	return nil
+}
+func (f *fakeDeps) CreateForm(_ context.Context, def FormDef) error {
+	f.forms = append(f.forms, def)
+	return nil
+}
+func (f *fakeDeps) SaveQuery(_ context.Context, def QueryDef) error {
+	f.queries = append(f.queries, def)
+	return nil
+}
+func (f *fakeDeps) CreateReport(_ context.Context, def ReportDef) error {
+	f.reports = append(f.reports, def)
+	return nil
+}
+func (f *fakeDeps) AddRelationship(_ context.Context, def RelationshipDef) error {
+	f.rels = append(f.rels, def)
 	return nil
 }
 
@@ -150,6 +170,74 @@ func TestChat_CreateTableTool_GatedBySandbox(t *testing.T) {
 	})
 }
 
+func TestChat_BuilderTools(t *testing.T) {
+	cases := []struct {
+		name, tool, args string
+		check            func(t *testing.T, d *fakeDeps)
+	}{
+		{
+			name: "create_form", tool: "create_form",
+			args: `{"title":"Customer entry","table":"customers","archetype":"columnar","fields":[{"name":"name","caption":"Name","control_type":"text"}]}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.forms, 1)
+				assert.Equal(t, "customers", d.forms[0].Table)
+				assert.Equal(t, "columnar", d.forms[0].Archetype)
+				require.Len(t, d.forms[0].Fields, 1)
+			},
+		},
+		{
+			name: "save_query", tool: "save_query",
+			args: `{"title":"Top cities","sql":"SELECT city, count(*) FROM customers GROUP BY city","description":"counts"}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.queries, 1)
+				assert.Equal(t, "Top cities", d.queries[0].Title)
+			},
+		},
+		{
+			name: "create_report", tool: "create_report",
+			args: `{"title":"Customers by city","source":"SELECT city, count(*) c FROM customers GROUP BY city","group_by":["city"],"columns":[{"field":"city","caption":"City"}]}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.reports, 1)
+				assert.Equal(t, []string{"city"}, d.reports[0].GroupBy)
+				require.Len(t, d.reports[0].Columns, 1)
+			},
+		},
+		{
+			name: "add_relationship", tool: "add_relationship",
+			args: `{"child_table":"orders","child_column":"customer_id","parent_table":"customers","parent_column":"id","on_delete":"CASCADE"}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.rels, 1)
+				assert.Equal(t, "orders", d.rels[0].ChildTable)
+				assert.Equal(t, "CASCADE", d.rels[0].OnDelete)
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+" runs under full sandbox", func(t *testing.T) {
+			srv := fakeLLMServer(t, tc.tool, tc.args, "Done.")
+			defer srv.Close()
+			deps := &fakeDeps{}
+			_, err := NewRunner(deps, nil).Chat(context.Background(), Config{
+				Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxFull,
+			}, "build it", "")
+			require.NoError(t, err)
+			tc.check(t, deps)
+		})
+		t.Run(tc.name+" is hidden under read-only", func(t *testing.T) {
+			srv := fakeLLMServer(t, tc.tool, tc.args, "I can't, read-only.")
+			defer srv.Close()
+			deps := &fakeDeps{}
+			_, _ = NewRunner(deps, nil).Chat(context.Background(), Config{
+				Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxReadOnly,
+			}, "build it", "")
+			assert.Empty(t, deps.forms)
+			assert.Empty(t, deps.queries)
+			assert.Empty(t, deps.reports)
+			assert.Empty(t, deps.rels)
+		})
+	}
+}
+
 func TestChat_PinnedContextPrefixed(t *testing.T) {
 	var capturedPrompt string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -221,6 +309,11 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 
 	rw := systemPromptFor(SandboxReadWrite)
 	assert.Contains(t, rw, "FULL WRITE ACCESS")
+
+	// The write-capable prompt advertises all the builder tools.
+	for _, tool := range []string{"create_table", "create_form", "save_query", "create_report", "add_relationship"} {
+		assert.Contains(t, full, tool)
+	}
 
 	ro := systemPromptFor(SandboxReadOnly)
 	assert.Contains(t, ro, "READ-ONLY access:")

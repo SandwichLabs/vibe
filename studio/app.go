@@ -2934,6 +2934,65 @@ func (d *llmDeps) CreateTable(_ context.Context, spec llm.TableSpec) error {
 	return d.app.CreateTable(spec.Name, cols)
 }
 
+func (d *llmDeps) CreateForm(_ context.Context, def llm.FormDef) error {
+	archetype := def.Archetype
+	if archetype == "" {
+		archetype = "columnar"
+	}
+	spec := schema.FormSpec{
+		ID:        uuid.New().String(),
+		Title:     def.Title,
+		Table:     def.Table,
+		Archetype: archetype,
+		OnSubmit:  "refresh",
+	}
+	for _, f := range def.Fields {
+		ctrl := f.ControlType
+		if ctrl == "" {
+			ctrl = "text"
+		}
+		spec.Fields = append(spec.Fields, schema.FormFieldSpec{Name: f.Name, Caption: f.Caption, ControlType: ctrl})
+	}
+	if def.SubformTable != "" {
+		spec.Subform = &schema.SubformSpec{
+			ChildTable: def.SubformTable,
+			ChildKey:   def.SubformChildKey,
+			ParentKey:  def.SubformParentKey,
+		}
+	}
+	return d.app.SaveForm(spec)
+}
+
+func (d *llmDeps) SaveQuery(_ context.Context, def llm.QueryDef) error {
+	return d.app.SaveQuery("", def.Title, def.SQL, def.Description)
+}
+
+func (d *llmDeps) CreateReport(_ context.Context, def llm.ReportDef) error {
+	spec := reports.ReportSpec{
+		ID:     uuid.New().String(),
+		Title:  def.Title,
+		Source: def.Source,
+	}
+	for _, g := range def.GroupBy {
+		spec.Groups = append(spec.Groups, reports.GroupLevel{Field: g})
+	}
+	for _, c := range def.Columns {
+		spec.Detail.Columns = append(spec.Detail.Columns, reports.ReportColumn{Field: c.Field, Caption: c.Caption})
+	}
+	return d.app.SaveReport(spec)
+}
+
+func (d *llmDeps) AddRelationship(_ context.Context, def llm.RelationshipDef) error {
+	_, err := d.app.AddForeignKey(ForeignKeySpec{
+		ChildTable:   def.ChildTable,
+		ChildColumn:  def.ChildColumn,
+		ParentTable:  def.ParentTable,
+		ParentColumn: def.ParentColumn,
+		OnDelete:     def.OnDelete,
+	})
+	return err
+}
+
 // --- Import/Export ---
 
 // SelectCSVFile opens a file dialog to select a CSV file.
@@ -3805,6 +3864,24 @@ func (a *App) ListReports() ([]reports.ReportSummary, error) {
 		return nil, fmt.Errorf("failed to list reports: %w", err)
 	}
 	return summaries, nil
+}
+
+// SaveReport persists a banded report definition to _vibe_reports. Studio-only.
+// Used by the wizard agent's create_report tool (and available to report editors).
+func (a *App) SaveReport(spec reports.ReportSpec) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.guardStudioOnly("SaveReport"); err != nil {
+		return err
+	}
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	if err := store.Save(spec); err != nil {
+		return fmt.Errorf("failed to save report %q: %w", spec.ID, err)
+	}
+	return nil
 }
 
 // RenderReportContent loads a banded report spec via the ReportStore, runs its

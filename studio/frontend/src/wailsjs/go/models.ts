@@ -816,6 +816,139 @@ export namespace queries {
 
 export namespace reports {
 	
+	export class Aggregate {
+	    name: string;
+	    func: string;
+	    field: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Aggregate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.func = source["func"];
+	        this.field = source["field"];
+	    }
+	}
+	export class ReportColumn {
+	    field: string;
+	    caption?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReportColumn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.caption = source["caption"];
+	    }
+	}
+	export class DetailBand {
+	    columns: ReportColumn[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DetailBand(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], ReportColumn);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class GroupLevel {
+	    field: string;
+	    sort_dir: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GroupLevel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.sort_dir = source["sort_dir"];
+	    }
+	}
+	
+	export class SortSpec {
+	    field: string;
+	    dir: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SortSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.dir = source["dir"];
+	    }
+	}
+	export class ReportSpec {
+	    id: string;
+	    title: string;
+	    source: string;
+	    groups?: GroupLevel[];
+	    sort?: SortSpec[];
+	    detail: DetailBand;
+	    group_footer_aggregates?: Aggregate[];
+	    report_footer_aggregates?: Aggregate[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ReportSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.source = source["source"];
+	        this.groups = this.convertValues(source["groups"], GroupLevel);
+	        this.sort = this.convertValues(source["sort"], SortSpec);
+	        this.detail = this.convertValues(source["detail"], DetailBand);
+	        this.group_footer_aggregates = this.convertValues(source["group_footer_aggregates"], Aggregate);
+	        this.report_footer_aggregates = this.convertValues(source["report_footer_aggregates"], Aggregate);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ReportSummary {
 	    id: string;
 	    title: string;
