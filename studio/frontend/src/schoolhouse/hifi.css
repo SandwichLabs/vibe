@@ -81,6 +81,17 @@
 }
 .topbar.app .right .lockpill svg { width: 14px; height: 14px; }
 
+/* App-Mode hit targets (W1) — the locked end-user shell enforces large 44px
+   touch/click targets on its controls and inputs (52px for the primary CTA),
+   matching the App-Mode mockup. Scoped to `.app-mode` so Studio chrome is
+   unaffected. */
+.app-mode main .btn { min-height: 44px; }
+.app-mode main .btn-app-primary { min-height: 52px; }
+.app-mode main .input,
+.app-mode main input:not([type='checkbox']):not([type='radio']),
+.app-mode main select,
+.app-mode main textarea { min-height: 44px; }
+
 /* ===== Sidebar tweaks for our screens ===== */
 .sidebar .nav-pill {
   margin: 14px 16px; padding: 12px;

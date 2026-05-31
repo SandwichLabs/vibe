@@ -111,18 +111,30 @@ describe('AppShell mode-aware chrome (P4.6)', () => {
     }
   })
 
-  it('App Mode: shows the marigold pill + app_title and hides the builder nav', async () => {
+  it('App Mode: renders the locked white/marigold chrome + app_title and hides the builder nav', async () => {
     makeApp({ config: { mode: 'app', default_mode: 'app', app_title: 'Acme Orders' } })
     const wrapper = mountShell()
     await flushPromises()
 
-    // marigold App-Mode pill present, teal Studio pill gone.
-    expect(wrapper.text()).toContain('App Mode')
-    const appPill = wrapper.find('.pill .dot.app, .pill .dot--app, .pill.app, .badge--marigold')
-    expect(appPill.exists(), 'expected a marigold App-mode pill').toBe(true)
+    // W1: the locked shell uses the white `.topbar.app` chrome with a lock pill
+    // and a tab strip — NOT the old dark "App Mode" status pill.
+    const topbar = wrapper.find('[data-testid="app-topbar"]')
+    expect(topbar.exists(), 'expected the locked .topbar.app chrome in App Mode').toBe(true)
+    expect(topbar.classes(), 'App-Mode topbar must carry the `app` modifier').toContain('app')
+    expect(
+      wrapper.find('[data-testid="app-lockpill"]').exists(),
+      'expected a lock pill in the locked App-Mode chrome',
+    ).toBe(true)
+    expect(
+      wrapper.find('[data-testid="app-tabstrip"]').exists(),
+      'expected the App-Mode tab strip',
+    ).toBe(true)
 
-    // app_title surfaced in App Mode chrome.
+    // app_title surfaced in the App-Mode brand block.
     expect(wrapper.text()).toContain('Acme Orders')
+
+    // The Studio sidebar must be gone entirely (no 240px gutter) in App Mode.
+    expect(wrapper.find('.sidebar').exists(), 'sidebar must be removed in App Mode').toBe(false)
 
     // builder nav links must NOT be reachable in App Mode.
     for (const label of BUILDER_LINKS) {
@@ -153,9 +165,10 @@ describe('AppShell mode-aware chrome (P4.6)', () => {
     const wrapper = mountShell()
     await flushPromises()
 
-    const toggle = wrapper.findAll('button').find((b: any) => /studio mode|switch to studio|unlock|exit app/i.test(b.text()))
-    expect(toggle, 'expected an App→Studio (unlock) toggle control').toBeTruthy()
-    await toggle!.trigger('click')
+    // The App→Studio control lives in the locked topbar's right cluster (W1).
+    const toggle = wrapper.find('[data-testid="app-exit"]')
+    expect(toggle.exists(), 'expected an App→Studio (unlock) toggle control').toBe(true)
+    await toggle.trigger('click')
     await flushPromises()
 
     // Returning to Studio must route through the unlock prompt rather than
