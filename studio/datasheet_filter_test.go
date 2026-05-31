@@ -152,7 +152,7 @@ func TestGetTableDataFiltered_OrGroup(t *testing.T) {
 		Combinator: "OR",
 		Conditions: []FilterCondition{
 			{Column: "status", Op: "eq", Value: "closed"}, // id 3
-			{Column: "amount", Op: "gt", Value: "900"},     // id 6
+			{Column: "amount", Op: "gt", Value: "900"},    // id 6
 		},
 	}
 	td, err := app.GetTableDataFiltered("tickets", spec, 1, 50, "id", "ASC")

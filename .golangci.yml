@@ -1,28 +1,51 @@
+# golangci-lint v2 configuration.
+#
+# Migrated from the v1 format (the installed binary is v2.x, which could not load
+# the old schema). The check set is kept behavior-preserving relative to v1:
+#   - staticcheck excludes the ST* (stylecheck) and QF* (quickfix) categories,
+#     which v1 never ran, so the migration doesn't surface a backlog of stylistic
+#     suggestions on pre-existing code.
+#   - govet keeps enable-all but disables `fieldalignment` (as before) and
+#     `shadow` (idiomatic `err :=` shadowing is pervasive and intentional here).
+version: "2"
 linters:
   enable:
-    - errcheck
-    - govet
-    - staticcheck
-    - unused
-    - gosimple
-    - ineffassign
-    - typecheck
     - misspell
-    - gofmt
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-
+  settings:
+    errcheck:
+      check-type-assertions: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    staticcheck:
+      checks:
+        - all
+        - -ST1*
+        - -QF1*
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - cmd/vibe-viewer/frontend
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-dirs:
-    - cmd/vibe-viewer/frontend
   max-issues-per-linter: 0
   max-same-issues: 0
-
-run:
-  timeout: 5m
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - cmd/vibe-viewer/frontend
+      - third_party$
+      - builtin$
+      - examples$

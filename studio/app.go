@@ -2821,6 +2821,64 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 	return out, nil
 }
 
+// AgentTurn is one prior message of conversation history passed from the panel
+// for multi-turn memory.
+type AgentTurn struct {
+	Role string `json:"role"` // "user" | "agent"
+	Text string `json:"text"`
+}
+
+// AgentChatStream runs a streaming agent turn. As the agent works it emits
+// "agent:stream" Wails events tagged with turnID (kind: delta | tool |
+// tool_done | final | error) so the panel can show live progress and tool use.
+// history is the prior transcript for multi-turn memory. Studio-only.
+func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []AgentTurn) (*AgentChatResult, error) {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("no file open")
+	}
+	if err := a.guardStudioOnly("AgentChatStream"); err != nil {
+		a.mu.RUnlock()
+		return nil, err
+	}
+	cfg := llm.Config{
+		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
+		Model:    a.metaOr("llm_model", defaultLLMModel),
+		APIKey:   a.metaOr("llm_api_key", ""),
+		Sandbox:  a.metaOr("agent_sandbox", "read-only"),
+	}
+	a.mu.RUnlock()
+
+	hist := make([]llm.Turn, 0, len(history))
+	for _, h := range history {
+		hist = append(hist, llm.Turn{Role: h.Role, Text: h.Text})
+	}
+
+	emit := func(ev llm.StreamEvent) {
+		a.emitEvent("agent:stream", map[string]any{
+			"turnId": turnID,
+			"kind":   ev.Kind,
+			"text":   ev.Text,
+			"id":     ev.ID,
+			"tool":   ev.Tool,
+			"input":  ev.Input,
+			"output": ev.Output,
+		})
+	}
+
+	runner := llm.NewRunner(&llmDeps{app: a}, a.logger)
+	res, err := runner.ChatStream(a.ctx, cfg, message, pinnedContext, hist, emit)
+	if err != nil {
+		return nil, err
+	}
+	out := &AgentChatResult{Text: res.Text}
+	for _, s := range res.Steps {
+		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output})
+	}
+	return out, nil
+}
+
 // llmDeps adapts *App to the narrow llm.Deps interface so internal/llm never
 // imports the studio package.
 type llmDeps struct{ app *App }

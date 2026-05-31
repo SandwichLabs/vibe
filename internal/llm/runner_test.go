@@ -192,6 +192,36 @@ func TestIsReadOnlySQL(t *testing.T) {
 	}
 }
 
+func TestBuildMessages_MultiTurn(t *testing.T) {
+	history := []Turn{
+		{Role: "user", Text: "hi"},
+		{Role: "agent", Text: "hello, how can I help?"},
+		{Role: "user", Text: ""}, // blank turns are skipped
+		{Role: "agent", Text: "  "},
+	}
+	msgs := buildMessages(history)
+	require.Len(t, msgs, 2, "blank turns should be dropped")
+	assert.Equal(t, MessageRoleFor("user"), string(msgs[0].Role))
+	assert.Equal(t, "assistant", string(msgs[1].Role))
+}
+
+// MessageRoleFor is a tiny helper to keep the assertion readable.
+func MessageRoleFor(role string) string {
+	if role == "agent" {
+		return "assistant"
+	}
+	return "user"
+}
+
+func TestWithPinned(t *testing.T) {
+	assert.Equal(t, "hi", withPinned("hi", ""))
+	assert.Equal(t, "hi", withPinned("hi", "   "))
+	out := withPinned("count rows", "the tables screen")
+	assert.Contains(t, out, "the tables screen")
+	assert.Contains(t, out, "count rows")
+	assert.Contains(t, out, "pinned")
+}
+
 func TestFormatResult(t *testing.T) {
 	out := formatResult(&QueryResult{Columns: []string{"a", "b"}, Rows: [][]string{{"1", "2"}, {"3", "4"}}})
 	assert.True(t, strings.HasPrefix(out, "a | b"))

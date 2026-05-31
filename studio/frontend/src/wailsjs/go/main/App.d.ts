@@ -15,6 +15,8 @@ export function AddIndex(arg1:string,arg2:string,arg3:Array<string>,arg4:boolean
 
 export function AgentChat(arg1:string,arg2:string):Promise<main.AgentChatResult>;
 
+export function AgentChatStream(arg1:string,arg2:string,arg3:string,arg4:Array<main.AgentTurn>):Promise<main.AgentChatResult>;
+
 export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function AnalyzeInExcel(arg1:string,arg2:string):Promise<string>;

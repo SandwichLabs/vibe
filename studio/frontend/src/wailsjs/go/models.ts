@@ -192,6 +192,20 @@ export namespace main {
 	    }
 	}
 	
+	export class AgentTurn {
+	    role: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentTurn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.role = source["role"];
+	        this.text = source["text"];
+	    }
+	}
 	export class AppConfig {
 	    mode: string;
 	    default_mode: string;

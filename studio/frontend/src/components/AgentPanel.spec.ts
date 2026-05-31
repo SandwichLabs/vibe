@@ -1,97 +1,74 @@
-// Component tests for the AgentPanel slide-in (W0).
+// Component tests for the AgentPanel slide-in (W0/W0.5).
 //
-// The panel drives the AgentChat binding and renders: the user message, the
-// agent's answer, the tool-use chips for each tool the agent invoked, a pin-
-// context affordance, and a graceful error when the LLM endpoint is unreachable.
+// The panel composes useAgentChat; these assert the panel's DOM rendering of a
+// streamed turn: the agent answer rendered as markdown, tool-use chips that end
+// "done", the pin affordance, and the error path. Stream-event/multi-turn logic
+// is covered in useAgentChat.spec.ts.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from '../router/index'
+
+// Drive the stream by capturing the EventsOn handler.
+let streamHandler: ((p: any) => void) | null = null
+vi.mock('../wailsjs/runtime/runtime', () => ({
+  EventsOn: (_n: string, cb: (p: any) => void) => { streamHandler = cb; return () => { streamHandler = null } },
+}))
+
 import AgentPanel from './AgentPanel.vue'
 
-function setApp(agentChat: any) {
+function setBinding(impl: (turnId: string, msg: string, pinned: string, history: any[]) => Promise<any>) {
   ;(globalThis as any).window = (globalThis as any).window || {}
-  ;(window as any).go = { main: { App: { AgentChat: agentChat } } }
+  ;(window as any).go = { main: { App: { AgentChatStream: vi.fn(impl) } } }
 }
 
 async function mountPanel() {
   await router.push('/tables')
   await router.isReady()
-  return mount(AgentPanel, {
-    props: { open: true },
-    global: { plugins: [router], stubs: { Icon: true } },
-  })
+  return mount(AgentPanel, { props: { open: true }, global: { plugins: [router], stubs: { Icon: true } } })
 }
 
-describe('AgentPanel (W0)', () => {
-  beforeEach(() => { vi.useRealTimers() })
+describe('AgentPanel (W0.5)', () => {
+  beforeEach(() => { streamHandler = null })
 
-  it('sends a message and renders the agent answer + tool chips', async () => {
-    const AgentChat = vi.fn(async () => ({
-      text: 'You have 2 customers in Denver and Vail.',
-      steps: [
-        { tool: 'list_tables', input: '', output: 'customers' },
-        { tool: 'query', input: 'SELECT count(*) FROM customers', output: '2 row(s)' },
-      ],
-    }))
-    setApp(AgentChat)
+  it('renders the agent answer as markdown and a done tool chip', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'query', input: 'SELECT 1' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'query', output: '1 row' })
+      streamHandler!({ turnId, kind: 'final', text: 'You have **2** customers.' })
+      return { text: 'You have **2** customers.', steps: [] }
+    })
     const wrapper = await mountPanel()
 
     await wrapper.find('[data-testid="agent-input"]').setValue('how many customers?')
     await wrapper.find('[data-testid="agent-send"]').trigger('click')
     await flushPromises()
 
-    expect(AgentChat).toHaveBeenCalledWith('how many customers?', '')
-    expect(wrapper.text()).toContain('You have 2 customers')
+    // Markdown rendered (bold), not literal asterisks.
+    expect(wrapper.find('.agent-md').html()).toContain('<strong>2</strong>')
     const chips = wrapper.findAll('[data-testid="agent-tool-chip"]')
-    expect(chips.length, 'one chip per tool step').toBe(2)
-    expect(wrapper.text()).toContain('list_tables')
+    expect(chips).toHaveLength(1)
+    expect(wrapper.find('[data-testid="chip-done"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('query')
   })
 
-  it('renders a graceful error when the LLM endpoint is unreachable', async () => {
-    const AgentChat = vi.fn(async () => { throw new Error('connection refused') })
-    setApp(AgentChat)
+  it('renders a graceful error when the stream fails', async () => {
+    setBinding(async () => { throw new Error('connection refused') })
     const wrapper = await mountPanel()
-
     await wrapper.find('[data-testid="agent-input"]').setValue('hi')
     await wrapper.find('[data-testid="agent-send"]').trigger('click')
     await flushPromises()
-
     expect(wrapper.text()).toContain('Agent error')
     expect(wrapper.text()).toContain('connection refused')
   })
 
-  it('pins the current screen as context and sends it with the message', async () => {
-    const AgentChat = vi.fn(async () => ({ text: 'ok', steps: [] }))
-    setApp(AgentChat)
+  it('pins the current screen as context', async () => {
+    setBinding(async (turnId) => { streamHandler!({ turnId, kind: 'final', text: 'ok' }); return { text: 'ok', steps: [] } })
     const wrapper = await mountPanel()
-
-    // No pin chip initially.
     expect(wrapper.find('[data-testid="agent-pin"]').exists()).toBe(false)
-
-    // Click the pin button, then a pin chip appears referencing the route.
     await wrapper.find('.agent-pinbtn').trigger('click')
     await flushPromises()
     const pin = wrapper.find('[data-testid="agent-pin"]')
     expect(pin.exists()).toBe(true)
     expect(pin.text()).toContain('tables')
-
-    await wrapper.find('[data-testid="agent-input"]').setValue('what is here?')
-    await wrapper.find('[data-testid="agent-send"]').trigger('click')
-    await flushPromises()
-
-    const [, pinnedArg] = AgentChat.mock.calls[0]
-    expect(pinnedArg).toContain('tables')
-  })
-
-  it('does not send empty messages', async () => {
-    const AgentChat = vi.fn(async () => ({ text: 'ok', steps: [] }))
-    setApp(AgentChat)
-    const wrapper = await mountPanel()
-
-    await wrapper.find('[data-testid="agent-input"]').setValue('   ')
-    await wrapper.find('[data-testid="agent-send"]').trigger('click')
-    await flushPromises()
-    expect(AgentChat).not.toHaveBeenCalled()
   })
 })

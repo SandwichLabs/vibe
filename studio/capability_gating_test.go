@@ -255,11 +255,13 @@ func TestAppModeCapabilityGating(t *testing.T) {
 	studioURL, err := app.StartMCPServer()
 	require.NoError(t, err, "start MCP server in Studio Mode")
 	require.NotEmpty(t, studioURL)
-	require.True(t, app.GetMCPStatus()["running"].(bool), "MCP server should be running")
+	running, _ := app.GetMCPStatus()["running"].(bool)
+	require.True(t, running, "MCP server should be running")
 
 	require.NoError(t, app.SetMode("app"))
-	appURL := app.GetMCPStatus()["url"].(string)
-	require.True(t, app.GetMCPStatus()["running"].(bool), "MCP server should still be running after mode flip")
+	appURL, _ := app.GetMCPStatus()["url"].(string)
+	runningAfter, _ := app.GetMCPStatus()["running"].(bool)
+	require.True(t, runningAfter, "MCP server should still be running after mode flip")
 	assert.NotEqual(t, studioURL, appURL,
 		"flipping Studio->App must restart the MCP server (fresh address) so the handler sandbox is re-derived and never retains ModeFull")
 	require.NoError(t, app.StopMCPServer())

@@ -115,13 +115,31 @@ func (r *recorder) add(s ToolStep) {
 	r.mu.Unlock()
 }
 
-// Chat runs one agent turn. pinnedContext, if non-empty, is prepended to the
-// user message so the agent knows what the user is currently looking at (the
-// "pin context" affordance in the panel).
-func (r *Runner) Chat(ctx context.Context, cfg Config, message, pinnedContext string) (*ChatResult, error) {
-	if strings.TrimSpace(message) == "" {
-		return nil, fmt.Errorf("empty message")
-	}
+// Turn is one prior message in a conversation, used to give the agent
+// multi-turn memory.
+type Turn struct {
+	Role string // "user" | "agent"
+	Text string
+}
+
+// StreamEvent is one incremental update emitted during ChatStream: a text delta,
+// a tool invocation starting, a tool finishing, the final answer, or an error.
+type StreamEvent struct {
+	Kind   string `json:"kind"` // "delta" | "tool" | "tool_done" | "final" | "error"
+	Text   string `json:"text,omitempty"`
+	ID     string `json:"id,omitempty"`   // tool call id, to correlate tool/tool_done
+	Tool   string `json:"tool,omitempty"` // tool name
+	Input  string `json:"input,omitempty"`
+	Output string `json:"output,omitempty"`
+}
+
+// Emitter receives StreamEvents as the agent works.
+type Emitter func(StreamEvent)
+
+// buildAgent constructs the fantasy agent for a turn: validates config, builds
+// the openaicompat provider/model, and equips the sandbox-permitted tools. The
+// recorder accumulates tool steps for the final ChatResult.
+func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder) (fantasy.Agent, error) {
 	endpoint := strings.TrimSpace(cfg.Endpoint)
 	if endpoint == "" {
 		return nil, fmt.Errorf("no LLM endpoint configured")
@@ -149,29 +167,114 @@ func (r *Runner) Chat(ctx context.Context, cfg Config, message, pinnedContext st
 		return nil, fmt.Errorf("failed to load model %q: %w", model, err)
 	}
 
-	rec := &recorder{}
-	tools := r.buildTools(cfg.Sandbox, rec)
-
-	agent := fantasy.NewAgent(languageModel,
+	return fantasy.NewAgent(languageModel,
 		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(tools...),
+		fantasy.WithTools(r.buildTools(cfg.Sandbox, rec)...),
 		fantasy.WithStopConditions(fantasy.StepCountIs(maxSteps)),
-	)
+	), nil
+}
 
-	prompt := message
+// withPinned prepends the pinned context (if any) to the user message.
+func withPinned(message, pinnedContext string) string {
 	if pc := strings.TrimSpace(pinnedContext); pc != "" {
-		prompt = fmt.Sprintf("[Context the user has pinned]\n%s\n\n%s", pc, message)
+		return fmt.Sprintf("[Context the user has pinned]\n%s\n\n%s", pc, message)
 	}
+	return message
+}
 
-	result, err := agent.Generate(ctx, fantasy.AgentCall{Prompt: prompt})
+// buildMessages converts prior turns into fantasy messages for multi-turn
+// memory. The current user message is appended by the caller.
+func buildMessages(history []Turn) []fantasy.Message {
+	msgs := make([]fantasy.Message, 0, len(history)+1)
+	for _, t := range history {
+		if strings.TrimSpace(t.Text) == "" {
+			continue
+		}
+		if t.Role == "agent" {
+			msgs = append(msgs, fantasy.Message{
+				Role:    fantasy.MessageRoleAssistant,
+				Content: []fantasy.MessagePart{fantasy.TextPart{Text: t.Text}},
+			})
+		} else {
+			msgs = append(msgs, fantasy.NewUserMessage(t.Text))
+		}
+	}
+	return msgs
+}
+
+// Chat runs one agent turn (non-streaming). Kept for the back-compat AgentChat
+// binding and unit tests. pinnedContext, if non-empty, is prepended to the user
+// message so the agent knows what the user is currently looking at.
+func (r *Runner) Chat(ctx context.Context, cfg Config, message, pinnedContext string) (*ChatResult, error) {
+	if strings.TrimSpace(message) == "" {
+		return nil, fmt.Errorf("empty message")
+	}
+	rec := &recorder{}
+	agent, err := r.buildAgent(ctx, cfg, rec)
+	if err != nil {
+		return nil, err
+	}
+	result, err := agent.Generate(ctx, fantasy.AgentCall{Prompt: withPinned(message, pinnedContext)})
 	if err != nil {
 		return nil, fmt.Errorf("agent error: %w", err)
 	}
+	return &ChatResult{Text: result.Response.Content.Text(), Steps: rec.steps}, nil
+}
 
-	return &ChatResult{
-		Text:  result.Response.Content.Text(),
-		Steps: rec.steps,
-	}, nil
+// ChatStream runs one agent turn with streaming. It emits incremental
+// StreamEvents (text deltas, tool start/finish) via emit as the agent works,
+// threading prior history for multi-turn memory, and returns the final result.
+func (r *Runner) ChatStream(ctx context.Context, cfg Config, message, pinnedContext string, history []Turn, emit Emitter) (*ChatResult, error) {
+	if strings.TrimSpace(message) == "" {
+		return nil, fmt.Errorf("empty message")
+	}
+	if emit == nil {
+		emit = func(StreamEvent) {}
+	}
+	rec := &recorder{}
+	agent, err := r.buildAgent(ctx, cfg, rec)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := buildMessages(history)
+	messages = append(messages, fantasy.NewUserMessage(withPinned(message, pinnedContext)))
+
+	var streamed strings.Builder
+	result, err := agent.Stream(ctx, fantasy.AgentStreamCall{
+		Messages: messages,
+		OnTextDelta: func(_ string, text string) error {
+			streamed.WriteString(text)
+			emit(StreamEvent{Kind: "delta", Text: text})
+			return nil
+		},
+		OnToolCall: func(tc fantasy.ToolCallContent) error {
+			emit(StreamEvent{Kind: "tool", ID: tc.ToolCallID, Tool: tc.ToolName, Input: tc.Input})
+			return nil
+		},
+		OnToolResult: func(res fantasy.ToolResultContent) error {
+			out := ""
+			if t, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentText](res.Result); ok {
+				out = t.Text
+			}
+			emit(StreamEvent{Kind: "tool_done", ID: res.ToolCallID, Tool: res.ToolName, Output: out})
+			return nil
+		},
+		OnError: func(e error) {
+			emit(StreamEvent{Kind: "error", Text: e.Error()})
+		},
+	})
+	if err != nil {
+		emit(StreamEvent{Kind: "error", Text: err.Error()})
+		return nil, fmt.Errorf("agent error: %w", err)
+	}
+
+	text := result.Response.Content.Text()
+	if strings.TrimSpace(text) == "" {
+		text = streamed.String()
+	}
+	emit(StreamEvent{Kind: "final", Text: text})
+	return &ChatResult{Text: text, Steps: rec.steps}, nil
 }
 
 // buildTools returns the tool set permitted by the sandbox level. Read tools are

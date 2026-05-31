@@ -1,79 +1,46 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, computed } from 'vue'
+import { ref, nextTick, watch, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from './Icon.vue'
+import { useAgentChat } from '../composables/useAgentChat'
 
-// AgentPanel is the slide-in right-docked wizard chat (W0). It drives the real
-// AgentChat binding, which runs a tool-calling loop against the configured
-// OpenAI-compatible LLM endpoint (default: local llama-server at :8080). Tool
-// use the agent performs is surfaced inline as tool-chips, and the user can pin
-// the current screen as context for the agent.
+// AgentPanel is the slide-in right-docked wizard chat (W0/W0.5). It drives the
+// streaming AgentChatStream binding via the shared useAgentChat composable: the
+// agent's text streams in, tool use shows as chips that go running -> done, the
+// conversation is multi-turn, and answers render as sanitized markdown.
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const route = useRoute()
+const { messages, sending, pinnedContext, send, pin, unpin, setScrollHandler, renderMarkdown } = useAgentChat()
 
-interface ToolStep { tool: string; input: string; output: string }
-interface ChatMessage {
-  role: 'user' | 'agent' | 'error'
-  text: string
-  steps?: ToolStep[]
-}
-
-const messages = ref<ChatMessage[]>([])
 const draft = ref('')
-const sending = ref(false)
-const pinnedContext = ref('')
 const streamEl = ref<HTMLElement | null>(null)
 
-// A human label for what the user is currently looking at, used when pinning.
 const currentScreen = computed(() => {
   const name = (route.name as string) || route.path
   return `the ${name} screen (${route.path})`
 })
 
-function pinContext() {
-  pinnedContext.value = currentScreen.value
-}
-function clearPin() {
-  pinnedContext.value = ''
-}
+function pinContext() { pin(currentScreen.value) }
 
 async function scrollToBottom() {
   await nextTick()
   if (streamEl.value) streamEl.value.scrollTop = streamEl.value.scrollHeight
 }
+onMounted(() => setScrollHandler(scrollToBottom))
 
-async function send() {
-  const text = draft.value.trim()
-  if (!text || sending.value) return
-  messages.value.push({ role: 'user', text })
+async function submit() {
+  const text = draft.value
+  if (!text.trim() || sending.value) return
   draft.value = ''
-  sending.value = true
-  await scrollToBottom()
-  try {
-    const res = await window.go.main.App.AgentChat(text, pinnedContext.value)
-    messages.value.push({
-      role: 'agent',
-      text: res?.text || '(no response)',
-      steps: (res?.steps || []) as ToolStep[],
-    })
-  } catch (e: any) {
-    const msg = typeof e === 'string' ? e : e?.message || String(e)
-    messages.value.push({
-      role: 'error',
-      text: `Agent error: ${msg}. Is the LLM server reachable?`,
-    })
-  } finally {
-    sending.value = false
-    await scrollToBottom()
-  }
+  await send(text)
 }
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    send()
+    submit()
   }
 }
 
@@ -104,27 +71,25 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
             {{ m.role === 'user' ? 'You' : 'AI' }}
           </div>
           <div class="body">
-            <div class="who">{{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Agent · error' : 'Agent' }}</div>
+            <div class="who">
+              {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Agent · error' : (m.streaming ? 'Agent · streaming' : 'Agent') }}
+            </div>
             <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
-            <p v-else class="agent-text" :class="{ 'agent-error': m.role === 'error' }">{{ m.text }}</p>
+            <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>
+            <div v-else-if="m.text" class="agent-text agent-md" v-html="renderMarkdown(m.text)"></div>
+            <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
+
             <div
-              v-for="(s, si) in (m.steps || [])"
+              v-for="(s, si) in m.steps"
               :key="si"
               class="tool-chip"
               data-testid="agent-tool-chip"
             >
               <span class="lab"><Icon name="terminal" :size="12" /> {{ s.tool }}</span>
-              <span v-if="s.input" class="time">{{ s.input.slice(0, 60) }}</span>
-              <span class="check">✓</span>
+              <span v-if="s.input" class="time">{{ s.input.slice(0, 48) }}</span>
+              <span v-if="s.status === 'running'" class="spin" data-testid="chip-running">●</span>
+              <span v-else class="check" data-testid="chip-done">✓</span>
             </div>
-          </div>
-        </div>
-
-        <div v-if="sending" class="amsg" data-testid="agent-thinking">
-          <div class="av bot">AI</div>
-          <div class="body">
-            <div class="who">Agent · thinking</div>
-            <p class="agent-text">Working on it…</p>
           </div>
         </div>
       </div>
@@ -135,7 +100,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
           <button v-if="!pinnedContext" class="agent-pinbtn" @click="pinContext">
             <Icon name="pin" :size="13" /> Pin context
           </button>
-          <button v-else class="agent-pinbtn active" @click="clearPin">
+          <button v-else class="agent-pinbtn active" @click="unpin">
             <Icon name="pin" :size="13" /> Unpin
           </button>
         </div>
@@ -148,7 +113,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
         ></textarea>
         <div class="row" style="display: flex; justify-content: space-between; align-items: center;">
           <span class="agent-hint">⏎ Send · ⇧⏎ Newline</span>
-          <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="send">
+          <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="submit">
             <Icon name="send" :size="13" /> {{ sending ? 'Sending…' : 'Send' }}
           </button>
         </div>
@@ -177,6 +142,13 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
 .agent-drawer .agent-side {
   height: 100%;
 }
+/* The shipped hifi.css sets `.agent-side .stream { overflow: hidden }`, which
+   locks scrolling. Override it (higher specificity via scope attr) and add the
+   flex min-height:0 a scroll container needs. */
+.agent-side .stream {
+  overflow-y: auto;
+  min-height: 0;
+}
 .agent-close {
   margin-left: 8px;
   background: transparent;
@@ -194,9 +166,22 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   flex-direction: column;
   gap: 8px;
 }
-.stream { overflow-y: auto; }
 .agent-text { white-space: pre-wrap; }
+.agent-md { white-space: normal; }
+.agent-md :deep(p) { margin: 0 0 6px; }
+.agent-md :deep(pre) {
+  background: var(--sh-ink);
+  color: var(--sh-paper);
+  padding: 8px 10px;
+  border-radius: var(--sh-radius-sm);
+  overflow-x: auto;
+  font-family: var(--sh-font-mono);
+  font-size: 12px;
+}
+.agent-md :deep(code) { font-family: var(--sh-font-mono); font-size: 12px; }
+.agent-md :deep(ul), .agent-md :deep(ol) { margin: 4px 0; padding-left: 20px; }
 .agent-error { color: var(--sh-coral); }
+.agent-dim { color: var(--sh-graphite); font-style: italic; }
 .agent-textarea {
   width: 100%;
   resize: vertical;
@@ -229,4 +214,6 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.spin { animation: agent-pulse 1s ease-in-out infinite; }
+@keyframes agent-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
 </style>
