@@ -154,9 +154,9 @@ export namespace main {
 		}
 	}
 	export class AgentConfig {
-	    endpoint: string;
+	    provider: string;
 	    model: string;
-	    api_key: string;
+	    endpoint: string;
 	    sandbox: string;
 	
 	    static createFrom(source: any = {}) {
@@ -165,9 +165,9 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.endpoint = source["endpoint"];
+	        this.provider = source["provider"];
 	        this.model = source["model"];
-	        this.api_key = source["api_key"];
+	        this.endpoint = source["endpoint"];
 	        this.sandbox = source["sandbox"];
 	    }
 	}

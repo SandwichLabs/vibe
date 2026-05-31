@@ -198,13 +198,9 @@ var defaultMeta = map[string]string{
 	// dual-mode). New files default to "studio"; data-entry deployments may
 	// flip it to "app" via SetAppConfig.
 	"default_mode": "studio",
-	// LLM endpoint config for the in-app conversational agent (W0). The agent
-	// loop (internal/llm) talks to any OpenAI-compatible server; the default
-	// targets a local llama-server. Read with a fallback so files created
-	// before these keys existed still work.
-	"llm_endpoint": "http://localhost:8080/v1",
-	"llm_model":    "local",
-	"llm_api_key":  "",
+	// Note: LLM provider/model/endpoint are app-global and viper-driven
+	// (~/.vibe.yaml + VIBE_LLM_* env), not per-file. Only the agent sandbox above
+	// is a per-.vibe setting.
 }
 
 // runMigrations creates all _vibe_* tables and seeds default metadata.

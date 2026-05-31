@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/config"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
@@ -78,13 +79,19 @@ type App struct {
 	// the AutoExec "app:autoexec" startup intents — can be asserted without a
 	// live Wails runtime.
 	emit func(event string, data ...any)
+
+	// llmCfg is the app-global, viper-driven LLM provider/model configuration
+	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
+	llmCfg config.LLMConfig
 }
 
-// NewApp creates a new App instance.
+// NewApp creates a new App instance. The LLM config is loaded eagerly so it is
+// available even before the Wails startup hook (and in tests).
 func NewApp(logger *slog.Logger) *App {
 	return &App{
 		logger:   logger,
 		renderer: htmlrenderer.NewRenderer(logger),
+		llmCfg:   config.Load().LLM,
 	}
 }
 
@@ -2700,16 +2707,12 @@ func (a *App) GetAgentStatus() map[string]any {
 	status := map[string]any{
 		"available": a.container != nil,
 		"mode":      a.metaOr("agent_sandbox", "full"),
-		"endpoint":  a.metaOr("llm_endpoint", defaultLLMEndpoint),
-		"model":     a.metaOr("llm_model", defaultLLMModel),
+		"provider":  a.llmCfg.Provider,
+		"endpoint":  a.llmCfg.Endpoint,
+		"model":     a.llmCfg.Model,
 	}
 	return status
 }
-
-const (
-	defaultLLMEndpoint = "http://localhost:8080/v1"
-	defaultLLMModel    = "local"
-)
 
 // metaOr reads a _vibe_meta key, returning def when no file is open or the key
 // is absent (e.g. files created before the key existed). Caller holds a.mu.
@@ -2724,15 +2727,18 @@ func (a *App) metaOr(key, def string) string {
 	return v
 }
 
-// AgentConfig is the editable LLM endpoint configuration surfaced to Settings.
+// AgentConfig surfaces the agent configuration to the UI. Provider/model/endpoint
+// are app-global and viper-driven (read-only here — configured via ~/.vibe.yaml
+// or VIBE_LLM_* env); only the sandbox is a per-.vibe security setting.
 type AgentConfig struct {
-	Endpoint string `json:"endpoint"`
-	Model    string `json:"model"`
-	APIKey   string `json:"api_key"`
-	Sandbox  string `json:"sandbox"`
+	Provider string `json:"provider"` // read-only (viper-driven)
+	Model    string `json:"model"`    // read-only (viper-driven)
+	Endpoint string `json:"endpoint"` // read-only (viper-driven)
+	Sandbox  string `json:"sandbox"`  // editable per-file
 }
 
-// GetAgentConfig returns the persisted LLM/agent configuration.
+// GetAgentConfig returns the viper-driven provider/model/endpoint plus the
+// per-file sandbox.
 func (a *App) GetAgentConfig() (*AgentConfig, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -2740,14 +2746,15 @@ func (a *App) GetAgentConfig() (*AgentConfig, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 	return &AgentConfig{
-		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
-		Model:    a.metaOr("llm_model", defaultLLMModel),
-		APIKey:   a.metaOr("llm_api_key", ""),
+		Provider: a.llmCfg.Provider,
+		Model:    a.llmCfg.Model,
+		Endpoint: a.llmCfg.Endpoint,
 		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}, nil
 }
 
-// SetAgentConfig persists the LLM/agent configuration. Studio-only.
+// SetAgentConfig persists the per-file agent sandbox. Provider/model/endpoint are
+// app-global viper config and are not settable here. Studio-only.
 func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -2757,14 +2764,9 @@ func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	if err := a.guardStudioOnly("SetAgentConfig"); err != nil {
 		return err
 	}
-	for k, v := range map[string]string{
-		"llm_endpoint":  cfg.Endpoint,
-		"llm_model":     cfg.Model,
-		"llm_api_key":   cfg.APIKey,
-		"agent_sandbox": cfg.Sandbox,
-	} {
-		if err := a.container.SetMeta(k, v); err != nil {
-			return fmt.Errorf("failed to set %s: %w", k, err)
+	if cfg.Sandbox != "" {
+		if err := a.container.SetMeta("agent_sandbox", cfg.Sandbox); err != nil {
+			return fmt.Errorf("failed to set agent_sandbox: %w", err)
 		}
 	}
 	return nil
@@ -2802,9 +2804,10 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 		return nil, err
 	}
 	cfg := llm.Config{
-		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
-		Model:    a.metaOr("llm_model", defaultLLMModel),
-		APIKey:   a.metaOr("llm_api_key", ""),
+		Provider: a.llmCfg.Provider,
+		Endpoint: a.llmCfg.Endpoint,
+		Model:    a.llmCfg.Model,
+		APIKey:   a.llmCfg.APIKey,
 		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
 	a.mu.RUnlock()
@@ -2843,9 +2846,10 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		return nil, err
 	}
 	cfg := llm.Config{
-		Endpoint: a.metaOr("llm_endpoint", defaultLLMEndpoint),
-		Model:    a.metaOr("llm_model", defaultLLMModel),
-		APIKey:   a.metaOr("llm_api_key", ""),
+		Provider: a.llmCfg.Provider,
+		Endpoint: a.llmCfg.Endpoint,
+		Model:    a.llmCfg.Model,
+		APIKey:   a.llmCfg.APIKey,
 		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
 	a.mu.RUnlock()

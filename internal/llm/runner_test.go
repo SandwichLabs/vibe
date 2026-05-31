@@ -301,6 +301,61 @@ func MessageRoleFor(role string) string {
 	return "user"
 }
 
+func TestLanguageModel_Providers(t *testing.T) {
+	r := NewRunner(&fakeDeps{}, nil)
+	ctx := context.Background()
+
+	t.Run("local builds from endpoint", func(t *testing.T) {
+		m, err := r.languageModel(ctx, Config{Provider: ProviderLocal, Endpoint: "http://localhost:8080/v1"})
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+	})
+
+	t.Run("local requires an endpoint", func(t *testing.T) {
+		_, err := r.languageModel(ctx, Config{Provider: ProviderLocal, Endpoint: ""})
+		assert.Error(t, err)
+	})
+
+	t.Run("anthropic builds with a key", func(t *testing.T) {
+		m, err := r.languageModel(ctx, Config{Provider: ProviderAnthropic, APIKey: "sk-ant-x"})
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+	})
+
+	t.Run("anthropic without key errors", func(t *testing.T) {
+		_, err := r.languageModel(ctx, Config{Provider: ProviderAnthropic})
+		assert.Error(t, err)
+	})
+
+	t.Run("gemini builds with a key", func(t *testing.T) {
+		m, err := r.languageModel(ctx, Config{Provider: ProviderGemini, APIKey: "g-x"})
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+	})
+
+	t.Run("gemini without key errors", func(t *testing.T) {
+		_, err := r.languageModel(ctx, Config{Provider: ProviderGemini})
+		assert.Error(t, err)
+	})
+
+	t.Run("unknown provider errors", func(t *testing.T) {
+		_, err := r.languageModel(ctx, Config{Provider: "bogus"})
+		assert.Error(t, err)
+	})
+
+	t.Run("empty provider defaults to local", func(t *testing.T) {
+		m, err := r.languageModel(ctx, Config{Endpoint: "http://localhost:8080/v1"})
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+	})
+}
+
+func TestDefaultModelFor(t *testing.T) {
+	assert.Equal(t, "local", defaultModelFor(ProviderLocal))
+	assert.Contains(t, defaultModelFor(ProviderAnthropic), "claude")
+	assert.Contains(t, defaultModelFor(ProviderGemini), "gemini")
+}
+
 func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	full := systemPromptFor(SandboxFull)
 	assert.Contains(t, full, "create_table")

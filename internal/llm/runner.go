@@ -20,6 +20,8 @@ import (
 	"sync"
 
 	"charm.land/fantasy"
+	"charm.land/fantasy/providers/anthropic"
+	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openaicompat"
 )
 
@@ -33,12 +35,34 @@ const (
 // maxSteps bounds the tool-calling loop so a confused model can't spin forever.
 const maxSteps = 8
 
-// Config configures the LLM endpoint and the agent's capability level.
+// Provider identifiers for the LLM backend.
+const (
+	ProviderLocal     = "local"     // OpenAI-compatible server (default)
+	ProviderAnthropic = "anthropic" // Anthropic Claude
+	ProviderGemini    = "gemini"    // Google Gemini
+)
+
+// Config configures the LLM provider/endpoint and the agent's capability level.
 type Config struct {
-	Endpoint string // OpenAI-compatible base URL, e.g. http://localhost:8080/v1
-	Model    string // model id to request (many local servers ignore this)
-	APIKey   string // bearer token; local servers often accept any non-empty value
+	Provider string // local | anthropic | gemini (default local)
+	Endpoint string // OpenAI-compatible base URL for the local provider
+	Model    string // model id to request; empty = per-provider default
+	APIKey   string // bearer token / cloud API key
 	Sandbox  string // read-only | read-write | full — gates mutating tools
+}
+
+// defaultModelFor returns a sensible default model id for a provider when none
+// is configured. These are overridable via config; cloud ids in particular may
+// need updating as providers release new models.
+func defaultModelFor(provider string) string {
+	switch provider {
+	case ProviderAnthropic:
+		return "claude-sonnet-4-5"
+	case ProviderGemini:
+		return "gemini-2.5-flash"
+	default:
+		return "local"
+	}
 }
 
 // ColumnSpec describes one column for create_table.
@@ -213,42 +237,75 @@ type StreamEvent struct {
 // Emitter receives StreamEvents as the agent works.
 type Emitter func(StreamEvent)
 
-// buildAgent constructs the fantasy agent for a turn: validates config, builds
-// the openaicompat provider/model, and equips the sandbox-permitted tools. The
-// recorder accumulates tool steps for the final ChatResult.
+// buildAgent constructs the fantasy agent for a turn: builds the configured
+// provider's model and equips the sandbox-permitted tools. The recorder
+// accumulates tool steps for the final ChatResult.
 func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder) (fantasy.Agent, error) {
-	endpoint := strings.TrimSpace(cfg.Endpoint)
-	if endpoint == "" {
-		return nil, fmt.Errorf("no LLM endpoint configured")
-	}
-	apiKey := cfg.APIKey
-	if strings.TrimSpace(apiKey) == "" {
-		// Local OpenAI-compatible servers usually accept any non-empty key; the
-		// underlying SDK rejects an empty one.
-		apiKey = "sk-local"
-	}
-	model := strings.TrimSpace(cfg.Model)
-	if model == "" {
-		model = "local"
-	}
-
-	provider, err := openaicompat.New(
-		openaicompat.WithBaseURL(endpoint),
-		openaicompat.WithAPIKey(apiKey),
-	)
+	languageModel, err := r.languageModel(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create LLM provider: %w", err)
+		return nil, err
 	}
-	languageModel, err := provider.LanguageModel(ctx, model)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load model %q: %w", model, err)
-	}
-
 	return fantasy.NewAgent(languageModel,
 		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox)),
 		fantasy.WithTools(r.buildTools(cfg.Sandbox, rec)...),
 		fantasy.WithStopConditions(fantasy.StepCountIs(maxSteps)),
 	), nil
+}
+
+// languageModel resolves the configured provider into a fantasy LanguageModel.
+// local -> OpenAI-compatible endpoint; anthropic -> Claude; gemini -> Google.
+func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.LanguageModel, error) {
+	provider := strings.TrimSpace(cfg.Provider)
+	if provider == "" {
+		provider = ProviderLocal
+	}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = defaultModelFor(provider)
+	}
+
+	var (
+		p   fantasy.Provider
+		err error
+	)
+	switch provider {
+	case ProviderAnthropic:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, fmt.Errorf("anthropic provider requires an API key (set ANTHROPIC_API_KEY or llm.api_key)")
+		}
+		p, err = anthropic.New(anthropic.WithAPIKey(cfg.APIKey))
+	case ProviderGemini:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, fmt.Errorf("gemini provider requires an API key (set GEMINI_API_KEY or llm.api_key)")
+		}
+		p, err = google.New(google.WithGeminiAPIKey(cfg.APIKey))
+	case ProviderLocal:
+		endpoint := strings.TrimSpace(cfg.Endpoint)
+		if endpoint == "" {
+			return nil, fmt.Errorf("local provider requires an endpoint (llm.endpoint)")
+		}
+		apiKey := cfg.APIKey
+		if strings.TrimSpace(apiKey) == "" {
+			// Local OpenAI-compatible servers usually accept any non-empty key;
+			// the underlying SDK rejects an empty one.
+			apiKey = "sk-local"
+		}
+		p, err = openaicompat.New(
+			openaicompat.WithBaseURL(endpoint),
+			openaicompat.WithAPIKey(apiKey),
+		)
+	default:
+		return nil, fmt.Errorf("unknown LLM provider %q (want local, anthropic, or gemini)", provider)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s provider: %w", provider, err)
+	}
+
+	languageModel, err := p.LanguageModel(ctx, model)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load model %q: %w", model, err)
+	}
+	return languageModel, nil
 }
 
 // withPinned prepends the pinned context (if any) to the user message.
