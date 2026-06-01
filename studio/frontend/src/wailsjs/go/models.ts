@@ -1036,6 +1036,11 @@ export namespace schema {
 	    name: string;
 	    caption: string;
 	    control_type: string;
+	    placeholder?: string;
+	    required?: boolean;
+	    visibility?: string;
+	    validation?: string;
+	    help?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FormFieldSpec(source);
@@ -1046,6 +1051,11 @@ export namespace schema {
 	        this.name = source["name"];
 	        this.caption = source["caption"];
 	        this.control_type = source["control_type"];
+	        this.placeholder = source["placeholder"];
+	        this.required = source["required"];
+	        this.visibility = source["visibility"];
+	        this.validation = source["validation"];
+	        this.help = source["help"];
 	    }
 	}
 	export class SubformSpec {

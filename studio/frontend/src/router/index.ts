@@ -6,6 +6,7 @@ import TableBrowserView from '../views/TableBrowserView.vue'
 import RelationshipsView from '../views/RelationshipsView.vue'
 import SchemaDesignerView from '../views/SchemaDesignerView.vue'
 import FormView from '../views/FormView.vue'
+import FormBuilderView from '../views/FormBuilderView.vue'
 import ReportView from '../views/ReportView.vue'
 import QueryEditorView from '../views/QueryEditorView.vue'
 import ImportView from '../views/ImportView.vue'
@@ -34,6 +35,10 @@ const routes = [
   { path: '/relationships', name: 'relationships', component: RelationshipsView, meta: { builderOnly: true } },
   { path: '/schema', name: 'schema', component: SchemaDesignerView, meta: { builderOnly: true } },
   { path: '/forms', name: 'forms', component: FormView },
+  // Form Builder (parity W2) — the authoring tool. Studio-only: it edits the
+  // form definition (SaveForm), so it is locked out of App Mode. The runtime
+  // player at /forms stays App-Mode reachable.
+  { path: '/forms/:id/edit', name: 'form-builder', component: FormBuilderView, meta: { builderOnly: true } },
   { path: '/reports', name: 'reports', component: ReportView },
   { path: '/queries', name: 'queries', component: QueryEditorView, meta: { builderOnly: true } },
   // Dedicated Agent wizard page (W0.5) — Studio-only; the agent can run SQL and
