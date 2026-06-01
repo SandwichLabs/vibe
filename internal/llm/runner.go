@@ -134,6 +134,19 @@ type RelationshipDef struct {
 	OnDelete     string
 }
 
+// PageInfo is a page list entry surfaced to the agent (title + type).
+type PageInfo struct {
+	Title    string
+	PageType string
+}
+
+// PageDef is a new page the agent authors. Content is a Vibe page document:
+// markdown plus named ```sql blocks and {directive:} tags.
+type PageDef struct {
+	Title   string
+	Content string
+}
+
 // Deps is the narrow capability surface the agent's tools call into. studio
 // implements this against the open container/engine.
 type Deps interface {
@@ -145,6 +158,13 @@ type Deps interface {
 	SaveQuery(ctx context.Context, def QueryDef) error
 	CreateReport(ctx context.Context, def ReportDef) error
 	AddRelationship(ctx context.Context, def RelationshipDef) error
+	// Pages — the interactive markdown+SQL document surface (dashboards, notes).
+	// Pages are addressed by title (the agent thinks in titles, not UUIDs); the
+	// adapter resolves a title to its stored id.
+	ListPages(ctx context.Context) ([]PageInfo, error)
+	GetPage(ctx context.Context, title string) (string, error)
+	CreatePage(ctx context.Context, def PageDef) error
+	UpdatePage(ctx context.Context, title, content string) error
 }
 
 // ToolStep is a single tool invocation surfaced to the UI so the panel can show
@@ -190,13 +210,23 @@ func systemPromptFor(sandbox string) string {
 	b.WriteString("- list_tables: list the tables in the database.\n")
 	b.WriteString("- describe_table: inspect a table's columns.\n")
 	b.WriteString("- query: run a READ-ONLY SQL SELECT (no DDL/DML through this tool).\n")
+	b.WriteString("- list_pages: list the pages (interactive dashboards/notes) in the app.\n")
+	b.WriteString("- get_page: read a page's source by its title.\n")
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
 		b.WriteString("- create_table: create a new table.\n")
 		b.WriteString("- add_relationship: declare a foreign key linking two tables.\n")
 		b.WriteString("- create_form: build a data-entry form bound to a table (columnar/continuous/datasheet/master-detail).\n")
 		b.WriteString("- save_query: save a named SQL query for reuse.\n")
-		b.WriteString("- create_report: build a banded report from a SQL query.\n")
-		b.WriteString("YOU HAVE FULL WRITE ACCESS to this database — you can build whole applications: tables, relationships, forms, queries, and reports. When the user asks you to build or create something, DO IT by calling the matching tool directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through the read-only `query` tool; use create_table for schema changes.\n")
+		b.WriteString("- create_page: author an interactive PAGE — a markdown document with embedded ```sql blocks and {directive:} tags (tables, charts, metrics).\n")
+		b.WriteString("- update_page: rewrite an existing page's content (look it up first with get_page).\n")
+		b.WriteString("- create_report: build a banded, print-style REPORT from a SQL query.\n")
+		b.WriteString("YOU HAVE FULL WRITE ACCESS to this database — you can build whole applications: tables, relationships, forms, queries, pages, and reports. When the user asks you to build or create something, DO IT by calling the matching tool directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through the read-only `query` tool; use create_table for schema changes.\n")
+		b.WriteString("\nPAGE vs REPORT — do not confuse these:\n")
+		b.WriteString("- A PAGE is an interactive, on-screen document: markdown prose plus named ```sql blocks and {directive:} tags such as {table: query=NAME}, {metric: query=NAME, label: Revenue}, {bar_chart: query=NAME, x: col, y: col}, {line_chart: query=NAME, x: col, y: col}, {value: query=NAME}. Use create_page for ANY request for a \"page\", \"dashboard\", \"screen\", \"overview\", \"notebook\", or interactive view. This is the DEFAULT for building a viewable screen.\n")
+		b.WriteString("- A REPORT is a static, banded, print/export-style layout (grouping bands + detail rows). Use create_report ONLY when the user explicitly asks for a \"report\" or a printable/grouped banded layout. Never substitute create_report when the user asked for a page.\n")
+		b.WriteString("\nPage authoring format — give each result set a NAME on the ```sql fence line, then render it with a directive whose arguments are COMMA-separated (it is parsed as YAML, so separate args with commas, NOT spaces):\n")
+		b.WriteString("```sql by_month\nSELECT month, SUM(total) AS total FROM sales GROUP BY month ORDER BY month\n```\n")
+		b.WriteString("{bar_chart: query=by_month, x: month, y: total}\n")
 	} else {
 		b.WriteString("\nYou currently have READ-ONLY access: you can inspect and query data but cannot modify the schema. If the user asks to create or change tables, explain that they can enable write access in the agent settings, and offer the SQL they could run.\n")
 	}
@@ -418,12 +448,16 @@ func (r *Runner) buildTools(sandbox string, rec *recorder) []fantasy.AgentTool {
 		r.listTablesTool(rec),
 		r.describeTableTool(rec),
 		r.queryTool(rec),
+		r.listPagesTool(rec),
+		r.getPageTool(rec),
 	}
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
 		tools = append(tools,
 			r.createTableTool(rec),
 			r.createFormTool(rec),
 			r.saveQueryTool(rec),
+			r.createPageTool(rec),
+			r.updatePageTool(rec),
 			r.createReportTool(rec),
 			r.addRelationshipTool(rec),
 		)
@@ -624,6 +658,94 @@ func (r *Runner) createReportTool(rec *recorder) fantasy.AgentTool {
 			}
 			out := fmt.Sprintf("created report %q", in.Title)
 			rec.add(ToolStep{Tool: "create_report", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+func (r *Runner) listPagesTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"list_pages",
+		"List the interactive pages (markdown+SQL dashboards/notes) in the open .vibe app, with their type.",
+		func(ctx context.Context, _ emptyInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			pages, err := r.deps.ListPages(ctx)
+			if err != nil {
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			if len(pages) == 0 {
+				rec.add(ToolStep{Tool: "list_pages", Output: "(no pages yet)"})
+				return fantasy.NewTextResponse("(no pages yet)"), nil
+			}
+			var b strings.Builder
+			for _, p := range pages {
+				fmt.Fprintf(&b, "- %s (%s)\n", p.Title, p.PageType)
+			}
+			out := strings.TrimRight(b.String(), "\n")
+			rec.add(ToolStep{Tool: "list_pages", Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type getPageInput struct {
+	Title string `json:"title" description:"The title of the page to read."`
+}
+
+func (r *Runner) getPageTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"get_page",
+		"Read a page's source document (markdown with ```sql blocks and {directive:} tags) by its title.",
+		func(ctx context.Context, in getPageInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			content, err := r.deps.GetPage(ctx, in.Title)
+			if err != nil {
+				rec.add(ToolStep{Tool: "get_page", Input: in.Title, Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			rec.add(ToolStep{Tool: "get_page", Input: in.Title, Output: fmt.Sprintf("%d char(s)", len(content))})
+			return fantasy.NewTextResponse(content), nil
+		},
+	)
+}
+
+type createPageInput struct {
+	Title   string `json:"title" description:"Human title for the page."`
+	Content string `json:"content" description:"The page document: markdown plus named sql fenced blocks (open with three backticks then 'sql block_name') and {directive:} tags. Directive args are COMMA-separated (parsed as YAML — use commas, not spaces): {table: query=block_name}, {metric: query=block_name, label: Revenue}, {bar_chart: query=block_name, x: col, y: col}, {line_chart: query=block_name, x: col, y: col}, {value: query=block_name}."`
+}
+
+func (r *Runner) createPageTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"create_page",
+		"Author a new interactive page — a markdown document with embedded ```sql blocks and {directive:} tags (tables, charts, metrics). Use this for any \"page\", \"dashboard\", \"screen\", or interactive view; do NOT use create_report for these.",
+		func(ctx context.Context, in createPageInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			inputJSON, _ := json.Marshal(in)
+			if err := r.deps.CreatePage(ctx, PageDef(in)); err != nil {
+				rec.add(ToolStep{Tool: "create_page", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("created page %q", in.Title)
+			rec.add(ToolStep{Tool: "create_page", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+type updatePageInput struct {
+	Title   string `json:"title" description:"The title of the existing page to rewrite."`
+	Content string `json:"content" description:"The full new page document (same format as create_page). Replaces the existing content."`
+}
+
+func (r *Runner) updatePageTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"update_page",
+		"Replace an existing page's content. Read it first with get_page so you preserve the parts you are not changing.",
+		func(ctx context.Context, in updatePageInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			inputJSON, _ := json.Marshal(in)
+			if err := r.deps.UpdatePage(ctx, in.Title, in.Content); err != nil {
+				rec.add(ToolStep{Tool: "update_page", Input: string(inputJSON), Output: "error: " + err.Error()})
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+			out := fmt.Sprintf("updated page %q", in.Title)
+			rec.add(ToolStep{Tool: "update_page", Input: string(inputJSON), Output: out})
 			return fantasy.NewTextResponse(out), nil
 		},
 	)

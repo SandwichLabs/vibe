@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errTest is a sentinel returned by fakeDeps for missing lookups.
+var errTest = errors.New("not found")
+
 // fakeDeps is an in-memory implementation of Deps for testing the agent loop
 // without a real .vibe/DuckDB.
 type fakeDeps struct {
@@ -22,6 +26,10 @@ type fakeDeps struct {
 	queries      []QueryDef
 	reports      []ReportDef
 	rels         []RelationshipDef
+	createdPages []PageDef
+	updatedPages []PageDef
+	pages        []PageInfo
+	pageContent  map[string]string
 	lastQuery    string
 	queryResult  *QueryResult
 	describeText string
@@ -53,6 +61,21 @@ func (f *fakeDeps) CreateReport(_ context.Context, def ReportDef) error {
 }
 func (f *fakeDeps) AddRelationship(_ context.Context, def RelationshipDef) error {
 	f.rels = append(f.rels, def)
+	return nil
+}
+func (f *fakeDeps) ListPages(context.Context) ([]PageInfo, error) { return f.pages, nil }
+func (f *fakeDeps) GetPage(_ context.Context, title string) (string, error) {
+	if c, ok := f.pageContent[title]; ok {
+		return c, nil
+	}
+	return "", errTest
+}
+func (f *fakeDeps) CreatePage(_ context.Context, def PageDef) error {
+	f.createdPages = append(f.createdPages, def)
+	return nil
+}
+func (f *fakeDeps) UpdatePage(_ context.Context, title, content string) error {
+	f.updatedPages = append(f.updatedPages, PageDef{Title: title, Content: content})
 	return nil
 }
 
@@ -138,6 +161,36 @@ func TestChat_ToolCallingLoop_ListTables(t *testing.T) {
 	assert.Contains(t, res.Steps[0].Output, "customers")
 }
 
+func TestChat_ListPagesTool_ReadOnly(t *testing.T) {
+	srv := fakeLLMServer(t, "list_pages", "{}", "You have a Sales dashboard page.")
+	defer srv.Close()
+
+	deps := &fakeDeps{pages: []PageInfo{{Title: "Sales dashboard", PageType: "notebook"}}}
+	// Pages are listable even in read-only mode.
+	res, err := NewRunner(deps, nil).Chat(context.Background(), Config{
+		Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxReadOnly,
+	}, "What pages do I have?", "")
+
+	require.NoError(t, err)
+	require.Len(t, res.Steps, 1)
+	assert.Equal(t, "list_pages", res.Steps[0].Tool)
+	assert.Contains(t, res.Steps[0].Output, "Sales dashboard")
+}
+
+func TestChat_GetPageTool_ReadOnly(t *testing.T) {
+	srv := fakeLLMServer(t, "get_page", `{"title":"Sales dashboard"}`, "Here is the page source.")
+	defer srv.Close()
+
+	deps := &fakeDeps{pageContent: map[string]string{"Sales dashboard": "# Sales\n{table: query=by_month}"}}
+	res, err := NewRunner(deps, nil).Chat(context.Background(), Config{
+		Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxReadOnly,
+	}, "Show me the Sales dashboard page.", "")
+
+	require.NoError(t, err)
+	require.Len(t, res.Steps, 1)
+	assert.Equal(t, "get_page", res.Steps[0].Tool)
+}
+
 func TestChat_CreateTableTool_GatedBySandbox(t *testing.T) {
 	args := `{"name":"widgets","columns":[{"name":"id","type":"INTEGER","primary_key":true,"not_null":true}]}`
 
@@ -211,6 +264,26 @@ func TestChat_BuilderTools(t *testing.T) {
 				assert.Equal(t, "CASCADE", d.rels[0].OnDelete)
 			},
 		},
+		{
+			name: "create_page", tool: "create_page",
+			args: `{"title":"Sales dashboard","content":"# Sales\n\n` + "```" + `sql by_month\nSELECT month, SUM(total) t FROM sales GROUP BY month\n` + "```" + `\n{line_chart: query=by_month x=month y=t}"}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.createdPages, 1)
+				assert.Equal(t, "Sales dashboard", d.createdPages[0].Title)
+				assert.Contains(t, d.createdPages[0].Content, "{line_chart:")
+				// A page request must NOT be fulfilled as a report.
+				assert.Empty(t, d.reports)
+			},
+		},
+		{
+			name: "update_page", tool: "update_page",
+			args: `{"title":"Sales dashboard","content":"# Sales (updated)"}`,
+			check: func(t *testing.T, d *fakeDeps) {
+				require.Len(t, d.updatedPages, 1)
+				assert.Equal(t, "Sales dashboard", d.updatedPages[0].Title)
+				assert.Contains(t, d.updatedPages[0].Content, "updated")
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+" runs under full sandbox", func(t *testing.T) {
@@ -234,6 +307,8 @@ func TestChat_BuilderTools(t *testing.T) {
 			assert.Empty(t, deps.queries)
 			assert.Empty(t, deps.reports)
 			assert.Empty(t, deps.rels)
+			assert.Empty(t, deps.createdPages)
+			assert.Empty(t, deps.updatedPages)
 		})
 	}
 }

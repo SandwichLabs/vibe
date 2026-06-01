@@ -27,10 +27,35 @@ const selectedPageType = computed(() => {
   return p?.page_type ?? 'markdown'
 })
 
+// A page entry is a banded report (rolled up into this list) when its
+// page_type is 'report'. Reports render via a different binding and edit in the
+// Report view, so several handlers branch on this.
+function isReport(p: PageSummary): boolean {
+  return p.page_type === 'report'
+}
+const selectedIsReport = computed(() => {
+  const p = pages.value.find(p => p.id === selectedId.value)
+  return !!p && isReport(p)
+})
+
 async function loadPages() {
   loading.value = true
   try {
-    pages.value = await window.go.main.App.ListPages()
+    // Reports roll up into the Pages list so agent-authored reports are
+    // discoverable here (not only in the Report view). We tag them with
+    // page_type 'report' and prefix the id so handlers can tell them apart and
+    // route/render them correctly. Pages come first, then reports.
+    const [pageList, reportList] = await Promise.all([
+      window.go.main.App.ListPages(),
+      window.go.main.App.ListReports().catch(() => []),
+    ])
+    const reportRows: PageSummary[] = (reportList || []).map((r: any) => ({
+      id: `report:${r.id}`,
+      title: r.title,
+      page_type: 'report',
+      sort_order: 0,
+    }))
+    pages.value = [...pageList, ...reportRows]
     if (pages.value.length > 0 && !selectedId.value) {
       selectedId.value = pages.value[0].id
     }
@@ -38,10 +63,17 @@ async function loadPages() {
   loading.value = false
 }
 
+// reportIdOf strips the 'report:' prefix used to namespace report rows.
+function reportIdOf(id: string): string {
+  return id.startsWith('report:') ? id.slice('report:'.length) : id
+}
+
 async function renderPage(id: string) {
   renderLoading.value = true
   try {
-    renderedContent.value = await window.go.main.App.RenderPageContent(id, {})
+    renderedContent.value = id.startsWith('report:')
+      ? await window.go.main.App.RenderReportContent(reportIdOf(id))
+      : await window.go.main.App.RenderPageContent(id, {})
   } catch (e: any) {
     renderedContent.value = `<div style="color: var(--sh-error); font-weight: 600;">Error: ${e.message || e}</div>`
   }
@@ -103,6 +135,11 @@ async function confirmDeletePage() {
 }
 
 function editPage(id: string) {
+  // Reports are edited in the Report view, not the page editor.
+  if (id.startsWith('report:')) {
+    router.push({ path: '/reports', query: { id: reportIdOf(id) } })
+    return
+  }
   router.push(`/pages/${id}/edit`)
 }
 
@@ -133,6 +170,8 @@ onMounted(async () => {
           @mouseenter="hoveredId = page.id"
           @mouseleave="hoveredId = null"
           class="row"
+          data-testid="page-row"
+          :data-page-id="page.id"
           :class="{ 'row-selected': selectedId === page.id }"
           :style="{
             justifyContent: 'space-between',
@@ -143,12 +182,15 @@ onMounted(async () => {
           }"
         >
           <div style="min-width: 0;">
-            <div style="font-size: var(--sh-fs-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ page.title || 'Untitled' }}</div>
-            <div class="badge badge--graphite" style="margin-top: var(--sh-space-1);">{{ page.page_type }}</div>
+            <div class="row" style="gap: var(--sh-space-1); align-items: center; min-width: 0;">
+              <Icon :name="isReport(page) ? 'barChart' : 'fileText'" :size="13" :style="{ color: isReport(page) ? 'var(--sh-teal)' : 'var(--sh-graphite)', flex: 'none' }" />
+              <div style="font-size: var(--sh-fs-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ page.title || 'Untitled' }}</div>
+            </div>
+            <div class="badge" :class="isReport(page) ? 'badge--teal' : 'badge--graphite'" style="margin-top: var(--sh-space-1);">{{ isReport(page) ? 'report' : page.page_type }}</div>
           </div>
           <div v-show="hoveredId === page.id" class="row" style="gap: var(--sh-space-1);">
-            <button @click.stop="editPage(page.id)" class="btn btn-ghost btn-sm"><Icon name="edit" :size="14" /></button>
-            <button @click.stop="deletePage(page.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+            <button @click.stop="editPage(page.id)" class="btn btn-ghost btn-sm" :title="isReport(page) ? 'Open in Report view' : 'Edit page'"><Icon :name="isReport(page) ? 'arrowRight' : 'edit'" :size="14" /></button>
+            <button v-if="!isReport(page)" @click.stop="deletePage(page.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
           </div>
         </div>
       </div>

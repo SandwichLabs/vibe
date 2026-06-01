@@ -748,6 +748,23 @@ func parseDirective(trimmed string, lineIdx int) (*DirectiveNode, error) {
 		result[k] = v
 	}
 
+	// `query=` is the documented public argument naming the result set a data
+	// directive renders ({table: query=sales}, {bar_chart: query=by_month x=…},
+	// {metric: query=revenue}, {value: query=open}). Internally the executor binds
+	// a directive's result via the "source" key, so alias query→source when source
+	// is not already set. Without this, every documented `query=` directive parses
+	// its result name under "query" and the executor never resolves it (the chart/
+	// table renders empty). Input-filter directives keep their own name/source
+	// semantics untouched.
+	if !isInputDirective(dirType) {
+		if _, hasSource := result["source"]; !hasSource {
+			if q, ok := result["query"]; ok {
+				result["source"] = q
+				delete(result, "query")
+			}
+		}
+	}
+
 	// {button:} command-button validation (plan §5, unit P5.5): a button must
 	// carry both a visible label and an action (macro target) so the GUI runtime
 	// has something to render and something to invoke.

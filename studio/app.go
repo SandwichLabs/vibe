@@ -2986,6 +2986,67 @@ func (d *llmDeps) CreateReport(_ context.Context, def llm.ReportDef) error {
 	return d.app.SaveReport(spec)
 }
 
+// pageIDForTitle resolves a page title to its stored id. Pages are keyed by a
+// UUID id, but the agent addresses them by title; this bridges the two. Returns
+// an error when no page (or more than one) matches the title.
+func (d *llmDeps) pageIDForTitle(title string) (string, error) {
+	pages, err := d.app.ListPages()
+	if err != nil {
+		return "", err
+	}
+	var matches []string
+	for _, p := range pages {
+		if p.Title == title {
+			matches = append(matches, p.ID)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no page titled %q", title)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("more than one page is titled %q; rename one so it is unambiguous", title)
+	}
+}
+
+func (d *llmDeps) ListPages(_ context.Context) ([]llm.PageInfo, error) {
+	summaries, err := d.app.ListPages()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]llm.PageInfo, 0, len(summaries))
+	for _, p := range summaries {
+		out = append(out, llm.PageInfo{Title: p.Title, PageType: p.PageType})
+	}
+	return out, nil
+}
+
+func (d *llmDeps) GetPage(_ context.Context, title string) (string, error) {
+	id, err := d.pageIDForTitle(title)
+	if err != nil {
+		return "", err
+	}
+	page, err := d.app.GetPage(id)
+	if err != nil {
+		return "", err
+	}
+	return page.Content, nil
+}
+
+func (d *llmDeps) CreatePage(_ context.Context, def llm.PageDef) error {
+	_, err := d.app.CreatePage(def.Title, def.Content)
+	return err
+}
+
+func (d *llmDeps) UpdatePage(_ context.Context, title, content string) error {
+	id, err := d.pageIDForTitle(title)
+	if err != nil {
+		return err
+	}
+	return d.app.UpdatePage(id, title, content)
+}
+
 func (d *llmDeps) AddRelationship(_ context.Context, def llm.RelationshipDef) error {
 	_, err := d.app.AddForeignKey(ForeignKeySpec{
 		ChildTable:   def.ChildTable,

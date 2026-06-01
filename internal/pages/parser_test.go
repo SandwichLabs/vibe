@@ -110,6 +110,33 @@ func TestParseChartDirective(t *testing.T) {
 	assert.Equal(t, "total", dir.Config["y"])
 }
 
+// The documented public form uses `query=` for the named result set; the parser
+// must alias it to the internal "source" key so the executor can bind the
+// result (otherwise the directive renders empty). Covers the typed chart alias
+// path too ({bar_chart:} → {chart: type=bar}).
+func TestParseDirective_QueryAliasesToSource(t *testing.T) {
+	cases := []struct {
+		name, input, wantType, wantSource string
+	}{
+		{"table", "{table: query=monthly_sales}", "table", "monthly_sales"},
+		{"metric", `{metric: query=revenue, label: Revenue}`, "metric", "revenue"},
+		{"bar_chart", "{bar_chart: query=by_month, x: month, y: total}", "chart", "by_month"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := Parse(tc.input)
+			require.NoError(t, err)
+			require.Len(t, page.Nodes, 1)
+			dir, ok := page.Nodes[0].(*DirectiveNode)
+			require.True(t, ok)
+			assert.Equal(t, tc.wantType, dir.Type)
+			assert.Equal(t, tc.wantSource, dir.Config["source"], "query= should alias to source")
+			_, hasQuery := dir.Config["query"]
+			assert.False(t, hasQuery, "query key should be consumed into source")
+		})
+	}
+}
+
 func TestParseChartTypeAliases(t *testing.T) {
 	tests := []struct {
 		input     string
