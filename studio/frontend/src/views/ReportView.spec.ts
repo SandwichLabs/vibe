@@ -1,11 +1,9 @@
-// P3.10 component test for ReportView (mockup #11). Mounts the real component
-// against mocked window.go bindings and a stubbed Chart.js, then asserts:
-//   - the report picker lists reports and renders the first by default
-//   - the banded (table) view renders RenderReportContentFiltered output
-//   - the chart <-> table toggle switches views and draws a Chart.js chart
-//   - live DuckDB filters call the bindings with the selected column=value
-//   - the Studio-only "Edit SQL" affordance is gated on app mode
-//   - print/export wire to the P3.9 ExportReportPDF / AnalyzeInExcel bindings
+// Supplementary component tests for the Report View (parity W6 / mockup #11).
+//
+// NOT the acceptance gate — that is Rodney driving :34115 against the real
+// backend (docs/parity-remediation-plan.md §1). These cover the logic that's
+// awkward to prove via the live DOM: facet derivation + filter payloads,
+// stacked-chart dataset construction, KPI math, and Edit-SQL gating/round-trip.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ReportView from './ReportView.vue'
@@ -23,37 +21,36 @@ class FakeChart {
   }
 }
 
-interface AppMocks {
-  ListReports: ReturnType<typeof vi.fn>
-  RenderReportContentFiltered: ReturnType<typeof vi.fn>
-  GetReportData: ReturnType<typeof vi.fn>
-  GetReportSQL: ReturnType<typeof vi.fn>
-  ExportReportPDF: ReturnType<typeof vi.fn>
-  AnalyzeInExcel: ReturnType<typeof vi.fn>
-}
-
-function makeApp(): AppMocks {
-  const reports = [
-    { id: 'rpt_sales', title: 'Sales by Rep', source: 'SELECT * FROM orders' },
-    { id: 'rpt_other', title: 'Other', source: 'SELECT * FROM x' },
-  ]
+function makeApp(opts: { chart?: object | null; sqlError?: string } = {}) {
+  // HVAC-shaped: two months × two parts, qty numeric.
   const data = {
-    columns: ['sales_rep', 'amount'],
+    columns: ['month', 'part', 'qty'],
     rows: [
-      ['Alice', 350],
-      ['Bob', 375],
+      ['Jan', 'Capacitors', 40],
+      ['Jan', 'Filters', 28],
+      ['Feb', 'Capacitors', 56],
+      ['Feb', 'Filters', 34],
     ],
+    chart:
+      opts.chart === undefined
+        ? { label_field: 'month', series_field: 'part', value_field: 'qty' }
+        : opts.chart,
+    duration_ms: 4.2,
   }
-  const app: AppMocks = {
-    ListReports: vi.fn(async () => reports),
-    RenderReportContentFiltered: vi.fn(
-      async (_id: string, filters: Record<string, string>) =>
-        `<section class="vibe-report"><div class="vibe-group-header">${
-          filters.sales_rep || 'ALL'
-        }</div></section>`,
+  const app = {
+    ListReports: vi.fn(async () => [
+      { id: 'rpt_parts', title: 'Parts usage', source: 'SELECT * FROM parts_used' },
+      { id: 'rpt_other', title: 'Other', source: 'SELECT * FROM x' },
+    ]),
+    GetReportDataFaceted: vi.fn(async () => data),
+    RenderReportContentFaceted: vi.fn(
+      async () => '<section class="vibe-report"><div class="vibe-group-header">G</div></section>',
     ),
-    GetReportData: vi.fn(async () => data),
-    GetReportSQL: vi.fn(async () => 'SELECT sales_rep, amount FROM orders'),
+    GetReportSQL: vi.fn(async () => 'SELECT month, part, qty FROM parts_used'),
+    UpdateReportSQL: vi.fn(async () => {
+      if (opts.sqlError) throw new Error(opts.sqlError)
+    }),
+    ExportReportCSV: vi.fn(async () => '/tmp/parts.csv'),
     ExportReportPDF: vi.fn(async () => '/tmp/r.pdf'),
     AnalyzeInExcel: vi.fn(async () => '/tmp/r.xlsx'),
   }
@@ -63,113 +60,199 @@ function makeApp(): AppMocks {
   return app
 }
 
-function mountView() {
-  return mount(ReportView, { global: { stubs: { Icon: true } }, attachTo: document.body })
+async function mountView() {
+  const wrapper = mount(ReportView, { global: { stubs: { Icon: true } }, attachTo: document.body })
+  await flushPromises()
+  return wrapper
 }
 
-describe('ReportView (P3.10)', () => {
+describe('ReportView (W6 Report View)', () => {
   beforeEach(() => {
-    chartCtor.mockClear()
-    chartDestroy.mockClear()
-    // Reset to Studio mode before each test.
+    vi.clearAllMocks()
     useAppMode().setMode('studio')
   })
 
-  it('lists reports and renders the first banded report by default', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
-    await flushPromises()
+  it('renders chart, legend, KPI tiles, ask-agent card, and detail table simultaneously', async () => {
+    makeApp()
+    const wrapper = await mountView()
 
-    // Picker shows both reports.
-    expect(wrapper.text()).toContain('Sales by Rep')
-    expect(wrapper.text()).toContain('Other')
-
-    // First report rendered as banded HTML via the filtered binding (no filter).
-    expect(app.RenderReportContentFiltered).toHaveBeenCalledWith('rpt_sales', {})
-    expect(wrapper.find('[data-testid="banded"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="banded"]').html()).toContain('vibe-group-header')
+    expect(wrapper.find('[data-testid="chart-card"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chart-legend"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="kpi-top"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="kpi-trend"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ask-agent-card"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="detail-card"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="detail-table"] tbody tr')).toHaveLength(4)
+    expect(wrapper.find('[data-testid="run-meta"]').text()).toContain('4.2ms')
   })
 
-  it('toggles between table and chart views, drawing a Chart.js chart', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
-    await flushPromises()
+  it('builds a stacked multi-series chart from the stored chart spec', async () => {
+    makeApp()
+    await mountView()
 
-    // Switch to chart view.
-    await wrapper.find('[data-testid="view-chart"]').trigger('click')
-    await flushPromises()
-
-    // Chart data fetched and a chart constructed.
-    expect(app.GetReportData).toHaveBeenCalled()
     expect(chartCtor).toHaveBeenCalled()
     const cfg = chartCtor.mock.calls.at(-1)![1] as any
     expect(cfg.type).toBe('bar')
-    expect(cfg.data.labels).toEqual(['Alice', 'Bob'])
-    expect(cfg.data.datasets[0].data).toEqual([350, 375])
+    expect(cfg.data.labels).toEqual(['Jan', 'Feb'])
+    expect(cfg.data.datasets).toHaveLength(2)
+    expect(cfg.data.datasets[0].label).toBe('Capacitors')
+    expect(cfg.data.datasets[0].data).toEqual([40, 56])
+    expect(cfg.data.datasets[1].label).toBe('Filters')
+    expect(cfg.data.datasets[1].data).toEqual([28, 34])
+    expect(cfg.options.scales.x.stacked).toBe(true)
+    expect(cfg.options.scales.y.stacked).toBe(true)
+  })
 
-    // Switch back to table view.
+  it('falls back to heuristic chart metadata when no spec is stored', async () => {
+    makeApp({ chart: null })
+    const wrapper = await mountView()
+
+    // month → label, part → series (low cardinality), qty → value.
+    const cfg = chartCtor.mock.calls.at(-1)![1] as any
+    expect(cfg.data.labels).toEqual(['Jan', 'Feb'])
+    expect(cfg.data.datasets).toHaveLength(2)
+    expect(wrapper.find('[data-testid="kpi-top"]').text()).toContain('Capacitors')
+  })
+
+  it('computes the KPI tiles: top series and first-to-last trend', async () => {
+    makeApp()
+    const wrapper = await mountView()
+
+    const top = wrapper.find('[data-testid="kpi-top"]')
+    expect(top.text()).toContain('Top part')
+    expect(top.text()).toContain('Capacitors')
+    expect(top.text()).toContain('96 qty total')
+
+    // Jan total 68 → Feb total 90 → +32%.
+    const trend = wrapper.find('[data-testid="kpi-trend"]')
+    expect(trend.text()).toContain('+32%')
+    expect(trend.text()).toContain('Jan → Feb')
+  })
+
+  it('derives facets and applies a category multi-select as an "in" filter', async () => {
+    const app = makeApp()
+    const wrapper = await mountView()
+
+    // month + part are category facets; qty is a numeric range facet.
+    expect(wrapper.find('[data-testid="facet-month"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="facet-part"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="facet-qty"] [data-testid="facet-min"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="facet-part"] [data-testid="facet-toggle"]').trigger('click')
+    const options = wrapper.findAll('[data-testid="facet-option"]')
+    expect(options).toHaveLength(2) // Capacitors, Filters
+    await options[0].setValue(true)
+    await flushPromises()
+
+    expect(app.GetReportDataFaceted).toHaveBeenLastCalledWith('rpt_parts', [
+      { column: 'part', op: 'in', values: ['Capacitors'] },
+    ])
+
+    // Reset clears the selection and re-runs unfiltered.
+    await wrapper.find('[data-testid="reset-filters"]').trigger('click')
+    await flushPromises()
+    expect(app.GetReportDataFaceted).toHaveBeenLastCalledWith('rpt_parts', [])
+  })
+
+  it('applies a numeric range facet as a "range" filter', async () => {
+    const app = makeApp()
+    const wrapper = await mountView()
+
+    const min = wrapper.find('[data-testid="facet-qty"] [data-testid="facet-min"]')
+    await min.setValue('30')
+    await min.trigger('change')
+    await flushPromises()
+
+    expect(app.GetReportDataFaceted).toHaveBeenLastCalledWith('rpt_parts', [
+      { column: 'qty', op: 'range', values: ['30', ''] },
+    ])
+  })
+
+  it('the Table seg renders banded HTML with the active filters, keeping the detail table', async () => {
+    const app = makeApp()
+    const wrapper = await mountView()
+
     await wrapper.find('[data-testid="view-table"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="banded"]').exists()).toBe(true)
+
+    expect(app.RenderReportContentFaceted).toHaveBeenCalledWith('rpt_parts', [])
+    expect(wrapper.find('[data-testid="banded"]').html()).toContain('vibe-group-header')
+    expect(wrapper.find('[data-testid="detail-card"]').exists()).toBe(true)
   })
 
-  it('applies live DuckDB filters via the bindings', async () => {
+  it('Edit SQL is Studio-only, loads the source, and saves through UpdateReportSQL', async () => {
     const app = makeApp()
-    const wrapper = mountView()
+    const wrapper = await mountView()
+
+    await wrapper.find('[data-testid="edit-sql"]').trigger('click')
     await flushPromises()
+    expect(app.GetReportSQL).toHaveBeenCalledWith('rpt_parts')
+    const input = wrapper.find('[data-testid="sql-input"]')
+    expect((input.element as HTMLTextAreaElement).value).toContain('FROM parts_used')
 
-    // Pick a filter column -> distinct values derived from GetReportData.
-    const colSel = wrapper.find('[data-testid="filter-column"]')
-    await colSel.setValue('sales_rep')
+    await input.setValue('SELECT month, qty FROM parts_used WHERE qty > 30')
+    await wrapper.find('[data-testid="sql-save"]').trigger('click')
     await flushPromises()
-
-    const valSel = wrapper.find('[data-testid="filter-value"]')
-    expect(valSel.exists()).toBe(true)
-    // Distinct values offered.
-    expect(valSel.findAll('option').map((o) => o.text())).toContain('Alice')
-
-    // Selecting a value re-renders filtered.
-    await valSel.setValue('Alice')
-    await flushPromises()
-
-    const lastCall = app.RenderReportContentFiltered.mock.calls.at(-1)!
-    expect(lastCall[0]).toBe('rpt_sales')
-    expect(lastCall[1]).toEqual({ sales_rep: 'Alice' })
-    expect(wrapper.find('[data-testid="banded"]').html()).toContain('Alice')
+    expect(app.UpdateReportSQL).toHaveBeenCalledWith(
+      'rpt_parts',
+      'SELECT month, qty FROM parts_used WHERE qty > 30',
+    )
+    // Editor closes and the report re-runs.
+    expect(wrapper.find('[data-testid="sql-editor"]').exists()).toBe(false)
   })
 
-  it('gates the Edit SQL affordance to Studio mode', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
+  it('a rejected SQL edit surfaces the error and keeps the editor open', async () => {
+    makeApp({ sqlError: 'report SQL failed validation: Binder Error' })
+    const wrapper = await mountView()
+
+    await wrapper.find('[data-testid="edit-sql"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="sql-save"]').trigger('click')
     await flushPromises()
 
-    // Studio mode: Edit SQL is present and reveals the SQL panel.
-    const editBtn = wrapper.find('[data-testid="edit-sql"]')
-    expect(editBtn.exists()).toBe(true)
-    await editBtn.trigger('click')
-    await flushPromises()
-    expect(app.GetReportSQL).toHaveBeenCalledWith('rpt_sales')
-    expect(wrapper.find('[data-testid="sql-panel"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sql-panel"]').text()).toContain('SELECT sales_rep')
+    expect(wrapper.find('[data-testid="sql-editor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sql-error"]').text()).toContain('failed validation')
+  })
 
-    // App mode: Edit SQL must NOT be available.
+  it('hides Edit SQL in App Mode', async () => {
+    makeApp()
     useAppMode().setMode('app')
-    await flushPromises()
+    const wrapper = await mountView()
+
     expect(wrapper.find('[data-testid="edit-sql"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sql-panel"]').exists()).toBe(false)
+    // The agent affordance is builder-only too (the shell refuses to open the
+    // drawer in App Mode, so the card would be a dead button).
+    expect(wrapper.find('[data-testid="ask-agent-card"]').exists()).toBe(false)
+    // The rest of the dashboard still renders for App users.
+    expect(wrapper.find('[data-testid="chart-card"]').exists()).toBe(true)
   })
 
-  it('wires print/export to the P3.9 bindings', async () => {
+  it('Export CSV passes the active filters and surfaces the written path', async () => {
     const app = makeApp()
-    const wrapper = mountView()
+    const wrapper = await mountView()
+
+    await wrapper.find('[data-testid="facet-month"] [data-testid="facet-toggle"]').trigger('click')
+    await wrapper.findAll('[data-testid="facet-option"]')[1].setValue(true) // 'Jan' (sorted: Feb, Jan)
     await flushPromises()
 
-    await wrapper.find('[data-testid="export-pdf"]').trigger('click')
+    await wrapper.find('[data-testid="export-csv"]').trigger('click')
     await flushPromises()
-    expect(app.ExportReportPDF).toHaveBeenCalledWith('rpt_sales', '')
 
-    await wrapper.find('[data-testid="export-xlsx"]').trigger('click')
-    await flushPromises()
-    expect(app.AnalyzeInExcel).toHaveBeenCalledWith('rpt_sales', '')
+    expect(app.ExportReportCSV).toHaveBeenCalledWith(
+      'rpt_parts',
+      [{ column: 'month', op: 'in', values: ['Jan'] }],
+      '',
+    )
+    expect(wrapper.find('[data-testid="report-status"]').text()).toContain('/tmp/parts.csv')
+  })
+
+  it('"Modify this report" dispatches the vibe:open-agent window event', async () => {
+    makeApp()
+    const wrapper = await mountView()
+    const seen = vi.fn()
+    window.addEventListener('vibe:open-agent', seen)
+    await wrapper.find('[data-testid="modify-report"]').trigger('click')
+    expect(seen).toHaveBeenCalledTimes(1)
+    window.removeEventListener('vibe:open-agent', seen)
   })
 })

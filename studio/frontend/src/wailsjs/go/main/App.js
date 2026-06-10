@@ -106,6 +106,10 @@ export function ExportQueryXLSX(arg1, arg2) {
   return window['go']['main']['App']['ExportQueryXLSX'](arg1, arg2);
 }
 
+export function ExportReportCSV(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportReportCSV'](arg1, arg2, arg3);
+}
+
 export function ExportReportHTML(arg1, arg2) {
   return window['go']['main']['App']['ExportReportHTML'](arg1, arg2);
 }
@@ -192,6 +196,10 @@ export function GetQuery(arg1) {
 
 export function GetReportData(arg1, arg2) {
   return window['go']['main']['App']['GetReportData'](arg1, arg2);
+}
+
+export function GetReportDataFaceted(arg1, arg2) {
+  return window['go']['main']['App']['GetReportDataFaceted'](arg1, arg2);
 }
 
 export function GetReportSQL(arg1) {
@@ -288,6 +296,10 @@ export function RenderPageContent(arg1, arg2) {
 
 export function RenderReportContent(arg1) {
   return window['go']['main']['App']['RenderReportContent'](arg1);
+}
+
+export function RenderReportContentFaceted(arg1, arg2) {
+  return window['go']['main']['App']['RenderReportContentFaceted'](arg1, arg2);
 }
 
 export function RenderReportContentFiltered(arg1, arg2) {
@@ -392,6 +404,10 @@ export function SubmitFormFor(arg1, arg2, arg3) {
 
 export function UpdatePage(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdatePage'](arg1, arg2, arg3);
+}
+
+export function UpdateReportSQL(arg1, arg2) {
+  return window['go']['main']['App']['UpdateReportSQL'](arg1, arg2);
 }
 
 export function UpdateRow(arg1, arg2, arg3, arg4) {

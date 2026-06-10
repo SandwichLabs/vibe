@@ -60,6 +60,16 @@ type DetailBand struct {
 	Columns []ReportColumn `json:"columns"`
 }
 
+// ChartSpec describes how the Report View charts this report's data: which
+// column labels the x-axis, which (optional) column splits rows into stacked
+// series, and which column supplies the numeric value. Absent fields are
+// derived heuristically by the viewer (parity W6 / mockup #11).
+type ChartSpec struct {
+	LabelField  string `json:"label_field"`
+	SeriesField string `json:"series_field,omitempty"`
+	ValueField  string `json:"value_field"`
+}
+
 // ReportSpec is the stored, versioned banded-report definition.
 type ReportSpec struct {
 	ID                     string       `json:"id"`
@@ -70,14 +80,18 @@ type ReportSpec struct {
 	Detail                 DetailBand   `json:"detail"`
 	GroupFooterAggregates  []Aggregate  `json:"group_footer_aggregates,omitempty"`
 	ReportFooterAggregates []Aggregate  `json:"report_footer_aggregates,omitempty"`
+	Chart                  *ChartSpec   `json:"chart,omitempty"`
 }
 
 // bands is the JSON payload persisted in the _vibe_reports.bands column: the
 // detail band plus the group-footer / report-footer aggregate expressions.
+// Chart rides along here so adding it needed no schema migration — old rows
+// simply unmarshal with a nil Chart.
 type bands struct {
 	Detail                 DetailBand  `json:"detail"`
 	GroupFooterAggregates  []Aggregate `json:"group_footer_aggregates,omitempty"`
 	ReportFooterAggregates []Aggregate `json:"report_footer_aggregates,omitempty"`
+	Chart                  *ChartSpec  `json:"chart,omitempty"`
 }
 
 // GroupBand is a computed group band: its key, nested detail rows, and computed
@@ -120,6 +134,7 @@ func (s *ReportStore) Save(spec ReportSpec) error {
 		Detail:                 spec.Detail,
 		GroupFooterAggregates:  spec.GroupFooterAggregates,
 		ReportFooterAggregates: spec.ReportFooterAggregates,
+		Chart:                  spec.Chart,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal report bands: %w", err)
@@ -174,6 +189,7 @@ func (s *ReportStore) Get(id string) (*ReportSpec, error) {
 	spec.Detail = b.Detail
 	spec.GroupFooterAggregates = b.GroupFooterAggregates
 	spec.ReportFooterAggregates = b.ReportFooterAggregates
+	spec.Chart = b.Chart
 
 	return &spec, nil
 }
