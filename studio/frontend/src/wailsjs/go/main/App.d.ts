@@ -59,6 +59,8 @@ export function ExportQueryResults(arg1:string,arg2:string,arg3:string):Promise<
 
 export function ExportQueryXLSX(arg1:string,arg2:string):Promise<string>;
 
+export function ExportReportCSV(arg1:string,arg2:Array<main.ReportFilter>,arg3:string):Promise<string>;
+
 export function ExportReportHTML(arg1:string,arg2:string):Promise<string>;
 
 export function ExportReportPDF(arg1:string,arg2:string):Promise<string>;
@@ -102,6 +104,8 @@ export function GetPage(arg1:string):Promise<main.PageDetail>;
 export function GetQuery(arg1:string):Promise<queries.Query>;
 
 export function GetReportData(arg1:string,arg2:Record<string, string>):Promise<main.ReportData>;
+
+export function GetReportDataFaceted(arg1:string,arg2:Array<main.ReportFilter>):Promise<main.ReportData>;
 
 export function GetReportSQL(arg1:string):Promise<string>;
 
@@ -150,6 +154,8 @@ export function RemoveForeignKey(arg1:string):Promise<void>;
 export function RenderPageContent(arg1:string,arg2:Record<string, string>):Promise<string>;
 
 export function RenderReportContent(arg1:string):Promise<string>;
+
+export function RenderReportContentFaceted(arg1:string,arg2:Array<main.ReportFilter>):Promise<string>;
 
 export function RenderReportContentFiltered(arg1:string,arg2:Record<string, string>):Promise<string>;
 
@@ -202,6 +208,8 @@ export function SubmitForm(arg1:main.FormSubmitRow,arg2:Array<main.FormSubmitRow
 export function SubmitFormFor(arg1:string,arg2:main.FormSubmitRow,arg3:Array<main.FormSubmitRow>):Promise<void>;
 
 export function UpdatePage(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function UpdateReportSQL(arg1:string,arg2:string):Promise<void>;
 
 export function UpdateRow(arg1:string,arg2:string,arg3:any,arg4:Record<string, any>):Promise<crud.WriteResult>;
 

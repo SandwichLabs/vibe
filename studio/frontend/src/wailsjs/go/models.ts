@@ -617,6 +617,8 @@ export namespace main {
 	export class ReportData {
 	    columns: string[];
 	    rows: any[][];
+	    chart?: reports.ChartSpec;
+	    duration_ms: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ReportData(source);
@@ -626,6 +628,42 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
 	        this.rows = source["rows"];
+	        this.chart = this.convertValues(source["chart"], reports.ChartSpec);
+	        this.duration_ms = source["duration_ms"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ReportFilter {
+	    column: string;
+	    op: string;
+	    values: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ReportFilter(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.op = source["op"];
+	        this.values = source["values"];
 	    }
 	}
 	export class SpreadsheetColumn {
@@ -846,6 +884,22 @@ export namespace reports {
 	        this.field = source["field"];
 	    }
 	}
+	export class ChartSpec {
+	    label_field: string;
+	    series_field?: string;
+	    value_field: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChartSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label_field = source["label_field"];
+	        this.series_field = source["series_field"];
+	        this.value_field = source["value_field"];
+	    }
+	}
 	export class ReportColumn {
 	    field: string;
 	    caption?: string;
@@ -928,6 +982,7 @@ export namespace reports {
 	    detail: DetailBand;
 	    group_footer_aggregates?: Aggregate[];
 	    report_footer_aggregates?: Aggregate[];
+	    chart?: ChartSpec;
 	
 	    static createFrom(source: any = {}) {
 	        return new ReportSpec(source);
@@ -943,6 +998,7 @@ export namespace reports {
 	        this.detail = this.convertValues(source["detail"], DetailBand);
 	        this.group_footer_aggregates = this.convertValues(source["group_footer_aggregates"], Aggregate);
 	        this.report_footer_aggregates = this.convertValues(source["report_footer_aggregates"], Aggregate);
+	        this.chart = this.convertValues(source["chart"], ChartSpec);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

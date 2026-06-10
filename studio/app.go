@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -3934,35 +3936,104 @@ func (a *App) RenderReportContent(reportID string) (string, error) {
 // reportFilterCol matches a safe identifier (column name) for live filtering.
 var reportFilterCol = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// ReportFilter is one faceted Report View filter (parity W6 / mockup #11):
+// an equality, a multi-select set, or an inclusive range over one column.
+// Range values are [min, max] where an empty string leaves that end open.
+type ReportFilter struct {
+	Column string   `json:"column"`
+	Op     string   `json:"op"` // eq | in | range
+	Values []string `json:"values"`
+}
+
 // filteredSource wraps a report's bound query in a subquery and applies the
-// supplied column=value equality filters as a WHERE clause. Filter keys are
-// validated as plain identifiers and values are passed as bound parameters, so
-// the live Report View filters cannot inject SQL (plan §3.4 / mockup #11 "Live
-// DuckDB filters").
+// supplied column=value equality filters as a WHERE clause (the pre-W6 shape,
+// kept for existing callers). Delegates to facetedSource.
 func filteredSource(source string, filters map[string]string) (string, []any) {
-	var clauses []string
-	var args []any
-	// Stable ordering for deterministic SQL (and tests).
 	keys := make([]string, 0, len(filters))
 	for k, v := range filters {
+		// The pre-W6 contract silently skips empty values and bad identifiers.
 		if v == "" || !reportFilterCol.MatchString(k) {
 			continue
 		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	for i, k := range keys {
-		// Engine binds $name placeholders (see engine.BindParams); namedArgs
-		// produces matching p1, p2, … keys.
-		clauses = append(clauses, fmt.Sprintf("%q = $p%d", k, i+1))
-		args = append(args, filters[k])
+	fs := make([]ReportFilter, 0, len(keys))
+	for _, k := range keys {
+		fs = append(fs, ReportFilter{Column: k, Op: "eq", Values: []string{filters[k]}})
+	}
+	wrapped, args, err := facetedSource(source, fs)
+	if err != nil {
+		return source, nil
+	}
+	return wrapped, args
+}
+
+// facetedSource wraps a report's bound query in a subquery and applies the
+// faceted filters as a WHERE clause. Column names are validated as plain
+// identifiers and every value is passed as a bound parameter, so the live
+// Report View filters cannot inject SQL. Range comparisons TRY_CAST both
+// sides to DOUBLE when the bound value is numeric so numeric columns compare
+// numerically, not lexically.
+func facetedSource(source string, filters []ReportFilter) (string, []any, error) {
+	var clauses []string
+	var args []any
+	param := func(v string) string {
+		args = append(args, v)
+		return fmt.Sprintf("$p%d", len(args))
+	}
+	for _, f := range filters {
+		if !reportFilterCol.MatchString(f.Column) {
+			return "", nil, fmt.Errorf("invalid filter column %q", f.Column)
+		}
+		col := fmt.Sprintf("%q", f.Column)
+		switch f.Op {
+		case "", "eq":
+			if len(f.Values) != 1 || f.Values[0] == "" {
+				continue
+			}
+			// Bare comparison: DuckDB coerces the bound VARCHAR to the column
+			// type (the pre-W6 equality semantics).
+			clauses = append(clauses, fmt.Sprintf("%s = %s", col, param(f.Values[0])))
+		case "in":
+			vals := make([]string, 0, len(f.Values))
+			for _, v := range f.Values {
+				if v != "" {
+					vals = append(vals, param(v))
+				}
+			}
+			if len(vals) == 0 {
+				continue
+			}
+			clauses = append(clauses, fmt.Sprintf("%s IN (%s)", col, strings.Join(vals, ", ")))
+		case "range":
+			if len(f.Values) != 2 {
+				return "", nil, fmt.Errorf("range filter on %q needs [min, max]", f.Column)
+			}
+			for i, bound := range f.Values {
+				if bound == "" {
+					continue
+				}
+				cmp := ">="
+				if i == 1 {
+					cmp = "<="
+				}
+				if _, err := strconv.ParseFloat(bound, 64); err == nil {
+					clauses = append(clauses, fmt.Sprintf("TRY_CAST(%s AS DOUBLE) %s TRY_CAST(%s AS DOUBLE)", col, cmp, param(bound)))
+				} else {
+					clauses = append(clauses, fmt.Sprintf("CAST(%s AS VARCHAR) %s %s", col, cmp, param(bound)))
+				}
+			}
+		default:
+			return "", nil, fmt.Errorf("unknown filter op %q on column %q", f.Op, f.Column)
+		}
 	}
 	if len(clauses) == 0 {
-		return source, nil
+		return source, nil, nil
 	}
 	wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _vibe_report_src WHERE %s",
 		source, strings.Join(clauses, " AND "))
-	return wrapped, args
+	return wrapped, args, nil
 }
 
 // RenderReportContentFiltered renders the banded report HTML after applying the
@@ -4020,16 +4091,30 @@ func namedArgs(args []any) map[string]any {
 
 // ReportData is a tabular view of a report's bound query result, used by the
 // Report View chart/table toggle and to populate live-filter option lists.
+// Chart carries the report's stored chart metadata (nil → viewer heuristics)
+// and DurationMs the bound-query wall time for the last-run strip (W6).
 type ReportData struct {
-	Columns []string `json:"columns"`
-	Rows    [][]any  `json:"rows"`
+	Columns    []string           `json:"columns"`
+	Rows       [][]any            `json:"rows"`
+	Chart      *reports.ChartSpec `json:"chart,omitempty"`
+	DurationMs float64            `json:"duration_ms"`
 }
 
-// GetReportData runs the report's bound query (with optional live filters) and
-// returns its raw tabular result, so the Report View can render either a chart
-// or a data table from the same data and derive filter options (plan §3.4 /
-// mockup #11). Studio-only "Edit SQL" reads the source via GetReportSQL.
+// GetReportData runs the report's bound query (with optional live equality
+// filters) — the pre-W6 shape, kept for existing callers.
 func (a *App) GetReportData(reportID string, filters map[string]string) (*ReportData, error) {
+	fs := make([]ReportFilter, 0, len(filters))
+	for k, v := range filters {
+		fs = append(fs, ReportFilter{Column: k, Op: "eq", Values: []string{v}})
+	}
+	return a.GetReportDataFaceted(reportID, fs)
+}
+
+// GetReportDataFaceted runs the report's bound query with faceted filters
+// (eq / in / range) and returns its raw tabular result plus chart metadata, so
+// the Report View can render the stacked chart, KPI tiles, and detail table
+// from one round-trip (parity W6 / mockup #11).
+func (a *App) GetReportDataFaceted(reportID string, filters []ReportFilter) (*ReportData, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.container == nil {
@@ -4039,18 +4124,34 @@ func (a *App) GetReportData(reportID string, filters map[string]string) (*Report
 		return nil, fmt.Errorf("no engine available")
 	}
 
-	source, err := a.reportSourceLocked(reportID)
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return nil, fmt.Errorf("report %q not found", reportID)
+	}
+	if strings.TrimSpace(spec.Source) == "" {
+		return nil, fmt.Errorf("report %q has no bound query", reportID)
 	}
 
-	query, args := filteredSource(source, filters)
+	query, args, err := facetedSource(spec.Source, filters)
+	if err != nil {
+		return nil, fmt.Errorf("bad report filter for %q: %w", reportID, err)
+	}
+	started := time.Now()
 	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
 	if err != nil {
 		return nil, fmt.Errorf("failed to run report query for %q: %w", reportID, err)
 	}
 
-	out := &ReportData{Columns: make([]string, 0, len(rs.Columns)), Rows: rs.Rows}
+	out := &ReportData{
+		Columns:    make([]string, 0, len(rs.Columns)),
+		Rows:       rs.Rows,
+		Chart:      spec.Chart,
+		DurationMs: float64(time.Since(started).Microseconds()) / 1000.0,
+	}
 	for _, c := range rs.Columns {
 		out.Columns = append(out.Columns, c.Name)
 	}
@@ -4058,6 +4159,146 @@ func (a *App) GetReportData(reportID string, filters map[string]string) (*Report
 		out.Rows = [][]any{}
 	}
 	return out, nil
+}
+
+// RenderReportContentFaceted renders the banded report HTML after applying
+// faceted filters (eq / in / range) to the report's bound query — the W6
+// counterpart to RenderReportContentFiltered.
+func (a *App) RenderReportContentFaceted(reportID string, filters []ReportFilter) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if a.engine == nil {
+		return "", fmt.Errorf("no engine available")
+	}
+
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return "", fmt.Errorf("report %q not found", reportID)
+	}
+
+	query, args, err := facetedSource(spec.Source, filters)
+	if err != nil {
+		return "", fmt.Errorf("bad report filter for %q: %w", reportID, err)
+	}
+	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
+	if err != nil {
+		return "", fmt.Errorf("failed to run report query for %q: %w", reportID, err)
+	}
+
+	tree, err := reports.ComputeBands(rs, *spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute report bands for %q: %w", reportID, err)
+	}
+
+	htmlOut, err := a.renderer.RenderReport(tree, *spec, htmlrenderer.RenderReportOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
+	}
+	return htmlOut, nil
+}
+
+// UpdateReportSQL replaces a report's bound query source, backing the
+// Studio-only "Edit SQL" affordance (parity W6 — previously the panel was
+// read-only despite the label). The new SQL is validated by actually running
+// it (LIMIT 0) against the engine before it is persisted.
+func (a *App) UpdateReportSQL(reportID, source string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.guardStudioOnly("UpdateReportSQL"); err != nil {
+		return err
+	}
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	if a.engine == nil {
+		return fmt.Errorf("no engine available")
+	}
+	if strings.TrimSpace(source) == "" {
+		return fmt.Errorf("report SQL cannot be empty")
+	}
+
+	store := reports.NewReportStore(a.container.SQLiteDB())
+	spec, err := store.Get(reportID)
+	if err != nil {
+		return fmt.Errorf("failed to load report %q: %w", reportID, err)
+	}
+	if spec == nil {
+		return fmt.Errorf("report %q not found", reportID)
+	}
+
+	probe := fmt.Sprintf("SELECT * FROM (%s) AS _vibe_sql_check LIMIT 0", source)
+	if _, err := a.engine.Execute(a.ctx, probe, nil); err != nil {
+		return fmt.Errorf("report SQL failed validation: %w", err)
+	}
+
+	spec.Source = source
+	if err := store.Save(*spec); err != nil {
+		return fmt.Errorf("failed to save report %q: %w", reportID, err)
+	}
+	a.logger.Info("updated report SQL", "report", reportID)
+	return nil
+}
+
+// ExportReportCSV writes the report's (optionally filtered) bound query result
+// to a CSV file, returning the written path. An empty dst opens a native save
+// dialog (parity W6 / mockup #11 "Export CSV").
+func (a *App) ExportReportCSV(reportID string, filters []ReportFilter, dst string) (string, error) {
+	data, err := a.GetReportDataFaceted(reportID, filters)
+	if err != nil {
+		return "", err
+	}
+
+	if dst == "" {
+		dst, err = runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+			DefaultFilename: reportID + ".csv",
+			Title:           "Export report CSV",
+		})
+		if err != nil {
+			return "", fmt.Errorf("save dialog failed: %w", err)
+		}
+		if dst == "" {
+			return "", nil // user cancelled
+		}
+	}
+	if !strings.HasSuffix(strings.ToLower(dst), ".csv") {
+		dst += ".csv"
+	}
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return "", fmt.Errorf("failed to create %q: %w", dst, err)
+	}
+	defer f.Close()
+	w := csv.NewWriter(f)
+	if err := w.Write(data.Columns); err != nil {
+		return "", fmt.Errorf("failed to write CSV header: %w", err)
+	}
+	row := make([]string, len(data.Columns))
+	for _, r := range data.Rows {
+		for i := range row {
+			if i < len(r) && r[i] != nil {
+				row[i] = fmt.Sprintf("%v", r[i])
+			} else {
+				row[i] = ""
+			}
+		}
+		if err := w.Write(row); err != nil {
+			return "", fmt.Errorf("failed to write CSV row: %w", err)
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return "", fmt.Errorf("failed to flush CSV: %w", err)
+	}
+	a.logger.Info("exported report CSV", "report", reportID, "path", dst, "rows", len(data.Rows))
+	return dst, nil
 }
 
 // GetReportSQL returns the report's bound query source SQL, backing the
