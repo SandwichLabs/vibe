@@ -549,7 +549,7 @@ type createTableInput struct {
 func (r *Runner) createTableTool(rec *recorder) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		"create_table",
-		"Create a new table in the .vibe database with the given columns.",
+		"Create a new table in the .vibe database with the given columns. Integer primary-key columns auto-number themselves (sequence-backed) — inserts may omit them.",
 		func(ctx context.Context, in createTableInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			spec := TableSpec{Name: in.Name}
 			for _, c := range in.Columns {
@@ -589,7 +589,7 @@ type createFormInput struct {
 func (r *Runner) createFormTool(rec *recorder) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		"create_form",
-		"Create a data-entry form bound to a table (columnar, continuous, datasheet, or master-detail with an optional subform).",
+		"Create a data-entry form bound to a table (columnar, continuous, datasheet, or master-detail with an optional subform). Do NOT include the table's auto-numbered id primary key as a field — it fills itself in.",
 		func(ctx context.Context, in createFormInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			def := FormDef{
 				Title:            in.Title,

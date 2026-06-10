@@ -30,12 +30,15 @@ type ForeignKeySpec struct {
 	OnUpdate     string
 }
 
-// FKColumn describes a column for table reconstruction.
+// FKColumn describes a column for table reconstruction. Default carries the
+// column's DEFAULT expression verbatim (e.g. an auto-number PK's
+// "nextval('_vibe_seq_orders_id')") so a rebuild does not strip it.
 type FKColumn struct {
 	Name    string
 	Type    string
 	NotNull bool
 	PK      bool
+	Default string
 }
 
 // ApplyForeignKey applies a real DuckDB foreign-key constraint for spec by
@@ -86,12 +89,34 @@ func ApplyForeignKey(ddb *sql.DB, spec ForeignKeySpec) error {
 	return nil
 }
 
+// StripForeignKeys rebuilds the child table with no inline REFERENCES,
+// removing its foreign-key constraint(s). DuckDB cannot ALTER a FK off an
+// existing table, so removal is a rebuild, mirroring ApplyForeignKey. A
+// missing table is a no-op.
+func StripForeignKeys(ddb *sql.DB, childTable string) error {
+	if !ValidIdentifier(childTable) {
+		return fmt.Errorf("invalid table name %q", childTable)
+	}
+	cols, err := TableColumns(ddb, childTable)
+	if err != nil {
+		return fmt.Errorf("failed to inspect child table %q: %w", childTable, err)
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	if err := rebuildTableWithFK(ddb, ForeignKeySpec{ChildTable: childTable}, cols); err != nil {
+		return fmt.Errorf("failed to drop foreign key from %q: %w", childTable, err)
+	}
+	return nil
+}
+
 // TableColumns introspects a DuckDB table's columns (name, type, nullability,
 // primary-key membership) in ordinal order. Returns an empty slice if the table
 // does not exist.
 func TableColumns(db *sql.DB, table string) ([]FKColumn, error) {
 	rows, err := db.Query(
-		`SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END
+		`SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END,
+		        COALESCE(column_default, '')
 		   FROM information_schema.columns
 		  WHERE table_schema = 'main' AND table_name = $1
 		  ORDER BY ordinal_position`, table)
@@ -103,7 +128,7 @@ func TableColumns(db *sql.DB, table string) ([]FKColumn, error) {
 	var cols []FKColumn
 	for rows.Next() {
 		var c FKColumn
-		if err := rows.Scan(&c.Name, &c.Type, &c.NotNull); err != nil {
+		if err := rows.Scan(&c.Name, &c.Type, &c.NotNull, &c.Default); err != nil {
 			return nil, fmt.Errorf("failed to scan column: %w", err)
 		}
 		cols = append(cols, c)
@@ -193,6 +218,11 @@ func rebuildTableWithFK(db *sql.DB, spec ForeignKeySpec, cols []FKColumn) error 
 	var defs []string
 	for _, c := range cols {
 		def := fmt.Sprintf("%q %s", c.Name, c.Type)
+		if c.Default != "" {
+			// Preserve the DEFAULT expression (notably auto-number sequences) —
+			// rebuilding without it silently broke id-less form inserts.
+			def += " DEFAULT " + c.Default
+		}
 		if c.PK {
 			def += " PRIMARY KEY"
 		}

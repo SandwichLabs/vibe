@@ -275,3 +275,32 @@ func TestReadOnly(t *testing.T) {
 	assert.Error(t, c2.Save())
 	assert.Error(t, c2.SetMeta("key", "value"))
 }
+
+// TestOpenBackfillsAutoNumberPKs: files created before the sequence-backed-PK
+// fix have bare integer PRIMARY KEYs; opening such a file must retrofit a
+// sequence DEFAULT (seeded past existing rows) so id-less form inserts work.
+func TestOpenBackfillsAutoNumberPKs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backfill.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	// A pre-fix-shaped table: bare integer PK, existing rows up to id 7.
+	_, err = c.DuckDBDB().Exec(`CREATE TABLE customers (id BIGINT PRIMARY KEY, name VARCHAR)`)
+	require.NoError(t, err)
+	_, err = c.DuckDBDB().Exec(`INSERT INTO customers VALUES (7, 'legacy')`)
+	require.NoError(t, err)
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	// The retrofit makes an id-less insert work and number past the max row.
+	_, err = c2.DuckDBDB().Exec(`INSERT INTO customers (name) VALUES ('new')`)
+	require.NoError(t, err, "id-less insert must succeed after open-time backfill")
+	var id int64
+	require.NoError(t, c2.DuckDBDB().QueryRow(`SELECT id FROM customers WHERE name = 'new'`).Scan(&id))
+	assert.Equal(t, int64(8), id)
+}

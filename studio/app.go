@@ -1584,7 +1584,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	// Build an allowlist of real columns to validate filter/sort identifiers.
-	cols, err := tableColumns(db, name)
+	cols, err := schema.TableColumns(db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}
@@ -1887,7 +1887,28 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 	return res, nil
 }
 
-// CreateTable creates a new table with the given columns.
+// isAutoNumberType reports whether a column type is an integer family member
+// that should auto-number when used as a primary key. DuckDB has no implicit
+// AUTOINCREMENT — without a sequence-backed DEFAULT, a form insert that omits
+// the id fails with "NOT NULL constraint failed".
+func isAutoNumberType(t string) bool {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case "BIGINT", "INTEGER", "INT", "INT2", "INT4", "INT8", "SMALLINT", "TINYINT",
+		"HUGEINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT":
+		return true
+	}
+	return false
+}
+
+// pkSequenceName is the deterministic sequence backing an auto-number primary
+// key. Both identifiers are validated before this is interpolated into DDL.
+func pkSequenceName(table, column string) string {
+	return fmt.Sprintf("_vibe_seq_%s_%s", table, column)
+}
+
+// CreateTable creates a new table with the given columns. Integer primary-key
+// columns are made auto-numbering via a backing sequence (the Access AutoNumber
+// behavior) so data-entry forms can omit the id.
 func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1902,10 +1923,20 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if !isValidIdentifier(name) {
 		return fmt.Errorf("invalid table name")
 	}
+	for _, col := range columns {
+		if !isValidIdentifier(col.Name) {
+			return fmt.Errorf("invalid column name %q", col.Name)
+		}
+	}
 
-	var colDefs []string
+	var colDefs, seqDDL []string
 	for _, col := range columns {
 		def := fmt.Sprintf("%q %s", col.Name, col.Type)
+		if col.PK && isAutoNumberType(col.Type) {
+			seq := pkSequenceName(name, col.Name)
+			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %q START 1", seq))
+			def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
+		}
 		if col.PK {
 			def += " PRIMARY KEY"
 		}
@@ -1920,12 +1951,70 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
+	for _, ddl := range seqDDL {
+		if _, err := ddb.Exec(ddl); err != nil {
+			return fmt.Errorf("failed to create id sequence: %w", err)
+		}
+	}
 	_, err := ddb.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
+	a.seedFieldMetaDefaults(name, columns)
 	a.emitEvent("data:changed")
 	return nil
+}
+
+// seedFieldMetaDefaults infers Access-style field metadata for a freshly
+// created table: friendly captions for every column, and control types plus
+// validation for recognizable fields (email gets a server-enforced format rule
+// via the crud validation path). Best-effort — a metadata failure never fails
+// the table creation.
+func (a *App) seedFieldMetaDefaults(table string, columns []ColumnInfo) {
+	store := schema.NewStore(a.container.SQLiteDB())
+	for i, col := range columns {
+		meta := schema.FieldMeta{
+			TableName:  table,
+			ColumnName: col.Name,
+			Caption:    captionFor(col.Name),
+			SortOrder:  i,
+		}
+		lower := strings.ToLower(col.Name)
+		upperType := strings.ToUpper(strings.TrimSpace(col.Type))
+		switch {
+		case strings.Contains(lower, "email"):
+			meta.ControlType = "email"
+			// Column-relative Access-style rule (crud.normalizeRule prepends the
+			// column): requires text@text.text. NULL/absent passes — pair with
+			// Required for mandatory emails.
+			meta.ValidationRule = "LIKE '%_@_%.%'"
+			meta.ValidationMsg = "Enter a valid email address (like name@example.com)."
+		case strings.Contains(lower, "phone"):
+			meta.ControlType = "tel"
+		case strings.HasPrefix(upperType, "DATE"):
+			meta.ControlType = "date"
+		case strings.HasPrefix(upperType, "TIMESTAMP"):
+			meta.ControlType = "datetime"
+		case strings.HasPrefix(upperType, "BOOL"):
+			meta.ControlType = "checkbox"
+		}
+		if err := store.SetFieldMeta(table, col.Name, meta); err != nil {
+			a.logger.Warn("failed to seed field meta", "table", table, "column", col.Name, "error", err)
+		}
+	}
+}
+
+// captionFor turns a snake_case column name into a friendly caption
+// ("first_name" -> "First Name", "customer_id" -> "Customer Id").
+func captionFor(column string) string {
+	words := strings.Split(column, "_")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.TrimSpace(strings.Join(words, " "))
 }
 
 // ForeignKeySpec describes a foreign-key relationship to add (P2.3): the child
@@ -1960,54 +2049,26 @@ func (a *App) AddForeignKey(spec ForeignKeySpec) (string, error) {
 		return "", fmt.Errorf("no file open")
 	}
 
-	for _, id := range []string{spec.ChildTable, spec.ChildColumn, spec.ParentTable, spec.ParentColumn} {
-		if !isValidIdentifier(id) {
-			return "", fmt.Errorf("invalid identifier %q in foreign key spec", id)
-		}
-	}
-
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
 
-	// Validate the child column exists.
-	childCols, err := tableColumns(ddb, spec.ChildTable)
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect child table %q: %w", spec.ChildTable, err)
-	}
-	if len(childCols) == 0 {
-		return "", fmt.Errorf("child table %q does not exist", spec.ChildTable)
-	}
-	if !columnExists(childCols, spec.ChildColumn) {
-		return "", fmt.Errorf("child column %q does not exist on table %q", spec.ChildColumn, spec.ChildTable)
-	}
-
-	// Validate the parent column exists.
-	parentCols, err := tableColumns(ddb, spec.ParentTable)
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect parent table %q: %w", spec.ParentTable, err)
-	}
-	if len(parentCols) == 0 {
-		return "", fmt.Errorf("parent table %q does not exist", spec.ParentTable)
-	}
-	if !columnExists(parentCols, spec.ParentColumn) {
-		return "", fmt.Errorf("parent column %q does not exist on table %q", spec.ParentColumn, spec.ParentTable)
-	}
-
-	// DuckDB requires the referenced (parent) column to be UNIQUE or PRIMARY KEY.
-	unique, err := columnIsUnique(ddb, spec.ParentTable, spec.ParentColumn)
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect parent constraints on %q: %w", spec.ParentTable, err)
-	}
-	if !unique {
-		return "", fmt.Errorf("referenced column %q.%q must be a PRIMARY KEY or UNIQUE column", spec.ParentTable, spec.ParentColumn)
-	}
-
-	// Recreate the child table with the inline REFERENCES, since DuckDB cannot
-	// ALTER a FK onto an existing table.
-	if err := rebuildTableWithFK(ddb, spec, childCols); err != nil {
-		return "", fmt.Errorf("failed to apply foreign key to %q: %w", spec.ChildTable, err)
+	// Single shared FK-emit path (internal/schema): validates identifiers and
+	// both endpoints, requires the parent column be PK/UNIQUE, and rebuilds the
+	// child table with the inline REFERENCES — preserving column DEFAULTs (the
+	// auto-number sequences) and the parent's FK dependency graph. The studio
+	// package previously carried a stale duplicate of this logic that did
+	// neither.
+	if err := schema.ApplyForeignKey(ddb, schema.ForeignKeySpec{
+		ChildTable:   spec.ChildTable,
+		ChildColumn:  spec.ChildColumn,
+		ParentTable:  spec.ParentTable,
+		ParentColumn: spec.ParentColumn,
+		OnDelete:     spec.OnDelete,
+		OnUpdate:     spec.OnUpdate,
+	}); err != nil {
+		return "", err
 	}
 
 	rel := schema.Relationship{
@@ -2078,15 +2139,10 @@ func (a *App) RemoveForeignKey(id string) error {
 		return fmt.Errorf("DuckDB not available")
 	}
 
-	childCols, err := tableColumns(ddb, rel.ChildTable)
-	if err != nil {
-		return fmt.Errorf("failed to inspect child table %q: %w", rel.ChildTable, err)
-	}
-	if len(childCols) > 0 {
-		// Rebuild the child table with no FK spec to strip the inline REFERENCES.
-		if err := rebuildTableWithFK(ddb, ForeignKeySpec{ChildTable: rel.ChildTable}, childCols); err != nil {
-			return fmt.Errorf("failed to drop foreign key from %q: %w", rel.ChildTable, err)
-		}
+	// Rebuild the child table with no FK spec to strip the inline REFERENCES
+	// (shared internal/schema path; preserves column DEFAULTs).
+	if err := schema.StripForeignKeys(ddb, rel.ChildTable); err != nil {
+		return err
 	}
 
 	if err := store.Delete(id); err != nil {
@@ -2095,163 +2151,6 @@ func (a *App) RemoveForeignKey(id string) error {
 
 	a.logger.Info("removed foreign key", "id", id, "child_table", rel.ChildTable)
 	return nil
-}
-
-// fkColumn describes a column for table reconstruction (P2.3).
-type fkColumn struct {
-	Name    string
-	Type    string
-	NotNull bool
-	PK      bool
-}
-
-// tableColumns introspects a DuckDB table's columns (name, type, nullability,
-// primary-key membership) in ordinal order. Returns an empty slice if the table
-// does not exist.
-func tableColumns(db *sql.DB, table string) ([]fkColumn, error) {
-	rows, err := db.Query(
-		`SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END
-		   FROM information_schema.columns
-		  WHERE table_schema = 'main' AND table_name = $1
-		  ORDER BY ordinal_position`, table)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query columns: %w", err)
-	}
-	defer rows.Close()
-
-	var cols []fkColumn
-	for rows.Next() {
-		var c fkColumn
-		if err := rows.Scan(&c.Name, &c.Type, &c.NotNull); err != nil {
-			return nil, fmt.Errorf("failed to scan column: %w", err)
-		}
-		cols = append(cols, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate columns: %w", err)
-	}
-
-	pk, err := primaryKeyColumns(db, table)
-	if err != nil {
-		return nil, err
-	}
-	for i := range cols {
-		if pk[cols[i].Name] {
-			cols[i].PK = true
-		}
-	}
-	return cols, nil
-}
-
-// primaryKeyColumns returns the set of PRIMARY KEY column names for a table.
-func primaryKeyColumns(db *sql.DB, table string) (map[string]bool, error) {
-	return constraintColumns(db, table, "PRIMARY KEY")
-}
-
-// columnIsUnique reports whether the given column is covered by a single-column
-// PRIMARY KEY or UNIQUE constraint (DuckDB's requirement for a FK target).
-func columnIsUnique(db *sql.DB, table, column string) (bool, error) {
-	for _, ct := range []string{"PRIMARY KEY", "UNIQUE"} {
-		cols, err := constraintColumns(db, table, ct)
-		if err != nil {
-			return false, err
-		}
-		if cols[column] {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// constraintColumns returns the set of column names participating in any
-// constraint of the given type on the table, using DuckDB's duckdb_constraints()
-// table function.
-func constraintColumns(db *sql.DB, table, constraintType string) (map[string]bool, error) {
-	rows, err := db.Query(
-		`SELECT constraint_column_names FROM duckdb_constraints()
-		  WHERE table_name = $1 AND constraint_type = $2`, table, constraintType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query %s constraints: %w", constraintType, err)
-	}
-	defer rows.Close()
-
-	set := map[string]bool{}
-	for rows.Next() {
-		var names []any
-		if err := rows.Scan(&names); err != nil {
-			return nil, fmt.Errorf("failed to scan constraint columns: %w", err)
-		}
-		for _, n := range names {
-			if s, ok := n.(string); ok {
-				set[s] = true
-			}
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate constraints: %w", err)
-	}
-	return set, nil
-}
-
-// rebuildTableWithFK recreates a child table with the same columns, preserving
-// types / NOT NULL / PRIMARY KEY, optionally adding an inline FK REFERENCES on
-// spec.ChildColumn (when spec.ParentTable is set). Existing rows are copied into
-// the rebuilt table, then the original is dropped and the rebuild renamed into
-// place. Done in a single transaction so a failure (e.g. an FK that orphan rows
-// would violate) leaves the original table untouched.
-func rebuildTableWithFK(db *sql.DB, spec ForeignKeySpec, cols []fkColumn) error {
-	tmp := spec.ChildTable + "__fk_rebuild"
-
-	var defs []string
-	for _, c := range cols {
-		def := fmt.Sprintf("%q %s", c.Name, c.Type)
-		if c.PK {
-			def += " PRIMARY KEY"
-		}
-		if c.NotNull && !c.PK {
-			def += " NOT NULL"
-		}
-		if spec.ParentTable != "" && c.Name == spec.ChildColumn {
-			def += fmt.Sprintf(" REFERENCES %q(%q)", spec.ParentTable, spec.ParentColumn)
-		}
-		defs = append(defs, def)
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin rebuild transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", tmp)); err != nil {
-		return fmt.Errorf("failed to drop stale rebuild table: %w", err)
-	}
-	if _, err := tx.Exec(fmt.Sprintf("CREATE TABLE %q (%s)", tmp, strings.Join(defs, ", "))); err != nil {
-		return fmt.Errorf("failed to create rebuild table: %w", err)
-	}
-	if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %q SELECT * FROM %q", tmp, spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to copy rows into rebuild table: %w", err)
-	}
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE %q", spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to drop original table: %w", err)
-	}
-	if _, err := tx.Exec(fmt.Sprintf("ALTER TABLE %q RENAME TO %q", tmp, spec.ChildTable)); err != nil {
-		return fmt.Errorf("failed to rename rebuild table: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit table rebuild: %w", err)
-	}
-	return nil
-}
-
-// columnExists reports whether a column of the given name is present.
-func columnExists(cols []fkColumn, name string) bool {
-	for _, c := range cols {
-		if c.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // normalizeAction normalizes a referential action. DuckDB FKs are effectively
@@ -2496,7 +2395,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		return "", fmt.Errorf("DuckDB not available")
 	}
 
-	cols, err := tableColumns(db, name)
+	cols, err := schema.TableColumns(db, name)
 	if err != nil {
 		return "", fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}

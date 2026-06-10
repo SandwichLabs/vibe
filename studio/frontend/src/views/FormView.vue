@@ -258,6 +258,7 @@ function controlType(t: string): string {
     case 'date': return 'date'
     case 'datetime': return 'datetime-local'
     case 'email': return 'email'
+    case 'tel': return 'tel'
     case 'url': return 'url'
     default: return 'text'
   }

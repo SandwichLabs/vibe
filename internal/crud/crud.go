@@ -170,6 +170,15 @@ func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]s
 		if rule == "" {
 			continue
 		}
+		// A column absent from the payload is NULL in the candidate row, and a
+		// NULL rule result passes (SQL CHECK semantics) — but the candidate
+		// SELECT can't even reference it. Skip instead of erroring, so partial
+		// writes don't trip rules on untouched columns. Blank values skip too:
+		// format rules judge entered values, blankness is Required's domain
+		// (Access semantics — a NULL/empty field passes the validation rule).
+		if v, present := values[col]; !present || isEmptyValue(v) {
+			continue
+		}
 		base, args := candidateRow(colTypes, values)
 		// Access-style rules may be column-relative (e.g. LIKE '%@%' or > 0),
 		// in which case the column is the implicit left operand. Full
@@ -223,7 +232,19 @@ func labelFor(m schema.FieldMeta) string {
 	return m.ColumnName
 }
 
+// isTextType reports whether a DuckDB type stores text — the only family where
+// an empty string is a meaningful value rather than a blank form control.
+func isTextType(t string) bool {
+	u := strings.ToUpper(t)
+	return strings.HasPrefix(u, "VARCHAR") || strings.HasPrefix(u, "CHAR") ||
+		strings.HasPrefix(u, "TEXT") || strings.HasPrefix(u, "STRING")
+}
+
 // InsertRowTx coerces, validates and inserts a single row within a transaction.
+// Nil values — and empty strings bound for non-text columns (a blank form
+// control) — are omitted from the INSERT so column DEFAULTs apply; in
+// particular an auto-number primary key fills itself in when the form leaves
+// id blank, instead of failing the NOT NULL constraint with an explicit NULL.
 func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, table string, values map[string]any) (*WriteResult, error) {
 	if we := validateRequired(metas, values, true); we != nil {
 		return nil, we
@@ -232,6 +253,26 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 		return nil, err
 	} else if we != nil {
 		return nil, we
+	}
+
+	kept := make(map[string]any, len(values))
+	for c, v := range values {
+		if v == nil {
+			continue
+		}
+		if s, ok := v.(string); ok && s == "" && !isTextType(castType(colTypes, c)) {
+			continue
+		}
+		kept[c] = v
+	}
+	values = kept
+	if len(values) == 0 {
+		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %q DEFAULT VALUES", table))
+		if err != nil {
+			return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
+		}
+		affected, _ := res.RowsAffected()
+		return &WriteResult{Affected: affected}, nil
 	}
 
 	cols := sortedKeys(values)

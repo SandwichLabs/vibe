@@ -136,6 +136,12 @@ func Open(path string, opts ...Option) (*Container, error) {
 		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
 	}
 
+	// Retrofit auto-number sequences onto bare integer PKs created before the
+	// sequence-backed-PK fix, so old files accept id-less form inserts too.
+	if !o.ReadOnly {
+		backfillAutoNumberPKs(duckState.db, o.Logger)
+	}
+
 	o.Logger.Info("container opened successfully", "path", path)
 
 	return &Container{
