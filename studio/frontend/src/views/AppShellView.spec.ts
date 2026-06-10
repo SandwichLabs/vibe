@@ -1,19 +1,18 @@
-// Component spec for AppShellView (Phase 4 / unit P4.7) — the Switchboard.
+// Component spec for AppShellView — the Switchboard (P4.7 runtime + W4 builder).
 //
-// Per parity-plan §4.2 and mockups #5 (sw-main builder) / #6 (app-desktop
-// runtime), AppShellView has two responsibilities driven by the live app mode:
+// Per parity-plan §W4 and mockup #5 (sw-main):
 //
-//   (a) Studio Mode — a builder canvas to compose the switchboard: list nav
-//       items, add/edit/reorder them (max 8 per switchboard page, the Access
-//       constraint), pick an action + target from ListNavTargets, expose access
-//       rules under an "advanced" disclosure, and persist via SaveNav.
+//   (a) Studio Mode — the spatial builder: a source palette (forms / reports /
+//       pages), a .sw-canvas of .sw-node tiles hanging off a distinct home
+//       node, a selected-item inspector (display name / icon / sort order /
+//       access rules), worker preview, and "Publish shell" via SaveNav.
 //
-//   (b) App Mode — the runtime switchboard: render the nav tree as large,
-//       44px-hit-target buttons (marigold accent) that navigate to the bound
-//       form/report/page, honoring startup_object as the landing screen.
+//   (b) App Mode — the runtime switchboard: large 44px-hit-target marigold
+//       buttons that navigate to the bound form/report/page, honoring
+//       startup_object and the W4 visible_to access rules.
 //
-// This is the RED step for P4.7: AppShellView.vue does not implement this
-// behaviour yet, so the assertions below fail on behaviour (not on compile).
+// These are supplementary to the Rodney gate (the acceptance criterion per
+// docs/parity-remediation-plan.md §1).
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import AppShellView from './AppShellView.vue'
@@ -26,6 +25,8 @@ interface NavItem {
   action_kind: string
   target_id: string
   sort_order: number
+  icon?: string
+  visible_to?: string
 }
 
 interface NavTarget {
@@ -124,14 +125,14 @@ function mountView() {
   })
 }
 
-describe('AppShellView Switchboard builder (P4.7 — Studio Mode)', () => {
+describe('AppShellView Switchboard builder (W4 — Studio Mode)', () => {
   beforeEach(() => {
     pushed.length = 0
     routerMock.push.mockClear()
     useAppMode().setMode('studio')
   })
 
-  it('lists existing nav items and populates the target picker from ListNavTargets', async () => {
+  it('renders the 3-pane builder: grouped palette, canvas nodes, distinct home node, inspector', async () => {
     const app = makeApp()
     const wrapper = mountView()
     await flushPromises()
@@ -139,132 +140,122 @@ describe('AppShellView Switchboard builder (P4.7 — Studio Mode)', () => {
     expect(app.ListNav).toHaveBeenCalled()
     expect(app.ListNavTargets).toHaveBeenCalled()
 
-    // Existing nav items are listed in the builder canvas.
-    const items = wrapper.findAll('[data-testid="nav-item"]')
-    expect(items.length).toBe(2)
-    expect(wrapper.text()).toContain('Orders')
-    expect(wrapper.text()).toContain('Sales Report')
+    // Palette groups objects by kind.
+    const palette = wrapper.findAll('[data-testid="palette-target"]')
+    expect(palette.length).toBe(4)
+    expect(wrapper.text()).toContain('Forms')
+    expect(wrapper.text()).toContain('Reports')
 
-    // The target picker is populated from ListNavTargets.
-    const picker = wrapper.find('[data-testid="target-picker"]')
-    expect(picker.exists()).toBe(true)
-    const options = picker.findAll('option').map((o) => o.text())
-    expect(options).toContain('Customers')
-    expect(options).toContain('Home')
+    // Canvas: one .sw-node per nav item + the distinct home node + arrows.
+    expect(wrapper.findAll('[data-testid="sw-node"]')).toHaveLength(2)
+    const home = wrapper.find('[data-testid="sw-home"]')
+    expect(home.exists()).toBe(true)
+    expect(home.classes()).toContain('home')
+    expect(wrapper.findAll('[data-testid="sw-arrow"]')).toHaveLength(2)
+
+    // Inspector idles until a node is selected.
+    expect(wrapper.find('[data-testid="sw-inspector"]').text()).toContain('Select a tile')
   })
 
-  it('adds an item and persists the new structure via SaveNav', async () => {
+  it('adds an item from the palette: a sw-node appears, selected, inspector opens on it', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Click the "Customers" form in the palette.
+    const customers = wrapper.findAll('[data-testid="palette-target"]')
+      .find((p) => p.text().includes('Customers'))!
+    await customers.trigger('click')
+    await flushPromises()
+
+    const nodes = wrapper.findAll('[data-testid="sw-node"]')
+    expect(nodes).toHaveLength(3)
+    const added = nodes.find((n) => n.text().includes('Customers'))!
+    expect(added.classes()).toContain('selected')
+    expect(wrapper.find('[data-testid="sw-inspector"]').text()).toContain('Customers')
+    expect(wrapper.find('[data-testid="shell-dirty"]').exists()).toBe(true)
+  })
+
+  it('inspector edits (label, icon, access rule) persist through Publish shell', async () => {
     const app = makeApp()
     const wrapper = mountView()
     await flushPromises()
 
-    // Pick a target + label, then add.
-    await wrapper.find('[data-testid="target-picker"]').setValue('frm_customers')
-    const labelInput = wrapper.find('[data-testid="new-item-label"]')
-    if (labelInput.exists()) await labelInput.setValue('Customers')
-    await wrapper.find('[data-testid="add-nav-item"]').trigger('click')
+    // Select the Orders node.
+    await wrapper.findAll('[data-testid="sw-node"]')[0].trigger('click')
     await flushPromises()
 
-    // Save the switchboard.
-    await wrapper.find('[data-testid="save-nav"]').trigger('click')
+    await wrapper.find('[data-testid="insp-label"]').setValue('Order Entry')
+    await wrapper.find('[data-testid="insp-icon"]').setValue('clipboard')
+    await wrapper.find('[data-testid="insp-visible-to"]').setValue('owner')
     await flushPromises()
 
-    expect(app.SaveNav).toHaveBeenCalled()
-    const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
-    // The persisted structure includes the newly added Customers item bound to
-    // the chosen form target.
-    expect(saved.length).toBe(3)
-    const added = saved.find((n) => n.target_id === 'frm_customers')
-    expect(added, 'new item bound to frm_customers persisted').toBeTruthy()
-    expect(added!.action_kind).toBe('open_form')
-  })
+    // The canvas reflects the rule immediately: restricted node + arrow label.
+    expect(wrapper.find('[data-testid="sw-canvas"]').text()).toContain('owner only')
 
-  it('reorders two items (move down) and persists the new sort_order via SaveNav', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
+    await wrapper.find('[data-testid="publish-shell"]').trigger('click')
     await flushPromises()
 
-    // Initial order: Orders (sort 0), Sales Report (sort 1).
-    let items = wrapper.findAll('[data-testid="nav-item"]')
-    expect(items[0].text()).toContain('Orders')
-    expect(items[1].text()).toContain('Sales Report')
-
-    // Move the first item ("Orders") down past "Sales Report".
-    await items[0].find('[data-testid="move-down"]').trigger('click')
-    await flushPromises()
-
-    // The visual order has flipped.
-    items = wrapper.findAll('[data-testid="nav-item"]')
-    expect(items[0].text()).toContain('Sales Report')
-    expect(items[1].text()).toContain('Orders')
-
-    // Persist and assert the saved sort_order reflects the new order.
-    await wrapper.find('[data-testid="save-nav"]').trigger('click')
-    await flushPromises()
-
-    expect(app.SaveNav).toHaveBeenCalled()
-    const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
-    const sales = saved.find((n) => n.target_id === 'rpt_sales')!
-    const orders = saved.find((n) => n.target_id === 'frm_orders')!
-    expect(sales.sort_order).toBe(0)
-    expect(orders.sort_order).toBe(1)
-  })
-
-  it('removes an item and persists the smaller, renumbered structure', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
-    await flushPromises()
-
-    // Remove the first item ("Orders").
-    await wrapper.findAll('[data-testid="nav-item"]')[0].find('[data-testid="remove-item"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.findAll('[data-testid="nav-item"]').length).toBe(1)
-
-    await wrapper.find('[data-testid="save-nav"]').trigger('click')
-    await flushPromises()
-    const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
-    expect(saved.find((n) => n.target_id === 'frm_orders')).toBeFalsy()
-    const remaining = saved.find((n) => n.target_id === 'rpt_sales')!
-    expect(remaining.sort_order).toBe(0)
-
-    // Round-trip the deletion through the (stateful) backing store: remount the
-    // view so it reloads via ListNav, and assert the removed item does NOT
-    // reappear. This is the regression guard — with a non-reconciling SaveNav
-    // (per-item upsert that never deletes), the removed row would survive and
-    // this assertion would fail.
-    const reloaded = mountView()
-    await flushPromises()
-    const reloadedItems = reloaded.findAll('[data-testid="nav-item"]')
-    expect(reloadedItems.length).toBe(1)
-    expect(reloadedItems[0].text()).toContain('Sales Report')
-    // The removed "Orders" item must not reappear in the persisted nav list.
-    expect(reloadedItems.some((i) => i.text().includes('Orders'))).toBe(false)
-  })
-
-  it('renames an item inline and persists the new label via SaveNav', async () => {
-    const app = makeApp()
-    const wrapper = mountView()
-    await flushPromises()
-
-    const first = wrapper.findAll('[data-testid="nav-item"]')[0]
-    await first.find('[data-testid="edit-item"]').trigger('click')
-    await flushPromises()
-    await wrapper.find('[data-testid="edit-item-label"]').setValue('Order Entry')
-    await wrapper.find('[data-testid="commit-edit"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Order Entry')
-
-    await wrapper.find('[data-testid="save-nav"]').trigger('click')
-    await flushPromises()
     const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
     const orders = saved.find((n) => n.target_id === 'frm_orders')!
     expect(orders.label).toBe('Order Entry')
+    expect(orders.icon).toBe('clipboard')
+    expect(orders.visible_to).toBe('owner')
+
+    // Round-trip through the stateful store: a remount reads the rule back.
+    const reloaded = mountView()
+    await flushPromises()
+    expect(reloaded.find('[data-testid="sw-canvas"]').text()).toContain('owner only')
+  })
+
+  it('removes an item via the inspector and Publish reconciles the deletion', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="sw-node"]')[0].trigger('click')
+    await wrapper.find('[data-testid="insp-remove"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="sw-node"]')).toHaveLength(1)
+
+    await wrapper.find('[data-testid="publish-shell"]').trigger('click')
+    await flushPromises()
+    const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
+    expect(saved.find((n) => n.target_id === 'frm_orders')).toBeFalsy()
+    expect(saved.find((n) => n.target_id === 'rpt_sales')!.sort_order).toBe(0)
+
+    // Deletion survives a reload through the stateful store (reconcile guard).
+    const reloaded = mountView()
+    await flushPromises()
+    const nodes = reloaded.findAll('[data-testid="sw-node"]')
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0].text()).toContain('Sales Report')
+  })
+
+  it('sort order edits in the inspector reorder the canvas and persist', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Move "Orders" (sort 0) to position 1.
+    await wrapper.findAll('[data-testid="sw-node"]')[0].trigger('click')
+    const sortInput = wrapper.find('[data-testid="insp-sort"]')
+    await sortInput.setValue('1')
+    await sortInput.trigger('change')
+    await flushPromises()
+
+    const nodes = wrapper.findAll('[data-testid="sw-node"]')
+    expect(nodes[0].text()).toContain('Sales Report')
+    expect(nodes[1].text()).toContain('Orders')
+
+    await wrapper.find('[data-testid="publish-shell"]').trigger('click')
+    await flushPromises()
+    const saved = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
+    expect(saved.find((n) => n.target_id === 'rpt_sales')!.sort_order).toBe(0)
+    expect(saved.find((n) => n.target_id === 'frm_orders')!.sort_order).toBe(1)
   })
 
   it('blocks adding a 9th item to one switchboard page (Access ≤8 constraint)', async () => {
-    // Eight existing root-level items already fill the page.
     const full: NavItem[] = Array.from({ length: 8 }, (_, i) => ({
       id: `nav_${i}`,
       parent_id: '',
@@ -273,25 +264,45 @@ describe('AppShellView Switchboard builder (P4.7 — Studio Mode)', () => {
       target_id: 'frm_orders',
       sort_order: i,
     }))
-    const app = makeApp({ nav: full })
+    makeApp({ nav: full })
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.findAll('[data-testid="nav-item"]').length).toBe(8)
+    expect(wrapper.findAll('[data-testid="sw-node"]')).toHaveLength(8)
 
-    // Attempt to add a 9th item to the same page.
-    await wrapper.find('[data-testid="target-picker"]').setValue('frm_customers')
-    await wrapper.find('[data-testid="add-nav-item"]').trigger('click')
+    const customers = wrapper.findAll('[data-testid="palette-target"]')
+      .find((p) => p.text().includes('Customers'))!
+    await customers.trigger('click')
     await flushPromises()
 
-    // Adding is blocked: still 8 items, and SaveNav not invoked with 9.
-    expect(wrapper.findAll('[data-testid="nav-item"]').length).toBe(8)
-    if (app.SaveNav.mock.calls.length) {
-      const last = app.SaveNav.mock.calls.at(-1)![0] as NavItem[]
-      expect(last.filter((n) => n.parent_id === '').length).toBeLessThanOrEqual(8)
-    }
-    // A limit message / disabled affordance is surfaced.
+    expect(wrapper.findAll('[data-testid="sw-node"]')).toHaveLength(8)
     expect(wrapper.find('[data-testid="nav-limit"]').exists()).toBe(true)
+  })
+
+  it('worker preview hides owner-only items without flipping the mode', async () => {
+    makeApp({
+      nav: [
+        { id: 'n1', parent_id: '', label: 'Orders', action_kind: 'open_form', target_id: 'frm_orders', sort_order: 0 },
+        { id: 'n2', parent_id: '', label: 'Owner Report', action_kind: 'open_report', target_id: 'rpt_sales', sort_order: 1, visible_to: 'owner' },
+      ],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="preview-worker"]').trigger('click')
+    await flushPromises()
+
+    const preview = wrapper.find('[data-testid="worker-preview"]')
+    expect(preview.exists()).toBe(true)
+    const buttons = preview.findAll('[data-testid="preview-button"]')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].text()).toContain('Orders')
+    expect(preview.text()).not.toContain('Owner Report')
+
+    // Exit returns to the canvas.
+    await wrapper.find('[data-testid="preview-worker"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sw-canvas"]').exists()).toBe(true)
   })
 })
 
@@ -494,5 +505,29 @@ describe('AppShellView Switchboard run_macro dispatch (P5.4 — App Mode)', () =
     // The set_filter intent must be reflected in the pushed route query.
     const matched = pushed.find((p) => JSON.stringify(p).includes('total > 50'))
     expect(matched, 'expected set_filter applied as a route query').toBeTruthy()
+  })
+})
+
+describe('AppShellView access rules (W4 — App Mode)', () => {
+  beforeEach(() => {
+    pushed.length = 0
+    routerMock.push.mockClear()
+    useAppMode().setMode('app')
+  })
+
+  it('hides owner-only items from the runtime switchboard', async () => {
+    makeApp({
+      nav: [
+        { id: 'n1', parent_id: '', label: 'Orders', action_kind: 'open_form', target_id: 'frm_orders', sort_order: 0 },
+        { id: 'n2', parent_id: '', label: 'Owner Report', action_kind: 'open_report', target_id: 'rpt_sales', sort_order: 1, visible_to: 'owner' },
+      ],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const buttons = wrapper.findAll('[data-testid="switchboard-button"]')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].text()).toContain('Orders')
+    expect(wrapper.text()).not.toContain('Owner Report')
   })
 })

@@ -12,6 +12,18 @@ export interface NavItem {
   action_kind: string
   target_id: string
   sort_order: number
+  // W4: per-item icon (SchoolHouse icon name; empty = derive from action_kind)
+  // and access rule ('' = everyone, 'owner' = hidden in the locked App Mode).
+  icon?: string
+  visible_to?: string
+}
+
+// visibleInAppMode applies the W4 access rule: items marked visible_to "owner"
+// are builder-only and must be hidden from the locked App Mode shell — both
+// the top tab strip and the runtime switchboard filter through this single
+// helper so they cannot drift.
+export function visibleInAppMode(item: NavItem): boolean {
+  return (item.visible_to ?? '') !== 'owner'
 }
 
 // destinationFor maps a nav item to a vue-router destination, or null when the
@@ -34,9 +46,11 @@ export function destinationFor(item: NavItem): Record<string, unknown> | null {
   }
 }
 
-// iconFor picks a top-bar tab icon for a nav item's action kind. Names match the
-// SchoolHouse icon set (icons.ts).
+// iconFor picks an icon for a nav item: the builder-assigned per-item icon
+// (W4 inspector) wins; otherwise it falls back to the action kind's default.
+// Names match the SchoolHouse icon set (icons.ts).
 export function iconFor(item: NavItem): string {
+  if (item.icon) return item.icon
   switch (item.action_kind) {
     case 'open_form':
       return 'form'

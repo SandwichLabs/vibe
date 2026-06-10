@@ -1145,6 +1145,8 @@ export namespace schema {
 	    action_kind: string;
 	    target_id: string;
 	    sort_order: number;
+	    icon: string;
+	    visible_to: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new NavItem(source);
@@ -1158,6 +1160,8 @@ export namespace schema {
 	        this.action_kind = source["action_kind"];
 	        this.target_id = source["target_id"];
 	        this.sort_order = source["sort_order"];
+	        this.icon = source["icon"];
+	        this.visible_to = source["visible_to"];
 	    }
 	}
 	export class Relationship {

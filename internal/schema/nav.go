@@ -20,6 +20,15 @@ const (
 	NavRunMacro        = "run_macro"
 )
 
+// Audience values for NavItem.VisibleTo (W4 access rules). Empty means
+// everyone. "owner" hides the item from the locked App Mode shell — the
+// single-user v1 access rule; per-device/role matrices arrive with the
+// multi-user mesh (v1.1) as additional values of the same column.
+const (
+	VisibleToEveryone = ""
+	VisibleToOwner    = "owner"
+)
+
 // NavItem is a single switchboard menu entry.
 type NavItem struct {
 	ID         string `json:"id"`
@@ -28,6 +37,8 @@ type NavItem struct {
 	ActionKind string `json:"action_kind"` // open_form | open_report | open_page | open_switchboard | run_macro
 	TargetID   string `json:"target_id"`
 	SortOrder  int    `json:"sort_order"`
+	Icon       string `json:"icon"`       // SchoolHouse icon name; empty = derive from action_kind
+	VisibleTo  string `json:"visible_to"` // "" (everyone) | "owner" (hidden in App Mode)
 }
 
 // NavStore provides read/write access to switchboard nav items stored in the
@@ -42,13 +53,14 @@ func NewNavStore(db *sql.DB) *NavStore {
 }
 
 // navColumns is the canonical SELECT column list, in scan order.
-const navColumns = `id, parent_id, label, action_kind, target_id, sort_order`
+const navColumns = `id, parent_id, label, action_kind, target_id, sort_order, icon, visible_to`
 
 // scanNavItem scans a single row into a NavItem.
 func scanNavItem(rows *sql.Rows) (NavItem, error) {
 	var it NavItem
 	if err := rows.Scan(
 		&it.ID, &it.ParentID, &it.Label, &it.ActionKind, &it.TargetID, &it.SortOrder,
+		&it.Icon, &it.VisibleTo,
 	); err != nil {
 		return NavItem{}, fmt.Errorf("failed to scan nav item: %w", err)
 	}
@@ -59,15 +71,18 @@ func scanNavItem(rows *sql.Rows) (NavItem, error) {
 func (s *NavStore) SetNav(item NavItem) error {
 	_, err := s.db.Exec(
 		`INSERT INTO _vibe_nav (
-			id, parent_id, label, action_kind, target_id, sort_order
-		) VALUES (?, ?, ?, ?, ?, ?)
+			id, parent_id, label, action_kind, target_id, sort_order, icon, visible_to
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			parent_id   = excluded.parent_id,
 			label       = excluded.label,
 			action_kind = excluded.action_kind,
 			target_id   = excluded.target_id,
-			sort_order  = excluded.sort_order;`,
+			sort_order  = excluded.sort_order,
+			icon        = excluded.icon,
+			visible_to  = excluded.visible_to;`,
 		item.ID, item.ParentID, item.Label, item.ActionKind, item.TargetID, item.SortOrder,
+		item.Icon, item.VisibleTo,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert nav item %q: %w", item.ID, err)
@@ -129,15 +144,18 @@ func (s *NavStore) ReplaceNav(items []NavItem) (err error) {
 	for _, item := range items {
 		if _, err = tx.Exec(
 			`INSERT INTO _vibe_nav (
-				id, parent_id, label, action_kind, target_id, sort_order
-			) VALUES (?, ?, ?, ?, ?, ?)
+				id, parent_id, label, action_kind, target_id, sort_order, icon, visible_to
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
 				parent_id   = excluded.parent_id,
 				label       = excluded.label,
 				action_kind = excluded.action_kind,
 				target_id   = excluded.target_id,
-				sort_order  = excluded.sort_order;`,
+				sort_order  = excluded.sort_order,
+				icon        = excluded.icon,
+				visible_to  = excluded.visible_to;`,
 			item.ID, item.ParentID, item.Label, item.ActionKind, item.TargetID, item.SortOrder,
+			item.Icon, item.VisibleTo,
 		); err != nil {
 			return fmt.Errorf("failed to upsert nav item %q: %w", item.ID, err)
 		}

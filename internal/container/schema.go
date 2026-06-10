@@ -163,7 +163,9 @@ var schemaDDL = []string{
 		label       TEXT NOT NULL DEFAULT '',
 		action_kind TEXT NOT NULL DEFAULT '',
 		target_id   TEXT NOT NULL DEFAULT '',
-		sort_order  INTEGER NOT NULL DEFAULT 0
+		sort_order  INTEGER NOT NULL DEFAULT 0,
+		icon        TEXT NOT NULL DEFAULT '',
+		visible_to  TEXT NOT NULL DEFAULT ''
 	);`,
 
 	// _vibe_macros stores Access-style declarative macros (plan §5.1) as
@@ -203,6 +205,24 @@ var defaultMeta = map[string]string{
 	// is a per-.vibe setting.
 }
 
+// ensureColumn applies an additive ADD COLUMN migration if (and only if) the
+// column is missing, so re-running migrations on any file vintage is a no-op.
+func ensureColumn(tx *sql.Tx, table, column, ddl string) error {
+	var n int
+	if err := tx.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column,
+	).Scan(&n); err != nil {
+		return fmt.Errorf("failed to inspect %s.%s: %w", table, column, err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ddl); err != nil {
+		return fmt.Errorf("failed to add column %s.%s: %w", table, column, err)
+	}
+	return nil
+}
+
 // runMigrations creates all _vibe_* tables and seeds default metadata.
 func runMigrations(db *sql.DB) error {
 	tx, err := db.Begin()
@@ -214,6 +234,18 @@ func runMigrations(db *sql.DB) error {
 	for _, ddl := range schemaDDL {
 		if _, err := tx.Exec(ddl); err != nil {
 			return fmt.Errorf("failed to execute DDL: %w", err)
+		}
+	}
+
+	// Additive column migrations for tables that predate a column (CREATE TABLE
+	// IF NOT EXISTS does not reshape an existing table). W4: _vibe_nav gained
+	// per-item icons + access rules.
+	for _, m := range []struct{ table, column, ddl string }{
+		{"_vibe_nav", "icon", `ALTER TABLE _vibe_nav ADD COLUMN icon TEXT NOT NULL DEFAULT ''`},
+		{"_vibe_nav", "visible_to", `ALTER TABLE _vibe_nav ADD COLUMN visible_to TEXT NOT NULL DEFAULT ''`},
+	} {
+		if err := ensureColumn(tx, m.table, m.column, m.ddl); err != nil {
+			return err
 		}
 	}
 

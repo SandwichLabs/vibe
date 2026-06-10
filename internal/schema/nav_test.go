@@ -242,3 +242,56 @@ func TestNavMigrationNoClobber(t *testing.T) {
 	assert.Equal(t, "root_only", items[0].ID)
 	assert.Equal(t, "only_form", items[0].TargetID)
 }
+
+// TestNavStoreIconAndVisibleTo (W4): per-item icons and access rules round-trip
+// through SetNav, ReplaceNav, and a Save + reopen cycle, and the additive
+// migration keeps old rows readable with empty defaults.
+func TestNavStoreIconAndVisibleTo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nav-w4.vibe")
+
+	c, err := container.Create(path,
+		container.WithPassphrase(testPassphrase),
+		container.WithLogger(testLogger()),
+	)
+	require.NoError(t, err)
+
+	store := schema.NewNavStore(c.SQLiteDB())
+	require.NoError(t, store.SetNav(schema.NavItem{
+		ID: "n1", Label: "Open Jobs Report", ActionKind: schema.NavOpenReport,
+		TargetID: "open_jobs", SortOrder: 0,
+		Icon: "barChart", VisibleTo: schema.VisibleToOwner,
+	}))
+	require.NoError(t, store.SetNav(schema.NavItem{
+		ID: "n2", Label: "New Service Call", ActionKind: schema.NavOpenForm,
+		TargetID: "service_call", SortOrder: 1,
+	}))
+
+	items, err := store.ListNav()
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	assert.Equal(t, "barChart", items[0].Icon)
+	assert.Equal(t, schema.VisibleToOwner, items[0].VisibleTo)
+	assert.Equal(t, schema.VisibleToEveryone, items[1].VisibleTo)
+
+	// ReplaceNav carries the fields too.
+	items[1].VisibleTo = schema.VisibleToOwner
+	items[1].Icon = "users"
+	require.NoError(t, store.ReplaceNav(items))
+
+	// Survives Save + reopen.
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+	c2, err := container.Open(path,
+		container.WithPassphrase(testPassphrase),
+		container.WithLogger(testLogger()),
+	)
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	got, err := schema.NewNavStore(c2.SQLiteDB()).ListNav()
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "users", got[1].Icon)
+	assert.Equal(t, schema.VisibleToOwner, got[1].VisibleTo)
+}

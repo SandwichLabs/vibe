@@ -90,3 +90,30 @@ describe('AppShell App-Mode tab strip (W1)', () => {
     expect(wrapper.find('[data-testid="app-tabstrip"]').exists()).toBe(false)
   })
 })
+
+describe('AppShell App-Mode tab strip access rules (W4)', () => {
+  beforeEach(async () => {
+    vi.useRealTimers()
+    setCachedMode('studio')
+    if (router.currentRoute.value.name !== 'dashboard') {
+      await router.push('/')
+      await router.isReady()
+    }
+  })
+
+  it('owner-only nav items never surface as tabs in the locked shell', async () => {
+    const { app } = makeApp('app')
+    app.ListNav = vi.fn(async () => [
+      { id: 'n0', parent_id: '', label: 'Today', action_kind: 'open_report', target_id: 'rep_today', sort_order: 0 },
+      { id: 'n1', parent_id: '', label: 'Owner Console', action_kind: 'open_page', target_id: 'pg_admin', sort_order: 1, visible_to: 'owner' },
+    ])
+    const wrapper = mountShell()
+    await flushPromises()
+
+    const tabs = wrapper.findAll('[data-testid="app-tab"]')
+    // Home + the one visible item; the owner-only item is filtered out.
+    expect(tabs).toHaveLength(2)
+    expect(wrapper.text()).toContain('Today')
+    expect(wrapper.text()).not.toContain('Owner Console')
+  })
+})

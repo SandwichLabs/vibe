@@ -5,7 +5,7 @@ import { setCachedMode } from '../router/index'
 import { useAppMode } from '../composables/useAppMode'
 import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
-import { destinationFor, iconFor, type NavItem } from '../lib/nav'
+import { destinationFor, iconFor, visibleInAppMode, type NavItem } from '../lib/nav'
 
 // Agent wizard panel (W0) — a slide-in chat available across Studio Mode screens.
 const agentOpen = ref(false)
@@ -50,6 +50,8 @@ async function loadAppTabs() {
     const items = ((await window.go.main.App.ListNav()) || []) as NavItem[]
     appTabs.value = items
       .filter((n) => n.parent_id === '')
+      // W4 access rules: owner-only items never surface in the locked shell.
+      .filter(visibleInAppMode)
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
   } catch {

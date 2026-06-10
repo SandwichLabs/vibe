@@ -276,6 +276,42 @@ func TestReadOnly(t *testing.T) {
 	assert.Error(t, c2.SetMeta("key", "value"))
 }
 
+// TestMigrationAddsNavAccessColumns (W4): a file whose _vibe_nav predates the
+// icon/visible_to columns gains them on open via the additive ALTER migration,
+// with existing rows defaulting to visible-to-everyone.
+func TestMigrationAddsNavAccessColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old-nav.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	// Regress _vibe_nav to its pre-W4 shape with a row, simulating an old file.
+	_, err = c.SQLiteDB().Exec(`DROP TABLE _vibe_nav;`)
+	require.NoError(t, err)
+	_, err = c.SQLiteDB().Exec(`CREATE TABLE _vibe_nav (
+		id TEXT PRIMARY KEY, parent_id TEXT NOT NULL DEFAULT '',
+		label TEXT NOT NULL DEFAULT '', action_kind TEXT NOT NULL DEFAULT '',
+		target_id TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0);`)
+	require.NoError(t, err)
+	_, err = c.SQLiteDB().Exec(
+		`INSERT INTO _vibe_nav (id, label, action_kind, target_id) VALUES ('old1', 'Orders', 'open_form', 'f1');`)
+	require.NoError(t, err)
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	var label, icon, visibleTo string
+	require.NoError(t, c2.SQLiteDB().QueryRow(
+		`SELECT label, icon, visible_to FROM _vibe_nav WHERE id = 'old1'`,
+	).Scan(&label, &icon, &visibleTo))
+	assert.Equal(t, "Orders", label)
+	assert.Equal(t, "", icon)
+	assert.Equal(t, "", visibleTo)
+}
+
 // TestOpenBackfillsAutoNumberPKs: files created before the sequence-backed-PK
 // fix have bare integer PRIMARY KEYs; opening such a file must retrofit a
 // sequence DEFAULT (seeded past existing rows) so id-less form inserts work.
