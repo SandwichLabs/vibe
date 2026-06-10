@@ -55,6 +55,8 @@ export function DropTable(arg1:string):Promise<void>;
 
 export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
 
+export function ExportQueryResults(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function ExportQueryXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function ExportReportHTML(arg1:string,arg2:string):Promise<string>;
@@ -130,6 +132,8 @@ export function ListQueries():Promise<Array<main.QuerySummary>>;
 export function ListRelationships():Promise<Array<schema.Relationship>>;
 
 export function ListReports():Promise<Array<reports.ReportSummary>>;
+
+export function ListTableStats():Promise<Array<main.TableStat>>;
 
 export function ListTables():Promise<Array<string>>;
 

@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+// QueryEditorView — the Query Explorer (parity W5; mockup #8 hifi-power).
+//
+// Left rail: a live schema tree (tables with row counts; expanding a table
+// lazily describes its columns with PK/FK badges) above the kept saved-query
+// list. Right: the SQL editor over a result bar carrying run-status metadata
+// (success badge, row count, duration, DuckDB engine label, last-run time)
+// and the result grid. The subhead exposes Save, CSV/Parquet export (DuckDB
+// COPY via ExportQueryResults), an Ask-agent jump (opens the W0 panel), and
+// Run.
+import { ref, computed, onMounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
 const sqlText = ref('')
+const savedSQL = ref('')
 const result = ref<QueryResult | null>(null)
 const loading = ref(true)
 const running = ref(false)
@@ -13,9 +23,28 @@ const error = ref('')
 const showSaveModal = ref(false)
 const saveTitle = ref('')
 const errorMessage = ref('')
+const statusMessage = ref('')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const hoveredId = ref<string | null>(null)
+
+// Run-status metadata (W5): success/error badge + wall-clock of the last run.
+const lastRunAt = ref('')
+const lastRunOk = ref<boolean | null>(null)
+
+// Schema tree state (W5).
+interface TableStat { name: string; rows: number }
+interface TreeColumn { name: string; type: string; pk: boolean; fk: boolean }
+const tableStats = ref<TableStat[]>([])
+const expandedTable = ref<string | null>(null)
+const columnsByTable = ref<Record<string, TreeColumn[]>>({})
+const fkColumns = ref<Set<string>>(new Set())
+
+const dirty = computed(() => sqlText.value.trim() !== '' && sqlText.value !== savedSQL.value)
+const currentTitle = computed(() => {
+  const q = queries.value.find((x) => x.id === selectedId.value)
+  return q?.title || 'untitled_query.sql'
+})
 
 async function loadQueries() {
   loading.value = true
@@ -25,11 +54,68 @@ async function loadQueries() {
   loading.value = false
 }
 
+async function loadSchemaTree() {
+  try {
+    tableStats.value = (await window.go.main.App.ListTableStats()) || []
+  } catch {
+    tableStats.value = []
+  }
+  try {
+    const rels = (await window.go.main.App.ListRelationships()) || []
+    fkColumns.value = new Set(rels.map((r: any) => `${r.child_table}.${r.child_column}`.toLowerCase()))
+  } catch {
+    fkColumns.value = new Set()
+  }
+}
+
+// toggleTable expands/collapses a tree node, lazily describing its columns
+// (real PK flags come from the backend; FK membership from relationships).
+async function toggleTable(name: string) {
+  if (expandedTable.value === name) {
+    expandedTable.value = null
+    return
+  }
+  expandedTable.value = name
+  if (!columnsByTable.value[name]) {
+    try {
+      const info = await window.go.main.App.DescribeTable(name)
+      columnsByTable.value[name] = (info?.columns ?? []).map((c: any) => ({
+        name: c.name,
+        type: friendlyColType(c.type),
+        pk: Boolean(c.pk),
+        fk: fkColumns.value.has(`${name}.${c.name}`.toLowerCase()),
+      }))
+    } catch (e: any) {
+      errorMessage.value = 'Failed to describe table: ' + (e.message || e)
+    }
+  }
+}
+
+// friendlyColType compacts DuckDB type names for the narrow tree rail.
+function friendlyColType(t: string): string {
+  const u = (t || '').toUpperCase()
+  if (u.startsWith('VARCHAR') || u === 'TEXT') return 'text'
+  if (u === 'BIGINT' || u === 'INTEGER' || u === 'SMALLINT') return 'int'
+  if (u === 'DOUBLE' || u === 'FLOAT' || u === 'REAL') return 'float'
+  if (u.startsWith('DECIMAL') || u.startsWith('NUMERIC')) return 'decimal'
+  if (u.startsWith('TIMESTAMP')) return 'timestamp'
+  if (u === 'DATE') return 'date'
+  if (u === 'BOOLEAN') return 'bool'
+  return t.toLowerCase()
+}
+
+// insertTableQuery seeds the editor with a starter SELECT for a tree table
+// (double-click affordance).
+function insertTableQuery(name: string) {
+  sqlText.value = `SELECT * FROM "${name}" LIMIT 100`
+}
+
 async function selectQuery(id: string) {
   selectedId.value = id
   try {
     const q = await window.go.main.App.GetQuery(id)
     sqlText.value = q.sql
+    savedSQL.value = q.sql
     saveTitle.value = q.title
   } catch (e: any) {
     error.value = e.message || String(e)
@@ -43,9 +129,12 @@ async function runQuery() {
   result.value = null
   try {
     result.value = await window.go.main.App.ExecuteQuery(sqlText.value)
+    lastRunOk.value = true
   } catch (e: any) {
     error.value = e.message || String(e)
+    lastRunOk.value = false
   }
+  lastRunAt.value = new Date().toLocaleTimeString()
   running.value = false
 }
 
@@ -53,11 +142,30 @@ async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
     await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '')
+    savedSQL.value = sqlText.value
     showSaveModal.value = false
     await loadQueries()
   } catch (e: any) {
     errorMessage.value = 'Save failed: ' + (e.message || e)
   }
+}
+
+// exportResults re-runs the current SQL server-side through DuckDB COPY and
+// writes CSV/Parquet to a user-picked path (empty dst = native save dialog).
+async function exportResults(format: 'csv' | 'parquet') {
+  if (!sqlText.value.trim()) return
+  try {
+    const path = await window.go.main.App.ExportQueryResults(sqlText.value, format, '')
+    if (path) statusMessage.value = `Exported ${format.toUpperCase()} → ${path}`
+  } catch (e: any) {
+    errorMessage.value = 'Export failed: ' + (e.message || e)
+  }
+}
+
+// askAgent opens the W0 wizard panel (AppShell owns it; this event is the
+// cross-component trigger) so the user can ask about the query they're writing.
+function askAgent() {
+  window.dispatchEvent(new CustomEvent('vibe:open-agent'))
 }
 
 function deleteQuery(id: string) {
@@ -75,6 +183,7 @@ async function confirmDeleteQuery() {
     if (selectedId.value === id) {
       selectedId.value = null
       sqlText.value = ''
+      savedSQL.value = ''
     }
     await loadQueries()
   } catch (e: any) {
@@ -85,9 +194,12 @@ async function confirmDeleteQuery() {
 function newQuery() {
   selectedId.value = null
   sqlText.value = ''
+  savedSQL.value = ''
   result.value = null
   error.value = ''
   saveTitle.value = ''
+  lastRunOk.value = null
+  lastRunAt.value = ''
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -97,77 +209,147 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(loadQueries)
+onMounted(() => {
+  loadQueries()
+  loadSchemaTree()
+})
 
 watch(errorMessage, (msg) => {
-  if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
+  if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
+})
+watch(statusMessage, (msg) => {
+  if (msg) setTimeout(() => { statusMessage.value = '' }, 4000)
 })
 </script>
 
 <template>
-  <div class="row" style="height: 100%; gap: 0; align-items: stretch;">
-    <!-- Query list -->
-    <div class="col" style="width: 224px; gap: 0; border-right: var(--sh-border); background: var(--sh-paper-2);">
-      <div class="row" style="justify-content: space-between; padding: 12px 16px; border-bottom: var(--sh-border);">
-        <h2 class="sh-label" style="margin: 0;">Queries</h2>
-        <button @click="newQuery" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
-      </div>
-      <div style="flex: 1; overflow: auto;">
-        <div v-if="loading" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Loading…</div>
-        <div v-else-if="queries.length === 0" class="sh-mono" style="padding: 16px; color: var(--sh-graphite); text-align: center;">No saved queries</div>
-        <div
-          v-for="q in queries"
-          :key="q.id"
-          @click="selectQuery(q.id)"
-          @mouseenter="hoveredId = q.id"
-          @mouseleave="hoveredId = null"
-          class="row"
-          :style="[
-            'justify-content: space-between; padding: 8px 16px; cursor: pointer; border-bottom: 1px solid rgba(31,35,48,0.12); font-size: 14px;',
-            selectedId === q.id ? 'background: var(--sh-teal-8); box-shadow: inset 3px 0 0 var(--sh-teal);' : (hoveredId === q.id ? 'background: rgba(31,35,48,0.04);' : '')
-          ]"
-        >
-          <div style="min-width: 0;">
-            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">{{ q.title }}</div>
-          </div>
-          <button v-show="hoveredId === q.id" @click.stop="deleteQuery(q.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+  <div class="col" style="height: 100%; gap: 0;">
+    <!-- Subhead: title, dirty badge, save/export/agent/run actions -->
+    <div class="page-subhead" style="padding: 12px 24px;">
+      <div>
+        <div class="crumb">Studio <span class="sep">/</span> Query Explorer</div>
+        <div class="row" style="gap: 10px; margin-top: 4px;">
+          <h1 style="font-size: 22px; margin: 0; font-family: var(--sh-font-mono);">{{ currentTitle }}</h1>
+          <span v-if="dirty" class="badge badge--warn" data-testid="query-dirty">Unsaved</span>
         </div>
       </div>
+      <span class="spacer"></span>
+      <button @click="saveTitle = saveTitle || currentTitle.replace('.sql',''), showSaveModal = true" class="btn btn-sm">
+        <Icon name="save" :size="14" /> Save query
+      </button>
+      <button
+        class="btn btn-sm"
+        data-testid="export-csv"
+        :disabled="!sqlText.trim()"
+        @click="exportResults('csv')"
+      ><Icon name="download" :size="14" /> CSV</button>
+      <button
+        class="btn btn-sm"
+        data-testid="export-parquet"
+        :disabled="!sqlText.trim()"
+        @click="exportResults('parquet')"
+      ><Icon name="download" :size="14" /> Parquet</button>
+      <button class="btn btn-ghost btn-sm" data-testid="ask-agent" @click="askAgent">
+        <Icon name="sparkle" :size="14" /> Ask agent
+      </button>
+      <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm" data-testid="run-query">
+        <Icon name="play" :size="14" /> {{ running ? 'Running…' : 'Run · Ctrl+Enter' }}
+      </button>
     </div>
 
-    <!-- Editor area -->
-    <div class="col" style="flex: 1; gap: 0; min-width: 0;">
-      <!-- Toolbar -->
-      <div class="page-subhead" style="padding: 12px 24px;">
-        <span class="sh-label" style="margin: 0;">Query Explorer</span>
-        <span class="spacer"></span>
-        <button @click="showSaveModal = true" class="btn btn-sm"><Icon name="save" :size="14" /> Save</button>
-        <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm">
-          <Icon name="play" :size="14" /> {{ running ? 'Running…' : 'Run · Ctrl+Enter' }}
-        </button>
-      </div>
+    <div class="row" style="flex: 1; gap: 0; align-items: stretch; min-height: 0;">
+      <!-- LEFT RAIL — schema tree + saved queries -->
+      <div class="col rail">
+        <div class="rail-label">Tables · DuckDB</div>
+        <div class="schema-tree" data-testid="schema-tree">
+          <template v-for="t in tableStats" :key="t.name">
+            <div
+              class="table-name"
+              :class="{ on: expandedTable === t.name }"
+              data-testid="tree-table"
+              :title="'Double-click to query ' + t.name"
+              @click="toggleTable(t.name)"
+              @dblclick="insertTableQuery(t.name)"
+            >
+              <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <Icon :name="expandedTable === t.name ? 'chevronDown' : 'chevronRight'" :size="12" />
+                {{ t.name }}
+              </span>
+              <span class="count" data-testid="tree-count">{{ t.rows }}</span>
+            </div>
+            <template v-if="expandedTable === t.name">
+              <div
+                v-for="c in columnsByTable[t.name] ?? []"
+                :key="c.name"
+                class="col"
+                data-testid="tree-col"
+              >
+                <span style="display: inline-flex; align-items: center; gap: 5px;">
+                  <Icon v-if="c.pk" name="key" :size="11" style="color: var(--sh-marigold);" />
+                  <Icon v-else-if="c.fk" name="link" :size="11" style="color: var(--sh-teal);" />
+                  {{ c.name }}
+                </span>
+                <span class="ct" :class="{ pk: c.pk, fk: c.fk }">
+                  {{ c.pk ? 'PK · ' : c.fk ? 'FK · ' : '' }}{{ c.type }}
+                </span>
+              </div>
+            </template>
+          </template>
+          <p v-if="tableStats.length === 0" class="sh-mono rail-empty">No tables yet</p>
+        </div>
 
-      <!-- SQL editor -->
-      <div class="editor" style="border-bottom: var(--sh-border);">
-        <textarea
-          v-model="sqlText"
-          @keydown="handleKeydown"
-          style="width: 100%; height: 160px; resize: none; outline: none; background: var(--sh-ink); color: var(--sh-paper); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
-          placeholder="Enter SQL query…"
-          spellcheck="false"
-        ></textarea>
-      </div>
-
-      <!-- Results -->
-      <div style="flex: 1; overflow: auto; min-height: 0;">
-        <div v-if="error" style="padding: 16px; font-size: 14px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
-        <div v-else-if="running" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Running query…</div>
-        <div v-else-if="result" class="col" style="gap: 0; height: 100%;">
-          <div class="result-bar">
-            <span><span class="big ok">{{ result.row_count }}</span> rows</span>
-            <span><span class="big">{{ result.duration }}</span></span>
+        <div class="rail-divider"></div>
+        <div class="row" style="justify-content: space-between; align-items: center;">
+          <div class="rail-label" style="margin: 0;">Saved queries</div>
+          <button @click="newQuery" class="btn btn-ghost btn-sm" title="New query"><Icon name="plus" :size="14" /></button>
+        </div>
+        <div style="flex: 1; overflow: auto; min-height: 0;">
+          <div v-if="loading" class="sh-mono rail-empty">Loading…</div>
+          <div v-else-if="queries.length === 0" class="sh-mono rail-empty">No saved queries</div>
+          <div
+            v-for="q in queries"
+            :key="q.id"
+            data-testid="saved-query"
+            @click="selectQuery(q.id)"
+            @mouseenter="hoveredId = q.id"
+            @mouseleave="hoveredId = null"
+            class="row saved-row"
+            :class="{ on: selectedId === q.id }"
+          >
+            <div style="min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">{{ q.title }}</div>
+            <button v-show="hoveredId === q.id" @click.stop="deleteQuery(q.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
           </div>
-          <div style="flex: 1; overflow: auto;">
+        </div>
+      </div>
+
+      <!-- EDITOR + RESULTS -->
+      <div class="col" style="flex: 1; gap: 0; min-width: 0;">
+        <div class="editor" style="border-bottom: var(--sh-border);">
+          <textarea
+            v-model="sqlText"
+            @keydown="handleKeydown"
+            style="width: 100%; height: 180px; resize: none; outline: none; background: var(--sh-ink); color: var(--sh-paper); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
+            placeholder="Enter SQL query…"
+            spellcheck="false"
+            data-testid="sql-input"
+          ></textarea>
+        </div>
+
+        <!-- Run-status metadata bar (W5) -->
+        <div v-if="lastRunOk !== null" class="result-bar" data-testid="run-meta">
+          <span v-if="lastRunOk" class="badge badge--success" data-testid="run-badge"><span class="dot"></span> Complete</span>
+          <span v-else class="badge badge--error" data-testid="run-badge"><span class="dot"></span> Error</span>
+          <span v-if="result"><span class="big ok">{{ result.row_count }}</span> rows</span>
+          <span v-if="result"><span class="big">{{ result.duration }}</span></span>
+          <span data-testid="run-engine"><Icon name="zap" :size="11" style="color: var(--sh-success); vertical-align: middle;" /> DuckDB</span>
+          <span class="spacer"></span>
+          <span data-testid="run-last">Last run · {{ lastRunAt }}</span>
+        </div>
+
+        <div style="flex: 1; overflow: auto; min-height: 0;">
+          <div v-if="error" style="padding: 16px; font-size: 14px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
+          <div v-else-if="running" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Running query…</div>
+          <div v-else-if="result" style="overflow: auto; height: 100%;">
             <table class="table">
               <thead>
                 <tr>
@@ -181,11 +363,11 @@ watch(errorMessage, (msg) => {
               </tbody>
             </table>
           </div>
-        </div>
-        <div v-else class="empty-hero">
-          <div class="glyph"><Icon name="terminal" :size="48" /></div>
-          <h2>Write a query, press Run</h2>
-          <p class="lead">Queries run on the embedded DuckDB engine — analytics and CRUD alike.</p>
+          <div v-else class="empty-hero">
+            <div class="glyph"><Icon name="terminal" :size="48" /></div>
+            <h2>Write a query, press Run</h2>
+            <p class="lead">Queries run on the embedded DuckDB engine — analytics and CRUD alike.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -210,8 +392,70 @@ watch(errorMessage, (msg) => {
       @cancel="showConfirmDelete = false; pendingDeleteId = null"
     />
 
-    <div v-if="errorMessage" class="error-toast">
-      {{ errorMessage }}
-    </div>
+    <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>
+    <div v-if="statusMessage" class="status-toast" data-testid="query-status">{{ statusMessage }}</div>
   </div>
 </template>
+
+<style scoped>
+.rail {
+  width: 240px;
+  flex: none;
+  gap: 8px;
+  border-right: var(--sh-border);
+  background: var(--sh-paper-2);
+  padding: 14px 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.rail-label {
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sh-graphite);
+}
+.rail-empty {
+  padding: 8px 10px;
+  color: var(--sh-graphite);
+  font-size: 12px;
+}
+/* The shipped .schema-tree .col rows collide with the global `.col`
+   (flex-column) utility — force the row direction back. */
+.schema-tree :deep(.col) {
+  flex-direction: row;
+  align-items: center;
+}
+.rail-divider {
+  border-top: 1.5px dashed rgba(31, 35, 48, 0.25);
+  margin: 10px 0 4px;
+}
+.saved-row {
+  justify-content: space-between;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: var(--sh-radius-sm);
+  font-size: 13px;
+}
+.saved-row:hover { background: rgba(31, 35, 48, 0.05); }
+.saved-row.on {
+  background: var(--sh-surface);
+  border: 1.5px solid var(--sh-ink);
+  box-shadow: 1px 1px 0 0 var(--sh-ink);
+}
+.status-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--sh-teal);
+  color: var(--sh-paper);
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 1000;
+  max-width: 480px;
+}
+</style>

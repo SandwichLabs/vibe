@@ -1409,29 +1409,132 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
-	rows, err := db.Query(
-		"SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END AS not_null FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
-		name)
+	// Shared introspection (internal/schema): fills real PRIMARY KEY membership
+	// from duckdb_constraints() — the previous inline query always reported
+	// PK=false, leaving the schema tree / ER diagram to guess by column name.
+	cols, err := schema.TableColumns(db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe table: %w", err)
 	}
-	defer rows.Close()
-
 	info := &TableInfo{Name: name}
-	for rows.Next() {
-		var colName, colType string
-		var notNull bool
-		if err := rows.Scan(&colName, &colType, &notNull); err != nil {
-			return nil, fmt.Errorf("failed to scan column: %w", err)
-		}
+	for _, c := range cols {
 		info.Columns = append(info.Columns, ColumnInfo{
-			Name:    colName,
-			Type:    colType,
-			NotNull: notNull,
-			PK:      false,
+			Name:    c.Name,
+			Type:    c.Type,
+			NotNull: c.NotNull,
+			PK:      c.PK,
 		})
 	}
-	return info, rows.Err()
+	return info, nil
+}
+
+// TableStat is one entry in the Query Explorer's schema tree: a table plus its
+// live row count (W5).
+type TableStat struct {
+	Name string `json:"name"`
+	Rows int64  `json:"rows"`
+}
+
+// ListTableStats returns every user table with its row count, for the Query
+// Explorer schema tree (W5).
+func (a *App) ListTableStats() ([]TableStat, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+	rows, err := db.Query(
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tables: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("failed to scan table name: %w", err)
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate tables: %w", err)
+	}
+
+	out := make([]TableStat, 0, len(names))
+	for _, n := range names {
+		var count int64
+		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", n)).Scan(&count); err != nil {
+			return nil, fmt.Errorf("failed to count rows of %q: %w", n, err)
+		}
+		out = append(out, TableStat{Name: n, Rows: count})
+	}
+	return out, nil
+}
+
+// ExportQueryResults writes the result of a SQL query to CSV or Parquet via
+// DuckDB COPY (W5). format is "csv" or "parquet". dst is the destination path;
+// when empty, a native save dialog is shown (the UI path) — a non-empty dst
+// writes directly (scriptable/testable, mirroring ExportTableXLSX). Returns
+// the written path, or "" if the dialog was cancelled.
+func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return "", fmt.Errorf("no file open")
+	}
+	if strings.TrimSpace(sqlStr) == "" {
+		return "", fmt.Errorf("no query to export")
+	}
+
+	var ext, copyOpts string
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "csv":
+		ext, copyOpts = ".csv", "FORMAT csv, HEADER true"
+	case "parquet":
+		ext, copyOpts = ".parquet", "FORMAT parquet"
+	default:
+		return "", fmt.Errorf("unsupported export format %q (want csv or parquet)", format)
+	}
+
+	if dst == "" {
+		path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+			Title:           "Export query results",
+			DefaultFilename: "query" + ext,
+			Filters: []runtime.FileFilter{
+				{DisplayName: strings.ToUpper(format) + " Files (*" + ext + ")", Pattern: "*" + ext},
+			},
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to open save dialog: %w", err)
+		}
+		if path == "" {
+			return "", nil
+		}
+		dst = path
+	}
+	if !strings.HasSuffix(strings.ToLower(dst), ext) {
+		dst += ext
+	}
+
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return "", fmt.Errorf("DuckDB not available")
+	}
+	copySQL := fmt.Sprintf("COPY (%s) TO '%s' WITH (%s)",
+		sqlStr, strings.ReplaceAll(dst, "'", "''"), copyOpts)
+	if _, err := ddb.Exec(copySQL); err != nil {
+		return "", fmt.Errorf("failed to export query results: %w", err)
+	}
+	a.logger.Info("exported query results", "format", format, "path", dst)
+	return dst, nil
 }
 
 // TableData holds paginated table data.

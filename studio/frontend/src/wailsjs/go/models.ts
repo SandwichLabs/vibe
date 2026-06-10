@@ -732,6 +732,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TableStat {
+	    name: string;
+	    rows: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableStat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.rows = source["rows"];
+	    }
+	}
 	export class TemplateInfo {
 	    name: string;
 	    description: string;

@@ -98,6 +98,10 @@ export function ExecuteQuery(arg1) {
   return window['go']['main']['App']['ExecuteQuery'](arg1);
 }
 
+export function ExportQueryResults(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportQueryResults'](arg1, arg2, arg3);
+}
+
 export function ExportQueryXLSX(arg1, arg2) {
   return window['go']['main']['App']['ExportQueryXLSX'](arg1, arg2);
 }
@@ -248,6 +252,10 @@ export function ListRelationships() {
 
 export function ListReports() {
   return window['go']['main']['App']['ListReports']();
+}
+
+export function ListTableStats() {
+  return window['go']['main']['App']['ListTableStats']();
 }
 
 export function ListTables() {

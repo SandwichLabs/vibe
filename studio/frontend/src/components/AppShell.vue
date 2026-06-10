@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { setCachedMode } from '../router/index'
 import { useAppMode } from '../composables/useAppMode'
@@ -184,10 +184,20 @@ async function closeFile() {
   }
 }
 
+// Views (e.g. the Query Explorer's "Ask agent" button) open the wizard panel
+// via this window event — the shell owns the panel, so this is the one
+// cross-component trigger.
+function openAgentFromEvent() {
+  if (!isAppMode.value) agentOpen.value = true
+}
+
 onMounted(() => {
   loadFileInfo()
   loadAppConfig()
+  window.addEventListener('vibe:open-agent', openAgentFromEvent)
 })
+
+onUnmounted(() => window.removeEventListener('vibe:open-agent', openAgentFromEvent))
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
