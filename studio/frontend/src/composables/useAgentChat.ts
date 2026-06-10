@@ -78,8 +78,13 @@ export function useAgentChat() {
       .map((m) => ({ role: m.role === 'agent' ? 'agent' : 'user', text: m.text }))
 
     messages.value.push({ role: 'user', text: msg, steps: [] })
-    const agentMsg: ChatMessage = { role: 'agent', text: '', steps: [], streaming: true }
-    messages.value.push(agentMsg)
+    messages.value.push({ role: 'agent', text: '', steps: [], streaming: true })
+    // Grab the agent message back THROUGH the reactive array so the stream
+    // handler's mutations (text deltas, tool steps) trigger reactivity. Holding
+    // the raw pre-push object would update state silently — watchers (e.g. the
+    // Schema Builder's propose_schema watcher) would only fire on the next
+    // unrelated reactive write.
+    const agentMsg = messages.value[messages.value.length - 1]
     scroll()
 
     const turnId = nextTurnId()

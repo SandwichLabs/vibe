@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { router, setCachedMode } from './index'
 import RelationshipsView from '../views/RelationshipsView.vue'
+import SchemaBuilderView from '../views/SchemaBuilderView.vue'
 import SchemaDesignerView from '../views/SchemaDesignerView.vue'
 import AppShellView from '../views/AppShellView.vue'
 import PageRuntimeView from '../views/PageRuntimeView.vue'
@@ -21,10 +22,19 @@ describe('router wiring (P2.8 regression guard)', () => {
     expect(resolved.matched[0]?.components?.default).toBe(RelationshipsView)
   })
 
-  it('the /schema route resolves to SchemaDesignerView', () => {
+  // W3: /schema is the conversational Schema Builder; the form-based designer
+  // moved (still wired, not dead code) to /schema/fields.
+  it('the /schema route resolves to SchemaBuilderView', () => {
     const resolved = router.resolve('/schema')
     expect(resolved.name).toBe('schema')
+    expect(resolved.matched[0]?.components?.default).toBe(SchemaBuilderView)
+  })
+
+  it('the /schema/fields route resolves to SchemaDesignerView (builderOnly)', () => {
+    const resolved = router.resolve('/schema/fields')
+    expect(resolved.name).toBe('schema-fields')
     expect(resolved.matched[0]?.components?.default).toBe(SchemaDesignerView)
+    expect(resolved.meta?.builderOnly).toBe(true)
   })
 
   // P4.7 regression guard: the Switchboard (AppShellView) must be a registered

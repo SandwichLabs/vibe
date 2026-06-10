@@ -4,6 +4,7 @@ import PagesView from '../views/PagesView.vue'
 import PageEditorView from '../views/PageEditorView.vue'
 import TableBrowserView from '../views/TableBrowserView.vue'
 import RelationshipsView from '../views/RelationshipsView.vue'
+import SchemaBuilderView from '../views/SchemaBuilderView.vue'
 import SchemaDesignerView from '../views/SchemaDesignerView.vue'
 import FormView from '../views/FormView.vue'
 import FormBuilderView from '../views/FormBuilderView.vue'
@@ -33,7 +34,11 @@ const routes = [
   { path: '/page/:id', name: 'page-runtime', component: PageRuntimeView },
   { path: '/tables', name: 'tables', component: TableBrowserView, meta: { builderOnly: true } },
   { path: '/relationships', name: 'relationships', component: RelationshipsView, meta: { builderOnly: true } },
-  { path: '/schema', name: 'schema', component: SchemaDesignerView, meta: { builderOnly: true } },
+  // Schema Builder (parity W3) — the conversational chat ↔ live ER diagram
+  // surface. The original form-based field/index editor stays reachable at
+  // /schema/fields for per-column properties (progressive disclosure).
+  { path: '/schema', name: 'schema', component: SchemaBuilderView, meta: { builderOnly: true } },
+  { path: '/schema/fields', name: 'schema-fields', component: SchemaDesignerView, meta: { builderOnly: true } },
   { path: '/forms', name: 'forms', component: FormView },
   // Form Builder (parity W2) — the authoring tool. Studio-only: it edits the
   // form definition (SaveForm), so it is locked out of App Mode. The runtime

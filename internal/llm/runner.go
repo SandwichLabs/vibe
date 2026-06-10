@@ -212,6 +212,7 @@ func systemPromptFor(sandbox string) string {
 	b.WriteString("- query: run a READ-ONLY SQL SELECT (no DDL/DML through this tool).\n")
 	b.WriteString("- list_pages: list the pages (interactive dashboards/notes) in the app.\n")
 	b.WriteString("- get_page: read a page's source by its title.\n")
+	b.WriteString("- propose_schema: lay out a DRAFT schema (tables + relationships) on the user's live ER diagram for review. This never modifies the database.\n")
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
 		b.WriteString("- create_table: create a new table.\n")
 		b.WriteString("- add_relationship: declare a foreign key linking two tables.\n")
@@ -228,8 +229,9 @@ func systemPromptFor(sandbox string) string {
 		b.WriteString("```sql by_month\nSELECT month, SUM(total) AS total FROM sales GROUP BY month ORDER BY month\n```\n")
 		b.WriteString("{bar_chart: query=by_month, x: month, y: total}\n")
 	} else {
-		b.WriteString("\nYou currently have READ-ONLY access: you can inspect and query data but cannot modify the schema. If the user asks to create or change tables, explain that they can enable write access in the agent settings, and offer the SQL they could run.\n")
+		b.WriteString("\nYou currently have READ-ONLY access: you can inspect and query data but cannot modify the schema. You CAN still propose_schema — drafting never modifies anything. If the user asks to create or change tables directly, explain that they can enable write access in the agent settings, and offer the SQL they could run.\n")
 	}
+	b.WriteString("\nSCHEMA DESIGN — when the user describes their business or asks you to design or sketch a database (especially on the Schema Builder screen), call propose_schema with the COMPLETE draft: every table with its columns, plus the relationships linking them. Use the friendly field types: ID (the primary key — start every table with one), Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link (a reference to another table's ID — pair it with an entry in relationships), Pick (one of a small set of choices). When the user asks for changes, re-call propose_schema with the full updated draft. After proposing, ask at most one short clarifying question. The user commits the draft with a button — do not create the proposed tables yourself unless they explicitly ask you to build immediately.\n")
 	return b.String()
 }
 
@@ -450,6 +452,9 @@ func (r *Runner) buildTools(sandbox string, rec *recorder) []fantasy.AgentTool {
 		r.queryTool(rec),
 		r.listPagesTool(rec),
 		r.getPageTool(rec),
+		// propose_schema only drafts — it never mutates the database — so it is
+		// available in every sandbox, including read-only.
+		r.proposeSchemaTool(rec),
 	}
 	if sandbox == SandboxReadWrite || sandbox == SandboxFull {
 		tools = append(tools,
@@ -746,6 +751,53 @@ func (r *Runner) updatePageTool(rec *recorder) fantasy.AgentTool {
 			}
 			out := fmt.Sprintf("updated page %q", in.Title)
 			rec.add(ToolStep{Tool: "update_page", Input: string(inputJSON), Output: out})
+			return fantasy.NewTextResponse(out), nil
+		},
+	)
+}
+
+// proposeSchemaInput is the draft schema the model lays out for the user to
+// review on the Schema Builder's live ER diagram. It is the propose-side twin
+// of create_table/add_relationship: nothing here touches the database — the
+// frontend renders the draft and the user commits it explicitly.
+type proposeSchemaInput struct {
+	Tables []struct {
+		Name    string `json:"name" description:"Table name, snake_case plural (e.g. service_calls)."`
+		Columns []struct {
+			Name       string `json:"name" description:"Column name, snake_case."`
+			Type       string `json:"type" description:"Friendly field type: ID, Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link, Pick. (A raw DuckDB type is also accepted.)"`
+			PrimaryKey bool   `json:"primary_key,omitempty" description:"True for the table's ID column."`
+			NotNull    bool   `json:"not_null,omitempty" description:"Whether the column is required."`
+		} `json:"columns" description:"The table's columns. Start every table with an ID primary-key column."`
+	} `json:"tables" description:"Every table in the draft, including ones carried over from an earlier proposal in this conversation."`
+	Relationships []struct {
+		ChildTable   string `json:"child_table" description:"The table holding the Link column."`
+		ChildColumn  string `json:"child_column" description:"The Link column on the child table."`
+		ParentTable  string `json:"parent_table" description:"The table being linked to."`
+		ParentColumn string `json:"parent_column" description:"The linked column on the parent (usually id)."`
+		Optional     bool   `json:"optional,omitempty" description:"True when the link may be empty (drawn dashed on the diagram)."`
+	} `json:"relationships,omitempty" description:"Foreign-key links between tables in the draft."`
+	Note string `json:"note,omitempty" description:"One short line summarizing the design for the diagram header."`
+}
+
+func (r *Runner) proposeSchemaTool(rec *recorder) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"propose_schema",
+		"PROPOSE a draft schema — tables with friendly field types plus the relationships linking them — for the user to review on a live ER diagram. This does NOT modify the database; the user commits the draft themselves. Always send the COMPLETE current draft (all tables), not just the changed ones.",
+		func(_ context.Context, in proposeSchemaInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			if len(in.Tables) == 0 {
+				msg := "propose_schema needs at least one table"
+				rec.add(ToolStep{Tool: "propose_schema", Output: "rejected: " + msg})
+				return fantasy.NewTextErrorResponse(msg), nil
+			}
+			inputJSON, _ := json.Marshal(in)
+			names := make([]string, 0, len(in.Tables))
+			for _, t := range in.Tables {
+				names = append(names, t.Name)
+			}
+			out := fmt.Sprintf("proposed %d table(s) (%s) and %d link(s) — drawn on the user's schema diagram. The user must press \"Looks good — build it\" to create them; do not call create_table yourself.",
+				len(in.Tables), strings.Join(names, ", "), len(in.Relationships))
+			rec.add(ToolStep{Tool: "propose_schema", Input: string(inputJSON), Output: out})
 			return fantasy.NewTextResponse(out), nil
 		},
 	)

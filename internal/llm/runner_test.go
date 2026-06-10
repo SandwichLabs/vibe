@@ -313,6 +313,42 @@ func TestChat_BuilderTools(t *testing.T) {
 	}
 }
 
+func TestChat_ProposeSchemaTool(t *testing.T) {
+	args := `{"tables":[{"name":"customers","columns":[{"name":"id","type":"ID","primary_key":true},{"name":"name","type":"Text"}]},{"name":"service_calls","columns":[{"name":"id","type":"ID","primary_key":true},{"name":"customer_id","type":"Link"}]}],"relationships":[{"child_table":"service_calls","child_column":"customer_id","parent_table":"customers","parent_column":"id"}],"note":"Customers and their service calls"}`
+
+	t.Run("available read-only and never mutates", func(t *testing.T) {
+		srv := fakeLLMServer(t, "propose_schema", args, "Here's a draft — review it on the diagram.")
+		defer srv.Close()
+		deps := &fakeDeps{}
+		res, err := NewRunner(deps, nil).Chat(context.Background(), Config{
+			Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxReadOnly,
+		}, "I run an HVAC company, design my database", "")
+		require.NoError(t, err)
+		// Drafting must not touch the database.
+		assert.Empty(t, deps.created)
+		assert.Empty(t, deps.rels)
+		// The step carries the full draft JSON — the Schema Builder UI parses it.
+		require.Len(t, res.Steps, 1)
+		assert.Equal(t, "propose_schema", res.Steps[0].Tool)
+		assert.Contains(t, res.Steps[0].Input, `"service_calls"`)
+		assert.Contains(t, res.Steps[0].Input, `"child_column":"customer_id"`)
+		assert.Contains(t, res.Steps[0].Output, "proposed 2 table(s)")
+		assert.Contains(t, res.Steps[0].Output, "Looks good")
+	})
+
+	t.Run("rejects an empty draft", func(t *testing.T) {
+		srv := fakeLLMServer(t, "propose_schema", `{"tables":[]}`, "ok")
+		defer srv.Close()
+		deps := &fakeDeps{}
+		res, err := NewRunner(deps, nil).Chat(context.Background(), Config{
+			Endpoint: srv.URL + "/v1", Model: "local", Sandbox: SandboxReadOnly,
+		}, "propose nothing", "")
+		require.NoError(t, err)
+		require.Len(t, res.Steps, 1)
+		assert.Contains(t, res.Steps[0].Output, "rejected")
+	})
+}
+
 func TestChat_PinnedContextPrefixed(t *testing.T) {
 	var capturedPrompt string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -448,6 +484,14 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	ro := systemPromptFor(SandboxReadOnly)
 	assert.Contains(t, ro, "READ-ONLY access:")
 	assert.NotContains(t, ro, "create_table:")
+
+	// propose_schema and the friendly-type vocabulary are advertised in every
+	// sandbox — drafting never mutates.
+	for _, prompt := range []string{full, rw, ro} {
+		assert.Contains(t, prompt, "propose_schema")
+		assert.Contains(t, prompt, "SCHEMA DESIGN")
+		assert.Contains(t, prompt, "Link (a reference to another table's ID")
+	}
 }
 
 func TestWithPinned(t *testing.T) {
