@@ -102,7 +102,8 @@ func makeScanDest(n int) []any {
 	return dest
 }
 
-// deref dereferences a pointer to any, returning the underlying value.
+// deref dereferences a pointer to any, returning the underlying value
+// normalized for downstream consumers (see NormalizeValue).
 func deref(v any) any {
 	if v == nil {
 		return nil
@@ -112,9 +113,9 @@ func deref(v any) any {
 		if rv.IsNil() {
 			return nil
 		}
-		return rv.Elem().Interface()
+		return NormalizeValue(rv.Elem().Interface())
 	}
-	return v
+	return NormalizeValue(v)
 }
 
 // goTypeName returns the Go type name for a sql.ColumnType.

@@ -274,7 +274,7 @@ onMounted(loadReports)
           data-testid="edit-sql"
           @click="toggleSQL"
         >
-          <Icon name="terminal" /> Edit SQL
+          <Icon name="terminal" /> View SQL
         </button>
 
         <button class="sh-btn" :disabled="!hasSelection" data-testid="export-pdf" @click="exportPDF">

@@ -33,7 +33,9 @@ const errorMessage = ref('')
 const appConfig = ref<AppConfig | null>(null)
 const mode = computed(() => appConfig.value?.mode === 'app' ? 'app' : 'studio')
 const isAppMode = computed(() => mode.value === 'app')
-const appTitle = computed(() => appConfig.value?.app_title || 'Untitled App')
+// Brand falls back to the open file's title when no app_title is configured —
+// an HVAC Ops .vibe should read "HVAC Ops" in App Mode, not "Untitled App".
+const appTitle = computed(() => appConfig.value?.app_title || fileInfo.value?.title || 'Untitled App')
 const appInitial = computed(() => (appTitle.value.trim().charAt(0) || 'A').toUpperCase())
 const showUnlock = ref(false)
 const unlockPassphrase = ref('')

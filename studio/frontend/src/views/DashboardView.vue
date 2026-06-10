@@ -4,8 +4,9 @@
 // system page (seeded by the container migration) via RenderPageContent, so the
 // home screen is data-driven (live {metric:}/{table:} directives executed on
 // DuckDB) rather than carrying hardcoded stats from GetDashboard().
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
 
 // Stable id of the seeded `_dashboard` system page (see container schema
@@ -20,21 +21,31 @@ const rendered = ref('')
 const loading = ref(true)
 const errorMessage = ref('')
 
+// Generation counter: a newer load() supersedes any in-flight one. The Go side
+// cancels the older render, whose rejection ("context canceled") must not
+// clobber the fresh result.
+let loadGen = 0
+
 async function load() {
+  const gen = ++loadGen
   loading.value = true
   errorMessage.value = ''
   try {
     // File metadata still comes from GetFileInfo for the crumb/lead; the BODY
     // is rendered through the page pipeline.
     const info = await window.go.main.App.GetFileInfo()
+    if (gen !== loadGen) return
     title.value = info?.title || 'Dashboard'
     description.value = info?.description || ''
   } catch {
     /* metadata is best-effort */
   }
   try {
-    rendered.value = await window.go.main.App.RenderPageContent(DASHBOARD_PAGE_ID, {})
+    const html = await window.go.main.App.RenderPageContent(DASHBOARD_PAGE_ID, {})
+    if (gen !== loadGen) return
+    rendered.value = html
   } catch (e: unknown) {
+    if (gen !== loadGen) return
     rendered.value = ''
     errorMessage.value = String(e)
   }
@@ -42,7 +53,20 @@ async function load() {
   await nextTick()
 }
 
-onMounted(load)
+// The Wails event bridge only exists inside the real runtime — guard so the
+// view still mounts in jsdom specs and the bare Vite dev server.
+const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
+
+onMounted(() => {
+  load()
+  // Re-render the live stats when the data underneath changes (imports, table
+  // create/drop) — previously the dashboard showed stale counts until a manual
+  // reload.
+  if (hasWailsRuntime()) EventsOn('data:changed', load)
+})
+onUnmounted(() => {
+  if (hasWailsRuntime()) EventsOff('data:changed')
+})
 </script>
 
 <template>

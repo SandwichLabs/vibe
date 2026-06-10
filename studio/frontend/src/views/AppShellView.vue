@@ -261,7 +261,10 @@ onMounted(async () => {
           data-testid="nav-item"
           class="nav-item sh-card"
         >
-          <span class="nav-item-handle sh-muted">{{ item.sort_order + 1 }}.</span>
+          <!-- Number by list position: stored sort_order values aren't
+               guaranteed to start at 0, so deriving the label from them shows
+               "2., 3." for the first two items. -->
+          <span class="nav-item-handle sh-muted">{{ idx + 1 }}.</span>
           <template v-if="editingId === item.id">
             <input
               v-model="editLabel"

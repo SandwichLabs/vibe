@@ -185,7 +185,7 @@ watch(errorMessage, (msg) => {
         <div v-else class="empty-hero">
           <div class="glyph"><Icon name="terminal" :size="48" /></div>
           <h2>Write a query, press Run</h2>
-          <p class="lead">Use <code>[engine=duckdb]</code> for analytics or <code>[engine=sqlite]</code> for CRUD.</p>
+          <p class="lead">Queries run on the embedded DuckDB engine — analytics and CRUD alike.</p>
         </div>
       </div>
     </div>

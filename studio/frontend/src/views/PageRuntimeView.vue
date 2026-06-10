@@ -8,6 +8,7 @@
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { execScripts } from '../lib/execScripts'
+import { wireInputFilters } from '../lib/wireInputFilters'
 import { useMacroIntents, type MacroResult } from '../composables/useMacroIntents'
 
 const route = useRoute()
@@ -16,6 +17,20 @@ const rendered = ref('')
 const loading = ref(true)
 const errorMessage = ref('')
 const previewEl = ref<HTMLElement | null>(null)
+
+// Input-filter state (P3.6 parity with PageEditorView): rendered {dropdown}/
+// {slider}/{toggle}/… controls must drive a re-render with their values as
+// page params in App Mode too, not just in the Studio editor preview.
+const filterParams = ref<Record<string, string>>({})
+
+function onFilterChange(name: string, value: string) {
+  if (value === '') {
+    delete filterParams.value[name]
+  } else {
+    filterParams.value[name] = value
+  }
+  render()
+}
 
 // Shared macro intent dispatcher (P5.6) — the SAME applier the AppShell
 // switchboard uses, so open_*/set_filter/msg_box behave identically here.
@@ -66,7 +81,7 @@ async function render() {
   loading.value = true
   errorMessage.value = ''
   try {
-    rendered.value = await window.go.main.App.RenderPageContent(id, {})
+    rendered.value = await window.go.main.App.RenderPageContent(id, { ...filterParams.value })
   } catch (e: any) {
     rendered.value = ''
     errorMessage.value = 'Failed to render page: ' + (e.message || e)
@@ -74,8 +89,16 @@ async function render() {
   loading.value = false
 }
 
-watch(() => [route.params.id, route.query.id], render)
-watch(rendered, () => { nextTick(() => execScripts(previewEl.value)) })
+watch(() => [route.params.id, route.query.id], () => {
+  filterParams.value = {}
+  render()
+})
+watch(rendered, () => {
+  nextTick(() => {
+    execScripts(previewEl.value)
+    wireInputFilters(previewEl.value, onFilterChange)
+  })
+})
 
 onMounted(render)
 </script>

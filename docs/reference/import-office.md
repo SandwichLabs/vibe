@@ -20,6 +20,19 @@ wizard walks these steps:
 The wizard is non-destructive: a failed or partial import never corrupts existing
 tables.
 
+### Quick CSV import
+
+The one-step **Import CSV** path (Dashboard shortcut / `ImportCSV` binding)
+skips the wizard and delegates parsing and type inference to DuckDB's CSV
+sniffer (`read_csv_auto`): numeric, boolean, and date columns arrive typed, and
+quoted fields with embedded commas are handled correctly. Re-importing into an
+existing table appends rows, matching columns **by name**.
+
+Quick imports do not declare a primary key. To use an imported table as the
+*parent* of a relationship, first give the referenced column a unique index
+(Schema Designer → Add index, unique), since foreign keys must reference a
+PRIMARY KEY or UNIQUE column.
+
 ## Office Links
 
 **Office** Links are the export/round-trip bridges to the Microsoft Office surface

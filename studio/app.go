@@ -1506,10 +1506,13 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		if err := rows.Scan(valuePtrs...); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		// Convert []byte to string for JSON serialization.
+		// Convert []byte to string for JSON serialization; normalize driver
+		// types (DECIMAL, HUGEINT) so they don't marshal as raw structs (#42).
 		for i, v := range values {
 			if b, ok := v.([]byte); ok {
 				values[i] = string(b)
+			} else {
+				values[i] = engine.NormalizeValue(v)
 			}
 		}
 		data = append(data, values)
@@ -1637,6 +1640,8 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 		for i, v := range values {
 			if b, ok := v.([]byte); ok {
 				values[i] = string(b)
+			} else {
+				values[i] = engine.NormalizeValue(v)
 			}
 		}
 		data = append(data, values)
@@ -1919,6 +1924,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
+	a.emitEvent("data:changed")
 	return nil
 }
 
@@ -2288,6 +2294,7 @@ func (a *App) DropTable(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
+	a.emitEvent("data:changed")
 	return nil
 }
 
@@ -3293,6 +3300,7 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode,
 		"rows", imported, "rejected", rejected)
 
+	a.emitEvent("data:changed")
 	return &ImportResult{RowsImported: imported, TableName: opts.TableName}, nil
 }
 
@@ -3318,20 +3326,8 @@ func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 		return nil, fmt.Errorf("invalid table name")
 	}
 
-	data, err := os.ReadFile(csvPath)
-	if err != nil {
+	if _, err := os.Stat(csvPath); err != nil {
 		return nil, fmt.Errorf("failed to read CSV: %w", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) < 2 {
-		return nil, fmt.Errorf("CSV file is empty or has no data rows")
-	}
-
-	// Parse header.
-	headers := strings.Split(lines[0], ",")
-	for i := range headers {
-		headers[i] = strings.TrimSpace(headers[i])
 	}
 
 	db := a.container.DuckDBDB()
@@ -3339,62 +3335,37 @@ func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
 
-	// Check if table exists; if not, create it.
+	// Delegate parsing AND type inference to DuckDB's CSV sniffer. The previous
+	// hand-rolled importer split lines on bare commas (breaking quoted fields)
+	// and created every column as TEXT, which made numeric aggregates fail and
+	// left imported tables unable to participate in relationships.
+	escapedPath := strings.ReplaceAll(csvPath, "'", "''")
+	readCSV := fmt.Sprintf("read_csv_auto('%s', header=true)", escapedPath)
+
 	var exists int
 	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1", tableName).Scan(&exists) //nolint:errcheck
 
-	if exists == 0 {
-		var colDefs []string
-		for _, h := range headers {
-			colDefs = append(colDefs, fmt.Sprintf("%q TEXT", h))
-		}
-		createSQL := fmt.Sprintf("CREATE TABLE %q (%s)", tableName, strings.Join(colDefs, ", "))
-		if _, err := db.Exec(createSQL); err != nil {
-			return nil, fmt.Errorf("failed to create table: %w", err)
-		}
-	}
-
-	// Insert rows.
-	placeholders := make([]string, len(headers))
-	for i := range placeholders {
-		placeholders[i] = "?"
-	}
-	insertSQL := fmt.Sprintf("INSERT INTO %q VALUES (%s)", tableName, strings.Join(placeholders, ", "))
-
-	tx, err := db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	stmt, err := tx.Prepare(insertSQL)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
-		return nil, fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
 	var imported int
-	for _, line := range lines[1:] {
-		fields := strings.Split(line, ",")
-		args := make([]any, len(headers))
-		for i := range headers {
-			if i < len(fields) {
-				args[i] = strings.TrimSpace(fields[i])
-			} else {
-				args[i] = ""
-			}
+	if exists == 0 {
+		if _, err := db.Exec(fmt.Sprintf("CREATE TABLE %q AS SELECT * FROM %s", tableName, readCSV)); err != nil {
+			return nil, fmt.Errorf("failed to import CSV: %w", err)
 		}
-		if _, err := stmt.Exec(args...); err != nil {
-			tx.Rollback() //nolint:errcheck
-			return nil, fmt.Errorf("failed to insert row: %w", err)
+		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", tableName)).Scan(&imported); err != nil {
+			return nil, fmt.Errorf("failed to count imported rows: %w", err)
 		}
-		imported++
+	} else {
+		// Append into the existing table, matching columns by name so column
+		// order in the file doesn't matter.
+		res, err := db.Exec(fmt.Sprintf("INSERT INTO %q BY NAME SELECT * FROM %s", tableName, readCSV))
+		if err != nil {
+			return nil, fmt.Errorf("failed to import CSV: %w", err)
+		}
+		if n, err := res.RowsAffected(); err == nil {
+			imported = int(n)
+		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit: %w", err)
-	}
-
+	a.emitEvent("data:changed")
 	return &ImportResult{RowsImported: imported, TableName: tableName}, nil
 }
 
@@ -3454,7 +3425,7 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 		}
 		fields := make([]string, len(columns))
 		for i, v := range values {
-			fields[i] = fmt.Sprintf("%v", v)
+			fields[i] = fmt.Sprintf("%v", engine.NormalizeValue(v))
 		}
 		b.WriteString(strings.Join(fields, ","))
 		b.WriteString("\n")
@@ -3522,6 +3493,8 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 			v := values[i]
 			if b, ok := v.([]byte); ok {
 				v = string(b)
+			} else {
+				v = engine.NormalizeValue(v)
 			}
 			row[col] = v
 		}
