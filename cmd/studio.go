@@ -13,7 +13,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/server"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -21,8 +21,10 @@ import (
 var studioCmd = &cobra.Command{
 	Use:   "studio <file>",
 	Short: "Launch the TUI editor (Vibe Studio)",
-	Long: `Open a .vibe file in the interactive terminal UI for editing pages,
-browsing tables, running queries, and managing the container.
+	Long: `Open a .vibe file in the interactive terminal UI: a SQL REPL, a
+read-only table browser, and a notebook list (source only — no rendering).
+Notebooks, skills, and A2UI dashboards are authored in the Studio desktop
+app (--gui), not here.
 
 If the file does not exist, it will be created.`,
 	Args: cobra.ExactArgs(1),
@@ -69,35 +71,18 @@ If the file does not exist, it will be created.`,
 		}
 		defer c.Close()
 
+		// Legacy content (pages, banded reports) becomes visible to the TUI's
+		// notebook list the same way it would in Studio or `vibe mcp serve` —
+		// every entry point that opens a .vibe file runs the same one-time
+		// migration. `vibe studio` has no read-only-open flag, so this always
+		// persists.
+		notebooks.MigrateOnOpen(c.SQLiteDB(), false, logger)
+
 		// Create the engine manager (DuckDB-only).
 		eng := engine.NewManager(
 			c.DuckDBDB(),
 			engine.WithLogger(logger),
 		)
-
-		// Start web server if --web flag is set.
-		webEnabled, _ := cmd.Flags().GetBool("web")
-		if webEnabled {
-			host, _ := cmd.Flags().GetString("host")
-			port, _ := cmd.Flags().GetInt("port")
-			allowSQL, _ := cmd.Flags().GetBool("allow-sql")
-			addr := fmt.Sprintf("%s:%d", host, port)
-
-			srv := server.New(
-				server.WithAddress(addr),
-				server.WithContainer(c),
-				server.WithEngine(eng),
-				server.WithAllowSQL(allowSQL),
-				server.WithLogger(logger),
-			)
-
-			if err := srv.Start(); err != nil {
-				return fmt.Errorf("failed to start web server: %w", err)
-			}
-			defer srv.Stop(context.Background()) //nolint:errcheck
-
-			fmt.Fprintf(os.Stderr, "Web server started at http://%s\n", srv.Addr())
-		}
 
 		// Start agent if --agent-cmd or --agent-listen is set.
 		agentCmd, _ := cmd.Flags().GetString("agent-cmd")
@@ -237,10 +222,6 @@ func launchGUI(filePath string) error {
 
 func init() {
 	studioCmd.Flags().Bool("gui", false, "launch the desktop GUI instead of the TUI")
-	studioCmd.Flags().Bool("web", false, "start the embedded web server")
-	studioCmd.Flags().Int("port", 3456, "web server port")
-	studioCmd.Flags().String("host", "localhost", "web server host")
-	studioCmd.Flags().Bool("allow-sql", false, "allow ad-hoc SQL queries via the web API")
 	studioCmd.Flags().String("agent-cmd", "", "agent command to spawn (stdio transport)")
 	studioCmd.Flags().String("agent-listen", "", "agent socket address to listen on")
 	studioCmd.Flags().String("agent-mode", "read-only", "agent sandbox mode: read-only, read-write, full")

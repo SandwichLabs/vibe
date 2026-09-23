@@ -481,6 +481,31 @@ textarea.field-input { min-height: 88px; resize: vertical; }
   box-shadow: var(--sh-shadow);
 }
 
+/* ---- Info toast ----
+   Same shape as .error-toast, but marigold/ink instead of --sh-error red —
+   red means destructive/failed (see CLAUDE.md's "coral = attention" /
+   error-color convention); an informational notice (e.g. "added as a new
+   cell instead of replacing it") is not an error and must not look like
+   one. */
+.info-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-family: var(--sh-font-body);
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--sh-marigold);
+  color: var(--sh-ink);
+  border: 2px solid var(--sh-ink);
+  border-radius: var(--sh-radius-sm);
+  box-shadow: var(--sh-shadow);
+}
+
 /* ---- Selected table row ----
    Highlighted/active row state for `.table`. Apply to the <tr>. */
 .table tr.row-selected td,

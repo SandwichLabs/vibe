@@ -1,3 +1,6 @@
+> **SUPERSEDED (2026-09-22).** The TUI is being cut to a SQL REPL and read-only browser (#69); the charmbracelet v2 upgrade and rich page viewer planned here are not going ahead.
+> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+
 # Plan: Rich TUI with charmbracelet v2 libraries
 
 ## Context

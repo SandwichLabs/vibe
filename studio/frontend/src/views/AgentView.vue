@@ -2,6 +2,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
+import A2UIPage from '../a2ui/A2UIPage.vue'
 
 // AgentView is the full-page wizard chat (W0.5) — the same conversation engine
 // as the slide-in AgentPanel (shared useAgentChat composable), given room for
@@ -60,20 +61,23 @@ function onKeydown(e: KeyboardEvent) {
           </div>
           <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
           <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>
-          <div v-else-if="m.text" class="agent-text agent-md" v-html="renderMarkdown(m.text)"></div>
+          <div v-else-if="m.text" class="agent-text agent-md vibe-content vibe-md-content" v-html="renderMarkdown(m.text)"></div>
           <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
 
-          <div
-            v-for="(s, si) in m.steps"
-            :key="si"
-            class="tool-chip"
-            data-testid="agent-tool-chip"
-          >
-            <span class="lab"><Icon name="terminal" :size="12" /> {{ s.tool }}</span>
-            <span v-if="s.input" class="time">{{ s.input.slice(0, 80) }}</span>
-            <span v-if="s.status === 'running'" class="spin" data-testid="chip-running">●</span>
-            <span v-else class="check" data-testid="chip-done">✓</span>
-          </div>
+          <template v-for="(s, si) in m.steps" :key="si">
+            <div
+              class="tool-chip"
+              :class="{ 'tool-chip-error': s.status === 'error' }"
+              data-testid="agent-tool-chip"
+            >
+              <span class="lab"><Icon name="terminal" :size="12" /> {{ s.tool }}</span>
+              <span v-if="s.input" class="time">{{ s.input.slice(0, 80) }}</span>
+              <span v-if="s.status === 'running'" class="spin" data-testid="chip-running">●</span>
+              <span v-else-if="s.status === 'error'" class="chip-error-mark" data-testid="chip-error" :title="s.output">✕</span>
+              <span v-else class="check" data-testid="chip-done">✓</span>
+            </div>
+            <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
+          </template>
         </div>
       </div>
     </div>
@@ -193,6 +197,17 @@ function onKeydown(e: KeyboardEvent) {
   font-size: 12.5px;
 }
 .agent-md :deep(code) { font-family: var(--sh-font-mono); font-size: 12.5px; }
+/* Same fix as AgentPanel.vue: the global `.sh code` rule paints inline code
+   with its own light --sh-paper-2 background, which collides with the dark
+   --sh-ink/--sh-paper <pre> above it — the code span floats as a near-white
+   box under near-white inherited text. Reset it like the Pages renderer's
+   `.vibe-content pre code` already does. */
+.agent-md :deep(pre code) {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
 .agent-md :deep(table) { border-collapse: collapse; }
 .agent-md :deep(th), .agent-md :deep(td) { border: 1px solid var(--sh-line); padding: 4px 8px; }
 .agent-error { color: var(--sh-coral); }
@@ -206,4 +221,23 @@ function onKeydown(e: KeyboardEvent) {
 }
 .spin { animation: agent-pulse 1s ease-in-out infinite; }
 @keyframes agent-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
+/* A denied/failed tool call — coral is SchoolHouse's "needs attention", not
+   destructive/red. */
+.tool-chip-error {
+  border-color: var(--sh-coral);
+  background: var(--sh-coral-8);
+}
+.chip-error-mark {
+  color: var(--sh-coral);
+  font-weight: 700;
+  cursor: help;
+  margin-left: auto;
+}
+.agent-a2ui-embed {
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius);
+  background: var(--sh-surface);
+  padding: 10px 12px;
+  margin: 4px 0 8px;
+}
 </style>

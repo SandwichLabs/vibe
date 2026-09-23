@@ -1,58 +1,30 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"os"
-	"os/exec"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/config"
 	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/sandwich-labs/vibe-app/internal/llm"
 	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
-	"github.com/sandwich-labs/vibe-app/internal/pages"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
-	htmlrenderer "github.com/sandwich-labs/vibe-app/internal/renderer/html"
-	"github.com/sandwich-labs/vibe-app/internal/reports"
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"github.com/yuin/goldmark"
-
-	"github.com/sandwich-labs/vibe-app/internal/renderer"
 )
-
-// engineAdapter wraps engine.Manager to satisfy pages.QueryEngine interface.
-type engineAdapter struct {
-	mgr *engine.Manager
-}
-
-func (ea *engineAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*pages.ResultSet, error) {
-	rs, err := ea.mgr.Execute(ctx, sql, params)
-	if err != nil {
-		return nil, err
-	}
-	prs := &pages.ResultSet{Rows: rs.Rows}
-	for _, col := range rs.Columns {
-		prs.Columns = append(prs.Columns, pages.Column{Name: col.Name, Type: col.Type})
-	}
-	return prs, nil
-}
 
 // App is the main application struct bound to the Wails frontend.
 type App struct {
@@ -62,18 +34,46 @@ type App struct {
 	container   *container.Container
 	engine      *engine.Manager
 	registry    *queries.Registry
-	renderer    *htmlrenderer.Renderer
 	filePath    string
 	mcpServer   *vibemcp.Server
 	initialFile string
 
-	// mode is the live runtime app mode ("studio" | "app"), initialized from
-	// the persisted default_mode on file open and flipped at runtime by
-	// SetMode. Capability gating (P4.4) and the App Shell UI (P4.5) key off it.
-	mode string
+	// sessionID identifies the CURRENTLY open container. It is regenerated
+	// on every successful OpenFile/CreateFile/CreateFromTemplate (see
+	// beginFileSession) and cleared on CloseFile. A frontend view that reads
+	// data at open/load time (NotebookView.vue's loadedSessionId) stamps
+	// itself with the value in effect at that moment and sends it back with
+	// every write (SaveNotebook); the backend rejects a write whose token
+	// doesn't match the CURRENT sessionID.
+	//
+	// This closes a real data-corruption bug (reviewer-caught, live-proven):
+	// calling OpenFile/CreateFile/CreateFromTemplate while a NotebookView
+	// for the PREVIOUS file was still mounted let that view's in-flight
+	// debounced save land in the NEW container after the switch — the
+	// container pointer itself was already swapped by the time the old
+	// view's save fired, and nothing on the write path noticed the file
+	// underneath it had changed. The frontend now also flushes pending
+	// saves before every one of these three calls (matching CloseFile's
+	// existing flushAll), but the backend token check is the one that
+	// cannot be bypassed by a caller that skips the frontend's own gating
+	// (e.g. a direct Wails-binding call, or a future call site that forgets
+	// to flush first).
+	sessionID string
 
-	renderMu     sync.Mutex
-	renderCancel context.CancelFunc
+	// activeNotebookID is the id of the notebook currently open in
+	// NotebookView.vue, if any — set via SetActiveNotebook (called on
+	// mount/switch/close). Consulted by add_query_cell/create_dashboard's
+	// "append to the open notebook" fallback (#67 deferred part) via
+	// agents.Handler.SetActiveNotebook, applied per-call in
+	// newAgentToolHandler/wrapAgentHandler.
+	activeNotebookID string
+
+	// taskCancel holds one context.CancelFunc per in-flight AgentTask call,
+	// keyed by the frontend-generated taskID — so closing the AI-cell dialog
+	// (CancelAgentTask) can stop a task turn without touching a.ctx (the
+	// whole app's lifecycle context) or any concurrently running chat turn.
+	taskCancelMu sync.Mutex
+	taskCancel   map[string]context.CancelFunc
 
 	// emit publishes a frontend event. In production it is nil and emitEvent
 	// falls back to the Wails runtime.EventsEmit (which requires the real Wails
@@ -85,15 +85,42 @@ type App struct {
 	// llmCfg is the app-global, viper-driven LLM provider/model configuration
 	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
 	llmCfg config.LLMConfig
+
+	// quitConfirmed gates beforeClose (review fix, step 4a round 2 #1): the
+	// FIRST window-close/quit attempt is intercepted (OnBeforeClose returns
+	// true, preventing it) so the frontend gets a chance to flush any
+	// pending debounced saves via the "app:before-close" event; once it has
+	// (or a timeout fires), it calls Quit(), which sets this flag so the
+	// NEXT beforeClose lets the close through.
+	quitConfirmed atomic.Bool
+
+	// closeWatchdogOnce guards starting the round-3 watchdog timer (below)
+	// so repeated close attempts never stack multiple timers.
+	closeWatchdogOnce sync.Once
+
+	// closeWatchdog and quitFn are testing seams for beforeClose's timeout
+	// logic (review fix, step 4a round 3 #1: a hung webview — e.g. its
+	// process suspended — never responds to "app:before-close", and
+	// beforeClose returned true forever, making the window impossible to
+	// close). Production leaves both nil and beforeClose lazily defaults
+	// them to a real time.AfterFunc and the real Quit(); tests inject
+	// deterministic stand-ins instead of waiting on a real 5s timer.
+	closeWatchdog func(d time.Duration, f func())
+	quitFn        func()
 }
+
+// closeWatchdogTimeout bounds how long beforeClose waits for the frontend to
+// respond to "app:before-close" (flush pending saves, then call Quit())
+// before quitting anyway — a hung/suspended webview must never be able to
+// make the window impossible to close.
+const closeWatchdogTimeout = 5 * time.Second
 
 // NewApp creates a new App instance. The LLM config is loaded eagerly so it is
 // available even before the Wails startup hook (and in tests).
 func NewApp(logger *slog.Logger) *App {
 	return &App{
-		logger:   logger,
-		renderer: htmlrenderer.NewRenderer(logger),
-		llmCfg:   config.Load().LLM,
+		logger: logger,
+		llmCfg: config.Load().LLM,
 	}
 }
 
@@ -148,6 +175,63 @@ func (a *App) shutdown(_ context.Context) {
 	}
 }
 
+// beforeClose is wired as Wails' OnBeforeClose option (studio/main.go). It
+// intercepts the first window-close/quit attempt and returns true
+// (preventing the close) while emitting "app:before-close" so the frontend
+// can flush any pending debounced saves (e.g. a notebook's autosave) before
+// the container actually closes — review fix, step 4a round 2 #1. The
+// frontend then calls Quit(), which sets quitConfirmed so THIS same check
+// lets the next close attempt through instead of looping forever.
+//
+// Round 3 review fix: the first attempt also arms a one-shot watchdog timer
+// (closeWatchdogTimeout) that force-quits if the frontend never responds —
+// a hung or suspended webview process must not be able to make the window
+// impossible to close. closeWatchdogOnce (a sync.Once) guards arming it so
+// repeated close attempts never stack multiple timers; a SECOND (or later)
+// attempt that arrives while the first is still pending instead lets the
+// close through immediately, on the theory that a person clicking close
+// twice means it, and there is no reason to make them wait out the full
+// watchdog window too.
+func (a *App) beforeClose(_ context.Context) (prevent bool) {
+	if a.quitConfirmed.Load() {
+		return false
+	}
+
+	first := false
+	a.closeWatchdogOnce.Do(func() {
+		first = true
+		a.emitEvent("app:before-close")
+		watchdog := a.closeWatchdog
+		if watchdog == nil {
+			watchdog = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+		}
+		watchdog(closeWatchdogTimeout, a.Quit)
+	})
+	if first {
+		return true
+	}
+
+	// A later attempt while the first is still pending: quit immediately
+	// rather than making a second, deliberate close click wait out the
+	// watchdog too.
+	a.quitConfirmed.Store(true)
+	return false
+}
+
+// Quit is called by the frontend once it has flushed (or timed out waiting
+// on) every pending save in response to "app:before-close" — and by
+// beforeClose's own watchdog timer if the frontend never responds at all.
+// It marks the close as confirmed and asks Wails to quit again, which this
+// time reaches beforeClose with quitConfirmed already set.
+func (a *App) Quit() {
+	a.quitConfirmed.Store(true)
+	quit := a.quitFn
+	if quit == nil {
+		quit = func() { runtime.Quit(a.ctx) }
+	}
+	quit()
+}
+
 // --- File Operations ---
 
 // SelectVibeFile opens a file dialog to select a .vibe file.
@@ -179,15 +263,47 @@ func (a *App) SelectNewVibeFile() (string, error) {
 	return path, nil
 }
 
+// closeCurrentContainerLocked saves and closes whatever container is
+// currently open (if any) and clears every field tied to its lifetime,
+// BEFORE the caller attempts to open/create the next one. Must be called
+// with a.mu held.
+//
+// This is the fix for a crash a reviewer reproduced live (SIGSEGV):
+// OpenFile/CreateFile/CreateFromTemplate used to Save+Close the current
+// container inline and then attempt the new open/create — but on a failed
+// open (e.g. a wrong passphrase), the early `return err` left a.container
+// still pointing at the now-CLOSED container. The NEXT OpenFile call then
+// saw a.container != nil, called Save()/Close() on an already-closed
+// container, and the process died. Clearing a.container (and engine/
+// registry/filePath/sessionID) here, unconditionally, right after closing —
+// not only on the success path — means a failed open always leaves the app
+// in a clean "no file open" state instead of a half-torn-down one.
+func (a *App) closeCurrentContainerLocked() {
+	if a.container == nil {
+		return
+	}
+	if a.mcpServer != nil {
+		a.mcpServer.Stop() //nolint:errcheck
+		a.mcpServer = nil
+	}
+	a.container.Save()  //nolint:errcheck
+	a.container.Close() //nolint:errcheck
+	a.container = nil
+	a.engine = nil
+	a.registry = nil
+	a.filePath = ""
+	a.sessionID = ""
+	// So the UI falls back to Unlock/the file picker instead of showing a
+	// stale view of the file that just got closed out from under it.
+	a.emitEvent("file:closed")
+}
+
 // OpenFile opens an existing .vibe file with the given passphrase.
 func (a *App) OpenFile(path, passphrase string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container != nil {
-		a.container.Save()  //nolint:errcheck
-		a.container.Close() //nolint:errcheck
-	}
+	a.closeCurrentContainerLocked()
 
 	c, err := container.Open(path,
 		container.WithPassphrase(passphrase),
@@ -201,10 +317,18 @@ func (a *App) OpenFile(path, passphrase string) error {
 	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
-	a.initModeFromMeta()
+	a.beginFileSession()
+	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
 	a.emitEvent("file:opened")
-	a.emitAutoExec()
 	return nil
+}
+
+// beginFileSession stamps a.sessionID with a fresh id, marking a new
+// "generation" of the open container — see the field's doc comment. Called
+// while a.mu is held, immediately after a.container is swapped in
+// (OpenFile/CreateFile/CreateFromTemplate).
+func (a *App) beginFileSession() {
+	a.sessionID = uuid.New().String()
 }
 
 // CreateFile creates a new .vibe file.
@@ -212,10 +336,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container != nil {
-		a.container.Save()  //nolint:errcheck
-		a.container.Close() //nolint:errcheck
-	}
+	a.closeCurrentContainerLocked()
 
 	c, err := container.Create(path,
 		container.WithPassphrase(passphrase),
@@ -231,28 +352,10 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
-	a.initModeFromMeta()
+	a.beginFileSession()
+	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
 	a.emitEvent("file:opened")
-	a.emitAutoExec()
 	return nil
-}
-
-// emitAutoExec runs the configured AutoExec startup macro (plan §5.3) and emits
-// its startup UI intents on the "app:autoexec" event so the App Shell applies
-// them on file open (the AutoExec-opens-switchboard acceptance). It is called
-// from OpenFile/CreateFile while a.mu is held, so it uses the lock-free
-// runAutoExecLocked. Failures are logged, not fatal — a broken startup macro
-// must not block opening the file.
-func (a *App) emitAutoExec() {
-	res, err := a.runAutoExecLocked()
-	if err != nil {
-		a.logger.Warn("autoexec macro failed on open", "error", err)
-		return
-	}
-	if res == nil || len(res.Intents) == 0 {
-		return
-	}
-	a.emitEvent("app:autoexec", res.Intents)
 }
 
 // CloseFile saves and closes the current file.
@@ -279,6 +382,7 @@ func (a *App) CloseFile() error {
 	a.engine = nil
 	a.registry = nil
 	a.filePath = ""
+	a.sessionID = ""
 	a.emitEvent("file:closed")
 	return nil
 }
@@ -303,13 +407,18 @@ func (a *App) IsFileOpen() bool {
 
 // FileInfo holds metadata about the open file.
 type FileInfo struct {
-	Path        string `json:"path"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	PageCount   int    `json:"page_count"`
-	TableCount  int    `json:"table_count"`
-	QueryCount  int    `json:"query_count"`
-	FileSize    int64  `json:"file_size"`
+	Path          string `json:"path"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	NotebookCount int    `json:"notebook_count"`
+	TableCount    int    `json:"table_count"`
+	QueryCount    int    `json:"query_count"`
+	FileSize      int64  `json:"file_size"`
+	// SessionID identifies the currently open container (see App.sessionID's
+	// doc comment). A view that reads data at load time should capture this
+	// and send it back with any later write (e.g. SaveNotebook) so the
+	// backend can reject a write from a superseded file session.
+	SessionID string `json:"session_id"`
 }
 
 // GetFileInfo returns metadata about the currently open file.
@@ -321,7 +430,7 @@ func (a *App) GetFileInfo() (*FileInfo, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	info := &FileInfo{Path: a.filePath}
+	info := &FileInfo{Path: a.filePath, SessionID: a.sessionID}
 
 	title, err := a.container.Meta("title")
 	if err == nil {
@@ -333,8 +442,8 @@ func (a *App) GetFileInfo() (*FileInfo, error) {
 	}
 
 	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&info.PageCount)    //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount) //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&info.NotebookCount) //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount)      //nolint:errcheck
 
 	if duckDB := a.container.DuckDBDB(); duckDB != nil {
 		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&info.TableCount) //nolint:errcheck
@@ -347,18 +456,23 @@ func (a *App) GetFileInfo() (*FileInfo, error) {
 	return info, nil
 }
 
-// --- Pages ---
+// --- Skills (#62) ---
 
-// PageSummary holds a page list entry.
-type PageSummary struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	PageType  string `json:"page_type"`
-	SortOrder int    `json:"sort_order"`
+// SkillSummary is one skill as the Skills view lists it.
+type SkillSummary struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
+	TableName    string `json:"table_name,omitempty"`
+	Source       string `json:"source"` // built-in | user | import
 }
 
-// ListPages returns all pages in the container.
-func (a *App) ListPages() ([]PageSummary, error) {
+// ListSkills returns every skill visible to chat: built-ins plus stored
+// user/import skills that pass table gating (a table-bound skill only
+// appears once its table exists and has rows). Mirrors exactly what the
+// agent's list_skills tool would return, so the Skills view shows the same
+// set the model can actually see.
+func (a *App) ListSkills() ([]SkillSummary, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -366,986 +480,350 @@ func (a *App) ListPages() ([]PageSummary, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	db := a.container.SQLiteDB()
-	// System pages (id prefixed with '_', e.g. the `_dashboard` page that backs
-	// the Studio Home) are excluded from the user-facing Pages list (P3.10).
-	rows, err := db.Query("SELECT id, title, page_type, sort_order FROM _vibe_pages WHERE id NOT LIKE '\\_%' ESCAPE '\\' ORDER BY sort_order, title")
+	entries, err := agents.LoadSkills(a.container.SQLiteDB(), a.container.DuckDBDB(), a.logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list pages: %w", err)
+		return nil, fmt.Errorf("failed to list skills: %w", err)
 	}
-	defer rows.Close()
-
-	result := make([]PageSummary, 0)
-	for rows.Next() {
-		var p PageSummary
-		if err := rows.Scan(&p.ID, &p.Title, &p.PageType, &p.SortOrder); err != nil {
-			return nil, fmt.Errorf("failed to scan page: %w", err)
-		}
-		result = append(result, p)
+	visible := agents.ChatVisibleSkills(entries)
+	out := make([]SkillSummary, 0, len(visible))
+	for _, s := range visible {
+		out = append(out, SkillSummary{
+			Name: s.Name, Description: s.Description, Instructions: s.Instructions,
+			TableName: s.TableName, Source: s.Source,
+		})
 	}
-	return result, rows.Err()
+	return out, nil
 }
 
-// PageDetail holds full page content.
-type PageDetail struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	PageType  string `json:"page_type"`
-	SortOrder int    `json:"sort_order"`
+// SaveSkill creates or updates a user-authored skill. Studio-only; rejects
+// built-in names, the reserved "task-" prefix, and invalid names — the same
+// validation the create_or_update_skill agent tool applies (SaveUserSkill is
+// shared by both entry points). Like page/table CRUD elsewhere in this file,
+// this bypasses the agent sandbox gate entirely: it's the user directly
+// authoring content in Studio, not an agent tool call.
+func (a *App) SaveSkill(name, description, instructions, tableName string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	if err := agents.SaveUserSkill(a.container.SQLiteDB(), a.container.DuckDBDB(), name, description, instructions, tableName); err != nil {
+		return err
+	}
+	a.emitEvent("data:changed")
+	return nil
 }
 
-// GetPage returns a single page by ID.
-func (a *App) GetPage(id string) (*PageDetail, error) {
+// DeleteSkill removes a user- or import-authored skill. Built-ins can't be
+// deleted (they aren't rows in _vibe_skills).
+func (a *App) DeleteSkill(name string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+	if err := agents.DeleteSkill(a.container.SQLiteDB(), name); err != nil {
+		return err
+	}
+	a.emitEvent("data:changed")
+	return nil
+}
+
+// --- Notebooks (#66 part A) ---
+//
+// SQL execution for a notebook cell reuses RunA2UIQuery — a notebook's sql
+// cell is a read query, the same live binding an A2UI page's data-bound
+// component uses (same sandbox-gated classifier, same read-only-only gate).
+// Writes belong in the Query Explorer or the table browser, not in a
+// notebook cell; RunA2UIQuery already rejects a write with
+// errReadOnlyBindingDenied, and the frontend surfaces that as "Notebook
+// cells are read-only queries — use the Query editor to change data."
+
+// NotebooksChangedEvent is the payload of every "notebooks:changed" Wails
+// event (review fix, finding 2). AppendedCellIDs is the load-bearing field:
+// an open NotebookView.vue merges in ONLY cell ids listed here — never "any
+// remote id we don't already have locally" (the pre-fix behavior), which
+// could resurrect a cell the user had just deleted locally but not yet
+// saved. Every emitter that is NOT "an agent tool appended a specific new
+// cell" (CreateNotebook, SaveNotebook, RenameNotebook, DeleteNotebook,
+// ImportNotebook) omits AppendedCellIDs entirely — the frontend treats an
+// event with no AppendedCellIDs as "not an append, nothing to merge" (this
+// is also how NotebookView tells its OWN SaveNotebook echo apart from a
+// remote append: its own save never sets this field).
+type NotebooksChangedEvent struct {
+	NotebookID      string   `json:"notebookId"`
+	AppendedCellIDs []string `json:"appendedCellIds,omitempty"`
+}
+
+// emitNotebooksChanged emits "notebooks:changed" with the shared payload
+// shape — see NotebooksChangedEvent.
+func (a *App) emitNotebooksChanged(notebookID string, appendedCellIDs []string) {
+	a.emitEvent("notebooks:changed", NotebooksChangedEvent{NotebookID: notebookID, AppendedCellIDs: appendedCellIDs})
+}
+
+// ListNotebooks returns every notebook's summary, newest-updated first.
+func (a *App) ListNotebooks() ([]notebooks.Summary, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-
-	db := a.container.SQLiteDB()
-	var p PageDetail
-	err := db.QueryRow("SELECT id, title, content, page_type, sort_order FROM _vibe_pages WHERE id = ?", id).
-		Scan(&p.ID, &p.Title, &p.Content, &p.PageType, &p.SortOrder)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get page: %w", err)
-	}
-	return &p, nil
+	return notebooks.List(a.container.SQLiteDB())
 }
 
-// CancelRender cancels any in-flight page render, killing running DB queries.
-func (a *App) CancelRender() {
-	a.renderMu.Lock()
-	defer a.renderMu.Unlock()
-	if a.renderCancel != nil {
-		a.renderCancel()
-		a.renderCancel = nil
-	}
-}
-
-// RenderPageContent renders a page's content as HTML fragments.
-func (a *App) RenderPageContent(id string, params map[string]string) (string, error) {
-	// Cancel any previous render and create a new cancellable context.
-	a.renderMu.Lock()
-	if a.renderCancel != nil {
-		a.renderCancel()
-	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	a.renderCancel = cancel
-	a.renderMu.Unlock()
-
+// GetNotebook loads one notebook, rebuilt through notebooks.Coerce.
+func (a *App) GetNotebook(id string) (*notebooks.Notebook, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+		return nil, fmt.Errorf("no file open")
 	}
-
-	db := a.container.SQLiteDB()
-	var content, pageType string
-	err := db.QueryRow("SELECT content, page_type FROM _vibe_pages WHERE id = ?", id).Scan(&content, &pageType)
+	nb, warnings, err := notebooks.Get(a.container.SQLiteDB(), id)
 	if err != nil {
-		return "", fmt.Errorf("failed to get page content: %w", err)
+		return nil, err
 	}
-
-	page, err := pages.Parse(content)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse page: %w", err)
+	for _, w := range warnings {
+		a.logger.Warn("notebook coercion warning", "notebook_id", id, "warning", w)
 	}
-
-	// Convert string params to any params for engine.
-	engineParams := make(map[string]any, len(params))
-	for k, v := range params {
-		engineParams[k] = v
-	}
-
-	executed, err := pages.Execute(ctx, page, &engineAdapter{mgr: a.engine}, engineParams)
-	if err != nil {
-		return "", fmt.Errorf("failed to execute page: %w", err)
-	}
-
-	// Expand Go template syntax in text nodes.
-	executed, err = pages.ExpandTemplates(executed, engineParams)
-	if err != nil {
-		return "", fmt.Errorf("failed to expand templates: %w", err)
-	}
-
-	return a.renderExecutedNodes(executed, pageType)
+	return &nb, nil
 }
 
-// renderExecutedNodes renders executed page nodes to HTML fragments. The page's
-// resolved variable registry (frontmatter + params) is threaded down so input
-// filters (P3.6) can mark their current selection as selected/checked.
-func (a *App) renderExecutedNodes(executed *pages.ExecutedPage, pageType string) (string, error) {
-	return a.renderNodeList(executed.Nodes, pageType, executed.Variables)
-}
-
-// renderNodeList renders a slice of executed nodes to HTML.
-func (a *App) renderNodeList(nodes []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
-	var b strings.Builder
-
-	for _, en := range nodes {
-		switch n := en.Node.(type) {
-		case *pages.TextNode:
-			var rendered string
-			if pageType == "html" {
-				rendered = n.Content
-			} else {
-				var mdBuf bytes.Buffer
-				if err := goldmark.Convert([]byte(n.Content), &mdBuf); err != nil {
-					rendered = "<div class=\"prose\">" + n.Content + "</div>\n"
-				} else {
-					rendered = "<div class=\"prose\">" + mdBuf.String() + "</div>\n"
-				}
-			}
-			// Substitute resolved inline {value:} directive placeholders with
-			// formatted inline <span> elements (post-markdown so they survive
-			// goldmark untouched and can embed within prose).
-			rendered = substituteInlineValues(rendered, en.InlineValues)
-			b.WriteString(rendered)
-
-		case *pages.SQLBlockNode:
-			// SQL blocks don't render directly (they produce result sets for directives).
-
-		case *pages.DirectiveNode:
-			html, err := a.renderDirective(n, en.Result, en.InlineValues, vars)
-			if err != nil {
-				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Type, err))
-				continue
-			}
-			b.WriteString(html)
-			b.WriteString("\n")
-
-		case *pages.RowNode:
-			html, err := a.renderRow(n, en.Children, pageType, vars)
-			if err != nil {
-				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering row: %s</div>\n", err))
-				continue
-			}
-			b.WriteString(html)
-			b.WriteString("\n")
-
-		case *pages.BlockNode:
-			html, err := a.renderBlock(n, en.Children, pageType, vars)
-			if err != nil {
-				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering %s: %s</div>\n", n.Kind, err))
-				continue
-			}
-			b.WriteString(html)
-			b.WriteString("\n")
-
-		case *pages.ConditionalNode:
-			// Defensive: pages.Execute resolves conditionals by inlining the
-			// surviving branch's children, so a ConditionalNode should never
-			// reach here. If one does (e.g. a future code path that skips the
-			// executor), render its already-executed children rather than
-			// silently swallowing the node.
-			html, err := a.renderNodeList(en.Children, pageType, vars)
-			if err != nil {
-				b.WriteString(fmt.Sprintf("<div class=\"error\">Error rendering conditional: %s</div>\n", err))
-				continue
-			}
-			b.WriteString(html)
-
-		default:
-			// Unknown node types are dropped intentionally; SQLBlockNode is the
-			// only other expected case and renders nothing on its own.
-		}
-	}
-
-	return b.String(), nil
-}
-
-// renderRow renders a RowNode as a CSS grid container. Each direct child
-// becomes a grid cell. The "cols" config sets the column count (default 2).
-func (a *App) renderRow(node *pages.RowNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
-	cols := "2"
-	if c, ok := node.Config["cols"]; ok {
-		if s, ok := c.(string); ok && s != "" {
-			cols = s
-		}
-	}
-	gap := "1rem"
-	if g, ok := node.Config["gap"]; ok {
-		if s, ok := g.(string); ok && s != "" {
-			gap = s
-		}
-	}
-
-	// Render each child as a separate grid cell.
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("<div class=\"vibe-row\" style=\"grid-template-columns: repeat(%s, 1fr); gap: %s;\">", cols, gap))
-
-	for _, en := range children {
-		cellHTML, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType, vars)
-		if err != nil {
-			return "", err
-		}
-		b.WriteString("<div class=\"vibe-col\">")
-		b.WriteString(cellHTML)
-		b.WriteString("</div>")
-	}
-
-	b.WriteString("</div>")
-	return b.String(), nil
-}
-
-// renderBlock renders a generalized layout BlockNode (P3.5): {stack}, {tabs}
-// (with {tab:} sections), and {callout}. Each block wraps its already-executed
-// children, recursing through renderNodeList so nested directives/SQL resolve.
-func (a *App) renderBlock(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
-	switch node.Kind {
-	case "tabs":
-		return a.renderTabs(node, children, pageType, vars)
-	case "callout":
-		return a.renderCallout(node, children, pageType, vars)
-	default: // "stack" and any future vertical container.
-		inner, err := a.renderNodeList(children, pageType, vars)
-		if err != nil {
-			return "", err
-		}
-		return "<div class=\"vibe-stack\">" + inner + "</div>", nil
-	}
-}
-
-// renderTabs renders a {tabs} block as a tab header bar plus one switchable
-// panel per {tab:} section. Each "tab" child BlockNode contributes a header
-// (its label) and a corresponding vibe-tab-panel wrapping its own children.
-func (a *App) renderTabs(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
-	var headers strings.Builder
-	var panels strings.Builder
-
-	tabIdx := 0
-	for _, en := range children {
-		tab, ok := en.Node.(*pages.BlockNode)
-		if !ok || tab.Kind != "tab" {
-			// Stray non-tab content inside {tabs} renders before the panels.
-			stray, err := a.renderNodeList([]pages.ExecutedNode{en}, pageType, vars)
-			if err != nil {
-				return "", err
-			}
-			panels.WriteString(stray)
-			continue
-		}
-
-		label, _ := tab.Config["tab"].(string)
-		active := ""
-		if tabIdx == 0 {
-			active = " active"
-		}
-		headers.WriteString(fmt.Sprintf(
-			"<button type=\"button\" class=\"vibe-tab-header%s\" data-tab-index=\"%d\">%s</button>",
-			active, tabIdx, html.EscapeString(label)))
-
-		panelInner, err := a.renderNodeList(en.Children, pageType, vars)
-		if err != nil {
-			return "", err
-		}
-		panels.WriteString(fmt.Sprintf(
-			"<div class=\"vibe-tab-panel%s\" data-tab-index=\"%d\">%s</div>",
-			active, tabIdx, panelInner))
-		tabIdx++
-	}
-
-	var b strings.Builder
-	b.WriteString("<div class=\"vibe-tabs\">")
-	b.WriteString("<div class=\"vibe-tab-headers\">")
-	b.WriteString(headers.String())
-	b.WriteString("</div>")
-	b.WriteString(panels.String())
-	b.WriteString("</div>")
-	return b.String(), nil
-}
-
-// renderCallout renders a {callout: type: warning} block as a typed container
-// wrapping its prose/children. The type defaults to "info".
-func (a *App) renderCallout(node *pages.BlockNode, children []pages.ExecutedNode, pageType string, vars map[string]any) (string, error) {
-	calloutType := "info"
-	if t, ok := node.Config["type"].(string); ok && t != "" {
-		calloutType = t
-	}
-	inner, err := a.renderNodeList(children, pageType, vars)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("<div class=\"vibe-callout vibe-callout-%s\">%s</div>",
-		html.EscapeString(calloutType), inner), nil
-}
-
-// renderDirective renders a single directive node to HTML. For a standalone
-// {value:} directive, the scalar is pre-resolved by the executor and arrives in
-// inlineValues; all other directive types ignore it.
-func (a *App) renderDirective(node *pages.DirectiveNode, result *pages.ResultSet, inlineValues []pages.InlineValue, vars map[string]any) (string, error) {
-	// Convert pages.ResultSet to renderer.ResultSet.
-	var rrs *renderer.ResultSet
-	if result != nil {
-		rrs = &renderer.ResultSet{
-			Rows: result.Rows,
-		}
-		for _, col := range result.Columns {
-			rrs.Columns = append(rrs.Columns, renderer.Column{
-				Name: col.Name,
-				Type: col.Type,
-			})
-		}
-	}
-
-	switch node.Type {
-	case "table":
-		return a.renderer.RenderTable(&renderer.TableConfig{
-			Source:     getStringConfig(node.Config, "source"),
-			Title:      getStringConfig(node.Config, "title"),
-			Subtitle:   getStringConfig(node.Config, "subtitle"),
-			PageSize:   getIntConfig(node.Config, "page_size"),
-			RowShading: getBoolConfig(node.Config, "row_shading"),
-			Sortable:   true,
-			ColumnFmt:  getStringMapConfig(node.Config, "fmt"),
-			Result:     rrs,
-		})
-
-	case "chart":
-		// {chart: y: ...} accepts either a single column ("revenue") or a list
-		// ("[revenue, cost]"). A list produces one dataset per column.
-		ySingle, yList := getStringOrSliceConfig(node.Config, "y")
-
-		// `stacked` accepts a bool or a string; the "100%" normalized-stacking
-		// mode must survive verbatim. stackMode is "", "true", or "100%".
-		stackMode := getStackMode(node.Config, "stacked")
-
-		// `type: horizontal_bar` maps to a Chart.js bar chart with indexAxis "y".
-		chartType := getStringConfig(node.Config, "type")
-		horizontal := false
-		if strings.EqualFold(chartType, "horizontal_bar") {
-			chartType = "bar"
-			horizontal = true
-		}
-
-		return a.renderer.RenderChart(&renderer.ChartConfig{
-			Source:       getStringConfig(node.Config, "source"),
-			Type:         chartType,
-			X:            getStringConfig(node.Config, "x"),
-			Y:            ySingle,
-			YColumns:     yList,
-			Series:       getStringConfig(node.Config, "series"),
-			Stacked:      stackMode != "",
-			StackMode:    stackMode,
-			XFmt:         getStringConfig(node.Config, "x_fmt"),
-			YFmt:         getStringConfig(node.Config, "y_fmt"),
-			XTitle:       getStringConfig(node.Config, "x_title"),
-			YTitle:       getStringConfig(node.Config, "y_title"),
-			YRange:       getFloatRangeConfig(node.Config, "y_range"),
-			Colors:       getStringSliceConfig(node.Config, "colors"),
-			SeriesColors: getStringMapConfig(node.Config, "series_colors"),
-			Legend:       getBoolPtrConfig(node.Config, "legend"),
-			DataLabels:   getBoolConfig(node.Config, "data_labels"),
-			RefLines:     getRefLinesConfig(node.Config, "ref_lines"),
-			Horizontal:   horizontal,
-			Title:        getStringConfig(node.Config, "title"),
-			Color:        getStringConfig(node.Config, "color"),
-			Result:       rrs,
-		})
-
-	case "metric":
-		var value any
-		if rrs != nil && len(rrs.Rows) > 0 && len(rrs.Rows[0]) > 0 {
-			value = rrs.Rows[0][0]
-		}
-		// Support both "fmt" key and legacy "format" key
-		fmtCode := getStringConfig(node.Config, "fmt")
-		cfg := &renderer.MetricConfig{
-			Label:  getStringConfig(node.Config, "label"),
-			Title:  getStringConfig(node.Config, "title"),
-			Format: getStringConfig(node.Config, "format"),
-			Fmt:    fmtCode,
-			Value:  value,
-		}
-
-		// Comparison delta: resolve the prior baseline. Prefer an explicit "prior"
-		// column in the first row; otherwise the second column of the first row.
-		if comparison := getStringConfig(node.Config, "comparison"); comparison != "" && rrs != nil {
-			cfg.Comparison = comparison
-			cfg.PriorValue = metricPriorValue(rrs)
-		}
-
-		// Sparkline: build a numeric series from the result. For a two-column
-		// time-series, the second (numeric) column is the series.
-		if getBoolConfig(node.Config, "sparkline") && rrs != nil {
-			cfg.Sparkline = true
-			cfg.Series = metricSeries(rrs)
-			// For a time-series the "current" value is the latest point.
-			if len(cfg.Series) > 0 {
-				cfg.Value = cfg.Series[len(cfg.Series)-1]
-			}
-		}
-
-		return a.renderer.RenderMetric(cfg)
-
-	case "detail":
-		return a.renderer.RenderDetail(&renderer.DetailConfig{
-			Source: getStringConfig(node.Config, "source"),
-			Layout: getStringConfig(node.Config, "layout"),
-			Result: rrs,
-		})
-
-	case "form":
-		return a.renderer.RenderForm(&renderer.FormConfig{
-			Table: getStringConfig(node.Config, "table"),
-		})
-
-	case "value":
-		// A standalone-line {value:} directive: the executor pre-resolved the
-		// scalar (source+column or inline sql) into inlineValues. Render it as an
-		// inline <span> mirroring the inline-prose path, with a nil value (missing
-		// column / empty result) degrading to a safe em-dash placeholder rather
-		// than crashing.
-		var iv pages.InlineValue
-		if len(inlineValues) > 0 {
-			iv = inlineValues[0]
-		}
-		var text string
-		if iv.Value == nil {
-			text = "—" // em-dash placeholder for missing/empty values
-		} else if iv.Fmt != "" {
-			text = renderer.Format(iv.Value, iv.Fmt)
-		} else {
-			text = fmt.Sprintf("%v", iv.Value)
-		}
-		return "<span class=\"vibe-value\">" + html.EscapeString(text) + "</span>", nil
-
-	case "dropdown", "button_group", "slider", "text_input", "toggle":
-		// Interactive input filters (P3.6). Each registers a named variable; its
-		// current value (from the page params/frontmatter threaded down in vars)
-		// is rendered as the control's selection so it persists across the full
-		// re-render (Option A reactivity).
-		return a.renderInput(node, rrs, vars), nil
-
-	default:
-		return fmt.Sprintf("<div>Unknown directive: %s</div>", node.Type), nil
-	}
-}
-
-// renderInput renders an interactive input-filter directive (P3.6) to an HTML
-// control wired for full-page-re-render reactivity (Option A). Each control
-// registers the variable named by the directive's primary value (`name`) and
-// emits a `data-vibe-input` attribute carrying that name so the frontend can
-// collect the new value and re-invoke RenderPageContent with it. The control's
-// current value comes from the threaded variable registry so the selection
-// persists after re-render.
-func (a *App) renderInput(node *pages.DirectiveNode, rrs *renderer.ResultSet, vars map[string]any) string {
-	name := getStringConfig(node.Config, "name")
-	title := getStringConfig(node.Config, "title")
-	current := ""
-	if vars != nil {
-		if v, ok := vars[name]; ok && v != nil {
-			current = fmt.Sprintf("%v", v)
-		}
-	}
-
-	// Round-trip contract (see frontend wireInputFilters): every control lives
-	// inside a wrapper carrying data-vibe-input=<variable name>. The wrapper also
-	// declares which value the toggle maps to in its two states so an unchecked
-	// toggle has a well-defined param mapping (default: checked => "true",
-	// unchecked => "" which the collector treats as "remove the param" =>
-	// unfiltered). text_input maps an empty string the same way (absent param =>
-	// unfiltered). This makes the round-trip well-defined for every control type.
-	checkedValue := getStringConfig(node.Config, "checked_value")
-	if checkedValue == "" {
-		checkedValue = "true"
-	}
-	uncheckedValue := getStringConfig(node.Config, "unchecked_value") // default "" => param removed
-
-	var b strings.Builder
-	b.WriteString("<div class=\"vibe-input\" data-vibe-input=\"" + html.EscapeString(name) + "\"")
-	if node.Type == "toggle" {
-		b.WriteString(attr("data-vibe-checked-value", checkedValue))
-		b.WriteString(" data-vibe-unchecked-value=\"" + html.EscapeString(uncheckedValue) + "\"")
-	}
-	b.WriteString(">")
-	if title != "" {
-		b.WriteString("<label class=\"vibe-input-label\">" + html.EscapeString(title) + "</label>")
-	}
-
-	switch node.Type {
-	case "button_group":
-		b.WriteString("<div class=\"vibe-button-group\" role=\"group\">")
-		for _, opt := range inputOptions(node, rrs) {
-			active := ""
-			if opt == current {
-				active = " active"
-			}
-			b.WriteString(fmt.Sprintf(
-				"<button type=\"button\" class=\"vibe-button-group-item%s\" data-vibe-value=\"%s\">%s</button>",
-				active, html.EscapeString(opt), html.EscapeString(opt)))
-		}
-		b.WriteString("</div>")
-
-	case "slider":
-		min := getStringConfig(node.Config, "min")
-		max := getStringConfig(node.Config, "max")
-		step := getStringConfig(node.Config, "step")
-		val := current
-		if val == "" {
-			val = getStringConfig(node.Config, "default")
-		}
-		b.WriteString(fmt.Sprintf(
-			"<input type=\"range\" class=\"vibe-slider\"%s%s%s%s />",
-			attr("min", min), attr("max", max), attr("step", step), attr("value", val)))
-
-	case "text_input":
-		placeholder := getStringConfig(node.Config, "placeholder")
-		b.WriteString(fmt.Sprintf(
-			"<input type=\"text\" class=\"vibe-text-input\"%s%s />",
-			attr("placeholder", placeholder), attr("value", current)))
-
-	case "toggle":
-		checked := ""
-		if current == checkedValue || current == "true" || current == "1" {
-			checked = " checked"
-		}
-		b.WriteString("<input type=\"checkbox\" class=\"vibe-toggle\"" + checked + " />")
-
-	default: // "dropdown"
-		b.WriteString("<select class=\"vibe-dropdown\">")
-		for _, opt := range inputOptions(node, rrs) {
-			selected := ""
-			if opt == current {
-				selected = " selected"
-			}
-			b.WriteString(fmt.Sprintf(
-				"<option value=\"%s\"%s>%s</option>",
-				html.EscapeString(opt), selected, html.EscapeString(opt)))
-		}
-		b.WriteString("</select>")
-	}
-
-	b.WriteString("</div>")
-	return b.String()
-}
-
-// inputOptions extracts the distinct option values for an input control from its
-// bound source result set, reading the column named by the directive's `column`
-// config (defaulting to the first column).
-func inputOptions(node *pages.DirectiveNode, rrs *renderer.ResultSet) []string {
-	if rrs == nil || len(rrs.Rows) == 0 {
-		return nil
-	}
-	col := getStringConfig(node.Config, "column")
-	idx := 0
-	if col != "" {
-		for i, c := range rrs.Columns {
-			if c.Name == col {
-				idx = i
-				break
-			}
-		}
-	}
-	opts := make([]string, 0, len(rrs.Rows))
-	for _, row := range rrs.Rows {
-		if idx >= len(row) || row[idx] == nil {
-			continue
-		}
-		opts = append(opts, fmt.Sprintf("%v", row[idx]))
-	}
-	return opts
-}
-
-// attr renders an optional HTML attribute, emitting nothing when the value is
-// empty so controls degrade cleanly when config is omitted.
-func attr(name, value string) string {
-	if value == "" {
-		return ""
-	}
-	return fmt.Sprintf(" %s=\"%s\"", name, html.EscapeString(value))
-}
-
-// substituteInlineValues replaces resolved inline {value:} placeholders in
-// already-rendered HTML with formatted inline <span> elements. Each value is
-// formatted via the shared renderer.Format codes; a nil value (missing column /
-// empty result) renders as a safe em-dash placeholder rather than crashing.
-func substituteInlineValues(rendered string, values []pages.InlineValue) string {
-	for _, iv := range values {
-		var text string
-		if iv.Value == nil {
-			text = "—" // em-dash placeholder for missing/empty values
-		} else if iv.Fmt != "" {
-			text = renderer.Format(iv.Value, iv.Fmt)
-		} else {
-			text = fmt.Sprintf("%v", iv.Value)
-		}
-		span := "<span class=\"vibe-value\">" + html.EscapeString(text) + "</span>"
-		rendered = strings.ReplaceAll(rendered, iv.Placeholder, span)
-	}
-	return rendered
-}
-
-// metricPriorValue resolves the comparison baseline from a result set. It prefers
-// a column named "prior" (case-insensitive) in the first row, else falls back to
-// the second column of the first row.
-func metricPriorValue(rrs *renderer.ResultSet) any {
-	if rrs == nil || len(rrs.Rows) == 0 {
-		return nil
-	}
-	row := rrs.Rows[0]
-	for i, col := range rrs.Columns {
-		if i < len(row) && strings.EqualFold(col.Name, "prior") {
-			return row[i]
-		}
-	}
-	if len(row) > 1 {
-		return row[1]
-	}
-	return nil
-}
-
-// metricSeries extracts a numeric series for a sparkline. For a multi-column
-// result it uses the last column (the measure in a time-series); for a
-// single-column result it uses that column.
-func metricSeries(rrs *renderer.ResultSet) []float64 {
-	if rrs == nil || len(rrs.Columns) == 0 {
-		return nil
-	}
-	col := len(rrs.Columns) - 1
-	series := make([]float64, 0, len(rrs.Rows))
-	for _, row := range rrs.Rows {
-		if col < len(row) {
-			series = append(series, renderer.ToFloat64(row[col]))
-		}
-	}
-	return series
-}
-
-// getIntConfig extracts an int from a config map value, tolerating the numeric
-// types YAML decoding may produce (int, int64, float64).
-func getIntConfig(config map[string]any, key string) int {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
-}
-
-// getBoolConfig extracts a bool from a config map value, tolerating string forms.
-func getBoolConfig(config map[string]any, key string) bool {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return false
-	}
-	switch b := v.(type) {
-	case bool:
-		return b
-	case string:
-		return strings.EqualFold(b, "true")
-	default:
-		return false
-	}
-}
-
-// getStackMode reads a stacking config value that may be a bool or a string.
-// It returns "" (no stacking), "true" (plain stacking), or "100%" (normalized
-// stacking). Any truthy string other than "100%" maps to "true".
-func getStackMode(config map[string]any, key string) string {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return ""
-	}
-	switch b := v.(type) {
-	case bool:
-		if b {
-			return "true"
-		}
-		return ""
-	case string:
-		s := strings.TrimSpace(b)
-		if s == "100%" {
-			return "100%"
-		}
-		if strings.EqualFold(s, "true") {
-			return "true"
-		}
-		return ""
-	default:
-		return ""
-	}
-}
-
-// getBoolPtrConfig reads an optional bool. It returns nil when the key is
-// absent so callers can distinguish "unset" from "false".
-func getBoolPtrConfig(config map[string]any, key string) *bool {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return nil
-	}
-	var b bool
-	switch t := v.(type) {
-	case bool:
-		b = t
-	case string:
-		b = strings.EqualFold(strings.TrimSpace(t), "true")
-	default:
-		return nil
-	}
-	return &b
-}
-
-// toFloatPtr converts a YAML-decoded scalar to a *float64, or nil if it is not
-// numeric.
-func toFloatPtr(v any) *float64 {
-	switch n := v.(type) {
-	case float64:
-		return &n
-	case int:
-		f := float64(n)
-		return &f
-	case int64:
-		f := float64(n)
-		return &f
-	case string:
-		var f float64
-		if _, err := fmt.Sscanf(strings.TrimSpace(n), "%g", &f); err == nil {
-			return &f
-		}
-	}
-	return nil
-}
-
-// getFloatRangeConfig reads a [min, max] numeric range (e.g. y_range: [0, 100]).
-// Either bound may be null to leave it auto.
-func getFloatRangeConfig(config map[string]any, key string) [2]*float64 {
-	var out [2]*float64
-	v, ok := config[key]
-	if !ok || v == nil {
-		return out
-	}
-	list, ok := v.([]any)
-	if !ok {
-		return out
-	}
-	if len(list) > 0 {
-		out[0] = toFloatPtr(list[0])
-	}
-	if len(list) > 1 {
-		out[1] = toFloatPtr(list[1])
-	}
-	return out
-}
-
-// getStringSliceConfig reads a YAML flow list of strings (e.g. colors: [a, b]).
-func getStringSliceConfig(config map[string]any, key string) []string {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return nil
-	}
-	switch t := v.(type) {
-	case []string:
-		return t
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, item := range t {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			} else {
-				out = append(out, fmt.Sprintf("%v", item))
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-// getRefLinesConfig reads ref_lines: [{value: 50000, label: "Target"}] into a
-// slice of renderer.RefLine.
-func getRefLinesConfig(config map[string]any, key string) []renderer.RefLine {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return nil
-	}
-	list, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]renderer.RefLine, 0, len(list))
-	for _, item := range list {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		rl := renderer.RefLine{}
-		if fp := toFloatPtr(m["value"]); fp != nil {
-			rl.Value = *fp
-		}
-		if s, ok := m["label"].(string); ok {
-			rl.Label = s
-		}
-		out = append(out, rl)
-	}
-	return out
-}
-
-func getStringConfig(config map[string]any, key string) string {
-	if v, ok := config[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-// getStringOrSliceConfig reads a config value that may be either a scalar string
-// or a YAML flow list. A scalar (e.g. "revenue") is returned as the single
-// value with a nil slice; a list (e.g. [revenue, cost]) is returned as the slice
-// with an empty single value. This lets the chart directive accept both
-// `y: revenue` (single-series) and `y: [revenue, cost]` (multi-series).
-func getStringOrSliceConfig(config map[string]any, key string) (single string, list []string) {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return "", nil
-	}
-	switch t := v.(type) {
-	case string:
-		return t, nil
-	case []any:
-		for _, item := range t {
-			if s, ok := item.(string); ok {
-				list = append(list, s)
-			} else {
-				list = append(list, fmt.Sprintf("%v", item))
-			}
-		}
-		return "", list
-	case []string:
-		return "", t
-	default:
-		return fmt.Sprintf("%v", v), nil
-	}
-}
-
-// getStringMapConfig extracts a map[string]string from a config map value.
-// Handles both map[string]any and map[string]string input types.
-func getStringMapConfig(config map[string]any, key string) map[string]string {
-	v, ok := config[key]
-	if !ok || v == nil {
-		return nil
-	}
-	switch m := v.(type) {
-	case map[string]string:
-		return m
-	case map[string]any:
-		result := make(map[string]string, len(m))
-		for k, val := range m {
-			if s, ok := val.(string); ok {
-				result[k] = s
-			}
-		}
-		return result
-	default:
-		return nil
-	}
-}
-
-// CreatePage creates a new page and returns its ID.
-func (a *App) CreatePage(title, content string) (string, error) {
+// SetActiveNotebook records which notebook is currently open in
+// NotebookView.vue (or clears it with ""), for the chat/MCP agent's
+// add_query_cell/create_dashboard tools (#67 deferred part) — "append to the
+// notebook currently open in Studio" needs the frontend to say which one
+// that is; there is no other way for a Go binding to know. The view calls
+// this on mount, on switching notebooks, and with "" on unmount/close.
+func (a *App) SetActiveNotebook(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.activeNotebookID = id
+}
 
-	if err := a.guardStudioOnly("CreatePage"); err != nil {
-		return "", err
-	}
+// CreateNotebook creates a new, empty notebook and returns it.
+func (a *App) CreateNotebook(title string) (*notebooks.Notebook, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
 	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+		return nil, fmt.Errorf("no file open")
 	}
-
-	id := uuid.New().String()
-	db := a.container.SQLiteDB()
-	_, err := db.Exec(
-		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'notebook', 0, ?, ?)",
-		id, title, content, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339),
-	)
+	nb, err := notebooks.Create(a.container.SQLiteDB(), title)
 	if err != nil {
-		return "", fmt.Errorf("failed to create page: %w", err)
+		return nil, err
 	}
-	return id, nil
+	a.emitNotebooksChanged(nb.ID, nil)
+	return &nb, nil
 }
 
-// CreateHTMLPage creates a new HTML page and returns its ID.
-func (a *App) CreateHTMLPage(title, content string) (string, error) {
+// NotebookSaveResult wraps a saved/imported notebook with any warnings
+// notebooks.Coerce produced — a save can silently drop or clamp fields (an
+// unknown cell type, an out-of-range view, an invalid a2ui page), and the
+// caller needs to know rather than have it happen invisibly.
+type NotebookSaveResult struct {
+	Notebook notebooks.Notebook `json:"notebook"`
+	Warnings []string           `json:"warnings"`
+}
+
+// SaveNotebook rebuilds raw (the frontend's in-memory notebook, JSON-decoded
+// into a plain map by Wails) through notebooks.Coerce and upserts it. This is
+// the ONE write path for a notebook's title/cells — the frontend's add/move/
+// delete/collapse cell operations all mutate its local copy and call this
+// with the whole document, matching the "outputs are never persisted, only
+// source/view/page are" contract (Coerce only ever keeps those fields).
+// sessionID must be the value GetFileInfo().SessionID returned at the time
+// the caller LOADED the notebook it is now saving (see App.sessionID's doc
+// comment) — never re-fetched at save time, or this check couldn't catch
+// the bug it exists for (a save that fires after the file underneath it was
+// already switched). A mismatch means the file was closed/reopened/switched
+// since this notebook was loaded, so the write is rejected rather than
+// silently landing in the wrong container.
+func (a *App) SaveNotebook(raw map[string]any, sessionID string) (*NotebookSaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("CreateHTMLPage"); err != nil {
-		return "", err
-	}
 
 	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+		return nil, fmt.Errorf("no file open")
 	}
-
-	id := uuid.New().String()
-	db := a.container.SQLiteDB()
-	_, err := db.Exec(
-		"INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at) VALUES (?, ?, ?, 'html', 0, ?, ?)",
-		id, title, content, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339),
-	)
+	if sessionID != a.sessionID {
+		return nil, fmt.Errorf("stale file session: the open file changed since this notebook was loaded; reopen it and try again")
+	}
+	nb, warnings, err := notebooks.Save(a.container.SQLiteDB(), raw)
 	if err != nil {
-		return "", fmt.Errorf("failed to create html page: %w", err)
+		return nil, err
 	}
-	return id, nil
+	a.emitNotebooksChanged(nb.ID, nil)
+	return &NotebookSaveResult{Notebook: nb, Warnings: warnings}, nil
 }
 
-// UpdatePage updates a page's title and content.
-func (a *App) UpdatePage(id, title, content string) error {
+// RenameNotebook updates a notebook's title without touching its cells.
+func (a *App) RenameNotebook(id, title string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("UpdatePage"); err != nil {
-		return err
-	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-
-	db := a.container.SQLiteDB()
-	_, err := db.Exec(
-		"UPDATE _vibe_pages SET title = ?, content = ?, updated_at = ? WHERE id = ?",
-		title, content, time.Now().UTC().Format(time.RFC3339), id,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update page: %w", err)
+	if err := notebooks.Rename(a.container.SQLiteDB(), id, title); err != nil {
+		return err
 	}
+	a.emitNotebooksChanged(id, nil)
 	return nil
 }
 
-// DeletePage deletes a page by ID.
-func (a *App) DeletePage(id string) error {
+// DeleteNotebook removes a notebook by id.
+func (a *App) DeleteNotebook(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("DeletePage"); err != nil {
-		return err
-	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-
-	db := a.container.SQLiteDB()
-	_, err := db.Exec("DELETE FROM _vibe_pages WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete page: %w", err)
+	if err := notebooks.Delete(a.container.SQLiteDB(), id); err != nil {
+		return err
 	}
+	a.emitNotebooksChanged(id, nil)
 	return nil
+}
+
+// notebookExportFile is the shape ExportNotebook writes and ImportNotebook
+// reads — matching model.js's toFile()/coerceNotebook's accepted wrapper
+// shape ({kind, schemaVersion, notebook}), adapted to this product's file
+// kind (notebooks.FileKind).
+type notebookExportFile struct {
+	Kind          string             `json:"kind"`
+	SchemaVersion int                `json:"schemaVersion"`
+	ExportedAt    string             `json:"exportedAt"`
+	Notebook      notebooks.Notebook `json:"notebook"`
+}
+
+// ExportNotebook writes one notebook to a JSON file. If dst is empty, a save
+// dialog picks the destination; dst == "" and a cancelled dialog both return
+// ("", nil), matching ExportTableCSV's cancel semantics.
+func (a *App) ExportNotebook(id, dst string) (string, error) {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
+		return "", fmt.Errorf("no file open")
+	}
+	nb, warnings, err := notebooks.Get(a.container.SQLiteDB(), id)
+	a.mu.RUnlock()
+	if err != nil {
+		return "", err
+	}
+	for _, w := range warnings {
+		a.logger.Warn("notebook coercion warning on export", "notebook_id", id, "warning", w)
+	}
+
+	path := dst
+	if path == "" {
+		path, err = runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+			Title:           "Export Notebook",
+			DefaultFilename: nb.Title + ".json",
+			Filters: []runtime.FileFilter{
+				{DisplayName: "Vibe Notebook (*.json)", Pattern: "*.json"},
+			},
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to open save dialog: %w", err)
+		}
+		if path == "" {
+			return "", nil
+		}
+	}
+
+	file := notebookExportFile{
+		Kind: notebooks.FileKind, SchemaVersion: notebooks.SchemaVersion,
+		ExportedAt: time.Now().UTC().Format(time.RFC3339), Notebook: nb,
+	}
+	b, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal notebook: %w", err)
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		return "", fmt.Errorf("failed to write notebook file: %w", err)
+	}
+	return path, nil
+}
+
+// SelectNotebookFile opens a file dialog for choosing an exported notebook
+// JSON file — ImportNotebook's picker step.
+func (a *App) SelectNotebookFile() (string, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Import Notebook",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Vibe Notebook (*.json)", Pattern: "*.json"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to open file dialog: %w", err)
+	}
+	return path, nil
+}
+
+// ImportNotebook reads path (an ExportNotebook file) and imports it as a
+// brand-new notebook, through notebooks.Coerce like every other load. Import
+// never overwrites a notebook already in this container — the file's own id/
+// updatedAt are stripped before Coerce so a fresh id is always assigned,
+// matching model.js's importFile ("Import always lands as a new notebook").
+// maxImportNotebookFileBytes caps an imported notebook file at 8MB (review
+// fix, step 4a #7c) — checked via os.Stat BEFORE the file is read, so a
+// multi-hundred-MB file (or a symlink/fifo pointed at one) never gets
+// fully loaded into memory just to be rejected.
+const maxImportNotebookFileBytes = 8 * 1024 * 1024
+
+func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read notebook file: %w", err)
+	}
+	if info.Size() > maxImportNotebookFileBytes {
+		return nil, fmt.Errorf("notebook file is %d bytes, exceeding the %d byte import limit", info.Size(), maxImportNotebookFileBytes)
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read notebook file: %w", err)
+	}
+	var wrapper map[string]any
+	if err := json.Unmarshal(b, &wrapper); err != nil {
+		return nil, fmt.Errorf("invalid notebook file: %w", err)
+	}
+	// ImportNotebook specifically (unlike Storage.Get/SaveNotebook, which
+	// stay permissive about a bare notebook object with no "kind") requires
+	// the file to be self-identified as a Vibe notebook export — review fix,
+	// step 4a #7b: without this, importing an arbitrary JSON file that
+	// happens to parse (e.g. package.json) would silently either fail deep
+	// inside Coerce with a confusing error, or in a pathological case
+	// coincidentally look enough like a notebook to import garbage.
+	if kind, _ := wrapper["kind"].(string); kind != notebooks.FileKind {
+		return nil, fmt.Errorf("not a Vibe notebook file (expected \"kind\": %q, got %q)", notebooks.FileKind, kind)
+	}
+	if nested, ok := wrapper["notebook"].(map[string]any); ok {
+		delete(nested, "id")
+		delete(nested, "updatedAt")
+	} else {
+		delete(wrapper, "id")
+		delete(wrapper, "updatedAt")
+	}
+
+	nb, warnings, err := notebooks.Save(a.container.SQLiteDB(), wrapper)
+	if err != nil {
+		return nil, err
+	}
+	a.emitNotebooksChanged(nb.ID, nil)
+	return &NotebookSaveResult{Notebook: nb, Warnings: warnings}, nil
 }
 
 // --- Tables ---
@@ -1386,6 +864,9 @@ type ColumnInfo struct {
 	Type    string `json:"type"`
 	NotNull bool   `json:"not_null"`
 	PK      bool   `json:"pk"`
+	// FK is read-only output from DescribeTable (see engine.ColumnInfo.FK);
+	// CreateTable/AddColumn ignore it on input.
+	FK bool `json:"fk"`
 }
 
 // TableInfo describes a table's schema.
@@ -1414,7 +895,7 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 	// Shared introspection (internal/schema): fills real PRIMARY KEY membership
 	// from duckdb_constraints() — the previous inline query always reported
 	// PK=false, leaving the schema tree / ER diagram to guess by column name.
-	cols, err := schema.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe table: %w", err)
 	}
@@ -1425,6 +906,7 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 			Type:    c.Type,
 			NotNull: c.NotNull,
 			PK:      c.PK,
+			FK:      c.FK,
 		})
 	}
 	return info, nil
@@ -1472,7 +954,7 @@ func (a *App) ListTableStats() ([]TableStat, error) {
 	out := make([]TableStat, 0, len(names))
 	for _, n := range names {
 		var count int64
-		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", n)).Scan(&count); err != nil {
+		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(n))).Scan(&count); err != nil {
 			return nil, fmt.Errorf("failed to count rows of %q: %w", n, err)
 		}
 		out = append(out, TableStat{Name: n, Rows: count})
@@ -1575,7 +1057,7 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}
 
 	var totalRows int
-	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", name)).Scan(&totalRows); err != nil {
+	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(name))).Scan(&totalRows); err != nil {
 		return nil, fmt.Errorf("failed to count rows: %w", err)
 	}
 
@@ -1585,11 +1067,11 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		if strings.ToUpper(sortDir) == "DESC" {
 			dir = "DESC"
 		}
-		orderClause = fmt.Sprintf(" ORDER BY %q %s", sortCol, dir)
+		orderClause = fmt.Sprintf(" ORDER BY %s %s", engine.QuoteIdent(sortCol), dir)
 	}
 
 	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %q%s LIMIT ? OFFSET ?", name, orderClause)
+	query := fmt.Sprintf("SELECT * FROM %s%s LIMIT ? OFFSET ?", engine.QuoteIdent(name), orderClause)
 	rows, err := db.Query(query, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query table: %w", err)
@@ -1628,14 +1110,22 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		totalPages = 1
 	}
 
-	return &TableData{
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	result := &TableData{
 		Columns:    columns,
 		Rows:       data,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalRows:  totalRows,
 		TotalPages: totalPages,
-	}, rows.Err()
+	}
+	if err := jsonRoundTripGuard(result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // FilterCondition is one structured datasheet filter clause (plan §2.3). It is
@@ -1689,7 +1179,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	// Build an allowlist of real columns to validate filter/sort identifiers.
-	cols, err := schema.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}
@@ -1704,7 +1194,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	var totalRows int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q%s", name, whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", engine.QuoteIdent(name), whereClause)
 	if err := db.QueryRow(countQuery, args...).Scan(&totalRows); err != nil {
 		return nil, fmt.Errorf("failed to count filtered rows: %w", err)
 	}
@@ -1715,11 +1205,11 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 		if strings.ToUpper(sortDir) == "DESC" {
 			dir = "DESC"
 		}
-		orderClause = fmt.Sprintf(" ORDER BY %q %s", sortCol, dir)
+		orderClause = fmt.Sprintf(" ORDER BY %s %s", engine.QuoteIdent(sortCol), dir)
 	}
 
 	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %q%s%s LIMIT ? OFFSET ?", name, whereClause, orderClause)
+	query := fmt.Sprintf("SELECT * FROM %s%s%s LIMIT ? OFFSET ?", engine.QuoteIdent(name), whereClause, orderClause)
 	queryArgs := append(append([]any{}, args...), pageSize, offset)
 	rows, err := db.Query(query, queryArgs...)
 	if err != nil {
@@ -1760,14 +1250,18 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 		totalPages = 1
 	}
 
-	return &TableData{
+	result := &TableData{
 		Columns:    columns,
 		Rows:       data,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalRows:  totalRows,
 		TotalPages: totalPages,
-	}, nil
+	}
+	if err := jsonRoundTripGuard(result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // filterOps maps a FilterCondition.Op to its SQL comparison operator. Value-less
@@ -1804,26 +1298,20 @@ func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, er
 		}
 		switch c.Op {
 		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NULL", engine.QuoteIdent(c.Column)))
 		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NOT NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", engine.QuoteIdent(c.Column)))
 		default:
 			sqlOp, ok := filterOps[c.Op]
 			if !ok {
 				return "", nil, fmt.Errorf("unsupported filter operator %q", c.Op)
 			}
-			clauses = append(clauses, fmt.Sprintf("%q %s ?", c.Column, sqlOp))
+			clauses = append(clauses, fmt.Sprintf("%s %s ?", engine.QuoteIdent(c.Column), sqlOp))
 			args = append(args, c.Value)
 		}
 	}
 
 	return " WHERE " + strings.Join(clauses, " "+combinator+" "), args, nil
-}
-
-// FormSubmitRow describes one row to write as part of an atomic form submit.
-type FormSubmitRow struct {
-	Table  string         `json:"table"`
-	Values map[string]any `json:"values"`
 }
 
 // InsertRow inserts a row into a table, coercing all-string form inputs to the
@@ -1886,58 +1374,9 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 	return res, nil
 }
 
-// SubmitForm writes a parent row plus zero or more child rows as a single
-// atomic logical submit (Access-style form + subform). All writes run in one
-// DuckDB transaction: if any child fails coercion/validation, the whole submit
-// rolls back so no orphaned parent is left behind.
-func (a *App) SubmitForm(parent FormSubmitRow, children []FormSubmitRow) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return fmt.Errorf("DuckDB not available")
-	}
-
-	tx, err := ddb.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	rows := append([]FormSubmitRow{parent}, children...)
-	for _, row := range rows {
-		if !isValidIdentifier(row.Table) {
-			tx.Rollback() //nolint:errcheck
-			return fmt.Errorf("invalid table name")
-		}
-		colTypes, err := columnTypes(ddb, row.Table)
-		if err != nil {
-			tx.Rollback() //nolint:errcheck
-			return err
-		}
-		metas, err := fieldMetaMap(schema.NewStore(a.container.SQLiteDB()), row.Table)
-		if err != nil {
-			tx.Rollback() //nolint:errcheck
-			return err
-		}
-		if _, err := insertRowTx(tx, colTypes, metas, row.Table, row.Values); err != nil {
-			tx.Rollback() //nolint:errcheck
-			return err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit form submit: %w", err)
-	}
-	return nil
-}
-
 // prepareWrite validates the open container + table and loads the column types
 // and field metadata needed by the transactional write helpers.
-func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]schema.FieldMeta, error) {
+func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]crud.FieldMeta, error) {
 	if a.container == nil {
 		return nil, nil, nil, fmt.Errorf("no file open")
 	}
@@ -1952,7 +1391,7 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	metas, err := fieldMetaMap(schema.NewStore(a.container.SQLiteDB()), table)
+	metas, err := fieldMetaMap(crud.NewFieldMetaStore(a.container.SQLiteDB()), table)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -2018,10 +1457,6 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("CreateTable"); err != nil {
-		return err
-	}
-
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2036,10 +1471,10 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 
 	var colDefs, seqDDL []string
 	for _, col := range columns {
-		def := fmt.Sprintf("%q %s", col.Name, col.Type)
+		def := fmt.Sprintf("%s %s", engine.QuoteIdent(col.Name), col.Type)
 		if col.PK && isAutoNumberType(col.Type) {
 			seq := pkSequenceName(name, col.Name)
-			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %q START 1", seq))
+			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START 1", engine.QuoteIdent(seq)))
 			def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
 		}
 		if col.PK {
@@ -2051,7 +1486,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 		colDefs = append(colDefs, def)
 	}
 
-	query := fmt.Sprintf("CREATE TABLE %q (%s)", name, strings.Join(colDefs, ", "))
+	query := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(name), strings.Join(colDefs, ", "))
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
@@ -2065,223 +1500,14 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
-	a.seedFieldMetaDefaults(name, columns)
 	a.emitEvent("data:changed")
 	return nil
-}
-
-// seedFieldMetaDefaults infers Access-style field metadata for a freshly
-// created table: friendly captions for every column, and control types plus
-// validation for recognizable fields (email gets a server-enforced format rule
-// via the crud validation path). Best-effort — a metadata failure never fails
-// the table creation.
-func (a *App) seedFieldMetaDefaults(table string, columns []ColumnInfo) {
-	store := schema.NewStore(a.container.SQLiteDB())
-	for i, col := range columns {
-		meta := schema.FieldMeta{
-			TableName:  table,
-			ColumnName: col.Name,
-			Caption:    captionFor(col.Name),
-			SortOrder:  i,
-		}
-		lower := strings.ToLower(col.Name)
-		upperType := strings.ToUpper(strings.TrimSpace(col.Type))
-		switch {
-		case strings.Contains(lower, "email"):
-			meta.ControlType = "email"
-			// Column-relative Access-style rule (crud.normalizeRule prepends the
-			// column): requires text@text.text. NULL/absent passes — pair with
-			// Required for mandatory emails.
-			meta.ValidationRule = "LIKE '%_@_%.%'"
-			meta.ValidationMsg = "Enter a valid email address (like name@example.com)."
-		case strings.Contains(lower, "phone"):
-			meta.ControlType = "tel"
-		case strings.HasPrefix(upperType, "DATE"):
-			meta.ControlType = "date"
-		case strings.HasPrefix(upperType, "TIMESTAMP"):
-			meta.ControlType = "datetime"
-		case strings.HasPrefix(upperType, "BOOL"):
-			meta.ControlType = "checkbox"
-		}
-		if err := store.SetFieldMeta(table, col.Name, meta); err != nil {
-			a.logger.Warn("failed to seed field meta", "table", table, "column", col.Name, "error", err)
-		}
-	}
-}
-
-// captionFor turns a snake_case column name into a friendly caption
-// ("first_name" -> "First Name", "customer_id" -> "Customer Id").
-func captionFor(column string) string {
-	words := strings.Split(column, "_")
-	for i, w := range words {
-		if w == "" {
-			continue
-		}
-		words[i] = strings.ToUpper(w[:1]) + w[1:]
-	}
-	return strings.TrimSpace(strings.Join(words, " "))
-}
-
-// ForeignKeySpec describes a foreign-key relationship to add (P2.3): the child
-// column references the parent column, with optional cascade options.
-type ForeignKeySpec struct {
-	ChildTable   string `json:"child_table"`
-	ChildColumn  string `json:"child_column"`
-	ParentTable  string `json:"parent_table"`
-	ParentColumn string `json:"parent_column"`
-	OnDelete     string `json:"on_delete"`
-	OnUpdate     string `json:"on_update"`
-}
-
-// AddForeignKey declares a foreign-key relationship (P2.3): the child column
-// references the parent column. Because DuckDB does not support ALTER TABLE ...
-// ADD FOREIGN KEY (see internal/engine relationship spike §8/§4.1), the child
-// table is recreated with the FK declared inline (copy rows into a rebuilt table
-// that carries the inline REFERENCES, then swap). DuckDB FKs are RESTRICT-only,
-// which matches the Access "enforce referential integrity" default. The
-// relationship metadata is persisted into _vibe_relationships as the source of
-// truth. All validation runs BEFORE any mutation, so a rejected call leaves no
-// constraint and no metadata row behind.
-func (a *App) AddForeignKey(spec ForeignKeySpec) (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("AddForeignKey"); err != nil {
-		return "", err
-	}
-
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return "", fmt.Errorf("DuckDB not available")
-	}
-
-	// Single shared FK-emit path (internal/schema): validates identifiers and
-	// both endpoints, requires the parent column be PK/UNIQUE, and rebuilds the
-	// child table with the inline REFERENCES — preserving column DEFAULTs (the
-	// auto-number sequences) and the parent's FK dependency graph. The studio
-	// package previously carried a stale duplicate of this logic that did
-	// neither.
-	if err := schema.ApplyForeignKey(ddb, schema.ForeignKeySpec{
-		ChildTable:   spec.ChildTable,
-		ChildColumn:  spec.ChildColumn,
-		ParentTable:  spec.ParentTable,
-		ParentColumn: spec.ParentColumn,
-		OnDelete:     spec.OnDelete,
-		OnUpdate:     spec.OnUpdate,
-	}); err != nil {
-		return "", err
-	}
-
-	rel := schema.Relationship{
-		ID:               uuid.New().String(),
-		ParentTable:      spec.ParentTable,
-		ParentColumn:     spec.ParentColumn,
-		ChildTable:       spec.ChildTable,
-		ChildColumn:      spec.ChildColumn,
-		OnDelete:         normalizeAction(spec.OnDelete),
-		OnUpdate:         normalizeAction(spec.OnUpdate),
-		EnforceIntegrity: true,
-	}
-	store := schema.NewRelationshipStore(a.container.SQLiteDB())
-	if err := store.Save(rel); err != nil {
-		return "", fmt.Errorf("failed to persist relationship metadata: %w", err)
-	}
-
-	a.logger.Info("added foreign key",
-		"child_table", spec.ChildTable, "child_column", spec.ChildColumn,
-		"parent_table", spec.ParentTable, "parent_column", spec.ParentColumn,
-		"id", rel.ID)
-	return rel.ID, nil
-}
-
-// ListRelationships returns every stored foreign-key relationship definition.
-func (a *App) ListRelationships() ([]schema.Relationship, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-
-	store := schema.NewRelationshipStore(a.container.SQLiteDB())
-	rels, err := store.List()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list relationships: %w", err)
-	}
-	return rels, nil
-}
-
-// RemoveForeignKey drops the foreign-key constraint identified by id: the child
-// table is rebuilt WITHOUT the inline REFERENCES (since DuckDB cannot ALTER a FK
-// off an existing table) and the relationship metadata row is deleted.
-func (a *App) RemoveForeignKey(id string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("RemoveForeignKey"); err != nil {
-		return err
-	}
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-
-	store := schema.NewRelationshipStore(a.container.SQLiteDB())
-	rel, err := store.Get(id)
-	if err != nil {
-		return fmt.Errorf("failed to load relationship %q: %w", id, err)
-	}
-	if rel == nil {
-		return fmt.Errorf("relationship %q not found", id)
-	}
-
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return fmt.Errorf("DuckDB not available")
-	}
-
-	// Rebuild the child table with no FK spec to strip the inline REFERENCES
-	// (shared internal/schema path; preserves column DEFAULTs).
-	if err := schema.StripForeignKeys(ddb, rel.ChildTable); err != nil {
-		return err
-	}
-
-	if err := store.Delete(id); err != nil {
-		return fmt.Errorf("failed to delete relationship metadata %q: %w", id, err)
-	}
-
-	a.logger.Info("removed foreign key", "id", id, "child_table", rel.ChildTable)
-	return nil
-}
-
-// normalizeAction normalizes a referential action. DuckDB FKs are effectively
-// RESTRICT-only; any unrecognized/empty value is stored as the Access default
-// "RESTRICT" so the persisted metadata reflects the enforced behavior.
-func normalizeAction(action string) string {
-	switch strings.ToUpper(strings.TrimSpace(action)) {
-	case "CASCADE":
-		return "CASCADE"
-	case "SET NULL":
-		return "SET NULL"
-	case "NO ACTION":
-		return "NO ACTION"
-	default:
-		return "RESTRICT"
-	}
 }
 
 // DropTable drops a table.
 func (a *App) DropTable(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("DropTable"); err != nil {
-		return err
-	}
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
@@ -2294,7 +1520,7 @@ func (a *App) DropTable(name string) error {
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	_, err := ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q", name))
+	_, err := ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", engine.QuoteIdent(name)))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -2313,13 +1539,30 @@ type QueryResult struct {
 }
 
 // ExecuteQuery runs a SQL query on DuckDB.
+// jsonRoundTripGuard is a last-resort, defence-in-depth check (review fix,
+// #67 step 2 round 3): Wails marshals a binding's return value to JSON
+// itself on the way back to the frontend, and an unmarshalable value there
+// does not surface as an ordinary error to the JS caller — it took the
+// ENTIRE Studio process down, confirmed live (round 1 review: a raw NaN
+// float reaching a binding logged "FAT | json: unsupported value: NaN" and
+// exited the backend). engine.NormalizeValue now recursively sanitizes
+// every known composite shape DuckDB can return, so this should never
+// trigger in practice — but it is cheap (one json.Marshal, only ever
+// discarding the bytes) and every row-returning binding calls it on its
+// result immediately before returning, so a value NormalizeValue somehow
+// missed (a future composite type, a code path that doesn't call it) still
+// becomes an ordinary Go error surfaced to the one caller, never a crash of
+// every open file/every other in-flight call.
+func jsonRoundTripGuard(v any) error {
+	if _, err := json.Marshal(v); err != nil {
+		return fmt.Errorf("result contains a value that could not be serialized (%w) — this is almost certainly a bug in Vibe, not your query; please report it", err)
+	}
+	return nil
+}
+
 func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-
-	if err := a.guardStudioOnly("ExecuteQuery"); err != nil {
-		return nil, err
-	}
 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
@@ -2358,7 +1601,100 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 		result.Rows = append(result.Rows, cleaned)
 	}
 
+	if err := jsonRoundTripGuard(result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// a2uiQueryRowCap bounds how many rows a single A2UI data-bound component
+// (stat/table/barChart/lineChart) will render — independent of, and tighter
+// than, the agent's run_query MaxQueryRows, since a component's whole point
+// is a compact chart/stat/table inline in a chat reply or notebook cell, not
+// a full result grid.
+const a2uiQueryRowCap = 500
+
+// a2uiQueryTimeout bounds how long one RunA2UIQuery call may run before its
+// context is cancelled, interrupting the underlying DuckDB query (review
+// fix, step 4a #1 — a live binding must never be able to hang the file's
+// one DuckDB connection for other bindings/queries behind it).
+const a2uiQueryTimeout = 30 * time.Second
+
+// A2UIQueryResult is RunA2UIQuery's result shape: just columns + rows, the
+// minimum the Vue renderer's data-bound components need (see toPoints/
+// buildTable in the ported renderer).
+type A2UIQueryResult struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+	// Truncated is true when the query returned more than a2uiQueryRowCap
+	// rows and was cut off — the cap is now pushed into the query itself
+	// (RunReadOnlySQL's LIMIT push-down) rather than fetched-then-sliced,
+	// so this reports whether that LIMIT actually cut anything.
+	Truncated bool `json:"truncated"`
+}
+
+// RunA2UIQuery executes one A2UI component's "sql" binding. It is called by
+// the Vue renderer (studio/frontend/src/a2ui/) once per data-bound
+// component when an A2UI page renders, live, on every mount.
+//
+// This SQL was authored by the model, not typed by the user in the query
+// editor — unlike ExecuteQuery (the query editor's binding, deliberately
+// unrestricted for the human at the keyboard), RunA2UIQuery must go through
+// the sandbox classifier, not a bypass. It does NOT reuse run_query's own
+// JSON-RPC dispatch (review fix, #67 step 2): run_query's checkSQLClass lets
+// read-write/full execute a write, which is correct for an agent's one-shot
+// tool call but wrong here — a "sql" binding re-runs every time the page
+// renders, so a write there would fire on every render, not once. Instead it
+// calls agents.Handler.RunReadOnlySQL, which reuses the exact same
+// classifySQL (no second, drifted copy of the classifier) but gates the
+// result with checkSQLClassReadOnly: sqlClassRead only, regardless of
+// sandbox mode.
+func (a *App) RunA2UIQuery(sqlStr string) (*A2UIQueryResult, error) {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("no file open")
+	}
+	sandbox := a.metaOr("agent_sandbox", "full")
+	sc := &agents.SandboxConfig{Mode: agents.SandboxMode(sandbox), MaxQueryRows: 10000}
+	// ceiling = ModeFull: RunReadOnlySQL (below) forces read-only regardless
+	// of sc.Mode/ceiling, via its own checkSQLClassReadOnly gate — see this
+	// function's doc comment — so no additional cap is needed here.
+	handler := a.wrapAgentHandler(sc, agents.ModeFull)
+	a.mu.RUnlock()
+
+	// Row cap enforced server side (review fix) and pushed down into the
+	// query itself via LIMIT (review fix, round 4) rather than fetched in
+	// full then sliced — the frontend never gets a chance to render more
+	// than this many rows for one component, and a query like
+	// `SELECT * FROM range(100000000)` never materializes more than
+	// a2uiQueryRowCap+1 rows in the first place.
+	//
+	// Per-query timeout (review fix, step 4a #1): a2uiQueryTimeout bounds
+	// how long ANY one live binding may run. Without it, a notebook packed
+	// with many data-bound components (even after the Coerce-time cap) or
+	// an accidentally expensive query (e.g. a cross join) could hang this
+	// call indefinitely — and since this DB connection is shared, block
+	// every OTHER binding behind it too. go-duckdb's QueryContext honors
+	// ctx cancellation by interrupting the running query on the DuckDB
+	// connection, so this deadline actually stops the query, not just the
+	// Go-side wait.
+	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
+	defer cancel()
+	rs, truncated, err := handler.RunReadOnlySQL(ctx, sqlStr, nil, a2uiQueryRowCap)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &A2UIQueryResult{Truncated: truncated}
+	for _, c := range rs.Columns {
+		out.Columns = append(out.Columns, c.Name)
+	}
+	out.Rows = rs.Rows
+	if err := jsonRoundTripGuard(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // QuerySummary holds a query list entry.
@@ -2410,10 +1746,6 @@ func (a *App) SaveQuery(id, title, sqlStr, description string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("SaveQuery"); err != nil {
-		return err
-	}
-
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2457,10 +1789,6 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("SaveFilterAsQuery"); err != nil {
-		return "", err
-	}
-
 	sqlStr, err := a.generateFilterSQL(name, spec, columns)
 	if err != nil {
 		return "", err
@@ -2500,7 +1828,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		return "", fmt.Errorf("DuckDB not available")
 	}
 
-	cols, err := schema.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, name)
 	if err != nil {
 		return "", fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}
@@ -2517,7 +1845,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 			if !known[col] {
 				return "", fmt.Errorf("unknown selected column %q", col)
 			}
-			parts = append(parts, fmt.Sprintf("%q", col))
+			parts = append(parts, engine.QuoteIdent(col))
 		}
 		projection = strings.Join(parts, ", ")
 	}
@@ -2527,7 +1855,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		return "", err
 	}
 
-	return fmt.Sprintf("SELECT %s FROM %q%s", projection, name, whereClause), nil
+	return fmt.Sprintf("SELECT %s FROM %s%s", projection, engine.QuoteIdent(name), whereClause), nil
 }
 
 // buildFilterWhereInline mirrors buildFilterWhere but inlines literal values into
@@ -2551,15 +1879,15 @@ func buildFilterWhereInline(spec FilterSpec, known map[string]bool) (string, err
 		}
 		switch c.Op {
 		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NULL", engine.QuoteIdent(c.Column)))
 		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NOT NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", engine.QuoteIdent(c.Column)))
 		default:
 			sqlOp, ok := filterOps[c.Op]
 			if !ok {
 				return "", fmt.Errorf("unsupported filter operator %q", c.Op)
 			}
-			clauses = append(clauses, fmt.Sprintf("%q %s %s", c.Column, sqlOp, sqlLiteral(c.Value)))
+			clauses = append(clauses, fmt.Sprintf("%s %s %s", engine.QuoteIdent(c.Column), sqlOp, sqlLiteral(c.Value)))
 		}
 	}
 
@@ -2595,10 +1923,6 @@ func (a *App) DeleteQuery(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("DeleteQuery"); err != nil {
-		return err
-	}
-
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
@@ -2610,14 +1934,14 @@ func (a *App) DeleteQuery(id string) error {
 
 // DashboardData holds overview stats.
 type DashboardData struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	PageCount   int    `json:"page_count"`
-	TableCount  int    `json:"table_count"`
-	QueryCount  int    `json:"query_count"`
-	FileSize    int64  `json:"file_size"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	NotebookCount int    `json:"notebook_count"`
+	TableCount    int    `json:"table_count"`
+	QueryCount    int    `json:"query_count"`
+	FileSize      int64  `json:"file_size"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 // GetDashboard returns dashboard overview data.
@@ -2645,8 +1969,8 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 	}
 
 	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_pages").Scan(&d.PageCount)    //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount) //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&d.NotebookCount) //nolint:errcheck
+	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount)      //nolint:errcheck
 
 	if duckDB := a.container.DuckDBDB(); duckDB != nil {
 		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&d.TableCount) //nolint:errcheck
@@ -2682,9 +2006,6 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 	// SendAgentQuery runs arbitrary raw SQL (DDL/DML) via a.engine.Execute, so it
 	// is a Studio-only privileged surface exactly like ExecuteQuery and must be
 	// capability-gated in App Mode (P4.4).
-	if err := a.guardStudioOnly("SendAgentQuery"); err != nil {
-		return nil, err
-	}
 
 	rs, err := a.engine.Execute(context.Background(), query, nil)
 	if err != nil {
@@ -2772,9 +2093,6 @@ func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if err := a.guardStudioOnly("SetAgentConfig"); err != nil {
-		return err
-	}
 	if cfg.Sandbox != "" {
 		if err := a.container.SetMeta("agent_sandbox", cfg.Sandbox); err != nil {
 			return fmt.Errorf("failed to set agent_sandbox: %w", err)
@@ -2785,9 +2103,10 @@ func (a *App) SetAgentConfig(cfg AgentConfig) error {
 
 // AgentToolStep is one tool invocation the agent made during a chat turn.
 type AgentToolStep struct {
-	Tool   string `json:"tool"`
-	Input  string `json:"input"`
-	Output string `json:"output"`
+	Tool    string `json:"tool"`
+	Input   string `json:"input"`
+	Output  string `json:"output"`
+	IsError bool   `json:"isError,omitempty"`
 }
 
 // AgentChatResult is the panel-facing result of one agent turn.
@@ -2802,17 +2121,15 @@ type AgentChatResult struct {
 // panel. Studio-only: the agent can run SQL and mutate schema.
 //
 // The config snapshot + capability guard happen under a.mu, which is released
-// before the (slow, network-bound) LLM call so the agent's tools — which take
-// their own locks via the public App methods — don't deadlock.
+// before the (slow, network-bound) LLM call so the runner's own tool
+// dispatch loop isn't held up waiting on it. Each individual tool call the
+// agent makes re-takes a.mu itself — see agentToolHandler — instead of
+// running the whole multi-step turn unlocked.
 func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error) {
 	a.mu.RLock()
 	if a.container == nil {
 		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
-	}
-	if err := a.guardStudioOnly("AgentChat"); err != nil {
-		a.mu.RUnlock()
-		return nil, err
 	}
 	cfg := llm.Config{
 		Provider: a.llmCfg.Provider,
@@ -2821,16 +2138,21 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 		APIKey:   a.llmCfg.APIKey,
 		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
+	// Chat has no cap of its own beyond whatever the file's agent_sandbox
+	// setting allows — ceiling = ModeFull lets Tighter (in
+	// agentToolHandler.Handle) resolve to the file's live mode on every
+	// dispatch, same as before this fix.
+	handler := a.newAgentToolHandler(agents.ModeFull)
 	a.mu.RUnlock()
 
-	runner := llm.NewRunner(&llmDeps{app: a}, a.logger)
+	runner := llm.NewRunner(handler, a.logger)
 	res, err := runner.Chat(a.ctx, cfg, message, pinnedContext)
 	if err != nil {
 		return nil, err
 	}
 	out := &AgentChatResult{Text: res.Text}
 	for _, s := range res.Steps {
-		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output})
+		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output, IsError: s.IsError})
 	}
 	return out, nil
 }
@@ -2852,10 +2174,6 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
 	}
-	if err := a.guardStudioOnly("AgentChatStream"); err != nil {
-		a.mu.RUnlock()
-		return nil, err
-	}
 	cfg := llm.Config{
 		Provider: a.llmCfg.Provider,
 		Endpoint: a.llmCfg.Endpoint,
@@ -2863,6 +2181,9 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		APIKey:   a.llmCfg.APIKey,
 		Sandbox:  a.metaOr("agent_sandbox", "full"),
 	}
+	// Chat has no cap of its own beyond whatever the file's agent_sandbox
+	// setting allows — see AgentChat's identical comment.
+	handler := a.newAgentToolHandler(agents.ModeFull)
 	a.mu.RUnlock()
 
 	hist := make([]llm.Turn, 0, len(history))
@@ -2872,201 +2193,343 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 
 	emit := func(ev llm.StreamEvent) {
 		a.emitEvent("agent:stream", map[string]any{
-			"turnId": turnID,
-			"kind":   ev.Kind,
-			"text":   ev.Text,
-			"id":     ev.ID,
-			"tool":   ev.Tool,
-			"input":  ev.Input,
-			"output": ev.Output,
+			"turnId":  turnID,
+			"kind":    ev.Kind,
+			"text":    ev.Text,
+			"id":      ev.ID,
+			"tool":    ev.Tool,
+			"input":   ev.Input,
+			"output":  ev.Output,
+			"isError": ev.IsError,
 		})
 	}
 
-	runner := llm.NewRunner(&llmDeps{app: a}, a.logger)
+	runner := llm.NewRunner(handler, a.logger)
 	res, err := runner.ChatStream(a.ctx, cfg, message, pinnedContext, hist, emit)
 	if err != nil {
 		return nil, err
 	}
 	out := &AgentChatResult{Text: res.Text}
 	for _, s := range res.Steps {
-		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output})
+		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output, IsError: s.IsError})
 	}
 	return out, nil
 }
 
-// llmDeps adapts *App to the narrow llm.Deps interface so internal/llm never
-// imports the studio package.
-type llmDeps struct{ app *App }
-
-func (d *llmDeps) ListTables(_ context.Context) ([]string, error) {
-	return d.app.ListTables()
+// TaskCellArg / TaskTurnArg / AgentTaskRequest mirror internal/llm's
+// TaskCell/TaskTurn/TaskRequest as Wails-bound JSON shapes (Wails generates
+// TS types from these, not from internal/llm's — keeping the request/
+// response Go types in studio/app.go, like every other binding here, rather
+// than exposing internal/llm's types to the frontend directly).
+type TaskCellArg struct {
+	Type   string `json:"type"`
+	SQL    string `json:"sql,omitempty"`
+	View   string `json:"view,omitempty"`
+	Label  string `json:"label,omitempty"`
+	Source string `json:"source,omitempty"`
 }
 
-func (d *llmDeps) DescribeTable(_ context.Context, table string) (string, error) {
-	ti, err := d.app.DescribeTable(table)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "table %s:\n", ti.Name)
-	for _, c := range ti.Columns {
-		fmt.Fprintf(&b, "  %s %s", c.Name, c.Type)
-		if c.PK {
-			b.WriteString(" PRIMARY KEY")
-		}
-		if c.NotNull {
-			b.WriteString(" NOT NULL")
-		}
-		b.WriteString("\n")
-	}
-	return b.String(), nil
+type TaskTurnArg struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
 }
 
-func (d *llmDeps) Query(_ context.Context, sqlStr string) (*llm.QueryResult, error) {
-	qr, err := d.app.ExecuteQuery(sqlStr)
+// AgentTaskRequest is AgentTask's input. taskID is caller-generated (the
+// dialog mints one per open, not per turn — a REFINE/ANSWER-AND-RETRY
+// follow-up within the same dialog session reuses it) and is both the
+// "agent:task" event-stream correlation key and the CancelAgentTask key.
+type AgentTaskRequest struct {
+	TaskID          string        `json:"taskId"`
+	Mode            string        `json:"mode"`
+	Description     string        `json:"description"`
+	Cell            *TaskCellArg  `json:"cell,omitempty"`
+	Tables          []string      `json:"tables,omitempty"`
+	NotebookSummary []string      `json:"notebookSummary,omitempty"`
+	FollowUp        []TaskTurnArg `json:"followUp,omitempty"`
+}
+
+// AgentTask runs one task-mode turn (#66 part B): a bounded, single-purpose
+// loop that authors one notebook cell (create or edit) and returns a
+// TaskEnvelope — never free chat prose. Distinct from AgentChat/
+// AgentChatStream in every dimension that matters for isolation: its own
+// tool set (internal/agents.ModeTask — preview_query/write_cell/
+// need_more_info, task-only), its own system prompt (no a2ui block, the
+// UNFILTERED skills list so task-* skills are visible), its own event name
+// ("agent:task", never "agent:stream" — so a concurrently open chat panel's
+// stream can never collide with or be mistaken for a task dialog's), and its
+// own cancellation (taskCancel, keyed by TaskID — closing the dialog calls
+// CancelAgentTask, not anything that could also cancel a chat turn).
+func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
+	a.mu.RLock()
+	if a.container == nil {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("no file open")
+	}
+	cfg := llm.Config{
+		Provider: a.llmCfg.Provider,
+		Endpoint: a.llmCfg.Endpoint,
+		Model:    a.llmCfg.Model,
+		APIKey:   a.llmCfg.APIKey,
+		// Task mode ALWAYS runs read-only, regardless of the file's own
+		// agent_sandbox setting (review fix, CRITICAL: previously this used
+		// the file's sandbox — often "full" — which combined with
+		// ListToolsForMode(ModeTask) exposing every unrestricted tool let a
+		// task turn call drop_table directly from prompt text). Task mode's
+		// whole contract is "propose, never mutate" — write_cell only
+		// records a proposal the user must still click Apply on — so nothing
+		// it does should ever need more than read access, and forcing
+		// read-only here is defense in depth even though
+		// agents.TaskAllowedToolNames already excludes every write tool by
+		// name.
+		Sandbox: llm.SandboxReadOnly,
+	}
+	// ceiling = ModeReadOnly, NOT cfg.Sandbox/agents.SandboxMode(cfg.Sandbox)
+	// — this is the ceiling that must survive every later per-dispatch
+	// SetSandboxMode refresh in agentToolHandler.Handle (see its doc
+	// comment). Passing anything file-mode-derived here would let that
+	// refresh overwrite task mode's "always read-only" contract on the
+	// handler's very first tool call, exactly the regression a reviewer
+	// caught (a task turn against a "full" file ran CREATE TABLE again).
+	handler := a.newAgentToolHandler(agents.ModeReadOnly)
+	a.mu.RUnlock()
+
+	taskID := strings.TrimSpace(req.TaskID)
+	if taskID == "" {
+		return nil, fmt.Errorf("taskId is required")
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.taskCancelMu.Lock()
+	if a.taskCancel == nil {
+		a.taskCancel = make(map[string]context.CancelFunc)
+	}
+	a.taskCancel[taskID] = cancel
+	a.taskCancelMu.Unlock()
+	defer func() {
+		a.taskCancelMu.Lock()
+		delete(a.taskCancel, taskID)
+		a.taskCancelMu.Unlock()
+		cancel()
+	}()
+
+	var cell *llm.TaskCell
+	if req.Cell != nil {
+		cell = &llm.TaskCell{Type: req.Cell.Type, SQL: req.Cell.SQL, View: req.Cell.View, Label: req.Cell.Label, Source: req.Cell.Source}
+	}
+	followUp := make([]llm.TaskTurn, 0, len(req.FollowUp))
+	for _, t := range req.FollowUp {
+		followUp = append(followUp, llm.TaskTurn{Role: t.Role, Text: t.Text})
+	}
+
+	emit := func(ev llm.TaskEvent) {
+		a.emitEvent("agent:task", map[string]any{
+			"taskId":  taskID,
+			"kind":    ev.Kind,
+			"text":    ev.Text,
+			"id":      ev.ID,
+			"tool":    ev.Tool,
+			"input":   ev.Input,
+			"output":  ev.Output,
+			"isError": ev.IsError,
+		})
+	}
+
+	runner := llm.NewRunner(handler, a.logger)
+	envelope, err := runner.Task(ctx, cfg, llm.TaskRequest{
+		Mode: req.Mode, Description: req.Description, Cell: cell,
+		Tables: req.Tables, NotebookSummary: req.NotebookSummary, FollowUp: followUp,
+	}, emit)
 	if err != nil {
 		return nil, err
 	}
-	out := &llm.QueryResult{}
-	for _, c := range qr.Columns {
-		out.Columns = append(out.Columns, c.Name)
+	return &envelope, nil
+}
+
+// CancelAgentTask stops the AgentTask call running under taskID, if any —
+// called when the AI-cell dialog closes or a new request supersedes an
+// in-flight one. A no-op if the task already finished or taskID is unknown
+// (the dialog closing after the turn already resolved is the common case,
+// not an error).
+func (a *App) CancelAgentTask(taskID string) {
+	a.taskCancelMu.Lock()
+	defer a.taskCancelMu.Unlock()
+	if cancel, ok := a.taskCancel[taskID]; ok {
+		cancel()
+		delete(a.taskCancel, taskID)
 	}
-	for _, row := range qr.Rows {
-		strRow := make([]string, len(row))
-		for i, v := range row {
-			strRow[i] = fmt.Sprintf("%v", v)
+}
+
+// newAgentToolHandler builds the tool-dispatch Handler that backs a single
+// Studio chat turn (AgentChat/AgentChatStream) or a task turn (AgentTask),
+// gated by BOTH the file's live "agent_sandbox" setting AND the given
+// ceiling — see agentToolHandler.ceiling's doc comment for why a ceiling is
+// needed at all (AgentTask's "always read-only" contract must survive the
+// per-dispatch file-mode refresh). The underlying *agents.Handler is the
+// same type StartMCPServer wires up for external MCP clients
+// (internal/agents.NewHandler + engineAgentAdapter), so every caller
+// dispatches every tool call through one registry with one set of
+// sandbox/approval rules (#63). It is wrapped in agentToolHandler so each
+// individual tool call — not just this construction — is locked and
+// container-identity-checked (review fix #4). Callers must hold at least
+// a.mu.RLock and have already checked a.container != nil.
+func (a *App) newAgentToolHandler(ceiling agents.SandboxMode) llm.Handler {
+	fileMode := agents.SandboxMode(a.metaOr("agent_sandbox", "full"))
+	sc := &agents.SandboxConfig{Mode: agents.Tighter(ceiling, fileMode), MaxQueryRows: 10000}
+	return a.wrapAgentHandler(sc, ceiling)
+}
+
+// wrapAgentHandler builds an *agents.Handler for the given sandbox and wraps
+// it in agentToolHandler (see below) with the given ceiling. Shared by
+// newAgentToolHandler (Studio chat/task) and StartMCPServer/RunA2UIQuery
+// (their own callers) so every dispatch path gets the same per-call
+// locking/container-identity check AND the same ceiling-clamped sandbox
+// refresh. Callers must hold at least a.mu.RLock (StartMCPServer holds
+// a.mu.Lock, which also suffices) and have already checked
+// a.container != nil.
+func (a *App) wrapAgentHandler(sc *agents.SandboxConfig, ceiling agents.SandboxMode) *agentToolHandler {
+	inner := agents.NewHandler(a.container, &engineAgentAdapter{mgr: a.engine}, sc, a.logger)
+	inner.SetActiveNotebook(a.activeNotebookID)
+	return &agentToolHandler{app: a, container: a.container, inner: inner, ceiling: ceiling}
+}
+
+// agentToolHandler wraps an *agents.Handler with App's file-lifecycle lock.
+// internal/agents.Handler methods talk directly to the container's raw
+// *sql.DB (via ContainerAccess/EngineAccess), bypassing every other App
+// method's a.mu locking entirely. Without this wrapper, a chat turn that
+// built its handler once (under a brief RLock) then ran several tool calls
+// unlocked could race a concurrent CloseFile/OpenFile/Save — each of which
+// takes a.mu.Lock() to swap or nil out a.container — and end up querying a
+// closed or already-replaced container mid-turn.
+//
+// Each dispatch here re-takes a.mu.RLock for exactly the duration of that one
+// tool call (not the whole multi-step turn, so a slow model thinking between
+// tool calls never blocks Save/Close), and rechecks a.container is still the
+// exact *container.Container this handler was built for, erroring instead of
+// silently operating on a stale one if the file was closed or replaced
+// mid-turn. On a successful data/schema/content-category tool call it also
+// notifies the frontend so Dashboard/Tables/etc. refresh instead of going
+// stale (review fixes #4 and #6).
+type agentToolHandler struct {
+	app       *App
+	container *container.Container
+	inner     *agents.Handler
+	// ceiling is the MOST PERMISSIVE sandbox mode this handler may ever run
+	// at, regardless of what the file's own "agent_sandbox" setting allows.
+	// Every dispatch computes agents.Tighter(ceiling, fileMode) fresh — see
+	// Handle/RunReadOnlySQL — rather than just re-reading fileMode alone.
+	//
+	// This exists because of a real security regression a reviewer caught:
+	// once dispatch started re-reading the live file sandbox on every call
+	// (to fix MCP running at a hard-coded ModeFull), that SAME refresh
+	// silently OVERWROTE AgentTask's "always read-only, regardless of the
+	// file's setting" contract on its very first tool call — a task turn
+	// against a "full" file could run_query DDL/create_table again, live-
+	// proven with a task that CREATE TABLE'd a helper table. AgentTask sets
+	// ceiling = ModeReadOnly; AgentChat/AgentChatStream/StartMCPServer/
+	// RunA2UIQuery set ceiling = ModeFull (no additional cap beyond
+	// whatever the file itself allows, matching their existing contract).
+	ceiling agents.SandboxMode
+}
+
+// SetMode forwards to the wrapped *agents.Handler, satisfying internal/llm's
+// modeSetter interface so Runner.Task can flip this handler into task mode
+// (agents.ModeTask) for the duration of one AgentTask call — see
+// setHandlerMode in internal/llm/task.go. AgentChat/AgentChatStream never
+// call this, so their handler stays at its zero-value mode (task-only tools
+// denied) unless something explicitly opts in.
+func (h *agentToolHandler) SetMode(mode string) { h.inner.SetMode(mode) }
+
+func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *agents.Response {
+	h.app.mu.RLock()
+	defer h.app.mu.RUnlock()
+
+	if h.app.container != h.container {
+		return agents.NewErrorResponse(req.ID, agents.ErrInternal, "the file was closed or replaced during this agent turn; reopen it and try again")
+	}
+
+	// Re-read the live agent_sandbox setting on every dispatch so a sandbox
+	// change via SetAgentConfig takes effect on this handler's very next
+	// call, not just for handlers built after the change (security fix: MCP
+	// previously ran at a hard-coded agents.ModeFull regardless of the
+	// file's configured sandbox — StartMCPServer builds ONE agentToolHandler
+	// for the server's whole lifetime, so it never re-read the setting).
+	// Clamped through h.ceiling (agents.Tighter) so this refresh can never
+	// grant a handler more than its ceiling allows — see ceiling's doc
+	// comment for the AgentTask regression this closes. SetSandboxMode
+	// swaps an atomic pointer inside h.inner rather than mutating a shared
+	// *SandboxConfig's fields in place, so this is safe under concurrent
+	// MCP calls (go test -race covers it).
+	fileMode := agents.SandboxMode(h.app.metaOr("agent_sandbox", "full"))
+	h.inner.SetSandboxMode(agents.Tighter(h.ceiling, fileMode))
+
+	// Re-read the live active notebook on every dispatch, not just at
+	// construction time: StartMCPServer builds ONE agentToolHandler for the
+	// server's whole lifetime (unlike AgentChat/AgentTask, which build a
+	// fresh one per turn), so an MCP client's add_query_cell/create_dashboard
+	// call minutes after the server started must still see whichever
+	// notebook is open in Studio right now, not whichever was open when the
+	// server was started (or none).
+	h.inner.SetActiveNotebook(h.app.activeNotebookID)
+	resp := h.inner.Handle(ctx, req)
+	if resp.Error == nil {
+		h.app.notifyAgentToolChange(req.Method, resp.Result)
+	}
+	return resp
+}
+
+// RunReadOnlySQL is RunA2UIQuery's dispatch path: the same file-lifecycle
+// lock and container-identity check Handle gives every JSON-RPC tool call,
+// for agents.Handler.RunReadOnlySQL (a data-bound component's "sql", always
+// gated to reads regardless of sandbox mode — see RunA2UIQuery). It never
+// calls notifyAgentToolChange: RunReadOnlySQL can only ever read.
+func (h *agentToolHandler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
+	h.app.mu.RLock()
+	defer h.app.mu.RUnlock()
+
+	if h.app.container != h.container {
+		return nil, false, fmt.Errorf("the file was closed or replaced during this agent turn; reopen it and try again")
+	}
+	fileMode := agents.SandboxMode(h.app.metaOr("agent_sandbox", "full"))
+	h.inner.SetSandboxMode(agents.Tighter(h.ceiling, fileMode))
+	return h.inner.RunReadOnlySQL(ctx, sqlStr, params, maxRows)
+}
+
+// notifyAgentToolChange emits "data:changed" after a successful agent tool
+// call in the data/schema/content categories, so views listening for that event
+// (Dashboard, Tables, ...) refresh to reflect what the agent just did — the
+// same event every other mutating App binding already emits (review fix #6:
+// agent-driven writes previously left the UI stale until a manual refresh).
+func (a *App) notifyAgentToolChange(method string, result any) {
+	td := agents.GetTool(method)
+	if td == nil {
+		return
+	}
+	switch td.Category {
+	case "data", "schema", "content":
+		a.emitEvent("data:changed")
+	}
+	// add_query_cell/create_dashboard (#67 deferred part) write a new cell to
+	// _vibe_notebooks, not the live DuckDB data/schema "data:changed" covers
+	// — an open NotebookView only reloads/merges on "notebooks:changed" (the
+	// same event CreateNotebook/SaveNotebook/RenameNotebook/DeleteNotebook/
+	// ImportNotebook already emit), so without this an agent-appended cell
+	// never appears in an already-open notebook until the user manually
+	// reopens it. result is the tool's own JSON-RPC result
+	// (handleAddQueryCell/handleCreateDashboard's {notebook_id, cell_id,
+	// title, warnings} map) — extracted here so the emitted event carries
+	// the SPECIFIC appended cell id (review fix, finding 2): the frontend
+	// merges only that id, never "every remote id it doesn't already have",
+	// which is what let a locally-deleted cell come back.
+	switch method {
+	case "add_query_cell", "create_dashboard":
+		resultMap, _ := result.(map[string]any)
+		notebookID, _ := resultMap["notebook_id"].(string)
+		cellID, _ := resultMap["cell_id"].(string)
+		if notebookID == "" || cellID == "" {
+			a.logger.Warn("agent tool change: missing notebook_id/cell_id in result, not emitting notebooks:changed", "method", method)
+			return
 		}
-		out.Rows = append(out.Rows, strRow)
+		a.emitNotebooksChanged(notebookID, []string{cellID})
 	}
-	return out, nil
-}
-
-func (d *llmDeps) CreateTable(_ context.Context, spec llm.TableSpec) error {
-	cols := make([]ColumnInfo, 0, len(spec.Columns))
-	for _, c := range spec.Columns {
-		cols = append(cols, ColumnInfo{Name: c.Name, Type: c.Type, PK: c.PrimaryKey, NotNull: c.NotNull})
-	}
-	return d.app.CreateTable(spec.Name, cols)
-}
-
-func (d *llmDeps) CreateForm(_ context.Context, def llm.FormDef) error {
-	archetype := def.Archetype
-	if archetype == "" {
-		archetype = "columnar"
-	}
-	spec := schema.FormSpec{
-		ID:        uuid.New().String(),
-		Title:     def.Title,
-		Table:     def.Table,
-		Archetype: archetype,
-		OnSubmit:  "refresh",
-	}
-	for _, f := range def.Fields {
-		ctrl := f.ControlType
-		if ctrl == "" {
-			ctrl = "text"
-		}
-		spec.Fields = append(spec.Fields, schema.FormFieldSpec{Name: f.Name, Caption: f.Caption, ControlType: ctrl})
-	}
-	if def.SubformTable != "" {
-		spec.Subform = &schema.SubformSpec{
-			ChildTable: def.SubformTable,
-			ChildKey:   def.SubformChildKey,
-			ParentKey:  def.SubformParentKey,
-		}
-	}
-	return d.app.SaveForm(spec)
-}
-
-func (d *llmDeps) SaveQuery(_ context.Context, def llm.QueryDef) error {
-	return d.app.SaveQuery("", def.Title, def.SQL, def.Description)
-}
-
-func (d *llmDeps) CreateReport(_ context.Context, def llm.ReportDef) error {
-	spec := reports.ReportSpec{
-		ID:     uuid.New().String(),
-		Title:  def.Title,
-		Source: def.Source,
-	}
-	for _, g := range def.GroupBy {
-		spec.Groups = append(spec.Groups, reports.GroupLevel{Field: g})
-	}
-	for _, c := range def.Columns {
-		spec.Detail.Columns = append(spec.Detail.Columns, reports.ReportColumn{Field: c.Field, Caption: c.Caption})
-	}
-	return d.app.SaveReport(spec)
-}
-
-// pageIDForTitle resolves a page title to its stored id. Pages are keyed by a
-// UUID id, but the agent addresses them by title; this bridges the two. Returns
-// an error when no page (or more than one) matches the title.
-func (d *llmDeps) pageIDForTitle(title string) (string, error) {
-	pages, err := d.app.ListPages()
-	if err != nil {
-		return "", err
-	}
-	var matches []string
-	for _, p := range pages {
-		if p.Title == title {
-			matches = append(matches, p.ID)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", fmt.Errorf("no page titled %q", title)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", fmt.Errorf("more than one page is titled %q; rename one so it is unambiguous", title)
-	}
-}
-
-func (d *llmDeps) ListPages(_ context.Context) ([]llm.PageInfo, error) {
-	summaries, err := d.app.ListPages()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]llm.PageInfo, 0, len(summaries))
-	for _, p := range summaries {
-		out = append(out, llm.PageInfo{Title: p.Title, PageType: p.PageType})
-	}
-	return out, nil
-}
-
-func (d *llmDeps) GetPage(_ context.Context, title string) (string, error) {
-	id, err := d.pageIDForTitle(title)
-	if err != nil {
-		return "", err
-	}
-	page, err := d.app.GetPage(id)
-	if err != nil {
-		return "", err
-	}
-	return page.Content, nil
-}
-
-func (d *llmDeps) CreatePage(_ context.Context, def llm.PageDef) error {
-	_, err := d.app.CreatePage(def.Title, def.Content)
-	return err
-}
-
-func (d *llmDeps) UpdatePage(_ context.Context, title, content string) error {
-	id, err := d.pageIDForTitle(title)
-	if err != nil {
-		return err
-	}
-	return d.app.UpdatePage(id, title, content)
-}
-
-func (d *llmDeps) AddRelationship(_ context.Context, def llm.RelationshipDef) error {
-	_, err := d.app.AddForeignKey(ForeignKeySpec{
-		ChildTable:   def.ChildTable,
-		ChildColumn:  def.ChildColumn,
-		ParentTable:  def.ParentTable,
-		ParentColumn: def.ParentColumn,
-		OnDelete:     def.OnDelete,
-	})
-	return err
 }
 
 // --- Import/Export ---
@@ -3137,9 +2600,6 @@ func (a *App) PreviewSpreadsheet(path, sheet string, hasHeader bool) (*Spreadshe
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if err := a.guardStudioOnly("PreviewSpreadsheet"); err != nil {
-		return nil, err
-	}
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
@@ -3181,9 +2641,6 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("ImportSpreadsheet"); err != nil {
-		return nil, err
-	}
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
@@ -3247,15 +2704,15 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 
 	if mode == "create" {
 		if tableExists > 0 {
-			if _, err := db.Exec(fmt.Sprintf("DROP TABLE %q", opts.TableName)); err != nil {
+			if _, err := db.Exec(fmt.Sprintf("DROP TABLE %s", engine.QuoteIdent(opts.TableName))); err != nil {
 				return nil, fmt.Errorf("failed to drop existing table: %w", err)
 			}
 		}
 		colDefs := make([]string, 0, len(bound))
 		for _, b := range bound {
-			colDefs = append(colDefs, fmt.Sprintf("%q %s", b.target, b.typ))
+			colDefs = append(colDefs, fmt.Sprintf("%s %s", engine.QuoteIdent(b.target), b.typ))
 		}
-		createSQL := fmt.Sprintf("CREATE TABLE %q (%s)", opts.TableName, strings.Join(colDefs, ", "))
+		createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(opts.TableName), strings.Join(colDefs, ", "))
 		if _, err := db.Exec(createSQL); err != nil {
 			return nil, fmt.Errorf("failed to create table: %w", err)
 		}
@@ -3266,10 +2723,10 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 	colNames := make([]string, len(bound))
 	placeholders := make([]string, len(bound))
 	for i, b := range bound {
-		colNames[i] = fmt.Sprintf("%q", b.target)
+		colNames[i] = engine.QuoteIdent(b.target)
 		placeholders[i] = "?"
 	}
-	insertSQL := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", opts.TableName,
+	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(opts.TableName),
 		strings.Join(colNames, ", "), strings.Join(placeholders, ", "))
 
 	stmt, err := db.Prepare(insertSQL)
@@ -3304,6 +2761,14 @@ func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, e
 		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode,
 		"rows", imported, "rejected", rejected)
 
+	// Skills (#62): write/refresh a workspace-<table> skill with the actual
+	// stored schema (row count, column types, null rates, sample values) so
+	// the agent has grounded facts about this table without a model call.
+	// Best-effort: a failure here must not fail the import itself.
+	if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, opts.TableName); err != nil {
+		a.logger.Warn("failed to write import skill", "table", opts.TableName, "error", err)
+	}
+
 	a.emitEvent("data:changed")
 	return &ImportResult{RowsImported: imported, TableName: opts.TableName}, nil
 }
@@ -3318,10 +2783,6 @@ type ImportResult struct {
 func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("ImportCSV"); err != nil {
-		return nil, err
-	}
 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
@@ -3351,22 +2812,28 @@ func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
 
 	var imported int
 	if exists == 0 {
-		if _, err := db.Exec(fmt.Sprintf("CREATE TABLE %q AS SELECT * FROM %s", tableName, readCSV)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s", engine.QuoteIdent(tableName), readCSV)); err != nil {
 			return nil, fmt.Errorf("failed to import CSV: %w", err)
 		}
-		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", tableName)).Scan(&imported); err != nil {
+		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(tableName))).Scan(&imported); err != nil {
 			return nil, fmt.Errorf("failed to count imported rows: %w", err)
 		}
 	} else {
 		// Append into the existing table, matching columns by name so column
 		// order in the file doesn't matter.
-		res, err := db.Exec(fmt.Sprintf("INSERT INTO %q BY NAME SELECT * FROM %s", tableName, readCSV))
+		res, err := db.Exec(fmt.Sprintf("INSERT INTO %s BY NAME SELECT * FROM %s", engine.QuoteIdent(tableName), readCSV))
 		if err != nil {
 			return nil, fmt.Errorf("failed to import CSV: %w", err)
 		}
 		if n, err := res.RowsAffected(); err == nil {
 			imported = int(n)
 		}
+	}
+
+	// Skills (#62): write/refresh a workspace-<table> skill with the actual
+	// stored schema. Best-effort — a failure here must not fail the import.
+	if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, tableName); err != nil {
+		a.logger.Warn("failed to write import skill", "table", tableName, "error", err)
 	}
 
 	a.emitEvent("data:changed")
@@ -3403,7 +2870,7 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
-	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
+	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(tableName)))
 	if err != nil {
 		return "", fmt.Errorf("failed to query table: %w", err)
 	}
@@ -3442,6 +2909,13 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 }
 
 // ExportTableJSON exports a table as JSON via save dialog.
+// ExportTableJSON is the "JSON export" row-returning binding
+// jsonRoundTripGuard's doc comment refers to — it already marshals to JSON
+// itself (json.MarshalIndent below) and checks the error before writing or
+// returning, rather than handing a raw Go value back to Wails to marshal on
+// its own, so it was already safe against the crash jsonRoundTripGuard
+// guards the other row-returning bindings against; no separate call needed
+// here.
 func (a *App) ExportTableJSON(tableName string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -3471,7 +2945,7 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
-	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %q", tableName))
+	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(tableName)))
 	if err != nil {
 		return "", fmt.Errorf("failed to query table: %w", err)
 	}
@@ -3550,259 +3024,10 @@ func (a *App) SetMeta(key, value string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.guardStudioOnly("SetMeta"); err != nil {
-		return err
-	}
-
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
 	return a.container.SetMeta(key, value)
-}
-
-// --- Field Metadata (Access-parity, plan §1.3) ---
-
-// GetFieldMeta returns the Access-style field metadata for every column of the
-// given table, ordered by sort_order then column_name.
-func (a *App) GetFieldMeta(table string) ([]schema.FieldMeta, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-
-	store := schema.NewStore(a.container.SQLiteDB())
-	return store.GetFieldMeta(table)
-}
-
-// SetFieldMeta upserts the Access-style field metadata for a single
-// (table, column) pair.
-func (a *App) SetFieldMeta(table, column string, meta schema.FieldMeta) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("SetFieldMeta"); err != nil {
-		return err
-	}
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-
-	store := schema.NewStore(a.container.SQLiteDB())
-	return store.SetFieldMeta(table, column, meta)
-}
-
-// FormSummary is a lightweight listing entry for _vibe_forms (plan §1.6).
-type FormSummary struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Archetype string `json:"archetype"`
-}
-
-// SaveForm upserts a form definition into _vibe_forms as versioned JSON.
-func (a *App) SaveForm(spec schema.FormSpec) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if err := a.guardStudioOnly("SaveForm"); err != nil {
-		return err
-	}
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	store := schema.NewFormStore(a.container.SQLiteDB())
-	if err := store.SaveForm(spec); err != nil {
-		return fmt.Errorf("failed to save form %q: %w", spec.ID, err)
-	}
-	return nil
-}
-
-// GetForm reads a stored form definition by id from _vibe_forms.
-func (a *App) GetForm(id string) (*schema.FormSpec, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	store := schema.NewFormStore(a.container.SQLiteDB())
-	return store.GetForm(id)
-}
-
-// ListForms returns a summary of every stored form definition.
-func (a *App) ListForms() ([]FormSummary, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	store := schema.NewFormStore(a.container.SQLiteDB())
-	summaries, err := store.ListForms()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]FormSummary, 0, len(summaries))
-	for _, s := range summaries {
-		out = append(out, FormSummary{ID: s.ID, Title: s.Title, Archetype: s.Archetype})
-	}
-	return out, nil
-}
-
-// --- Switchboard navigation (plan §4.2 / P4.2) — STUBS for TDD RED ---
-
-// NavTarget is one bindable object the switchboard builder can point a nav item
-// at: a form, report, or page. Kind is a nav action kind (open_form/
-// open_report/open_page).
-type NavTarget struct {
-	Kind  string `json:"kind"`
-	ID    string `json:"id"`
-	Label string `json:"label"`
-}
-
-// ListNavTargets returns the catalog of bindable objects (forms + reports +
-// pages) the switchboard builder can point nav items at. Each target carries a
-// nav action kind (open_form / open_report / open_page), the object id, and a
-// human label.
-func (a *App) ListNavTargets() ([]NavTarget, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	db := a.container.SQLiteDB()
-
-	out := []NavTarget{}
-
-	// Forms.
-	forms, err := schema.NewFormStore(db).ListForms()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list form nav targets: %w", err)
-	}
-	for _, f := range forms {
-		label := f.Title
-		if label == "" {
-			label = f.ID
-		}
-		out = append(out, NavTarget{Kind: schema.NavOpenForm, ID: f.ID, Label: label})
-	}
-
-	// Reports.
-	rpts, err := reports.NewReportStore(db).List()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list report nav targets: %w", err)
-	}
-	for _, r := range rpts {
-		label := r.Title
-		if label == "" {
-			label = r.ID
-		}
-		out = append(out, NavTarget{Kind: schema.NavOpenReport, ID: r.ID, Label: label})
-	}
-
-	// Pages (skip internal _-prefixed pages, matching ListPages).
-	rows, err := db.Query(`SELECT id, title FROM _vibe_pages WHERE id NOT LIKE '\_%' ESCAPE '\' ORDER BY sort_order, title`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list page nav targets: %w", err)
-	}
-	defer rows.Close() //nolint:errcheck
-	for rows.Next() {
-		var id, title string
-		if err := rows.Scan(&id, &title); err != nil {
-			return nil, fmt.Errorf("failed to scan page nav target: %w", err)
-		}
-		if title == "" {
-			title = id
-		}
-		out = append(out, NavTarget{Kind: schema.NavOpenPage, ID: id, Label: title})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate page nav targets: %w", err)
-	}
-
-	return out, nil
-}
-
-// SaveNav persists a whole switchboard by reconciling _vibe_nav to exactly the
-// supplied set in one transaction: items absent from the payload (i.e. removed
-// in the builder) are deleted, and the remaining items are upserted in order.
-// This makes reorder + remove atomic and idempotent so deletions survive a
-// save+reload.
-func (a *App) SaveNav(items []schema.NavItem) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.guardStudioOnly("SaveNav"); err != nil {
-		return err
-	}
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	store := schema.NewNavStore(a.container.SQLiteDB())
-	if err := store.ReplaceNav(items); err != nil {
-		return fmt.Errorf("failed to save navigation: %w", err)
-	}
-	return nil
-}
-
-// SaveNavItem upserts a single nav node keyed by id.
-func (a *App) SaveNavItem(item schema.NavItem) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.guardStudioOnly("SaveNavItem"); err != nil {
-		return err
-	}
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	store := schema.NewNavStore(a.container.SQLiteDB())
-	if err := store.SetNav(item); err != nil {
-		return fmt.Errorf("failed to save nav item %q: %w", item.ID, err)
-	}
-	return nil
-}
-
-// ListNav returns every nav item across all switchboard pages.
-func (a *App) ListNav() ([]schema.NavItem, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	store := schema.NewNavStore(a.container.SQLiteDB())
-	return store.ListNav()
-}
-
-// GetNav returns the direct children of a switchboard page (empty parentID =
-// root-level items), ordered by sort order.
-func (a *App) GetNav(parentID string) ([]schema.NavItem, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	store := schema.NewNavStore(a.container.SQLiteDB())
-	return store.GetNav(parentID)
-}
-
-// DeleteNavItem removes a single nav node by id. Single-row delete: deleting a
-// parent orphans (does not cascade) its children.
-func (a *App) DeleteNavItem(id string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.guardStudioOnly("DeleteNavItem"); err != nil {
-		return err
-	}
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	store := schema.NewNavStore(a.container.SQLiteDB())
-	if err := store.DeleteNav(id); err != nil {
-		return fmt.Errorf("failed to delete nav item %q: %w", id, err)
-	}
-	return nil
 }
 
 // --- MCP Server ---
@@ -3828,8 +3053,11 @@ func (a *App) StartMCPServer() (string, error) {
 		return fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()), nil
 	}
 
-	sandbox := agentSandboxForMode(a.mode)
-	handler := agents.NewHandler(a.container, &engineAgentAdapter{mgr: a.engine}, sandbox, a.logger)
+	sandbox := &agents.SandboxConfig{Mode: agents.SandboxMode(a.metaOr("agent_sandbox", "full")), MaxQueryRows: 10000}
+	// ceiling = ModeFull: an external MCP client gets whatever the file's
+	// own agent_sandbox setting allows, no additional cap beyond it — see
+	// agentToolHandler.ceiling's doc comment.
+	handler := a.wrapAgentHandler(sandbox, agents.ModeFull)
 
 	srv := vibemcp.New(handler, a.logger)
 	if err := srv.Start("127.0.0.1:0"); err != nil {
@@ -3855,7 +3083,11 @@ func (a *App) StopMCPServer() error {
 	return err
 }
 
-// GetMCPStatus returns the current MCP server status.
+// GetMCPStatus returns the current MCP server status, including the
+// per-session bearer token (#64/#70) an external MCP client must send as
+// `Authorization: Bearer <token>` (or `?token=` for a transport that can't
+// set headers) — the server rejects every request without it. Shown in
+// SettingsView.vue's MCP panel with a copy button, alongside the URL.
 func (a *App) GetMCPStatus() map[string]any {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -3864,11 +3096,13 @@ func (a *App) GetMCPStatus() map[string]any {
 		return map[string]any{
 			"running": true,
 			"url":     fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()),
+			"token":   a.mcpServer.Token(),
 		}
 	}
 	return map[string]any{
 		"running": false,
 		"url":     "",
+		"token":   "",
 	}
 }
 
@@ -3890,481 +3124,6 @@ func isValidIdentifier(name string) bool {
 		return false
 	}
 	return true
-}
-
-// ListReports returns every stored banded-report definition as a lightweight
-// {id, title, source} summary for the Report View picker (plan §3.4 / P3.10).
-func (a *App) ListReports() ([]reports.ReportSummary, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	summaries, err := store.List()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list reports: %w", err)
-	}
-	return summaries, nil
-}
-
-// SaveReport persists a banded report definition to _vibe_reports. Studio-only.
-// Used by the wizard agent's create_report tool (and available to report editors).
-func (a *App) SaveReport(spec reports.ReportSpec) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.guardStudioOnly("SaveReport"); err != nil {
-		return err
-	}
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	if err := store.Save(spec); err != nil {
-		return fmt.Errorf("failed to save report %q: %w", spec.ID, err)
-	}
-	return nil
-}
-
-// RenderReportContent loads a banded report spec via the ReportStore, runs its
-// bound query on the real engine, computes the band tree, and renders banded
-// HTML (plan §3.3 / P3.8).
-func (a *App) RenderReportContent(reportID string) (string, error) {
-	return a.RenderReportContentFiltered(reportID, nil)
-}
-
-// reportFilterCol matches a safe identifier (column name) for live filtering.
-var reportFilterCol = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// ReportFilter is one faceted Report View filter (parity W6 / mockup #11):
-// an equality, a multi-select set, or an inclusive range over one column.
-// Range values are [min, max] where an empty string leaves that end open.
-type ReportFilter struct {
-	Column string   `json:"column"`
-	Op     string   `json:"op"` // eq | in | range
-	Values []string `json:"values"`
-}
-
-// filteredSource wraps a report's bound query in a subquery and applies the
-// supplied column=value equality filters as a WHERE clause (the pre-W6 shape,
-// kept for existing callers). Delegates to facetedSource.
-func filteredSource(source string, filters map[string]string) (string, []any) {
-	keys := make([]string, 0, len(filters))
-	for k, v := range filters {
-		// The pre-W6 contract silently skips empty values and bad identifiers.
-		if v == "" || !reportFilterCol.MatchString(k) {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	fs := make([]ReportFilter, 0, len(keys))
-	for _, k := range keys {
-		fs = append(fs, ReportFilter{Column: k, Op: "eq", Values: []string{filters[k]}})
-	}
-	wrapped, args, err := facetedSource(source, fs)
-	if err != nil {
-		return source, nil
-	}
-	return wrapped, args
-}
-
-// facetedSource wraps a report's bound query in a subquery and applies the
-// faceted filters as a WHERE clause. Column names are validated as plain
-// identifiers and every value is passed as a bound parameter, so the live
-// Report View filters cannot inject SQL. Range comparisons TRY_CAST both
-// sides to DOUBLE when the bound value is numeric so numeric columns compare
-// numerically, not lexically.
-func facetedSource(source string, filters []ReportFilter) (string, []any, error) {
-	var clauses []string
-	var args []any
-	param := func(v string) string {
-		args = append(args, v)
-		return fmt.Sprintf("$p%d", len(args))
-	}
-	for _, f := range filters {
-		if !reportFilterCol.MatchString(f.Column) {
-			return "", nil, fmt.Errorf("invalid filter column %q", f.Column)
-		}
-		col := fmt.Sprintf("%q", f.Column)
-		switch f.Op {
-		case "", "eq":
-			if len(f.Values) != 1 || f.Values[0] == "" {
-				continue
-			}
-			// Bare comparison: DuckDB coerces the bound VARCHAR to the column
-			// type (the pre-W6 equality semantics).
-			clauses = append(clauses, fmt.Sprintf("%s = %s", col, param(f.Values[0])))
-		case "in":
-			vals := make([]string, 0, len(f.Values))
-			for _, v := range f.Values {
-				if v != "" {
-					vals = append(vals, param(v))
-				}
-			}
-			if len(vals) == 0 {
-				continue
-			}
-			clauses = append(clauses, fmt.Sprintf("%s IN (%s)", col, strings.Join(vals, ", ")))
-		case "range":
-			if len(f.Values) != 2 {
-				return "", nil, fmt.Errorf("range filter on %q needs [min, max]", f.Column)
-			}
-			for i, bound := range f.Values {
-				if bound == "" {
-					continue
-				}
-				cmp := ">="
-				if i == 1 {
-					cmp = "<="
-				}
-				if _, err := strconv.ParseFloat(bound, 64); err == nil {
-					clauses = append(clauses, fmt.Sprintf("TRY_CAST(%s AS DOUBLE) %s TRY_CAST(%s AS DOUBLE)", col, cmp, param(bound)))
-				} else {
-					clauses = append(clauses, fmt.Sprintf("CAST(%s AS VARCHAR) %s %s", col, cmp, param(bound)))
-				}
-			}
-		default:
-			return "", nil, fmt.Errorf("unknown filter op %q on column %q", f.Op, f.Column)
-		}
-	}
-	if len(clauses) == 0 {
-		return source, nil, nil
-	}
-	wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _vibe_report_src WHERE %s",
-		source, strings.Join(clauses, " AND "))
-	return wrapped, args, nil
-}
-
-// RenderReportContentFiltered renders the banded report HTML after applying the
-// given live equality filters (column=value) to the report's bound query. An
-// empty/nil filter map renders the full report (plan §3.4 / mockup #11).
-func (a *App) RenderReportContentFiltered(reportID string, filters map[string]string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-	if a.engine == nil {
-		return "", fmt.Errorf("no engine available")
-	}
-
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return "", fmt.Errorf("report %q not found", reportID)
-	}
-
-	query, args := filteredSource(spec.Source, filters)
-	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
-	if err != nil {
-		return "", fmt.Errorf("failed to run report query for %q: %w", reportID, err)
-	}
-
-	tree, err := reports.ComputeBands(rs, *spec)
-	if err != nil {
-		return "", fmt.Errorf("failed to compute report bands for %q: %w", reportID, err)
-	}
-
-	htmlOut, err := a.renderer.RenderReport(tree, *spec, htmlrenderer.RenderReportOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
-	}
-	return htmlOut, nil
-}
-
-// namedArgs converts positional WHERE args into the param map shape the engine
-// expects for "?" placeholders (p1, p2, …). Returns nil for no args.
-func namedArgs(args []any) map[string]any {
-	if len(args) == 0 {
-		return nil
-	}
-	m := make(map[string]any, len(args))
-	for i, v := range args {
-		m[fmt.Sprintf("p%d", i+1)] = v
-	}
-	return m
-}
-
-// ReportData is a tabular view of a report's bound query result, used by the
-// Report View chart/table toggle and to populate live-filter option lists.
-// Chart carries the report's stored chart metadata (nil → viewer heuristics)
-// and DurationMs the bound-query wall time for the last-run strip (W6).
-type ReportData struct {
-	Columns    []string           `json:"columns"`
-	Rows       [][]any            `json:"rows"`
-	Chart      *reports.ChartSpec `json:"chart,omitempty"`
-	DurationMs float64            `json:"duration_ms"`
-}
-
-// GetReportData runs the report's bound query (with optional live equality
-// filters) — the pre-W6 shape, kept for existing callers.
-func (a *App) GetReportData(reportID string, filters map[string]string) (*ReportData, error) {
-	fs := make([]ReportFilter, 0, len(filters))
-	for k, v := range filters {
-		fs = append(fs, ReportFilter{Column: k, Op: "eq", Values: []string{v}})
-	}
-	return a.GetReportDataFaceted(reportID, fs)
-}
-
-// GetReportDataFaceted runs the report's bound query with faceted filters
-// (eq / in / range) and returns its raw tabular result plus chart metadata, so
-// the Report View can render the stacked chart, KPI tiles, and detail table
-// from one round-trip (parity W6 / mockup #11).
-func (a *App) GetReportDataFaceted(reportID string, filters []ReportFilter) (*ReportData, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	if a.engine == nil {
-		return nil, fmt.Errorf("no engine available")
-	}
-
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return nil, fmt.Errorf("report %q not found", reportID)
-	}
-	if strings.TrimSpace(spec.Source) == "" {
-		return nil, fmt.Errorf("report %q has no bound query", reportID)
-	}
-
-	query, args, err := facetedSource(spec.Source, filters)
-	if err != nil {
-		return nil, fmt.Errorf("bad report filter for %q: %w", reportID, err)
-	}
-	started := time.Now()
-	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
-	if err != nil {
-		return nil, fmt.Errorf("failed to run report query for %q: %w", reportID, err)
-	}
-
-	out := &ReportData{
-		Columns:    make([]string, 0, len(rs.Columns)),
-		Rows:       rs.Rows,
-		Chart:      spec.Chart,
-		DurationMs: float64(time.Since(started).Microseconds()) / 1000.0,
-	}
-	for _, c := range rs.Columns {
-		out.Columns = append(out.Columns, c.Name)
-	}
-	if out.Rows == nil {
-		out.Rows = [][]any{}
-	}
-	return out, nil
-}
-
-// RenderReportContentFaceted renders the banded report HTML after applying
-// faceted filters (eq / in / range) to the report's bound query — the W6
-// counterpart to RenderReportContentFiltered.
-func (a *App) RenderReportContentFaceted(reportID string, filters []ReportFilter) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-	if a.engine == nil {
-		return "", fmt.Errorf("no engine available")
-	}
-
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return "", fmt.Errorf("report %q not found", reportID)
-	}
-
-	query, args, err := facetedSource(spec.Source, filters)
-	if err != nil {
-		return "", fmt.Errorf("bad report filter for %q: %w", reportID, err)
-	}
-	rs, err := a.engine.Execute(a.ctx, query, namedArgs(args))
-	if err != nil {
-		return "", fmt.Errorf("failed to run report query for %q: %w", reportID, err)
-	}
-
-	tree, err := reports.ComputeBands(rs, *spec)
-	if err != nil {
-		return "", fmt.Errorf("failed to compute report bands for %q: %w", reportID, err)
-	}
-
-	htmlOut, err := a.renderer.RenderReport(tree, *spec, htmlrenderer.RenderReportOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to render report %q: %w", reportID, err)
-	}
-	return htmlOut, nil
-}
-
-// UpdateReportSQL replaces a report's bound query source, backing the
-// Studio-only "Edit SQL" affordance (parity W6 — previously the panel was
-// read-only despite the label). The new SQL is validated by actually running
-// it (LIMIT 0) against the engine before it is persisted.
-func (a *App) UpdateReportSQL(reportID, source string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.guardStudioOnly("UpdateReportSQL"); err != nil {
-		return err
-	}
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	if a.engine == nil {
-		return fmt.Errorf("no engine available")
-	}
-	if strings.TrimSpace(source) == "" {
-		return fmt.Errorf("report SQL cannot be empty")
-	}
-
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return fmt.Errorf("report %q not found", reportID)
-	}
-
-	probe := fmt.Sprintf("SELECT * FROM (%s) AS _vibe_sql_check LIMIT 0", source)
-	if _, err := a.engine.Execute(a.ctx, probe, nil); err != nil {
-		return fmt.Errorf("report SQL failed validation: %w", err)
-	}
-
-	spec.Source = source
-	if err := store.Save(*spec); err != nil {
-		return fmt.Errorf("failed to save report %q: %w", reportID, err)
-	}
-	a.logger.Info("updated report SQL", "report", reportID)
-	return nil
-}
-
-// ExportReportCSV writes the report's (optionally filtered) bound query result
-// to a CSV file, returning the written path. An empty dst opens a native save
-// dialog (parity W6 / mockup #11 "Export CSV").
-func (a *App) ExportReportCSV(reportID string, filters []ReportFilter, dst string) (string, error) {
-	data, err := a.GetReportDataFaceted(reportID, filters)
-	if err != nil {
-		return "", err
-	}
-
-	if dst == "" {
-		dst, err = runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-			DefaultFilename: reportID + ".csv",
-			Title:           "Export report CSV",
-		})
-		if err != nil {
-			return "", fmt.Errorf("save dialog failed: %w", err)
-		}
-		if dst == "" {
-			return "", nil // user cancelled
-		}
-	}
-	if !strings.HasSuffix(strings.ToLower(dst), ".csv") {
-		dst += ".csv"
-	}
-
-	f, err := os.Create(dst)
-	if err != nil {
-		return "", fmt.Errorf("failed to create %q: %w", dst, err)
-	}
-	defer f.Close()
-	w := csv.NewWriter(f)
-	if err := w.Write(data.Columns); err != nil {
-		return "", fmt.Errorf("failed to write CSV header: %w", err)
-	}
-	row := make([]string, len(data.Columns))
-	for _, r := range data.Rows {
-		for i := range row {
-			if i < len(r) && r[i] != nil {
-				row[i] = fmt.Sprintf("%v", r[i])
-			} else {
-				row[i] = ""
-			}
-		}
-		if err := w.Write(row); err != nil {
-			return "", fmt.Errorf("failed to write CSV row: %w", err)
-		}
-	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		return "", fmt.Errorf("failed to flush CSV: %w", err)
-	}
-	a.logger.Info("exported report CSV", "report", reportID, "path", dst, "rows", len(data.Rows))
-	return dst, nil
-}
-
-// GetReportSQL returns the report's bound query source SQL, backing the
-// Studio-only "Edit SQL" affordance in the Report View (plan §3.4 / mockup #11).
-func (a *App) GetReportSQL(reportID string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.reportSourceLocked(reportID)
-}
-
-// reportSourceLocked is the lock-free body shared by reportSource/GetReportSQL.
-func (a *App) reportSourceLocked(reportID string) (string, error) {
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-	store := reports.NewReportStore(a.container.SQLiteDB())
-	spec, err := store.Get(reportID)
-	if err != nil {
-		return "", fmt.Errorf("failed to load report %q: %w", reportID, err)
-	}
-	if spec == nil {
-		return "", fmt.Errorf("report %q not found", reportID)
-	}
-	if strings.TrimSpace(spec.Source) == "" {
-		return "", fmt.Errorf("report %q has no bound query", reportID)
-	}
-	return spec.Source, nil
-}
-
-// ExportReportHTML renders the banded report HTML (P3.8) and writes it to dst,
-// returning the written path (plan §3.4 / P3.9).
-func (a *App) ExportReportHTML(reportID, dst string) (string, error) {
-	htmlOut, err := a.RenderReportContent(reportID)
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(dst, []byte(htmlOut), 0o644); err != nil {
-		return "", fmt.Errorf("failed to write report HTML to %q: %w", dst, err)
-	}
-	a.logger.Info("exported report HTML", "report", reportID, "path", dst)
-	return dst, nil
-}
-
-// reportSource loads a report spec and returns its bound query source SQL.
-// Caller must hold a.mu (it is invoked under RLock by ExportReportXLSX).
-func (a *App) reportSource(reportID string) (string, error) {
-	return a.reportSourceLocked(reportID)
-}
-
-// ExportReportXLSX writes the report's bound query result to an .xlsx via the
-// DuckDB excel extension (CSV fallback if unavailable), returning the written
-// path (plan §3.4 / P3.9).
-func (a *App) ExportReportXLSX(reportID, dst string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	source, err := a.reportSource(reportID)
-	if err != nil {
-		return "", err
-	}
-	path, err := a.copyToXLSX(source, dst)
-	if err != nil {
-		return "", fmt.Errorf("failed to export report %q to spreadsheet: %w", reportID, err)
-	}
-	a.logger.Info("exported report spreadsheet", "report", reportID, "path", path)
-	return path, nil
 }
 
 // copyToXLSX writes the result of the given SELECT source to an .xlsx via the
@@ -4402,12 +3161,6 @@ func (a *App) copyToXLSX(source, dst string) (string, error) {
 		return "", err
 	}
 	return csvPath, nil
-}
-
-// AnalyzeInExcel is the one-click "Analyze in Excel/Sheets" alias for
-// ExportReportXLSX (plan §3.4 / P3.9).
-func (a *App) AnalyzeInExcel(reportID, dst string) (string, error) {
-	return a.ExportReportXLSX(reportID, dst)
 }
 
 // ExportTableXLSX exports an arbitrary table to an .xlsx via the DuckDB excel
@@ -4462,61 +3215,4 @@ func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
 // ExportQueryXLSX (plan §6.2 / P6.5).
 func (a *App) AnalyzeQueryInExcel(queryID, dst string) (string, error) {
 	return a.ExportQueryXLSX(queryID, dst)
-}
-
-// ExportReportPDF renders the banded report HTML and prints it to a PDF at dst
-// via a headless-print backend, returning the written path; degrades gracefully
-// with a clear error if no backend is available (plan §3.4 / P3.9).
-func (a *App) ExportReportPDF(reportID, dst string) (string, error) {
-	htmlOut, err := a.RenderReportContent(reportID)
-	if err != nil {
-		return "", err
-	}
-
-	backend := detectPrintBackend()
-	if backend == "" {
-		return "", fmt.Errorf("no headless-print backend available: install a Chromium/Chrome browser to enable PDF export")
-	}
-
-	// Write the HTML to a temp file and drive the headless browser to print it.
-	tmp, err := os.CreateTemp("", "vibe-report-*.html")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp HTML for PDF export: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.WriteString(htmlOut); err != nil {
-		tmp.Close()
-		return "", fmt.Errorf("failed to write temp HTML for PDF export: %w", err)
-	}
-	tmp.Close()
-
-	cmd := exec.CommandContext(a.ctx, backend,
-		"--headless",
-		"--disable-gpu",
-		"--no-sandbox",
-		"--print-to-pdf="+dst,
-		"file://"+tmpPath,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("headless print failed: %w: %s", err, strings.TrimSpace(string(out)))
-	}
-	if _, err := os.Stat(dst); err != nil {
-		return "", fmt.Errorf("headless print produced no PDF at %q: %w", dst, err)
-	}
-	a.logger.Info("exported report PDF", "report", reportID, "path", dst, "backend", backend)
-	return dst, nil
-}
-
-// detectPrintBackend returns the path to a headless-print-capable Chromium/Chrome
-// binary, or "" if none is available.
-func detectPrintBackend() string {
-	for _, name := range []string{
-		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome",
-	} {
-		if p, err := exec.LookPath(name); err == nil {
-			return p
-		}
-	}
-	return ""
 }

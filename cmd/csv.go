@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // importCSVIntoTable reads a CSV file and imports its contents into a table.
@@ -34,9 +36,9 @@ func importCSVIntoTable(db *sql.DB, csvPath, tableName string) (int, error) {
 	// Create table if it doesn't exist.
 	colDefs := make([]string, len(headers))
 	for i, h := range headers {
-		colDefs[i] = fmt.Sprintf("%q TEXT", h)
+		colDefs[i] = fmt.Sprintf("%s TEXT", engine.QuoteIdent(h))
 	}
-	createSQL := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %q (%s);", tableName, strings.Join(colDefs, ", "))
+	createSQL := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s);", engine.QuoteIdent(tableName), strings.Join(colDefs, ", "))
 	if _, err := db.Exec(createSQL); err != nil { //nolint:gosec
 		return 0, fmt.Errorf("failed to create table: %w", err)
 	}
@@ -46,7 +48,7 @@ func importCSVIntoTable(db *sql.DB, csvPath, tableName string) (int, error) {
 	for i := range placeholders {
 		placeholders[i] = "?"
 	}
-	insertSQL := fmt.Sprintf("INSERT INTO %q VALUES (%s);", tableName, strings.Join(placeholders, ", "))
+	insertSQL := fmt.Sprintf("INSERT INTO %s VALUES (%s);", engine.QuoteIdent(tableName), strings.Join(placeholders, ", "))
 
 	tx, err := db.Begin()
 	if err != nil {

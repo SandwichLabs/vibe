@@ -4,12 +4,9 @@
 **Structure:** 6 phases, each with concrete deliverables, files to create, and acceptance criteria.
 **Convention:** All packages live under `internal/` per Sandwich Labs Go conventions (not `pkg/` as in the spec's diagrams).
 
-> **Status (2026-05):** These foundational phases (0–6) are **largely complete** — the
-> container, encryption, page engine, TUI, web preview, agent/MCP, and Wails GUI all
-> exist. The *next* arc is **MS Access application parity** (forms with write-back,
-> relational schema, banded reports, switchboard/app-mode, macros). That roadmap lives
-> in **[`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md)** and supersedes
-> this document for forward planning.
+> **Status (2026-09-22):** Phases 0–6 here are **complete** and this document is historical.
+> The Access-parity arc that followed it is **superseded**. Forward planning lives in
+> **[`docs/direction.md`](docs/direction.md)** (primitive migration, issues #62–#70).
 
 ---
 

@@ -15,6 +15,8 @@ package queries
 import (
 	"fmt"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // FilterCondition is one structured QBE filter clause. Op is one of
@@ -58,7 +60,7 @@ func BuildFilterSQL(table string, spec FilterSpec, columns []string, known map[s
 			if !known[col] {
 				return "", fmt.Errorf("unknown selected column %q", col)
 			}
-			parts = append(parts, fmt.Sprintf("%q", col))
+			parts = append(parts, engine.QuoteIdent(col))
 		}
 		projection = strings.Join(parts, ", ")
 	}
@@ -68,7 +70,7 @@ func BuildFilterSQL(table string, spec FilterSpec, columns []string, known map[s
 		return "", err
 	}
 
-	return fmt.Sprintf("SELECT %s FROM %q%s", projection, table, whereClause), nil
+	return fmt.Sprintf("SELECT %s FROM %s%s", projection, engine.QuoteIdent(table), whereClause), nil
 }
 
 // buildFilterWhereInline renders a FilterSpec into a SQL WHERE clause (leading
@@ -90,15 +92,15 @@ func buildFilterWhereInline(spec FilterSpec, known map[string]bool) (string, err
 		}
 		switch c.Op {
 		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NULL", engine.QuoteIdent(c.Column)))
 		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%q IS NOT NULL", c.Column))
+			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", engine.QuoteIdent(c.Column)))
 		default:
 			sqlOp, ok := filterOps[c.Op]
 			if !ok {
 				return "", fmt.Errorf("unsupported filter operator %q", c.Op)
 			}
-			clauses = append(clauses, fmt.Sprintf("%q %s %s", c.Column, sqlOp, sqlLiteral(c.Value)))
+			clauses = append(clauses, fmt.Sprintf("%s %s %s", engine.QuoteIdent(c.Column), sqlOp, sqlLiteral(c.Value)))
 		}
 	}
 

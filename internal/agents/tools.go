@@ -4,16 +4,36 @@ package agents
 type ToolDef struct {
 	Name        string
 	Description string
-	Category    string // introspect, data, page, schema
+	Category    string // introspect, data, content, schema
 	Params      []ParamDef
+	// Modes restricts which agent surfaces advertise this tool. Empty means
+	// "every mode" (chat, mcp, task) — the vast majority of tools. A non-empty
+	// list is a closed allow-list of mode names; today the only mode that
+	// matters is "task" (#66's notebook cell-authoring loop): preview_query,
+	// write_cell, and need_more_info are task-workflow tools that must never
+	// appear in Studio chat's tool list or be callable over MCP — see
+	// ListToolsForMode, which both internal/llm's chat runner and
+	// internal/mcp's server call instead of the unfiltered ListTools/Tools.
+	Modes []string
 }
 
 // ParamDef defines a parameter for a tool.
 type ParamDef struct {
 	Name     string
-	Type     string
+	Type     string // string | boolean | number | integer | object | array
 	Required bool
 	Desc     string
+	// Items describes the schema of each element when Type == "array". Strict
+	// JSON Schema consumers (notably Gemini) reject a bare {"type":"array"}
+	// with no "items", so every array ParamDef should set this — see
+	// ParamsToJSONSchema in schema.go, which is the single place both
+	// internal/llm's fantasy tool wrapper and internal/mcp's MCP bridge build
+	// a tool's input schema from Params, so they stay byte-identical.
+	Items *ParamDef
+	// Fields lists known sub-properties when Type == "object" (either a
+	// top-level param or an array's Items). Optional: an object/array-of-object
+	// with no declared Fields still renders as a bare {"type":"object"}.
+	Fields []ParamDef
 }
 
 // Tools contains all available agent tool definitions.
@@ -34,17 +54,17 @@ var Tools = []ToolDef{
 		},
 	},
 	{
-		Name:        "list_pages",
-		Description: "List all pages in the container",
+		Name:        "list_notebooks",
+		Description: "List every notebook in the container: id, title, cell count, and last-updated time. Includes notebooks migrated from a legacy file's pages/reports.",
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},
 	{
-		Name:        "get_page",
-		Description: "Get the content of a specific page",
+		Name:        "get_notebook",
+		Description: "Get one notebook's cells as data: each cell's type plus its raw sql/markdown source (or a title/component-count summary for an a2ui cell) — never rendered output. Long cell sources are truncated.",
 		Category:    "introspect",
 		Params: []ParamDef{
-			{Name: "name", Type: "string", Required: true, Desc: "Name of the page to retrieve"},
+			{Name: "id", Type: "string", Required: true, Desc: "Notebook id, from list_notebooks"},
 		},
 	},
 	{
@@ -52,6 +72,31 @@ var Tools = []ToolDef{
 		Description: "List all named queries in the container",
 		Category:    "introspect",
 		Params:      []ParamDef{},
+	},
+	{
+		Name:        "list_skills",
+		Description: "List the Skills available in this workspace: built-in skills plus any user- or import-authored ones stored in the file. Each entry gives a name and one-line description; call read_skill with a name to fetch its full instructions. Skills bound to a table only appear once that table exists and has rows.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+	{
+		Name:        "read_skill",
+		Description: "Fetch the full instructions for one Skill by name (see list_skills, or the <skills> block in the system prompt). Call this whenever a task matches a skill's description before proceeding.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Skill name, e.g. \"data-profiling\" or \"workspace-sales\""},
+		},
+	},
+	{
+		Name:        "create_or_update_skill",
+		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the file and loaded on demand by the agent. Upserts by name. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
+		Category:    "content",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Lowercase kebab-case name, e.g. \"revenue-rules\" (routing key; must not shadow a built-in or start with \"task-\")"},
+			{Name: "description", Type: "string", Required: true, Desc: "One-line description advertised in the system prompt (<= 300 characters)"},
+			{Name: "instructions", Type: "string", Required: true, Desc: "Full markdown instructions, fetched on demand via read_skill"},
+			{Name: "table_name", Type: "string", Required: false, Desc: "Optional: gate this skill so it only loads once this table exists and has at least one row"},
+		},
 	},
 	{
 		Name:        "help_search",
@@ -65,7 +110,7 @@ var Tools = []ToolDef{
 	// Data tools
 	{
 		Name:        "run_query",
-		Description: "Execute a SQL query and return results",
+		Description: "Execute a SQL query and return results. Gated per-statement, not just by sandbox category: read statements (SELECT, a CTE ending in SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE, a read-style PRAGMA) are allowed in every sandbox including read-only; INSERT/UPDATE/DELETE additionally require read-write or full; anything else (DDL, ATTACH/COPY/INSTALL, administrative SET/PRAGMA, multi-statement SQL) requires full.",
 		Category:    "data",
 		Params: []ParamDef{
 			{Name: "sql", Type: "string", Required: true, Desc: "SQL query to execute"},
@@ -106,36 +151,8 @@ var Tools = []ToolDef{
 		Category:    "data",
 		Params: []ParamDef{
 			{Name: "table", Type: "string", Required: true, Desc: "Table to insert into"},
-			{Name: "columns", Type: "array", Required: true, Desc: "Column names"},
-			{Name: "rows", Type: "array", Required: true, Desc: "Array of row arrays"},
-		},
-	},
-
-	// Page tools
-	{
-		Name:        "create_page",
-		Description: "Create a new page in the container",
-		Category:    "page",
-		Params: []ParamDef{
-			{Name: "name", Type: "string", Required: true, Desc: "Name of the page"},
-			{Name: "content", Type: "string", Required: true, Desc: "Markdown content of the page"},
-		},
-	},
-	{
-		Name:        "update_page",
-		Description: "Update an existing page",
-		Category:    "page",
-		Params: []ParamDef{
-			{Name: "name", Type: "string", Required: true, Desc: "Name of the page to update"},
-			{Name: "content", Type: "string", Required: true, Desc: "New markdown content"},
-		},
-	},
-	{
-		Name:        "delete_page",
-		Description: "Delete a page from the container",
-		Category:    "page",
-		Params: []ParamDef{
-			{Name: "name", Type: "string", Required: true, Desc: "Name of the page to delete"},
+			{Name: "columns", Type: "array", Required: true, Desc: "Column names", Items: &ParamDef{Type: "string"}},
+			{Name: "rows", Type: "array", Required: true, Desc: "Array of row arrays", Items: &ParamDef{Type: "array", Items: &ParamDef{Type: "string"}}},
 		},
 	},
 
@@ -146,7 +163,10 @@ var Tools = []ToolDef{
 		Category:    "schema",
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name of the table"},
-			{Name: "columns", Type: "array", Required: true, Desc: "Column definitions"},
+			{Name: "columns", Type: "array", Required: true, Desc: "Column definitions", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+				{Name: "name", Type: "string", Required: true, Desc: "Column name"},
+				{Name: "type", Type: "string", Required: true, Desc: "DuckDB column type, e.g. TEXT, INTEGER, DOUBLE, DATE, BOOLEAN. Constraints (PRIMARY KEY, NOT NULL) may be embedded directly, e.g. \"INTEGER PRIMARY KEY\"."},
+			}}},
 		},
 	},
 	{
@@ -178,45 +198,6 @@ var Tools = []ToolDef{
 		},
 	},
 
-	// Form Wizard tool (plan §1.6 / §4.3). Generates a bound form spec for a
-	// table, seeds humanized field-meta captions, and persists to _vibe_forms.
-	{
-		Name:        "create_form",
-		Description: "Form Wizard: generate a bound form for a table. Supports archetypes columnar | continuous | datasheet | master_detail (with a subform link to a child table), seeds humanized field-meta captions, and persists the spec to _vibe_forms.",
-		Category:    "schema",
-		Params: []ParamDef{
-			{Name: "name", Type: "string", Required: true, Desc: "Form name / title"},
-			{Name: "table", Type: "string", Required: true, Desc: "Table the form is bound to"},
-			{Name: "archetype", Type: "string", Required: true, Desc: "Form archetype: columnar | continuous | datasheet | master_detail"},
-			{Name: "fields", Type: "array", Required: false, Desc: "Bound master fields; objects with a 'name' key. Defaults to all table columns."},
-			{Name: "on_submit", Type: "string", Required: false, Desc: "On-submit behavior: refresh | redirect:<page> | noop (default: refresh)"},
-			{Name: "subform", Type: "object", Required: false, Desc: "master_detail subform link: {child_table, child_key, parent_key, fields}"},
-		},
-	},
-
-	// Schema Wizard tool (plan §2.1 / §4.3). Applies a real DuckDB foreign key
-	// (child.<child_column> -> parent.<parent_column>) and persists the
-	// relationship to _vibe_relationships.
-	{
-		Name:        "create_relationship",
-		Description: "Schema Wizard: create a relationship (foreign key) linking a child table column to a parent table column. Applies a real DuckDB foreign-key constraint (RESTRICT) so orphan child records are rejected, and persists the relationship to _vibe_relationships.",
-		Category:    "schema",
-		Params: []ParamDef{
-			{Name: "parent_table", Type: "string", Required: true, Desc: "The referenced (one) table"},
-			{Name: "parent_column", Type: "string", Required: true, Desc: "The referenced column (must be PRIMARY KEY or UNIQUE)"},
-			{Name: "child_table", Type: "string", Required: true, Desc: "The referencing (many) table"},
-			{Name: "child_column", Type: "string", Required: true, Desc: "The referencing column"},
-			{Name: "on_delete", Type: "string", Required: false, Desc: "Referential action on delete: RESTRICT | CASCADE | SET NULL | NO ACTION (DuckDB enforces RESTRICT)"},
-			{Name: "on_update", Type: "string", Required: false, Desc: "Referential action on update (stored as metadata)"},
-		},
-	},
-	{
-		Name:        "list_relationships",
-		Description: "List all stored foreign-key relationships in the container.",
-		Category:    "introspect",
-		Params:      []ParamDef{},
-	},
-
 	// Query Wizard tool (plan §2.4 / §4.3). Builds a named query from a QBE-style
 	// filter spec and persists it to the _vibe_queries registry.
 	{
@@ -226,65 +207,152 @@ var Tools = []ToolDef{
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name/title for the saved query"},
 			{Name: "table", Type: "string", Required: true, Desc: "Table the query selects from"},
-			{Name: "conditions", Type: "array", Required: false, Desc: "QBE filter conditions: objects {column, op, value}"},
+			{Name: "conditions", Type: "array", Required: false, Desc: "QBE filter conditions: objects {column, op, value}", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+				{Name: "column", Type: "string", Required: true, Desc: "Column to filter on"},
+				{Name: "op", Type: "string", Required: true, Desc: "eq | neq | lt | gt | lte | gte | like | is_null | is_not_null"},
+				{Name: "value", Type: "string", Required: false, Desc: "Comparison value (ignored for is_null/is_not_null)"},
+			}}},
 			{Name: "combinator", Type: "string", Required: false, Desc: "How to join conditions: AND | OR (default AND)"},
-			{Name: "columns", Type: "array", Required: false, Desc: "Projection column names (default: all columns)"},
+			{Name: "columns", Type: "array", Required: false, Desc: "Projection column names (default: all columns)", Items: &ParamDef{Type: "string"}},
 		},
 	},
 
-	// Report Wizard tool (plan §3.4 / §4.3). Builds an Access-style banded report
-	// spec (report/group/detail bands with group-footer subtotals) and persists it
-	// to _vibe_reports.
+	// propose_schema (ported from internal/llm's wizard-only tool, #63). This
+	// is a draft-only tool: it never touches the database. There is no
+	// dedicated diagram screen — the draft renders inline in chat (one
+	// heading + column table per proposed table, plus a relationships
+	// table), the same way present_data renders. The model asks the user to
+	// confirm in a chat reply, then builds the draft itself by calling
+	// create_table once per table. It stays in the "introspect" category so
+	// it is available even in read-only sandboxes.
 	{
-		Name:        "create_report",
-		Description: "Report Wizard: build and save an Access-style banded report over a table. Groups detail rows by one or more fields, sorts within a group, projects detail columns, and computes group-footer (and report-footer) aggregates. Persisted to _vibe_reports and renderable as banded HTML.",
+		Name:        "propose_schema",
+		Description: "PROPOSE a draft schema — tables with friendly field types plus the relationships linking them — rendered inline in chat as a readable table-by-table summary for the user to review. This does NOT modify the database. After the user confirms in chat (e.g. \"yes\", \"build it\"), create the tables yourself with create_table, one call per table in dependency order (parent tables before the children that reference them), declaring any Link/relationship as an inline foreign key in the child column's type (e.g. \"INTEGER REFERENCES customers(id)\"). Always send the COMPLETE current draft (all tables), not just the changed ones.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "tables", Type: "array", Required: true, Desc: "Every table in the draft: objects {name, columns: [{name, type, primary_key, not_null}]}. Start every table with an ID primary-key column. Friendly field types: ID, Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link, Pick (a raw DuckDB type is also accepted).", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+				{Name: "name", Type: "string", Required: true, Desc: "Table name, snake_case plural (e.g. service_calls)"},
+				{Name: "columns", Type: "array", Required: true, Desc: "The table's columns. Start every table with an ID primary-key column.", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+					{Name: "name", Type: "string", Required: true, Desc: "Column name, snake_case"},
+					{Name: "type", Type: "string", Required: true, Desc: "Friendly field type: ID, Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link, Pick (a raw DuckDB type is also accepted)"},
+					{Name: "primary_key", Type: "boolean", Required: false, Desc: "True for the table's ID column"},
+					{Name: "not_null", Type: "boolean", Required: false, Desc: "Whether the column is required"},
+				}}},
+			}}},
+			{Name: "relationships", Type: "array", Required: false, Desc: "Foreign-key links between tables in the draft: objects {child_table, child_column, parent_table, parent_column, optional}.", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+				{Name: "child_table", Type: "string", Required: true, Desc: "The table holding the Link column"},
+				{Name: "child_column", Type: "string", Required: true, Desc: "The Link column on the child table"},
+				{Name: "parent_table", Type: "string", Required: true, Desc: "The table being linked to"},
+				{Name: "parent_column", Type: "string", Required: false, Desc: "The linked column on the parent (usually id)"},
+				{Name: "optional", Type: "boolean", Required: false, Desc: "True when the link may be empty"},
+			}}},
+			{Name: "note", Type: "string", Required: false, Desc: "One short line summarizing the design; used as the draft's title."},
+		},
+	},
+
+	// present_data (#67). Validates an A2UI page (internal/a2ui) and hands the
+	// validated page straight back as the tool result — it writes nothing, so
+	// it stays in the "introspect" category and is available in every
+	// sandbox, including read-only. The Studio agent panel renders a
+	// successful result inline in the chat transcript. Its sql-bound
+	// components (stat/table/barChart/lineChart with a "sql" field) are NOT
+	// executed here: the Vue renderer runs each one through RunA2UIQuery,
+	// which re-enters this same per-statement SQL classifier via run_query —
+	// present_data itself never touches the database.
+	{
+		Name:        "present_data",
+		Description: "Render an A2UI page inline in the current reply. Call this WHENEVER you answer a data-driven question with a chart, table, or stat rather than plain prose — do not wait for the user to ask for a chart. This does not save anything; use inline data (rows/value/bars/points) rather than sql, since you already have the values and the reply is a one-off. See the <a2ui> system prompt block for the full component schema.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the <a2ui> system prompt block for the component schema.`},
+		},
+	},
+
+	// save_query (ported from internal/llm's wizard-only tool, #63). Unlike
+	// build_query (QBE conditions rendered to SQL), this persists an
+	// already-written SQL string as-is, mirroring studio's SaveQuery binding.
+	// No "description" param: queries.Query (the _vibe_queries row type) has
+	// no description column to persist it into (review fix — a param that
+	// silently did nothing was worse than no param).
+	{
+		Name:        "save_query",
+		Description: "Save a named SQL query for reuse. The SQL may be any valid DuckDB query; it is persisted as-is (not rendered from QBE conditions — use build_query for that).",
 		Category:    "schema",
 		Params: []ParamDef{
-			{Name: "id", Type: "string", Required: false, Desc: "Stable report id (defaults to a generated id)"},
-			{Name: "title", Type: "string", Required: true, Desc: "Report title shown in the report header"},
-			{Name: "source", Type: "string", Required: true, Desc: "Table or view the report selects from"},
-			{Name: "group_by", Type: "array", Required: false, Desc: "Grouping levels: objects {field, sort_dir}"},
-			{Name: "sort", Type: "array", Required: false, Desc: "Detail sort specs: objects {field, dir}"},
-			{Name: "columns", Type: "array", Required: false, Desc: "Detail-band columns: objects {field, caption}"},
-			{Name: "aggregates", Type: "array", Required: false, Desc: "Group-footer aggregates: objects {name, func, field}; func is one of sum | count | avg | min | max"},
-			{Name: "report_aggregates", Type: "array", Required: false, Desc: "Report-footer (grand total) aggregates: objects {name, func, field}"},
+			{Name: "title", Type: "string", Required: true, Desc: "Name for the saved query."},
+			{Name: "sql", Type: "string", Required: true, Desc: "The SQL the query runs."},
 		},
 	},
 
-	// Switchboard Wizard tool (plan §4.4 / §4.3). Builds an Access-style
-	// switchboard page (a hierarchical menu of ≤8 items) and persists its items
-	// to _vibe_nav. Each item binds to a validated nav target (form, report, or
-	// another switchboard page).
+	// --- Task mode (#66 part B): notebook cell authoring. preview_query,
+	// write_cell, and need_more_info are Modes: []string{"task"} — visible
+	// only to internal/llm's Task() loop, never to chat or MCP (see
+	// ListToolsForMode). They are "introspect" category so they're never
+	// denied by sandbox mode: previewing/proposing a cell never mutates the
+	// database, and the user still has to click Apply for anything to be
+	// persisted.
+
 	{
-		Name:        "create_switchboard",
-		Description: "Switchboard Wizard: create an Access-style switchboard page (a hierarchical navigation menu) and persist its items to _vibe_nav. Each item binds to a validated target: action open_form -> a form id, open_report -> a report id, open_switchboard -> another switchboard page id, open_page -> a page title. Enforces the Access constraint of at most 8 items per switchboard page.",
-		Category:    "schema",
+		Name:        "preview_query",
+		Description: "Run a SELECT (read-only) query and preview its shape before committing it as a notebook cell: row count, columns with types, a sample of rows (budgeted to fit the response), and a suggestedView (table/bar/line/stat) computed from the actual result shape. ALWAYS preview a query before calling write_cell with cell_type \"sql\" — write_cell rejects sql it has not been shown working.",
+		Category:    "introspect",
+		Modes:       []string{"task"},
 		Params: []ParamDef{
-			{Name: "id", Type: "string", Required: false, Desc: "Stable switchboard page id (defaults to a generated id)"},
-			{Name: "title", Type: "string", Required: true, Desc: "Switchboard page title"},
-			{Name: "items", Type: "array", Required: true, Desc: "Up to 8 menu items: objects {label, action, target}; action is open_form | open_report | open_page | open_switchboard | run_macro"},
+			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only statement (SELECT, WITH...SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE)"},
+		},
+	},
+	{
+		Name:        "write_cell",
+		Description: "Terminal call: record the notebook cell you are proposing and end the turn. cell_type \"sql\" requires non-empty sql that you have already run through preview_query this turn (not remembered SQL, not a lightly-edited copy — re-preview after every edit). cell_type \"markdown\" requires non-empty markdown text (put prose here, not in explanation).",
+		Category:    "introspect",
+		Modes:       []string{"task"},
+		Params: []ParamDef{
+			{Name: "cell_type", Type: "string", Required: true, Desc: "\"sql\" or \"markdown\""},
+			{Name: "sql", Type: "string", Required: false, Desc: "The previewed SQL (sql cells only)"},
+			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (sql cells only; defaults to preview_query's suggestedView)"},
+			{Name: "label", Type: "string", Required: false, Desc: "Short, specific label — a chart title, not \"Query 1\" (sql cells only)"},
+			{Name: "markdown", Type: "string", Required: false, Desc: "The cell's markdown text (markdown cells only)"},
+			{Name: "explanation", Type: "string", Required: false, Desc: "One or two sentences explaining the proposal, shown alongside it — never the cell's own content"},
+		},
+	},
+	{
+		Name:        "need_more_info",
+		Description: "Terminal call: decline to write a cell and end the turn, because the loaded tables genuinely cannot answer the request (not because the SQL is hard). Requires at least one specific question, or non-empty notes/missing_data explaining what's missing and why — a call with none of those is rejected. Only call this after you have already checked with introspect_schema/describe_table.",
+		Category:    "introspect",
+		Modes:       []string{"task"},
+		Params: []ParamDef{
+			{Name: "questions", Type: "array", Required: false, Desc: "Up to three specific questions naming the missing table/column/vendor export", Items: &ParamDef{Type: "string"}},
+			{Name: "missing_data", Type: "array", Required: false, Desc: "What data is missing", Items: &ParamDef{Type: "string"}},
+			{Name: "notes", Type: "string", Required: false, Desc: "Any additional explanation"},
 		},
 	},
 
-	// Macro Wizard tools (plan §5.4 / §4.3). Build and persist an Access-style
-	// declarative macro (an ordered list of actions with optional If/Then
-	// conditions) to _vibe_macros via the shared automation.MacroStore. Every
-	// action target is validated against the relevant catalog before persisting.
+	// --- Chat/MCP-visible notebook-authoring tools (#67 deferred part).
+	// Unlike write_cell (task-only, proposal-and-apply), these persist
+	// directly — the agent panel's chat surface has no proposal dialog, so
+	// the user's ask ("add a dashboard of X to my notebook") is the
+	// confirmation. Category "content" (full sandbox only): both write a new
+	// notebook cell to _vibe_notebooks.
+
 	{
-		Name:        "create_macro",
-		Description: "Macro Wizard: build and save an Access-style declarative macro (an ordered list of actions, each an action kind plus args, with an optional If/Then condition). Every action target is validated against the relevant catalog (OpenForm -> a form id, OpenReport -> a report id, RunMacro -> a macro id, RunQuery -> a named query) before the macro is persisted atomically to _vibe_macros.",
-		Category:    "automation",
+		Name:        "add_query_cell",
+		Description: "Append a SQL notebook cell to a notebook. sql must be a single read-only statement (classified the same way a live A2UI binding is — INSERT/UPDATE/DELETE/DDL are rejected). Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from label.",
+		Category:    "content",
 		Params: []ParamDef{
-			{Name: "id", Type: "string", Required: false, Desc: "Stable macro id (defaults to a generated id)"},
-			{Name: "title", Type: "string", Required: false, Desc: "Macro title"},
-			{Name: "actions", Type: "array", Required: true, Desc: "Ordered actions: objects {kind, args, condition}; kind is OpenForm | OpenReport | GoToRecord | FindRecord | RunQuery | RunSQL | SetValue | SetFilter | MsgBox | Export | EmailObject | RunMacro | OpenSwitchboard; args is a string map; condition is an optional {expr} If/Then guard"},
+			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
+			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only SQL statement"},
+			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (default: auto-fit to the result shape the first time it runs)"},
+			{Name: "label", Type: "string", Required: false, Desc: "Short label for the cell (also used as the new notebook's title, if one is created)"},
 		},
 	},
 	{
-		Name:        "list_macros",
-		Description: "List all stored macros in the container.",
-		Category:    "automation",
-		Params:      []ParamDef{},
+		Name:        "create_dashboard",
+		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. See the <a2ui> system prompt block for the component schema. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title.",
+		Category:    "content",
+		Params: []ParamDef{
+			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
+			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the <a2ui> system prompt block for the component schema.`},
+		},
 	},
 }
 
@@ -308,4 +376,92 @@ func ListTools() []ToolDef {
 	result := make([]ToolDef, len(Tools))
 	copy(result, Tools)
 	return result
+}
+
+// Mode names for ListToolsForMode / ToolDef.Modes.
+const (
+	ModeChat = "chat"
+	ModeMCP  = "mcp"
+	ModeTask = "task"
+)
+
+// TaskAllowedToolNames is the CLOSED allow-list of tools task mode may see
+// or dispatch (#66 part B review fix, CRITICAL): task mode never mutates
+// anything directly — every proposal goes through write_cell/need_more_info,
+// and only the user's own Apply click (a separate write path: SaveNotebook)
+// commits it. Before this fix, ListToolsForMode(ModeTask) returned every
+// Modes-unrestricted tool in the WHOLE registry (introspect_schema alongside
+// create_table, drop_table, bulk_insert, import_csv, add_query_cell, ...)
+// because "empty Modes = visible everywhere including task" was too broad —
+// combined with AgentTask running the file's own (often "full") sandbox
+// mode, a task turn could call drop_table directly from prompt text alone.
+// Task mode's toolset is now build ONLY from this explicit list — deliberately
+// NOT derived from ToolDef.Modes/Category, so a future unrelated tool added
+// to the registry can never silently become task-reachable.
+var TaskAllowedToolNames = map[string]bool{
+	"introspect_schema": true,
+	"describe_table":    true,
+	"run_query":         true,
+	"list_skills":       true,
+	"read_skill":        true,
+	"preview_query":     true,
+	"write_cell":        true,
+	"need_more_info":    true,
+}
+
+// ListToolsForMode returns the tools visible to a given agent surface.
+// mode == ModeTask returns EXACTLY TaskAllowedToolNames (intersected with
+// the live registry) — never "every unrestricted tool" (see
+// TaskAllowedToolNames's doc comment for why that was wrong). For every
+// other mode (ModeChat, ModeMCP, ""), a ToolDef with an empty Modes list is
+// visible; one with a non-empty Modes list (today only the task-only
+// terminal/preview tools) is hidden, since those tools' Modes is
+// ["task"] and mode != "task" here.
+func ListToolsForMode(mode string) []ToolDef {
+	all := ListTools()
+	out := make([]ToolDef, 0, len(all))
+	for _, td := range all {
+		if mode == ModeTask {
+			if TaskAllowedToolNames[td.Name] {
+				out = append(out, td)
+			}
+			continue
+		}
+		if len(td.Modes) == 0 {
+			out = append(out, td)
+			continue
+		}
+		for _, m := range td.Modes {
+			if m == mode {
+				out = append(out, td)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// IsModeVisible reports whether a tool named name is visible in the given
+// mode (see ListToolsForMode). Used by Handler.Handle so task-only dispatch
+// is enforced a SECOND time, independent of whatever tool list the caller
+// advertised to the model — a caller that bypasses the runner/MCP tool list
+// and dispatches "drop_table" (or any tool outside TaskAllowedToolNames)
+// directly while mode == ModeTask is still denied here.
+func IsModeVisible(name, mode string) bool {
+	td := GetTool(name)
+	if td == nil {
+		return false
+	}
+	if mode == ModeTask {
+		return TaskAllowedToolNames[td.Name]
+	}
+	if len(td.Modes) == 0 {
+		return true
+	}
+	for _, m := range td.Modes {
+		if m == mode {
+			return true
+		}
+	}
+	return false
 }

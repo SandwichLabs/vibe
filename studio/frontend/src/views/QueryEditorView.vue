@@ -38,7 +38,6 @@ interface TreeColumn { name: string; type: string; pk: boolean; fk: boolean }
 const tableStats = ref<TableStat[]>([])
 const expandedTable = ref<string | null>(null)
 const columnsByTable = ref<Record<string, TreeColumn[]>>({})
-const fkColumns = ref<Set<string>>(new Set())
 
 const dirty = computed(() => sqlText.value.trim() !== '' && sqlText.value !== savedSQL.value)
 const currentTitle = computed(() => {
@@ -60,16 +59,13 @@ async function loadSchemaTree() {
   } catch {
     tableStats.value = []
   }
-  try {
-    const rels = (await window.go.main.App.ListRelationships()) || []
-    fkColumns.value = new Set(rels.map((r: any) => `${r.child_table}.${r.child_column}`.toLowerCase()))
-  } catch {
-    fkColumns.value = new Set()
-  }
 }
 
-// toggleTable expands/collapses a tree node, lazily describing its columns
-// (real PK flags come from the backend; FK membership from relationships).
+// toggleTable expands/collapses a tree node, lazily describing its columns.
+// PK and FK flags both come straight from the backend (DescribeTable reads
+// DuckDB's own duckdb_constraints() catalog — #68 dropped the
+// _vibe_relationships metadata table, but a plain-SQL inline REFERENCES is
+// still a real DuckDB constraint the catalog reports).
 async function toggleTable(name: string) {
   if (expandedTable.value === name) {
     expandedTable.value = null
@@ -83,7 +79,7 @@ async function toggleTable(name: string) {
         name: c.name,
         type: friendlyColType(c.type),
         pk: Boolean(c.pk),
-        fk: fkColumns.value.has(`${name}.${c.name}`.toLowerCase()),
+        fk: Boolean(c.fk),
       }))
     } catch (e: any) {
       errorMessage.value = 'Failed to describe table: ' + (e.message || e)

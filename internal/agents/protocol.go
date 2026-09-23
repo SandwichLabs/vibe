@@ -19,6 +19,14 @@ type Response struct {
 	ID      any    `json:"id"`
 	Result  any    `json:"result,omitempty"`
 	Error   *Error `json:"error,omitempty"`
+
+	// StopTurn is set only by the task-mode terminal tools (write_cell,
+	// need_more_info) on a successful (non-validation-rejected) call — see
+	// handleWriteCell/handleNeedMoreInfo. internal/llm's Task() loop reads it
+	// to end the fantasy agent's turn (fantasy.ToolResponse.StopTurn) instead
+	// of continuing the tool-calling loop. Every other tool leaves this
+	// false/omitted; JSON-RPC callers (MCP, a raw request) can ignore it.
+	StopTurn bool `json:"stopTurn,omitempty"`
 }
 
 // Error is a JSON-RPC 2.0 error.

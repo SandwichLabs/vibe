@@ -22,8 +22,9 @@ declare global {
           SaveFile(): Promise<void>
           IsFileOpen(): Promise<boolean>
           GetFileInfo(): Promise<FileInfo>
-          GetAppConfig(): Promise<AppConfig>
-          SetMode(mode: string): Promise<void>
+          ListSkills(): Promise<SkillSummary[]>
+          SaveSkill(name: string, description: string, instructions: string, tableName: string): Promise<void>
+          DeleteSkill(name: string): Promise<void>
           ListPages(): Promise<PageSummary[]>
           GetPage(id: string): Promise<PageDetail>
           RenderPageContent(id: string, params: Record<string, string>): Promise<string>
@@ -42,25 +43,11 @@ declare global {
           CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string): Promise<QueryResult>
-          GetFieldMeta(table: string): Promise<FieldMeta[]>
-          SetFieldMeta(table: string, column: string, meta: FieldMeta): Promise<void>
+          RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
           AddColumn(table: string, column: string, colType: string): Promise<void>
           DropColumn(table: string, column: string): Promise<void>
           AddIndex(table: string, indexName: string, columns: string[], unique: boolean): Promise<void>
           AlterColumnType(table: string, column: string, newType: string): Promise<void>
-          SaveForm(spec: FormSpec): Promise<void>
-          GetForm(id: string): Promise<FormSpec>
-          ListForms(): Promise<FormSummary[]>
-          SubmitForm(parent: FormSubmitRow, children: FormSubmitRow[]): Promise<void>
-          SubmitFormFor(formID: string, parent: FormSubmitRow, children: FormSubmitRow[]): Promise<void>
-          UpdateRowFor(formID: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
-          FireFormOpen(formID: string): Promise<MacroRunResult>
-          RunMacro(id: string): Promise<MacroRunResult>
-          RunAutoExec(): Promise<MacroRunResult>
-          SaveMacro(spec: any): Promise<void>
-          GetMacro(id: string): Promise<any>
-          ListMacro(): Promise<any[]>
-          DeleteMacro(id: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
           SaveQuery(id: string, title: string, sql: string, engine: string, description: string): Promise<void>
@@ -97,94 +84,6 @@ interface WriteError {
   fields?: Record<string, string>
 }
 
-// FieldMeta mirrors internal/schema.FieldMeta (Access-parity field properties).
-interface FieldMeta {
-  table_name: string
-  column_name: string
-  caption: string
-  control_type: string
-  default_value: string
-  required: boolean
-  format_code: string
-  validation_rule: string
-  validation_message: string
-  input_mask: string
-  lookup_sql: string
-  display_col: string
-  value_col: string
-  control_tip: string
-  sort_order: number
-}
-
-// FormSpec mirrors internal/schema.FormSpec (Access-parity form definition).
-interface FormFieldSpec {
-  name: string
-  caption: string
-  control_type: string
-  // Form Builder (parity W2) properties — all optional/additive.
-  placeholder?: string
-  required?: boolean
-  visibility?: string
-  validation?: string
-  help?: string
-}
-
-interface SubformSpec {
-  child_table: string
-  child_key: string
-  parent_key: string
-  fields: FormFieldSpec[]
-}
-
-interface FormSpec {
-  id: string
-  title: string
-  table: string
-  archetype: string // columnar | continuous | datasheet | master_detail
-  on_submit: string
-  fields: FormFieldSpec[]
-  subform?: SubformSpec | null
-  events?: FormEvents | null
-}
-
-// FormEvents binds form/record lifecycle events to macro ids (P5.7).
-interface FormEvents {
-  on_open?: string
-  on_load?: string
-  before_insert?: string
-  after_insert?: string
-  before_update?: string
-  after_update?: string
-}
-
-// MacroRunResult / MacroIntent mirror studio.MacroRunResult — the ordered UI
-// intent list RunMacro / RunAutoExec / FireFormOpen return for the frontend.
-interface MacroRunResult {
-  intents: { kind: string; target: string; args?: Record<string, string> }[]
-}
-
-interface FormSummary {
-  id: string
-  title: string
-  archetype: string
-}
-
-// FormSubmitRow mirrors studio.FormSubmitRow — one row in an atomic submit.
-interface FormSubmitRow {
-  table: string
-  values: Record<string, any>
-}
-
-// AppConfig mirrors studio.AppConfig (Phase 4 dual-mode). `mode` is the live
-// runtime mode ("studio" | "app"); default_mode / startup_object / app_title are
-// persisted in _vibe_meta.
-interface AppConfig {
-  mode: string
-  default_mode: string
-  startup_object: string
-  app_title: string
-}
-
 // TemplateInfo mirrors studio.TemplateInfo (P6.7): a bundled starter-template
 // descriptor surfaced to the Home/Unlock quick-start template picker cards.
 interface TemplateInfo {
@@ -200,6 +99,21 @@ interface FileInfo {
   table_count: number
   query_count: number
   file_size: number
+  // session_id identifies the currently open container (studio.App.sessionID).
+  // A view that reads data at load time (NotebookView) should capture this
+  // and send it back with any later write (SaveNotebook) so a write from a
+  // superseded file session is rejected instead of landing in the wrong file.
+  session_id: string
+}
+
+// SkillSummary mirrors studio.SkillSummary (#62): one Skill as the Skills
+// view lists/renders it — built-in, user-authored, or import-generated.
+interface SkillSummary {
+  name: string
+  description: string
+  instructions: string
+  table_name?: string
+  source: string // 'built-in' | 'user' | 'import'
 }
 
 interface PageSummary {
@@ -207,6 +121,7 @@ interface PageSummary {
   title: string
   page_type: string
   sort_order: number
+  migrated_to: string
 }
 
 interface PageDetail {
@@ -222,6 +137,10 @@ interface ColumnInfo {
   type: string
   not_null: boolean
   pk: boolean
+  // fk is read-only output from DescribeTable (a real DuckDB FOREIGN KEY
+  // constraint, read from duckdb_constraints() — #68 dropped the
+  // _vibe_relationships metadata table); CreateTable/AddColumn ignore it.
+  fk?: boolean
 }
 
 interface TableInfo {
@@ -284,6 +203,14 @@ interface DashboardData {
   file_size: number
   created_at: string
   updated_at: string
+}
+
+// A2UIQueryResult mirrors studio.A2UIQueryResult — the result of one A2UI
+// data-bound component's live "sql" binding (RunA2UIQuery), gated through the
+// agent sandbox's per-statement SQL classifier, not a bypass.
+interface A2UIQueryResult {
+  columns: string[]
+  rows: any[][]
 }
 
 interface AgentResult {

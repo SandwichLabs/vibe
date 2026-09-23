@@ -2,6 +2,7 @@ package container
 
 import (
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,8 +32,29 @@ var expectedTemplateTables = map[string]map[string][]string{
 	},
 }
 
-// TestListTemplates asserts the registry advertises at least the three required
-// Access-style starter templates by name.
+// expectedTemplateRelationships maps each template to the plain-SQL inline
+// foreign keys (child.column -> parent.column) its CREATE TABLE statements
+// declare (#68 dropped the _vibe_relationships metadata table; the FK itself
+// is still real DuckDB DDL, so it's asserted directly against the known
+// template schema rather than reparsed out of DuckDB's catalog).
+var expectedTemplateRelationships = map[string][]tmplRel{
+	"contacts": {
+		{parentTable: "contacts", parentColumn: "id", childTable: "contact_notes", childColumn: "contact_id"},
+	},
+	"inventory": {
+		{parentTable: "suppliers", parentColumn: "id", childTable: "products", childColumn: "supplier_id"},
+	},
+	"order-entry": {
+		{parentTable: "customers", parentColumn: "id", childTable: "orders", childColumn: "customer_id"},
+		{parentTable: "orders", parentColumn: "id", childTable: "order_items", childColumn: "order_id"},
+	},
+	"training-registrations": {
+		{parentTable: "courses", parentColumn: "id", childTable: "registrations", childColumn: "course_id"},
+	},
+}
+
+// TestListTemplates asserts the registry advertises at least the four
+// starter templates by name.
 func TestListTemplates(t *testing.T) {
 	names := ListTemplates()
 	require.GreaterOrEqual(t, len(names), 3, "expected at least 3 registered templates")
@@ -60,8 +82,10 @@ func TestCreate_UnknownTemplate_Error(t *testing.T) {
 
 // TestCreate_WithTemplate_SeedsRelationalApp builds every registered template
 // into a fresh encrypted .vibe, reopens it, and asserts the full acceptance
-// shape: relational tables with expected columns, enforced FK relationships,
-// field metadata, at least one form + nav entry, and non-zero sample data.
+// shape (#68: tables + seed data + a runnable notebook, no forms/nav/macros/
+// relationships metadata): relational tables with expected columns and
+// enforced inline FK constraints, non-zero sample data, and exactly one
+// starter notebook with at least one sql cell.
 func TestCreate_WithTemplate_SeedsRelationalApp(t *testing.T) {
 	for name, tables := range expectedTemplateTables {
 		name, tables := name, tables
@@ -107,31 +131,38 @@ func TestCreate_WithTemplate_SeedsRelationalApp(t *testing.T) {
 				assert.Greater(t, rowCount, 0, "table %q should have sample data", table)
 			}
 
-			// 2. Declared FK relationships present in _vibe_relationships and enforced.
-			rels := templateRelationships(t, c2.SQLiteDB())
-			require.NotEmpty(t, rels, "template %q should declare at least one relationship", name)
-
+			// 2. Inline FK relationships (declared at CREATE TABLE time, plain
+			// SQL — #68 dropped the _vibe_relationships metadata table) are
+			// actually enforced by DuckDB.
+			rels := expectedTemplateRelationships[name]
+			require.NotEmpty(t, rels, "template %q should declare at least one foreign key", name)
 			for _, r := range rels {
 				assertParentDeleteBlocked(t, ddb, r)
 			}
 
-			// 3. At least one form and one nav entry.
-			assert.GreaterOrEqual(t, countRows(t, c2.SQLiteDB(), "_vibe_forms"), 1,
-				"template %q should seed at least one form", name)
-			assert.GreaterOrEqual(t, countRows(t, c2.SQLiteDB(), "_vibe_nav"), 1,
-				"template %q should seed at least one nav entry", name)
-
-			// 4. Field metadata seeded.
-			assert.GreaterOrEqual(t, countRows(t, c2.SQLiteDB(), "_vibe_field_meta"), 1,
-				"template %q should seed field metadata", name)
+			// 3. Exactly one starter notebook, with at least one sql cell.
+			require.Equal(t, 1, countRows(t, c2.SQLiteDB(), "_vibe_notebooks"),
+				"template %q should seed exactly one starter notebook", name)
+			var cellsJSON string
+			require.NoError(t, c2.SQLiteDB().QueryRow(`SELECT cells FROM _vibe_notebooks LIMIT 1`).Scan(&cellsJSON))
+			var cells []map[string]any
+			require.NoError(t, json.Unmarshal([]byte(cellsJSON), &cells))
+			hasSQL := false
+			for _, cell := range cells {
+				if cell["type"] == "sql" {
+					hasSQL = true
+					break
+				}
+			}
+			assert.True(t, hasSQL, "template %q's starter notebook should have at least one sql cell", name)
 		})
 	}
 }
 
-// TestOrderEntryTemplate_MasterDetailForm asserts the order-entry template
-// yields the Phase 1 acceptance pattern: a master-detail form (order header +
-// line-item subform) bound on the orders -> order_items FK.
-func TestOrderEntryTemplate_MasterDetailForm(t *testing.T) {
+// TestOrderEntryTemplate_NotebookReferencesLineItems asserts the order-entry
+// template's starter notebook actually queries the master/detail relationship
+// (orders -> order_items) it seeds, not just the top-level tables.
+func TestOrderEntryTemplate_NotebookReferencesLineItems(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "order-entry.vibe")
 
@@ -143,20 +174,9 @@ func TestOrderEntryTemplate_MasterDetailForm(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	var (
-		archetype string
-		tableName string
-		spec      string
-	)
-	err = c.SQLiteDB().QueryRow(
-		`SELECT archetype, table_name, spec FROM _vibe_forms WHERE archetype = 'master_detail' LIMIT 1`,
-	).Scan(&archetype, &tableName, &spec)
-	require.NoError(t, err, "order-entry should include a master_detail form")
-
-	assert.Equal(t, "master_detail", archetype)
-	assert.Equal(t, "orders", tableName, "master form should bind the order header table")
-	// The subform must be FK-linked to the line-item table.
-	assert.Contains(t, spec, "order_items", "master_detail spec should reference the line-item subform")
+	var cellsJSON string
+	require.NoError(t, c.SQLiteDB().QueryRow(`SELECT cells FROM _vibe_notebooks LIMIT 1`).Scan(&cellsJSON))
+	assert.Contains(t, cellsJSON, "order_items", "order-entry notebook should include a cell over the line-item table")
 }
 
 // --- helpers ---
@@ -164,23 +184,6 @@ func TestOrderEntryTemplate_MasterDetailForm(t *testing.T) {
 type tmplRel struct {
 	parentTable, parentColumn string
 	childTable, childColumn   string
-}
-
-func templateRelationships(t *testing.T, sdb *sql.DB) []tmplRel {
-	t.Helper()
-	rows, err := sdb.Query(
-		`SELECT parent_table, parent_column, child_table, child_column FROM _vibe_relationships`)
-	require.NoError(t, err)
-	defer rows.Close() //nolint:errcheck
-
-	var rels []tmplRel
-	for rows.Next() {
-		var r tmplRel
-		require.NoError(t, rows.Scan(&r.parentTable, &r.parentColumn, &r.childTable, &r.childColumn))
-		rels = append(rels, r)
-	}
-	require.NoError(t, rows.Err())
-	return rels
 }
 
 // assertParentDeleteBlocked verifies the FK is actually enforced in DuckDB:

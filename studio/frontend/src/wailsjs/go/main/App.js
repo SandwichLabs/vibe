@@ -6,10 +6,6 @@ export function AddColumn(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddColumn'](arg1, arg2, arg3);
 }
 
-export function AddForeignKey(arg1) {
-  return window['go']['main']['App']['AddForeignKey'](arg1);
-}
-
 export function AddIndex(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddIndex'](arg1, arg2, arg3, arg4);
 }
@@ -22,20 +18,20 @@ export function AgentChatStream(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AgentChatStream'](arg1, arg2, arg3, arg4);
 }
 
-export function AlterColumnType(arg1, arg2, arg3) {
-  return window['go']['main']['App']['AlterColumnType'](arg1, arg2, arg3);
+export function AgentTask(arg1) {
+  return window['go']['main']['App']['AgentTask'](arg1);
 }
 
-export function AnalyzeInExcel(arg1, arg2) {
-  return window['go']['main']['App']['AnalyzeInExcel'](arg1, arg2);
+export function AlterColumnType(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AlterColumnType'](arg1, arg2, arg3);
 }
 
 export function AnalyzeQueryInExcel(arg1, arg2) {
   return window['go']['main']['App']['AnalyzeQueryInExcel'](arg1, arg2);
 }
 
-export function CancelRender() {
-  return window['go']['main']['App']['CancelRender']();
+export function CancelAgentTask(arg1) {
+  return window['go']['main']['App']['CancelAgentTask'](arg1);
 }
 
 export function CloseFile() {
@@ -50,28 +46,16 @@ export function CreateFromTemplate(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateFromTemplate'](arg1, arg2, arg3);
 }
 
-export function CreateHTMLPage(arg1, arg2) {
-  return window['go']['main']['App']['CreateHTMLPage'](arg1, arg2);
-}
-
-export function CreatePage(arg1, arg2) {
-  return window['go']['main']['App']['CreatePage'](arg1, arg2);
+export function CreateNotebook(arg1) {
+  return window['go']['main']['App']['CreateNotebook'](arg1);
 }
 
 export function CreateTable(arg1, arg2) {
   return window['go']['main']['App']['CreateTable'](arg1, arg2);
 }
 
-export function DeleteMacro(arg1) {
-  return window['go']['main']['App']['DeleteMacro'](arg1);
-}
-
-export function DeleteNavItem(arg1) {
-  return window['go']['main']['App']['DeleteNavItem'](arg1);
-}
-
-export function DeletePage(arg1) {
-  return window['go']['main']['App']['DeletePage'](arg1);
+export function DeleteNotebook(arg1) {
+  return window['go']['main']['App']['DeleteNotebook'](arg1);
 }
 
 export function DeleteQuery(arg1) {
@@ -80,6 +64,10 @@ export function DeleteQuery(arg1) {
 
 export function DeleteRow(arg1, arg2, arg3) {
   return window['go']['main']['App']['DeleteRow'](arg1, arg2, arg3);
+}
+
+export function DeleteSkill(arg1) {
+  return window['go']['main']['App']['DeleteSkill'](arg1);
 }
 
 export function DescribeTable(arg1) {
@@ -98,28 +86,16 @@ export function ExecuteQuery(arg1) {
   return window['go']['main']['App']['ExecuteQuery'](arg1);
 }
 
+export function ExportNotebook(arg1, arg2) {
+  return window['go']['main']['App']['ExportNotebook'](arg1, arg2);
+}
+
 export function ExportQueryResults(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExportQueryResults'](arg1, arg2, arg3);
 }
 
 export function ExportQueryXLSX(arg1, arg2) {
   return window['go']['main']['App']['ExportQueryXLSX'](arg1, arg2);
-}
-
-export function ExportReportCSV(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ExportReportCSV'](arg1, arg2, arg3);
-}
-
-export function ExportReportHTML(arg1, arg2) {
-  return window['go']['main']['App']['ExportReportHTML'](arg1, arg2);
-}
-
-export function ExportReportPDF(arg1, arg2) {
-  return window['go']['main']['App']['ExportReportPDF'](arg1, arg2);
-}
-
-export function ExportReportXLSX(arg1, arg2) {
-  return window['go']['main']['App']['ExportReportXLSX'](arg1, arg2);
 }
 
 export function ExportTableCSV(arg1) {
@@ -134,10 +110,6 @@ export function ExportTableXLSX(arg1, arg2) {
   return window['go']['main']['App']['ExportTableXLSX'](arg1, arg2);
 }
 
-export function FireFormOpen(arg1) {
-  return window['go']['main']['App']['FireFormOpen'](arg1);
-}
-
 export function GetAgentConfig() {
   return window['go']['main']['App']['GetAgentConfig']();
 }
@@ -150,24 +122,12 @@ export function GetAllMeta() {
   return window['go']['main']['App']['GetAllMeta']();
 }
 
-export function GetAppConfig() {
-  return window['go']['main']['App']['GetAppConfig']();
-}
-
 export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
 }
 
-export function GetFieldMeta(arg1) {
-  return window['go']['main']['App']['GetFieldMeta'](arg1);
-}
-
 export function GetFileInfo() {
   return window['go']['main']['App']['GetFileInfo']();
-}
-
-export function GetForm(arg1) {
-  return window['go']['main']['App']['GetForm'](arg1);
 }
 
 export function GetInitialFile() {
@@ -178,32 +138,12 @@ export function GetMCPStatus() {
   return window['go']['main']['App']['GetMCPStatus']();
 }
 
-export function GetMacro(arg1) {
-  return window['go']['main']['App']['GetMacro'](arg1);
-}
-
-export function GetNav(arg1) {
-  return window['go']['main']['App']['GetNav'](arg1);
-}
-
-export function GetPage(arg1) {
-  return window['go']['main']['App']['GetPage'](arg1);
+export function GetNotebook(arg1) {
+  return window['go']['main']['App']['GetNotebook'](arg1);
 }
 
 export function GetQuery(arg1) {
   return window['go']['main']['App']['GetQuery'](arg1);
-}
-
-export function GetReportData(arg1, arg2) {
-  return window['go']['main']['App']['GetReportData'](arg1, arg2);
-}
-
-export function GetReportDataFaceted(arg1, arg2) {
-  return window['go']['main']['App']['GetReportDataFaceted'](arg1, arg2);
-}
-
-export function GetReportSQL(arg1) {
-  return window['go']['main']['App']['GetReportSQL'](arg1);
 }
 
 export function GetTableData(arg1, arg2, arg3, arg4, arg5) {
@@ -218,6 +158,10 @@ export function ImportCSV(arg1, arg2) {
   return window['go']['main']['App']['ImportCSV'](arg1, arg2);
 }
 
+export function ImportNotebook(arg1) {
+  return window['go']['main']['App']['ImportNotebook'](arg1);
+}
+
 export function ImportSpreadsheet(arg1) {
   return window['go']['main']['App']['ImportSpreadsheet'](arg1);
 }
@@ -230,36 +174,16 @@ export function IsFileOpen() {
   return window['go']['main']['App']['IsFileOpen']();
 }
 
-export function ListForms() {
-  return window['go']['main']['App']['ListForms']();
-}
-
-export function ListMacro() {
-  return window['go']['main']['App']['ListMacro']();
-}
-
-export function ListNav() {
-  return window['go']['main']['App']['ListNav']();
-}
-
-export function ListNavTargets() {
-  return window['go']['main']['App']['ListNavTargets']();
-}
-
-export function ListPages() {
-  return window['go']['main']['App']['ListPages']();
+export function ListNotebooks() {
+  return window['go']['main']['App']['ListNotebooks']();
 }
 
 export function ListQueries() {
   return window['go']['main']['App']['ListQueries']();
 }
 
-export function ListRelationships() {
-  return window['go']['main']['App']['ListRelationships']();
-}
-
-export function ListReports() {
-  return window['go']['main']['App']['ListReports']();
+export function ListSkills() {
+  return window['go']['main']['App']['ListSkills']();
 }
 
 export function ListTableStats() {
@@ -286,32 +210,16 @@ export function PreviewSpreadsheet(arg1, arg2, arg3) {
   return window['go']['main']['App']['PreviewSpreadsheet'](arg1, arg2, arg3);
 }
 
-export function RemoveForeignKey(arg1) {
-  return window['go']['main']['App']['RemoveForeignKey'](arg1);
+export function Quit() {
+  return window['go']['main']['App']['Quit']();
 }
 
-export function RenderPageContent(arg1, arg2) {
-  return window['go']['main']['App']['RenderPageContent'](arg1, arg2);
+export function RenameNotebook(arg1, arg2) {
+  return window['go']['main']['App']['RenameNotebook'](arg1, arg2);
 }
 
-export function RenderReportContent(arg1) {
-  return window['go']['main']['App']['RenderReportContent'](arg1);
-}
-
-export function RenderReportContentFaceted(arg1, arg2) {
-  return window['go']['main']['App']['RenderReportContentFaceted'](arg1, arg2);
-}
-
-export function RenderReportContentFiltered(arg1, arg2) {
-  return window['go']['main']['App']['RenderReportContentFiltered'](arg1, arg2);
-}
-
-export function RunAutoExec() {
-  return window['go']['main']['App']['RunAutoExec']();
-}
-
-export function RunMacro(arg1) {
-  return window['go']['main']['App']['RunMacro'](arg1);
+export function RunA2UIQuery(arg1) {
+  return window['go']['main']['App']['RunA2UIQuery'](arg1);
 }
 
 export function SaveFile() {
@@ -322,28 +230,16 @@ export function SaveFilterAsQuery(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveFilterAsQuery'](arg1, arg2, arg3, arg4);
 }
 
-export function SaveForm(arg1) {
-  return window['go']['main']['App']['SaveForm'](arg1);
-}
-
-export function SaveMacro(arg1) {
-  return window['go']['main']['App']['SaveMacro'](arg1);
-}
-
-export function SaveNav(arg1) {
-  return window['go']['main']['App']['SaveNav'](arg1);
-}
-
-export function SaveNavItem(arg1) {
-  return window['go']['main']['App']['SaveNavItem'](arg1);
+export function SaveNotebook(arg1, arg2) {
+  return window['go']['main']['App']['SaveNotebook'](arg1, arg2);
 }
 
 export function SaveQuery(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4);
 }
 
-export function SaveReport(arg1) {
-  return window['go']['main']['App']['SaveReport'](arg1);
+export function SaveSkill(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveSkill'](arg1, arg2, arg3, arg4);
 }
 
 export function SelectCSVFile() {
@@ -352,6 +248,10 @@ export function SelectCSVFile() {
 
 export function SelectNewVibeFile() {
   return window['go']['main']['App']['SelectNewVibeFile']();
+}
+
+export function SelectNotebookFile() {
+  return window['go']['main']['App']['SelectNotebookFile']();
 }
 
 export function SelectSpreadsheetFile() {
@@ -366,24 +266,16 @@ export function SendAgentQuery(arg1) {
   return window['go']['main']['App']['SendAgentQuery'](arg1);
 }
 
+export function SetActiveNotebook(arg1) {
+  return window['go']['main']['App']['SetActiveNotebook'](arg1);
+}
+
 export function SetAgentConfig(arg1) {
   return window['go']['main']['App']['SetAgentConfig'](arg1);
 }
 
-export function SetAppConfig(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetAppConfig'](arg1, arg2, arg3);
-}
-
-export function SetFieldMeta(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetFieldMeta'](arg1, arg2, arg3);
-}
-
 export function SetMeta(arg1, arg2) {
   return window['go']['main']['App']['SetMeta'](arg1, arg2);
-}
-
-export function SetMode(arg1) {
-  return window['go']['main']['App']['SetMode'](arg1);
 }
 
 export function StartMCPServer() {
@@ -394,26 +286,6 @@ export function StopMCPServer() {
   return window['go']['main']['App']['StopMCPServer']();
 }
 
-export function SubmitForm(arg1, arg2) {
-  return window['go']['main']['App']['SubmitForm'](arg1, arg2);
-}
-
-export function SubmitFormFor(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SubmitFormFor'](arg1, arg2, arg3);
-}
-
-export function UpdatePage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['UpdatePage'](arg1, arg2, arg3);
-}
-
-export function UpdateReportSQL(arg1, arg2) {
-  return window['go']['main']['App']['UpdateReportSQL'](arg1, arg2);
-}
-
 export function UpdateRow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateRow'](arg1, arg2, arg3, arg4);
-}
-
-export function UpdateRowFor(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['UpdateRowFor'](arg1, arg2, arg3, arg4);
 }

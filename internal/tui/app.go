@@ -1,3 +1,8 @@
+// Package tui is Vibe Studio's terminal interface (#69): a SQL REPL, a
+// read-only table browser, and a notebook list. It is deliberately narrow —
+// the page editor/wizard/renderer that used to live here were removed along
+// with the page system (#66/#69); notebooks and A2UI dashboards are authored
+// in the Wails Studio app, not the TUI.
 package tui
 
 import (
@@ -6,33 +11,37 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
-type focus int
+// mode selects which of the three top-level views is active.
+type mode int
 
 const (
-	focusSidebar focus = iota
-	focusContent
-	focusREPL
+	modeREPL mode = iota
+	modeTables
+	modeNotebooks
 )
 
-// contentView tracks which view is active in the content panel.
-type contentView int
+func (m mode) String() string {
+	switch m {
+	case modeREPL:
+		return "REPL"
+	case modeTables:
+		return "Tables"
+	case modeNotebooks:
+		return "Notebooks"
+	default:
+		return "?"
+	}
+}
 
-const (
-	viewPage contentView = iota
-	viewTable
-	viewQuery
-)
-
-// ContainerAccess interface to avoid importing container directly.
+// ContainerAccess is the minimal container surface the TUI needs.
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
 	DuckDBDB() *sql.DB
@@ -40,110 +49,71 @@ type ContainerAccess interface {
 	Close() error
 }
 
-// EngineAccess interface for query execution.
+// EngineAccess is the minimal query-execution surface the TUI needs.
 type EngineAccess interface {
 	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
-// App is the top-level BubbleTea model for Vibe Studio.
+// App is the top-level BubbleTea model for Vibe Studio's TUI.
 type App struct {
-	container    ContainerAccess
-	engine       EngineAccess
-	focus        focus
-	activeView   contentView
-	sidebar      SidebarModel
-	content      ContentModel
-	tableBrowser TableBrowserModel
-	queryEditor  QueryEditorModel
-	repl         REPLModel
-	pageWizard   PageWizardModel
-	keys         KeyMap
-	helpView     help.Model
-	width        int
-	height       int
-	unsaved      bool
-	showHelp     bool
-	quitting     bool
-	logger       *slog.Logger
+	container ContainerAccess
+	engine    EngineAccess
+	logger    *slog.Logger
+
+	mode mode
+
+	repl      REPLModel
+	tables    TablesModel
+	notebooks NotebooksModel
+
+	keys     KeyMap
+	helpView help.Model
+	width    int
+	height   int
+	showHelp bool
+	quitting bool
+	status   string // one-line transient status (e.g. save result), cleared on next keypress
+
+	// unsaved tracks whether a write has happened in this session (a REPL
+	// statement that wasn't a plain read) since the last successful Save.
+	// Drives the status-bar indicator, and whether quitting auto-saves.
+	unsaved bool
 }
 
 // NewApp creates a new TUI application model.
-func NewApp(container ContainerAccess, engine EngineAccess, logger *slog.Logger) *App {
+func NewApp(container ContainerAccess, eng EngineAccess, logger *slog.Logger) *App {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &App{
-		container:    container,
-		engine:       engine,
-		focus:        focusSidebar,
-		activeView:   viewPage,
-		sidebar:      NewSidebarModel(),
-		content:      NewContentModel(),
-		tableBrowser: NewTableBrowserModel(),
-		queryEditor:  NewQueryEditorModel(),
-		repl:         NewREPLModel(),
-		pageWizard:   NewPageWizardModel(),
-		keys:         DefaultKeyMap(),
-		helpView:     newHelpModel(),
-		width:        80,
-		height:       24,
-		logger:       logger,
+	a := &App{
+		container: container,
+		engine:    eng,
+		logger:    logger,
+		mode:      modeREPL,
+		repl:      NewREPLModel(),
+		tables:    NewTablesModel(),
+		notebooks: NewNotebooksModel(),
+		keys:      DefaultKeyMap(),
+		helpView:  newHelpModel(),
+		width:     80,
+		height:    24,
 	}
+	// The app starts in modeREPL directly (not through setMode), so the
+	// REPL's textinput must be focused here too — bubbles/textinput drops
+	// every keystroke while unfocused, which otherwise made the REPL
+	// silently un-typeable on a fresh app until the user tabbed away and
+	// back (setMode is the only other place that calls repl.Focus()).
+	a.repl.Focus()
+	return a
 }
 
-// LoadData loads pages, tables, and queries from the container into the sidebar.
+// LoadData loads the table list and notebook list from the container.
 func (a *App) LoadData() {
 	if a.container == nil {
 		return
 	}
-
-	db := a.container.SQLiteDB()
-
-	// Load pages.
-	rows, err := db.Query("SELECT id, title, page_type FROM _vibe_pages ORDER BY sort_order, title;")
-	if err == nil {
-		var pages []PageItem
-		for rows.Next() {
-			var p PageItem
-			if err := rows.Scan(&p.ID, &p.Title, &p.Type); err == nil {
-				pages = append(pages, p)
-			}
-		}
-		rows.Close()
-		a.sidebar.SetPages(pages)
-	}
-
-	// Load user tables with row counts from DuckDB.
-	if duckDB := a.container.DuckDBDB(); duckDB != nil {
-		tblRows, tblErr := duckDB.Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;")
-		if tblErr == nil {
-			var tables []TableItem
-			for tblRows.Next() {
-				var t TableItem
-				if err := tblRows.Scan(&t.Name); err == nil {
-					// Get row count.
-					duckDB.QueryRow("SELECT COUNT(*) FROM \"" + t.Name + "\";").Scan(&t.RowCount) //nolint:gosec,errcheck
-					tables = append(tables, t)
-				}
-			}
-			tblRows.Close()
-			a.sidebar.SetTables(tables)
-		}
-	}
-
-	// Load queries.
-	rows, err = db.Query("SELECT id, title FROM _vibe_queries ORDER BY title;")
-	if err == nil {
-		var queries []QueryItem
-		for rows.Next() {
-			var q QueryItem
-			if err := rows.Scan(&q.ID, &q.Title); err == nil {
-				queries = append(queries, q)
-			}
-		}
-		rows.Close()
-		a.sidebar.SetQueries(queries)
-	}
+	a.tables.LoadTables(a.container.DuckDBDB())
+	a.notebooks.LoadNotebooks(a.container.SQLiteDB())
 }
 
 // Init implements tea.Model.
@@ -165,416 +135,246 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.executeREPLQuery(msg.query)
 	case replResultMsg:
 		a.repl.AppendOutput(msg.output)
+		if msg.wrote {
+			a.unsaved = true
+		}
 		return a, nil
 	case tableDataMsg:
-		a.tableBrowser.SetData(msg.columns, msg.rows, msg.err)
-		return a, nil
-	case pageCreatedMsg:
-		if msg.err != nil {
-			a.logger.Error("failed to create page", "error", msg.err)
-			return a, nil
-		}
-		a.LoadData()
-		a.unsaved = true
-		return a, openEditorCmd(msg.pageID, msg.content)
-	case editorFinishedMsg:
-		if msg.err != nil {
-			a.logger.Error("editor error", "error", msg.err)
-			return a, nil
-		}
-		// Save edited content back to database.
-		if a.container != nil {
-			db := a.container.SQLiteDB()
-			now := time.Now().UTC().Format(time.RFC3339)
-			_, err := db.Exec("UPDATE _vibe_pages SET content = ?, updated_at = ? WHERE id = ?;",
-				msg.content, now, msg.pageID)
-			if err != nil {
-				a.logger.Error("failed to save edited page", "error", err)
-			}
-		}
-		// Display the page in the content panel.
-		title := a.lookupPageTitle(msg.pageID)
-		_, contentWidth, _, _ := a.computeLayout()
-		a.content.SetPage(title, msg.content, "page", contentWidth)
-		a.activeView = viewPage
-		a.setFocus(focusContent)
+		a.tables.SetData(msg)
 		return a, nil
 	case saveResultMsg:
-		if msg.err == "" {
+		if msg.err != "" {
+			a.status = "save failed: " + msg.err
+		} else {
+			a.status = "saved"
 			a.unsaved = false
+		}
+		if msg.thenQuit {
+			a.quitting = true
+			return a, tea.Quit
 		}
 		return a, nil
 	}
 	return a, nil
 }
 
-// pageCreatedMsg is sent after a page is inserted into the database.
-type pageCreatedMsg struct {
-	pageID  string
-	content string
-	err     error
-}
-
-// lookupPageTitle queries the page title from the database by ID.
-func (a *App) lookupPageTitle(pageID string) string {
-	if a.container == nil {
-		return "Untitled"
-	}
-	var title string
-	err := a.container.SQLiteDB().QueryRow(
-		"SELECT title FROM _vibe_pages WHERE id = ?;", pageID,
-	).Scan(&title)
-	if err != nil || title == "" {
-		return "Untitled"
-	}
-	return title
-}
-
-// propagateDimensions sends current dimensions to all sub-components.
 func (a *App) propagateDimensions() {
-	sidebarWidth, contentWidth, _, mainHeight := a.computeLayout()
-	_ = sidebarWidth // sidebar sets its own size in View()
-	a.content.SetSize(contentWidth, mainHeight)
-	a.tableBrowser.SetSize(contentWidth, mainHeight)
-	a.queryEditor.SetSize(contentWidth, mainHeight)
-	a.repl.SetSize(a.width, a.computeREPLHeight())
-}
-
-func (a *App) computeREPLHeight() int {
-	if a.focus == focusREPL {
-		return replHeightExpanded
+	mainHeight := a.height - 2 // -1 status bar, -1 mode bar
+	if mainHeight < 4 {
+		mainHeight = 4
 	}
-	return replHeightNormal
+	a.repl.SetSize(a.width, mainHeight)
+	a.tables.SetSize(a.width, mainHeight)
+	a.notebooks.SetSize(a.width, mainHeight)
 }
 
 func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Global keys that work regardless of focus.
 	switch msg.String() {
 	case "ctrl+c":
-		a.quitting = true
-		return a, tea.Quit
+		return a, a.quit()
+	// ctrl+s saves in every mode, including the REPL — unlike the bare "s"
+	// shortcut (which the REPL's textinput owns for typing), ctrl+s is never
+	// a character a query could contain, so it's safe to intercept globally
+	// ahead of the showHelp/mode dispatch below.
+	case "ctrl+s":
+		a.status = ""
+		return a, a.save(false)
 	}
 
-	// If page wizard is active, route all input there.
-	if a.pageWizard.IsActive() {
-		a.pageWizard = a.pageWizard.Update(msg)
-		// Check if wizard just completed.
-		if !a.pageWizard.IsActive() && a.pageWizard.step == wizardStepDone {
-			return a, a.createPageFromWizard()
-		}
-		return a, nil
-	}
-
-	switch msg.String() {
-	case "?":
-		if a.focus != focusREPL {
-			a.showHelp = !a.showHelp
-			return a, nil
-		}
-	}
-
-	// If help overlay is showing, any key dismisses it.
 	if a.showHelp {
 		a.showHelp = false
 		return a, nil
 	}
 
+	a.status = ""
+
 	switch msg.String() {
-	case "q":
-		if a.focus != focusREPL {
-			a.quitting = true
-			return a, tea.Quit
-		}
-	case "tab":
-		return a, a.cycleFocus()
-	case "`":
-		return a, a.toggleREPL()
-	case "s":
-		if a.focus != focusREPL {
-			return a, a.save()
-		}
-	case "n":
-		if a.focus != focusREPL {
-			a.pageWizard.Start()
+	case "?":
+		// "?" only opens help when the active view isn't capturing free-text
+		// input — in the REPL, "?" must type into the query (e.g. "SELECT
+		// name FROM t WHERE x = ?" during editing), not pop a full-screen
+		// overlay over it.
+		if !a.captureText() {
+			a.showHelp = true
 			return a, nil
 		}
-	case "enter":
-		if a.focus == focusSidebar {
-			return a, a.handleSidebarSelect()
+	case "q":
+		if a.mode != modeREPL || !a.repl.Focused() {
+			return a, a.quit()
+		}
+	case "esc":
+		if a.mode == modeTables {
+			a.tables.Back()
+			return a, nil
+		}
+		if a.mode == modeNotebooks {
+			a.notebooks.Back()
+			return a, nil
+		}
+	case "tab":
+		a.cycleMode()
+		return a, nil
+	case "1":
+		if !a.captureText() {
+			a.setMode(modeREPL)
+			return a, nil
+		}
+	case "2":
+		if !a.captureText() {
+			a.setMode(modeTables)
+			return a, nil
+		}
+	case "3":
+		if !a.captureText() {
+			a.setMode(modeNotebooks)
+			return a, nil
+		}
+	case "s":
+		if !a.captureText() {
+			return a, a.save(false)
 		}
 	}
 
-	// Delegate to focused panel.
 	var cmd tea.Cmd
-	switch a.focus {
-	case focusSidebar:
-		a.sidebar, cmd = a.sidebar.Update(msg)
-	case focusContent:
-		switch a.activeView {
-		case viewPage:
-			a.content, cmd = a.content.Update(msg)
-		case viewTable:
-			a.tableBrowser, cmd = a.tableBrowser.Update(msg)
-		case viewQuery:
-			a.queryEditor, cmd = a.queryEditor.Update(msg)
-		}
-	case focusREPL:
+	switch a.mode {
+	case modeREPL:
 		a.repl, cmd = a.repl.Update(msg)
+	case modeTables:
+		var loadCmd tea.Cmd
+		a.tables, loadCmd = a.tables.Update(msg, a.engine)
+		cmd = loadCmd
+	case modeNotebooks:
+		a.notebooks, cmd = a.notebooks.Update(msg, a.container)
 	}
-
 	return a, cmd
 }
 
-// setFocus changes focus and manages input blur/focus.
-func (a *App) setFocus(f focus) tea.Cmd {
-	a.focus = f
-	if f == focusREPL {
-		a.propagateDimensions()
-		return a.repl.Focus()
-	}
-	a.repl.Blur()
-	a.propagateDimensions()
-	// Set table focus state.
-	a.tableBrowser.SetFocused(f == focusContent && a.activeView == viewTable)
-	return nil
+// captureText reports whether the active view currently owns free-text
+// keyboard input (the REPL's textinput), so single-letter global shortcuts
+// like "s"/"1"/"2"/"3" must be routed to it instead of intercepted.
+func (a *App) captureText() bool {
+	return a.mode == modeREPL
 }
 
-// handleSidebarSelect loads the selected item into the content panel.
-func (a *App) handleSidebarSelect() tea.Cmd {
-	si := a.sidebar.SelectedItem()
-	if si == nil {
-		return nil
-	}
-
-	switch {
-	case si.page != nil:
-		if a.container == nil {
-			return nil
-		}
-		db := a.container.SQLiteDB()
-		var content string
-		err := db.QueryRow("SELECT content FROM _vibe_pages WHERE id = ?;", si.page.ID).Scan(&content)
-		if err != nil {
-			content = fmt.Sprintf("(failed to load page: %v)", err)
-		}
-		_, contentWidth, _, _ := a.computeLayout()
-		a.content.SetPage(si.page.Title, content, si.page.Type, contentWidth)
-		a.activeView = viewPage
-		a.setFocus(focusContent)
-
-	case si.table != nil:
-		a.tableBrowser.SetLoading(si.table.Name, si.table.RowCount)
-		a.activeView = viewTable
-		a.setFocus(focusContent)
-		return a.loadTableData(si.table.Name)
-
-	case si.query != nil:
-		if a.container == nil {
-			return nil
-		}
-		db := a.container.SQLiteDB()
-		var sqlText string
-		err := db.QueryRow("SELECT sql FROM _vibe_queries WHERE id = ?;", si.query.ID).Scan(&sqlText)
-		if err != nil {
-			sqlText = fmt.Sprintf("-- failed to load query: %v", err)
-		}
-		a.queryEditor.SetQuery(si.query.ID, si.query.Title, sqlText)
-		a.activeView = viewQuery
-		a.setFocus(focusContent)
-	}
-
-	return nil
-}
-
-// createPageFromWizard inserts a new page into the database using the wizard result.
-func (a *App) createPageFromWizard() tea.Cmd {
-	pageType, title, tmpl := a.pageWizard.Result()
-	return func() tea.Msg {
-		if a.container == nil {
-			return pageCreatedMsg{err: fmt.Errorf("no container open")}
-		}
-		db := a.container.SQLiteDB()
-		id := generateID()
-		now := time.Now().UTC().Format(time.RFC3339)
-		content := templateContent(pageType, tmpl)
-		_, err := db.Exec(
-			`INSERT INTO _vibe_pages (id, title, content, page_type, sort_order, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, 0, ?, ?);`,
-			id, title, content, pageType, now, now,
-		)
-		if err != nil {
-			return pageCreatedMsg{err: fmt.Errorf("failed to insert page: %w", err)}
-		}
-		return pageCreatedMsg{pageID: id, content: content}
+func (a *App) setMode(m mode) {
+	a.mode = m
+	if m == modeREPL {
+		a.repl.Focus()
+	} else {
+		a.repl.Blur()
 	}
 }
 
-// templateContent returns starter content for a page based on type and template.
-func templateContent(pageType, tmpl string) string {
-	switch pageType {
-	case "dashboard":
-		switch tmpl {
-		case "metrics":
-			return "# Dashboard\n\n```sql [results=metrics]\nSELECT 'Total' AS label, COUNT(*) AS value FROM sqlite_master;\n```\n\n{metric: metrics}\n"
-		case "charts":
-			return "# Dashboard\n\n```sql [results=data]\nSELECT name, type FROM sqlite_master;\n```\n\n{chart: data type=bar}\n"
-		}
-	case "form":
-		switch tmpl {
-		case "crud":
-			return "# Form\n\n{form: table_name}\n"
-		}
-	case "report":
-		switch tmpl {
-		case "summary":
-			return "# Report\n\n```sql [results=summary]\nSELECT type, COUNT(*) AS count FROM sqlite_master GROUP BY type;\n```\n\n{table: summary}\n"
-		}
-	}
-	// Default: blank or markdown.
-	return "# " + tmpl + "\n\nStart writing here.\n"
-}
-
-// generateID creates a simple unique ID for new records.
-func generateID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-// loadTableData asynchronously loads row data for a table.
-func (a *App) loadTableData(tableName string) tea.Cmd {
-	return func() tea.Msg {
-		if a.engine == nil {
-			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no engine available")}
-		}
-
-		ctx := context.Background()
-		query := fmt.Sprintf("SELECT * FROM %q LIMIT 1000", tableName)
-		rs, err := a.engine.Execute(ctx, query, nil)
-		if err != nil {
-			return tableDataMsg{tableName: tableName, err: err}
-		}
-
-		if rs == nil || len(rs.Columns) == 0 {
-			return tableDataMsg{tableName: tableName}
-		}
-
-		// Convert to bubbles/table types.
-		cols := make([]table.Column, len(rs.Columns))
-		for i, c := range rs.Columns {
-			width := len(c.Name)
-			if width < 8 {
-				width = 8
-			}
-			// Check max data width.
-			for _, row := range rs.Rows {
-				if i < len(row) {
-					cellWidth := len(fmt.Sprintf("%v", row[i]))
-					if cellWidth > width {
-						width = cellWidth
-					}
-				}
-			}
-			if width > 40 {
-				width = 40
-			}
-			cols[i] = table.Column{Title: c.Name, Width: width}
-		}
-
-		rows := make([]table.Row, len(rs.Rows))
-		for i, row := range rs.Rows {
-			r := make(table.Row, len(row))
-			for j, v := range row {
-				r[j] = fmt.Sprintf("%v", v)
-			}
-			rows[i] = r
-		}
-
-		return tableDataMsg{tableName: tableName, columns: cols, rows: rows}
+func (a *App) cycleMode() {
+	switch a.mode {
+	case modeREPL:
+		a.setMode(modeTables)
+	case modeTables:
+		a.setMode(modeNotebooks)
+	case modeNotebooks:
+		a.setMode(modeREPL)
 	}
 }
 
-// executeREPLQuery runs a SQL query through the engine and returns the result.
 func (a *App) executeREPLQuery(query string) tea.Cmd {
 	return func() tea.Msg {
 		if a.engine == nil {
 			return replResultMsg{output: "-- Error: no engine available"}
 		}
-
 		ctx := context.Background()
-		rs, err := a.engine.Execute(ctx, query, nil)
+		var duckDB *sql.DB
+		if a.container != nil {
+			duckDB = a.container.DuckDBDB()
+		}
+		// agents.IsReadOnlyStatement is the SAME classifier run_query uses
+		// (real DuckDB parsing + statement counting), not a keyword-prefix
+		// heuristic — a reviewer proved live that a prefix heuristic
+		// (the previous looksLikeWrite) missed real writes disguised as a
+		// read-looking prefix: `WITH x AS (INSERT ...) SELECT ...`,
+		// `SELECT 1; INSERT ...` (multi-statement), and
+		// `EXPLAIN ANALYZE INSERT ...` all "looked" read-only by prefix
+		// alone and silently lost the write on quit. IsReadOnlyStatement
+		// fails closed (false) on a nil db or a classification error, so
+		// an unrecognized/unparseable statement is always treated as a
+		// write here too.
+		readOnly := agents.IsReadOnlyStatement(ctx, duckDB, query, nil)
+		rs, err := a.engine.Execute(ctx, capRowsIfSafe(query, readOnly), nil)
 		if err != nil {
 			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
 		}
-
-		return replResultMsg{output: formatResultSet(rs)}
+		return replResultMsg{output: formatResultSet(rs), wrote: !readOnly}
 	}
 }
 
-// formatResultSet formats a ResultSet as a simple text table.
-func formatResultSet(rs *engine.ResultSet) string {
-	if rs == nil || len(rs.Columns) == 0 {
-		return "-- OK (no results)"
+// capRowsIfSafe pushes a row cap down into the SQL itself, for the one
+// statement shape where wrapping it is unconditionally valid: a single,
+// standalone SELECT or WITH…SELECT that IsReadOnlyStatement has already
+// confirmed is a pure read, with no LIMIT of its own. readOnly must come
+// from agents.IsReadOnlyStatement, never a prefix guess — wrapping
+// `WITH x AS (INSERT ...) SELECT ...` as a subquery, for example, would
+// silently turn a real write into a broken/no-op SELECT instead of running
+// it. This keeps a `SELECT * FROM huge_table` from ever being fully
+// materialized in the TUI's memory in the first place — formatResultSet's
+// own row cap is only a display-time backstop for everything this can't
+// safely touch: SHOW/DESCRIBE/PRAGMA/EXPLAIN/SUMMARIZE (not valid as a
+// subquery), a statement that already has its own LIMIT, a multi-statement
+// input, and any write statement.
+func capRowsIfSafe(query string, readOnly bool) string {
+	if !readOnly {
+		return query
 	}
-
-	var b strings.Builder
-
-	// Header.
-	colNames := make([]string, len(rs.Columns))
-	for i, c := range rs.Columns {
-		colNames[i] = c.Name
+	trimmed := strings.TrimSpace(query)
+	trimmed = strings.TrimSuffix(strings.TrimSpace(trimmed), ";")
+	if trimmed == "" || strings.Contains(trimmed, ";") {
+		return query // empty, or genuinely multi-statement — leave untouched.
 	}
-	b.WriteString(strings.Join(colNames, " | "))
-	b.WriteString("\n")
-	b.WriteString(strings.Repeat("-", len(b.String())-1))
-	b.WriteString("\n")
-
-	// Rows.
-	for _, row := range rs.Rows {
-		vals := make([]string, len(row))
-		for i, v := range row {
-			vals[i] = fmt.Sprintf("%v", v)
-		}
-		b.WriteString(strings.Join(vals, " | "))
-		b.WriteString("\n")
+	upper := strings.ToUpper(trimmed)
+	if !strings.HasPrefix(upper, "SELECT") && !strings.HasPrefix(upper, "WITH") {
+		return query
 	}
-
-	b.WriteString(fmt.Sprintf("(%d rows)", len(rs.Rows)))
-	return b.String()
+	if strings.Contains(upper, "LIMIT") {
+		return query // respect the caller's own LIMIT rather than double-wrapping.
+	}
+	return fmt.Sprintf("SELECT * FROM (%s) AS _vibe_repl_cap LIMIT %d", trimmed, replRowCap+1)
 }
 
-func (a *App) cycleFocus() tea.Cmd {
-	switch a.focus {
-	case focusSidebar:
-		return a.setFocus(focusContent)
-	case focusContent:
-		return a.setFocus(focusREPL)
-	case focusREPL:
-		return a.setFocus(focusSidebar)
-	}
-	return nil
+// saveResultMsg is sent after a save operation completes. thenQuit carries
+// the quit-with-unsaved-writes request through to the Update handler, which
+// only sets a.quitting/returns tea.Quit once the save this message reports
+// on has actually finished — never before, so a write made moments before
+// quitting is never silently dropped.
+type saveResultMsg struct {
+	err      string
+	thenQuit bool
 }
 
-func (a *App) toggleREPL() tea.Cmd {
-	if a.focus == focusREPL {
-		return a.setFocus(focusContent)
-	}
-	return a.setFocus(focusREPL)
-}
-
-func (a *App) save() tea.Cmd {
+// save persists the container. When thenQuit is true (the auto-save-on-quit
+// path — see quit()), the returned saveResultMsg carries that through so the
+// program only exits after the save attempt completes, whether it succeeded
+// or not — a failed save must still let the user quit rather than trap them,
+// but it must never race the quit against an in-flight write.
+func (a *App) save(thenQuit bool) tea.Cmd {
 	return func() tea.Msg {
 		if a.container == nil {
-			return saveResultMsg{err: "no container open"}
+			return saveResultMsg{err: "no container open", thenQuit: thenQuit}
 		}
 		if err := a.container.Save(); err != nil {
-			return saveResultMsg{err: err.Error()}
+			return saveResultMsg{err: err.Error(), thenQuit: thenQuit}
 		}
-		return saveResultMsg{}
+		return saveResultMsg{thenQuit: thenQuit}
 	}
 }
 
-// saveResultMsg is sent after a save operation completes.
-type saveResultMsg struct {
-	err string
+// quit auto-saves any unsaved write before exiting (issue #69 follow-up:
+// REPL writes — INSERT/UPDATE/CREATE TABLE/etc — used to be silently
+// discarded on quit, since only Ctrl+C/`q` and never a save ran on the way
+// out). A clean quit with nothing unsaved exits immediately, same as before.
+func (a *App) quit() tea.Cmd {
+	if !a.unsaved {
+		a.quitting = true
+		return tea.Quit
+	}
+	return a.save(true)
 }
 
 // View implements tea.Model.
@@ -585,25 +385,73 @@ func (a *App) View() string {
 	if a.showHelp {
 		return renderHelp(a.keys, a.helpView, a.width, a.height)
 	}
-	if a.pageWizard.IsActive() {
-		return a.renderWizardOverlay()
+
+	mainHeight := a.height - 2
+	if mainHeight < 4 {
+		mainHeight = 4
 	}
-	return a.renderLayout()
+
+	var body string
+	switch a.mode {
+	case modeREPL:
+		body = a.repl.View(a.width, mainHeight)
+	case modeTables:
+		body = a.tables.View(a.width, mainHeight)
+	case modeNotebooks:
+		body = a.notebooks.View(a.width, mainHeight)
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, a.renderModeBar(), body, a.renderStatusBar())
 }
 
-// renderWizardOverlay renders the page wizard as a centered overlay.
-func (a *App) renderWizardOverlay() string {
-	content := a.pageWizard.View(a.width-8, a.height-4)
+func (a *App) renderModeBar() string {
+	labels := []mode{modeREPL, modeTables, modeNotebooks}
+	var parts []string
+	for i, m := range labels {
+		// While the REPL owns the keyboard (captureText), "1"/"2"/"3" type
+		// into the query instead of switching views — see captureText's doc
+		// comment — so the bar must not advertise them as if they worked
+		// here. Only "n:Label" numbering is dropped; tab still switches
+		// views from any mode, so the label itself stays.
+		var label string
+		if a.captureText() {
+			label = fmt.Sprintf(" %s ", m.String())
+		} else {
+			label = fmt.Sprintf(" %d:%s ", i+1, m.String())
+		}
+		if m == a.mode {
+			parts = append(parts, selectedItemStyle.Render(label))
+		} else {
+			parts = append(parts, dimStyle.Render(label))
+		}
+	}
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	return lipgloss.NewStyle().Width(a.width).Render(bar)
+}
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
-		Padding(1, 2).
-		Width(a.width - 4).
-		Height(a.height - 2)
+func (a *App) renderStatusBar() string {
+	status := " VIBE STUDIO"
+	if a.unsaved {
+		status += " [unsaved]"
+	}
+	if a.status != "" {
+		status += " — " + a.status
+	}
+	hint := " " + a.helpView.ShortHelpView(a.keys.ShortHelp()) + " "
 
-	return lipgloss.Place(a.width, a.height,
-		lipgloss.Center, lipgloss.Center,
-		boxStyle.Render(content),
-	)
+	statusStyle := lipgloss.NewStyle().
+		Width(a.width).
+		Background(lipgloss.Color("235")).
+		Foreground(lipgloss.Color("252"))
+
+	left := statusStyle.Render(status)
+	right := statusStyle.Render(hint)
+
+	gap := a.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 0 {
+		gap = 0
+	}
+	padding := lipgloss.NewStyle().Width(gap).Background(lipgloss.Color("235")).Render("")
+
+	return left + padding + right
 }

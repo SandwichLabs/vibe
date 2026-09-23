@@ -13,11 +13,11 @@
   "dependencies": {
     "@codemirror/commands": "^6.8.0",
     "@codemirror/lang-markdown": "^6.3.1",
+    "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/language": "^6.10.8",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.36.5",
     "@lezer/highlight": "^1.2.1",
-    "chart.js": "^4.4.0",
     "dompurify": "^3.4.7",
     "marked": "^15.0.0",
     "vue": "^3.5.0",

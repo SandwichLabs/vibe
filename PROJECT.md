@@ -4,20 +4,14 @@
 **Date:** March 2026
 **Status:** Original MVP specification — substantially implemented.
 
-> **Direction note (2026-05):** This document is the *original* spec and remains the
-> reference for the `.vibe` file format, runtime, and agent protocol. Two things have
-> since evolved:
-> 1. **Single-engine DuckDB.** The dual-engine (SQLite + DuckDB) design here was
->    simplified — all queries and CRUD run on DuckDB; SQLCipher is the encrypted
->    container envelope only.
-> 2. **One app, two modes.** "Vibe Studio" and "Vibe Viewer" are unified into a single
->    Wails app (Vue 3 frontend) with a **Studio Mode** and a locked-down **App Mode**,
->    rather than two binaries.
->
-> The product's north star is now explicit **Microsoft Access 97 application parity**
-> (forms, relational schema, reports, switchboard navigation), with multi-user/Tailscale
-> deferred to **v1.1**. See **[`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md)**
-> for the current roadmap and **[`CLAUDE.md`](CLAUDE.md)** for the up-to-date architecture.
+> **Direction note (2026-09-22):** This document is the *original* spec and remains the
+> reference for the `.vibe` file format, container lifecycle, and agent protocol. Its
+> product framing is **superseded**: Vibe is now an agentic data workspace (tables,
+> notebooks, skills, A2UI artifacts, one agent tool surface over MCP), not an Access
+> successor. The dual-engine design became DuckDB-only; Studio/Viewer and the Studio/App
+> mode split are gone; forms, switchboard, macros and the page-directive model are being
+> removed. See **[`docs/direction.md`](docs/direction.md)** for the plan of record and
+> **[`CLAUDE.md`](CLAUDE.md)** for the current architecture.
 
 ---
 

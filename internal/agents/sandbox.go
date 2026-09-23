@@ -11,6 +11,42 @@ const (
 	ModeFull      SandboxMode = "full"
 )
 
+// modeStrictness ranks the three sandbox modes from most to least
+// permissive-restricted (read-only is the MOST restrictive, full the LEAST),
+// so Tighter can compare two modes without hand-rolling a switch at every
+// call site. An unrecognized mode ranks as read-only (the safe default) —
+// see Tighter's doc comment.
+var modeStrictness = map[SandboxMode]int{
+	ModeReadOnly:  0,
+	ModeReadWrite: 1,
+	ModeFull:      2,
+}
+
+// Tighter returns whichever of a/b is the MORE restrictive sandbox mode
+// (read-only < read-write < full). Used to combine a caller-fixed ceiling
+// (e.g. AgentTask's "always read-only, regardless of the file's own
+// setting" contract) with the file's live "agent_sandbox" setting: the
+// effective mode a dispatch runs at is never more permissive than either
+// one. An unrecognized SandboxMode value (not one of the three constants)
+// is returned immediately, without being ranked — SandboxConfig.Check
+// already fails closed on an unknown mode ("unknown sandbox mode"), so
+// propagating a bad/empty value as-is can only ever deny more, never grant
+// access Tighter's caller didn't intend.
+func Tighter(a, b SandboxMode) SandboxMode {
+	ra, ok := modeStrictness[a]
+	if !ok {
+		return a
+	}
+	rb, ok := modeStrictness[b]
+	if !ok {
+		return b
+	}
+	if ra <= rb {
+		return a
+	}
+	return b
+}
+
 // SandboxConfig defines permission boundaries for an agent session.
 type SandboxConfig struct {
 	Mode              SandboxMode
@@ -36,14 +72,12 @@ var categoryPermissions = map[SandboxMode]map[string]bool{
 	ModeReadWrite: {
 		"introspect": true,
 		"data":       true,
-		"automation": true,
 	},
 	ModeFull: {
 		"introspect": true,
 		"data":       true,
-		"page":       true,
+		"content":    true,
 		"schema":     true,
-		"automation": true,
 	},
 }
 
@@ -54,6 +88,17 @@ func (sc *SandboxConfig) Check(method string) error {
 		if blocked == method {
 			return fmt.Errorf("operation %q is blocked by sandbox configuration", method)
 		}
+	}
+
+	// run_query is exempt from the blanket "data" category gate: it carries
+	// arbitrary SQL, so its permission depends on what that SQL actually does
+	// (a SELECT is safe in read-only; a CREATE TABLE is not safe just because
+	// read-write allows "data"). handleRunQuery classifies the statement and
+	// calls checkSQLClass itself instead. (Handler.Handle already rejects an
+	// unknown method before calling Check, so no separate existence check is
+	// needed here.)
+	if method == "run_query" {
+		return nil
 	}
 
 	tool := GetTool(method)

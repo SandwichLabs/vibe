@@ -32,6 +32,10 @@ func main() {
 		},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,
+		// Lets the frontend flush pending debounced saves (e.g. a notebook's
+		// autosave) before the window/process actually closes — see
+		// app.beforeClose's doc comment (review fix, step 4a round 2 #1).
+		OnBeforeClose: app.beforeClose,
 		Bind: []interface{}{
 			app,
 		},

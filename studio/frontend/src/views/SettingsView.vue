@@ -11,8 +11,10 @@ const message = ref('')
 
 const mcpRunning = ref(false)
 const mcpUrl = ref('')
+const mcpToken = ref('')
 const mcpToggling = ref(false)
 const mcpCopied = ref(false)
+const mcpTokenCopied = ref(false)
 
 async function loadMeta() {
   loading.value = true
@@ -29,6 +31,7 @@ async function loadMCPStatus() {
     const status = await window.go.main.App.GetMCPStatus()
     mcpRunning.value = status.running
     mcpUrl.value = status.url || ''
+    mcpToken.value = status.token || ''
   } catch { /* ignore */ }
 }
 
@@ -39,10 +42,14 @@ async function toggleMCP() {
       await window.go.main.App.StopMCPServer()
       mcpRunning.value = false
       mcpUrl.value = ''
+      mcpToken.value = ''
     } else {
-      const url = await window.go.main.App.StartMCPServer()
-      mcpRunning.value = true
-      mcpUrl.value = url
+      await window.go.main.App.StartMCPServer()
+      // Re-fetch status rather than trusting StartMCPServer's return value
+      // alone: it only returns the URL, and the bearer token (#64/#70) lives
+      // on GetMCPStatus so a page reload / re-open of Settings always shows
+      // the CURRENT session's token, not a stale one captured at start time.
+      await loadMCPStatus()
     }
   } catch (e: any) {
     message.value = 'Error: ' + (e.message || e)
@@ -56,6 +63,14 @@ async function copyMCPUrl() {
     await navigator.clipboard.writeText(mcpUrl.value)
     mcpCopied.value = true
     setTimeout(() => { mcpCopied.value = false }, 2000)
+  } catch { /* ignore */ }
+}
+
+async function copyMCPToken() {
+  try {
+    await navigator.clipboard.writeText(mcpToken.value)
+    mcpTokenCopied.value = true
+    setTimeout(() => { mcpTokenCopied.value = false }, 2000)
   } catch { /* ignore */ }
 }
 
@@ -128,6 +143,17 @@ onMounted(() => {
               <code class="break-all" style="flex: 1; user-select: all; padding: 8px 12px;">{{ mcpUrl }}</code>
               <button @click="copyMCPUrl" class="btn btn-sm"><Icon name="copy" :size="14" /> {{ mcpCopied ? 'Copied' : 'Copy' }}</button>
             </div>
+          </div>
+
+          <div v-if="mcpRunning && mcpToken" style="margin-bottom: var(--sh-space-3);">
+            <label class="field-label">Auth token</label>
+            <div class="row" style="gap: var(--sh-space-2);">
+              <code class="break-all" style="flex: 1; user-select: all; padding: 8px 12px;">{{ mcpToken }}</code>
+              <button @click="copyMCPToken" class="btn btn-sm"><Icon name="copy" :size="14" /> {{ mcpTokenCopied ? 'Copied' : 'Copy' }}</button>
+            </div>
+            <p class="sh-micro sh-mono" style="margin-top: var(--sh-space-2); color: var(--sh-graphite);">
+              Every request must send this as <code>Authorization: Bearer &lt;token&gt;</code> — the server rejects unauthenticated requests and anything sent with a browser Origin header. A new token is generated each time the server starts.
+            </p>
           </div>
 
           <button

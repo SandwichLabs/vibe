@@ -1,49 +1,70 @@
-# Import & Office Links
+# Import & Export
 
-## Import Spreadsheet Wizard
+## Import
 
-The **Import** Spreadsheet Wizard ingests a messy CSV/XLSX file into a clean
-relational DuckDB table — the Access "Import Spreadsheet Wizard" homage. The
-wizard walks these steps:
-
-1. **Choose source** — pick a `.csv` or `.xlsx` file (multiple sheets supported
-   for XLSX).
-2. **Preview & header row** — detect the header row and skip leading junk.
-3. **Column types** — infer DuckDB types (INTEGER, DOUBLE, DATE, TEXT, BOOLEAN)
-   per column, with manual overrides.
-4. **Map columns** — rename columns, drop unwanted ones, choose/append to a target
-   table.
-5. **Key & relationships** — pick a primary key and optionally link the new table
-   to an existing one (writing a `_vibe_relationships` row).
-6. **Import** — load rows into DuckDB, reporting rejected/coerced rows.
-
-The wizard is non-destructive: a failed or partial import never corrupts existing
-tables.
+The **Import** view (`ImportView.vue`) brings CSV and XLSX data into a DuckDB
+table. There are two paths, matching the two bindings behind them:
 
 ### Quick CSV import
 
-The one-step **Import CSV** path (Dashboard shortcut / `ImportCSV` binding)
-skips the wizard and delegates parsing and type inference to DuckDB's CSV
-sniffer (`read_csv_auto`): numeric, boolean, and date columns arrive typed, and
-quoted fields with embedded commas are handled correctly. Re-importing into an
-existing table appends rows, matching columns **by name**.
+The one-step **Import CSV** path (`ImportCSV` binding) delegates parsing and
+type inference to DuckDB's CSV sniffer (`read_csv_auto`): numeric, boolean,
+and date columns arrive typed, and quoted fields with embedded commas are
+handled correctly. Re-importing into an existing table appends rows, matching
+columns **by name**.
 
-Quick imports do not declare a primary key. To use an imported table as the
-*parent* of a relationship, first give the referenced column a unique index
-(Schema Designer → Add index, unique), since foreign keys must reference a
-PRIMARY KEY or UNIQUE column.
+### Spreadsheet import (CSV or XLSX, with a preview)
 
-## Office Links
+Pick a `.csv` or `.xlsx` file (multiple sheets supported for XLSX) and the
+view walks:
 
-**Office** Links are the export/round-trip bridges to the Microsoft Office surface
-that Access shipped (Analyze It / Publish It / Mail It):
+1. **Preview** (`PreviewSpreadsheet` binding) — detect the sheet list, the
+   header row, and suggest a DuckDB type per column from a sample of the data.
+2. **Adjust** — pick the sheet, toggle whether the first row is a header,
+   override any column's suggested type, and name the target table.
+3. **Mode** — `create` a new table, or `append` matching rows into an
+   existing one by column name.
+4. **Import** (`ImportSpreadsheet` binding) — loads rows into DuckDB inside
+   one transaction; a row that violates a constraint (e.g. a duplicate
+   primary key) is skipped and counted as rejected rather than failing the
+   whole import.
 
-| Link | Produces | Backing macro action |
+Both paths are non-destructive: a failed or partial import never corrupts
+existing tables.
+
+### The skill written on import
+
+Every successful import (CSV or spreadsheet) also writes or refreshes a
+`workspace-<table>` Skill (`agents.WriteImportSkill`) with the table's actual
+stored shape — row count, column types, null rates, and a few sample values —
+so the agent has grounded facts about the new table without needing a model
+call to guess at them. This is best-effort: a failure to write the skill logs
+a warning but never fails the import itself. See `internal/llm/skills/` and
+the Skills view for how skills load.
+
+Foreign keys are not part of import — declare them with plain SQL (an inline
+`REFERENCES` on the child column) via the Query Explorer, or ask the agent to
+do it with `create_table`.
+
+## Export
+
+There is no single "Office Links" surface — exporting a table or a query
+result is a small, focused action next to the data itself:
+
+| Where | Binding(s) | Formats |
 |---|---|---|
-| **Analyze in Excel** | `.xlsx` of the current result set / report | `Export` |
-| **Publish to Word / PDF** | `.pdf` (or `.rtf`) of the current report | `Export` |
-| **Mail as attachment** | An email with the exported object attached | `EmailObject` |
+| Query Explorer result | `ExportQueryResults` | CSV, Parquet |
+| A table (Tables view / agent tooling) | `ExportTableCSV`, `ExportTableJSON`, `ExportTableXLSX` | CSV, JSON, XLSX |
+| A saved query | `ExportQueryXLSX`, `AnalyzeQueryInExcel` (an XLSX-export alias) | XLSX |
+| A notebook | `ExportNotebook` | the notebook's own JSON document |
 
-Office Links operate on the currently open object (form record source, query
-result, or report) and reuse the report renderer for fidelity. Exports are written
-to a user-chosen path; nothing leaves the machine unless the user mails it.
+XLSX export uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
+(FORMAT xlsx)`), falling back to CSV automatically if the extension is
+unavailable in a given build. Exports are written to a user-chosen path on
+disk; nothing leaves the machine.
+
+Banded reports, and their PDF/Word export, were part of the Access
+application layer removed in #68 — a banded report migrates into a notebook
+on first open of an old file (a markdown cell + one sql cell over its
+source); print/PDF export of a notebook may come later as a notebook
+feature, not a report one.

@@ -1,0 +1,327 @@
+/* A2UI renderer styles (#67) — SchoolHouse tokens only (studio/frontend/src/schoolhouse).
+   Colors are applied exclusively via class (a2ui--yellow/black/error/muted),
+   never via inline style — model output never reaches a style attribute.
+
+   Every selector below except the root `.a2ui-page` itself is prefixed with
+   `.a2ui-page ` (review fix, #67 step 2 round 2): the shipped SchoolHouse
+   base stylesheet (studio/frontend/src/schoolhouse/colors_and_type.css)
+   sets `.sh h1/h2/h3/h4`, `.sh p`, and `.sh code` — a class + a type
+   selector, CSS specificity (0,1,1). A bare `.a2ui-heading` (0,1,0) or even
+   a `h1.a2ui-heading` (also (0,1,1), a TIE broken only by whichever
+   stylesheet happens to load later in the final bundle) could lose to
+   those rules — which is exactly how a plain <h2> page title rendered at
+   36px (`.sh h2`'s --sh-fs-3xl) despite `.a2ui-page__title` asking for
+   --sh-fs-lg (18px), caught live in QA. `.a2ui-page <selector>` is
+   specificity (0,2,0) at minimum, which reliably outranks (0,1,1)
+   regardless of source order, so every one of this file's own rules always
+   wins. */
+
+.a2ui-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.a2ui-page .a2ui-page__title {
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-lg);
+  font-weight: 600;
+  margin: 0;
+  color: var(--sh-ink);
+}
+
+.a2ui-page .a2ui-heading {
+  font-family: var(--sh-font-display);
+  font-weight: 600;
+  line-height: var(--sh-lh-tight);
+  margin: 0;
+  color: var(--sh-ink);
+}
+/* Explicit, capped per-level sizes (review fix): without these, the shipped
+   `.sh h1/h2/h3` rule sizes a bare <h1> at --sh-fs-4xl (52px) — larger than
+   the page title itself, absurd in a ~410px agent-panel card. All three
+   stay at or below the page title (--sh-fs-lg, 18px) and h1 is the SAME
+   size as .a2ui-page__title, never bigger — nothing in this narrow card
+   should outrank the title the user is reading it under. */
+.a2ui-page h1.a2ui-heading { font-size: var(--sh-fs-lg); }
+.a2ui-page h2.a2ui-heading { font-size: var(--sh-fs-base); }
+.a2ui-page h3.a2ui-heading { font-size: var(--sh-fs-sm); }
+.a2ui-page .a2ui-text {
+  margin: 0;
+  font-size: var(--sh-fs-sm);
+  line-height: var(--sh-lh-ui);
+  color: var(--sh-ink);
+}
+.a2ui-page .a2ui-text--muted { color: var(--sh-graphite); }
+
+.a2ui-page .a2ui-divider {
+  border: none;
+  border-top: var(--sh-border-thin);
+  margin: 4px 0;
+}
+
+.a2ui-page .a2ui-callout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius);
+  background: var(--sh-paper-2);
+  font-size: var(--sh-fs-sm);
+}
+.a2ui-page .a2ui-callout__icon { flex: 0 0 auto; }
+
+.a2ui-page .a2ui-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: var(--sh-radius-pill);
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: var(--sh-border-thin);
+  background: var(--sh-surface);
+  color: var(--sh-ink);
+}
+
+.a2ui-page .a2ui-list { display: flex; flex-direction: column; gap: 2px; }
+.a2ui-page .a2ui-list__items { margin: 2px 0; padding-left: 18px; font-size: var(--sh-fs-sm); }
+
+.a2ui-page .a2ui-code {
+  background: var(--sh-ink);
+  color: var(--sh-paper);
+  padding: 8px 10px;
+  border-radius: var(--sh-radius-sm);
+  overflow-x: auto;
+  font-family: var(--sh-font-mono);
+  font-size: 12px;
+  margin: 0;
+}
+.a2ui-page .a2ui-code code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.a2ui-page .a2ui-container { display: flex; }
+.a2ui-page .a2ui-container--row { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+.a2ui-page .a2ui-container--column { flex-direction: column; }
+.a2ui-page .a2ui-container--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.a2ui-page .a2ui-statrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.a2ui-page .a2ui-stat {
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius);
+  padding: 10px 12px;
+  background: var(--sh-surface);
+  min-width: 120px;
+}
+.a2ui-page .a2ui-stat__label {
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sh-graphite);
+}
+.a2ui-page .a2ui-stat__value {
+  font-family: var(--sh-font-display);
+  font-size: var(--sh-fs-2xl);
+  color: var(--sh-ink);
+  line-height: var(--sh-lh-tight);
+}
+.a2ui-page .a2ui-stat__detail {
+  font-size: var(--sh-fs-xs);
+  color: var(--sh-graphite);
+  margin-top: 2px;
+}
+
+.a2ui-page .a2ui-component__title {
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sh-graphite);
+  margin-bottom: 4px;
+}
+
+.a2ui-page .a2ui-tablewrap { overflow-x: auto; }
+.a2ui-page .a2ui-table { border-collapse: collapse; width: 100%; font-size: var(--sh-fs-sm); }
+.a2ui-page .a2ui-table th {
+  text-align: left;
+  border-bottom: var(--sh-border-thin);
+  padding: 4px 8px;
+  color: var(--sh-graphite);
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.a2ui-page .a2ui-table td {
+  border-bottom: 1px solid var(--sh-chalk);
+  padding: 4px 8px;
+  color: var(--sh-ink);
+}
+.a2ui-page .a2ui-td--num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.a2ui-page .a2ui-barchart { display: flex; flex-direction: column; }
+.a2ui-page .a2ui-bar { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.a2ui-page .a2ui-bar__label {
+  flex: 0 0 110px;
+  font-size: var(--sh-fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sh-ink);
+}
+.a2ui-page .a2ui-bar__track {
+  flex: 1;
+  background: var(--sh-paper-2);
+  border-radius: var(--sh-radius-sm);
+  height: 14px;
+  overflow: hidden;
+}
+.a2ui-page .a2ui-bar__fill {
+  height: 100%;
+  background: var(--sh-teal);
+  border-radius: var(--sh-radius-sm);
+}
+.a2ui-page .a2ui-bar__value {
+  /* Fixed-width value column (review fix): flex:0 0 auto let this span
+     size to its own text, so a row with "1,234" made its .a2ui-bar__track
+     (flex:1) narrower than a row with "1" right next to it — every bar's
+     fill % was computed correctly, but the tracks themselves were
+     different pixel lengths, breaking any visual comparison between rows.
+     A fixed min-width + right-aligned tabular numerals keeps every track
+     exactly the same length regardless of how many digits a row's value
+     has. */
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+  font-size: var(--sh-fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--sh-graphite);
+}
+
+.a2ui-page .a2ui-linechart__wrap { display: flex; flex-direction: column; }
+.a2ui-page .a2ui-linechart__plot { position: relative; }
+.a2ui-page .a2ui-linechart__svg { width: 100%; height: auto; display: block; }
+.a2ui-page .a2ui-linechart__line { fill: none; stroke: var(--sh-teal); stroke-width: 2; }
+.a2ui-page .a2ui-linechart__dot { fill: var(--sh-teal); }
+.a2ui-page .a2ui-linechart__grid { stroke: var(--sh-chalk); stroke-width: 1; }
+.a2ui-page .a2ui-linechart__grid--bottom { stroke-dasharray: 2 2; }
+/* Axis labels render as HTML, not SVG <text> (review fix): an SVG <text>
+   font-size is in the viewBox's own "user units", which scale down with
+   the SVG's rendered size — at the ~410px agent-panel width the 640-unit
+   viewBox renders around half scale, shrinking a 9-unit label to roughly 5
+   actual screen pixels. HTML text is sized in real CSS px regardless of
+   how much the SVG next to it is scaled, so 11px here is always 11 actual
+   screen pixels. Positioned by percentage of the viewBox (see
+   A2UILineChart.vue's xPct/yPct) rather than a ResizeObserver-measured
+   container width, since the SVG's rendered box always keeps the
+   viewBox's aspect ratio. */
+.a2ui-page .a2ui-linechart__axis-y {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-family: var(--sh-font-mono);
+  color: var(--sh-graphite);
+  background: var(--sh-surface);
+  padding-right: 4px;
+  white-space: nowrap;
+}
+.a2ui-page .a2ui-linechart__axis-x-row {
+  position: relative;
+  height: 16px;
+  margin-top: 2px;
+}
+.a2ui-page .a2ui-linechart__axis-x {
+  /* `left`/`transform` are set inline per label by A2UILineChart.vue's
+     labelStyle() — the first label anchors left, the last anchors right,
+     everything else centers, so none of them clip past the card's edge
+     (review fix: the first/last label used to always center on a point
+     sitting at the very edge of the plot, hanging half the label text
+     outside the card — "2026-06" rendered as "2026-0"). */
+  position: absolute;
+  top: 0;
+  font-size: 11px;
+  font-family: var(--sh-font-mono);
+  color: var(--sh-graphite);
+  white-space: nowrap;
+}
+
+.a2ui-page .a2ui-loading, .a2ui-page .a2ui-empty {
+  font-family: var(--sh-font-mono);
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sh-graphite);
+}
+/* Data-fetch failure for a bound component — coral is "needs attention", not
+   destructive, matching CLAUDE.md / the panel's existing tool-error styling. */
+.a2ui-page .a2ui-error {
+  font-family: var(--sh-font-mono);
+  font-size: var(--sh-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sh-coral);
+}
+
+/* Color tokens: closed enum -> SchoolHouse accent variable, applied only via
+   class. yellow=marigold (highlight), black=ink, error=true failing/error
+   red (not the coral "attention" used for query-fetch failures above),
+   muted=graphite.
+   --a2ui-accent-tint is a ~8% wash of the same color for a background tint.
+
+   Review fix: marigold ("yellow") used as BODY TEXT color on a white/paper
+   background is roughly 2:1 contrast — well under the ~4.5:1 a reader
+   needs, and a genuine accessibility failure, not just a look. Checking
+   the other three the same way: ink-on-paper and graphite-on-paper are
+   both existing SchoolHouse UI text colors already in production use
+   elsewhere at acceptable contrast, and --sh-error is a dark enough red to
+   clear it too — marigold is the one token that, given how light it is,
+   only makes for a legible HIGHLIGHT (background tint, border, a filled
+   bar/line/accent-bar), never body text. Rather than special-case just
+   that one token, EVERY token here follows the same rule uniformly: text
+   stays ink, the accent color only ever paints a border/background
+   tint/fill (bar fill and line stroke are the two places a filled shape,
+   not text, legitimately wants the full accent color). */
+.a2ui-page .a2ui--yellow { --a2ui-accent: var(--sh-marigold); --a2ui-accent-tint: var(--sh-marigold-8); }
+.a2ui-page .a2ui--black { --a2ui-accent: var(--sh-ink); --a2ui-accent-tint: rgba(31, 35, 48, 0.08); }
+.a2ui-page .a2ui--error { --a2ui-accent: var(--sh-error); --a2ui-accent-tint: rgba(178, 59, 46, 0.08); }
+.a2ui-page .a2ui--muted { --a2ui-accent: var(--sh-graphite); --a2ui-accent-tint: rgba(92, 98, 117, 0.08); }
+
+/* Fill contexts — a filled shape, not text, so the full accent color is
+   fine (and the point: this is exactly what "highlight" fills for). */
+.a2ui-page .a2ui-bar__fill:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) {
+  background: var(--a2ui-accent);
+}
+.a2ui-page .a2ui-linechart__svg:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) .a2ui-linechart__line {
+  stroke: var(--a2ui-accent);
+}
+.a2ui-page .a2ui-linechart__svg:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) .a2ui-linechart__dot {
+  fill: var(--a2ui-accent);
+}
+
+/* Text contexts — background tint / border only; the text itself always
+   stays ink. */
+.a2ui-page .a2ui-badge:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted),
+.a2ui-page .a2ui-callout:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) {
+  border-color: var(--a2ui-accent);
+  background: var(--a2ui-accent-tint);
+  color: var(--sh-ink);
+}
+.a2ui-page .a2ui-stat:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) {
+  border-left: 3px solid var(--a2ui-accent);
+}
+.a2ui-page .a2ui-list__items:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) {
+  border-left: 2px solid var(--a2ui-accent);
+  padding-left: 10px;
+  color: var(--sh-ink);
+}

@@ -13,7 +13,7 @@ var infoCmd = &cobra.Command{
 	Use:   "info <file>",
 	Short: "Print metadata about a .vibe file",
 	Long: `Display metadata for a .vibe file including title, format version,
-page count, table count, and file size.
+notebook/skill/table counts, and file size.
 
 Use --json for machine-readable JSON output.`,
 	Args: cobra.ExactArgs(1),
@@ -56,13 +56,32 @@ Use --json for machine-readable JSON output.`,
 			meta[key] = val
 		}
 
-		// Count pages.
-		var pageCount int
-		db.QueryRow("SELECT COUNT(*) FROM _vibe_pages;").Scan(&pageCount) //nolint:errcheck
+		// Count notebooks (#66 — the primary content surface now, replacing pages).
+		var notebookCount int
+		db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks;").Scan(&notebookCount) //nolint:errcheck
 
-		// Count user tables.
+		// Count skills (#62 — user/import-authored; built-ins are embedded, not
+		// counted here since they aren't specific to this file).
+		var skillCount int
+		db.QueryRow("SELECT COUNT(*) FROM _vibe_skills;").Scan(&skillCount) //nolint:errcheck
+
+		// Count legacy pages that have NOT yet been migrated to a notebook
+		// (migrated_to is stamped by internal/notebooks.MigratePages, run by
+		// every entry point that opens a file — see MigrateOnOpen). A file
+		// opened read-only (as info always does) never migrates, so this can
+		// legitimately be nonzero even on a file that WOULD migrate cleanly
+		// on a normal read-write open — that's the point: it tells the user
+		// there's legacy content waiting to be picked up.
+		var unmigratedPageCount int
+		db.QueryRow("SELECT COUNT(*) FROM _vibe_pages WHERE migrated_to = '' AND id NOT LIKE '\\_%' ESCAPE '\\';").Scan(&unmigratedPageCount) //nolint:errcheck
+
+		// Count user tables. User tables live in DuckDB (the _vibe_duckdb
+		// blob), not SQLite — sqlite_master only ever holds the internal
+		// _vibe_* tables, so counting there always reported 0 regardless of
+		// how much data the file actually had. Same query GetDashboard
+		// (studio/app.go) uses.
 		var tableCount int
-		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE '_vibe_%';").Scan(&tableCount) //nolint:errcheck
+		c.DuckDBDB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='main'").Scan(&tableCount) //nolint:errcheck
 
 		// Count queries.
 		var queryCount int
@@ -77,10 +96,14 @@ Use --json for machine-readable JSON output.`,
 				"file":        filePath,
 				"size":        fi.Size(),
 				"size_human":  formatBytes(fi.Size()),
-				"pages":       pageCount,
+				"notebooks":   notebookCount,
+				"skills":      skillCount,
 				"tables":      tableCount,
 				"queries":     queryCount,
 				"duckdb_size": duckdbSize,
+			}
+			if unmigratedPageCount > 0 {
+				result["legacy_pages_unmigrated"] = unmigratedPageCount
 			}
 			for k, v := range meta {
 				result[k] = v
@@ -102,11 +125,15 @@ Use --json for machine-readable JSON output.`,
 			fmt.Fprintf(out, "%-8s%s\n", key+":", val)
 		}
 
-		fmt.Fprintf(out, "Pages:  %d\n", pageCount)
-		fmt.Fprintf(out, "Tables: %d\n", tableCount)
-		fmt.Fprintf(out, "Queries: %d\n", queryCount)
+		fmt.Fprintf(out, "Notebooks: %d\n", notebookCount)
+		fmt.Fprintf(out, "Skills:    %d\n", skillCount)
+		fmt.Fprintf(out, "Tables:    %d\n", tableCount)
+		fmt.Fprintf(out, "Queries:   %d\n", queryCount)
+		if unmigratedPageCount > 0 {
+			fmt.Fprintf(out, "Legacy pages (unmigrated): %d\n", unmigratedPageCount)
+		}
 		if duckdbSize > 0 {
-			fmt.Fprintf(out, "DuckDB: %s\n", formatBytes(duckdbSize))
+			fmt.Fprintf(out, "DuckDB:    %s\n", formatBytes(duckdbSize))
 		}
 
 		return nil

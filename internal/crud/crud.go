@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/schema"
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // WriteResult reports the outcome of a single CRUD write (rows affected).
@@ -83,12 +83,12 @@ func ColumnTypes(q RowQuerier, table string) (map[string]string, error) {
 
 // FieldMetaMap loads the Access-style field metadata for a table keyed by
 // column name. It tolerates a missing/empty meta table.
-func FieldMetaMap(store *schema.Store, table string) (map[string]schema.FieldMeta, error) {
+func FieldMetaMap(store *FieldMetaStore, table string) (map[string]FieldMeta, error) {
 	metas, err := store.GetFieldMeta(table)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]schema.FieldMeta, len(metas))
+	out := make(map[string]FieldMeta, len(metas))
 	for _, m := range metas {
 		out[m.ColumnName] = m
 	}
@@ -111,7 +111,7 @@ func isEmptyValue(v any) bool {
 // field-keyed *WriteError naming every missing required column. For inserts,
 // required columns absent from values are violations; for updates, only
 // columns present in the payload are checked (partial updates are allowed).
-func validateRequired(metas map[string]schema.FieldMeta, values map[string]any, isInsert bool) *WriteError {
+func validateRequired(metas map[string]FieldMeta, values map[string]any, isInsert bool) *WriteError {
 	we := &WriteError{Fields: map[string]string{}}
 	for col, m := range metas {
 		if !m.Required {
@@ -133,7 +133,7 @@ func validateRequired(metas map[string]schema.FieldMeta, values map[string]any, 
 	return we
 }
 
-func requiredMessage(m schema.FieldMeta) string {
+func requiredMessage(m FieldMeta) string {
 	label := m.Caption
 	if label == "" {
 		label = m.ColumnName
@@ -153,7 +153,7 @@ func candidateRow(colTypes map[string]string, values map[string]any) (string, []
 	exprs := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols))
 	for _, c := range cols {
-		exprs = append(exprs, fmt.Sprintf("CAST(? AS %s) AS %q", castType(colTypes, c), c))
+		exprs = append(exprs, fmt.Sprintf("CAST(? AS %s) AS %s", castType(colTypes, c), engine.QuoteIdent(c)))
 		args = append(args, values[c])
 	}
 	return "SELECT " + strings.Join(exprs, ", "), args
@@ -162,7 +162,7 @@ func candidateRow(colTypes map[string]string, values map[string]any) (string, []
 // validateRules evaluates each column's validation_rule against the candidate
 // row. A rule that evaluates to FALSE (NULL passes, matching SQL CHECK
 // semantics) yields a field-keyed *WriteError.
-func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, values map[string]any) (*WriteError, error) {
+func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]FieldMeta, values map[string]any) (*WriteError, error) {
 	we := &WriteError{Fields: map[string]string{}}
 	for _, col := range sortedKeys(metas) {
 		m := metas[col]
@@ -212,20 +212,20 @@ func normalizeRule(col, rule string) string {
 	relativePrefixes := []string{"LIKE", "IN ", "IN(", "BETWEEN", "IS ", "NOT ", "NOT(", "<>", "!=", ">=", "<=", "=", "<", ">"}
 	for _, p := range relativePrefixes {
 		if strings.HasPrefix(upper, p) {
-			return fmt.Sprintf("%q %s", col, rule)
+			return fmt.Sprintf("%s %s", engine.QuoteIdent(col), rule)
 		}
 	}
 	return rule
 }
 
-func validationMessage(m schema.FieldMeta) string {
+func validationMessage(m FieldMeta) string {
 	if msg := strings.TrimSpace(m.ValidationMsg); msg != "" {
 		return msg
 	}
 	return fmt.Sprintf("%s is invalid", labelFor(m))
 }
 
-func labelFor(m schema.FieldMeta) string {
+func labelFor(m FieldMeta) string {
 	if m.Caption != "" {
 		return m.Caption
 	}
@@ -245,7 +245,7 @@ func isTextType(t string) bool {
 // control) — are omitted from the INSERT so column DEFAULTs apply; in
 // particular an auto-number primary key fills itself in when the form leaves
 // id blank, instead of failing the NOT NULL constraint with an explicit NULL.
-func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, table string, values map[string]any) (*WriteResult, error) {
+func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]FieldMeta, table string, values map[string]any) (*WriteResult, error) {
 	if we := validateRequired(metas, values, true); we != nil {
 		return nil, we
 	}
@@ -267,7 +267,7 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 	}
 	values = kept
 	if len(values) == 0 {
-		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %q DEFAULT VALUES", table))
+		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", engine.QuoteIdent(table)))
 		if err != nil {
 			return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
 		}
@@ -280,12 +280,12 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 	placeholders := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols))
 	for _, c := range cols {
-		colSQL = append(colSQL, fmt.Sprintf("%q", c))
+		colSQL = append(colSQL, engine.QuoteIdent(c))
 		placeholders = append(placeholders, fmt.Sprintf("CAST(? AS %s)", castType(colTypes, c)))
 		args = append(args, values[c])
 	}
 
-	query := fmt.Sprintf("INSERT INTO %q (%s) VALUES (%s)", table, strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(table), strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
@@ -297,7 +297,7 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 // UpdateRowTx coerces, validates and updates a single row within a transaction.
 // A 0-affected-row outcome (PK mismatch) is surfaced as an error rather than a
 // silent no-op.
-func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
+func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]FieldMeta, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
 	if we := validateRequired(metas, values, false); we != nil {
 		return nil, we
 	}
@@ -311,13 +311,13 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 	setClauses := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols)+1)
 	for _, c := range cols {
-		setClauses = append(setClauses, fmt.Sprintf("%q = CAST(? AS %s)", c, castType(colTypes, c)))
+		setClauses = append(setClauses, fmt.Sprintf("%s = CAST(? AS %s)", engine.QuoteIdent(c), castType(colTypes, c)))
 		args = append(args, values[c])
 	}
 	args = append(args, pkVal)
 
-	query := fmt.Sprintf("UPDATE %q SET %s WHERE %q = CAST(? AS %s)",
-		table, strings.Join(setClauses, ", "), pkCol, castType(colTypes, pkCol))
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = CAST(? AS %s)",
+		engine.QuoteIdent(table), strings.Join(setClauses, ", "), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to update %q: %v", table, err)}
@@ -334,8 +334,8 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]schem
 // UpdateRowTx), and a 0-affected-row outcome (PK mismatch) is surfaced as a
 // structured *WriteError rather than a silent no-op.
 func DeleteRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, pkVal any) (*WriteResult, error) {
-	query := fmt.Sprintf("DELETE FROM %q WHERE %q = CAST(? AS %s)",
-		table, pkCol, castType(colTypes, pkCol))
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s = CAST(? AS %s)",
+		engine.QuoteIdent(table), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, pkVal)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to delete from %q: %v", table, err)}

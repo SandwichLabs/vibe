@@ -21,7 +21,6 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/crud"
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,9 +60,12 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 	require.NotNil(t, ddb)
 
 	// Relational app: customers(id PK) and orders(id PK, customer_id) + total.
+	// Foreign keys are plain SQL now (#68 dropped the FK-emit wizard helper) —
+	// orders.customer_id REFERENCES customers(id) is declared inline, matching
+	// how a user or the agent's run_query tool would create it.
 	_, err = ddb.Exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);`)
 	require.NoError(t, err)
-	_, err = ddb.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, total DOUBLE);`)
+	_, err = ddb.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DOUBLE);`)
 	require.NoError(t, err)
 
 	// Bulk-insert ~5,000 customers.
@@ -97,19 +99,10 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 		}
 	})
 
-	// Apply the enforced FK: orders.customer_id REFERENCES customers(id) ON DELETE RESTRICT.
-	require.NoError(t, schema.ApplyForeignKey(ddb, schema.ForeignKeySpec{
-		ChildTable:   "orders",
-		ChildColumn:  "customer_id",
-		ParentTable:  "customers",
-		ParentColumn: "id",
-		OnDelete:     "RESTRICT",
-	}))
-
 	assertCount(t, ddb, "customers", numCustomers)
 	assertCount(t, ddb, "orders", numOrders)
 
-	store := schema.NewStore(c.SQLiteDB())
+	store := crud.NewFieldMetaStore(c.SQLiteDB())
 
 	ordersColTypes, err := crud.ColumnTypes(ddb, "orders")
 	require.NoError(t, err)
@@ -212,7 +205,7 @@ func assertCount(t *testing.T, q *sql.DB, table string, want int) {
 }
 
 // isForeignKeyViolation reports whether err is a DuckDB foreign-key / referential
-// integrity rejection (mirrors the matcher in internal/schema's FK test).
+// integrity rejection.
 func isForeignKeyViolation(err error) bool {
 	if err == nil {
 		return false

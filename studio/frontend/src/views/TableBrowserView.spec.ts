@@ -9,9 +9,18 @@
 //   - add-row calls InsertRow and the new row appears after the data reload
 //   - a rejected UpdateRow reverts the optimistic change (NOT persisted) and
 //     surfaces cell-level feedback identifying the failed cell
-//   - field meta drives the editor: combo (hidden-PK lookup), checkbox, date
+//   - the declared SQL column type drives the editor: checkbox, date
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+
+// Capture the "data:changed" handler so tests can drive it, mirroring
+// AgentPanel.spec.ts's approach to the same wailsjs runtime module.
+let dataChangedHandler: (() => void) | null = null
+vi.mock('../wailsjs/runtime/runtime', () => ({
+  EventsOn: (name: string, cb: () => void) => { if (name === 'data:changed') dataChangedHandler = cb },
+  EventsOff: () => { dataChangedHandler = null },
+}))
+
 import TableBrowserView from './TableBrowserView.vue'
 
 // --- Fake backend (window.go.main.App) ------------------------------------
@@ -19,7 +28,6 @@ import TableBrowserView from './TableBrowserView.vue'
 interface Row { [k: string]: any }
 
 function makeApp(opts: {
-  fieldMeta?: any[]
   rows?: Row[]
   columns?: { name: string; type: string; not_null: boolean; pk: boolean }[]
   updateRow?: (...a: any[]) => Promise<any>
@@ -48,7 +56,6 @@ function makeApp(opts: {
   const app = {
     ListTables: vi.fn(async () => ['people']),
     DescribeTable: vi.fn(async () => ({ name: 'people', columns })),
-    GetFieldMeta: vi.fn(async () => opts.fieldMeta ?? []),
     ExecuteQuery: vi.fn(async () => ({
       columns: opts.lookupCols ?? [{ name: 'id' }, { name: 'label' }],
       rows: opts.lookupRows ?? [],
@@ -199,17 +206,13 @@ describe('TableBrowserView inline datasheet editing', () => {
     expect(cellAfter.find('.cell-error-msg').text()).toContain('name must be unique')
   })
 
-  it('renders a checkbox editor for boolean field-meta columns', async () => {
+  it('renders a checkbox editor for boolean columns', async () => {
     makeApp({
       columns: [
         { name: 'id', type: 'INTEGER', not_null: true, pk: true },
         { name: 'active', type: 'BOOLEAN', not_null: false, pk: false },
       ],
       rows: [{ id: 1, active: false }],
-      fieldMeta: [{ table_name: 'people', column_name: 'active', control_type: 'checkbox',
-        caption: '', default_value: '', required: false, format_code: '', validation_rule: '',
-        validation_message: '', input_mask: '', lookup_sql: '', display_col: '', value_col: '',
-        control_tip: '', sort_order: 0 }],
     })
     const wrapper = mountView()
     await openTable(wrapper)
@@ -230,10 +233,6 @@ describe('TableBrowserView inline datasheet editing', () => {
         { name: 'active', type: 'BOOLEAN', not_null: false, pk: false },
       ],
       rows: [{ id: 5, active: false }],
-      fieldMeta: [{ table_name: 'people', column_name: 'active', control_type: 'checkbox',
-        caption: '', default_value: '', required: false, format_code: '', validation_rule: '',
-        validation_message: '', input_mask: '', lookup_sql: '', display_col: '', value_col: '',
-        control_tip: '', sort_order: 0 }],
     })
     const wrapper = mountView()
     await openTable(wrapper)
@@ -248,17 +247,13 @@ describe('TableBrowserView inline datasheet editing', () => {
     expect(app.UpdateRow).toHaveBeenCalledWith('people', 'id', 5, { active: 'true' })
   })
 
-  it('renders a date editor for date field-meta columns', async () => {
+  it('renders a date editor for date columns', async () => {
     makeApp({
       columns: [
         { name: 'id', type: 'INTEGER', not_null: true, pk: true },
         { name: 'born', type: 'DATE', not_null: false, pk: false },
       ],
       rows: [{ id: 1, born: '1815-12-10' }],
-      fieldMeta: [{ table_name: 'people', column_name: 'born', control_type: 'date',
-        caption: '', default_value: '', required: false, format_code: '', validation_rule: '',
-        validation_message: '', input_mask: '', lookup_sql: '', display_col: '', value_col: '',
-        control_tip: '', sort_order: 0 }],
     })
     const wrapper = mountView()
     await openTable(wrapper)
@@ -267,39 +262,49 @@ describe('TableBrowserView inline datasheet editing', () => {
     await cell.trigger('dblclick')
     expect(cell.find('input[type="date"]').exists()).toBe(true)
   })
+})
 
-  it('renders a combo editor with hidden-PK lookup and commits the value, not the label', async () => {
-    const { app } = makeApp({
-      columns: [
-        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
-        { name: 'dept_id', type: 'INTEGER', not_null: false, pk: false },
-      ],
-      rows: [{ id: 1, dept_id: 10 }],
-      fieldMeta: [{ table_name: 'people', column_name: 'dept_id', control_type: 'combo',
-        caption: '', default_value: '', required: false, format_code: '', validation_rule: '',
-        validation_message: '', input_mask: '',
-        lookup_sql: 'SELECT id, name FROM dept', display_col: 'name', value_col: 'id',
-        control_tip: '', sort_order: 0 }],
-      lookupCols: [{ name: 'id' }, { name: 'name' }],
-      lookupRows: [[10, 'Engineering'], [20, 'Sales']],
-    })
+// Review fix #6: an agent-driven create_table/create_record/import previously
+// left the table list (and the open table's rows) stale until a manual
+// reload — this view never listened for "data:changed" (DashboardView did,
+// TableBrowserView didn't).
+describe('TableBrowserView "data:changed" live refresh', () => {
+  beforeEach(() => {
+    dataChangedHandler = null
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    ;(window as any).runtime = {} // hasWailsRuntime() gate
+  })
+
+  it('re-lists tables and reloads the open table when data:changed fires', async () => {
+    const { app, store } = makeApp({ rows: [{ id: 1, name: 'Ada' }] })
     const wrapper = mountView()
     await openTable(wrapper)
 
-    // Combo lookup was resolved.
-    expect(app.ExecuteQuery).toHaveBeenCalledWith('SELECT id, name FROM dept')
-    // Display mode shows the label, not the raw id.
-    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
-    expect(cell.text()).toContain('Engineering')
+    expect(app.ListTables).toHaveBeenCalledTimes(1)
+    expect(app.GetTableData).toHaveBeenCalledTimes(1)
+    expect(dataChangedHandler).not.toBeNull()
 
-    await cell.trigger('dblclick')
-    const select = cell.find('select.cell-input')
-    expect(select.exists()).toBe(true)
-    // Options carry the hidden stored values.
-    await select.setValue('20')
+    // Simulate the agent inserting a row and the backend's emitted event.
+    store.push({ id: 2, name: 'Grace' })
+    dataChangedHandler!()
     await flushPromises()
 
-    // The stored (hidden) value is committed, not the display label.
-    expect(app.UpdateRow).toHaveBeenCalledWith('people', 'id', 1, { dept_id: '20' })
+    expect(app.ListTables).toHaveBeenCalledTimes(2)
+    expect(app.GetTableData).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Grace')
+  })
+
+  it('clears the open table if data:changed reveals it was dropped', async () => {
+    const { app } = makeApp({ rows: [{ id: 1, name: 'Ada' }] })
+    app.ListTables.mockImplementationOnce(async () => ['people']) // initial mount
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    app.ListTables.mockImplementation(async () => []) // the agent dropped it
+    dataChangedHandler!()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Ada')
+    expect(wrapper.text()).toContain('No tables yet')
   })
 })

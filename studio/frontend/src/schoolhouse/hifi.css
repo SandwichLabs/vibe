@@ -20,77 +20,6 @@
 .topbar .pill .dot.ok { background: var(--sh-success); box-shadow: 0 0 0 2px rgba(47,125,74,0.28); }
 .topbar .pill .dot.warn { background: var(--sh-marigold); box-shadow: 0 0 0 2px rgba(242,169,59,0.30); }
 .topbar .pill .dot.err { background: var(--sh-coral); box-shadow: 0 0 0 2px rgba(226,114,98,0.28); }
-.topbar .pill .dot.studio { background: var(--sh-teal); box-shadow: 0 0 0 2px rgba(47,143,135,0.30); }
-/* App-Mode pill (P4.6) — marigold accent signals the locked, task-only context. */
-.topbar .pill .dot.app { background: var(--sh-marigold); box-shadow: 0 0 0 2px rgba(242,169,59,0.30); }
-
-/* App-mode top bar (white chrome, ink text) */
-.topbar.app {
-  background: var(--sh-surface);
-  color: var(--sh-ink);
-  height: 64px;
-  padding: 0;
-  border-bottom: 2px solid var(--sh-ink);
-}
-.topbar.app .brand-block {
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 24px; height: 100%;
-  border-right: 1.5px solid var(--sh-ink);
-}
-.topbar.app .brand-block .mark {
-  width: 38px; height: 38px;
-  background: var(--sh-marigold);
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  box-shadow: 2px 2px 0 0 var(--sh-ink);
-  font-family: var(--sh-font-display); font-weight: 700; font-size: 20px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--sh-ink);
-}
-.topbar.app .brand-block .name {
-  font-family: var(--sh-font-display); font-weight: 600;
-  font-size: 18px; line-height: 1; letter-spacing: -0.015em;
-}
-.topbar.app .brand-block .role {
-  font-family: var(--sh-font-mono); font-size: 10px;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite); margin-top: 4px;
-}
-.tabstrip { display: flex; height: 100%; }
-.tabstrip .tab {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 0 22px; height: 100%;
-  border-right: 1.5px solid var(--sh-ink);
-  font-size: 14px; font-weight: 500;
-  color: var(--sh-ink);
-  text-decoration: none;
-  cursor: pointer;
-}
-.tabstrip .tab.on { background: var(--sh-marigold); font-weight: 600; }
-.tabstrip .tab svg { width: 16px; height: 16px; }
-
-.topbar.app .right {
-  margin-left: auto; padding: 0 20px;
-  display: flex; align-items: center; gap: 14px;
-}
-.topbar.app .right .lockpill {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--sh-font-mono); font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite);
-}
-.topbar.app .right .lockpill svg { width: 14px; height: 14px; }
-
-/* App-Mode hit targets (W1) — the locked end-user shell enforces large 44px
-   touch/click targets on its controls and inputs (52px for the primary CTA),
-   matching the App-Mode mockup. Scoped to `.app-mode` so Studio chrome is
-   unaffected. */
-.app-mode main .btn { min-height: 44px; }
-.app-mode main .btn-app-primary { min-height: 52px; }
-.app-mode main .input,
-.app-mode main input:not([type='checkbox']):not([type='radio']),
-.app-mode main select,
-.app-mode main textarea { min-height: 44px; }
 
 /* ===== Sidebar tweaks for our screens ===== */
 .sidebar .nav-pill {
@@ -281,26 +210,6 @@
 }
 .url-tile .acc { color: var(--sh-teal); font-weight: 600; }
 
-/* Model option cards */
-.model-card { position: relative; padding: 18px; }
-.model-card.rec { box-shadow: var(--sh-shadow-teal); }
-.model-card .name { font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; }
-.model-card .specs {
-  font-family: var(--sh-font-mono); font-size: 12px;
-  color: var(--sh-graphite); display: flex; justify-content: space-between;
-  text-transform: uppercase; letter-spacing: 0.06em;
-}
-.model-card .bar {
-  height: 6px; background: var(--sh-paper-2); border-radius: 9999px;
-  border: 1.5px solid var(--sh-ink); position: relative; overflow: hidden;
-}
-.model-card .bar > span {
-  position: absolute; left: 0; top: 0; bottom: 0; background: var(--sh-teal);
-  border-right: 1.5px solid var(--sh-ink);
-}
-.model-card.dim { opacity: 0.55; }
-.model-card.dim .name { text-decoration: line-through; }
-
 /* Summary KV rows */
 .kv {
   display: flex; align-items: center; justify-content: space-between;
@@ -347,15 +256,6 @@
   font-size: 9px;
   text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--sh-graphite); font-weight: 600;
-}
-
-/* Schema diagram canvas */
-.diagram-canvas {
-  position: relative; height: 100%;
-  background: var(--sh-paper-2);
-  background-image: radial-gradient(rgba(31,35,48,0.10) 1px, transparent 1px);
-  background-size: 22px 22px;
-  overflow: hidden;
 }
 
 /* ===== Agent panel (right slide-in) ===== */
@@ -480,38 +380,6 @@
   font-size: 14px; line-height: 1.55;
 }
 
-/* ===== Switchboard ===== */
-.sw-canvas {
-  position: relative; height: 100%;
-  background: var(--sh-paper-2);
-  background-image: radial-gradient(rgba(31,35,48,0.12) 1px, transparent 1px);
-  background-size: 24px 24px;
-  overflow: hidden;
-}
-.sw-node {
-  background: var(--sh-surface);
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  box-shadow: var(--sh-shadow);
-  padding: 10px 14px;
-  min-width: 168px;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.sw-node.home { background: var(--sh-ink); color: var(--sh-paper); }
-.sw-node.home .sub { color: var(--sh-chalk); }
-.sw-node.selected { box-shadow: var(--sh-shadow-teal); outline: 2px dashed var(--sh-teal); outline-offset: 4px; }
-.sw-node .ttl {
-  font-family: var(--sh-font-display); font-weight: 600;
-  font-size: 15px; letter-spacing: -0.01em;
-  display: flex; align-items: center; gap: 6px;
-}
-.sw-node .ttl svg { width: 14px; height: 14px; }
-.sw-node .sub {
-  font-family: var(--sh-font-mono); font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite);
-}
-
 /* ===== Mobile phone frame ===== */
 .phone {
   background: var(--sh-ink);
@@ -598,65 +466,6 @@
 /* ===== Wizard summary card spacing ===== */
 .summary-card { max-width: 560px; width: 100%; padding: 24px; text-align: left; }
 
-/* ===== Field stub (read-only display, not the kit's <input>) ===== */
-.field-ro { display: flex; flex-direction: column; gap: 6px; }
-.field-ro .lab {
-  font-family: var(--sh-font-mono); font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite);
-}
-.field-ro .lab .req { color: var(--sh-coral); margin-right: 4px; }
-.field-ro .inp {
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  background: var(--sh-surface);
-  padding: 10px 14px;
-  min-height: 44px; font-size: 15px;
-  display: flex; align-items: center; gap: 8px;
-  color: var(--sh-ink);
-}
-.field-ro .inp.ph { color: var(--sh-chalk); }
-.field-ro .inp.focus { box-shadow: var(--sh-shadow-teal); }
-.field-ro .inp.app { min-height: 52px; font-size: 16px; padding: 12px 16px; }
-.field-ro .help { font-size: 12px; color: var(--sh-graphite); }
-.field-ro .inp.selected { outline: 2px dashed var(--sh-teal); outline-offset: 4px; }
-.field-ro .area {
-  border: 2px solid var(--sh-ink);
-  border-top: 0;
-  background: var(--sh-surface);
-  padding: 12px 14px;
-  min-height: 72px; font-size: 14px; line-height: 1.55;
-  color: var(--sh-graphite);
-}
-
-/* ===== Form-builder palette + field list ===== */
-.field-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  font-size: 13px; font-weight: 500;
-  border: 1.5px solid transparent;
-  border-radius: var(--sh-radius-sm);
-  cursor: pointer;
-  background: transparent;
-}
-.field-row:hover { background: rgba(31,35,48,0.04); }
-.field-row.sel {
-  background: var(--sh-surface);
-  border-color: var(--sh-ink);
-  box-shadow: 1px 1px 0 0 var(--sh-ink);
-}
-.field-row.sel.active {
-  border-color: var(--sh-teal);
-  box-shadow: 2px 2px 0 0 var(--sh-teal);
-}
-.field-row .drag { color: var(--sh-chalk); }
-.field-row .nm { flex: 1; }
-.field-row .ty {
-  font-family: var(--sh-font-mono); font-size: 9.5px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite);
-}
-
 /* Toggle switch */
 .toggle {
   width: 36px; height: 20px;
@@ -698,42 +507,12 @@
   min-height: 40px;
 }
 
-/* Topology canvas (Node Manager) */
-.topology {
-  position: relative; height: 100%;
-  background: var(--sh-paper-2);
-  background-image: radial-gradient(rgba(31,35,48,0.10) 1px, transparent 1px);
-  background-size: 26px 26px;
-  overflow: hidden;
-}
-.node-card {
-  background: var(--sh-surface);
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  box-shadow: var(--sh-shadow);
-  padding: 12px 14px;
-  width: 184px;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.node-card.host { box-shadow: var(--sh-shadow-teal); border-color: var(--sh-teal); }
-.node-card.conflict { box-shadow: var(--sh-shadow-coral); border-color: var(--sh-coral); }
-.node-card.offline { opacity: 0.6; border-style: dashed; box-shadow: none; }
-.node-card .row1 { display: flex; align-items: center; justify-content: space-between; }
-.node-card .nm { font-family: var(--sh-font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
-.node-card .url {
-  font-family: var(--sh-font-mono); font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite);
-}
-.node-card .meta { font-size: 12px; color: var(--sh-graphite); }
+/* Status dot (used by Settings' MCP status indicator) */
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--sh-success); flex: none; }
 .status-dot.ok { background: var(--sh-success); box-shadow: 0 0 0 3px rgba(47,125,74,0.18); }
 .status-dot.err { background: var(--sh-coral); box-shadow: 0 0 0 3px rgba(226,114,98,0.22); }
 .status-dot.warn { background: var(--sh-marigold); box-shadow: 0 0 0 3px rgba(242,169,59,0.22); }
 .status-dot.off { background: var(--sh-chalk); }
-
-/* SVG arrow base (we draw inline) */
-.svg-overlay { position: absolute; inset: 0; pointer-events: none; }
 
 /* ===== Query explorer ===== */
 .editor {
@@ -919,33 +698,6 @@
 .act .who { font-family: var(--sh-font-mono); font-size: 12px; color: var(--sh-graphite); }
 .act .when { font-family: var(--sh-font-mono); font-size: 12px; color: var(--sh-graphite); text-align: right; }
 
-/* Template row (Studio Home) */
-.tpl-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px;
-  background: var(--sh-surface);
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  box-shadow: var(--sh-shadow-sm);
-  font-size: 14px;
-}
-.tpl-row .ico {
-  width: 42px; height: 42px;
-  border: 1.5px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  background: var(--sh-paper-2);
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--sh-graphite);
-  flex: none;
-}
-.tpl-row .ico svg { width: 22px; height: 22px; }
-.tpl-row .body { flex: 1; }
-.tpl-row .name { font-family: var(--sh-font-display); font-weight: 600; font-size: 14px; }
-.tpl-row .meta {
-  font-family: var(--sh-font-mono); font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em; color: var(--sh-graphite);
-}
-
 /* Mode legend bar */
 .legend {
   display: flex; gap: 22px; flex-wrap: wrap; align-items: center;
@@ -963,38 +715,8 @@
   border-radius: 2px;
 }
 
-/* Mode tag (corner) */
-.mode-tag {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--sh-font-mono); font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  background: var(--sh-teal); color: var(--sh-paper);
-  border: 1.5px solid var(--sh-ink);
-  padding: 4px 10px;
-  border-radius: var(--sh-radius-sm);
-  box-shadow: 2px 2px 0 0 var(--sh-ink);
-  position: absolute; top: 12px; right: 12px;
-  z-index: 4;
-}
-.mode-tag.app { background: var(--sh-marigold); color: var(--sh-ink); }
-
-/* DesignCanvas section header tweak — make labels readable */
-.dc-section-header h2,
-.dc-section-title { font-family: var(--sh-font-display); }
-
 /* Generic table extra rules */
 .table tr:last-child td { border-bottom: 0; }
-
-/* Subform header */
-.subform-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding-bottom: 8px; margin-bottom: 8px;
-  border-bottom: 1.5px dashed rgba(31,35,48,0.25);
-}
-.subform-head h3 {
-  font-family: var(--sh-font-display); font-weight: 600; font-size: 18px;
-  letter-spacing: -0.015em; margin: 0;
-}
 
 /* Chart legend */
 .chart-legend {

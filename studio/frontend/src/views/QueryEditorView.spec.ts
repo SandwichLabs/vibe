@@ -18,15 +18,12 @@ function makeApp(opts: { execError?: string } = {}) {
       { name: 'customers', rows: 89 },
       { name: 'service_calls', rows: 142 },
     ]),
-    ListRelationships: vi.fn(async () => [
-      { id: 'r1', parent_table: 'customers', parent_column: 'id', child_table: 'service_calls', child_column: 'customer_id' },
-    ]),
     DescribeTable: vi.fn(async (name: string) => ({
       name,
       columns: [
-        { name: 'id', type: 'BIGINT', not_null: true, pk: true },
-        { name: 'customer_id', type: 'BIGINT', not_null: false, pk: false },
-        { name: 'status', type: 'VARCHAR', not_null: false, pk: false },
+        { name: 'id', type: 'BIGINT', not_null: true, pk: true, fk: false },
+        { name: 'customer_id', type: 'BIGINT', not_null: false, pk: false, fk: true },
+        { name: 'status', type: 'VARCHAR', not_null: false, pk: false, fk: false },
       ],
     })),
     ExecuteQuery: vi.fn(async () => {

@@ -10,15 +10,7 @@ var (
 	accentColor    = lipgloss.Color("39")  // Blue
 	dimColor       = lipgloss.Color("240") // Gray
 	errorColor     = lipgloss.Color("196") // Red
-	successColor   = lipgloss.Color("40")  // Green
-	warningColor   = lipgloss.Color("214") // Orange
 	highlightColor = lipgloss.Color("229") // Yellow
-
-	// Section header style
-	sectionHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(accentColor).
-				MarginBottom(1)
 
 	// List item styles
 	listItemStyle = lipgloss.NewStyle().
@@ -48,10 +40,6 @@ var (
 	// Error text style
 	errorStyle = lipgloss.NewStyle().
 			Foreground(errorColor)
-
-	// Success text style
-	successStyle = lipgloss.NewStyle().
-			Foreground(successColor)
 
 	// Dim text style
 	dimStyle = lipgloss.NewStyle().

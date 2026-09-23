@@ -7,16 +7,27 @@
 // while the binding's resolved result is treated as the authoritative final.
 // Conversation history is threaded back to the backend for multi-turn memory.
 import { ref } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import type { A2UIPageT } from '../a2ui/types'
+import { renderSafeMarkdown } from '../lib/markdown'
 
 export interface ToolStep {
   id?: string
   tool: string
   input?: string
   output?: string
-  status: 'running' | 'done'
+  status: 'running' | 'done' | 'error'
+  // page holds the validated A2UI page a successful present_data call
+  // returned (#67), parsed from its JSON output, so the panel can render it
+  // inline instead of the raw JSON tool-result text. Never set for a denied
+  // or failed call (isError), and never set for any other tool.
+  page?: A2UIPageT
+  // notebookLink holds the {id, title} a successful add_query_cell/
+  // create_dashboard call returned (#67 deferred part), so the panel can
+  // offer an "Open notebook" link instead of leaving the user to find the
+  // new/updated notebook themselves. Never set for a denied/failed call or
+  // any other tool.
+  notebookLink?: { id: string; title: string }
 }
 
 export interface ChatMessage {
@@ -24,24 +35,73 @@ export interface ChatMessage {
   text: string
   steps: ToolStep[]
   streaming?: boolean
+  // verifying is set true between a "verifying" stream event (#70's
+  // grounding check re-sending an ungrounded answer for one recheck pass)
+  // and the next delta/final/error event, so the panel can show a
+  // "Verifying…" state instead of leaving the first (about-to-be-replaced)
+  // answer sitting there looking finished.
+  verifying?: boolean
 }
 
 interface StreamPayload {
   turnId: string
-  kind: 'delta' | 'tool' | 'tool_done' | 'final' | 'error'
+  kind: 'delta' | 'tool' | 'tool_done' | 'final' | 'error' | 'verifying'
   text?: string
   id?: string
   tool?: string
   input?: string
   output?: string
+  // tool_done only: the tool call was denied or failed (Output carries the
+  // error message). Without this the panel had no way to distinguish a
+  // denied call from a successful one — both rendered the same "done" chip.
+  isError?: boolean
 }
 
-// renderMarkdown turns agent text into sanitized HTML. The agent output is
-// rendered as markdown; DOMPurify guards the v-html sink against any HTML the
-// model might emit.
-export function renderMarkdown(text: string): string {
-  const raw = marked.parse(text ?? '', { async: false }) as string
-  return DOMPurify.sanitize(raw)
+// renderMarkdown turns agent text into sanitized HTML. This is a thin
+// re-export of the ONE shared safe renderer (lib/markdown.ts) — it used to
+// carry its own marked/DOMPurify call here, a second copy that had drifted
+// from Skills' sanitization (weaker FORBID_TAGS, no image/link handling).
+// Consumers (AgentPanel, AgentView) must render the result inside a
+// `.vibe-md-content` container (see lib/markdown.ts's vibeMdContentClass)
+// so installSafeLinkHandling's click interception actually applies to it.
+export const renderMarkdown = renderSafeMarkdown
+
+// parsePresentDataPage parses present_data's (and propose_schema's — #68
+// follow-up: there is no dedicated Schema Builder diagram screen, so a
+// proposed schema renders the same inline-A2UI way as present_data)
+// tool_done output (a JSON-encoded internal/a2ui.Page) into an A2UIPageT for
+// inline rendering, or returns undefined for anything else — a
+// denied/errored call, an unrelated tool, or output that isn't the expected
+// {title, components[]} shape. The page was already validated server side
+// (internal/a2ui.Validate); this is just a parse, not a re-validation.
+function parsePresentDataPage(tool: string | undefined, output: string | undefined, isError: boolean | undefined): A2UIPageT | undefined {
+  if ((tool !== 'present_data' && tool !== 'propose_schema') || isError || !output) return undefined
+  try {
+    const parsed = JSON.parse(output)
+    if (parsed && typeof parsed === 'object' && typeof parsed.title === 'string' && Array.isArray(parsed.components)) {
+      return parsed as A2UIPageT
+    }
+  } catch {
+    // Not JSON, or not a page — nothing to render inline.
+  }
+  return undefined
+}
+
+// parseNotebookLink parses add_query_cell/create_dashboard's tool_done
+// output ({notebook_id, cell_id, title, warnings}) into the {id, title} the
+// panel's "Open notebook" link needs, or undefined for anything else (a
+// denied/errored call, a non-matching tool, or unparseable output).
+function parseNotebookLink(tool: string | undefined, output: string | undefined, isError: boolean | undefined): { id: string; title: string } | undefined {
+  if ((tool !== 'add_query_cell' && tool !== 'create_dashboard') || isError || !output) return undefined
+  try {
+    const parsed = JSON.parse(output)
+    if (parsed && typeof parsed.notebook_id === 'string' && parsed.notebook_id) {
+      return { id: parsed.notebook_id, title: typeof parsed.title === 'string' ? parsed.title : 'notebook' }
+    }
+  } catch {
+    // Not JSON, or not this shape — nothing to link.
+  }
+  return undefined
 }
 
 let turnSeq = 0
@@ -98,17 +158,29 @@ export function useAgentChat() {
           agentMsg.steps.push({ id: p.id, tool: p.tool || '?', input: p.input, status: 'running' })
           break
         case 'tool_done': {
+          const status = p.isError ? 'error' : 'done'
+          const page = parsePresentDataPage(p.tool, p.output, p.isError)
+          const notebookLink = parseNotebookLink(p.tool, p.output, p.isError)
           const step = agentMsg.steps.find((s) => s.id === p.id && s.status === 'running')
-          if (step) { step.status = 'done'; step.output = p.output }
-          else agentMsg.steps.push({ id: p.id, tool: p.tool || '?', output: p.output, status: 'done' })
+          if (step) { step.status = status; step.output = p.output; step.page = page; step.notebookLink = notebookLink }
+          else agentMsg.steps.push({ id: p.id, tool: p.tool || '?', output: p.output, status, page, notebookLink })
           break
         }
         case 'final':
           if (p.text) agentMsg.text = p.text
+          agentMsg.verifying = false
           break
         case 'error':
           agentMsg.role = 'error'
           agentMsg.text = `Agent error: ${p.text}. Is the LLM server reachable?`
+          agentMsg.verifying = false
+          break
+        case 'verifying':
+          // The agent's first answer asserted a fact with no grounding tool
+          // call this turn (#70) and is being sent back once for
+          // verification — the text currently shown is about to be
+          // replaced by the recheck's final answer.
+          agentMsg.verifying = true
           break
       }
       scroll()
@@ -128,6 +200,17 @@ export function useAgentChat() {
       agentMsg.text = `Agent error: ${m}. Is the LLM server reachable?`
     } finally {
       agentMsg.streaming = false
+      // Belt-and-suspenders (review fix, round 2): the "final"/"error" event
+      // handlers above already clear verifying, but both are events that
+      // can arrive (or be missed) independently of when the AgentChatStream
+      // binding promise itself resolves — a "verifying" event with no
+      // matching "final"/"error" ever following it (e.g. the binding
+      // resolves from its OWN authoritative result before that event's
+      // handler runs, or the event is dropped) left "Agent · verifying"
+      // stuck on screen after the turn had actually finished. The binding
+      // promise settling, one way or the other, is the true end of the
+      // turn, so this is where verifying is unconditionally cleared.
+      agentMsg.verifying = false
       unsub()
       sending.value = false
       scroll()

@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/schema"
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // integerPKTypes is the integer family eligible for auto-numbering.
@@ -64,7 +64,7 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 	_ = rows.Close() //nolint:errcheck
 
 	for _, c := range candidates {
-		if !schema.ValidIdentifier(c.table) || !schema.ValidIdentifier(c.column) {
+		if !engine.ValidIdentifier(c.table) || !engine.ValidIdentifier(c.column) {
 			continue
 		}
 		var dataType string
@@ -88,7 +88,7 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 		// numbering where their data left off.
 		var next int64
 		if err := ddb.QueryRow(
-			fmt.Sprintf("SELECT COALESCE(MAX(%q), 0) + 1 FROM %q", c.column, c.table),
+			fmt.Sprintf("SELECT COALESCE(MAX(%s), 0) + 1 FROM %s", engine.QuoteIdent(c.column), engine.QuoteIdent(c.table)),
 		).Scan(&next); err != nil {
 			logger.Warn("auto-number backfill: failed to read max id",
 				"table", c.table, "error", err)
@@ -96,13 +96,13 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 		}
 
 		seq := fmt.Sprintf("_vibe_seq_%s_%s", c.table, c.column)
-		if _, err := ddb.Exec(fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %q START %d", seq, next)); err != nil {
+		if _, err := ddb.Exec(fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START %d", engine.QuoteIdent(seq), next)); err != nil {
 			logger.Warn("auto-number backfill: failed to create sequence",
 				"table", c.table, "sequence", seq, "error", err)
 			continue
 		}
 		if _, err := ddb.Exec(fmt.Sprintf(
-			"ALTER TABLE %q ALTER COLUMN %q SET DEFAULT nextval('%s')", c.table, c.column, seq,
+			"ALTER TABLE %s ALTER COLUMN %s SET DEFAULT nextval('%s')", engine.QuoteIdent(c.table), engine.QuoteIdent(c.column), seq,
 		)); err != nil {
 			logger.Warn("auto-number backfill: failed to set default",
 				"table", c.table, "column", c.column, "error", err)

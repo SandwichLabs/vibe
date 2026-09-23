@@ -4,27 +4,33 @@ package main
 // coercion and validation" (parity plan §1.1).
 //
 // This is a REAL integration test: it opens a real encrypted .vibe container,
-// materializes DuckDB, creates typed tables + _vibe_field_meta rules, and
-// drives the production Wails-bound write path (InsertRow/UpdateRow/DeleteRow
-// + the atomic multi-statement form submit). No mocks.
+// materializes DuckDB, creates typed tables, and drives the production
+// Wails-bound write path (InsertRow/UpdateRow/DeleteRow). No mocks.
+//
+// #68 removed the bound-forms layer that used to author _vibe_field_meta
+// rows (SetFieldMeta/the Form Wizard); a NEW file never gets a
+// _vibe_field_meta table at all any more. The server-side required +
+// validation_rule enforcement in internal/crud stays, though, for an OLD
+// file that still carries _vibe_field_meta rows from before #68 (additive
+// migration: existing tables are never dropped) — seedFieldMeta below
+// simulates that by writing rows directly, the way such an old file would
+// already have them.
 //
 // It asserts the acceptance behavior end-to-end:
 //   - string inputs are coerced to column types via information_schema before write
-//   - required + validation_rule from _vibe_field_meta are enforced server-side,
-//     returning a FIELD-KEYED structured error (not a raw SQL string)
+//   - required + validation_rule from an old file's _vibe_field_meta are
+//     enforced server-side, returning a FIELD-KEYED structured error (not a
+//     raw SQL string)
 //   - UpdateRow surfaces a 0-affected-row PK mismatch as an error
 //   - DeleteRow runs transactionally, coerces the PK, validates the pk column
 //     identifier, and surfaces a 0-affected-row PK mismatch as a *WriteError
-//   - a failed child statement rolls back the whole logical submit (atomicity),
-//     leaving no orphaned parent row
 //   - FK behavior follows the P1.0 rely-on-duckdb-fk decision: an orphan child
-//     insert is rejected (RESTRICT) and rolls the parent back as well
+//     insert is rejected (RESTRICT)
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,6 +49,44 @@ func createOrdersTable(t *testing.T, app *App) {
 	require.NoError(t, err, "create typed orders table")
 }
 
+// seedFieldMeta writes a _vibe_field_meta row directly via SQL, simulating an
+// OLD file that already carries field metadata from before #68 removed the
+// bound-forms layer that used to author it (SetFieldMeta is gone).
+func seedFieldMeta(t *testing.T, app *App, table, column, caption string, required bool, rule, msg string) {
+	t.Helper()
+	db := app.container.SQLiteDB()
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS _vibe_field_meta (
+		table_name         TEXT NOT NULL,
+		column_name        TEXT NOT NULL,
+		caption            TEXT NOT NULL DEFAULT '',
+		control_type       TEXT NOT NULL DEFAULT '',
+		default_value      TEXT NOT NULL DEFAULT '',
+		required           INTEGER NOT NULL DEFAULT 0,
+		format_code        TEXT NOT NULL DEFAULT '',
+		validation_rule    TEXT NOT NULL DEFAULT '',
+		validation_message TEXT NOT NULL DEFAULT '',
+		input_mask         TEXT NOT NULL DEFAULT '',
+		lookup_sql         TEXT NOT NULL DEFAULT '',
+		display_col        TEXT NOT NULL DEFAULT '',
+		value_col          TEXT NOT NULL DEFAULT '',
+		control_tip        TEXT NOT NULL DEFAULT '',
+		sort_order         INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (table_name, column_name)
+	);`)
+	require.NoError(t, err)
+
+	req := 0
+	if required {
+		req = 1
+	}
+	_, err = db.Exec(
+		`INSERT INTO _vibe_field_meta (table_name, column_name, caption, required, validation_rule, validation_message)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		table, column, caption, req, rule, msg,
+	)
+	require.NoError(t, err)
+}
+
 // asWriteError extracts the structured, field-keyed error from a CRUD failure.
 // It must NOT be a raw SQL string — the UI relies on per-field feedback.
 func asWriteError(t *testing.T, err error) *WriteError {
@@ -57,13 +101,9 @@ func TestCRUDCoercionAndValidation(t *testing.T) {
 	app := newOpenApp(t)
 	createOrdersTable(t, app)
 
-	// qty is required and must satisfy qty > 0 (Access-style validation rule).
-	require.NoError(t, app.SetFieldMeta("orders", "qty", schema.FieldMeta{
-		Caption:        "Quantity",
-		Required:       true,
-		ValidationRule: "qty > 0",
-		ValidationMsg:  "Quantity must be positive",
-	}))
+	// qty is required and must satisfy qty > 0 (an old file's carried-over
+	// field-meta rule; see seedFieldMeta's doc comment).
+	seedFieldMeta(t, app, "orders", "qty", "Quantity", true, "qty > 0", "Quantity must be positive")
 
 	// --- (1) coercion: all-string HTTP/Vue values become typed columns ---
 	res, err := app.InsertRow("orders", map[string]any{
@@ -120,47 +160,18 @@ func TestCRUDCoercionAndValidation(t *testing.T) {
 	require.Error(t, err, "updating a non-existent PK must be an error, not a silent no-op")
 }
 
-// TestCRUDAtomicSubmitRollback verifies that a multi-statement form+subform
-// submit is atomic: when the child statement fails, the whole submit rolls
-// back and the parent is NOT left orphaned.
-func TestCRUDAtomicSubmitRollback(t *testing.T) {
+// TestCRUDCoercionAndValidationNoFieldMeta verifies a NEW file (no
+// _vibe_field_meta table at all — #68 stopped creating it) still coerces
+// types correctly; required/validation_rule enforcement is simply absent
+// since there is no metadata to enforce.
+func TestCRUDCoercionAndValidationNoFieldMeta(t *testing.T) {
 	app := newOpenApp(t)
 	createOrdersTable(t, app)
 
-	ddb := app.container.DuckDBDB()
-	// A child table whose insert will fail validation, forcing rollback.
-	_, err := ddb.Exec(`CREATE TABLE order_items (
-		id INTEGER PRIMARY KEY,
-		order_id INTEGER,
-		qty INTEGER
-	);`)
-	require.NoError(t, err)
-
-	// Child qty must be > 0; we will submit a child with qty = 0 to force failure.
-	require.NoError(t, app.SetFieldMeta("order_items", "qty", schema.FieldMeta{
-		Required:       true,
-		ValidationRule: "qty > 0",
-	}))
-
-	parent := FormSubmitRow{
-		Table:  "orders",
-		Values: map[string]any{"id": "100", "qty": "2"},
-	}
-	children := []FormSubmitRow{
-		{Table: "order_items", Values: map[string]any{"id": "1", "order_id": "100", "qty": "0"}},
-	}
-
-	err = app.SubmitForm(parent, children)
-	require.Error(t, err, "child validation failure must fail the whole submit")
-
-	// Atomicity: the parent order must NOT have been committed.
-	var parentCount int
-	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM orders WHERE id = 100;`).Scan(&parentCount))
-	assert.Equal(t, 0, parentCount, "parent must be rolled back — no orphan left behind")
-
-	var childCount int
-	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items;`).Scan(&childCount))
-	assert.Equal(t, 0, childCount, "no child rows committed")
+	res, err := app.InsertRow("orders", map[string]any{"id": "1", "qty": "5"})
+	require.NoError(t, err, "insert must succeed with no field-meta table present")
+	require.NotNil(t, res)
+	assert.Equal(t, int64(1), res.Affected)
 }
 
 // TestDeleteRowTransactional verifies DeleteRow is consistent with the
@@ -200,10 +211,9 @@ func TestDeleteRowTransactional(t *testing.T) {
 }
 
 // TestCRUDForeignKeyRestrict covers the P1.0 "rely-on-duckdb-fk" decision
-// through the production CRUD write path: a REFERENCES constraint must reject
-// an orphan child (RESTRICT) and, within an atomic SubmitForm, roll the parent
-// back when the FK-violating child insert fails — true referential-integrity
-// atomicity, not merely validation-rule rollback.
+// through the production CRUD write path: a REFERENCES constraint (plain
+// SQL — #68 dropped the FK-wizard bindings) must reject an orphan child
+// (RESTRICT) via InsertRow.
 func TestCRUDForeignKeyRestrict(t *testing.T) {
 	app := newOpenApp(t)
 	ddb := app.container.DuckDBDB()
@@ -218,7 +228,7 @@ func TestCRUDForeignKeyRestrict(t *testing.T) {
 	);`)
 	require.NoError(t, err)
 
-	// (a) Orphan child via InsertRow: customer_id=42 has no parent -> FK reject.
+	// Orphan child via InsertRow: customer_id=42 has no parent -> FK reject.
 	_, err = app.InsertRow("invoices", map[string]any{
 		"id":          "1",
 		"customer_id": "42",
@@ -230,24 +240,4 @@ func TestCRUDForeignKeyRestrict(t *testing.T) {
 	var invCount int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM invoices;`).Scan(&invCount))
 	assert.Equal(t, 0, invCount, "orphan invoice must be rejected (RESTRICT)")
-
-	// (b) Atomic submit: a valid parent customer + an FK-violating child invoice
-	// (pointing at a non-existent customer) must roll BOTH back — referential
-	// integrity, not a validation rule, triggers the rollback.
-	parent := FormSubmitRow{
-		Table:  "customers",
-		Values: map[string]any{"id": "100", "name": "Acme"},
-	}
-	children := []FormSubmitRow{
-		{Table: "invoices", Values: map[string]any{"id": "2", "customer_id": "999", "amount": "5.00"}},
-	}
-	err = app.SubmitForm(parent, children)
-	require.Error(t, err, "FK-violating child must fail the whole submit")
-
-	var custCount int
-	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM customers WHERE id = 100;`).Scan(&custCount))
-	assert.Equal(t, 0, custCount, "parent must be rolled back when the FK child fails")
-
-	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM invoices;`).Scan(&invCount))
-	assert.Equal(t, 0, invCount, "no invoice committed")
 }

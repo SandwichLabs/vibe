@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver registers "sqlite3"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
@@ -26,11 +28,11 @@ func TestParseRequest_Valid(t *testing.T) {
 }
 
 func TestParseRequest_StringID(t *testing.T) {
-	data := `{"jsonrpc":"2.0","id":"abc-123","method":"list_pages"}`
+	data := `{"jsonrpc":"2.0","id":"abc-123","method":"list_queries"}`
 	req, err := ParseRequest([]byte(data))
 	require.NoError(t, err)
 	assert.Equal(t, "abc-123", req.ID)
-	assert.Equal(t, "list_pages", req.Method)
+	assert.Equal(t, "list_queries", req.Method)
 }
 
 func TestParseRequest_InvalidJSON(t *testing.T) {
@@ -109,21 +111,23 @@ func TestSandbox_ReadOnlyBlocksWrite(t *testing.T) {
 	// Read operations should be allowed.
 	assert.NoError(t, sc.Check("introspect_schema"))
 	assert.NoError(t, sc.Check("describe_table"))
-	assert.NoError(t, sc.Check("list_pages"))
-	assert.NoError(t, sc.Check("get_page"))
 	assert.NoError(t, sc.Check("list_queries"))
 
-	// Data write operations should be blocked.
-	assert.Error(t, sc.Check("run_query"))
+	// run_query is exempt from the coarse category gate — its permission is
+	// per-statement (see TestCheckSQLClass / TestHandleRunQuery_SandboxGating
+	// in sql_classify_test.go): read-only allows SELECT but denies DML/DDL at
+	// dispatch time, inside handleRunQuery.
+	assert.NoError(t, sc.Check("run_query"))
+	// Structured data write operations should still be blocked outright.
 	assert.Error(t, sc.Check("create_record"))
 	assert.Error(t, sc.Check("update_record"))
 	assert.Error(t, sc.Check("delete_record"))
 	assert.Error(t, sc.Check("bulk_insert"))
 
-	// Page operations should be blocked.
-	assert.Error(t, sc.Check("create_page"))
-	assert.Error(t, sc.Check("update_page"))
-	assert.Error(t, sc.Check("delete_page"))
+	// Content operations should be blocked.
+	assert.Error(t, sc.Check("create_or_update_skill"))
+	assert.Error(t, sc.Check("add_query_cell"))
+	assert.Error(t, sc.Check("create_dashboard"))
 
 	// Schema operations should be blocked.
 	assert.Error(t, sc.Check("create_table"))
@@ -132,7 +136,7 @@ func TestSandbox_ReadOnlyBlocksWrite(t *testing.T) {
 	assert.Error(t, sc.Check("import_csv"))
 }
 
-func TestSandbox_ReadWriteAllowsDataButBlocksPageSchema(t *testing.T) {
+func TestSandbox_ReadWriteAllowsDataButBlocksContentSchema(t *testing.T) {
 	sc := SandboxConfig{Mode: ModeReadWrite}
 
 	// Introspect and data should be allowed.
@@ -142,9 +146,9 @@ func TestSandbox_ReadWriteAllowsDataButBlocksPageSchema(t *testing.T) {
 	assert.NoError(t, sc.Check("update_record"))
 	assert.NoError(t, sc.Check("delete_record"))
 
-	// Page and schema should be blocked.
-	assert.Error(t, sc.Check("create_page"))
-	assert.Error(t, sc.Check("update_page"))
+	// Content and schema should be blocked.
+	assert.Error(t, sc.Check("add_query_cell"))
+	assert.Error(t, sc.Check("create_dashboard"))
 	assert.Error(t, sc.Check("create_table"))
 	assert.Error(t, sc.Check("drop_table"))
 }
@@ -155,8 +159,8 @@ func TestSandbox_FullAllowsEverything(t *testing.T) {
 	assert.NoError(t, sc.Check("introspect_schema"))
 	assert.NoError(t, sc.Check("run_query"))
 	assert.NoError(t, sc.Check("create_record"))
-	assert.NoError(t, sc.Check("create_page"))
-	assert.NoError(t, sc.Check("update_page"))
+	assert.NoError(t, sc.Check("add_query_cell"))
+	assert.NoError(t, sc.Check("create_dashboard"))
 	assert.NoError(t, sc.Check("create_table"))
 	assert.NoError(t, sc.Check("drop_table"))
 	assert.NoError(t, sc.Check("import_csv"))
@@ -234,6 +238,11 @@ func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 			engine TEXT NOT NULL DEFAULT 'duckdb', parameters TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 		);
+		CREATE TABLE _vibe_skills (
+			name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '',
+			table_name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user',
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+		);
 		CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
 		INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');
 		INSERT INTO _vibe_pages (id, title, content, created_at, updated_at) VALUES ('p1', 'home', '# Welcome', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
@@ -298,39 +307,69 @@ func TestHandler_DispatchDescribeTable(t *testing.T) {
 	assert.NotNil(t, resp)
 }
 
-func TestHandler_DispatchListPages(t *testing.T) {
-	handler, _ := newTestHandler(t, ModeFull)
+// --- present_data (#67) ---
+
+func TestHandler_PresentData_ValidPageAllowedInReadOnly(t *testing.T) {
+	// present_data is "introspect" category and writes nothing, so it must
+	// be available even in the most restricted sandbox.
+	handler, _ := newTestHandler(t, ModeReadOnly)
 	ctx := context.Background()
 
 	req := &Request{
 		JSONRPC: "2.0",
-		ID:      3,
-		Method:  "list_pages",
-		Params:  map[string]any{},
+		ID:      1,
+		Method:  "present_data",
+		Params: map[string]any{
+			"page": map[string]any{
+				"title": "Customers",
+				"components": []any{
+					map[string]any{"id": "h", "type": "heading", "text": "Customers"},
+				},
+			},
+		},
 	}
 	resp := handler.Handle(ctx, req)
-
-	assert.Nil(t, resp.Error)
-	result, _ := resp.Result.(map[string]any)
-	pages, _ := result["pages"].([]string)
-	assert.Contains(t, pages, "home")
+	require.Nil(t, resp.Error)
+	out, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"title":"Customers"`)
 }
 
-func TestHandler_DispatchGetPage(t *testing.T) {
+func TestHandler_PresentData_InvalidPageDenied(t *testing.T) {
 	handler, _ := newTestHandler(t, ModeFull)
 	ctx := context.Background()
 
 	req := &Request{
 		JSONRPC: "2.0",
-		ID:      4,
-		Method:  "get_page",
-		Params:  map[string]any{"name": "home"},
+		ID:      1,
+		Method:  "present_data",
+		Params: map[string]any{
+			"page": map[string]any{
+				"title":      "Bad",
+				"components": []any{map[string]any{"id": "a", "type": "pieChart"}},
+			},
+		},
 	}
 	resp := handler.Handle(ctx, req)
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "pieChart")
+}
 
-	assert.Nil(t, resp.Error)
-	result, _ := resp.Result.(map[string]any)
-	assert.Equal(t, "# Welcome", result["content"])
+func TestHandler_PresentData_ToleratesJSONStringPage(t *testing.T) {
+	handler, _ := newTestHandler(t, ModeFull)
+	ctx := context.Background()
+
+	req := &Request{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "present_data",
+		Params: map[string]any{
+			"page": `{"title":"x","components":[{"id":"a","type":"text","text":"hi"}]}`,
+		},
+	}
+	resp := handler.Handle(ctx, req)
+	require.Nil(t, resp.Error)
 }
 
 func TestHandler_DispatchListQueries(t *testing.T) {
@@ -420,7 +459,9 @@ func TestHandler_SandboxPermissionDenied(t *testing.T) {
 
 func TestHandler_TableAllowlistEnforced(t *testing.T) {
 	handler, _ := newTestHandler(t, ModeFull)
-	handler.sandbox.AllowedTables = []string{"orders"}
+	sb := *handler.sandbox.Load()
+	sb.AllowedTables = []string{"orders"}
+	handler.sandbox.Store(&sb)
 	ctx := context.Background()
 
 	req := &Request{
@@ -437,7 +478,11 @@ func TestHandler_TableAllowlistEnforced(t *testing.T) {
 }
 
 func TestHandler_CreateAndDeleteRecord(t *testing.T) {
-	handler, _ := newTestHandler(t, ModeFull)
+	// create_record/delete_record now route through the real-DuckDB SQL
+	// classifier (requireWriteStatement) — a SQLite-mocked "DuckDB" can't
+	// satisfy classifySQL's EXPLAIN (FORMAT JSON)/catalog queries, so this
+	// needs the real-DuckDB handler, same as the run_query tests.
+	handler, _ := newRealDuckDBHandler(t, ModeFull)
 	ctx := context.Background()
 
 	// Create
@@ -463,7 +508,7 @@ func TestHandler_CreateAndDeleteRecord(t *testing.T) {
 	assert.Equal(t, int64(1), result["rows_affected"])
 }
 
-func TestHandler_CreateAndUpdatePage(t *testing.T) {
+func TestHandler_CreateAndUpdateSkill(t *testing.T) {
 	handler, _ := newTestHandler(t, ModeFull)
 	ctx := context.Background()
 
@@ -471,18 +516,18 @@ func TestHandler_CreateAndUpdatePage(t *testing.T) {
 	req := &Request{
 		JSONRPC: "2.0",
 		ID:      13,
-		Method:  "create_page",
-		Params:  map[string]any{"name": "about", "content": "# About"},
+		Method:  "create_or_update_skill",
+		Params:  map[string]any{"name": "about-us", "description": "About us", "instructions": "# About"},
 	}
 	resp := handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
 
-	// Update
+	// Update (upsert by name)
 	req = &Request{
 		JSONRPC: "2.0",
 		ID:      14,
-		Method:  "update_page",
-		Params:  map[string]any{"name": "about", "content": "# About Us"},
+		Method:  "create_or_update_skill",
+		Params:  map[string]any{"name": "about-us", "description": "About us", "instructions": "# About Us"},
 	}
 	resp = handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
@@ -491,11 +536,87 @@ func TestHandler_CreateAndUpdatePage(t *testing.T) {
 	req = &Request{
 		JSONRPC: "2.0",
 		ID:      15,
-		Method:  "get_page",
-		Params:  map[string]any{"name": "about"},
+		Method:  "read_skill",
+		Params:  map[string]any{"name": "about-us"},
 	}
 	resp = handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
 	result, _ := resp.Result.(map[string]any)
-	assert.Equal(t, "# About Us", result["content"])
+	assert.Contains(t, result["instructions"], "# About Us")
+}
+
+// TestHandler_SetSandboxModeConcurrentWithHandle is a regression guard for a
+// data race a reviewer caught live: studio/app.go's agentToolHandler used to
+// mutate a *SandboxConfig's Mode field in place on every dispatch so a
+// long-lived Handler (the one StartMCPServer builds for the whole life of
+// the MCP server) would track a live SetAgentConfig change — but that shared
+// mutable struct raced with concurrent Handle() calls reading the same
+// fields. SetSandboxMode (atomic.Pointer swap) replaces that; this test
+// hammers both concurrently under `go test -race` to prove there is no data
+// race, and that every call still observes some valid, fully-formed sandbox
+// (never a torn/partial config).
+func TestHandler_SetSandboxModeConcurrentWithHandle(t *testing.T) {
+	handler, _ := newTestHandler(t, ModeReadOnly)
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	// Flip the sandbox mode back and forth concurrently with dispatch.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		modes := []SandboxMode{ModeReadOnly, ModeReadWrite, ModeFull}
+		i := 0
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				handler.SetSandboxMode(modes[i%len(modes)])
+				i++
+			}
+		}
+	}()
+
+	// Concurrently dispatch a read tool (always allowed) and a write tool
+	// (allowed only in read-write/full) — neither must ever panic or race.
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				handler.Handle(ctx, &Request{JSONRPC: "2.0", ID: j, Method: "introspect_schema", Params: map[string]any{}})
+				handler.Handle(ctx, &Request{JSONRPC: "2.0", ID: j, Method: "create_or_update_skill", Params: map[string]any{"name": "x", "description": "d", "instructions": "y"}})
+			}
+		}()
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+}
+
+// TestTighter covers the strictness ordering Tighter relies on: read-only <
+// read-write < full, symmetric in its two arguments, and an unrecognized
+// mode is returned as-is (SandboxConfig.Check fails closed on it, so this
+// can only ever deny more, never grant unintended access).
+func TestTighter(t *testing.T) {
+	cases := []struct {
+		a, b SandboxMode
+		want SandboxMode
+	}{
+		{ModeReadOnly, ModeFull, ModeReadOnly},
+		{ModeFull, ModeReadOnly, ModeReadOnly},
+		{ModeReadWrite, ModeFull, ModeReadWrite},
+		{ModeFull, ModeReadWrite, ModeReadWrite},
+		{ModeReadOnly, ModeReadWrite, ModeReadOnly},
+		{ModeFull, ModeFull, ModeFull},
+		{ModeReadOnly, ModeReadOnly, ModeReadOnly},
+		{SandboxMode("bogus"), ModeFull, SandboxMode("bogus")},
+		{ModeFull, SandboxMode("bogus"), SandboxMode("bogus")},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, Tighter(c.a, c.b), "Tighter(%q, %q)", c.a, c.b)
+	}
 }

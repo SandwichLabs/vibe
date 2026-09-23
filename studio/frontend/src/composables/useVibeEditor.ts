@@ -1,6 +1,7 @@
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
+import { sql as sqlLang } from '@codemirror/lang-sql'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
@@ -71,6 +72,10 @@ export interface VibeEditorOptions {
   value?: string
   /** Called whenever the document changes. */
   onChange?: (value: string) => void
+  /** Language mode — 'markdown' (default) or 'sql' (notebook sql cells, the Query Explorer). */
+  lang?: 'markdown' | 'sql'
+  /** Extra key bindings layered on top of the default keymap (e.g. Ctrl/Cmd+Enter to run). */
+  extraKeymap?: import('@codemirror/view').KeyBinding[]
 }
 
 export interface VibeEditorInstance {
@@ -100,14 +105,19 @@ export function createVibeEditor(
     }
   })
 
+  const languageExtension = options.lang === 'sql' ? sqlLang() : markdown()
+  const extraKeymap = options.extraKeymap ?? []
+
   const state = EditorState.create({
     doc: options.value ?? '',
     extensions: [
       vibeTheme,
       syntaxHighlighting(vibeHighlightStyle),
-      markdown(),
+      languageExtension,
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      // extraKeymap first so a caller's binding (e.g. Ctrl/Cmd+Enter to run
+      // a cell) takes priority over the default keymap's own bindings.
+      keymap.of([...extraKeymap, ...defaultKeymap, ...historyKeymap]),
       updateListener,
       EditorView.lineWrapping,
     ],

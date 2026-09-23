@@ -35,11 +35,11 @@ func TestCreate_SchemaTablesExist(t *testing.T) {
 		"_vibe_pages",
 		"_vibe_queries",
 		"_vibe_components",
-		"_vibe_sources",
 		"_vibe_agent_config",
 		"_vibe_secrets",
 		"_vibe_assets",
 		"_vibe_duckdb",
+		"_vibe_skills",
 	}
 
 	for _, table := range expectedTables {
@@ -276,25 +276,17 @@ func TestReadOnly(t *testing.T) {
 	assert.Error(t, c2.SetMeta("key", "value"))
 }
 
-// TestMigrationAddsNavAccessColumns (W4): a file whose _vibe_nav predates the
-// icon/visible_to columns gains them on open via the additive ALTER migration,
-// with existing rows defaulting to visible-to-everyone.
-func TestMigrationAddsNavAccessColumns(t *testing.T) {
+// TestMigrationCreatesSkillsTable (#62): a file created before _vibe_skills
+// existed gains the table on open via the additive `CREATE TABLE IF NOT
+// EXISTS` migration, without disturbing anything else.
+func TestMigrationCreatesSkillsTable(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "old-nav.vibe")
+	path := filepath.Join(dir, "old-skills.vibe")
 
 	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
 	require.NoError(t, err)
-	// Regress _vibe_nav to its pre-W4 shape with a row, simulating an old file.
-	_, err = c.SQLiteDB().Exec(`DROP TABLE _vibe_nav;`)
-	require.NoError(t, err)
-	_, err = c.SQLiteDB().Exec(`CREATE TABLE _vibe_nav (
-		id TEXT PRIMARY KEY, parent_id TEXT NOT NULL DEFAULT '',
-		label TEXT NOT NULL DEFAULT '', action_kind TEXT NOT NULL DEFAULT '',
-		target_id TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0);`)
-	require.NoError(t, err)
-	_, err = c.SQLiteDB().Exec(
-		`INSERT INTO _vibe_nav (id, label, action_kind, target_id) VALUES ('old1', 'Orders', 'open_form', 'f1');`)
+	// Simulate a file created before #62: drop the table entirely.
+	_, err = c.SQLiteDB().Exec(`DROP TABLE _vibe_skills;`)
 	require.NoError(t, err)
 	require.NoError(t, c.Save())
 	require.NoError(t, c.Close())
@@ -303,13 +295,153 @@ func TestMigrationAddsNavAccessColumns(t *testing.T) {
 	require.NoError(t, err)
 	defer c2.Close() //nolint:errcheck
 
-	var label, icon, visibleTo string
+	var name string
 	require.NoError(t, c2.SQLiteDB().QueryRow(
-		`SELECT label, icon, visible_to FROM _vibe_nav WHERE id = 'old1'`,
-	).Scan(&label, &icon, &visibleTo))
-	assert.Equal(t, "Orders", label)
-	assert.Equal(t, "", icon)
-	assert.Equal(t, "", visibleTo)
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='_vibe_skills';",
+	).Scan(&name))
+	assert.Equal(t, "_vibe_skills", name)
+
+	// The table must actually be usable (right columns).
+	_, err = c2.SQLiteDB().Exec(
+		`INSERT INTO _vibe_skills (name, description, instructions, table_name, source, created_at, updated_at)
+		 VALUES ('t', 'd', 'i', '', 'user', 'now', 'now')`)
+	require.NoError(t, err)
+}
+
+// TestOpenOldFileWithAccessLayerTables (#68): a file created BEFORE the
+// Access application layer was removed still has _vibe_field_meta,
+// _vibe_forms, _vibe_relationships, _vibe_reports, _vibe_nav, and
+// _vibe_macros, each carrying a row. Opening it after #68 must succeed, and
+// every one of those tables — and its data — must survive completely
+// untouched: the additive-migration policy never drops a table from an
+// existing file, it just stops creating it for new ones.
+func TestOpenOldFileWithAccessLayerTables(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy-access-layer.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+
+	// Simulate a pre-#68 file: recreate the removed tables with one row each.
+	ddls := []string{
+		`CREATE TABLE _vibe_field_meta (table_name TEXT, column_name TEXT, caption TEXT NOT NULL DEFAULT '',
+			control_type TEXT NOT NULL DEFAULT '', default_value TEXT NOT NULL DEFAULT '', required INTEGER NOT NULL DEFAULT 0,
+			format_code TEXT NOT NULL DEFAULT '', validation_rule TEXT NOT NULL DEFAULT '', validation_message TEXT NOT NULL DEFAULT '',
+			input_mask TEXT NOT NULL DEFAULT '', lookup_sql TEXT NOT NULL DEFAULT '', display_col TEXT NOT NULL DEFAULT '',
+			value_col TEXT NOT NULL DEFAULT '', control_tip TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (table_name, column_name));`,
+		`INSERT INTO _vibe_field_meta (table_name, column_name, caption) VALUES ('orders', 'status', 'Status');`,
+		`CREATE TABLE _vibe_forms (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '',
+			archetype TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1, spec TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');`,
+		`INSERT INTO _vibe_forms (id, title, table_name, archetype, spec, created_at, updated_at)
+			VALUES ('f1', 'Orders Form', 'orders', 'columnar', '{}', 'now', 'now');`,
+		`CREATE TABLE _vibe_relationships (id TEXT PRIMARY KEY, parent_table TEXT NOT NULL DEFAULT '', parent_column TEXT NOT NULL DEFAULT '',
+			child_table TEXT NOT NULL DEFAULT '', child_column TEXT NOT NULL DEFAULT '', on_delete TEXT NOT NULL DEFAULT 'NO ACTION',
+			on_update TEXT NOT NULL DEFAULT 'NO ACTION', enforce_integrity INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT '');`,
+		`INSERT INTO _vibe_relationships (id, parent_table, parent_column, child_table, child_column, created_at)
+			VALUES ('r1', 'customers', 'id', 'orders', 'customer_id', 'now');`,
+		`CREATE TABLE _vibe_reports (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+			groups TEXT NOT NULL DEFAULT '[]', sort TEXT NOT NULL DEFAULT '[]', bands TEXT NOT NULL DEFAULT '{}',
+			version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');`,
+		`INSERT INTO _vibe_reports (id, title, source, created_at, updated_at) VALUES ('rep1', 'Orders Report', 'orders', 'now', 'now');`,
+		`CREATE TABLE _vibe_nav (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
+			action_kind TEXT NOT NULL DEFAULT '', target_id TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0,
+			icon TEXT NOT NULL DEFAULT '', visible_to TEXT NOT NULL DEFAULT '');`,
+		`INSERT INTO _vibe_nav (id, label, action_kind, target_id) VALUES ('n1', 'Orders', 'open_form', 'f1');`,
+		`CREATE TABLE _vibe_macros (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1,
+			spec TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');`,
+		`INSERT INTO _vibe_macros (id, title, spec, created_at, updated_at) VALUES ('m1', 'Startup', '{}', 'now', 'now');`,
+	}
+	for _, ddl := range ddls {
+		_, err := c.SQLiteDB().Exec(ddl)
+		require.NoError(t, err, "ddl: %s", ddl)
+	}
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err, "opening a file with the (removed) Access layer's tables must still succeed")
+	defer c2.Close() //nolint:errcheck
+
+	for table, wantCount := range map[string]int{
+		"_vibe_field_meta":    1,
+		"_vibe_forms":         1,
+		"_vibe_relationships": 1,
+		"_vibe_reports":       1,
+		"_vibe_nav":           1,
+		"_vibe_macros":        1,
+	} {
+		var n int
+		require.NoError(t, c2.SQLiteDB().QueryRow("SELECT COUNT(*) FROM "+table).Scan(&n))
+		assert.Equal(t, wantCount, n, "table %q must survive untouched on a file opened after #68", table)
+	}
+}
+
+// TestMigrationCreatesNotebooksTable (#66 part A): a file created before
+// _vibe_notebooks existed gains the table on open via the additive `CREATE
+// TABLE IF NOT EXISTS` migration.
+func TestMigrationCreatesNotebooksTable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old-notebooks.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	// Simulate a file created before #66: drop the table entirely.
+	_, err = c.SQLiteDB().Exec(`DROP TABLE _vibe_notebooks;`)
+	require.NoError(t, err)
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	var name string
+	require.NoError(t, c2.SQLiteDB().QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='_vibe_notebooks';",
+	).Scan(&name))
+	assert.Equal(t, "_vibe_notebooks", name)
+
+	_, err = c2.SQLiteDB().Exec(
+		`INSERT INTO _vibe_notebooks (id, title, cells, created_at, updated_at) VALUES ('n', 't', '[]', 'now', 'now')`)
+	require.NoError(t, err)
+}
+
+// TestMigrationAddsPagesMigratedToColumn (#66 part A): a file whose
+// _vibe_pages predates the migrated_to column gains it on open via the
+// additive ALTER migration, with existing rows defaulting to ” (not yet
+// migrated), and no page rows are disturbed.
+func TestMigrationAddsPagesMigratedToColumn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old-pages.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	// Regress _vibe_pages to its pre-#66 shape, simulating an old file.
+	_, err = c.SQLiteDB().Exec(`DROP TABLE _vibe_pages;`)
+	require.NoError(t, err)
+	_, err = c.SQLiteDB().Exec(`CREATE TABLE _vibe_pages (
+		id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
+		page_type TEXT NOT NULL DEFAULT 'markdown', sort_order INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}');`)
+	require.NoError(t, err)
+	_, err = c.SQLiteDB().Exec(
+		`INSERT INTO _vibe_pages (id, title, content, created_at, updated_at) VALUES ('old1', 'Old Page', '# hi', 'now', 'now');`)
+	require.NoError(t, err)
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	var title, migratedTo string
+	require.NoError(t, c2.SQLiteDB().QueryRow(
+		`SELECT title, migrated_to FROM _vibe_pages WHERE id = 'old1'`,
+	).Scan(&title, &migratedTo))
+	assert.Equal(t, "Old Page", title)
+	assert.Equal(t, "", migratedTo)
 }
 
 // TestOpenBackfillsAutoNumberPKs: files created before the sequence-backed-PK

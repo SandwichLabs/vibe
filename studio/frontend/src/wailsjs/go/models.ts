@@ -1,68 +1,35 @@
-export namespace automation {
+export namespace a2ui {
 	
-	export class MacroCondition {
-	    expr: string;
+	export class Component {
+	    ID: string;
+	    Type: string;
+	    Parent: string;
+	    Fields: Record<string, any>;
 	
 	    static createFrom(source: any = {}) {
-	        return new MacroCondition(source);
+	        return new Component(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.expr = source["expr"];
+	        this.ID = source["ID"];
+	        this.Type = source["Type"];
+	        this.Parent = source["Parent"];
+	        this.Fields = source["Fields"];
 	    }
 	}
-	export class MacroAction {
-	    kind: string;
-	    args?: Record<string, string>;
-	    condition?: MacroCondition;
+	export class Page {
+	    Title: string;
+	    Components: Component[];
 	
 	    static createFrom(source: any = {}) {
-	        return new MacroAction(source);
+	        return new Page(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.args = source["args"];
-	        this.condition = this.convertValues(source["condition"], MacroCondition);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
-	export class MacroSpec {
-	    id: string;
-	    title: string;
-	    version: number;
-	    actions: MacroAction[];
-	
-	    static createFrom(source: any = {}) {
-	        return new MacroSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.version = source["version"];
-	        this.actions = this.convertValues(source["actions"], MacroAction);
+	        this.Title = source["Title"];
+	        this.Components = this.convertValues(source["Components"], Component);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -103,12 +70,96 @@ export namespace crud {
 
 }
 
+export namespace llm {
+	
+	export class EnvelopeCell {
+	    type: string;
+	    sql?: string;
+	    view?: string;
+	    label?: string;
+	    markdown?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnvelopeCell(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.sql = source["sql"];
+	        this.view = source["view"];
+	        this.label = source["label"];
+	        this.markdown = source["markdown"];
+	    }
+	}
+	export class TaskEnvelope {
+	    outcome: string;
+	    cell?: EnvelopeCell;
+	    explanation?: string;
+	    checked?: string[];
+	    questions?: string[];
+	    missingData?: string[];
+	    notes?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskEnvelope(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.outcome = source["outcome"];
+	        this.cell = this.convertValues(source["cell"], EnvelopeCell);
+	        this.explanation = source["explanation"];
+	        this.checked = source["checked"];
+	        this.questions = source["questions"];
+	        this.missingData = source["missingData"];
+	        this.notes = source["notes"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace main {
 	
+	export class A2UIQueryResult {
+	    columns: string[];
+	    rows: any[][];
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new A2UIQueryResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = source["columns"];
+	        this.rows = source["rows"];
+	        this.truncated = source["truncated"];
+	    }
+	}
 	export class AgentToolStep {
 	    tool: string;
 	    input: string;
 	    output: string;
+	    isError?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentToolStep(source);
@@ -119,6 +170,7 @@ export namespace main {
 	        this.tool = source["tool"];
 	        this.input = source["input"];
 	        this.output = source["output"];
+	        this.isError = source["isError"];
 	    }
 	}
 	export class AgentChatResult {
@@ -191,6 +243,82 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class TaskTurnArg {
+	    role: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskTurnArg(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.role = source["role"];
+	        this.text = source["text"];
+	    }
+	}
+	export class TaskCellArg {
+	    type: string;
+	    sql?: string;
+	    view?: string;
+	    label?: string;
+	    source?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskCellArg(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.sql = source["sql"];
+	        this.view = source["view"];
+	        this.label = source["label"];
+	        this.source = source["source"];
+	    }
+	}
+	export class AgentTaskRequest {
+	    taskId: string;
+	    mode: string;
+	    description: string;
+	    cell?: TaskCellArg;
+	    tables?: string[];
+	    notebookSummary?: string[];
+	    followUp?: TaskTurnArg[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentTaskRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.mode = source["mode"];
+	        this.description = source["description"];
+	        this.cell = this.convertValues(source["cell"], TaskCellArg);
+	        this.tables = source["tables"];
+	        this.notebookSummary = source["notebookSummary"];
+	        this.followUp = this.convertValues(source["followUp"], TaskTurnArg);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class AgentTurn {
 	    role: string;
@@ -206,29 +334,12 @@ export namespace main {
 	        this.text = source["text"];
 	    }
 	}
-	export class AppConfig {
-	    mode: string;
-	    default_mode: string;
-	    startup_object: string;
-	    app_title: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AppConfig(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.mode = source["mode"];
-	        this.default_mode = source["default_mode"];
-	        this.startup_object = source["startup_object"];
-	        this.app_title = source["app_title"];
-	    }
-	}
 	export class ColumnInfo {
 	    name: string;
 	    type: string;
 	    not_null: boolean;
 	    pk: boolean;
+	    fk: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ColumnInfo(source);
@@ -240,12 +351,13 @@ export namespace main {
 	        this.type = source["type"];
 	        this.not_null = source["not_null"];
 	        this.pk = source["pk"];
+	        this.fk = source["fk"];
 	    }
 	}
 	export class DashboardData {
 	    title: string;
 	    description: string;
-	    page_count: number;
+	    notebook_count: number;
 	    table_count: number;
 	    query_count: number;
 	    file_size: number;
@@ -260,7 +372,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.title = source["title"];
 	        this.description = source["description"];
-	        this.page_count = source["page_count"];
+	        this.notebook_count = source["notebook_count"];
 	        this.table_count = source["table_count"];
 	        this.query_count = source["query_count"];
 	        this.file_size = source["file_size"];
@@ -272,10 +384,11 @@ export namespace main {
 	    path: string;
 	    title: string;
 	    description: string;
-	    page_count: number;
+	    notebook_count: number;
 	    table_count: number;
 	    query_count: number;
 	    file_size: number;
+	    session_id: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FileInfo(source);
@@ -286,10 +399,11 @@ export namespace main {
 	        this.path = source["path"];
 	        this.title = source["title"];
 	        this.description = source["description"];
-	        this.page_count = source["page_count"];
+	        this.notebook_count = source["notebook_count"];
 	        this.table_count = source["table_count"];
 	        this.query_count = source["query_count"];
 	        this.file_size = source["file_size"];
+	        this.session_id = source["session_id"];
 	    }
 	}
 	export class FilterCondition {
@@ -339,58 +453,6 @@ export namespace main {
 		    }
 		    return a;
 		}
-	}
-	export class ForeignKeySpec {
-	    child_table: string;
-	    child_column: string;
-	    parent_table: string;
-	    parent_column: string;
-	    on_delete: string;
-	    on_update: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ForeignKeySpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.child_table = source["child_table"];
-	        this.child_column = source["child_column"];
-	        this.parent_table = source["parent_table"];
-	        this.parent_column = source["parent_column"];
-	        this.on_delete = source["on_delete"];
-	        this.on_update = source["on_update"];
-	    }
-	}
-	export class FormSubmitRow {
-	    table: string;
-	    values: Record<string, any>;
-	
-	    static createFrom(source: any = {}) {
-	        return new FormSubmitRow(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.table = source["table"];
-	        this.values = source["values"];
-	    }
-	}
-	export class FormSummary {
-	    id: string;
-	    title: string;
-	    archetype: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FormSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.archetype = source["archetype"];
-	    }
 	}
 	export class ImportColumnMapping {
 	    source: string;
@@ -462,32 +524,18 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class MacroIntent {
-	    kind: string;
-	    target: string;
-	    args?: Record<string, string>;
+	export class NotebookSaveResult {
+	    notebook: notebooks.Notebook;
+	    warnings: string[];
 	
 	    static createFrom(source: any = {}) {
-	        return new MacroIntent(source);
+	        return new NotebookSaveResult(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.target = source["target"];
-	        this.args = source["args"];
-	    }
-	}
-	export class MacroRunResult {
-	    intents: MacroIntent[];
-	
-	    static createFrom(source: any = {}) {
-	        return new MacroRunResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.intents = this.convertValues(source["intents"], MacroIntent);
+	        this.notebook = this.convertValues(source["notebook"], notebooks.Notebook);
+	        this.warnings = source["warnings"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -507,60 +555,6 @@ export namespace main {
 		    }
 		    return a;
 		}
-	}
-	export class NavTarget {
-	    kind: string;
-	    id: string;
-	    label: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new NavTarget(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.id = source["id"];
-	        this.label = source["label"];
-	    }
-	}
-	export class PageDetail {
-	    id: string;
-	    title: string;
-	    content: string;
-	    page_type: string;
-	    sort_order: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PageDetail(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.content = source["content"];
-	        this.page_type = source["page_type"];
-	        this.sort_order = source["sort_order"];
-	    }
-	}
-	export class PageSummary {
-	    id: string;
-	    title: string;
-	    page_type: string;
-	    sort_order: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PageSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.page_type = source["page_type"];
-	        this.sort_order = source["sort_order"];
-	    }
 	}
 	export class QueryResult {
 	    columns: ColumnInfo[];
@@ -614,56 +608,24 @@ export namespace main {
 	        this.engine = source["engine"];
 	    }
 	}
-	export class ReportData {
-	    columns: string[];
-	    rows: any[][];
-	    chart?: reports.ChartSpec;
-	    duration_ms: number;
+	export class SkillSummary {
+	    name: string;
+	    description: string;
+	    instructions: string;
+	    table_name?: string;
+	    source: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new ReportData(source);
+	        return new SkillSummary(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.columns = source["columns"];
-	        this.rows = source["rows"];
-	        this.chart = this.convertValues(source["chart"], reports.ChartSpec);
-	        this.duration_ms = source["duration_ms"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ReportFilter {
-	    column: string;
-	    op: string;
-	    values: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ReportFilter(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.column = source["column"];
-	        this.op = source["op"];
-	        this.values = source["values"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.instructions = source["instructions"];
+	        this.table_name = source["table_name"];
+	        this.source = source["source"];
 	    }
 	}
 	export class SpreadsheetColumn {
@@ -784,6 +746,8 @@ export namespace main {
 	        this.rows = source["rows"];
 	    }
 	}
+	
+	
 	export class TemplateInfo {
 	    name: string;
 	    description: string;
@@ -796,6 +760,111 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.description = source["description"];
+	    }
+	}
+
+}
+
+export namespace notebooks {
+	
+	export class Cell {
+	    ID: string;
+	    Type: string;
+	    Collapsed: boolean;
+	    Source: string;
+	    View: string;
+	    ViewPinned: boolean;
+	    Label: string;
+	    Page?: a2ui.Page;
+	
+	    static createFrom(source: any = {}) {
+	        return new Cell(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.Type = source["Type"];
+	        this.Collapsed = source["Collapsed"];
+	        this.Source = source["Source"];
+	        this.View = source["View"];
+	        this.ViewPinned = source["ViewPinned"];
+	        this.Label = source["Label"];
+	        this.Page = this.convertValues(source["Page"], a2ui.Page);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Notebook {
+	    schemaVersion: number;
+	    id: string;
+	    title: string;
+	    cells: Cell[];
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Notebook(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schemaVersion = source["schemaVersion"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.cells = this.convertValues(source["cells"], Cell);
+	        this.updatedAt = source["updatedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Summary {
+	    id: string;
+	    title: string;
+	    cellCount: number;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.cellCount = source["cellCount"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 
@@ -862,405 +931,6 @@ export namespace queries {
 		    }
 		    return a;
 		}
-	}
-
-}
-
-export namespace reports {
-	
-	export class Aggregate {
-	    name: string;
-	    func: string;
-	    field: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Aggregate(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.func = source["func"];
-	        this.field = source["field"];
-	    }
-	}
-	export class ChartSpec {
-	    label_field: string;
-	    series_field?: string;
-	    value_field: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ChartSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.label_field = source["label_field"];
-	        this.series_field = source["series_field"];
-	        this.value_field = source["value_field"];
-	    }
-	}
-	export class ReportColumn {
-	    field: string;
-	    caption?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ReportColumn(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.field = source["field"];
-	        this.caption = source["caption"];
-	    }
-	}
-	export class DetailBand {
-	    columns: ReportColumn[];
-	
-	    static createFrom(source: any = {}) {
-	        return new DetailBand(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.columns = this.convertValues(source["columns"], ReportColumn);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class GroupLevel {
-	    field: string;
-	    sort_dir: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new GroupLevel(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.field = source["field"];
-	        this.sort_dir = source["sort_dir"];
-	    }
-	}
-	
-	export class SortSpec {
-	    field: string;
-	    dir: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new SortSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.field = source["field"];
-	        this.dir = source["dir"];
-	    }
-	}
-	export class ReportSpec {
-	    id: string;
-	    title: string;
-	    source: string;
-	    groups?: GroupLevel[];
-	    sort?: SortSpec[];
-	    detail: DetailBand;
-	    group_footer_aggregates?: Aggregate[];
-	    report_footer_aggregates?: Aggregate[];
-	    chart?: ChartSpec;
-	
-	    static createFrom(source: any = {}) {
-	        return new ReportSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.source = source["source"];
-	        this.groups = this.convertValues(source["groups"], GroupLevel);
-	        this.sort = this.convertValues(source["sort"], SortSpec);
-	        this.detail = this.convertValues(source["detail"], DetailBand);
-	        this.group_footer_aggregates = this.convertValues(source["group_footer_aggregates"], Aggregate);
-	        this.report_footer_aggregates = this.convertValues(source["report_footer_aggregates"], Aggregate);
-	        this.chart = this.convertValues(source["chart"], ChartSpec);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ReportSummary {
-	    id: string;
-	    title: string;
-	    source: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ReportSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.source = source["source"];
-	    }
-	}
-
-}
-
-export namespace schema {
-	
-	export class FieldMeta {
-	    table_name: string;
-	    column_name: string;
-	    caption: string;
-	    control_type: string;
-	    default_value: string;
-	    required: boolean;
-	    format_code: string;
-	    validation_rule: string;
-	    validation_message: string;
-	    input_mask: string;
-	    lookup_sql: string;
-	    display_col: string;
-	    value_col: string;
-	    control_tip: string;
-	    sort_order: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new FieldMeta(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.table_name = source["table_name"];
-	        this.column_name = source["column_name"];
-	        this.caption = source["caption"];
-	        this.control_type = source["control_type"];
-	        this.default_value = source["default_value"];
-	        this.required = source["required"];
-	        this.format_code = source["format_code"];
-	        this.validation_rule = source["validation_rule"];
-	        this.validation_message = source["validation_message"];
-	        this.input_mask = source["input_mask"];
-	        this.lookup_sql = source["lookup_sql"];
-	        this.display_col = source["display_col"];
-	        this.value_col = source["value_col"];
-	        this.control_tip = source["control_tip"];
-	        this.sort_order = source["sort_order"];
-	    }
-	}
-	export class FormEvents {
-	    on_open?: string;
-	    on_load?: string;
-	    before_insert?: string;
-	    after_insert?: string;
-	    before_update?: string;
-	    after_update?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FormEvents(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.on_open = source["on_open"];
-	        this.on_load = source["on_load"];
-	        this.before_insert = source["before_insert"];
-	        this.after_insert = source["after_insert"];
-	        this.before_update = source["before_update"];
-	        this.after_update = source["after_update"];
-	    }
-	}
-	export class FormFieldSpec {
-	    name: string;
-	    caption: string;
-	    control_type: string;
-	    placeholder?: string;
-	    required?: boolean;
-	    visibility?: string;
-	    validation?: string;
-	    help?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FormFieldSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.caption = source["caption"];
-	        this.control_type = source["control_type"];
-	        this.placeholder = source["placeholder"];
-	        this.required = source["required"];
-	        this.visibility = source["visibility"];
-	        this.validation = source["validation"];
-	        this.help = source["help"];
-	    }
-	}
-	export class SubformSpec {
-	    child_table: string;
-	    child_key: string;
-	    parent_key: string;
-	    fields: FormFieldSpec[];
-	
-	    static createFrom(source: any = {}) {
-	        return new SubformSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.child_table = source["child_table"];
-	        this.child_key = source["child_key"];
-	        this.parent_key = source["parent_key"];
-	        this.fields = this.convertValues(source["fields"], FormFieldSpec);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class FormSpec {
-	    id: string;
-	    title: string;
-	    table: string;
-	    archetype: string;
-	    on_submit: string;
-	    fields: FormFieldSpec[];
-	    subform?: SubformSpec;
-	    events?: FormEvents;
-	
-	    static createFrom(source: any = {}) {
-	        return new FormSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.table = source["table"];
-	        this.archetype = source["archetype"];
-	        this.on_submit = source["on_submit"];
-	        this.fields = this.convertValues(source["fields"], FormFieldSpec);
-	        this.subform = this.convertValues(source["subform"], SubformSpec);
-	        this.events = this.convertValues(source["events"], FormEvents);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class NavItem {
-	    id: string;
-	    parent_id: string;
-	    label: string;
-	    action_kind: string;
-	    target_id: string;
-	    sort_order: number;
-	    icon: string;
-	    visible_to: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new NavItem(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.parent_id = source["parent_id"];
-	        this.label = source["label"];
-	        this.action_kind = source["action_kind"];
-	        this.target_id = source["target_id"];
-	        this.sort_order = source["sort_order"];
-	        this.icon = source["icon"];
-	        this.visible_to = source["visible_to"];
-	    }
-	}
-	export class Relationship {
-	    id: string;
-	    parent_table: string;
-	    parent_column: string;
-	    child_table: string;
-	    child_column: string;
-	    on_delete: string;
-	    on_update: string;
-	    enforce_integrity: boolean;
-	    created_at: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Relationship(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.parent_table = source["parent_table"];
-	        this.parent_column = source["parent_column"];
-	        this.child_table = source["child_table"];
-	        this.child_column = source["child_column"];
-	        this.on_delete = source["on_delete"];
-	        this.on_update = source["on_update"];
-	        this.enforce_integrity = source["enforce_integrity"];
-	        this.created_at = source["created_at"];
-	    }
 	}
 
 }

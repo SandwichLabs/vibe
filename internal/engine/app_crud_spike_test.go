@@ -9,7 +9,7 @@ package engine_test
 // P2.1 spike (relationship DDL surface), P4.0 drives the *production* write
 // path that App Mode's switchboard/forms actually navigate to:
 //
-//   - the shared FK-emit path:   schema.ApplyForeignKey
+//   - a plain-SQL inline foreign key (REFERENCES) on the child table
 //   - the transactional CRUD core: crud.InsertRowTx / UpdateRowTx / DeleteRowTx
 //     run inside ddb.Begin() ... tx.Commit() exactly as studio/app.go and
 //     internal/server/handlers.go invoke them.
@@ -39,7 +39,6 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,10 +76,11 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	ctx := context.Background()
 	_ = ctx
 
-	// --- DDL: parent (customers, PK) + child (orders) ---
+	// --- DDL: parent (customers, PK) + child (orders), FK declared inline ---
+	// (#68 dropped the FK-emit wizard helper; foreign keys are plain SQL now.)
 	_, err = ddb.Exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);`)
 	require.NoError(t, err, "create customers")
-	_, err = ddb.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, total DOUBLE);`)
+	_, err = ddb.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DOUBLE);`)
 	require.NoError(t, err, "create orders")
 
 	// --- seed: 50 customers + 500 orders (each order -> a valid customer) ---
@@ -94,21 +94,8 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 		require.NoError(t, err, "seed order %d", i)
 	}
 
-	// --- apply the FK via the shared production FK-emit path ---
-	// (DuckDB cannot ALTER a FK onto an existing table; ApplyForeignKey rebuilds
-	// the child table with the FK declared inline. This is the same path used by
-	// studio/app.go AddForeignKey and the agent create_relationship tool.)
-	err = schema.ApplyForeignKey(ddb, schema.ForeignKeySpec{
-		ChildTable:   "orders",
-		ChildColumn:  "customer_id",
-		ParentTable:  "customers",
-		ParentColumn: "id",
-		OnDelete:     "RESTRICT",
-	})
-	require.NoError(t, err, "ApplyForeignKey should apply an inline FK orders.customer_id -> customers.id")
-
 	// Field metadata is empty for these tables; the CRUD core tolerates that.
-	store := schema.NewStore(c.SQLiteDB())
+	store := crud.NewFieldMetaStore(c.SQLiteDB())
 	orderColTypes, err := crud.ColumnTypes(ddb, "orders")
 	require.NoError(t, err, "read orders column types")
 	orderMetas, err := crud.FieldMetaMap(store, "orders")
@@ -253,7 +240,7 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	var reopenedTotal float64
 	require.NoError(t, ddb2.QueryRow(`SELECT total FROM orders WHERE id = 250;`).Scan(&reopenedTotal))
 	assert.InDelta(t, 250.0, reopenedTotal, 0.001, "updated value must persist across reopen")
-	perRowWriteDurable := orderCount == 400 && custCount == 50
+	assert.True(t, orderCount == 400 && custCount == 50, "all per-row writes must be durable across the round-trip")
 
 	// the FK constraint must still enforce integrity after the blob round-trip
 	_, orphanErr2 := ddb2.Exec(`INSERT INTO orders (id, customer_id, total) VALUES (88888, 4242, 1.0);`)
@@ -261,34 +248,12 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	t.Logf("P4.0 FINDING: FK still rejects orphan after reopen = %v (err=%v)", fkSurvives, orphanErr2)
 	assert.True(t, fkSurvives, "FK constraint must survive the DuckDB-blob serialize/reopen round-trip")
 
-	// --- recorded go/no-go verdict the rest of Phase 4 builds on ---
-	// The stub returns the zero value, so these assertions fail until the GREEN
-	// step records the real findings.
-	verdict := engine.AppCRUDViabilitySpikeVerdict()
-
-	assert.Equal(t, orphanRejected, verdict.OrphanInsertRejected,
-		"recorded verdict must match observed orphan-insert behavior")
-	assert.Equal(t, observedParentDeleteBehavior, verdict.ParentDeleteBehavior,
-		"recorded verdict must match observed parent-delete behavior")
-	assert.Equal(t, fkSurvives, verdict.FKSurvivesRoundTrip,
-		"recorded verdict must match observed FK round-trip survival")
-	assert.Equal(t, perRowWriteDurable, verdict.PerRowWriteDurable,
-		"recorded verdict must match observed per-row write durability")
-	assert.Contains(t,
-		[]string{engine.AppCRUDRecommendViable, engine.AppCRUDRecommendBlocking},
-		verdict.Recommendation,
-		"spike must record a concrete go/no-go recommendation for Phase 4")
-
-	// The recommendation must be self-consistent with the observations: App-Mode
-	// CRUD is only "viable" if per-row writes are durable AND the FK keeps
-	// enforcing integrity across the blob round-trip; otherwise it is BLOCKING.
-	viable := perRowWriteDurable && fkSurvives && orphanRejected &&
-		observedParentDeleteBehavior == engine.FKParentDeleteRestrict
-	if viable {
-		assert.Equal(t, engine.AppCRUDRecommendViable, verdict.Recommendation,
-			"if per-row CRUD is durable and FK survives, spike should mark App-Mode CRUD viable")
-	} else {
-		assert.Equal(t, engine.AppCRUDRecommendBlocking, verdict.Recommendation,
-			"if a viability problem is found, spike must surface a BLOCKING finding")
-	}
+	// This test's original purpose (recording a go/no-go verdict for building
+	// App Mode on top of DuckDB-as-CRUD) is moot — App Mode was removed in
+	// #68, and engine.AppCRUDViabilitySpikeVerdict()/AppCRUDVerdict were
+	// deleted as dead weight along with it. The substantive regression
+	// coverage above (durable per-row writes, FK enforcement including the
+	// RESTRICT-vs-dangling-dependency distinction, survival across a
+	// Save+Close+reopen round-trip) still guards real, kept behavior
+	// (internal/crud + plain-SQL foreign keys), so the test itself stays.
 }

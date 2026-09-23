@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -42,7 +43,7 @@ Output is written to stdout.`,
 
 		db := c.SQLiteDB()
 
-		rows, err := db.Query(fmt.Sprintf("SELECT * FROM %q;", table)) //nolint:gosec
+		rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s;", engine.QuoteIdent(table))) //nolint:gosec
 		if err != nil {
 			return fmt.Errorf("failed to query table %q: %w", table, err)
 		}

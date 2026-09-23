@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,9 +31,8 @@ func columnType(info *TableInfo, name string) (string, bool) {
 // TestAppSchemaDesignerDDL drives the P2.4 Schema Designer DDL bindings against
 // a real .vibe container + DuckDB, asserting the full acceptance behavior:
 // AddColumn shows up in DescribeTable; a UNIQUE AddIndex enforces uniqueness on
-// InsertRow; SetFieldMeta/GetFieldMeta round-trips field properties; DropColumn
-// removes the column; AlterColumnType changes a type while keeping data
-// readable — all surviving SaveFile + reopen.
+// InsertRow; DropColumn removes the column; AlterColumnType changes a type
+// while keeping data readable — all surviving SaveFile + reopen.
 func TestAppSchemaDesignerDDL(t *testing.T) {
 	app := newOpenApp(t)
 
@@ -58,27 +56,6 @@ func TestAppSchemaDesignerDDL(t *testing.T) {
 
 	_, err = app.InsertRow("people", map[string]any{"id": 2, "name": "Bob", "email": "ada@example.com"})
 	require.Error(t, err, "unique index must reject a duplicate email")
-
-	// SetFieldMeta: persist Access-style field properties on the email column.
-	require.NoError(t, app.SetFieldMeta("people", "email", schema.FieldMeta{
-		Caption:        "Email Address",
-		ValidationRule: "LIKE '%@%'",
-		Required:       true,
-		InputMask:      "Lower",
-	}))
-
-	metas, err := app.GetFieldMeta("people")
-	require.NoError(t, err)
-	var emailMeta *schema.FieldMeta
-	for i := range metas {
-		if metas[i].ColumnName == "email" {
-			emailMeta = &metas[i]
-		}
-	}
-	require.NotNil(t, emailMeta, "GetFieldMeta must return the email column meta")
-	assert.Equal(t, "Email Address", emailMeta.Caption)
-	assert.Equal(t, "LIKE '%@%'", emailMeta.ValidationRule)
-	assert.True(t, emailMeta.Required)
 
 	// AlterColumnType: change name from VARCHAR to VARCHAR(64)-ish (use a real
 	// type change that keeps data readable). Add an integer column then widen.
@@ -111,17 +88,6 @@ func TestAppSchemaDesignerDDL(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasColumn(info, "email"), "added column must persist across reopen")
 	assert.False(t, hasColumn(info, "score"), "dropped column must stay dropped across reopen")
-
-	metas, err = app.GetFieldMeta("people")
-	require.NoError(t, err)
-	var emailMeta2 *schema.FieldMeta
-	for i := range metas {
-		if metas[i].ColumnName == "email" {
-			emailMeta2 = &metas[i]
-		}
-	}
-	require.NotNil(t, emailMeta2, "field meta must persist across reopen")
-	assert.Equal(t, "Email Address", emailMeta2.Caption)
 
 	// Unique index still enforced after reopen.
 	_, err = app.InsertRow("people", map[string]any{"id": 4, "name": "Dot", "email": "ada@example.com"})

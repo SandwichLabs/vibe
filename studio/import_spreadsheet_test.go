@@ -165,31 +165,6 @@ func TestImportSpreadsheetCreateThenAppend(t *testing.T) {
 	assert.Equal(t, 4, data.TotalRows, "append accumulates rows on top of the created table")
 }
 
-// TestImportSpreadsheetDeniedInAppMode asserts the binding is guarded
-// studio-only, matching ImportCSV.
-func TestImportSpreadsheetDeniedInAppMode(t *testing.T) {
-	app := newOpenApp(t)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "fixture.xlsx")
-	writeTwoSheetXLSXFixture(t, path)
-
-	require.NoError(t, app.SetMode("app"))
-
-	_, err := app.ImportSpreadsheet(ImportSpreadsheetOptions{
-		Path:      path,
-		Sheet:     "People",
-		HasHeader: true,
-		TableName: "people",
-		Mode:      "create",
-		Columns: []ImportColumnMapping{
-			{Source: "id", Target: "id", Type: "INTEGER"},
-			{Source: "name", Target: "name", Type: "VARCHAR"},
-		},
-	})
-	require.Error(t, err, "ImportSpreadsheet must be denied in App Mode")
-}
-
 // TestImportSpreadsheetRejectsInvalidIdentifier asserts an invalid table name
 // is rejected, matching ImportCSV's identifier guard.
 func TestImportSpreadsheetRejectsInvalidIdentifier(t *testing.T) {

@@ -47,7 +47,6 @@ function makeApp(opts: {
   const app = {
     ListTables: vi.fn(async () => ['people']),
     DescribeTable: vi.fn(async () => ({ name: 'people', columns })),
-    GetFieldMeta: vi.fn(async () => []),
     ExecuteQuery: vi.fn(async () => ({ columns: [], rows: [], duration: '0s', row_count: 0 })),
     GetTableData: vi.fn(async () => toTableData(store, store.length)),
     // The filtered endpoint returns the (mocked) filtered subset + total.

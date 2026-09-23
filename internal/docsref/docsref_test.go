@@ -1,20 +1,29 @@
-// Package docsref holds the docs-consistency check for the v1.0 reference
-// documentation (plan §6.4 / unit P6.9). It is intentionally test-only: there is
-// no production behavior here. The check keeps the shipped reference docs honest
-// against the code — every directive token registered in internal/pages, every
-// macro action registered in internal/automation, and every bundled starter
-// template registered in internal/container must be documented, and the docs
-// must not reference a directive/action/template that no longer exists.
+// Package docsref holds the docs-consistency check for the shipped reference
+// documentation. It is intentionally test-only: there is no production
+// behavior here. The check keeps docs/reference/ honest against the code —
+//
+//   - every A2UI component type registered in internal/a2ui must be
+//     documented in docs/reference/notebooks.md
+//   - every bundled starter template registered in internal/container must
+//     be documented in docs/reference/
+//
+// #69 retired the page system (docs/reference/pages.md, the directive
+// registry this test used to scrape out of internal/pages/parser.go, and the
+// stale-directive-token check that went with it) in favor of Notebooks/A2UI
+// (docs/reference/notebooks.md). #68 removed internal/automation (macros)
+// along with docs/reference/macros.md, forms.md, and reports.md, so the
+// macro-action and form/report-surface checks that used to live here are
+// gone too.
 package docsref
 
 import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
+	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +47,7 @@ func repoRoot(t *testing.T) string {
 
 // readReferenceDocs concatenates every markdown file under docs/reference/ into a
 // single lowercased blob. The reference is allowed to be split across multiple
-// files (pages, forms, reports, macros, import/office-links, templates).
+// files (notebooks, import/office-links, templates).
 func readReferenceDocs(t *testing.T, root string) string {
 	t.Helper()
 	refDir := filepath.Join(root, "docs", "reference")
@@ -58,69 +67,36 @@ func readReferenceDocs(t *testing.T, root string) string {
 		b.WriteByte('\n')
 		return nil
 	})
-	require.NoError(t, err, "docs/reference/ must exist and contain the v1.0 reference markdown")
+	require.NoError(t, err, "docs/reference/ must exist and contain the reference markdown")
 	blob := strings.ToLower(b.String())
 	require.NotEmpty(t, strings.TrimSpace(blob), "docs/reference/ contained no documentation")
 	return blob
 }
 
-// registeredDirectiveTypes scrapes the canonical knownTypes slice out of
-// internal/pages/parser.go. This is the single registry of directive tokens the
-// parser recognizes; the reference must document every one of them.
-func registeredDirectiveTypes(t *testing.T, root string) []string {
-	t.Helper()
-	src, err := os.ReadFile(filepath.Join(root, "internal", "pages", "parser.go"))
-	require.NoError(t, err)
-	re := regexp.MustCompile(`knownTypes\s*:?=\s*\[\]string\{([^}]*)\}`)
-	m := re.FindSubmatch(src)
-	require.Len(t, m, 2, "could not locate knownTypes directive registry in parser.go")
-	return extractQuoted(string(m[1]))
-}
-
-// registeredMacroActions scrapes the Action* string constants out of
-// internal/automation/macro.go.
-func registeredMacroActions(t *testing.T, root string) []string {
-	t.Helper()
-	src, err := os.ReadFile(filepath.Join(root, "internal", "automation", "macro.go"))
-	require.NoError(t, err)
-	re := regexp.MustCompile(`Action\w+\s*=\s*"([A-Za-z]+)"`)
-	matches := re.FindAllStringSubmatch(string(src), -1)
-	require.NotEmpty(t, matches, "could not locate Action* constants in macro.go")
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		out = append(out, m[1])
-	}
-	return out
-}
-
-func extractQuoted(s string) []string {
-	re := regexp.MustCompile(`"([^"]+)"`)
-	var out []string
-	for _, m := range re.FindAllStringSubmatch(s, -1) {
-		out = append(out, m[1])
-	}
-	return out
-}
-
-// TestReferenceDocsDocumentEveryDirective asserts every registered page directive
-// token appears in the reference docs.
-func TestReferenceDocsDocumentEveryDirective(t *testing.T) {
+// TestReferenceDocsDocumentEveryA2UIComponent asserts every component type
+// registered in internal/a2ui.Components appears in the reference docs —
+// the single source of truth docs/reference/notebooks.md's component table
+// must stay in sync with.
+func TestReferenceDocsDocumentEveryA2UIComponent(t *testing.T) {
 	root := repoRoot(t)
 	docs := readReferenceDocs(t, root)
-	for _, dir := range registeredDirectiveTypes(t, root) {
-		assert.Contains(t, docs, strings.ToLower(dir),
-			"page directive %q is registered in parser.go but undocumented in docs/reference/", dir)
+	require.NotEmpty(t, a2ui.Components, "expected the A2UI component registry to be non-empty")
+	for name := range a2ui.Components {
+		assert.Contains(t, docs, strings.ToLower(name),
+			"a2ui component %q is registered in internal/a2ui but undocumented in docs/reference/", name)
 	}
 }
 
-// TestReferenceDocsDocumentEveryMacroAction asserts every registered macro action
-// kind appears in the reference docs.
-func TestReferenceDocsDocumentEveryMacroAction(t *testing.T) {
+// TestReferenceDocsDocumentColorEnum asserts every closed A2UI color token
+// appears in the reference docs, so the enum can't silently drift from what
+// the docs claim is valid.
+func TestReferenceDocsDocumentColorEnum(t *testing.T) {
 	root := repoRoot(t)
 	docs := readReferenceDocs(t, root)
-	for _, act := range registeredMacroActions(t, root) {
-		assert.Contains(t, docs, strings.ToLower(act),
-			"macro action %q is registered in internal/automation but undocumented in docs/reference/", act)
+	require.NotEmpty(t, a2ui.ColorTokens)
+	for _, c := range a2ui.ColorTokens {
+		assert.Contains(t, docs, strings.ToLower(c),
+			"a2ui color token %q is registered in internal/a2ui but undocumented in docs/reference/", c)
 	}
 }
 
@@ -137,49 +113,89 @@ func TestReferenceDocsDocumentEveryTemplate(t *testing.T) {
 	}
 }
 
-// TestReferenceDocsCoverRequiredSections asserts the reference covers each surface
-// called for by §6.4: page directives, form archetypes/bound controls, banded
-// reports, macros/actions, the Import Spreadsheet Wizard, Office Links, and
-// starter templates.
+// TestReferenceDocsCoverRequiredSections asserts the reference covers each
+// surface Vibe still ships (#68 dropped forms/reports/macros/switchboard;
+// #69 dropped the page system): notebooks, the A2UI component schema, the
+// Import Spreadsheet Wizard, Office Links, and starter templates.
 func TestReferenceDocsCoverRequiredSections(t *testing.T) {
 	root := repoRoot(t)
 	docs := readReferenceDocs(t, root)
 	required := []string{
-		"directive", // page directives
-		"form",      // form archetypes / bound controls
-		"archetype", // columnar/continuous/datasheet/master-detail
-		"report",    // banded reports
-		"macro",     // macros / actions
-		"import",    // Import Spreadsheet Wizard
-		"office",    // Office Links
-		"template",  // starter templates
+		"notebook", // Notebooks
+		"a2ui",     // A2UI component schema
+		"import",   // Import Spreadsheet Wizard
+		"office",   // Office Links
+		"template", // starter templates
 	}
 	for _, kw := range required {
 		assert.Contains(t, docs, kw,
-			"reference docs are missing coverage of required surface %q (plan §6.4)", kw)
+			"reference docs are missing coverage of required surface %q", kw)
 	}
 }
 
-// TestReferenceDocsHaveNoStaleTokens flags docs that reference a directive or
-// macro action that no longer exists in the code, scanning the docs' own
-// directive-style tokens and Access-action mentions against the live registries.
-func TestReferenceDocsHaveNoStaleTokens(t *testing.T) {
+// componentTableRowRe matches one row of docs/reference/notebooks.md's "##
+// Component types" table: `| \`Type\` | required | optional |`. Capturing
+// group 1 is the backtick-wrapped type name in the first column.
+var componentTableRowRe = regexp.MustCompile("(?m)^\\|\\s*`([A-Za-z][A-Za-z0-9]*)`\\s*\\|")
+
+// notebooksDocComponentTypes parses every component type named in
+// docs/reference/notebooks.md's component-types table (the first column of
+// each `| \`Type\` | ... | ... |` row).
+func notebooksDocComponentTypes(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "docs", "reference", "notebooks.md"))
+	require.NoError(t, err, "docs/reference/notebooks.md must exist")
+
+	out := map[string]bool{}
+	for _, m := range componentTableRowRe.FindAllStringSubmatch(string(data), -1) {
+		out[m[1]] = true
+	}
+	return out
+}
+
+// TestNotebooksDocComponentTableMatchesA2UIRegistry cross-checks
+// docs/reference/notebooks.md's "Component types" table against
+// internal/a2ui.Components BOTH ways: every registered type must have a
+// table row (TestReferenceDocsDocumentEveryA2UIComponent already partly
+// covers this via a substring check, but not specifically the table), and
+// every table row must name a real registered type — so a typo'd or
+// stale/renamed component type in the table (not just a totally missing
+// one) is caught too.
+func TestNotebooksDocComponentTableMatchesA2UIRegistry(t *testing.T) {
+	root := repoRoot(t)
+	docTypes := notebooksDocComponentTypes(t, root)
+	require.NotEmpty(t, docTypes, "docs/reference/notebooks.md's component-types table must not be empty/unparseable")
+
+	for name := range a2ui.Components {
+		assert.True(t, docTypes[name], "a2ui component %q has no row in docs/reference/notebooks.md's component-types table", name)
+	}
+	for name := range docTypes {
+		assert.NotNil(t, a2ui.Components[name], "docs/reference/notebooks.md's component-types table lists %q, which is not (or no longer) a registered a2ui component", name)
+	}
+}
+
+// fencedCodeRe strips fenced code blocks (```...```) so the stale-directive
+// scan below never flags a directive mentioned INSIDE an example/quoted
+// fence (docs/reference/import-office.md and notebooks.md both show real
+// SQL/JSON snippets in fences that could otherwise coincidentally contain a
+// brace pattern).
+var fencedCodeRe = regexp.MustCompile("(?s)```.*?```")
+
+// staleDirectiveRe matches the retired page-directive syntax
+// `{directive_name: ...}` for every directive token the old page system
+// ever recognized (table/chart/metric/value directives, the Access-layer
+// form/detail/subform/button directives, and the P3.5/P3.6 layout/input
+// directives) — the full token list #69's removal covers, not just the
+// handful TestReferenceDocsDoNotReferencePageSystem spot-checks.
+var staleDirectiveRe = regexp.MustCompile(`\{(table|chart|metric|value|form|detail|if|row|stack|callout|tabs|dropdown|slider|text_input|button_group|toggle|button|subform)\s*:`)
+
+// TestReferenceDocsHaveNoStaleDirectivesOutsideCode scans every doc under
+// docs/reference/, with fenced code blocks stripped, for the retired page
+// directive syntax.
+func TestReferenceDocsHaveNoStaleDirectivesOutsideCode(t *testing.T) {
 	root := repoRoot(t)
 	refDir := filepath.Join(root, "docs", "reference")
 
-	// Live registries (case-preserving for actions, lower for directives).
-	liveDirectives := map[string]struct{}{}
-	for _, d := range registeredDirectiveTypes(t, root) {
-		liveDirectives[d] = struct{}{}
-	}
-	// Layout-block closers and well-known non-directive braces are not registry
-	// tokens; allow them so the stale check doesn't false-positive.
-	for _, ok := range []string{"/if", "/row", "/stack", "/tabs", "/callout", "stack", "tabs", "callout", "tab"} {
-		liveDirectives[ok] = struct{}{}
-	}
-
-	// Collect {token: ...} directive references used in the docs and ensure each is real.
-	dirRef := regexp.MustCompile(`\{([a-z_/]+):`)
 	err := filepath.WalkDir(refDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -191,14 +207,28 @@ func TestReferenceDocsHaveNoStaleTokens(t *testing.T) {
 		if rerr != nil {
 			return rerr
 		}
-		for _, m := range dirRef.FindAllStringSubmatch(string(data), -1) {
-			tok := m[1]
-			_, ok := liveDirectives[tok]
-			assert.True(t, ok, "doc %s references directive {%s:} that is not registered in parser.go", filepath.Base(path), tok)
+		prose := fencedCodeRe.ReplaceAll(data, nil)
+		for _, m := range staleDirectiveRe.FindAllString(string(prose), -1) {
+			assert.Fail(t, "stale page directive found outside a fenced code block",
+				"%s references %q — the page directive system was removed in #69", filepath.Base(path), m)
 		}
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// TestReferenceDocsDoNotReferencePageSystem guards against the retired page
+// directive syntax and its render entry point creeping back into the docs
+// now that docs/reference/pages.md is gone. It does not forbid mentioning
+// retired tool names in prose (notebooks.md explains "there is no
+// create_page/list_pages tool" on purpose, documenting the absence).
+func TestReferenceDocsDoNotReferencePageSystem(t *testing.T) {
+	root := repoRoot(t)
+	docs := readReferenceDocs(t, root)
+	for _, stale := range []string{"renderpagecontent", "{table:}", "{chart:}", "{metric:}"} {
+		assert.NotContains(t, docs, stale,
+			"docs/reference/ references the retired page system (%q) — #69 removed it", stale)
+	}
 }
 
 // TestEntryPointsCrossLinkReference asserts README and CLAUDE.md link to the
@@ -209,23 +239,6 @@ func TestEntryPointsCrossLinkReference(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(root, entry))
 		require.NoError(t, err, "%s must exist", entry)
 		assert.Contains(t, strings.ToLower(string(data)), "docs/reference",
-			"%s should cross-link the v1.0 reference docs (docs/reference/...)", entry)
+			"%s should cross-link the reference docs (docs/reference/...)", entry)
 	}
 }
-
-// sortedDedupe is a small helper kept for diagnostics in failing runs.
-func sortedDedupe(in []string) []string {
-	seen := map[string]struct{}{}
-	var out []string
-	for _, s := range in {
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	return out
-}
-
-var _ = sortedDedupe

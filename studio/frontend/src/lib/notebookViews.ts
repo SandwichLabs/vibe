@@ -1,0 +1,126 @@
+// notebookViews — what each notebook sql-cell view needs from a query
+// result, and whether a given result actually provides it. Ported from
+// schoolwork-workspace's src/notebook/views.js: same four views, same rules,
+// so the picker's hints, the "why is this greyed out" tooltips, the mismatch
+// message, and the auto-fit on first run all tell the same story the prior
+// art did.
+
+export type ViewKind = 'table' | 'bar' | 'line' | 'stat'
+
+export const VIEWS: ViewKind[] = ['table', 'bar', 'line', 'stat']
+
+export const VIEW_LABELS: Record<ViewKind, string> = { table: 'TABLE', bar: 'BARS', line: 'LINE', stat: 'STAT' }
+
+// The A2UI component type a view synthesizes into when a sql cell's result
+// is rendered (#67's one renderer, shared by user cells and agent
+// dashboards alike).
+export const VIEW_COMPONENT: Record<ViewKind, string> = {
+  table: 'table', bar: 'barChart', line: 'lineChart', stat: 'stat',
+}
+
+export const VIEW_HINTS: Record<ViewKind, string> = {
+  table: 'every column, as rows',
+  bar: 'a label column, then a number — one bar per row',
+  line: 'an ordered label column, then a number — good for terms or dates',
+  stat: 'one number: the first column of the first row',
+}
+
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v)
+}
+
+export interface Shape {
+  cols: string[]
+  numeric: string[]
+  label: string[]
+  rowCount: number
+  firstDistinct: boolean
+}
+
+/**
+ * Describe a result set (column-array + row-array, RunA2UIQuery's shape):
+ * which columns hold numbers, which hold labels. Judged from the rows
+ * rather than a declared type, because that is what the renderer actually
+ * meets.
+ */
+export function describeShape(columns: string[], rows: any[][]): Shape {
+  const cols = columns.length ? columns : (rows[0] ? rows[0].map((_, i) => String(i)) : [])
+  const numeric: string[] = []
+  const label: string[] = []
+  const colIndex = new Map(cols.map((c, i) => [c, i]))
+  for (const c of cols) {
+    const i = colIndex.get(c)!
+    const sample = rows.find((r) => r[i] !== null && r[i] !== undefined)
+    if (sample === undefined) { label.push(c); continue }
+    ;(isNum(sample[i]) ? numeric : label).push(c)
+  }
+  const firstIdx = 0
+  const seen = new Set(rows.map((r) => String(r[firstIdx])))
+  return {
+    cols,
+    numeric,
+    label,
+    rowCount: rows.length,
+    firstDistinct: rows.length > 0 && seen.size === rows.length,
+  }
+}
+
+export interface ViewFit {
+  ok: boolean
+  why?: string
+}
+
+/** Can `view` render this shape? */
+export function viewFit(view: ViewKind, shape: Shape): ViewFit {
+  const { cols, numeric, rowCount } = shape
+  if (cols.length === 0) return { ok: false, why: 'the query returned no columns' }
+
+  switch (view) {
+    case 'table':
+      return { ok: true }
+    case 'bar':
+    case 'line': {
+      if (numeric.length === 0) {
+        return { ok: false, why: `needs a numeric column — this query returns only text (${cols.join(', ')})` }
+      }
+      if (cols.length < 2) {
+        return { ok: false, why: 'needs two columns: something to label each point, then the number' }
+      }
+      return { ok: true }
+    }
+    case 'stat': {
+      if (rowCount === 0) return { ok: false, why: 'needs one row — this query returned none' }
+      if (rowCount > 1) {
+        return { ok: false, why: `shows a single number, but this query returns ${rowCount} rows — aggregate it, or add LIMIT 1` }
+      }
+      return { ok: true }
+    }
+    default:
+      return { ok: true }
+  }
+}
+
+const ORDERED_HINTS = ['date', 'day', 'week', 'month', 'year', 'term', 'window', 'period', 'time', 'quarter', 'season']
+
+function looksOrdered(name: string): boolean {
+  const n = String(name).toLowerCase()
+  return ORDERED_HINTS.some((h) => n.includes(h))
+}
+
+/**
+ * The view that suits a result best, used only for cells whose view a
+ * person has not pinned. Deliberately conservative: prefers TABLE whenever
+ * a chart would be a guess, because a wrong chart is worse than an honest
+ * table.
+ */
+export function bestView(shape: Shape): ViewKind {
+  const { cols, numeric, rowCount, firstDistinct } = shape
+  if (rowCount === 1 && cols.length === 1 && numeric.length === 1) return 'stat'
+
+  const CHARTABLE_ROWS = 25
+  if (cols.length === 2 && numeric.includes(cols[1]) && rowCount > 1
+      && rowCount <= CHARTABLE_ROWS && firstDistinct) {
+    return looksOrdered(cols[0]) ? 'line' : 'bar'
+  }
+  return 'table'
+}

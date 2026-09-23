@@ -9,9 +9,10 @@ import (
 
 var dumpCmd = &cobra.Command{
 	Use:   "dump <file>",
-	Short: "Dump schema and pages to stdout",
-	Long: `Dump the internal schema and page contents of a .vibe file to stdout
-for debugging and backup purposes.`,
+	Short: "Dump schema, notebooks, and skills to stdout",
+	Long: `Dump the internal schema, notebooks, skills, named queries, and any
+unmigrated legacy pages of a .vibe file to stdout for debugging and backup
+purposes.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]
@@ -54,25 +55,49 @@ for debugging and backup purposes.`,
 			return fmt.Errorf("failed to iterate schema: %w", err)
 		}
 
-		// Dump pages.
-		fmt.Fprintln(out, "\n-- Pages")
-		fmt.Fprintln(out, "-- =====")
-		pageRows, err := db.Query("SELECT id, title, page_type, content FROM _vibe_pages ORDER BY sort_order, title;")
+		// Dump notebooks (#66 — the primary content surface, replacing pages).
+		fmt.Fprintln(out, "\n-- Notebooks")
+		fmt.Fprintln(out, "-- =========")
+		nbRows, err := db.Query("SELECT id, title, cells FROM _vibe_notebooks ORDER BY title;")
 		if err != nil {
-			return fmt.Errorf("failed to query pages: %w", err)
+			return fmt.Errorf("failed to query notebooks: %w", err)
 		}
-		defer pageRows.Close()
+		defer nbRows.Close()
 
-		for pageRows.Next() {
-			var id, title, pageType, content string
-			if err := pageRows.Scan(&id, &title, &pageType, &content); err != nil {
-				return fmt.Errorf("failed to scan page: %w", err)
+		for nbRows.Next() {
+			var id, title, cellsJSON string
+			if err := nbRows.Scan(&id, &title, &cellsJSON); err != nil {
+				return fmt.Errorf("failed to scan notebook: %w", err)
 			}
-			fmt.Fprintf(out, "\n-- Page: %s (%s, type=%s)\n", title, id, pageType)
-			fmt.Fprintln(out, content)
+			fmt.Fprintf(out, "\n-- Notebook: %s (%s)\n%s\n", title, id, cellsJSON)
 		}
-		if err := pageRows.Err(); err != nil {
-			return fmt.Errorf("failed to iterate pages: %w", err)
+		if err := nbRows.Err(); err != nil {
+			return fmt.Errorf("failed to iterate notebooks: %w", err)
+		}
+
+		// Dump skills (#62 — user/import-authored; built-ins are embedded in
+		// the binary, not stored per-file, so they aren't dumped here).
+		fmt.Fprintln(out, "\n-- Skills")
+		fmt.Fprintln(out, "-- ======")
+		skillRows, err := db.Query("SELECT name, description, instructions, table_name, source FROM _vibe_skills ORDER BY name;")
+		if err != nil {
+			return fmt.Errorf("failed to query skills: %w", err)
+		}
+		defer skillRows.Close()
+
+		for skillRows.Next() {
+			var name, description, instructions, tableName, source string
+			if err := skillRows.Scan(&name, &description, &instructions, &tableName, &source); err != nil {
+				return fmt.Errorf("failed to scan skill: %w", err)
+			}
+			fmt.Fprintf(out, "\n-- Skill: %s (source=%s", name, source)
+			if tableName != "" {
+				fmt.Fprintf(out, ", table=%s", tableName)
+			}
+			fmt.Fprintf(out, ")\n-- %s\n%s\n", description, instructions)
+		}
+		if err := skillRows.Err(); err != nil {
+			return fmt.Errorf("failed to iterate skills: %w", err)
 		}
 
 		// Dump named queries.
@@ -93,6 +118,29 @@ for debugging and backup purposes.`,
 		}
 		if err := queryRows.Err(); err != nil {
 			return fmt.Errorf("failed to iterate queries: %w", err)
+		}
+
+		// Dump any legacy pages that have not yet been migrated to a notebook
+		// (info opens read-only, so MigrateOnOpen never runs — see its doc
+		// comment). A fully-migrated file has none of these.
+		fmt.Fprintln(out, "\n-- Legacy pages (unmigrated)")
+		fmt.Fprintln(out, "-- =========================")
+		pageRows, err := db.Query("SELECT id, title, page_type, content FROM _vibe_pages WHERE migrated_to = '' ORDER BY sort_order, title;")
+		if err != nil {
+			return fmt.Errorf("failed to query pages: %w", err)
+		}
+		defer pageRows.Close()
+
+		for pageRows.Next() {
+			var id, title, pageType, content string
+			if err := pageRows.Scan(&id, &title, &pageType, &content); err != nil {
+				return fmt.Errorf("failed to scan page: %w", err)
+			}
+			fmt.Fprintf(out, "\n-- Page: %s (%s, type=%s)\n", title, id, pageType)
+			fmt.Fprintln(out, content)
+		}
+		if err := pageRows.Err(); err != nil {
+			return fmt.Errorf("failed to iterate pages: %w", err)
 		}
 
 		return nil

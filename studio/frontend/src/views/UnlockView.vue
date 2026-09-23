@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
+import { flushAll } from '../composables/usePendingSaves'
+import { askConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{ initialFile?: string }>()
 const emit = defineEmits<{ 'file-opened': [] }>()
@@ -69,6 +71,23 @@ async function openFile() {
   loading.value = true
   error.value = ''
   try {
+    // Defensive completeness (review fix, step 4a round 2 #1): by the time
+    // this view is reachable the previous file's views are already
+    // unmounted (and therefore already unregistered from the pending-save
+    // registry) in this app's architecture, but flushing here too costs
+    // nothing and closes off any future path that opens a new file without
+    // going through AppShell's own closeFile flush first.
+    const { failed } = await flushAll()
+    if (failed.length > 0) {
+      // Round 3 review fix: don't silently proceed past a failed flush.
+      const first = failed[0]
+      const proceed = await askConfirm({
+        title: 'Unsaved notebook',
+        message: `A notebook couldn't be saved: ${first.error}. Close anyway?`,
+        variant: 'destructive',
+      })
+      if (!proceed) return // the finally below still resets loading
+    }
     await window.go.main.App.OpenFile(filePath.value, passphrase.value)
     emit('file-opened')
   } catch (e: any) {
@@ -90,6 +109,22 @@ async function createFile() {
   loading.value = true
   error.value = ''
   try {
+    // Same reasoning as openFile() above (review fix): flush any pending
+    // notebook save from whatever file was open before switching to this
+    // new/template one, so it can never land in the new container after
+    // the switch (the backend's SaveNotebook session-token check is the
+    // hard guarantee; this flush is the first line of defense that avoids
+    // ever tripping it in the normal UI flow).
+    const { failed } = await flushAll()
+    if (failed.length > 0) {
+      const first = failed[0]
+      const proceed = await askConfirm({
+        title: 'Unsaved notebook',
+        message: `A notebook couldn't be saved: ${first.error}. Continue anyway?`,
+        variant: 'destructive',
+      })
+      if (!proceed) return
+    }
     if (selectedTemplate.value) {
       await window.go.main.App.CreateFromTemplate(filePath.value, passphrase.value, selectedTemplate.value)
     } else {

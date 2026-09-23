@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // AddColumn adds a new column to an existing table (P2.4 §2.2). DuckDB-native
@@ -30,7 +32,7 @@ func (a *App) AddColumn(table, column, colType string) error {
 		return fmt.Errorf("DuckDB not available")
 	}
 
-	query := fmt.Sprintf("ALTER TABLE %q ADD COLUMN %q %s", table, column, colType)
+	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", engine.QuoteIdent(table), engine.QuoteIdent(column), colType)
 	if _, err := ddb.Exec(query); err != nil {
 		return fmt.Errorf("failed to add column %q to %q: %w", column, table, err)
 	}
@@ -62,7 +64,7 @@ func (a *App) AddIndex(table, indexName string, columns []string, unique bool) e
 		if !isValidIdentifier(col) {
 			return fmt.Errorf("invalid column name %q", col)
 		}
-		quoted = append(quoted, fmt.Sprintf("%q", col))
+		quoted = append(quoted, engine.QuoteIdent(col))
 	}
 
 	ddb := a.container.DuckDBDB()
@@ -74,7 +76,7 @@ func (a *App) AddIndex(table, indexName string, columns []string, unique bool) e
 	if unique {
 		unq = "UNIQUE "
 	}
-	query := fmt.Sprintf("CREATE %sINDEX %q ON %q (%s)", unq, indexName, table, strings.Join(quoted, ", "))
+	query := fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)", unq, engine.QuoteIdent(indexName), engine.QuoteIdent(table), strings.Join(quoted, ", "))
 	if _, err := ddb.Exec(query); err != nil {
 		return fmt.Errorf("failed to create index %q on %q: %w", indexName, table, err)
 	}
@@ -102,7 +104,7 @@ func (a *App) DropColumn(table, column string) error {
 		return fmt.Errorf("DuckDB not available")
 	}
 
-	query := fmt.Sprintf("ALTER TABLE %q DROP COLUMN %q", table, column)
+	query := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", engine.QuoteIdent(table), engine.QuoteIdent(column))
 	if err := execWithoutIndexes(ddb, table, column, query); err != nil {
 		return fmt.Errorf("failed to drop column %q from %q: %w", column, table, err)
 	}
@@ -134,7 +136,7 @@ func (a *App) AlterColumnType(table, column, newType string) error {
 		return fmt.Errorf("DuckDB not available")
 	}
 
-	query := fmt.Sprintf("ALTER TABLE %q ALTER COLUMN %q TYPE %s", table, column, newType)
+	query := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", engine.QuoteIdent(table), engine.QuoteIdent(column), newType)
 	if err := execWithoutIndexes(ddb, table, column, query); err != nil {
 		return fmt.Errorf("failed to alter column %q on %q to %q: %w", column, table, newType, err)
 	}
@@ -185,7 +187,7 @@ func execWithoutIndexes(ddb indexDDLer, table, column, ddl string) error {
 	rows.Close()
 
 	for _, idx := range indexes {
-		if _, err := ddb.Exec(fmt.Sprintf("DROP INDEX %q", idx.name)); err != nil {
+		if _, err := ddb.Exec(fmt.Sprintf("DROP INDEX %s", engine.QuoteIdent(idx.name))); err != nil {
 			return fmt.Errorf("failed to drop index %q: %w", idx.name, err)
 		}
 	}
@@ -215,7 +217,7 @@ func execWithoutIndexes(ddb indexDDLer, table, column, ddl string) error {
 // the given column name (quoted), used to decide whether a recreate failure is
 // expected after a DROP COLUMN.
 func indexReferencesColumn(idxSQL, column string) bool {
-	return strings.Contains(idxSQL, fmt.Sprintf("%q", column)) ||
+	return strings.Contains(idxSQL, engine.QuoteIdent(column)) ||
 		strings.Contains(strings.ToLower(idxSQL), strings.ToLower(column))
 }
 

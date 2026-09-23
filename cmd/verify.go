@@ -51,8 +51,8 @@ schema validation, and metadata verification.`,
 		// 2. Check required _vibe_ tables exist.
 		requiredTables := []string{
 			"_vibe_meta", "_vibe_pages", "_vibe_queries", "_vibe_components",
-			"_vibe_sources", "_vibe_agent_config", "_vibe_secrets",
-			"_vibe_assets", "_vibe_duckdb",
+			"_vibe_agent_config", "_vibe_secrets",
+			"_vibe_assets", "_vibe_duckdb", "_vibe_skills", "_vibe_notebooks",
 		}
 		fmt.Fprint(out, "Schema tables... ")
 		var missingTables []string

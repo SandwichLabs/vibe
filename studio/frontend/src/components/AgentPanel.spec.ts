@@ -61,6 +61,27 @@ describe('AgentPanel (W0.5)', () => {
     expect(wrapper.text()).toContain('connection refused')
   })
 
+  it('renders a denied/errored tool call as an error chip, not a done checkmark', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'create_table', input: '{"name":"widgets"}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'create_table', output: 'method "create_table" (category "schema") is not allowed in read-write mode', isError: true })
+      streamHandler!({ turnId, kind: 'final', text: 'I could not create that table.' })
+      return { text: 'I could not create that table.', steps: [] }
+    })
+    const wrapper = await mountPanel()
+
+    await wrapper.find('[data-testid="agent-input"]').setValue('create a widgets table')
+    await wrapper.find('[data-testid="agent-send"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="chip-done"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chip-running"]').exists()).toBe(false)
+    const errorChip = wrapper.find('[data-testid="chip-error"]')
+    expect(errorChip.exists()).toBe(true)
+    const chip = wrapper.find('[data-testid="agent-tool-chip"]')
+    expect(chip.classes()).toContain('tool-chip-error')
+  })
+
   it('pins the current screen as context', async () => {
     setBinding(async (turnId) => { streamHandler!({ turnId, kind: 'final', text: 'ok' }); return { text: 'ok', steps: [] } })
     const wrapper = await mountPanel()

@@ -10,7 +10,7 @@ package cmd
 // Acceptance behavior asserted here:
 //   - `vibe init --from order-entry` builds from the bundled template registry
 //     (P6.6): the file is created, opens, and contains the order-entry tables
-//     + at least one form (asserted via reopen).
+//     + a starter notebook (asserted via reopen).
 //   - `vibe init --from <path.vibe>` still clones an existing file as before
 //     (name lookup first, else treat as a path — deterministic disambiguation).
 //   - `vibe init --from <unknown-name>` returns a clear, actionable error that
@@ -27,7 +27,7 @@ import (
 
 // TestInitCommand_FromBundledTemplate asserts `--from order-entry` seeds the
 // registered bundled template (not a file clone), producing an openable .vibe
-// that contains the order-entry relational tables and at least one form.
+// that contains the order-entry relational tables and a starter notebook.
 func TestInitCommand_FromBundledTemplate(t *testing.T) {
 	origReader := readPasswordFunc
 	readPasswordFunc = mockReadPassword("testpass123")
@@ -59,10 +59,11 @@ func TestInitCommand_FromBundledTemplate(t *testing.T) {
 		assert.Greater(t, n, 0, "table %q should have sample data", table)
 	}
 
-	// At least one form was seeded from the template.
-	var formCount int
-	require.NoError(t, c.SQLiteDB().QueryRow("SELECT COUNT(*) FROM _vibe_forms").Scan(&formCount))
-	assert.GreaterOrEqual(t, formCount, 1, "order-entry template should seed at least one form")
+	// Exactly one starter notebook was seeded from the template (#68: forms
+	// were dropped, templates are now tables + seed data + a notebook).
+	var notebookCount int
+	require.NoError(t, c.SQLiteDB().QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&notebookCount))
+	assert.Equal(t, 1, notebookCount, "order-entry template should seed exactly one starter notebook")
 }
 
 // TestInitCommand_FromPathStillClones asserts the existing clone-from-file path

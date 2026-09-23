@@ -1,29 +1,23 @@
 <script setup lang="ts">
-// P3.10: Studio Home / Dashboard. The body is rendered by the SAME page
-// pipeline used by the page editor/preview — it renders the `_dashboard`
-// system page (seeded by the container migration) via RenderPageContent, so the
-// home screen is data-driven (live {metric:}/{table:} directives executed on
-// DuckDB) rather than carrying hardcoded stats from GetDashboard().
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+// Studio Home / Dashboard. #69 retired the page system (and with it, the
+// `_dashboard` system page + RenderPageContent pipeline this view used to
+// render through) — the home screen is now backed directly by GetDashboard's
+// live table/notebook/query counts, refreshed on "data:changed" the same way
+// the old page-rendered version was.
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
-
-// Stable id of the seeded `_dashboard` system page (see container schema
-// DashboardPageID). The page pipeline renders this through the standard
-// SQL-block + directive path.
-const DASHBOARD_PAGE_ID = '_dashboard'
 
 const router = useRouter()
 const title = ref('Dashboard')
 const description = ref('')
-const rendered = ref('')
+const tableCount = ref(0)
+const notebookCount = ref(0)
+const queryCount = ref(0)
 const loading = ref(true)
 const errorMessage = ref('')
 
-// Generation counter: a newer load() supersedes any in-flight one. The Go side
-// cancels the older render, whose rejection ("context canceled") must not
-// clobber the fresh result.
 let loadGen = 0
 
 async function load() {
@@ -31,41 +25,33 @@ async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    // File metadata still comes from GetFileInfo for the crumb/lead; the BODY
-    // is rendered through the page pipeline.
-    const info = await window.go.main.App.GetFileInfo()
+    const d = await window.go.main.App.GetDashboard()
     if (gen !== loadGen) return
-    title.value = info?.title || 'Dashboard'
-    description.value = info?.description || ''
-  } catch {
-    /* metadata is best-effort */
-  }
-  try {
-    const html = await window.go.main.App.RenderPageContent(DASHBOARD_PAGE_ID, {})
-    if (gen !== loadGen) return
-    rendered.value = html
+    title.value = d?.title || 'Dashboard'
+    description.value = d?.description || ''
+    tableCount.value = d?.table_count ?? 0
+    notebookCount.value = d?.notebook_count ?? 0
+    queryCount.value = d?.query_count ?? 0
   } catch (e: unknown) {
     if (gen !== loadGen) return
-    rendered.value = ''
     errorMessage.value = String(e)
   }
   loading.value = false
-  await nextTick()
 }
 
-// The Wails event bridge only exists inside the real runtime — guard so the
-// view still mounts in jsdom specs and the bare Vite dev server.
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
+
+let unsubDataChanged: (() => void) | null = null
 
 onMounted(() => {
   load()
-  // Re-render the live stats when the data underneath changes (imports, table
-  // create/drop) — previously the dashboard showed stale counts until a manual
-  // reload.
-  if (hasWailsRuntime()) EventsOn('data:changed', load)
+  // Re-fetch the live counts when the data underneath changes (imports,
+  // table create/drop, notebook edits) so the dashboard never shows stale
+  // numbers until a manual reload.
+  if (hasWailsRuntime()) unsubDataChanged = EventsOn('data:changed', load)
 })
 onUnmounted(() => {
-  if (hasWailsRuntime()) EventsOff('data:changed')
+  unsubDataChanged?.()
 })
 </script>
 
@@ -80,8 +66,8 @@ onUnmounted(() => {
         <button class="btn" @click="router.push('/import')">
           <Icon name="download" :size="16" /> Import CSV
         </button>
-        <button class="btn btn-primary" @click="router.push('/pages?new=1')">
-          <Icon name="plus" :size="16" /> New page
+        <button class="btn btn-primary" @click="router.push('/notebooks?new=1')">
+          <Icon name="plus" :size="16" /> New notebook
         </button>
       </div>
     </div>
@@ -96,26 +82,32 @@ onUnmounted(() => {
 
     <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
 
-    <!-- Dashboard body, rendered through the page pipeline (no hardcoded stats). -->
-    <!-- eslint-disable-next-line vue/no-v-html -->
-    <div
-      v-else
-      class="dashboard-rendered vibe-content prose"
-      data-testid="dashboard-rendered"
-      v-html="rendered"
-    ></div>
+    <div v-else class="dashboard-stats" data-testid="dashboard-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 8px;">
+      <div class="card" style="padding: 20px;">
+        <div class="sh-meta">Tables</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ tableCount }}</div>
+      </div>
+      <div class="card" style="padding: 20px;">
+        <div class="sh-meta">Notebooks</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ notebookCount }}</div>
+      </div>
+      <div class="card" style="padding: 20px;">
+        <div class="sh-meta">Saved queries</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ queryCount }}</div>
+      </div>
+    </div>
 
     <div class="sec-title" style="margin-top: 32px;">
       <h2>Quick actions</h2>
       <span class="label">Jump back in</span>
     </div>
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/pages')">
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/notebooks')">
         <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
-          <Icon name="fileText" :size="22" />
+          <Icon name="layers" :size="22" />
         </div>
-        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Pages</div>
-        <div class="sh-meta" style="margin-top: 4px;">Author markdown & HTML pages</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Notebooks</div>
+        <div class="sh-meta" style="margin-top: 4px;">SQL, markdown & A2UI cells</div>
       </div>
       <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-science);" @click="router.push('/tables')">
         <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">

@@ -1,3 +1,6 @@
+> **SUPERSEDED (2026-09-22).** The page-directive rendering model this plan extends is being replaced by Notebooks (#66) and A2UI artifacts (#67). Its shipped work units remain in the code until then; do not add directives.
+> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+
 # Evidence Parity Plan
 
 Goal: Bring Vibe's page/dashboard rendering to feature parity with Evidence's core authoring model. DuckDB-only engine. Markdown editor without autocomplete.

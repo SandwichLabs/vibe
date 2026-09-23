@@ -4,16 +4,16 @@ package container
 // that seeds a fresh .vibe with a complete little relational application: DuckDB
 // user tables (with inline foreign keys so referential integrity is actually
 // enforced — DuckDB cannot ALTER a FK onto an existing table, so the constraint
-// is declared inline at CREATE time), sample data, Access-style metadata
-// (_vibe_relationships, _vibe_field_meta, _vibe_forms, _vibe_nav), and a
-// Switchboard nav entry. These are the modern stand-ins for the Access "database
-// wizard" starter databases (Contacts, Inventory, Order Entry, ...).
+// is declared inline at CREATE time), sample data, and one starter notebook
+// (#68: forms/switchboard/macros/nav/reports were dropped from every template
+// along with the Access application layer; each template is now just tables +
+// seed data + a notebook).
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"time"
+
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 )
 
 // templateTable describes one DuckDB user-data table to create for a template.
@@ -25,67 +25,15 @@ type templateTable struct {
 	Inserts   []string
 }
 
-// templateRelationship mirrors a row of _vibe_relationships. The FK itself is
-// declared inline in the child table's CreateSQL; this is the Access-style
-// metadata record describing the link.
-type templateRelationship struct {
-	ParentTable, ParentColumn string
-	ChildTable, ChildColumn   string
-}
-
-// templateFieldMeta is a single _vibe_field_meta row (a human caption / control
-// type for a bound column).
-type templateFieldMeta struct {
-	Table, Column, Caption, ControlType string
-	SortOrder                           int
-}
-
-// templateForm is a single _vibe_forms definition. Spec is marshalled to JSON.
-type templateForm struct {
-	ID, Title, Table, Archetype string
-	Spec                        formSpec
-}
-
-// templateNav is a single _vibe_nav switchboard entry.
-type templateNav struct {
-	ID, Label, ActionKind, TargetID string
-	SortOrder                       int
-}
-
-// formSpec is the minimal JSON form spec persisted into _vibe_forms.spec. It is a
-// container-local mirror of schema.FormSpec (container cannot import internal/schema,
-// which imports container) carrying just what the starter forms need.
-type formSpec struct {
-	ID        string       `json:"id"`
-	Title     string       `json:"title"`
-	Table     string       `json:"table"`
-	Archetype string       `json:"archetype"`
-	Fields    []formField  `json:"fields"`
-	Subform   *formSubform `json:"subform,omitempty"`
-}
-
-type formField struct {
-	Name        string `json:"name"`
-	Caption     string `json:"caption"`
-	ControlType string `json:"control_type"`
-}
-
-type formSubform struct {
-	ChildTable string      `json:"child_table"`
-	ChildKey   string      `json:"child_key"`
-	ParentKey  string      `json:"parent_key"`
-	Fields     []formField `json:"fields"`
-}
-
-// template is a complete starter-app definition.
+// template is a complete starter-app definition: tables + seed data, plus a
+// starter notebook built directly as a notebooks.Notebook (built via
+// internal/notebooks so it passes Coerce the same way any agent- or
+// user-authored notebook does).
 type template struct {
-	Name          string
-	Title         string
-	Tables        []templateTable
-	Relationships []templateRelationship
-	FieldMeta     []templateFieldMeta
-	Forms         []templateForm
-	Nav           []templateNav
+	Name   string
+	Title  string
+	Tables []templateTable
+	Book   notebooks.Notebook
 }
 
 // templateRegistry holds every registered starter template, keyed by name.
@@ -96,8 +44,8 @@ var templateRegistry = map[string]template{
 	"training-registrations": trainingRegistrationsTemplate(),
 }
 
-// ListTemplates returns the names of all registered Access-style starter
-// templates that can be passed to WithTemplate.
+// ListTemplates returns the names of all registered starter templates that can
+// be passed to WithTemplate.
 func ListTemplates() []string {
 	names := make([]string, 0, len(templateRegistry))
 	for name := range templateRegistry {
@@ -118,7 +66,7 @@ func TemplateDescription(name string) (string, bool) {
 }
 
 // applyTemplate seeds the named starter template into a freshly created
-// container: DuckDB user tables + sample data, and the Access-style metadata in
+// container: DuckDB user tables + sample data, and a starter notebook in
 // SQLCipher. It returns a wrapped error if the template name is unknown.
 func applyTemplate(c *Container, name string) error {
 	tmpl, ok := templateRegistry[name]
@@ -131,8 +79,8 @@ func applyTemplate(c *Container, name string) error {
 	if err := seedTemplateTables(c.duckDB.db, tmpl); err != nil {
 		return fmt.Errorf("failed to seed template %q tables: %w", name, err)
 	}
-	if err := seedTemplateMetadata(c.sqliteDB, tmpl); err != nil {
-		return fmt.Errorf("failed to seed template %q metadata: %w", name, err)
+	if _, _, err := notebooks.Insert(c.sqliteDB, tmpl.Book); err != nil {
+		return fmt.Errorf("failed to seed template %q notebook: %w", name, err)
 	}
 	return nil
 }
@@ -153,75 +101,38 @@ func seedTemplateTables(ddb *sql.DB, tmpl template) error {
 	return nil
 }
 
-// seedTemplateMetadata writes the relationships, field metadata, forms, and nav
-// entries into SQLCipher.
-func seedTemplateMetadata(sdb *sql.DB, tmpl template) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+// sqlCell builds an already-populated SQL notebook cell — a template-building
+// convenience wrapping notebooks.NewCell, which cannot itself fail for
+// CellSQL.
+func sqlCell(sql, view, label string, pinned bool) notebooks.Cell {
+	c, _ := notebooks.NewCell(notebooks.CellSQL)
+	c.Source = sql
+	c.View = view
+	c.ViewPinned = pinned
+	c.Label = label
+	return c
+}
 
-	tx, err := sdb.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin template metadata transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	for i, rel := range tmpl.Relationships {
-		id := fmt.Sprintf("%s_rel_%d", tmpl.Name, i+1)
-		if _, err := tx.Exec(
-			`INSERT INTO _vibe_relationships
-				(id, parent_table, parent_column, child_table, child_column,
-				 on_delete, on_update, enforce_integrity, created_at)
-			 VALUES (?, ?, ?, ?, ?, 'RESTRICT', 'NO ACTION', 1, ?);`,
-			id, rel.ParentTable, rel.ParentColumn, rel.ChildTable, rel.ChildColumn, now,
-		); err != nil {
-			return fmt.Errorf("failed to insert relationship %q: %w", id, err)
-		}
-	}
-
-	for _, fm := range tmpl.FieldMeta {
-		if _, err := tx.Exec(
-			`INSERT INTO _vibe_field_meta
-				(table_name, column_name, caption, control_type, sort_order)
-			 VALUES (?, ?, ?, ?, ?);`,
-			fm.Table, fm.Column, fm.Caption, fm.ControlType, fm.SortOrder,
-		); err != nil {
-			return fmt.Errorf("failed to insert field meta %s.%s: %w", fm.Table, fm.Column, err)
-		}
-	}
-
-	for _, f := range tmpl.Forms {
-		blob, err := json.Marshal(f.Spec)
-		if err != nil {
-			return fmt.Errorf("failed to marshal form spec %q: %w", f.ID, err)
-		}
-		if _, err := tx.Exec(
-			`INSERT INTO _vibe_forms
-				(id, title, table_name, archetype, version, spec, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, 1, ?, ?, ?);`,
-			f.ID, f.Title, f.Table, f.Archetype, string(blob), now, now,
-		); err != nil {
-			return fmt.Errorf("failed to insert form %q: %w", f.ID, err)
-		}
-	}
-
-	for _, n := range tmpl.Nav {
-		if _, err := tx.Exec(
-			`INSERT INTO _vibe_nav (id, parent_id, label, action_kind, target_id, sort_order)
-			 VALUES (?, '', ?, ?, ?, ?);`,
-			n.ID, n.Label, n.ActionKind, n.TargetID, n.SortOrder,
-		); err != nil {
-			return fmt.Errorf("failed to insert nav entry %q: %w", n.ID, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit template metadata transaction: %w", err)
-	}
-	return nil
+// markdownCell builds an already-populated markdown notebook cell.
+func markdownCell(source string) notebooks.Cell {
+	c, _ := notebooks.NewCell(notebooks.CellMarkdown)
+	c.Source = source
+	return c
 }
 
 // --- Template builders ---
 
 func contactsTemplate() template {
+	nb := notebooks.Empty("Contacts")
+	nb.Cells = []notebooks.Cell{
+		markdownCell("# Contacts\n\nA starter workspace: a contacts list plus a running log of notes per contact."),
+		sqlCell(`SELECT * FROM contacts ORDER BY name`, "table", "Contacts", true),
+		sqlCell(
+			`SELECT c.name AS contact, n.note, n.noted_at FROM contact_notes n JOIN contacts c ON c.id = n.contact_id ORDER BY n.noted_at DESC`,
+			"table", "Recent notes", true,
+		),
+	}
+
 	return template{
 		Name:  "contacts",
 		Title: "Contacts",
@@ -258,45 +169,22 @@ func contactsTemplate() template {
 				},
 			},
 		},
-		Relationships: []templateRelationship{
-			{ParentTable: "contacts", ParentColumn: "id", ChildTable: "contact_notes", ChildColumn: "contact_id"},
-		},
-		FieldMeta: []templateFieldMeta{
-			{Table: "contacts", Column: "name", Caption: "Full Name", ControlType: "text", SortOrder: 1},
-			{Table: "contacts", Column: "email", Caption: "Email", ControlType: "text", SortOrder: 2},
-			{Table: "contacts", Column: "phone", Caption: "Phone", ControlType: "text", SortOrder: 3},
-			{Table: "contacts", Column: "company", Caption: "Company", ControlType: "text", SortOrder: 4},
-		},
-		Forms: []templateForm{
-			{
-				ID: "contacts_form", Title: "Contacts", Table: "contacts", Archetype: "master_detail",
-				Spec: formSpec{
-					ID: "contacts_form", Title: "Contacts", Table: "contacts", Archetype: "master_detail",
-					Fields: []formField{
-						{Name: "name", Caption: "Full Name", ControlType: "text"},
-						{Name: "email", Caption: "Email", ControlType: "text"},
-						{Name: "phone", Caption: "Phone", ControlType: "text"},
-						{Name: "company", Caption: "Company", ControlType: "text"},
-					},
-					Subform: &formSubform{
-						ChildTable: "contact_notes",
-						ChildKey:   "contact_id",
-						ParentKey:  "id",
-						Fields: []formField{
-							{Name: "note", Caption: "Note", ControlType: "text"},
-							{Name: "noted_at", Caption: "Date", ControlType: "date"},
-						},
-					},
-				},
-			},
-		},
-		Nav: []templateNav{
-			{ID: "contacts_nav", Label: "Contacts", ActionKind: "open_form", TargetID: "contacts_form", SortOrder: 1},
-		},
+		Book: nb,
 	}
 }
 
 func inventoryTemplate() template {
+	nb := notebooks.Empty("Inventory")
+	nb.Cells = []notebooks.Cell{
+		markdownCell("# Inventory\n\nA starter workspace: suppliers and the products they supply, with current stock."),
+		sqlCell(`SELECT * FROM suppliers ORDER BY name`, "table", "Suppliers", true),
+		sqlCell(
+			`SELECT p.name, s.name AS supplier, p.price, p.stock FROM products p JOIN suppliers s ON s.id = p.supplier_id ORDER BY p.name`,
+			"table", "Products", true,
+		),
+		sqlCell(`SELECT name, stock FROM products ORDER BY stock ASC LIMIT 10`, "bar", "Lowest stock", true),
+	}
+
 	return template{
 		Name:  "inventory",
 		Title: "Inventory",
@@ -331,48 +219,25 @@ func inventoryTemplate() template {
 				},
 			},
 		},
-		Relationships: []templateRelationship{
-			{ParentTable: "suppliers", ParentColumn: "id", ChildTable: "products", ChildColumn: "supplier_id"},
-		},
-		FieldMeta: []templateFieldMeta{
-			{Table: "products", Column: "name", Caption: "Product Name", ControlType: "text", SortOrder: 1},
-			{Table: "products", Column: "supplier_id", Caption: "Supplier", ControlType: "lookup", SortOrder: 2},
-			{Table: "products", Column: "price", Caption: "Price", ControlType: "number", SortOrder: 3},
-			{Table: "products", Column: "stock", Caption: "In Stock", ControlType: "number", SortOrder: 4},
-			{Table: "suppliers", Column: "name", Caption: "Supplier Name", ControlType: "text", SortOrder: 1},
-		},
-		Forms: []templateForm{
-			{
-				ID: "products_form", Title: "Products", Table: "products", Archetype: "continuous",
-				Spec: formSpec{
-					ID: "products_form", Title: "Products", Table: "products", Archetype: "continuous",
-					Fields: []formField{
-						{Name: "name", Caption: "Product Name", ControlType: "text"},
-						{Name: "supplier_id", Caption: "Supplier", ControlType: "lookup"},
-						{Name: "price", Caption: "Price", ControlType: "number"},
-						{Name: "stock", Caption: "In Stock", ControlType: "number"},
-					},
-				},
-			},
-			{
-				ID: "suppliers_form", Title: "Suppliers", Table: "suppliers", Archetype: "columnar",
-				Spec: formSpec{
-					ID: "suppliers_form", Title: "Suppliers", Table: "suppliers", Archetype: "columnar",
-					Fields: []formField{
-						{Name: "name", Caption: "Supplier Name", ControlType: "text"},
-						{Name: "contact_email", Caption: "Contact Email", ControlType: "text"},
-					},
-				},
-			},
-		},
-		Nav: []templateNav{
-			{ID: "inventory_products_nav", Label: "Products", ActionKind: "open_form", TargetID: "products_form", SortOrder: 1},
-			{ID: "inventory_suppliers_nav", Label: "Suppliers", ActionKind: "open_form", TargetID: "suppliers_form", SortOrder: 2},
-		},
+		Book: nb,
 	}
 }
 
 func orderEntryTemplate() template {
+	nb := notebooks.Empty("Order Entry")
+	nb.Cells = []notebooks.Cell{
+		markdownCell("# Order Entry\n\nA starter workspace: customers, their orders, and the line items on each order."),
+		sqlCell(`SELECT * FROM customers ORDER BY name`, "table", "Customers", true),
+		sqlCell(
+			`SELECT o.id AS order_id, c.name AS customer, o.ordered_at, o.status FROM orders o JOIN customers c ON c.id = o.customer_id ORDER BY o.ordered_at DESC`,
+			"table", "Orders", true,
+		),
+		sqlCell(
+			`SELECT o.id AS order_id, i.product, i.quantity, i.price FROM order_items i JOIN orders o ON o.id = i.order_id ORDER BY o.id`,
+			"table", "Order line items", true,
+		),
+	}
+
 	return template{
 		Name:  "order-entry",
 		Title: "Order Entry",
@@ -421,47 +286,25 @@ func orderEntryTemplate() template {
 				},
 			},
 		},
-		Relationships: []templateRelationship{
-			{ParentTable: "customers", ParentColumn: "id", ChildTable: "orders", ChildColumn: "customer_id"},
-			{ParentTable: "orders", ParentColumn: "id", ChildTable: "order_items", ChildColumn: "order_id"},
-		},
-		FieldMeta: []templateFieldMeta{
-			{Table: "orders", Column: "customer_id", Caption: "Customer", ControlType: "lookup", SortOrder: 1},
-			{Table: "orders", Column: "ordered_at", Caption: "Order Date", ControlType: "date", SortOrder: 2},
-			{Table: "orders", Column: "status", Caption: "Status", ControlType: "text", SortOrder: 3},
-			{Table: "order_items", Column: "product", Caption: "Product", ControlType: "text", SortOrder: 1},
-			{Table: "order_items", Column: "quantity", Caption: "Qty", ControlType: "number", SortOrder: 2},
-		},
-		Forms: []templateForm{
-			{
-				ID: "order_entry_form", Title: "Order Entry", Table: "orders", Archetype: "master_detail",
-				Spec: formSpec{
-					ID: "order_entry_form", Title: "Order Entry", Table: "orders", Archetype: "master_detail",
-					Fields: []formField{
-						{Name: "customer_id", Caption: "Customer", ControlType: "lookup"},
-						{Name: "ordered_at", Caption: "Order Date", ControlType: "date"},
-						{Name: "status", Caption: "Status", ControlType: "text"},
-					},
-					Subform: &formSubform{
-						ChildTable: "order_items",
-						ChildKey:   "order_id",
-						ParentKey:  "id",
-						Fields: []formField{
-							{Name: "product", Caption: "Product", ControlType: "text"},
-							{Name: "quantity", Caption: "Qty", ControlType: "number"},
-							{Name: "price", Caption: "Price", ControlType: "number"},
-						},
-					},
-				},
-			},
-		},
-		Nav: []templateNav{
-			{ID: "order_entry_nav", Label: "Order Entry", ActionKind: "open_form", TargetID: "order_entry_form", SortOrder: 1},
-		},
+		Book: nb,
 	}
 }
 
 func trainingRegistrationsTemplate() template {
+	nb := notebooks.Empty("Training Registrations")
+	nb.Cells = []notebooks.Cell{
+		markdownCell("# Training Registrations\n\nA starter workspace: courses and who has registered for each."),
+		sqlCell(`SELECT * FROM courses ORDER BY title`, "table", "Courses", true),
+		sqlCell(
+			`SELECT c.title AS course, r.attendee, r.registered_at FROM registrations r JOIN courses c ON c.id = r.course_id ORDER BY r.registered_at`,
+			"table", "Registrations", true,
+		),
+		sqlCell(
+			`SELECT c.title, COUNT(r.id) AS registered FROM courses c LEFT JOIN registrations r ON r.course_id = c.id GROUP BY c.title ORDER BY c.title`,
+			"bar", "Registrations per course", true,
+		),
+	}
+
 	return template{
 		Name:  "training-registrations",
 		Title: "Training Registrations",
@@ -496,39 +339,6 @@ func trainingRegistrationsTemplate() template {
 				},
 			},
 		},
-		Relationships: []templateRelationship{
-			{ParentTable: "courses", ParentColumn: "id", ChildTable: "registrations", ChildColumn: "course_id"},
-		},
-		FieldMeta: []templateFieldMeta{
-			{Table: "courses", Column: "title", Caption: "Course Title", ControlType: "text", SortOrder: 1},
-			{Table: "courses", Column: "instructor", Caption: "Instructor", ControlType: "text", SortOrder: 2},
-			{Table: "registrations", Column: "course_id", Caption: "Course", ControlType: "lookup", SortOrder: 1},
-			{Table: "registrations", Column: "attendee", Caption: "Attendee", ControlType: "text", SortOrder: 2},
-		},
-		Forms: []templateForm{
-			{
-				ID: "course_registrations_form", Title: "Course Registrations", Table: "courses", Archetype: "master_detail",
-				Spec: formSpec{
-					ID: "course_registrations_form", Title: "Course Registrations", Table: "courses", Archetype: "master_detail",
-					Fields: []formField{
-						{Name: "title", Caption: "Course Title", ControlType: "text"},
-						{Name: "instructor", Caption: "Instructor", ControlType: "text"},
-						{Name: "seats", Caption: "Seats", ControlType: "number"},
-					},
-					Subform: &formSubform{
-						ChildTable: "registrations",
-						ChildKey:   "course_id",
-						ParentKey:  "id",
-						Fields: []formField{
-							{Name: "attendee", Caption: "Attendee", ControlType: "text"},
-							{Name: "registered_at", Caption: "Registered", ControlType: "date"},
-						},
-					},
-				},
-			},
-		},
-		Nav: []templateNav{
-			{ID: "training_nav", Label: "Course Registrations", ActionKind: "open_form", TargetID: "course_registrations_form", SortOrder: 1},
-		},
+		Book: nb,
 	}
 }

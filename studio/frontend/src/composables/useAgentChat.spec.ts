@@ -49,6 +49,23 @@ describe('useAgentChat (W0.5)', () => {
     expect(agent.steps[0].output).toBe('customers')
   })
 
+  it('marks a denied/errored tool call as status "error", not "done"', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'create_table', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'create_table', output: 'denied', isError: true })
+      streamHandler!({ turnId, kind: 'final', text: 'Cannot do that.' })
+      return { text: 'Cannot do that.', steps: [] }
+    })
+
+    const chat = useAgentChat()
+    await chat.send('create a table')
+
+    const agent = chat.messages.value[1]
+    expect(agent.steps).toHaveLength(1)
+    expect(agent.steps[0].status).toBe('error')
+    expect(agent.steps[0].output).toBe('denied')
+  })
+
   it('threads multi-turn history to the backend', async () => {
     const binding = setBinding(async (turnId) => {
       streamHandler!({ turnId, kind: 'final', text: 'reply' })
@@ -95,6 +112,126 @@ describe('useAgentChat (W0.5)', () => {
     const chat = useAgentChat()
     await chat.send('   ')
     expect(binding).not.toHaveBeenCalled()
+  })
+
+  // present_data (#67): a successful tool_done for present_data should parse
+  // its JSON output into a page the panel renders inline; a denied/failed
+  // call, or any other tool, must never populate `page`.
+  it('parses a successful present_data result into step.page', async () => {
+    const pageJSON = JSON.stringify({ title: 'Customers', components: [{ id: 'h', type: 'heading', text: 'Customers' }] })
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'present_data', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'present_data', output: pageJSON })
+      streamHandler!({ turnId, kind: 'final', text: 'Here you go.' })
+      return { text: 'Here you go.', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('show me customers')
+    const step = chat.messages.value[1].steps[0]
+    expect(step.page).toEqual({ title: 'Customers', components: [{ id: 'h', type: 'heading', text: 'Customers' }] })
+  })
+
+  it('does not set page for a denied present_data call', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'present_data', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'present_data', output: 'components[0].type: unknown type "pieChart"', isError: true })
+      streamHandler!({ turnId, kind: 'final', text: 'Sorry, that failed.' })
+      return { text: 'Sorry, that failed.', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('show me a pie chart')
+    const step = chat.messages.value[1].steps[0]
+    expect(step.status).toBe('error')
+    expect(step.page).toBeUndefined()
+  })
+
+  // #70 grounding check: a "verifying" event sets a verifying flag, cleared
+  // once the turn's own "final" event arrives.
+  it('sets verifying=true on a "verifying" event and clears it on "final"', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'delta', text: 'roughly 40' })
+      streamHandler!({ turnId, kind: 'verifying' })
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'run_query', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'run_query', output: '[{"n":3}]' })
+      streamHandler!({ turnId, kind: 'final', text: 'exactly 3, verified' })
+      return { text: 'exactly 3, verified', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('how many rows roughly')
+    const agent = chat.messages.value[1]
+    expect(agent.verifying).toBe(false)
+    expect(agent.text).toBe('exactly 3, verified')
+  })
+
+  // Review fix (round 2): a "verifying" event with NO matching "final"/
+  // "error" ever following it (e.g. the binding's own authoritative result
+  // settles the turn without that follow-up event landing) must not leave
+  // "Agent · verifying" stuck forever — the finally block clears it
+  // unconditionally once the AgentChatStream promise itself settles.
+  it('clears verifying once the turn settles even if no final/error event follows it', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'verifying' })
+      // No "final"/"error" event ever emitted — only the binding's own
+      // resolved result settles the turn.
+      return { text: 'settled without a final event', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('how many rows roughly')
+    const agent = chat.messages.value[1]
+    expect(agent.verifying).toBe(false)
+    expect(agent.text).toBe('settled without a final event')
+  })
+
+  // propose_schema (#68 follow-up): there is no dedicated Schema Builder
+  // diagram screen any more — a proposed schema renders inline the same way
+  // present_data does.
+  it('parses a successful propose_schema result into step.page', async () => {
+    const pageJSON = JSON.stringify({
+      title: 'Proposed schema',
+      components: [
+        { id: 'h1', type: 'heading', text: 'Proposed schema', level: 1 },
+        { id: 'h2', type: 'heading', text: 'customers', level: 2 },
+        { id: 't1', type: 'table', columns: ['Column', 'Type', 'Constraints'], rows: [['id', 'ID', 'PRIMARY KEY']] },
+      ],
+    })
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'propose_schema', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'propose_schema', output: pageJSON })
+      streamHandler!({ turnId, kind: 'final', text: 'Want me to build this?' })
+      return { text: 'Want me to build this?', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('design my database')
+    const step = chat.messages.value[1].steps[0]
+    expect(step.page?.title).toBe('Proposed schema')
+    expect(step.page?.components).toHaveLength(3)
+  })
+
+  it('does not set page for a denied propose_schema call', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'propose_schema', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'propose_schema', output: 'propose_schema needs at least one table', isError: true })
+      streamHandler!({ turnId, kind: 'final', text: 'Sorry, that failed.' })
+      return { text: 'Sorry, that failed.', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('design nothing')
+    const step = chat.messages.value[1].steps[0]
+    expect(step.status).toBe('error')
+    expect(step.page).toBeUndefined()
+  })
+
+  it('does not set page for a non-present_data tool, even with JSON-shaped output', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'run_query', input: '{}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'run_query', output: '{"title":"x","components":[]}' })
+      streamHandler!({ turnId, kind: 'final', text: 'done' })
+      return { text: 'done', steps: [] }
+    })
+    const chat = useAgentChat()
+    await chat.send('run a query')
+    const step = chat.messages.value[1].steps[0]
+    expect(step.page).toBeUndefined()
   })
 })
 

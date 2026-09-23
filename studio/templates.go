@@ -12,6 +12,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 )
 
@@ -45,10 +46,7 @@ func (a *App) CreateFromTemplate(path, passphrase, template string) error {
 		return fmt.Errorf("unknown template %q; available templates: %v", template, container.ListTemplates())
 	}
 
-	if a.container != nil {
-		a.container.Save()  //nolint:errcheck
-		a.container.Close() //nolint:errcheck
-	}
+	a.closeCurrentContainerLocked()
 
 	c, err := container.Create(path,
 		container.WithPassphrase(passphrase),
@@ -63,15 +61,11 @@ func (a *App) CreateFromTemplate(path, passphrase, template string) error {
 	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
-	a.initModeFromMeta()
-	// Mirror the OpenFile/CreateFile lifecycle: announce the open and run the
-	// AutoExec startup macro. emitEvent is a no-op when no emit sink is wired
-	// (unit tests); production installs the Wails runtime emitter in startup.
+	a.beginFileSession()
+	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
+	// Mirror the OpenFile/CreateFile lifecycle: announce the open. emitEvent is
+	// a no-op when no emit sink is wired (unit tests); production installs the
+	// Wails runtime emitter in startup.
 	a.emitEvent("file:opened")
-	if res, err := a.runAutoExecLocked(); err != nil {
-		a.logger.Warn("autoexec macro failed on template create", "error", err)
-	} else if res != nil && len(res.Intents) > 0 {
-		a.emitEvent("app:autoexec", res.Intents)
-	}
 	return nil
 }

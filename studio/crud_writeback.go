@@ -8,7 +8,6 @@ package main
 
 import (
 	"github.com/sandwich-labs/vibe-app/internal/crud"
-	"github.com/sandwich-labs/vibe-app/internal/schema"
 )
 
 // WriteResult and WriteError are re-exported from internal/crud so existing
@@ -25,15 +24,15 @@ func columnTypes(q rowQuerier, table string) (map[string]string, error) {
 	return crud.ColumnTypes(q, table)
 }
 
-func fieldMetaMap(store *schema.Store, table string) (map[string]schema.FieldMeta, error) {
+func fieldMetaMap(store *crud.FieldMetaStore, table string) (map[string]crud.FieldMeta, error) {
 	return crud.FieldMetaMap(store, table)
 }
 
-func insertRowTx(tx txExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, table string, values map[string]any) (*WriteResult, error) {
+func insertRowTx(tx txExecer, colTypes map[string]string, metas map[string]crud.FieldMeta, table string, values map[string]any) (*WriteResult, error) {
 	return crud.InsertRowTx(tx, colTypes, metas, table, values)
 }
 
-func updateRowTx(tx txExecer, colTypes map[string]string, metas map[string]schema.FieldMeta, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
+func updateRowTx(tx txExecer, colTypes map[string]string, metas map[string]crud.FieldMeta, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
 	return crud.UpdateRowTx(tx, colTypes, metas, table, pkCol, pkVal, values)
 }
 

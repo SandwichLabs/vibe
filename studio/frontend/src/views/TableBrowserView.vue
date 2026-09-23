@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 
 // Autofocus + select directive for the inline cell editor. select() only exists
 // on text inputs, so guard it for checkbox/date/select editors.
@@ -42,14 +43,6 @@ const editing = ref<{ row: number; col: number } | null>(null)
 const editValue = ref('')
 const savingCell = ref(false)
 
-// Field metadata for the selected table, keyed by column name. Drives the
-// choice of inline editor (combo / checkbox / date / text) per P1.4 parity.
-// FieldMeta is declared globally in env.d.ts (mirrors internal/schema.FieldMeta).
-const fieldMeta = ref<Record<string, FieldMeta>>({})
-// Lookup options for combo editors, keyed by column name. Each option carries
-// the hidden stored value (PK / value_col) and the human-readable label.
-const lookupOptions = ref<Record<string, { value: any; label: string }[]>>({})
-
 // --- P2.9 datasheet visual querying ---
 // activeFilter holds the currently applied structured FilterSpec (null = no
 // filter). When set, loadData routes through GetTableDataFiltered so both the
@@ -79,64 +72,15 @@ const FILTER_OPS = [
 // cell rejected without the change being persisted.
 const cellError = ref<{ row: number; col: number; message: string } | null>(null)
 
-// editorType resolves the inline editor to use for a column from its field
-// meta control_type, falling back to the table's declared SQL type. Returns
-// one of: 'combo' | 'checkbox' | 'date' | 'text'.
-function editorType(colName: string): 'combo' | 'checkbox' | 'date' | 'text' {
-  const meta = fieldMeta.value[colName]
-  if (meta) {
-    const ct = (meta.control_type || '').toLowerCase()
-    if (ct === 'combo' || ct === 'combobox' || ct === 'lookup') return 'combo'
-    if (ct === 'checkbox' || ct === 'boolean') return 'checkbox'
-    if (ct === 'date' || ct === 'datepicker') return 'date'
-    if (ct === 'textbox' || ct === 'text') return 'text'
-  }
-  // Fall back to the declared column type for sensible defaults.
+// editorType resolves the inline editor to use for a column from its
+// declared SQL type (#68 dropped the Access-style field-meta control_type/
+// combo-lookup layer). Returns one of: 'checkbox' | 'date' | 'text'.
+function editorType(colName: string): 'checkbox' | 'date' | 'text' {
   const col = tableInfo.value?.columns.find(c => c.name === colName)
   const t = (col?.type || '').toUpperCase()
   if (t.includes('BOOL')) return 'checkbox'
   if (t.includes('DATE') || t.includes('TIME')) return 'date'
   return 'text'
-}
-
-// loadFieldMeta fetches Access-style field metadata for the table and, for any
-// combo/lookup column, eagerly resolves its option list via ExecuteQuery so the
-// inline combo can show labels while storing hidden values (value_col).
-async function loadFieldMeta(table: string) {
-  fieldMeta.value = {}
-  lookupOptions.value = {}
-  let metas: FieldMeta[] = []
-  try {
-    metas = (await window.go.main.App.GetFieldMeta(table)) || []
-  } catch { metas = [] }
-  const map: Record<string, FieldMeta> = {}
-  for (const m of metas) map[m.column_name] = m
-  fieldMeta.value = map
-
-  for (const m of metas) {
-    if (editorType(m.column_name) !== 'combo') continue
-    if (!m.lookup_sql) continue
-    try {
-      const res = await window.go.main.App.ExecuteQuery(m.lookup_sql)
-      const cols: string[] = (res?.columns || []).map((c: any) => c.name ?? c)
-      const valIdx = m.value_col ? cols.indexOf(m.value_col) : 0
-      const dispIdx = m.display_col ? cols.indexOf(m.display_col) : (cols.length > 1 ? 1 : 0)
-      lookupOptions.value[m.column_name] = (res?.rows || []).map((r: any[]) => ({
-        value: r[valIdx >= 0 ? valIdx : 0],
-        label: String(r[dispIdx >= 0 ? dispIdx : 0] ?? ''),
-      }))
-    } catch { /* leave combo without options; falls back to free text */ }
-  }
-}
-
-// comboLabel renders the human-readable label for a stored combo value.
-function comboLabel(colName: string, value: any): string {
-  const opts = lookupOptions.value[colName]
-  if (opts) {
-    const hit = opts.find(o => String(o.value) === String(value))
-    if (hit) return hit.label
-  }
-  return value == null ? '' : String(value)
 }
 
 async function loadTables() {
@@ -145,6 +89,26 @@ async function loadTables() {
     tables.value = (await window.go.main.App.ListTables()) || []
   } catch { /* ignore */ }
   loading.value = false
+}
+
+// Re-fetch the table list (and the currently open table's rows, if any) when
+// the data underneath changes — an agent-driven create_table/create_record/
+// import, another tab, etc. Previously this view only ever loaded once on
+// mount, so a table the agent just created stayed invisible until a manual
+// reload (review fix #6, mirroring DashboardView's identical listener).
+const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
+async function onDataChanged() {
+  await loadTables()
+  if (selectedTable.value) {
+    if (!tables.value.includes(selectedTable.value)) {
+      // The table the agent dropped/renamed out from under us.
+      selectedTable.value = null
+      tableInfo.value = null
+      tableData.value = null
+      return
+    }
+    await loadData()
+  }
 }
 
 async function selectTable(name: string) {
@@ -156,7 +120,6 @@ async function selectTable(name: string) {
   try {
     tableInfo.value = await window.go.main.App.DescribeTable(name)
   } catch { tableInfo.value = null }
-  await loadFieldMeta(name)
   await loadData()
 }
 
@@ -446,6 +409,11 @@ function commitValue(value: string) {
 }
 
 onMounted(loadTables)
+// Holds EventsOn's own unsubscribe function — review fix, step 4a round 2
+// #2: EventsOff('data:changed') would remove DashboardView's listener too.
+let unsubDataChanged: (() => void) | null = null
+onMounted(() => { if (hasWailsRuntime()) unsubDataChanged = EventsOn('data:changed', onDataChanged) })
+onUnmounted(() => { unsubDataChanged?.() })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
@@ -559,38 +527,15 @@ watch(errorMessage, (msg) => {
                     :key="j"
                     @click="startEdit(i, j)"
                     @dblclick="startEdit(i, j)"
-                    :title="fieldMeta[tableData.columns[j]]?.control_tip || ''"
                     :class="{
                       'cell-editing': editing && editing.row === i && editing.col === j,
                       'cell-error': cellError && cellError.row === i && cellError.col === j,
                     }"
                   >
                     <template v-if="editing && editing.row === i && editing.col === j">
-                      <!-- Combo / lookup editor: shows labels, stores hidden value. -->
-                      <select
-                        v-if="editorType(tableData.columns[j]) === 'combo'"
-                        class="cell-input"
-                        :value="editValue"
-                        :disabled="savingCell"
-                        @change="commitValue(($event.target as HTMLSelectElement).value)"
-                        @keydown.esc.prevent="cancelEdit"
-                        v-focus
-                      >
-                        <!-- Preserve the current value if it is not in the option
-                             list (e.g. an orphaned FK) so it is not silently lost. -->
-                        <option
-                          v-if="!(lookupOptions[tableData.columns[j]] || []).some(o => String(o.value) === editValue)"
-                          :value="editValue"
-                        >{{ comboLabel(tableData.columns[j], editValue) }}</option>
-                        <option
-                          v-for="opt in (lookupOptions[tableData.columns[j]] || [])"
-                          :key="String(opt.value)"
-                          :value="String(opt.value)"
-                        >{{ opt.label }}</option>
-                      </select>
                       <!-- Boolean checkbox editor. -->
                       <input
-                        v-else-if="editorType(tableData.columns[j]) === 'checkbox'"
+                        v-if="editorType(tableData.columns[j]) === 'checkbox'"
                         type="checkbox"
                         class="cell-checkbox"
                         :checked="editValue === 'true' || editValue === '1'"
@@ -624,9 +569,8 @@ watch(errorMessage, (msg) => {
                       />
                     </template>
                     <template v-else>
-                      <span v-if="editorType(tableData.columns[j]) === 'combo'">{{ comboLabel(tableData.columns[j], cell) }}</span>
                       <input
-                        v-else-if="editorType(tableData.columns[j]) === 'checkbox'"
+                        v-if="editorType(tableData.columns[j]) === 'checkbox'"
                         type="checkbox"
                         :checked="cell === true || cell === 'true' || cell === 1 || cell === '1'"
                         disabled

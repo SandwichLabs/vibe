@@ -19,8 +19,10 @@ var initCmd = &cobra.Command{
 Prompts for a passphrase to encrypt the container. Optionally set
 a title with --title, a description with --description.
 
-Use --from to clone from a template .vibe file, or --import to
-create with initial CSV data (these are mutually exclusive).`,
+Use --from to seed a bundled starter template (tables + sample data + a
+starter notebook, e.g. "order-entry") or clone an existing .vibe file, or
+--import to create with initial CSV data (--from and --import are mutually
+exclusive). Run without any of these for a bare, empty workspace.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]
@@ -34,7 +36,6 @@ create with initial CSV data (these are mutually exclusive).`,
 		description, _ := cmd.Flags().GetString("description")
 		fromTemplate, _ := cmd.Flags().GetString("from")
 		importCSV, _ := cmd.Flags().GetString("import")
-		examples, _ := cmd.Flags().GetBool("examples")
 
 		// Validate mutually exclusive flags.
 		if fromTemplate != "" && importCSV != "" {
@@ -65,7 +66,6 @@ create with initial CSV data (these are mutually exclusive).`,
 			container.WithPassphrase(passphrase),
 			container.WithTitle(title),
 			container.WithLogger(logger),
-			container.WithExampleData(examples),
 		}
 		if description != "" {
 			opts = append(opts, container.WithDescription(description))
@@ -231,6 +231,5 @@ func init() {
 	initCmd.Flags().String("description", "", "set the container description")
 	initCmd.Flags().String("from", "", "create from a bundled template name (e.g. order-entry) or clone from a .vibe file path")
 	initCmd.Flags().String("import", "", "import CSV data into the new container")
-	initCmd.Flags().Bool("examples", false, "include example data, pages, and queries")
 	rootCmd.AddCommand(initCmd)
 }

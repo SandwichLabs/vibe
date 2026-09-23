@@ -210,6 +210,23 @@
   line-height: var(--sh-lh-read);
   margin: 0 0 var(--sh-space-4);
 }
+/* Tailwind's preflight resets ul/ol to list-style: none globally, which
+   silently stripped bullets/numbers from every rendered-markdown surface
+   (Pages, Skills, agent chat) — restore them scoped to rendered content so
+   plain app chrome (nav lists, etc.) is unaffected. */
+.vibe-content ul,
+.vibe-content ol {
+  margin: 0 0 var(--sh-space-4);
+  padding-left: 1.5em;
+}
+.vibe-content ul { list-style: disc; }
+.vibe-content ol { list-style: decimal; }
+.vibe-content ul ul, .vibe-content ol ul { list-style: circle; }
+.vibe-content li {
+  font-size: var(--sh-fs-base);
+  line-height: var(--sh-lh-read);
+  margin: 0 0 var(--sh-space-1);
+}
 .vibe-content code {
   font-family: var(--sh-font-mono);
   font-size: 0.92em;
@@ -236,15 +253,24 @@
   color: inherit;
 }
 
-.vibe-content .vibe-table-container { overflow-x: auto; margin: var(--sh-space-4) 0; }
-.vibe-content .vibe-table { width: 100%; border-collapse: collapse; font-size: var(--sh-fs-sm); }
-.vibe-content .vibe-table th,
-.vibe-content .vibe-table td {
+/* Plain markdown output (renderSafeMarkdown/goldmark): a raw <table> from a
+   GFM pipe table, and <blockquote>. Distinct from .vibe-table above (the
+   {table:} page directive's own markup) — without this, a markdown table's
+   header cells ran together with no border/spacing ("RegionOwner"), and a
+   blockquote had no visual treatment at all. */
+.vibe-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sh-fs-sm);
+  margin: 0 0 var(--sh-space-4);
+}
+.vibe-content th,
+.vibe-content td {
   padding: 8px 12px;
   border: 1.5px solid var(--sh-ink);
   text-align: left;
 }
-.vibe-content .vibe-table thead th {
+.vibe-content thead th {
   background: var(--sh-paper-2);
   font-weight: 600;
   font-family: var(--sh-font-mono);
@@ -252,60 +278,14 @@
   font-size: var(--sh-fs-xs);
   letter-spacing: var(--sh-track-mono-caps);
 }
-.vibe-content .vibe-table tbody tr:nth-child(even) { background: var(--sh-paper-2); }
+.vibe-content tbody tr:nth-child(even) { background: var(--sh-paper-2); }
 
-.vibe-content .vibe-metric {
-  display: inline-block;
-  padding: var(--sh-space-4) var(--sh-space-5);
-  background: var(--sh-surface);
-  border: 2px solid var(--sh-ink);
-  border-radius: var(--sh-radius-sm);
-  box-shadow: var(--sh-shadow);
-  text-align: left;
-  margin: var(--sh-space-2);
-  min-width: 160px;
-}
-.vibe-content .vibe-metric-value {
-  font-family: var(--sh-font-display);
-  font-size: var(--sh-fs-3xl);
-  font-weight: 600;
-  line-height: var(--sh-lh-tight);
-  letter-spacing: var(--sh-track-display);
-  color: var(--sh-ink);
-}
-.vibe-content .vibe-metric-label {
-  font-family: var(--sh-font-mono);
-  font-size: var(--sh-fs-xs);
-  letter-spacing: var(--sh-track-mono-caps);
-  text-transform: uppercase;
+.vibe-content blockquote {
+  margin: 0 0 var(--sh-space-4);
+  padding: var(--sh-space-2) var(--sh-space-4);
+  border-left: 3px solid var(--sh-teal);
+  background: var(--sh-paper-2);
   color: var(--sh-graphite);
-  margin-top: 4px;
+  font-style: italic;
 }
 
-.vibe-content .vibe-chart-container { margin: var(--sh-space-4) 0; }
-.vibe-content .vibe-row { display: grid; gap: var(--sh-space-4); margin: var(--sh-space-4) 0; }
-.vibe-content .vibe-col { min-width: 0; }
-
-/* P3.5 block layouts: stack, tabs, callout. */
-.vibe-content .vibe-stack { display: flex; flex-direction: column; gap: var(--sh-space-4); margin: var(--sh-space-4) 0; }
-
-.vibe-content .vibe-tabs { margin: var(--sh-space-4) 0; }
-.vibe-content .vibe-tab-headers { display: flex; gap: var(--sh-space-1); border-bottom: 1px solid var(--sh-ink-3); margin-bottom: var(--sh-space-4); }
-.vibe-content .vibe-tab-header {
-  appearance: none; background: transparent; border: none; cursor: pointer;
-  padding: var(--sh-space-2) var(--sh-space-4); font: inherit; color: var(--sh-ink-2);
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.vibe-content .vibe-tab-header:hover { color: var(--sh-ink-1); }
-.vibe-content .vibe-tab-header.active { color: var(--sh-accent); border-bottom-color: var(--sh-accent); font-weight: 600; }
-.vibe-content .vibe-tab-panel { display: none; }
-.vibe-content .vibe-tab-panel.active { display: block; }
-
-.vibe-content .vibe-callout {
-  border-left: 4px solid var(--sh-ink-3); border-radius: var(--sh-radius-1);
-  background: var(--sh-paper-2); padding: var(--sh-space-3) var(--sh-space-4); margin: var(--sh-space-4) 0;
-}
-.vibe-content .vibe-callout-info { border-left-color: var(--sh-accent); }
-.vibe-content .vibe-callout-warning { border-left-color: #d97706; background: #fffbeb; }
-.vibe-content .vibe-callout-success { border-left-color: #16a34a; background: #f0fdf4; }
-.vibe-content .vibe-callout-error { border-left-color: #dc2626; background: #fef2f2; }

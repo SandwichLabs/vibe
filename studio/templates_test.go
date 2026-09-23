@@ -49,7 +49,7 @@ func TestApp_ListTemplates(t *testing.T) {
 
 // TestApp_CreateFromTemplate asserts the binding creates a usable encrypted
 // .vibe seeded from the bundled order-entry template: it opens, holds the
-// expected relational tables with data, and carries at least one form.
+// expected relational tables with data, and carries a starter notebook.
 func TestApp_CreateFromTemplate(t *testing.T) {
 	app := NewApp(testLogger())
 	app.ctx = context.Background()
@@ -80,9 +80,9 @@ func TestApp_CreateFromTemplate(t *testing.T) {
 		assert.Greater(t, n, 0, "table %q should have sample data", table)
 	}
 
-	var formCount int
-	require.NoError(t, c.SQLiteDB().QueryRow("SELECT COUNT(*) FROM _vibe_forms").Scan(&formCount))
-	assert.GreaterOrEqual(t, formCount, 1, "order-entry template should seed at least one form")
+	var notebookCount int
+	require.NoError(t, c.SQLiteDB().QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&notebookCount))
+	assert.Equal(t, 1, notebookCount, "order-entry template should seed exactly one starter notebook")
 }
 
 // TestApp_CreateFromTemplate_UnknownName asserts an unknown template name yields

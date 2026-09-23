@@ -2,11 +2,11 @@
 
 # Vibe
 
-**The local-first successor to Microsoft Access 97.**
+**A local-first, encrypted, single-file agentic data workspace.**
 
-A portable, encrypted, single-file application platform for small businesses —
-tables, forms, reports, and an AI agent, all inside one `.vibe` file. No cloud
-account, no per-seat fees, no vendor lock-in. The data lives in the building.
+DuckDB tables, notebooks, skills, and an AI agent in one portable `.vibe` file —
+open it in the Studio app or point any MCP client at it. No cloud account, no
+per-seat fees, no vendor lock-in. The data lives in the building.
 
 *by [sandwichlabs](https://github.com/SandwichLabs)*
 
@@ -16,64 +16,66 @@ account, no per-seat fees, no vendor lock-in. The data lives in the building.
 
 ## What is Vibe?
 
-Access 97 succeeded because it collapsed the distance between a business problem
-and a working solution: an office manager could build a schema, a form, and a
-report in an afternoon, and it was theirs. The cloud era traded that sovereignty
-for convenience. **Vibe reclaims it with modern primitives.**
+MotherDuck showed what a data platform looks like when it is built for agents:
+tables, notebooks, guides that tell the model what your data means, and MCP so
+any agent can use all three. Vibe is the local, offline, file-shaped version of
+that idea. A `.vibe` file is an encrypted container holding:
 
-A `.vibe` file is an encrypted container that bundles your data, interactive
-pages, forms, reports, navigation, and an AI agent into a single portable file —
-like the PDF ecosystem, but for data applications.
+- **Tables** — an embedded DuckDB database. Import CSV and spreadsheets, edit
+  rows in a datasheet, export to CSV, JSON, xlsx, or Parquet.
+- **Notebooks** — cells of SQL, markdown, and live dashboards. Outputs are never
+  saved; every cell re-runs when you open the notebook, so the numbers are
+  always current.
+- **Skills** — markdown documents that tell the agent what your metrics mean,
+  which joins are canonical, and what to avoid. Loaded on demand, stored in the
+  file.
+- **An agent** — sandboxed, with an approval queue, that explores the data,
+  writes notebook cells, and draws live charts. The same tools are exposed over
+  **MCP**, so Claude Desktop, Cursor, or your own agent can work on the file
+  with Studio closed.
 
-Vibe ships as **one desktop app with two modes**, mirroring the Access dual-mode
-design:
+Everything works without AI. SQL and notebooks are first-class by hand.
 
-- **Studio Mode** — for builders. Schema designer, page/form/report editors,
-  query explorer, and an AI agent that acts as the "wizard" layer.
-- **App Mode** — for data-entry workers. A locked-down, generated interface:
-  switchboard navigation, forms, and reports only — no schema, SQL, or
-  destructive tools.
-
-A terminal-native **BubbleTea TUI** is also available for technical workflows.
+> **Direction change (2026-09-22).** Vibe was previously aimed at Microsoft
+> Access 97 application parity (forms, switchboard, App Mode, macros). That
+> layer was removed in favour of the primitives above. The reasoning and
+> the plan are in [`docs/direction.md`](docs/direction.md).
 
 ## Who it's for
 
 | Persona | What they do | What they get |
 |---|---|---|
-| **Data Entry Worker** | Front-line input & retrieval | Locked App Mode: curated forms, large targets, validation, switchboard nav |
-| **Citizen Developer** | Office manager / power user building a tool | Conversational schema + AI-generated forms; progressive disclosure |
-| **Studio Developer** | IT generalist / consultant | Full schema, SQL, agent config, export pipeline, deployment |
+| **Analyst / operator** | Asks questions of business data | Notebooks, live dashboards, an agent that grounds every number in a query |
+| **Builder** | Curates a data workspace for a team | Import wizard, skills that encode the domain, exports, encrypted portability |
+| **Agent developer** | Points an external agent at a dataset | `vibe mcp serve file.vibe` — one tool surface, sandboxed, offline |
 
 ## Architecture
 
 - **Container / encryption:** SQLCipher (AES-256, PBKDF2-HMAC-SHA512) — the `.vibe` envelope.
-- **Data & query engine:** embedded **DuckDB** (single engine for analytics *and* CRUD), stored as a serialized blob inside the encrypted container.
-- **Desktop app:** Wails v2 (Go backend + Vue 3 frontend + Chart.js).
-- **TUI:** BubbleTea + Lipgloss + Glamour.
-- **AI agent:** JSON-RPC 2.0 + MCP server; sandboxed (`read-only` / `read-write` / `full`) with an approval queue.
+- **Data & query engine:** embedded **DuckDB** (single engine), stored as a serialized blob inside the encrypted container.
+- **Desktop app:** Wails v2 (Go backend + Vue 3 frontend, SchoolHouse design system).
+- **AI agent:** `charmbracelet/fantasy` runner over one tool registry; sandboxed (`read-only` / `read-write` / `full`) with an approval queue; MCP server (SSE in-app, stdio headless).
+- **Artifacts:** A2UI pages — a validated, live-SQL-bound component spec the agent draws with.
 - **Language:** Go 1.24+ (`CGO_ENABLED=1` for the SQLCipher & DuckDB bindings).
 
 ```
-.vibe file = SQLCipher (encrypted container) ─┬─ _vibe_* tables (pages, queries, forms, …)
-                                              └─ _vibe_duckdb blob (your data + analytics)
+.vibe file = SQLCipher (encrypted container) ─┬─ _vibe_* tables (notebooks, skills, queries, …)
+                                              └─ _vibe_duckdb blob (your data)
 ```
 
 ## Roadmap
 
-The current focus is **Microsoft Access *application* parity** on the local-first
-Go desktop stack:
+The current arc is the **primitive migration**, tracked in GitHub issues:
 
-1. **Forms & CRUD write-back** — bound forms, the four archetypes (columnar / continuous / datasheet / master-detail subform), inline datasheet editing.
-2. **Relational schema & visual querying** — relationships, referential integrity, field properties, Filter-by-Form / Filter-by-Selection.
-3. **Reports & dashboards** — banded reports (grouping, subtotals, print/PDF) + live filterable dashboards.
-4. **App Shell & Switchboard** — hierarchical navigation and the dual-mode lockdown.
-5. **Automation & macros** — command-button actions, AutoExec, events; AI-generated automation.
-6. **Office bridge & templates** — Excel import/export, starter apps → **v1.0**.
+1. **One tool surface** (#63) — the in-app agent and the MCP server share one registry.
+2. **Skills** (#62) and **A2UI artifacts** (#67), in parallel.
+3. **Notebooks** (#66) — the cell model plus agent task-mode authoring. Pages migrate here.
+4. **Headless MCP** (#64), **guardrails** (#70).
+5. **Remove the Access layer** (#68, shipped) and **retire the page system, cut the TUI to a REPL** (#69, shipped).
 
-**v1.1** adds multi-user via a **Tailscale** mesh (delta sync, optimistic
-concurrency, identity-aware permissions).
+Multi-user / Tailscale mesh remains deferred.
 
-> Full detail: [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md).
+> Full detail: [`docs/direction.md`](docs/direction.md).
 
 ## Build
 
@@ -84,6 +86,7 @@ task              # Default: lint + test + build
 task build        # Build binary
 task test         # Run all tests (alias: task t)
 task lint         # Run golangci-lint
+task studio:dev   # Wails dev server for the Studio app
 ```
 
 Run a single package's tests:
@@ -96,19 +99,21 @@ go test -v ./internal/container/
 
 | Doc | Purpose |
 |---|---|
+| [`docs/direction.md`](docs/direction.md) | **Current** north star: primitives, what goes, sequencing |
 | [`CLAUDE.md`](CLAUDE.md) | Architecture, conventions, key concepts (also guidance for AI assistants) |
-| [`PROJECT.md`](PROJECT.md) | Original MVP specification (file format, runtime, agent protocol) |
-| [`PLAN.md`](PLAN.md) | Original build phases (0–6) |
-| [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md) | **Current** phased roadmap to Access parity |
-| [`docs/ms-access-ux-research.txt`](docs/ms-access-ux-research.txt) | UX research grounding the parity target |
-| [`docs/EVIDENCE_PARITY_PLAN.md`](docs/EVIDENCE_PARITY_PLAN.md) | Dashboard/reporting component plan (folded into roadmap Phase 3) |
-| [`docs/reference/`](docs/reference/) | **v1.0 reference**: page directives, forms, reports, macros, import/Office Links, starter templates |
+| [`motherduck-research.md`](motherduck-research.md) | The MotherDuck platform research that informed the direction |
+| [`docs/llm-config.md`](docs/llm-config.md) | LLM provider configuration |
+| [`docs/mcp.md`](docs/mcp.md) | `vibe mcp serve` (stdio/SSE), Claude Desktop config, SSE auth/security |
+| [`docs/reference/`](docs/reference/) | Shipped surface reference (notebooks, A2UI, import, templates) |
+| [`PROJECT.md`](PROJECT.md), [`PLAN.md`](PLAN.md) | Original MVP spec and build phases (file format, runtime) — historical |
+| [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md) | Superseded Access-parity roadmap — historical |
 
 ## Design principles
 
 - **File is the app** — fully self-contained, no external dependencies.
 - **Local-first & data sovereignty** — your data never leaves your machine.
 - **Encryption by default** — passphrase required; no plaintext on disk.
-- **Single-user first** — multi-user mesh is a deliberate v1.1.
+- **One tool surface** — the built-in agent and external MCP clients see the same tools with the same gating.
+- **Live, not frozen** — notebooks store questions, not answers; outputs re-run on open.
 - **AI as collaborator, not dependency** — everything works without AI.
-- **Progressive disclosure** — complexity available, never imposed.
+- **Progressive disclosure** — skills advertise a line and load on demand.
