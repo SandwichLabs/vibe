@@ -66,5 +66,13 @@ disk; nothing leaves the machine.
 Banded reports, and their PDF/Word export, were part of the Access
 application layer removed in #68 — a banded report migrates into a notebook
 on first open of an old file (a markdown cell + one sql cell over its
-source); print/PDF export of a notebook may come later as a notebook
-feature, not a report one.
+source). HTML/PDF/xlsx export of a notebook is tracked as a notebook
+feature in #73, not a report one.
+
+### CLI
+
+`vibe import <file> --csv <path> --table <name>` and `vibe export` exist,
+but **currently read and write the SQLite envelope instead of DuckDB**, so a
+CLI-imported table is invisible to Studio, the agent, and MCP (#72). Use the
+Studio Import view, or the agent's tools over `vibe mcp serve`, until that
+is fixed. `vibe notebook import/export` is tracked in #9.

@@ -88,6 +88,9 @@ rejected — and re-inserts the notebook through the same whitelist rebuild
 (`Coerce`) every load goes through, so a hand-edited or newer-schema file
 can't smuggle unexpected fields into `_vibe_notebooks`.
 
+Planned: a CLI `vibe notebook import/export` (JSON wrapper + Markdown with
+````sql``` fences) in #9, and HTML/PDF/xlsx snapshot export in #73.
+
 ## A2UI component reference
 
 A2UI is the `internal/a2ui` package: a closed, validated component schema an

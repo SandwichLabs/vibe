@@ -75,7 +75,7 @@ in Settings → MCP Server with a copy button (Studio). A request is rejected
 if it:
 
 - carries a browser `Origin` header at all (a legitimate MCP client never
-  sets one — only a page loaded in a browser does, via
+  sets one — only a website running in a browser tab does, via
   fetch/XHR/EventSource — so its mere presence, regardless of value, is
   treated as a CSRF/DNS-rebinding attempt and blocked with `403`);
 - has a non-loopback `Host` header (`404`/`403` defense in depth against DNS
@@ -83,8 +83,10 @@ if it:
 - is missing or has the wrong `Authorization: Bearer <token>` (`401`).
 
 For the initial `GET /sse` connection only, a `?token=<token>` query
-parameter is also accepted as a fallback, for a client that can't set custom
-headers on that specific request (e.g. a raw browser `EventSource`). **Every
+parameter is also accepted as a fallback, for a non-browser client whose SSE
+library can't set custom headers on that specific request. (A browser
+`EventSource` still can't use it: the browser attaches an `Origin` header,
+which is rejected first.) **Every
 other request — in particular the `POST` a client sends to make an actual
 tool call — must use the `Authorization: Bearer <token>` header; `?token=`
 on a `POST` is always rejected with `401`.** This is deliberate, not a gap:

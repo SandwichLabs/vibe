@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Status:** Adopted. This document is the product north star and supersedes the Access-parity roadmap.
-**Tracking:** GitHub issues #62–#70.
+**Tracking:** GitHub issues #62–#70 (all shipped in PR #71, 2026-09-23). Follow-ups: #9 CLI notebook import/export, #56 Studio Home, #72 CLI commands on DuckDB, #73 notebook HTML/PDF/xlsx export.
 
 ---
 
@@ -54,7 +54,7 @@ The one thing the agent draws. A page is `{ title, components[] }`: a flat list 
 One tool registry in `internal/agents`, consumed by the in-app runner in `internal/llm` **and** exposed by the MCP server in `internal/mcp`. Sandbox modes (`read-only` / `read-write` / `full`) and the approval queue apply identically to both. `vibe mcp serve <file>` runs the server headless over stdio for Claude Desktop, Cursor, and similar. Guardrails from the workspace: a grounding check that bounces unverified numeric claims, a zero-row explanation, and a tool-result budget.
 
 ### 3.7 Import / Export
-The import wizard (CSV, xlsx) stays and gains skill generation. Exports stay. Banded report export becomes a notebook export (HTML, PDF, xlsx).
+The import wizard (CSV, xlsx) stays and gains skill generation. Exports stay. Banded report export becomes a notebook export (HTML, PDF, xlsx) — #73; today notebooks export as JSON only.
 
 ## 4. What stays, what goes, what changes
 

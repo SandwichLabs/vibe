@@ -224,7 +224,7 @@ func (s *Server) Token() string {
 
 // authMiddleware gates every SSE request behind three checks, in order:
 //  1. no browser Origin header — a legitimate MCP client (Claude Desktop, a
-//     CLI, curl) never sets Origin; only a page loaded in a browser does,
+//     CLI, curl) never sets Origin; only a website running in a browser tab does,
 //     via fetch/XHR/EventSource. Rejecting any request that carries one at
 //     all (regardless of value) blocks the CSRF/DNS-rebinding attack a
 //     malicious web page would otherwise be able to mount against a
