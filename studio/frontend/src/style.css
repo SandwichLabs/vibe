@@ -1,56 +1,59 @@
-/* Fonts first — CSS @import rules must precede all other statements. */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Nunito:wght@400;500;600;700&display=swap');
+/* Vendored fonts first — CSS @import rules must precede all other statements. */
+@import "./fonts.css";
 @import "tailwindcss";
 
 /* SchoolHouse design system — tokens + UI kit + hi-fi component styles.
-   Imported after Tailwind so its base/component rules win. */
-@import "./schoolhouse/colors_and_type.css";
-@import "./schoolhouse/kit.css";
-@import "./schoolhouse/hifi.css";
+   Imported INTO the components layer so Tailwind utilities (layer utilities)
+   and this file's own component rules (later in the same layer) can override
+   them. Before this they sat outside every layer and silently won every
+   fight — e.g. `.btn-sm` never shrank a `.btn`. */
+@import "./schoolhouse/colors_and_type.css" layer(components);
+@import "./schoolhouse/kit.css" layer(components);
+@import "./schoolhouse/hifi.css" layer(components);
+/* Theme bridge: --sh-* → --vibe-* roles set by theme/apply.ts. Must follow
+   colors_and_type.css so its :root declarations win. */
+@import "./theme/bridge.css" layer(components);
 
-/* === Tailwind @theme — utility classes wired to SchoolHouse tokens === */
+/* === Tailwind @theme — utility classes wired to the theme roles === */
 @theme {
   /* Core */
-  --color-ink:        #1F2330;
-  --color-black:      #1F2330;   /* remap: SchoolHouse never uses pure #000 */
-  --color-paper:      #FAF7F0;
-  --color-paper-2:    #F2EDDF;
-  --color-surface:    #FFFFFF;
-  --color-graphite:   #5C6275;
-  --color-chalk:      #A8A89C;
-  --color-ember:      #C25A1F;
+  --color-ink:        var(--vibe-fg);
+  --color-black:      var(--vibe-fg);   /* remap: never pure #000 unless the theme says so */
+  --color-paper:      var(--vibe-bg);
+  --color-paper-2:    var(--vibe-bg-alt);
+  --color-surface:    var(--vibe-surface);
+  --color-graphite:   var(--vibe-fg-muted);
+  --color-chalk:      var(--vibe-fg-disabled);
+  --color-ember:      var(--vibe-splash);
+  --color-line:       var(--vibe-border-subtle);
+  --color-border:     var(--vibe-border);
 
   /* Accents */
-  --color-teal:       #2F8F87;
-  --color-teal-hi:    #3FA39B;
-  --color-teal-lo:    #236962;
-  --color-marigold:   #F2A93B;
-  --color-coral:      #E27262;
+  --color-teal:       var(--vibe-accent);
+  --color-teal-hi:    var(--vibe-accent-hover);
+  --color-teal-lo:    var(--vibe-accent-active);
+  --color-accent:     var(--vibe-accent);
+  --color-marigold:   var(--vibe-highlight);
+  --color-coral:      var(--vibe-attention);
 
   /* Status */
-  --color-success:    #2F7D4A;
-  --color-warn:       #B47800;
-  --color-error:      #B23B2E;
-  --color-info:       #2F6FA8;
-
-  /* Legacy aliases (keep older utility names rendering on-brand) */
-  --color-muted:      #5C6275;
-  --color-warm-white: #FAF7F0;
-  --color-cream:      #F2EDDF;
-  --color-yellow:     #F2A93B;
+  --color-success:    var(--vibe-success);
+  --color-warn:       var(--vibe-warn);
+  --color-error:      var(--vibe-error);
+  --color-info:       var(--vibe-info);
 
   /* Typography families */
-  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
-  --font-label:   'JetBrains Mono', monospace;
+  --font-sans:    var(--vibe-font-body);
+  --font-display: var(--vibe-font-display);
+  --font-mono:    var(--vibe-font-mono);
+  --font-label:   var(--vibe-font-mono);
 
-  /* Shadows — hard offset, graphite */
-  --shadow-brutal-xs: 1px 1px 0 0 rgba(31,35,48,0.85);
-  --shadow-brutal-sm: 2px 2px 0 0 rgba(31,35,48,0.85);
-  --shadow-brutal:    3px 3px 0 0 rgba(31,35,48,0.85);
-  --shadow-brutal-lg: 5px 5px 0 0 rgba(31,35,48,0.85);
-  --shadow-brutal-teal: 3px 3px 0 0 var(--color-teal);
+  /* Shadows — hard offset in the theme's shadow colour */
+  --shadow-brutal-xs: 1px 1px 0 0 var(--vibe-shadow);
+  --shadow-brutal-sm: 2px 2px 0 0 var(--vibe-shadow);
+  --shadow-brutal:    3px 3px 0 0 var(--vibe-shadow);
+  --shadow-brutal-lg: 5px 5px 0 0 var(--vibe-shadow);
+  --shadow-brutal-teal: 3px 3px 0 0 var(--vibe-accent);
 
   /* Border widths */
   --border-width-2: 2px;
@@ -69,7 +72,6 @@
     color: var(--sh-ink);
     background: var(--sh-paper);
   }
-  *:focus { outline: none; }
 }
 
 /* === App-specific component classes built on SchoolHouse tokens === */
@@ -88,35 +90,12 @@
     background: var(--sh-surface);
   }
   .btn-inverted {
-    background: var(--sh-ink);
-    color: var(--sh-paper);
-    border-color: var(--sh-ink);
+    background: var(--vibe-code-bg);
+    color: var(--vibe-code-fg);
+    border-color: var(--vibe-border);
   }
   .btn-inverted:hover { box-shadow: var(--sh-shadow-lg); }
 
-  /* Form fields (kit uses .field; views use .field-input/.field-label) */
-  .field-label {
-    display: block;
-    font-family: var(--sh-font-mono);
-    font-size: var(--sh-fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: var(--sh-track-mono-caps);
-    margin-bottom: 6px;
-    color: var(--sh-graphite);
-  }
-  .field-input {
-    width: 100%;
-    font-size: 15px;
-    padding: 10px 14px;
-    min-height: 44px;
-    border: 2px solid var(--sh-ink);
-    border-radius: var(--sh-radius-sm);
-    background: var(--sh-surface);
-    color: var(--sh-ink);
-    outline: none;
-  }
-  .field-input:focus { box-shadow: var(--sh-shadow-teal); }
   .field-input-error {
     border-color: var(--sh-error);
     box-shadow: var(--sh-shadow-error);
@@ -129,18 +108,28 @@
     font-family: var(--sh-font-mono); font-size: var(--sh-fs-xs); font-weight: 600;
     text-transform: uppercase; letter-spacing: var(--sh-track-mono-caps);
     text-align: left; padding: 10px 12px;
-    border-bottom: 2px solid var(--sh-ink);
+    border-bottom: 2px solid var(--vibe-border);
     cursor: pointer;
     position: sticky; top: 0;
   }
   .brutal-table th:hover { background: var(--sh-paper); }
   .brutal-table td {
     padding: 8px 12px;
-    border-bottom: 1.5px solid rgba(31,35,48,0.18);
+    border-bottom: 1.5px solid var(--vibe-border-subtle);
     font-size: var(--sh-fs-sm);
   }
   .brutal-table tbody tr:hover td { background: var(--sh-teal-8); }
   .brutal-table tbody tr:last-child td { border-bottom: 0; }
+
+  /* Controls that appear on row hover — but ALSO on keyboard focus, and
+     when the row marks them .is-on, so they are never mouse-only. */
+  .hover-reveal { opacity: 0; transition: opacity var(--sh-dur) var(--sh-ease); }
+  .group:hover .hover-reveal,
+  .hover-reveal:focus-visible,
+  .hover-reveal.is-on { opacity: 1; }
+
+  /* Selected choice card (template picker, theme picker) */
+  .card.is-selected { border-color: var(--vibe-accent); box-shadow: var(--sh-shadow-teal); }
 
   /* Selected list-row state (replaces legacy bg-yellow selection) */
   .row-selected {
@@ -149,31 +138,17 @@
   }
 
   /* Modal + toasts (not provided by the kit) */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: var(--sh-scrim);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 50;
-  }
-  .error-toast {
-    position: fixed; bottom: 16px; right: 16px;
-    background: var(--sh-error); color: var(--sh-paper);
-    padding: 10px 16px;
-    border: 2px solid var(--sh-ink);
+  /* Success/status toast — same shape as kit's .error-toast / .info-toast. */
+  .success-toast,
+  .status-toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 1100;
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    background: var(--vibe-accent); color: var(--vibe-accent-fg);
+    border: 2px solid var(--vibe-border);
     border-radius: var(--sh-radius-sm);
     box-shadow: var(--sh-shadow);
     font-size: var(--sh-fs-sm); font-weight: 600;
-    z-index: 60;
-  }
-  .success-toast {
-    position: fixed; bottom: 16px; right: 16px;
-    background: var(--sh-teal); color: var(--sh-paper);
-    padding: 10px 16px;
-    border: 2px solid var(--sh-ink);
-    border-radius: var(--sh-radius-sm);
-    box-shadow: var(--sh-shadow);
-    font-size: var(--sh-fs-sm); font-weight: 600;
-    z-index: 60;
   }
 }
 
@@ -233,14 +208,14 @@
   background: var(--sh-paper-2);
   padding: 1px 6px;
   border-radius: var(--sh-radius-sm);
-  border: 1.5px solid var(--sh-ink);
+  border: 1.5px solid var(--vibe-border);
 }
 .vibe-content pre {
   font-family: var(--sh-font-mono);
   font-size: var(--sh-fs-sm);
-  background: var(--sh-ink);
-  color: var(--sh-paper);
-  border: 2px solid var(--sh-ink);
+  background: var(--vibe-code-bg);
+  color: var(--vibe-code-fg);
+  border: 2px solid var(--vibe-border);
   border-radius: var(--sh-radius-sm);
   padding: var(--sh-space-4);
   overflow-x: auto;
@@ -267,7 +242,7 @@
 .vibe-content th,
 .vibe-content td {
   padding: 8px 12px;
-  border: 1.5px solid var(--sh-ink);
+  border: 1.5px solid var(--vibe-border);
   text-align: left;
 }
 .vibe-content thead th {

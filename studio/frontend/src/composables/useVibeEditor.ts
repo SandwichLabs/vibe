@@ -6,65 +6,71 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 
-/** SchoolHouse theme for the CodeMirror editor. */
-const MONO = "'JetBrains Mono', 'SF Mono', Menlo, monospace"
+/**
+ * Editor theme — every value is a `var(--vibe-*)` role so the editor follows
+ * the active theme (Settings → Appearance) with no re-render; see
+ * theme/schema.ts for the role list and theme/bridge.css for the fallbacks.
+ */
+const MONO = 'var(--vibe-font-mono)'
 const vibeTheme = EditorView.theme({
   '&': {
-    backgroundColor: '#FAF7F0',
-    color: '#1F2330',
+    backgroundColor: 'var(--vibe-editor-bg)',
+    color: 'var(--vibe-editor-fg)',
     fontFamily: MONO,
-    fontSize: '14px',
+    fontSize: 'var(--sh-fs-sm)',
     height: '100%',
   },
   '.cm-content': {
-    caretColor: '#1F2330',
+    caretColor: 'var(--vibe-editor-cursor)',
     padding: '16px',
     minHeight: '100%',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#1F2330',
+    borderLeftColor: 'var(--vibe-editor-cursor)',
     borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-    backgroundColor: 'rgba(47, 143, 135, 0.18) !important',
+    backgroundColor: 'var(--vibe-editor-selection) !important',
   },
   '.cm-activeLine': {
-    backgroundColor: 'rgba(47, 143, 135, 0.07)',
+    backgroundColor: 'var(--vibe-editor-line)',
   },
   '.cm-gutters': {
-    backgroundColor: '#F2EDDF',
-    color: '#5C6275',
-    borderRight: '2px solid #1F2330',
+    backgroundColor: 'var(--vibe-editor-gutter-bg)',
+    color: 'var(--vibe-editor-gutter-fg)',
+    borderRight: '2px solid var(--vibe-border)',
     fontFamily: MONO,
-    fontSize: '12px',
+    fontSize: 'var(--sh-fs-xs)',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: 'rgba(47, 143, 135, 0.14)',
-    color: '#1F2330',
+    backgroundColor: 'var(--vibe-editor-line)',
+    color: 'var(--vibe-editor-fg)',
   },
   '.cm-scroller': {
     overflow: 'auto',
   },
+  // Focus is drawn by theme/bridge.css (`.cm-editor.cm-focused`) so it
+  // matches the app-wide focus ring.
   '.cm-focused': {
     outline: 'none',
   },
 })
 
-/** Syntax highlighting colors matching the SchoolHouse palette. */
+/** Syntax highlighting — colours come from the theme's `syntax.*` roles. */
 const vibeHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: '700', color: '#1F2330' },
-  { tag: tags.emphasis, fontStyle: 'italic', color: '#5C6275' },
-  { tag: tags.strong, fontWeight: '700', color: '#1F2330' },
-  { tag: tags.keyword, color: '#C25A1F' },
-  { tag: tags.atom, color: '#C25A1F' },
-  { tag: tags.number, color: '#2F6FA8' },
-  { tag: tags.string, color: '#2F7D4A' },
-  { tag: tags.comment, color: '#5C6275', fontStyle: 'italic' },
-  { tag: tags.link, color: '#2F8F87', textDecoration: 'underline' },
-  { tag: tags.url, color: '#2F8F87' },
+  { tag: tags.heading, fontWeight: '700', color: 'var(--vibe-syntax-heading)' },
+  { tag: tags.emphasis, fontStyle: 'italic', color: 'var(--vibe-syntax-meta)' },
+  { tag: tags.strong, fontWeight: '700', color: 'var(--vibe-syntax-heading)' },
+  { tag: tags.keyword, color: 'var(--vibe-syntax-keyword)' },
+  { tag: tags.atom, color: 'var(--vibe-syntax-keyword)' },
+  { tag: tags.number, color: 'var(--vibe-syntax-number)' },
+  { tag: tags.string, color: 'var(--vibe-syntax-string)' },
+  { tag: tags.comment, color: 'var(--vibe-syntax-comment)', fontStyle: 'italic' },
+  { tag: tags.link, color: 'var(--vibe-syntax-link)', textDecoration: 'underline' },
+  { tag: tags.url, color: 'var(--vibe-syntax-link)' },
   { tag: tags.monospace, fontFamily: MONO },
-  { tag: tags.processingInstruction, color: '#C25A1F', fontWeight: '700' },
-  { tag: tags.meta, color: '#5C6275' },
+  { tag: tags.processingInstruction, color: 'var(--vibe-syntax-keyword)', fontWeight: '700' },
+  { tag: tags.meta, color: 'var(--vibe-syntax-meta)' },
 ])
 
 export interface VibeEditorOptions {

@@ -76,7 +76,7 @@ onUnmounted(() => {
       {{ description }}
     </p>
 
-    <p v-if="errorMessage" class="sh-mono" role="alert" style="color: var(--sh-coral, #e5604a);">
+    <p v-if="errorMessage" class="sh-mono" role="alert" style="color: var(--sh-error);">
       {{ errorMessage }}
     </p>
 

@@ -22,6 +22,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/llm"
 	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/prefs"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -82,6 +83,10 @@ type App struct {
 	// live Wails runtime.
 	emit func(event string, data ...any)
 
+	// prefs stores app-global user preferences (theme, appearance) outside
+	// any .vibe file — see internal/prefs. nil in tests that don't need it.
+	prefs *prefs.Store
+
 	// llmCfg is the app-global, viper-driven LLM provider/model configuration
 	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
 	llmCfg config.LLMConfig
@@ -118,10 +123,16 @@ const closeWatchdogTimeout = 5 * time.Second
 // NewApp creates a new App instance. The LLM config is loaded eagerly so it is
 // available even before the Wails startup hook (and in tests).
 func NewApp(logger *slog.Logger) *App {
-	return &App{
+	app := &App{
 		logger: logger,
 		llmCfg: config.Load().LLM,
 	}
+	if dir, err := prefs.DefaultDir(); err == nil {
+		app.prefs = prefs.NewStore(dir)
+	} else {
+		logger.Warn("preferences disabled: no config dir", "error", err)
+	}
+	return app
 }
 
 // GetInitialFile returns the file path passed as a command-line argument, if any.
@@ -3215,4 +3226,78 @@ func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
 // ExportQueryXLSX (plan §6.2 / P6.5).
 func (a *App) AnalyzeQueryInExcel(queryID, dst string) (string, error) {
 	return a.ExportQueryXLSX(queryID, dst)
+}
+
+// --- Preferences (app-global, not per-file) ---
+
+// prefsStore returns the preferences store, or an error when the app was
+// built without one (no user config dir).
+func (a *App) prefsStore() (*prefs.Store, error) {
+	if a.prefs == nil {
+		return nil, fmt.Errorf("preferences are unavailable: no user config directory")
+	}
+	return a.prefs, nil
+}
+
+// GetPreferences returns the user's app-level preferences (theme, appearance).
+// A missing or unreadable settings file yields the defaults; a parse error is
+// logged, never surfaced, so a bad edit can't lock the user out of the UI.
+func (a *App) GetPreferences() (prefs.Preferences, error) {
+	s, err := a.prefsStore()
+	if err != nil {
+		return prefs.Defaults(), nil
+	}
+	p, err := s.Load()
+	if err != nil {
+		a.logger.Warn("preferences: falling back to defaults", "error", err)
+	}
+	return p, nil
+}
+
+// SetPreferences persists the user's app-level preferences.
+func (a *App) SetPreferences(p prefs.Preferences) error {
+	s, err := a.prefsStore()
+	if err != nil {
+		return err
+	}
+	if err := s.Save(p); err != nil {
+		return fmt.Errorf("failed to save preferences: %w", err)
+	}
+	return nil
+}
+
+// UserThemesResult is what ListUserThemes returns: every readable theme file
+// plus a human-readable line per file that was skipped.
+type UserThemesResult struct {
+	Themes   []prefs.ThemeFile `json:"themes"`
+	Problems []string          `json:"problems"`
+	Dir      string            `json:"dir"`
+}
+
+// ListUserThemes scans <config dir>/vibe/themes/*.json. Validation happens in
+// the frontend (studio/frontend/src/theme/schema.ts) so the rules live once.
+func (a *App) ListUserThemes() (UserThemesResult, error) {
+	s, err := a.prefsStore()
+	if err != nil {
+		return UserThemesResult{}, nil
+	}
+	themes, problems := s.ListUserThemes()
+	return UserThemesResult{Themes: themes, Problems: problems, Dir: s.ThemesDir()}, nil
+}
+
+// OpenThemesDir creates the themes folder (with a README describing the
+// format) and opens it in the OS file manager. Returns the path either way.
+func (a *App) OpenThemesDir() (string, error) {
+	s, err := a.prefsStore()
+	if err != nil {
+		return "", err
+	}
+	dir, err := s.EnsureThemesDir()
+	if err != nil {
+		return "", err
+	}
+	if a.ctx != nil {
+		runtime.BrowserOpenURL(a.ctx, "file://"+dir)
+	}
+	return dir, nil
 }

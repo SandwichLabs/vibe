@@ -823,7 +823,7 @@ defineExpose({
   <div class="col" style="height: 100%; gap: 0;">
     <div class="row" style="justify-content: space-between; align-items: center; padding: var(--sh-space-3) var(--sh-space-6); border-bottom: var(--sh-border);">
       <div class="row" style="gap: var(--sh-space-3); align-items: center; min-width: 0;">
-        <button @click="backToList" class="btn btn-ghost btn-sm"><Icon name="arrowLeft" :size="14" /></button>
+        <button @click="backToList" class="btn btn-ghost btn-sm" aria-label="Back to notebooks" title="Back to notebooks"><Icon name="arrowLeft" :size="14" /></button>
         <input
           v-model="title"
           class="field-input"
@@ -864,7 +864,7 @@ defineExpose({
           <!-- Cell toolbar -->
           <div class="row" style="justify-content: space-between; align-items: center; padding: var(--sh-space-2) var(--sh-space-3); background: var(--sh-paper-2); border-bottom: var(--sh-border-thin); flex-wrap: wrap; gap: var(--sh-space-2);">
             <div class="row" style="gap: var(--sh-space-2); align-items: center; min-width: 0; flex-wrap: nowrap; overflow: hidden;">
-              <button @click="toggleCollapsed(cell)" class="btn btn-ghost btn-sm" style="padding: 2px; flex: none;">
+              <button @click="toggleCollapsed(cell)" class="btn btn-ghost btn-sm" style="padding: 2px; flex: none;" :aria-label="cell.collapsed ? 'Expand cell' : 'Collapse cell'" :aria-expanded="!cell.collapsed">
                 <Icon :name="cell.collapsed ? 'chevronRight' : 'chevronDown'" :size="14" />
               </button>
               <span class="badge badge--graphite" style="flex: none;">{{ cell.type }}</span>
@@ -879,7 +879,7 @@ defineExpose({
               <span
                 v-if="isStale(cell)"
                 class="badge"
-                style="background: var(--sh-marigold); color: #1F2330; white-space: nowrap; flex: none;"
+                style="background: var(--vibe-highlight); color: var(--vibe-highlight-fg); white-space: nowrap; flex: none;"
                 data-testid="stale-badge"
               >EDITED · RUN TO UPDATE</span>
             </div>
@@ -907,11 +907,12 @@ defineExpose({
                 @click="openAiCellEdit(cell)"
                 class="btn btn-ghost btn-sm"
                 title="Edit with AI"
+                aria-label="Edit with AI"
                 :data-testid="`ai-cell-edit-${cell.id}`"
               ><Icon name="sparkle" :size="14" /></button>
-              <button @click="moveCell(cell, -1)" class="btn btn-ghost btn-sm" title="Move up"><Icon name="chevronUp" :size="14" /></button>
-              <button @click="moveCell(cell, 1)" class="btn btn-ghost btn-sm" title="Move down"><Icon name="chevronDown" :size="14" /></button>
-              <button @click="deleteCell(cell)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" title="Delete cell"><Icon name="trash" :size="14" /></button>
+              <button @click="moveCell(cell, -1)" class="btn btn-ghost btn-sm" title="Move up" aria-label="Move cell up"><Icon name="chevronUp" :size="14" /></button>
+              <button @click="moveCell(cell, 1)" class="btn btn-ghost btn-sm" title="Move down" aria-label="Move cell down"><Icon name="chevronDown" :size="14" /></button>
+              <button @click="deleteCell(cell)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" title="Delete cell" aria-label="Delete cell"><Icon name="trash" :size="14" /></button>
             </div>
           </div>
 

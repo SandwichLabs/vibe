@@ -5,6 +5,7 @@ studio/build/
 studio/studio/
 *.exe
 
+.env
 # Test data
 *.vibe
 *.vibe-journal

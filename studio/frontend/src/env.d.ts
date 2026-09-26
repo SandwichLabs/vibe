@@ -13,6 +13,10 @@ declare global {
       main: {
         App: {
           SelectVibeFile(): Promise<string>
+          GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
+          SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
+          ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
+          OpenThemesDir(): Promise<string>
           SelectNewVibeFile(): Promise<string>
           OpenFile(path: string, passphrase: string): Promise<void>
           CreateFile(path: string, passphrase: string, title: string, desc: string): Promise<void>

@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import { useModalKeys } from '../composables/useModal'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 
 // Autofocus + select directive for the inline cell editor. select() only exists
@@ -28,6 +29,10 @@ const sortCol = ref('')
 const sortDir = ref('ASC')
 const showNewTableModal = ref(false)
 const showAddRowModal = ref(false)
+const newTableEl = ref<HTMLElement | null>(null)
+const addRowEl = ref<HTMLElement | null>(null)
+useModalKeys(showNewTableModal, () => { showNewTableModal.value = false }, newTableEl)
+useModalKeys(showAddRowModal, () => { showAddRowModal.value = false }, addRowEl)
 const newTableName = ref('')
 const newTableCols = ref<ColumnInfo[]>([{ name: '', type: 'TEXT', not_null: false, pk: false }])
 const newRowValues = ref<Record<string, string>>({})
@@ -435,11 +440,11 @@ watch(errorMessage, (msg) => {
           v-for="t in tables"
           :key="t"
           @click="selectTable(t)"
-          class="px-4 py-2 cursor-pointer border-b border-[rgba(31,35,48,0.12)] flex items-center justify-between group text-sm font-medium"
-          :class="selectedTable === t ? 'row-selected' : 'hover:bg-[rgba(31,35,48,0.04)]'"
+          class="px-4 py-2 cursor-pointer border-b border-line flex items-center justify-between group text-sm font-medium"
+          :class="selectedTable === t ? 'row-selected' : 'hover:bg-[var(--sh-hover)]'"
         >
           <span class="truncate flex items-center gap-2"><Icon name="database" :size="14" /> {{ t }}</span>
-          <button @click.stop="dropTable(t)" class="hidden group-hover:block btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+          <button @click.stop="dropTable(t)" class="btn btn-ghost btn-sm hover-reveal" style="color: var(--sh-error);" :aria-label="`Drop table ${t}`" :title="`Drop ${t}`"><Icon name="trash" :size="14" /></button>
         </div>
       </div>
     </div>
@@ -467,7 +472,7 @@ watch(errorMessage, (msg) => {
         </div>
 
         <!-- Record-count bar -->
-        <div class="record-count-bar px-6 py-1.5 border-b border-[rgba(31,35,48,0.12)] sh-mono text-xs text-[var(--sh-graphite)] flex items-center gap-2">
+        <div class="record-count-bar px-6 py-1.5 border-b border-line sh-mono text-xs text-[var(--sh-graphite)] flex items-center gap-2">
           <span v-if="activeFilter" class="badge badge--teal">Filtered</span>
           <span>{{ (activeFilter ? (filteredTotal ?? 0) : (tableData?.total_rows ?? 0)) }} records</span>
         </div>
@@ -593,7 +598,7 @@ watch(errorMessage, (msg) => {
                     >{{ cellError.message }}</div>
                   </td>
                   <td>
-                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" aria-label="Delete row" title="Delete row"><Icon name="trash" :size="14" /></button>
                   </td>
                 </tr>
               </template>
@@ -614,8 +619,8 @@ watch(errorMessage, (msg) => {
     </div>
 
     <!-- New table modal -->
-    <div v-if="showNewTableModal" class="modal-overlay" @click.self="showNewTableModal = false">
-      <div class="card card-pad w-full max-w-lg">
+    <div v-if="showNewTableModal" class="modal-overlay" @click.self="showNewTableModal = false" role="dialog" aria-modal="true" aria-label="Create table">
+      <div ref="newTableEl" class="card card-pad w-full max-w-lg">
         <h3 class="card-title mb-4">Create table</h3>
         <input v-model="newTableName" placeholder="Table name" class="field-input mb-4" />
         <div class="space-y-2 mb-4">
@@ -639,8 +644,8 @@ watch(errorMessage, (msg) => {
     </div>
 
     <!-- Add row modal -->
-    <div v-if="showAddRowModal && tableInfo" class="modal-overlay" @click.self="showAddRowModal = false">
-      <div class="card card-pad w-full max-w-lg max-h-[80vh] overflow-auto">
+    <div v-if="showAddRowModal && tableInfo" class="modal-overlay" @click.self="showAddRowModal = false" role="dialog" aria-modal="true" aria-label="Add row">
+      <div ref="addRowEl" class="card card-pad w-full max-w-lg max-h-[80vh] overflow-auto">
         <h3 class="card-title mb-4">Add row to {{ selectedTable }}</h3>
         <div class="space-y-3 mb-4">
           <div v-for="col in tableInfo.columns" :key="col.name">
@@ -657,7 +662,8 @@ watch(errorMessage, (msg) => {
 
     <ConfirmDialog
       :visible="showConfirmDrop"
-      title="Drop Table"
+      title="Drop table"
+      confirm-label="Drop table"
       :message="`Drop table '${pendingDropTable}'? This cannot be undone.`"
       @confirm="confirmDropTable"
       @cancel="showConfirmDrop = false; pendingDropTable = null"
@@ -665,7 +671,8 @@ watch(errorMessage, (msg) => {
 
     <ConfirmDialog
       :visible="showConfirmDeleteRow"
-      title="Delete Row"
+      title="Delete row"
+      confirm-label="Delete row"
       message="Delete this row?"
       @confirm="confirmDeleteRow"
       @cancel="showConfirmDeleteRow = false; pendingDeleteRow = null"
@@ -721,12 +728,12 @@ watch(errorMessage, (msg) => {
 .brutal-table td.cell-error {
   outline: 2px solid var(--sh-error);
   outline-offset: -2px;
-  background: rgba(220, 38, 38, 0.06);
+  background: var(--sh-error-8);
 }
 .cell-error-msg {
   font-size: 11px;
   color: var(--sh-error);
   margin-top: 2px;
-  font-family: var(--sh-mono, monospace);
+  font-family: var(--sh-font-mono);
 }
 </style>

@@ -21,12 +21,15 @@ export interface ConfirmOptions {
   // See ConfirmDialog.vue's own prop doc: 'destructive' (default) is the
   // red delete-style button; 'primary' is the ordinary teal action style.
   variant?: 'destructive' | 'primary'
+  // Button label naming the action ("Delete"). Defaults to "Confirm".
+  confirmLabel?: string
 }
 
 export const confirmVisible = ref(false)
 export const confirmTitle = ref('')
 export const confirmMessage = ref('')
 export const confirmVariant = ref<'destructive' | 'primary'>('destructive')
+export const confirmLabel = ref('Confirm')
 
 let pendingResolve: ((confirmed: boolean) => void) | null = null
 
@@ -43,6 +46,7 @@ export function askConfirm(opts: ConfirmOptions): Promise<boolean> {
   confirmTitle.value = opts.title ?? 'Confirm'
   confirmMessage.value = opts.message
   confirmVariant.value = opts.variant ?? 'destructive'
+  confirmLabel.value = opts.confirmLabel ?? 'Confirm'
   confirmVisible.value = true
   return new Promise((resolve) => {
     pendingResolve = resolve

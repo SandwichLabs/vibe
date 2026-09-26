@@ -762,6 +762,40 @@ export namespace main {
 	        this.description = source["description"];
 	    }
 	}
+	export class UserThemesResult {
+	    themes: prefs.ThemeFile[];
+	    problems: string[];
+	    dir: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UserThemesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.themes = this.convertValues(source["themes"], prefs.ThemeFile);
+	        this.problems = source["problems"];
+	        this.dir = source["dir"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
@@ -865,6 +899,47 @@ export namespace notebooks {
 	        this.title = source["title"];
 	        this.cellCount = source["cellCount"];
 	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+
+}
+
+export namespace prefs {
+	
+	export class Preferences {
+	    theme: string;
+	    systemLight: string;
+	    systemDark: string;
+	    reduceMotion: boolean;
+	    uiScale: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Preferences(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
+	        this.systemLight = source["systemLight"];
+	        this.systemDark = source["systemDark"];
+	        this.reduceMotion = source["reduceMotion"];
+	        this.uiScale = source["uiScale"];
+	    }
+	}
+	export class ThemeFile {
+	    path: string;
+	    filename: string;
+	    json: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ThemeFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.filename = source["filename"];
+	        this.json = source["json"];
 	    }
 	}
 

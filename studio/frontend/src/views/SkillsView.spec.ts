@@ -125,8 +125,8 @@ describe('SkillsView', () => {
     await row.find('button[title="Delete skill"]').trigger('click')
     await flushPromises()
     // ConfirmDialog is rendered; simulate confirm via its Confirm button.
-    const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Confirm')
-    expect(confirmBtn, 'expected a ConfirmDialog Confirm button').toBeTruthy()
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Delete')
+    expect(confirmBtn, 'expected a ConfirmDialog Delete button').toBeTruthy()
     await confirmBtn!.trigger('click')
     await flushPromises()
     expect(app.DeleteSkill).toHaveBeenCalledWith('revenue-rules')

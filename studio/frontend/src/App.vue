@@ -4,7 +4,7 @@ import { EventsOn } from './wailsjs/runtime/runtime'
 import UnlockView from './views/UnlockView.vue'
 import AppShell from './components/AppShell.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
-import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, resolveConfirm } from './composables/useConfirm'
+import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, resolveConfirm } from './composables/useConfirm'
 import { flushAll } from './composables/usePendingSaves'
 
 const isOpen = ref(false)
@@ -99,6 +99,7 @@ onUnmounted(() => {
       :title="confirmTitle"
       :message="confirmMessage"
       :variant="confirmVariant"
+      :confirm-label="confirmLabel"
       @confirm="resolveConfirm(true)"
       @cancel="resolveConfirm(false)"
     />

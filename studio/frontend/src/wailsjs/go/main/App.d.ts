@@ -4,6 +4,7 @@ import {main} from '../models';
 import {llm} from '../models';
 import {notebooks} from '../models';
 import {crud} from '../models';
+import {prefs} from '../models';
 import {queries} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -76,6 +77,8 @@ export function GetMCPStatus():Promise<Record<string, any>>;
 
 export function GetNotebook(arg1:string):Promise<notebooks.Notebook>;
 
+export function GetPreferences():Promise<prefs.Preferences>;
+
 export function GetQuery(arg1:string):Promise<queries.Query>;
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
@@ -104,7 +107,11 @@ export function ListTables():Promise<Array<string>>;
 
 export function ListTemplates():Promise<Array<main.TemplateInfo>>;
 
+export function ListUserThemes():Promise<main.UserThemesResult>;
+
 export function OpenFile(arg1:string,arg2:string):Promise<void>;
+
+export function OpenThemesDir():Promise<string>;
 
 export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
 
@@ -143,6 +150,8 @@ export function SetActiveNotebook(arg1:string):Promise<void>;
 export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 
 export function SetMeta(arg1:string,arg2:string):Promise<void>;
+
+export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
 
 export function StartMCPServer():Promise<string>;
 

@@ -155,7 +155,7 @@ function goBack() {
   <div class="row" style="justify-content: center; height: 100%; background: var(--sh-paper);">
     <div class="card card-pad" style="width: 100%; max-width: 28rem; box-shadow: var(--sh-shadow-lg);">
       <div class="col" style="align-items: center; text-align: center; gap: var(--sh-space-1); margin-bottom: var(--sh-space-5);">
-        <span style="width: 48px; height: 48px; background: var(--sh-teal); color: var(--sh-paper); border: 2px solid var(--sh-ink); border-radius: var(--sh-radius-sm); box-shadow: 3px 3px 0 0 var(--sh-ink); font-family: var(--sh-font-display); font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center;">V</span>
+        <span style="width: 48px; height: 48px; background: var(--vibe-accent); color: var(--vibe-accent-fg); border: 2px solid var(--vibe-border); border-radius: var(--sh-radius-sm); box-shadow: var(--sh-shadow); font-family: var(--sh-font-display); font-weight: 700; font-size: 26px; display: inline-flex; align-items: center; justify-content: center;">V</span>
         <h1 style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px; letter-spacing: -0.015em; margin-top: 14px;">
           Vibe <span style="border-bottom: 3px solid var(--sh-teal); padding-bottom: 1px;">Studio</span>
         </h1>
@@ -206,7 +206,8 @@ function goBack() {
               type="button"
               class="card card-pad"
               :class="{ 'is-selected': selectedTemplate === '' }"
-              :style="selectedTemplate === '' ? 'border-color: var(--sh-teal); text-align: left;' : 'text-align: left;'"
+              :aria-pressed="selectedTemplate === ''"
+              style="text-align: left;"
               @click="selectedTemplate = ''"
             >
               <div style="font-weight: 600;">Blank database</div>
@@ -218,7 +219,8 @@ function goBack() {
               type="button"
               class="card card-pad"
               :class="{ 'is-selected': selectedTemplate === tmpl.name }"
-              :style="selectedTemplate === tmpl.name ? 'border-color: var(--sh-teal); text-align: left;' : 'text-align: left;'"
+              :aria-pressed="selectedTemplate === tmpl.name"
+              style="text-align: left;"
               @click="selectTemplate(tmpl.name)"
             >
               <div style="font-weight: 600;">{{ tmpl.description || tmpl.name }}</div>

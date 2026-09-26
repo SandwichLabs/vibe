@@ -142,6 +142,10 @@ export function GetNotebook(arg1) {
   return window['go']['main']['App']['GetNotebook'](arg1);
 }
 
+export function GetPreferences() {
+  return window['go']['main']['App']['GetPreferences']();
+}
+
 export function GetQuery(arg1) {
   return window['go']['main']['App']['GetQuery'](arg1);
 }
@@ -198,8 +202,16 @@ export function ListTemplates() {
   return window['go']['main']['App']['ListTemplates']();
 }
 
+export function ListUserThemes() {
+  return window['go']['main']['App']['ListUserThemes']();
+}
+
 export function OpenFile(arg1, arg2) {
   return window['go']['main']['App']['OpenFile'](arg1, arg2);
+}
+
+export function OpenThemesDir() {
+  return window['go']['main']['App']['OpenThemesDir']();
 }
 
 export function PreviewFilterSQL(arg1, arg2, arg3) {
@@ -276,6 +288,10 @@ export function SetAgentConfig(arg1) {
 
 export function SetMeta(arg1, arg2) {
   return window['go']['main']['App']['SetMeta'](arg1, arg2);
+}
+
+export function SetPreferences(arg1) {
+  return window['go']['main']['App']['SetPreferences'](arg1);
 }
 
 export function StartMCPServer() {

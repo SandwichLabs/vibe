@@ -119,7 +119,7 @@ watch(
           <Icon name="sparkle" :size="16" />
           {{ title }}
         </h3>
-        <button @click="onClose" class="btn btn-ghost btn-sm" data-testid="ai-cell-close"><Icon name="x" :size="14" /></button>
+        <button @click="onClose" class="btn btn-ghost btn-sm" data-testid="ai-cell-close" aria-label="Close"><Icon name="x" :size="14" /></button>
       </div>
 
       <!-- prompt -->
@@ -167,7 +167,7 @@ watch(
         <div v-if="dialog.state.checked.length" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">
           Checked: {{ dialog.state.checked.join(', ') }}
         </div>
-        <p v-if="applyExplanation" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-coral);" data-testid="ai-cell-apply-note">{{ applyExplanation }}</p>
+        <p v-if="applyExplanation" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-warn);" data-testid="ai-cell-apply-note">{{ applyExplanation }}</p>
         <div class="row" style="gap: var(--sh-space-2);">
           <input ref="refineEl" v-model="draftText" class="field-input sh-mono" placeholder="Refine (e.g. “make it monthly for East only”)" data-testid="ai-cell-refine-input" @keyup.enter="onFollowUp" />
           <button @click="onFollowUp" class="btn btn-ghost btn-sm" data-testid="ai-cell-refine" :disabled="!draftText.trim()">Refine</button>

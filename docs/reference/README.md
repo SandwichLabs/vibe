@@ -9,6 +9,7 @@ surface so each area is easy to find:
 | [`notebooks.md`](notebooks.md) | **Notebooks** (sql/markdown/a2ui cells) and the **A2UI** component reference |
 | [`import-office.md`](import-office.md) | **Import** (CSV/XLSX) and table/query **export** (CSV, Parquet, XLSX, JSON) |
 | [`templates.md`](templates.md) | Bundled starter **templates** |
+| [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui` and every starter template in

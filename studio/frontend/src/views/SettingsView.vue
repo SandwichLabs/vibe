@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
+import AppearanceSettings from '../components/AppearanceSettings.vue'
 
 const meta = ref<Record<string, string>>({})
 const title = ref('')
@@ -81,6 +82,7 @@ async function save() {
     await window.go.main.App.SetMeta('title', title.value)
     await window.go.main.App.SetMeta('description', description.value)
     await window.go.main.App.SaveFile()
+    meta.value = await window.go.main.App.GetAllMeta()
     message.value = 'Settings saved'
     setTimeout(() => { message.value = '' }, 2000)
   } catch (e: any) {
@@ -106,26 +108,34 @@ onMounted(() => {
 
     <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
 
-    <div v-else class="col" style="max-width: 36rem; gap: var(--sh-space-6);">
+    <div v-else class="col" style="max-width: 52rem; gap: var(--sh-space-6);">
+      <AppearanceSettings />
+
+      <div>
+        <div class="sec-title">
+          <h2 style="font-size: 22px;">This file</h2>
+          <span class="label">Stored in the .vibe</span>
+        </div>
       <div class="card card-pad col" style="gap: var(--sh-space-4);">
         <div>
-          <label class="field-label">Title</label>
-          <input v-model="title" class="field-input" />
+          <label class="field-label" for="settings-title">Title</label>
+          <input id="settings-title" v-model="title" class="field-input" />
         </div>
 
         <div>
-          <label class="field-label">Description</label>
-          <textarea v-model="description" rows="3" class="field-input" style="resize: none;"></textarea>
+          <label class="field-label" for="settings-description">Description</label>
+          <textarea id="settings-description" v-model="description" rows="3" class="field-input" style="resize: vertical;"></textarea>
         </div>
 
         <div class="row">
           <button @click="save" :disabled="saving" class="btn btn-primary">
             <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save settings' }}
           </button>
-          <span v-if="message" class="sh-body" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">
+          <span v-if="message" class="sh-body" role="status" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">
             {{ message }}
           </span>
         </div>
+      </div>
       </div>
 
       <!-- MCP Server -->

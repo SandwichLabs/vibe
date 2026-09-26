@@ -6,6 +6,11 @@ import { flushAll } from '../composables/usePendingSaves'
 import { askConfirm } from '../composables/useConfirm'
 import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
+import { useTheme } from '../theme/useTheme'
+import { shortcutLabel } from '../composables/useModal'
+
+const theme = useTheme()
+const savedFlash = ref(false)
 
 // Agent wizard panel — a slide-in chat available across every screen.
 const agentOpen = ref(false)
@@ -45,9 +50,12 @@ async function loadFileInfo() {
 }
 
 async function save() {
+  if (saving.value) return
   saving.value = true
   try {
     await window.go.main.App.SaveFile()
+    savedFlash.value = true
+    setTimeout(() => { savedFlash.value = false }, 1500)
   } catch (e: any) {
     errorMessage.value = 'Save failed: ' + (e.message || e)
   } finally {
@@ -85,11 +93,32 @@ function openAgentFromEvent() {
 
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
+// Global shortcuts: Ctrl/Cmd+S saves the file from anywhere (the sidebar
+// button was the only way); Ctrl/Cmd+J toggles the agent drawer; Escape
+// closes it when nothing else (a modal, an editor) claims the key first.
+function onGlobalKeydown(e: KeyboardEvent) {
+  const mod = e.metaKey || e.ctrlKey
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    save()
+    return
+  }
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
+    e.preventDefault()
+    agentOpen.value = !agentOpen.value
+    return
+  }
+  if (e.key === 'Escape' && agentOpen.value && !e.defaultPrevented) {
+    agentOpen.value = false
+  }
+}
+
 let unsubFileOpened: (() => void) | null = null
 
 onMounted(() => {
   loadFileInfo()
   window.addEventListener('vibe:open-agent', openAgentFromEvent)
+  window.addEventListener('keydown', onGlobalKeydown)
   // The sidebar's "Open file" label was captured once at mount and never
   // refreshed — stale if the open file changes underneath this
   // already-mounted shell (e.g. a direct OpenFile/CreateFile/
@@ -102,6 +131,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('vibe:open-agent', openAgentFromEvent)
+  window.removeEventListener('keydown', onGlobalKeydown)
   unsubFileOpened?.()
 })
 
@@ -122,11 +152,22 @@ watch(errorMessage, (msg) => {
         <button
           class="btn btn-inverted agent-toggle"
           data-testid="agent-toggle"
+          :aria-expanded="agentOpen"
+          aria-controls="agent-panel"
+          :title="`Toggle agent · ${shortcutLabel('J')}`"
           @click="agentOpen = !agentOpen"
         >
           <Icon name="bot" :size="16" /> Agent
         </button>
-        <span class="avatar-sq">VS</span>
+        <button
+          class="theme-toggle"
+          data-testid="theme-toggle"
+          :aria-label="theme.activeTheme.value.type === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+          :title="`${theme.activeTheme.value.name} · click to switch`"
+          @click="theme.toggleDark()"
+        >
+          <Icon :name="theme.activeTheme.value.type === 'dark' ? 'sun' : 'moon'" :size="16" />
+        </button>
       </div>
     </div>
 
@@ -152,12 +193,12 @@ watch(errorMessage, (msg) => {
       </div>
 
       <div style="padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px;">
-        <button @click="save" :disabled="saving" class="btn btn-primary" style="width: 100%; justify-content: center;">
-          <Icon name="save" :size="16" />
-          {{ saving ? 'Saving…' : 'Save' }}
+        <button @click="save" :disabled="saving" class="btn btn-primary" style="width: 100%; justify-content: center;" :title="`Save file · ${shortcutLabel('S')}`">
+          <Icon :name="savedFlash ? 'check' : 'save'" :size="16" />
+          {{ saving ? 'Saving…' : (savedFlash ? 'Saved' : 'Save') }}
         </button>
-        <button @click="closeFile" data-testid="close-file" class="btn btn-inverted" style="width: 100%; justify-content: center;">
-          Close File
+        <button @click="closeFile" data-testid="close-file" class="btn btn-ghost" style="width: 100%; justify-content: center;">
+          Close file
         </button>
       </div>
     </aside>
@@ -169,6 +210,19 @@ watch(errorMessage, (msg) => {
 
     <AgentPanel :open="agentOpen" @close="agentOpen = false" />
 
-    <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>
+    <div v-if="errorMessage" class="error-toast" role="alert">{{ errorMessage }}</div>
   </div>
 </template>
+
+<style scoped>
+.theme-toggle {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  color: var(--vibe-chrome-fg);
+  border: 1.5px solid var(--vibe-chrome-fg);
+  border-radius: var(--sh-radius-sm);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: color-mix(in srgb, var(--vibe-chrome-fg) 12%, transparent); }
+</style>

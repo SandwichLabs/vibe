@@ -55,7 +55,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
 </script>
 
 <template>
-  <div class="agent-drawer" :class="{ open }" data-testid="agent-panel">
+  <div id="agent-panel" class="agent-drawer" :class="{ open }" data-testid="agent-panel" role="complementary" aria-label="Agent" :aria-hidden="!open">
     <div class="agent-side">
       <div class="head">
         <div class="title"><Icon name="bot" :size="18" /> Agent</div>
@@ -171,7 +171,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   margin-left: 8px;
   background: transparent;
   border: none;
-  color: var(--sh-paper);
+  color: var(--vibe-chrome-fg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -188,8 +188,8 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
 .agent-md { white-space: normal; }
 .agent-md :deep(p) { margin: 0 0 6px; }
 .agent-md :deep(pre) {
-  background: var(--sh-ink);
-  color: var(--sh-paper);
+  background: var(--vibe-code-bg);
+  color: var(--vibe-code-fg);
   padding: 8px 10px;
   border-radius: var(--sh-radius-sm);
   overflow-x: auto;
@@ -211,7 +211,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   color: inherit;
 }
 .agent-md :deep(ul), .agent-md :deep(ol) { margin: 4px 0; padding-left: 20px; }
-.agent-error { color: var(--sh-coral); }
+.agent-error { color: var(--sh-error); }
 .agent-dim { color: var(--sh-graphite); font-style: italic; }
 .agent-textarea {
   width: 100%;
@@ -234,9 +234,9 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   letter-spacing: 0.06em;
 }
 .agent-pinbtn.active {
-  background: var(--sh-teal);
-  color: var(--sh-paper);
-  border-color: var(--sh-teal);
+  background: var(--vibe-accent);
+  color: var(--vibe-accent-fg);
+  border-color: var(--vibe-accent);
 }
 .agent-hint {
   font-family: var(--sh-font-mono);

@@ -87,8 +87,8 @@
 .a2ui-page .a2ui-list__items { margin: 2px 0; padding-left: 18px; font-size: var(--sh-fs-sm); }
 
 .a2ui-page .a2ui-code {
-  background: var(--sh-ink);
-  color: var(--sh-paper);
+  background: var(--vibe-code-bg);
+  color: var(--vibe-code-fg);
   padding: 8px 10px;
   border-radius: var(--sh-radius-sm);
   overflow-x: auto;
@@ -263,15 +263,17 @@
   letter-spacing: 0.04em;
   color: var(--sh-graphite);
 }
-/* Data-fetch failure for a bound component — coral is "needs attention", not
-   destructive, matching CLAUDE.md / the panel's existing tool-error styling. */
+/* Data-fetch failure for a bound component. Coral ("needs attention") is
+   ~2.9:1 on paper and fails AA as text, so the message reads in the error
+   role; the coral accent is kept as a leading marker instead. */
 .a2ui-page .a2ui-error {
   font-family: var(--sh-font-mono);
   font-size: var(--sh-fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sh-coral);
+  color: var(--sh-error);
 }
+.a2ui-page .a2ui-error::before { content: "● "; color: var(--sh-coral); }
 
 /* Color tokens: closed enum -> SchoolHouse accent variable, applied only via
    class. yellow=marigold (highlight), black=ink, error=true failing/error
@@ -293,9 +295,9 @@
    tint/fill (bar fill and line stroke are the two places a filled shape,
    not text, legitimately wants the full accent color). */
 .a2ui-page .a2ui--yellow { --a2ui-accent: var(--sh-marigold); --a2ui-accent-tint: var(--sh-marigold-8); }
-.a2ui-page .a2ui--black { --a2ui-accent: var(--sh-ink); --a2ui-accent-tint: rgba(31, 35, 48, 0.08); }
-.a2ui-page .a2ui--error { --a2ui-accent: var(--sh-error); --a2ui-accent-tint: rgba(178, 59, 46, 0.08); }
-.a2ui-page .a2ui--muted { --a2ui-accent: var(--sh-graphite); --a2ui-accent-tint: rgba(92, 98, 117, 0.08); }
+.a2ui-page .a2ui--black { --a2ui-accent: var(--sh-ink); --a2ui-accent-tint: var(--sh-ink-8); }
+.a2ui-page .a2ui--error { --a2ui-accent: var(--sh-error); --a2ui-accent-tint: var(--sh-error-8); }
+.a2ui-page .a2ui--muted { --a2ui-accent: var(--sh-graphite); --a2ui-accent-tint: var(--sh-graphite-8); }
 
 /* Fill contexts — a filled shape, not text, so the full accent color is
    fine (and the point: this is exactly what "highlight" fills for). */

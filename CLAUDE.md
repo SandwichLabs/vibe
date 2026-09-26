@@ -20,7 +20,7 @@ Vibe is a **local-first, encrypted, single-file agentic data workspace**. A `.vi
 - **CLI Framework:** Cobra + Viper (config management)
 - **Container/Encryption:** go-sqlcipher (SQLite + AES-256-CBC, PBKDF2-HMAC-SHA512) — the `.vibe` container envelope
 - **Query/Data Engine:** go-duckdb (embedded DuckDB) — **single engine** for queries and CRUD
-- **Desktop GUI:** Wails v2 with **Vue 3** frontend (the Studio app under `studio/`). UI uses the **SchoolHouse** design system (`studio/frontend/src/schoolhouse/`); the editor is **CodeMirror** (`composables/useVibeEditor.ts`). Chart.js under the A2UI renderer (#67) — the old page renderer (`internal/renderer`) it replaced was removed in #69.
+- **Desktop GUI:** Wails v2 with **Vue 3** frontend (the Studio app under `studio/`). UI uses the **SchoolHouse** design system (`studio/frontend/src/schoolhouse/`) **themed through semantic roles** (`studio/frontend/src/theme/`, `docs/reference/themes.md`): stylesheets reference `--vibe-*` roles (or the bridged `--sh-*` names), never hex; four built-in themes plus user JSON themes in `~/.config/vibe/themes/`. The editor is **CodeMirror** (`composables/useVibeEditor.ts`), themed via the same vars. A2UI charts (#67) are hand-drawn CSS/SVG in `studio/frontend/src/a2ui/` (no Chart.js) — the old page renderer (`internal/renderer`) they replaced was removed in #69.
 - **AI Agent:** `internal/llm` on `charmbracelet/fantasy` (providers: local OpenAI-compatible, Anthropic, Gemini — see `docs/llm-config.md`); tool registry + sandbox + approval queue in `internal/agents`; MCP server in `internal/mcp` (`mark3labs/mcp-go`)
 - **TUI:** BubbleTea + Lipgloss — a SQL REPL, a read-only table browser, and a notebook list (cut to this shape in #69)
 - **Logging:** `log/slog` (structured JSON logging)
@@ -126,6 +126,8 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 - **Additive migrations** — `_vibe_*` tables are only ever added in `internal/container/schema.go`; removals stop creating a table and stop requiring it in `vibe verify`, never drop it from existing files
 - **One tool surface** — new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`
 - **Model output never reaches a style attribute** — A2UI colors are a closed enum; validators reject unknown fields
+- **No hex in stylesheets** — every colour in `studio/frontend` is a `--vibe-*` role (or a bridged `--sh-*` token); translucent variants use `color-mix()` on a role. Theme files are validated by `theme/schema.ts` (hex only, closed role list). Built-ins must pass the AA contrast spec in `theme/schema.spec.ts`
+- **Focus is visible** — `theme/bridge.css` owns one `:focus-visible` ring; never `outline: none` without it. Ad-hoc modals use `composables/useModal.ts` (Escape, focus move/return)
 - **QA in a real browser** — Rodney against the Wails-bound dev server at `:34115`; Vitest specs are supplementary, never the acceptance criterion (see `RODNEY.md`)
 
 ## Key Concepts

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
+import { useModalKeys } from '../composables/useModal'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { EventsOn } from '../wailsjs/runtime/runtime'
@@ -16,6 +17,12 @@ const errorMessage = ref('')
 const viewMode = ref<'rendered' | 'raw'>('rendered')
 
 const showEditor = ref(false)
+const editorEl = ref<HTMLElement | null>(null)
+useModalKeys(showEditor, () => { showEditor.value = false }, editorEl)
+
+watch(errorMessage, (msg) => {
+  if (msg) setTimeout(() => { if (errorMessage.value === msg) errorMessage.value = '' }, 4000)
+})
 const editingOriginalName = ref<string | null>(null) // null = creating new
 const formName = ref('')
 const formDescription = ref('')
@@ -174,14 +181,14 @@ onUnmounted(() => {
         <div class="row" style="justify-content: space-between; align-items: flex-start; margin-bottom: var(--sh-space-4);">
           <div>
             <div class="row" style="gap: var(--sh-space-2); align-items: center;">
-              <h2 style="margin: 0;">{{ selected.name }}</h2>
+              <h2 class="card-title" style="margin: 0; font-size: 28px;">{{ selected.name }}</h2>
               <span class="badge" :class="sourceBadgeClass(selected.source)">{{ selected.source }}</span>
             </div>
             <p class="sh-mono" style="color: var(--sh-graphite); margin-top: var(--sh-space-1);">{{ selected.description }}</p>
           </div>
-          <div class="row" style="gap: var(--sh-space-1);">
-            <button class="btn btn-sm" :class="viewMode === 'rendered' ? 'btn-primary' : 'btn-ghost'" @click="viewMode = 'rendered'" data-testid="skill-view-rendered">Rendered</button>
-            <button class="btn btn-sm" :class="viewMode === 'raw' ? 'btn-primary' : 'btn-ghost'" @click="viewMode = 'raw'" data-testid="skill-view-raw">Raw</button>
+          <div class="seg" role="group" aria-label="Skill view">
+            <button type="button" :class="{ on: viewMode === 'rendered' }" :aria-pressed="viewMode === 'rendered'" @click="viewMode = 'rendered'" data-testid="skill-view-rendered">Rendered</button>
+            <button type="button" :class="{ on: viewMode === 'raw' }" :aria-pressed="viewMode === 'raw'" @click="viewMode = 'raw'" data-testid="skill-view-raw">Raw</button>
           </div>
         </div>
 
@@ -191,8 +198,8 @@ onUnmounted(() => {
     </div>
 
     <!-- Editor modal -->
-    <div v-if="showEditor" class="modal-overlay" @click.self="showEditor = false">
-      <div class="card card-pad" style="width: 100%; max-width: 560px;">
+    <div v-if="showEditor" class="modal-overlay" @click.self="showEditor = false" role="dialog" aria-modal="true" :aria-label="editingOriginalName ? 'Edit skill' : 'New skill'">
+      <div ref="editorEl" class="card card-pad" style="width: 100%; max-width: 560px;">
         <h3 class="card-title" style="margin: 0 0 var(--sh-space-4);">{{ editingOriginalName ? 'Edit skill' : 'New skill' }}</h3>
         <div class="col" style="gap: 4px;">
           <label class="sh-label" style="margin: 0;">Name</label>
@@ -220,7 +227,8 @@ onUnmounted(() => {
 
     <ConfirmDialog
       :visible="showConfirmDelete"
-      title="Delete Skill"
+      title="Delete skill"
+      confirm-label="Delete"
       message="Delete this skill? This cannot be undone."
       @confirm="confirmDelete"
       @cancel="showConfirmDelete = false; pendingDeleteName = null"

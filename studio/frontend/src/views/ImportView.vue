@@ -154,7 +154,7 @@ async function importXlsx() {
 
     <!-- Spreadsheet wizard -->
     <div class="card card-pad" style="max-width: 60rem; margin-bottom: 24px;">
-      <h2 style="margin-top: 0;">Import spreadsheet</h2>
+      <h2 class="card-title" style="margin: 0 0 var(--sh-space-4);">Import spreadsheet</h2>
       <div class="col">
         <div>
           <label class="field-label">Workbook (.xlsx)</label>
@@ -272,7 +272,7 @@ async function importXlsx() {
 
     <!-- CSV import -->
     <div class="card card-pad" style="max-width: 36rem;">
-      <h2 style="margin-top: 0;">Import CSV</h2>
+      <h2 class="card-title" style="margin: 0 0 var(--sh-space-4);">Import CSV</h2>
       <div class="col">
         <div>
           <label class="field-label">CSV file</label>

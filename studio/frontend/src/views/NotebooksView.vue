@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // NotebooksView — the notebook library list (#66 part A). Mirrors PagesView's
 // list/create/delete shape; each row opens NotebookView (#/notebooks/:id).
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import { useModalKeys } from '../composables/useModal'
 
 interface NotebookSummary { id: string; title: string; cellCount: number; updatedAt: string }
 
@@ -19,6 +20,13 @@ const errorMessage = ref('')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const hoveredId = ref<string | null>(null)
+const newModalEl = ref<HTMLElement | null>(null)
+useModalKeys(showNewModal, () => { showNewModal.value = false }, newModalEl)
+
+// Errors clear themselves like every other view's toast (audit 2.3).
+watch(errorMessage, (msg) => {
+  if (msg) setTimeout(() => { if (errorMessage.value === msg) errorMessage.value = '' }, 4000)
+})
 const importing = ref(false)
 
 async function loadNotebooks() {
@@ -136,14 +144,14 @@ onMounted(async () => {
               </div>
             </div>
           </div>
-          <div v-show="hoveredId === nb.id" class="row" style="gap: var(--sh-space-1);">
-            <button @click.stop="deleteNotebook(nb.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+          <div class="row" style="gap: var(--sh-space-1);">
+            <button @click.stop="deleteNotebook(nb.id)" class="btn btn-ghost btn-sm hover-reveal" :class="{ 'is-on': hoveredId === nb.id }" style="color: var(--sh-error);" :aria-label="`Delete notebook ${nb.title}`" :title="`Delete ${nb.title}`"><Icon name="trash" :size="14" /></button>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="showNewModal" class="modal-overlay" @click.self="showNewModal = false">
+    <div v-if="showNewModal" class="modal-overlay" @click.self="showNewModal = false" role="dialog" aria-modal="true" aria-label="New notebook">
       <div class="card card-pad" style="width: 100%; max-width: 384px;">
         <h3 class="card-title" style="margin: 0 0 var(--sh-space-4);">New notebook</h3>
         <input v-model="newTitle" placeholder="Notebook title" class="field-input" :class="{ 'field-input-error': titleError }" @keyup.enter="createNotebook" @input="titleError = false" autofocus />
@@ -158,6 +166,7 @@ onMounted(async () => {
     <ConfirmDialog
       :visible="showConfirmDelete"
       title="Delete Notebook"
+      confirm-label="Delete"
       message="Delete this notebook? This cannot be undone."
       @confirm="confirmDeleteNotebook"
       @cancel="showConfirmDelete = false; pendingDeleteId = null"

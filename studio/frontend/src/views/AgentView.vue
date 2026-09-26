@@ -188,8 +188,8 @@ function onKeydown(e: KeyboardEvent) {
 .agent-md { white-space: normal; }
 .agent-md :deep(p) { margin: 0 0 6px; }
 .agent-md :deep(pre) {
-  background: var(--sh-ink);
-  color: var(--sh-paper);
+  background: var(--vibe-code-bg);
+  color: var(--vibe-code-fg);
   padding: 10px 12px;
   border-radius: var(--sh-radius-sm);
   overflow-x: auto;
@@ -210,7 +210,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 .agent-md :deep(table) { border-collapse: collapse; }
 .agent-md :deep(th), .agent-md :deep(td) { border: 1px solid var(--sh-line); padding: 4px 8px; }
-.agent-error { color: var(--sh-coral); }
+.agent-error { color: var(--sh-error); }
 .agent-dim { color: var(--sh-graphite); font-style: italic; }
 .agent-hint {
   font-family: var(--sh-font-mono);

@@ -11,6 +11,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import { useModalKeys, shortcutLabel } from '../composables/useModal'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
@@ -21,6 +22,8 @@ const loading = ref(true)
 const running = ref(false)
 const error = ref('')
 const showSaveModal = ref(false)
+const saveModalEl = ref<HTMLElement | null>(null)
+useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
 const saveTitle = ref('')
 const errorMessage = ref('')
 const statusMessage = ref('')
@@ -249,7 +252,7 @@ watch(statusMessage, (msg) => {
         <Icon name="sparkle" :size="14" /> Ask agent
       </button>
       <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm" data-testid="run-query">
-        <Icon name="play" :size="14" /> {{ running ? 'Running…' : 'Run · Ctrl+Enter' }}
+        <Icon name="play" :size="14" /> {{ running ? 'Running…' : `Run · ${shortcutLabel('Enter')}` }}
       </button>
     </div>
 
@@ -313,7 +316,7 @@ watch(statusMessage, (msg) => {
             :class="{ on: selectedId === q.id }"
           >
             <div style="min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">{{ q.title }}</div>
-            <button v-show="hoveredId === q.id" @click.stop="deleteQuery(q.id)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);"><Icon name="trash" :size="14" /></button>
+            <button :class="{ 'is-on': hoveredId === q.id }" @click.stop="deleteQuery(q.id)" class="btn btn-ghost btn-sm hover-reveal" style="color: var(--sh-error);" :aria-label="`Delete query ${q.title}`" :title="`Delete ${q.title}`"><Icon name="trash" :size="14" /></button>
           </div>
         </div>
       </div>
@@ -324,7 +327,7 @@ watch(statusMessage, (msg) => {
           <textarea
             v-model="sqlText"
             @keydown="handleKeydown"
-            style="width: 100%; height: 180px; resize: none; outline: none; background: var(--sh-ink); color: var(--sh-paper); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
+            style="width: 100%; height: 180px; resize: none; outline: none; background: var(--vibe-editor-bg); color: var(--vibe-editor-fg); border: 2px solid var(--vibe-border); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
             placeholder="Enter SQL query…"
             spellcheck="false"
             data-testid="sql-input"
@@ -369,10 +372,10 @@ watch(statusMessage, (msg) => {
     </div>
 
     <!-- Save modal -->
-    <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false">
-      <div class="card card-pad" style="width: 100%; max-width: 384px;">
+    <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false" role="dialog" aria-modal="true" aria-label="Save query">
+      <div ref="saveModalEl" class="card card-pad" style="width: 100%; max-width: 384px;">
         <h3 class="card-title" style="margin-bottom: 16px;">Save query</h3>
-        <input v-model="saveTitle" placeholder="Query name" class="field-input" style="margin-bottom: 16px;" @keyup.enter="saveQuery" autofocus />
+        <input v-model="saveTitle" placeholder="Query name" aria-label="Query name" class="field-input" style="margin-bottom: 16px;" @keyup.enter="saveQuery" />
         <div class="row" style="gap: 12px; justify-content: flex-end;">
           <button @click="showSaveModal = false" class="btn btn-ghost">Cancel</button>
           <button @click="saveQuery" class="btn btn-primary">Save</button>
@@ -382,7 +385,8 @@ watch(statusMessage, (msg) => {
 
     <ConfirmDialog
       :visible="showConfirmDelete"
-      title="Delete Query"
+      title="Delete query"
+      confirm-label="Delete"
       message="Delete this query?"
       @confirm="confirmDeleteQuery"
       @cancel="showConfirmDelete = false; pendingDeleteId = null"
@@ -424,7 +428,7 @@ watch(statusMessage, (msg) => {
   align-items: center;
 }
 .rail-divider {
-  border-top: 1.5px dashed rgba(31, 35, 48, 0.25);
+  border-top: 1.5px dashed var(--vibe-border-subtle);
   margin: 10px 0 4px;
 }
 .saved-row {
@@ -434,19 +438,19 @@ watch(statusMessage, (msg) => {
   border-radius: var(--sh-radius-sm);
   font-size: 13px;
 }
-.saved-row:hover { background: rgba(31, 35, 48, 0.05); }
+.saved-row:hover { background: var(--sh-hover); }
 .saved-row.on {
   background: var(--sh-surface);
-  border: 1.5px solid var(--sh-ink);
-  box-shadow: 1px 1px 0 0 var(--sh-ink);
+  border: 1.5px solid var(--vibe-border);
+  box-shadow: var(--sh-shadow-xs);
 }
 .status-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: var(--sh-teal);
-  color: var(--sh-paper);
-  border: 2px solid var(--sh-ink);
+  background: var(--vibe-accent);
+  color: var(--vibe-accent-fg);
+  border: 2px solid var(--vibe-border);
   border-radius: var(--sh-radius-sm);
   padding: 10px 16px;
   font-size: 13px;
