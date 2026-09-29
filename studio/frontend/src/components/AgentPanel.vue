@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
 import A2UIPage from '../a2ui/A2UIPage.vue'
+import ToolStepChip from './ToolStepChip.vue'
+import AgentSandboxIntro from './AgentSandboxIntro.vue'
 
 // AgentPanel is the slide-in right-docked wizard chat (W0/W0.5). It drives the
 // streaming AgentChatStream binding via the shared useAgentChat composable: the
@@ -14,7 +16,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const route = useRoute()
 const router = useRouter()
-const { messages, sending, pinnedContext, send, pin, unpin, setScrollHandler, renderMarkdown } = useAgentChat()
+const { messages, sending, pinnedContext, send, pin, unpin, setScrollHandler, renderMarkdown, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
   router.push(`/notebooks/${id}`)
@@ -70,7 +72,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
       <div ref="streamEl" class="stream">
         <div v-if="messages.length === 0" class="agent-empty">
           <Icon name="sparkle" :size="20" />
-          <p>Ask the wizard to inspect your data or build something. It can read your schema, run read-only SQL, and create tables.</p>
+          <AgentSandboxIntro />
         </div>
 
         <div v-for="(m, i) in messages" :key="i" class="amsg">
@@ -88,17 +90,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
             <p v-if="m.verifying" class="agent-text agent-dim" data-testid="agent-verifying">Verifying that answer against the data…</p>
 
             <template v-for="(s, si) in m.steps" :key="si">
-              <div
-                class="tool-chip"
-                :class="{ 'tool-chip-error': s.status === 'error' }"
-                data-testid="agent-tool-chip"
-              >
-                <span class="lab"><Icon name="terminal" :size="12" /> {{ s.tool }}</span>
-                <span v-if="s.input" class="time">{{ s.input.slice(0, 48) }}</span>
-                <span v-if="s.status === 'running'" class="spin" data-testid="chip-running">●</span>
-                <span v-else-if="s.status === 'error'" class="chip-error-mark" data-testid="chip-error" :title="s.output">✕</span>
-                <span v-else class="check" data-testid="chip-done">✓</span>
-              </div>
+              <ToolStepChip :step="s" :preview-len="48" @resolve="(ok, saveFirst) => resolveApproval(s, ok, saveFirst)" />
               <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
               <button
                 v-if="s.notebookLink"
@@ -244,21 +236,6 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   color: var(--sh-graphite);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-.spin { animation: agent-pulse 1s ease-in-out infinite; }
-@keyframes agent-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
-/* A denied/failed tool call (e.g. sandbox permission denial) — SchoolHouse
-   coral is "needs attention", not destructive/red, matching a call the user
-   should notice but that isn't a crash. */
-.tool-chip-error {
-  border-color: var(--sh-coral);
-  background: var(--sh-coral-8);
-}
-.chip-error-mark {
-  color: var(--sh-coral);
-  font-weight: 700;
-  cursor: help;
-  margin-left: auto;
 }
 /* present_data's inline A2UI result (#67) — a compact card in the transcript,
    distinct from the plain-text agent bubble above it. */

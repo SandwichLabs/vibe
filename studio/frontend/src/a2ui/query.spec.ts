@@ -6,7 +6,8 @@
 // only assert structural guarantees (first/last shown, fewer than N), not
 // the actual no-overlap behavior at a given container width.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { pickLabelIndices, formatNumber, toPoints, clampGap, runLiveQuery, _resetQueryPoolForTests } from './query'
+import { pickLabelIndices, toPoints, clampGap, runLiveQuery, _resetQueryPoolForTests } from './query'
+import { formatNumber } from '../lib/formatCell'
 
 // Deferred: a promise plus its own resolve, for scripting exactly when a
 // mocked RunA2UIQuery call "returns" so the pool's queueing/ordering can be

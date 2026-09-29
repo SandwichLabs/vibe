@@ -13,6 +13,15 @@
 // entangle.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+
+// #82: TableBrowserView reads ?table= to pre-select a table (e.g. after
+// "Open table →" from Import). Not exercised here, but useRoute() must
+// resolve to something.
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  return { useRoute: () => reactive({ query: {} }) }
+})
+
 import TableBrowserView from './TableBrowserView.vue'
 
 interface Row { [k: string]: any }

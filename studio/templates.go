@@ -52,6 +52,7 @@ func (a *App) CreateFromTemplate(path, passphrase, template string) error {
 		container.WithPassphrase(passphrase),
 		container.WithLogger(a.logger),
 		container.WithTemplate(template),
+		container.WithLockApp("Vibe Studio"),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create file from template %q: %w", template, err)

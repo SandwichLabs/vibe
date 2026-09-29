@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver
@@ -17,6 +19,14 @@ type Container struct {
 	duckDB   *duckDBState
 	logger   *slog.Logger
 	readOnly bool
+	lock     *fileLock
+
+	// dirty tracks whether DuckDB user data (table rows/schema) has changed
+	// since the last successful Save. It is UI signal only, never a gate on
+	// any exit path: SQLCipher-side content (notebooks, queries, skills,
+	// meta) is write-through and never marks this, so callers that write
+	// DuckDB user data are the ones responsible for calling MarkDirty.
+	dirty atomic.Bool
 }
 
 // Create creates a new .vibe file at the given path with the specified options.
@@ -27,6 +37,20 @@ func Create(path string, opts ...Option) (*Container, error) {
 	if o.Passphrase == "" {
 		return nil, fmt.Errorf("failed to create container: passphrase is required")
 	}
+
+	// Take the writer lock before anything else (#80): a refused create
+	// costs nothing. This also covers the vanishingly unlikely case of two
+	// Creates racing on the same path.
+	lk, err := acquireLock(path, o.LockApp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container: %w", err)
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			lk.release() //nolint:errcheck
+		}
+	}()
 
 	// Ensure the file does not already exist.
 	if _, err := os.Stat(path); err == nil {
@@ -69,13 +93,24 @@ func Create(path string, opts ...Option) (*Container, error) {
 		duckDB:   duckState,
 		logger:   o.Logger,
 		readOnly: false,
+		lock:     lk,
 	}
 
 	// Seed a bundled starter template if requested (P6.6). This writes user
-	// tables + sample data into DuckDB and Access-style metadata into SQLCipher.
+	// tables + sample data into DuckDB and Access-style metadata into
+	// SQLCipher, then saves once: applyTemplate's writes never reach the
+	// encrypted file on their own (DuckDB user data only reaches it on
+	// Save), so without this a crash right after Create keeps only the
+	// SQLCipher-side notebook metadata a template writes and loses the
+	// tables themselves.
 	if o.Template != "" {
-		if err := applyTemplate(c, o.Template); err != nil {
-			c.Close()       //nolint:errcheck
+		err := applyTemplate(c, o.Template)
+		if err == nil {
+			err = c.Save()
+		}
+		if err != nil {
+			c.Close() //nolint:errcheck // releases lk; mark ok so our own defer doesn't double-release it.
+			ok = true
 			os.Remove(path) //nolint:errcheck
 			return nil, fmt.Errorf("failed to apply template: %w", err)
 		}
@@ -83,6 +118,7 @@ func Create(path string, opts ...Option) (*Container, error) {
 
 	o.Logger.Info("container created successfully", "path", path)
 
+	ok = true
 	return c, nil
 }
 
@@ -96,9 +132,36 @@ func Open(path string, opts ...Option) (*Container, error) {
 	}
 
 	// Ensure the file exists.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to open container: file not found at %s", path)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to open container: %w", err)
+	}
+	// #94: a zero-byte file is never a valid .vibe container. Catch it
+	// before any SQLCipher open, so it is never accidentally initialized.
+	if fi.Size() == 0 {
+		return nil, fmt.Errorf("failed to open container: %s is empty, not a .vibe file", filepath.Base(path))
+	}
+
+	// Take the writer lock (#80) before any SQLCipher/DuckDB work, so a
+	// refused open costs nothing. Read-only opens (info/export/dump/verify,
+	// `mcp serve --read-only-file`) take no lock and may proceed alongside
+	// a writer, seeing the last saved state.
+	var lk *fileLock
+	if !o.ReadOnly {
+		lk, err = acquireLock(path, o.LockApp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open container: %w", err)
+		}
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			lk.release() //nolint:errcheck
+		}
+	}()
 
 	o.Logger.Info("opening .vibe container", "path", path)
 
@@ -121,26 +184,22 @@ func Open(path string, opts ...Option) (*Container, error) {
 	}
 
 	// Materialize DuckDB from stored blob.
-	duckState, err := materializeDuckDB(db)
+	duckState, err := openDuckDBSession(db, o.ReadOnly, o.Logger)
 	if err != nil {
 		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
-	}
-
-	// Retrofit auto-number sequences onto bare integer PKs created before the
-	// sequence-backed-PK fix, so old files accept id-less form inserts too.
-	if !o.ReadOnly {
-		backfillAutoNumberPKs(duckState.db, o.Logger)
+		return nil, err
 	}
 
 	o.Logger.Info("container opened successfully", "path", path)
 
+	ok = true
 	return &Container{
 		path:     path,
 		sqliteDB: db,
 		duckDB:   duckState,
 		logger:   o.Logger,
 		readOnly: o.ReadOnly,
+		lock:     lk,
 	}, nil
 }
 
@@ -167,6 +226,26 @@ func (c *Container) DuckDBTempDir() string {
 	return c.duckDB.tempDir
 }
 
+// MarkDirty records that DuckDB user data (table rows/schema) may have
+// changed since the last successful Save. Callers that write DuckDB — not
+// SQLCipher rows, which are write-through and never call this — call it
+// after the write is attempted. It returns true only the call that flips
+// clean to dirty, so a caller can use it to fire a "just became dirty"
+// notification exactly once per clean/dirty edge. A read-only container is
+// never dirty (Save is refused on it anyway), so this is a no-op for one.
+func (c *Container) MarkDirty() bool {
+	if c.readOnly {
+		return false
+	}
+	return !c.dirty.Swap(true)
+}
+
+// Dirty reports whether DuckDB user data has changed since the last
+// successful Save. UI signal only — see the dirty field's doc comment.
+func (c *Container) Dirty() bool {
+	return c.dirty.Load()
+}
+
 // Save checkpoints DuckDB and writes the blob back into the SQLCipher container.
 func (c *Container) Save() error {
 	if c.readOnly {
@@ -177,7 +256,16 @@ func (c *Container) Save() error {
 
 	c.logger.Info("saving container", "path", c.path)
 
+	// Clear the dirty flag BEFORE the checkpoint, not after: a write that
+	// lands (from a concurrent caller, or the agent) while the checkpoint is
+	// running must leave the file dirty again rather than being silently
+	// cleared once this Save happens to finish.
+	was := c.dirty.Swap(false)
+
 	if err := checkpointDuckDB(c.duckDB, c.sqliteDB); err != nil {
+		if was {
+			c.dirty.Store(true)
+		}
 		return fmt.Errorf("failed to save container: %w", err)
 	}
 
@@ -203,11 +291,60 @@ func (c *Container) Close() error {
 		c.sqliteDB = nil
 	}
 
+	// Release the writer lock last (#80), so no other process can open the
+	// file for writing until our own SQLite close above has finished.
+	if err := c.lock.release(); err != nil && firstErr == nil {
+		firstErr = fmt.Errorf("failed to release lock: %w", err)
+	}
+	c.lock = nil
+
 	if firstErr != nil {
 		return fmt.Errorf("failed to close container: %w", firstErr)
 	}
 
 	c.logger.Info("container closed successfully", "path", c.path)
+	return nil
+}
+
+// Revert discards every DuckDB change since the last successful Save (#98):
+// it materializes a fresh session copy from the saved blob, swaps it in, and
+// then closes and zeroes the old copy. The SQLCipher connection and the #80
+// writer lock stay held throughout, so no passphrase is needed and no other
+// process can take the file in between. SQLCipher-side content is
+// write-through and untouched. A file that has never been saved reverts to
+// an empty DuckDB (the state of its last save).
+//
+// DuckDBDB() returns a NEW *sql.DB afterwards and the old one is closed;
+// callers that cached it (an engine.Manager) must rebuild. Not safe for
+// concurrent use with other calls on c: the caller serializes (Studio holds
+// a.mu.Lock). On error c's current session is left exactly as it was.
+//
+// Materialize-before-cleanup means two plaintext copies exist briefly, both
+// in 0700 dirs. That is acceptable and is what makes failure atomic.
+func (c *Container) Revert() error {
+	if c.readOnly {
+		return fmt.Errorf("failed to revert: container is read-only")
+	}
+	if c.sqliteDB == nil || c.duckDB == nil {
+		return fmt.Errorf("failed to revert: container is closed")
+	}
+
+	c.logger.Info("reverting container to last save", "path", c.path)
+
+	fresh, err := openDuckDBSession(c.sqliteDB, false, c.logger)
+	if err != nil {
+		return fmt.Errorf("failed to revert: %w", err)
+	}
+
+	old := c.duckDB
+	c.duckDB = fresh
+	c.dirty.Store(false)
+
+	if err := cleanupDuckDB(old); err != nil {
+		c.logger.Warn("failed to clean up previous DuckDB session after revert", "error", err)
+	}
+
+	c.logger.Info("container reverted successfully", "path", c.path)
 	return nil
 }
 

@@ -75,7 +75,8 @@ const (
 // matter which tier it was otherwise headed for. Read-only and read-write
 // must never touch any of that; only full may (review fix, #63 round 2/3).
 // This intentionally does NOT touch DuckDB's global enable_external_access
-// setting — ImportCSV (and full-sandbox run_query) still need it enabled.
+// setting — the importer (internal/importer, and full-sandbox run_query)
+// still needs it enabled.
 const externalAccessDeniedMsg = "external file/network access requires the full sandbox"
 
 // plainIdentifierRe matches an unquoted SQL identifier — letters, digits,

@@ -136,6 +136,32 @@
 }
 .cm-editor.cm-focused { box-shadow: inset 0 0 0 2px var(--vibe-focus); }
 
+/* ---- Data is shown as stored (#91, M-F29/P-F25/P-F8) ----
+   Inter's contextual alternates turn 2x6x10 into 2×6×10; JetBrains Mono's
+   ligatures turn <= into ≤. Off wherever data or code is displayed or typed. */
+.table, .brutal-table, .a2ui-page, .tool-chip, .tool-step,
+input, textarea, select, code, pre, kbd, samp, .cm-editor, .sh-mono {
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0;
+}
+
+/* ---- Faithful value rendering ----
+   lib/formatCell.ts's cellClass() emits these on every table/grid cell
+   (query grid, datasheet, A2UI table/stat, notebook SQL cells) — the one
+   place cell classes are decided, so every consumer looks the same. */
+.cell-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-null { color: var(--sh-graphite); font-style: italic; }
+.cell-text { white-space: pre; overflow: hidden; text-overflow: ellipsis; max-width: 28rem; }
+.cell-temporal { font-variant-numeric: tabular-nums; }
+/* A numeric column's <th> also gets .cell-num (an isNumericType check in
+   the query grid/datasheet/A2UI table views), so its header right-aligns
+   over the right-aligned digits below it. kit.css's `.table th`/style.css's
+   `.brutal-table th` (both (0,1,1), same `components` layer as this file)
+   would otherwise beat a bare `.cell-num` ((0,1,0)). (The A2UI table's own
+   `.a2ui-table th` rule lives in a2ui.css, unlayered, so its override is
+   there instead — see that file.) */
+.table th.cell-num, .brutal-table th.cell-num { text-align: right; }
+
 /* ---- Reduced motion (Settings → Appearance, or the OS setting) ---- */
 :root[data-reduce-motion="true"] *,
 :root[data-reduce-motion="true"] *::before,

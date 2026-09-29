@@ -3,11 +3,13 @@ import { ref, nextTick, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
 import A2UIPage from '../a2ui/A2UIPage.vue'
+import ToolStepChip from '../components/ToolStepChip.vue'
+import AgentSandboxIntro from '../components/AgentSandboxIntro.vue'
 
 // AgentView is the full-page wizard chat (W0.5) — the same conversation engine
 // as the slide-in AgentPanel (shared useAgentChat composable), given room for
 // longer sessions, schema work, and report/query building.
-const { messages, sending, send, reset, setScrollHandler, renderMarkdown } = useAgentChat()
+const { messages, sending, send, reset, setScrollHandler, renderMarkdown, resolveApproval } = useAgentChat()
 
 const draft = ref('')
 const streamEl = ref<HTMLElement | null>(null)
@@ -48,7 +50,7 @@ function onKeydown(e: KeyboardEvent) {
     <div ref="streamEl" class="agent-view__stream">
       <div v-if="messages.length === 0" class="agent-view__empty">
         <Icon name="sparkle" :size="28" />
-        <p>Describe what you want to build or ask about your data. The wizard reads your schema, runs read-only SQL, and can create tables — every step shown below as it works.</p>
+        <AgentSandboxIntro />
       </div>
 
       <div v-for="(m, i) in messages" :key="i" class="amsg">
@@ -65,17 +67,7 @@ function onKeydown(e: KeyboardEvent) {
           <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
 
           <template v-for="(s, si) in m.steps" :key="si">
-            <div
-              class="tool-chip"
-              :class="{ 'tool-chip-error': s.status === 'error' }"
-              data-testid="agent-tool-chip"
-            >
-              <span class="lab"><Icon name="terminal" :size="12" /> {{ s.tool }}</span>
-              <span v-if="s.input" class="time">{{ s.input.slice(0, 80) }}</span>
-              <span v-if="s.status === 'running'" class="spin" data-testid="chip-running">●</span>
-              <span v-else-if="s.status === 'error'" class="chip-error-mark" data-testid="chip-error" :title="s.output">✕</span>
-              <span v-else class="check" data-testid="chip-done">✓</span>
-            </div>
+            <ToolStepChip :step="s" :preview-len="80" @resolve="(ok, saveFirst) => resolveApproval(s, ok, saveFirst)" />
             <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
           </template>
         </div>
@@ -218,20 +210,6 @@ function onKeydown(e: KeyboardEvent) {
   color: var(--sh-graphite);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-.spin { animation: agent-pulse 1s ease-in-out infinite; }
-@keyframes agent-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
-/* A denied/failed tool call — coral is SchoolHouse's "needs attention", not
-   destructive/red. */
-.tool-chip-error {
-  border-color: var(--sh-coral);
-  background: var(--sh-coral-8);
-}
-.chip-error-mark {
-  color: var(--sh-coral);
-  font-weight: 700;
-  cursor: help;
-  margin-left: auto;
 }
 .agent-a2ui-embed {
   border: var(--sh-border-thin);

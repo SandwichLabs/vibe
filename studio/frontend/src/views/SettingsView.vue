@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import AppearanceSettings from '../components/AppearanceSettings.vue'
+import AgentSettings from '../components/AgentSettings.vue'
+import { errorText } from '../lib/errors'
+import { fileDirty } from '../composables/useFileDirty'
+import { shortcutLabel } from '../composables/useModal'
 
 const meta = ref<Record<string, string>>({})
 const title = ref('')
@@ -25,6 +29,18 @@ async function loadMeta() {
     description.value = meta.value.description || ''
   } catch { /* ignore */ }
   loading.value = false
+}
+
+// refreshMeta re-reads the "All metadata" kv list (updated_at in
+// particular) WITHOUT touching the Title/Description form fields or
+// `loading` — unlike loadMeta, which is only right at mount and right after
+// this view's own Save. A Save elsewhere (the sidebar, Ctrl+S, an agent
+// write) must not overwrite text the person has typed into Title/
+// Description but not yet saved through "Save settings".
+async function refreshMeta() {
+  try {
+    meta.value = await window.go.main.App.GetAllMeta()
+  } catch { /* ignore */ }
 }
 
 async function loadMCPStatus() {
@@ -53,7 +69,7 @@ async function toggleMCP() {
       await loadMCPStatus()
     }
   } catch (e: any) {
-    message.value = 'Error: ' + (e.message || e)
+    message.value = 'Error: ' + errorText(e)
     setTimeout(() => { message.value = '' }, 3000)
   }
   mcpToggling.value = false
@@ -86,7 +102,7 @@ async function save() {
     message.value = 'Settings saved'
     setTimeout(() => { message.value = '' }, 2000)
   } catch (e: any) {
-    message.value = 'Error: ' + (e.message || e)
+    message.value = 'Error: ' + errorText(e)
   }
   saving.value = false
 }
@@ -94,6 +110,15 @@ async function save() {
 onMounted(() => {
   loadMeta()
   loadMCPStatus()
+})
+
+// #81: a Save elsewhere (the sidebar button, Ctrl+S, an agent write) moves
+// updated_at without this view doing anything — refresh the metadata list
+// on the dirty->clean edge so the timestamp shown here stays current
+// without requiring a navigate-away-and-back. refreshMeta (not loadMeta)
+// so an unsaved Title/Description edit is never wiped by a Save elsewhere.
+watch(fileDirty, (dirty, was) => {
+  if (was && !dirty) refreshMeta()
 })
 </script>
 
@@ -135,8 +160,15 @@ onMounted(() => {
             {{ message }}
           </span>
         </div>
+        <p class="sh-micro" style="color: var(--sh-graphite);">
+          Table data (edits, imports, schema changes, agent writes) is kept in this session until you Save ({{ shortcutLabel('S') }}).
+          Notebooks, saved queries and skills save as you go; Title/Description save with "Save settings" above.
+          updated_at is the time of the last Save.
+        </p>
       </div>
       </div>
+
+      <AgentSettings />
 
       <!-- MCP Server -->
       <div>

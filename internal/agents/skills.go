@@ -2,10 +2,12 @@ package agents
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -524,9 +526,62 @@ func stripControlChars(s string) string {
 	}, s)
 }
 
+// nonSlugChars matches any run of characters that isn't a lowercase letter
+// or digit — collapsed to a single "-" by importSkillSlug.
+var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
+
+// importSkillSlug turns a table name into a kebab-case slug fit for
+// SkillNamePattern: lowercase, every run of non [a-z0-9] characters (spaces,
+// punctuation, non-ASCII) becomes one "-", and leading/trailing "-" is
+// trimmed. A table name that has no [a-z0-9] characters at all (all-Unicode,
+// e.g. "日本語") would otherwise slug to "", so that case falls back to the
+// literal word "table".
+func importSkillSlug(table string) string {
+	slug := nonSlugChars.ReplaceAllString(strings.ToLower(table), "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		return "table"
+	}
+	return slug
+}
+
+// cutBytes truncates s to at most n bytes (the slug is pure ASCII, so a byte
+// cut can't split a UTF-8 codepoint) and re-trims a trailing "-" a cut can
+// leave behind.
+func cutBytes(s string, n int) string {
+	if len(s) > n {
+		s = s[:n]
+	}
+	return strings.TrimRight(s, "-")
+}
+
+// importSkillName picks the `workspace-<slug>` skill name for table.
+// The base name belongs to this table only when an existing row at that name
+// is already owned by this same table (table_name = table); ANY other
+// owner — including "" (an unbound, hand-authored user skill with no
+// table_name) — gets the hashed suffix name instead, so an import never
+// takes over a name the user created for their own purposes. This also
+// resolves the collision two differently-quoted/cased table names can slug
+// to the same string (e.g. `order_items` and `Order Items`): a deterministic
+// 8-hex-digit suffix (from sha256(table)) disambiguates it. Re-importing the
+// same table always resolves to the same name, because the suffix is
+// derived from the table name itself, not from insertion order.
+func importSkillName(sqliteDB *sql.DB, table string) string {
+	slug := importSkillSlug(table)
+	base := "workspace-" + cutBytes(slug, 54)
+
+	var owner string
+	err := sqliteDB.QueryRow(`SELECT table_name FROM _vibe_skills WHERE name = ?`, base).Scan(&owner)
+	if err == nil && owner != table {
+		sum := sha256.Sum256([]byte(table))
+		return fmt.Sprintf("workspace-%s-%x", cutBytes(slug, 45), sum[:4])
+	}
+	return base
+}
+
 // WriteImportSkill writes/refreshes a `workspace-<table>` skill (source =
 // 'import' on first creation) describing a just-imported table, called by
-// the Studio import bindings (ImportCSV / ImportSpreadsheet) after a
+// the Studio ImportFile binding and `vibe import`/`init --import` after a
 // successful import — no LLM call involved, purely facts derived from the
 // live schema. Only the generated block (row count + "## Columns as
 // stored", between importSkillGenBegin/End) is replaced on a re-import;
@@ -541,7 +596,7 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 	if sqliteDB == nil || duckDB == nil {
 		return fmt.Errorf("no open container")
 	}
-	name := "workspace-" + table
+	name := importSkillName(sqliteDB, table)
 	quotedTable := engine.QuoteIdent(table)
 
 	var rowCount int
@@ -579,8 +634,14 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 		//nolint:errcheck
 		duckDB.QueryRow(fmt.Sprintf(`SELECT approx_count_distinct(%s) FROM %s`, quotedCol, quotedTable)).Scan(&c.distinctN)
 
+		// CAST ... AS VARCHAR, not a bare %s scanned with %v: DuckDB's own
+		// text rendering is the source of truth for what a sample "looks
+		// like as stored" (DATE gives "2025-04-06", DECIMAL keeps its
+		// scale, UUID gives text), matching CSV export. This is
+		// deliberately not engine.NormalizeColumnValue — skill text should
+		// be exactly what DuckDB prints, not the JSON-friendly Go value.
 		sampleRows, err := duckDB.Query(fmt.Sprintf(
-			`SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL LIMIT 5`, quotedCol, quotedTable, quotedCol))
+			`SELECT DISTINCT CAST(%s AS VARCHAR) FROM %s WHERE %s IS NOT NULL LIMIT 5`, quotedCol, quotedTable, quotedCol))
 		if err == nil {
 			for sampleRows.Next() {
 				var v any
@@ -653,6 +714,20 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to write import skill for %q: %w", table, err)
+	}
+
+	// Clean up the pre-#91 name, "workspace-<table>" verbatim (no slugging),
+	// if it's invalid and therefore could only be a leftover from the old
+	// WriteImportSkill — SaveUserSkill has always rejected an invalid name,
+	// so a row shaped like that was never visible to LoadSkills/read_skill
+	// and can't hold user prose. A file whose invalid row happens to also be
+	// a valid name (no special characters in the table name) is left alone;
+	// it heals on the next import of that table because `name` now resolves
+	// to the same slug.
+	legacy := "workspace-" + table
+	if legacy != name && !SkillNamePattern.MatchString(legacy) {
+		//nolint:errcheck // best-effort cleanup; a failed delete just leaves a dead row.
+		sqliteDB.Exec(`DELETE FROM _vibe_skills WHERE name = ?`, legacy)
 	}
 	return nil
 }

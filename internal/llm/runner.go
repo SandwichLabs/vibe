@@ -58,6 +58,12 @@ type Config struct {
 	Model    string // model id to request; empty = per-provider default
 	APIKey   string // bearer token / cloud API key
 	Sandbox  string // read-only | read-write | full — gates mutating tools
+	// AskBeforeWrites mirrors the file's agents.FilePolicy.AskBeforeWrites
+	// (#79): when true and the sandbox isn't read-only, systemPromptFor adds
+	// a sentence telling the model every change is shown to the user for
+	// approval first, so it doesn't treat a declined/expired tool result as
+	// a real failure worth retrying.
+	AskBeforeWrites bool
 }
 
 // defaultModelFor returns a sensible default model id for a provider when none
@@ -131,7 +137,7 @@ Prefer reading the schema (introspect_schema, describe_table) before writing SQL
 // shared agents registry (the same list a MCP client sees) and flags the ones
 // the current sandbox will refuse, so the model doesn't wrongly claim to be
 // read-only when it has real write tools, nor try a tool that will bounce.
-func systemPromptFor(sandbox string, skillsBlock string) string {
+func systemPromptFor(sandbox string, ask bool, skillsBlock string) string {
 	var b strings.Builder
 	b.WriteString(baseSystemPrompt)
 
@@ -162,6 +168,9 @@ func systemPromptFor(sandbox string, skillsBlock string) string {
 		b.WriteString("\nYou currently have READ-WRITE access to DATA ONLY: you can run_query freely — including INSERT/UPDATE/DELETE — and use create_record/update_record/delete_record/bulk_insert to add, change, or remove rows. You CANNOT change the schema or author notebook content — create_table, add_column, drop_table, add_query_cell, and create_dashboard will all be denied if you call them. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox; tell the user so and offer the plan/SQL, or tell them to switch the sandbox to full. If the user asks you to change the schema or build a notebook/dashboard, say so plainly and offer the SQL or plan they could apply themselves, or tell them to switch the sandbox to full.\n")
 	default:
 		b.WriteString("\nYou currently have READ-ONLY access: you can inspect the schema and run read-only queries (SELECT, WITH…SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE via run_query) but cannot write or modify anything — INSERT/UPDATE/DELETE and every schema/content tool will be denied. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox. If the user asks to change data or the schema, explain that they can enable more access in the agent settings, and offer the SQL they could run themselves.\n")
+	}
+	if ask && sc.Mode != agents.ModeReadOnly {
+		b.WriteString("\nEvery change you make (rows, tables, saved queries, notebooks, skills) is shown to the user for approval before it runs. Call the tool normally. If it comes back declined, nothing changed: say so, and don't retry unless the user asks again.\n")
 	}
 	b.WriteString("\nSCHEMA DESIGN — when the user describes their business or asks you to design or sketch a database, call propose_schema with the COMPLETE draft: every table with its columns, plus the relationships linking them. Use the friendly field types: ID (the primary key — start every table with one), Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link (a reference to another table's ID — pair it with an entry in relationships), Pick (one of a small set of choices). propose_schema renders the draft inline in chat as a readable table-by-table summary (there is no diagram screen) — after it returns, briefly describe what you proposed and ask the user to confirm (\"Want me to build this?\"). When the user asks for changes, re-call propose_schema with the full updated draft; ask at most one short clarifying question after proposing. Only once the user clearly confirms (\"yes\", \"build it\", \"looks good\", ...) do you create it: call create_table once per table, PARENTS BEFORE CHILDREN (a table referenced by a Link must be created before the table that links to it), with every Link declared as an inline foreign key in the child column's type string, e.g. a Link column becomes {\"name\": \"customer_id\", \"type\": \"INTEGER REFERENCES customers(id)\"}. Do not call create_table before the user confirms, and do not silently skip confirmation even if the request sounded like an instruction to build immediately — always show the draft first.\n")
 
@@ -275,7 +284,7 @@ func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder, with
 		return nil, err
 	}
 	opts := []fantasy.AgentOption{
-		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox, r.skillsBlockFor(ctx))),
+		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox, cfg.AskBeforeWrites, r.skillsBlockFor(ctx))),
 		fantasy.WithTools(r.buildTools(rec)...),
 		fantasy.WithStopConditions(fantasy.StepCountIs(maxSteps)),
 	}

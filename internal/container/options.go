@@ -1,6 +1,10 @@
 package container
 
-import "log/slog"
+import (
+	"log/slog"
+	"os"
+	"path/filepath"
+)
 
 // Options holds configuration for opening or creating a Container.
 type Options struct {
@@ -10,6 +14,7 @@ type Options struct {
 	Description string
 	ReadOnly    bool
 	Template    string
+	LockApp     string
 }
 
 // Option is a functional option for configuring a Container.
@@ -59,9 +64,19 @@ func WithReadOnly(readOnly bool) Option {
 	}
 }
 
+// WithLockApp names the process holding a writable Container's file lock
+// (#80), shown to anyone refused a second writable open — e.g. "Vibe
+// Studio" or "vibe mcp serve". Defaults to the executable's base name.
+func WithLockApp(name string) Option {
+	return func(o *Options) {
+		o.LockApp = name
+	}
+}
+
 func defaultOptions() *Options {
 	return &Options{
-		Logger: slog.Default(),
+		Logger:  slog.Default(),
+		LockApp: filepath.Base(os.Args[0]),
 	}
 }
 

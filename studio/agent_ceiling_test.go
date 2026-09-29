@@ -95,7 +95,8 @@ func TestMCPCeiling_DeniedWhenFileIsReadOnly(t *testing.T) {
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-only"}))
 
 	app.mu.Lock()
-	sc := &agents.SandboxConfig{Mode: agents.SandboxMode(app.metaOr("agent_sandbox", "full")), MaxQueryRows: 10000}
+	policy := app.agentPolicy()
+	sc := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
 	handler := app.wrapAgentHandler(sc, agents.ModeFull) // StartMCPServer's exact call
 	app.mu.Unlock()
 

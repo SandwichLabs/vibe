@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -99,9 +100,14 @@ type App struct {
 	// NEXT beforeClose lets the close through.
 	quitConfirmed atomic.Bool
 
-	// closeWatchdogOnce guards starting the round-3 watchdog timer (below)
-	// so repeated close attempts never stack multiple timers.
-	closeWatchdogOnce sync.Once
+	// closePending replaces closeWatchdogOnce's sync.Once (#81): a sync.Once
+	// can only ever fire once per App, but CancelQuit (the frontend's "Save
+	// changes?" dialog answered Cancel) must be able to re-arm the SAME
+	// prompt/watchdog dance on the next close attempt. true means a close
+	// attempt is already in flight (the frontend is deciding, or the
+	// watchdog is armed); the next attempt while it's true quits
+	// immediately (see beforeClose).
+	closePending atomic.Bool
 
 	// closeWatchdog and quitFn are testing seams for beforeClose's timeout
 	// logic (review fix, step 4a round 3 #1: a hung webview — e.g. its
@@ -112,7 +118,24 @@ type App struct {
 	// deterministic stand-ins instead of waiting on a real 5s timer.
 	closeWatchdog func(d time.Duration, f func())
 	quitFn        func()
+
+	// approvals is the one process-lifetime registry backing every pending
+	// write-approval card across every open chat turn (#79) — see
+	// agentToolHandler.enableApprovals and ResolveAgentApproval. It outlives
+	// any single file (CloseFile/OpenFile/CreateFile cancel whatever is
+	// pending on it before swapping the container, never replace it).
+	approvals *agents.ApprovalQueue
+
+	// approvalTimeout bounds how long a pending approval card waits for an
+	// answer before the tool call gives up (see enableApprovals). A App
+	// field, not a package constant, so tests can shorten it instead of
+	// waiting out the real 5 minutes.
+	approvalTimeout time.Duration
 }
+
+// defaultApprovalTimeout is how long an approval card waits for the user
+// before the tool call it's blocking reports "no answer, nothing changed".
+const defaultApprovalTimeout = 5 * time.Minute
 
 // closeWatchdogTimeout bounds how long beforeClose waits for the frontend to
 // respond to "app:before-close" (flush pending saves, then call Quit())
@@ -124,8 +147,10 @@ const closeWatchdogTimeout = 5 * time.Second
 // available even before the Wails startup hook (and in tests).
 func NewApp(logger *slog.Logger) *App {
 	app := &App{
-		logger: logger,
-		llmCfg: config.Load().LLM,
+		logger:          logger,
+		llmCfg:          config.Load().LLM,
+		approvals:       agents.NewApprovalQueue(),
+		approvalTimeout: defaultApprovalTimeout,
 	}
 	if dir, err := prefs.DefaultDir(); err == nil {
 		app.prefs = prefs.NewStore(dir)
@@ -186,54 +211,73 @@ func (a *App) shutdown(_ context.Context) {
 	}
 }
 
+// dirtyForClose reports whether the open container has unsaved table
+// changes, for beforeClose's "app:before-close" payload (#81). It tries the
+// read lock rather than blocking: beforeClose runs on Wails' own event loop,
+// and a long-running import/CRUD call already holding a.mu must never make
+// window-close itself hang. Failing to get the lock fails toward "dirty" —
+// worst case an extra Save/Cancel prompt, never a silently skipped one.
+func (a *App) dirtyForClose() bool {
+	if !a.mu.TryRLock() {
+		return true
+	}
+	defer a.mu.RUnlock()
+	return a.container != nil && a.container.Dirty()
+}
+
 // beforeClose is wired as Wails' OnBeforeClose option (studio/main.go). It
 // intercepts the first window-close/quit attempt and returns true
-// (preventing the close) while emitting "app:before-close" so the frontend
-// can flush any pending debounced saves (e.g. a notebook's autosave) before
-// the container actually closes — review fix, step 4a round 2 #1. The
-// frontend then calls Quit(), which sets quitConfirmed so THIS same check
-// lets the next close attempt through instead of looping forever.
+// (preventing the close) while emitting "app:before-close" (carrying
+// whether the open file has unsaved table changes, #81) so the frontend can
+// flush any pending debounced saves (e.g. a notebook's autosave) and, if
+// dirty, ask Save/Don't save/Cancel before the container actually closes —
+// review fix, step 4a round 2 #1. The frontend then calls Quit() (Save or
+// Don't save) or CancelQuit() (Cancel); Quit() sets quitConfirmed so THIS
+// same check lets the next close attempt through instead of looping
+// forever, while CancelQuit() clears closePending so the NEXT attempt
+// prompts again from scratch.
 //
-// Round 3 review fix: the first attempt also arms a one-shot watchdog timer
-// (closeWatchdogTimeout) that force-quits if the frontend never responds —
-// a hung or suspended webview process must not be able to make the window
-// impossible to close. closeWatchdogOnce (a sync.Once) guards arming it so
-// repeated close attempts never stack multiple timers; a SECOND (or later)
-// attempt that arrives while the first is still pending instead lets the
-// close through immediately, on the theory that a person clicking close
-// twice means it, and there is no reason to make them wait out the full
-// watchdog window too.
+// Round 3 review fix: a clean-close attempt also arms a one-shot watchdog
+// timer (closeWatchdogTimeout) that force-quits if the frontend never
+// responds — a hung or suspended webview process must not be able to make
+// the window impossible to close. When the file is dirty, no watchdog is
+// armed: a prompt asking the person to decide may legitimately stay open
+// indefinitely, and the escape hatch for a hung webview is instead a SECOND
+// close attempt while one is already pending, which lets the close through
+// immediately (and still saves, via shutdown) — on the theory that a person
+// clicking close twice means it, and there is no reason to make them wait
+// out a clean-case watchdog too.
 func (a *App) beforeClose(_ context.Context) (prevent bool) {
 	if a.quitConfirmed.Load() {
 		return false
 	}
 
-	first := false
-	a.closeWatchdogOnce.Do(func() {
-		first = true
-		a.emitEvent("app:before-close")
-		watchdog := a.closeWatchdog
-		if watchdog == nil {
-			watchdog = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+	if a.closePending.CompareAndSwap(false, true) {
+		dirty := a.dirtyForClose()
+		a.emitEvent("app:before-close", map[string]any{"dirty": dirty})
+		if !dirty {
+			watchdog := a.closeWatchdog
+			if watchdog == nil {
+				watchdog = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+			}
+			watchdog(closeWatchdogTimeout, a.Quit)
 		}
-		watchdog(closeWatchdogTimeout, a.Quit)
-	})
-	if first {
 		return true
 	}
 
 	// A later attempt while the first is still pending: quit immediately
-	// rather than making a second, deliberate close click wait out the
-	// watchdog too.
+	// rather than making a second, deliberate close click wait out a
+	// prompt (or the watchdog) too.
 	a.quitConfirmed.Store(true)
 	return false
 }
 
 // Quit is called by the frontend once it has flushed (or timed out waiting
-// on) every pending save in response to "app:before-close" — and by
-// beforeClose's own watchdog timer if the frontend never responds at all.
-// It marks the close as confirmed and asks Wails to quit again, which this
-// time reaches beforeClose with quitConfirmed already set.
+// on) every pending save in response to "app:before-close", and either the
+// file was clean or the person chose Save/Don't save — and by beforeClose's
+// own watchdog timer if the frontend never responds at all (clean-close
+// case only). It marks the close as confirmed and asks Wails to quit
+// again, which this time reaches beforeClose with quitConfirmed already set.
 func (a *App) Quit() {
 	a.quitConfirmed.Store(true)
 	quit := a.quitFn
@@ -241,6 +285,15 @@ func (a *App) Quit() {
 		quit = func() { runtime.Quit(a.ctx) }
 	}
 	quit()
+}
+
+// CancelQuit answers a dirty "app:before-close" prompt with Cancel: the
+// close attempt is abandoned and closePending is cleared so the next
+// close/quit attempt starts the whole dance over — a fresh prompt, or a
+// fresh watchdog if the file is clean by then. It never touches
+// quitConfirmed, so an actual quit still requires a later Quit() call.
+func (a *App) CancelQuit() {
+	a.closePending.Store(false)
 }
 
 // --- File Operations ---
@@ -309,18 +362,57 @@ func (a *App) closeCurrentContainerLocked() {
 	a.emitEvent("file:closed")
 }
 
+// studioInUseMessage renders the Unlock-view error for #80's InUseError:
+// who holds the file (LockHolder.String() — the one place that formats a
+// holder, so the "pid"/empty-host rules never drift between this and the
+// CLI's InUseError.Error()), or a generic fallback when the holder info
+// raced with the other process writing it (still informative — a lock IS
+// held).
+func studioInUseMessage(inUse *container.InUseError) string {
+	who := "another Vibe window or program"
+	if inUse.Holder != nil {
+		who = inUse.Holder.String()
+	}
+	return fmt.Sprintf("This file is already open in %s. Close it there, then try again.", who)
+}
+
 // OpenFile opens an existing .vibe file with the given passphrase.
 func (a *App) OpenFile(path, passphrase string) error {
+	// Cancel any approval pending on the file about to be replaced BEFORE
+	// taking a.mu — not to avoid a deadlock (enableApprovals releases
+	// a.mu.RLock for the whole wait, so Lock() below would proceed either
+	// way), but so a pending card ends right now as "cancelled, nothing
+	// changed" instead of sitting there for up to approvalTimeout after the
+	// file underneath it has already been swapped. CancelAll runs again
+	// once this function holds a.mu.Lock — see its second call below — to
+	// close the narrow window where a Wait() registers after this first
+	// call but before the lock is taken.
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
 
 	a.closeCurrentContainerLocked()
 
 	c, err := container.Open(path,
 		container.WithPassphrase(passphrase),
 		container.WithLogger(a.logger),
+		container.WithLockApp("Vibe Studio"),
 	)
 	if err != nil {
+		if errors.Is(err, container.ErrWrongPassphrase) {
+			a.logger.Info("open failed: wrong passphrase", "path", path, "error", err)
+			return errors.New("That passphrase didn't work. Check Caps Lock and try again.")
+		}
+		var inUse *container.InUseError
+		if errors.As(err, &inUse) {
+			a.logger.Info("open failed: file in use", "path", path, "holder", inUse.Holder)
+			return errors.New(studioInUseMessage(inUse))
+		}
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 
@@ -344,8 +436,14 @@ func (a *App) beginFileSession() {
 
 // CreateFile creates a new .vibe file.
 func (a *App) CreateFile(path, passphrase, title, desc string) error {
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
 
 	a.closeCurrentContainerLocked()
 
@@ -354,6 +452,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 		container.WithLogger(a.logger),
 		container.WithTitle(title),
 		container.WithDescription(desc),
+		container.WithLockApp("Vibe Studio"),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
@@ -371,8 +470,28 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 
 // CloseFile saves and closes the current file.
 func (a *App) CloseFile() error {
+	return a.closeFile(true)
+}
+
+// CloseFileWithoutSaving closes the current file WITHOUT saving — the
+// "Don't save" answer to the unsaved-changes prompt (#81). Table changes
+// made since the last Save are discarded; SQLite-side content (notebooks,
+// queries, skills, settings) is write-through and was already persisted, so
+// it is unaffected. Still releases the #80 writer lock via Container.Close.
+func (a *App) CloseFileWithoutSaving() error {
+	return a.closeFile(false)
+}
+
+// closeFile is CloseFile/CloseFileWithoutSaving's shared body.
+func (a *App) closeFile(save bool) error {
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
 
 	if a.container == nil {
 		return nil
@@ -383,8 +502,10 @@ func (a *App) CloseFile() error {
 		a.mcpServer = nil
 	}
 
-	if err := a.container.Save(); err != nil {
-		return fmt.Errorf("failed to save: %w", err)
+	if save {
+		if err := a.container.Save(); err != nil {
+			return fmt.Errorf("failed to save: %w", err)
+		}
 	}
 	if err := a.container.Close(); err != nil {
 		return fmt.Errorf("failed to close: %w", err)
@@ -406,7 +527,67 @@ func (a *App) SaveFile() error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	return a.container.Save()
+	if err := a.container.Save(); err != nil {
+		return err
+	}
+	// Read Dirty() AFTER Save, not a hard-coded false: SaveFile only holds
+	// RLock, so a write that lands (from an agent, MCP, or another RLock
+	// holder) between the checkpoint finishing and this line can leave the
+	// container dirty again — emitting a constant false would then get
+	// silently swallowed by the concurrent write's own (already-fired)
+	// markDirty edge, leaving the indicator stuck on "Saved" while the file
+	// is actually dirty again.
+	a.emitEvent("file:dirty", a.container.Dirty())
+	return nil
+}
+
+// markDirty marks the open container's DuckDB user data as changed since
+// the last Save and, on the clean->dirty edge, notifies the frontend so the
+// sidebar indicator and window title can flip immediately. Callers must
+// hold at least a.mu.RLock (a container write already needs at least that
+// much). A no-op with no file open.
+func (a *App) markDirty() {
+	if a.container != nil && a.container.MarkDirty() {
+		a.emitEvent("file:dirty", true)
+	}
+}
+
+// IsDirty reports whether the open file has DuckDB table changes since the
+// last Save. false with no file open.
+func (a *App) IsDirty() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.container != nil && a.container.Dirty()
+}
+
+// RevertFile discards table changes since the last Save without closing the
+// file (#98). Keeps the writer lock, the session id (notebooks are
+// write-through and unaffected, so in-flight notebook saves must still
+// land), and a running MCP server (its handler resolves the rebuilt engine
+// per call). Pending approval cards end as cancelled.
+func (a *App) RevertFile() error {
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
+
+	if a.container == nil {
+		return fmt.Errorf("no file open")
+	}
+
+	if err := a.container.Revert(); err != nil {
+		return fmt.Errorf("failed to revert: %w", err)
+	}
+	a.engine = engine.NewManager(a.container.DuckDBDB(), engine.WithLogger(a.logger))
+
+	a.emitEvent("file:dirty", false)
+	a.emitEvent("data:changed")
+	a.emitEvent("file:reverted")
+	return nil
 }
 
 // IsFileOpen returns whether a file is currently open.
@@ -1023,8 +1204,7 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
-	copySQL := fmt.Sprintf("COPY (%s) TO '%s' WITH (%s)",
-		sqlStr, strings.ReplaceAll(dst, "'", "''"), copyOpts)
+	copySQL := buildCopySQL(sqlStr, dst, copyOpts)
 	if _, err := ddb.Exec(copySQL); err != nil {
 		return "", fmt.Errorf("failed to export query results: %w", err)
 	}
@@ -1034,7 +1214,11 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 
 // TableData holds paginated table data.
 type TableData struct {
-	Columns    []string `json:"columns"`
+	Columns []string `json:"columns"`
+	// Types is the DuckDB type name of each column, parallel to Columns
+	// — the datasheet needs it to pick an editor (date input vs
+	// text), align/format cells, and round-trip a DECIMAL's scale.
+	Types      []string `json:"types"`
 	Rows       [][]any  `json:"rows"`
 	Page       int      `json:"page"`
 	PageSize   int      `json:"page_size"`
@@ -1089,45 +1273,21 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}
 	defer rows.Close()
 
-	columns, err := rows.Columns()
+	rs, _, err := engine.ScanRows(rows, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get columns: %w", err)
+		return nil, err
 	}
-
-	var data [][]any
-	for rows.Next() {
-		values := make([]any, len(columns))
-		valuePtrs := make([]any, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		// Convert []byte to string for JSON serialization; normalize driver
-		// types (DECIMAL, HUGEINT) so they don't marshal as raw structs (#42).
-		for i, v := range values {
-			if b, ok := v.([]byte); ok {
-				values[i] = string(b)
-			} else {
-				values[i] = engine.NormalizeValue(v)
-			}
-		}
-		data = append(data, values)
-	}
+	columns, types := rs.NamesAndTypes()
 
 	totalPages := (totalRows + pageSize - 1) / pageSize
 	if totalPages < 1 {
 		totalPages = 1
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
 	result := &TableData{
 		Columns:    columns,
-		Rows:       data,
+		Types:      types,
+		Rows:       rs.Rows,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalRows:  totalRows,
@@ -1228,33 +1388,11 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 	defer rows.Close()
 
-	columns, err := rows.Columns()
+	rs, _, err := engine.ScanRows(rows, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get columns: %w", err)
+		return nil, err
 	}
-
-	var data [][]any
-	for rows.Next() {
-		values := make([]any, len(columns))
-		valuePtrs := make([]any, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		for i, v := range values {
-			if b, ok := v.([]byte); ok {
-				values[i] = string(b)
-			} else {
-				values[i] = engine.NormalizeValue(v)
-			}
-		}
-		data = append(data, values)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate filtered rows: %w", err)
-	}
+	columns, types := rs.NamesAndTypes()
 
 	totalPages := (totalRows + pageSize - 1) / pageSize
 	if totalPages < 1 {
@@ -1263,7 +1401,8 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 
 	result := &TableData{
 		Columns:    columns,
-		Rows:       data,
+		Types:      types,
+		Rows:       rs.Rows,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalRows:  totalRows,
@@ -1351,6 +1490,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit insert: %w", err)
 	}
+	a.markDirty()
 	return res, nil
 }
 
@@ -1382,6 +1522,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit update: %w", err)
 	}
+	a.markDirty()
 	return res, nil
 }
 
@@ -1439,26 +1580,8 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit delete: %w", err)
 	}
+	a.markDirty()
 	return res, nil
-}
-
-// isAutoNumberType reports whether a column type is an integer family member
-// that should auto-number when used as a primary key. DuckDB has no implicit
-// AUTOINCREMENT — without a sequence-backed DEFAULT, a form insert that omits
-// the id fails with "NOT NULL constraint failed".
-func isAutoNumberType(t string) bool {
-	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "BIGINT", "INTEGER", "INT", "INT2", "INT4", "INT8", "SMALLINT", "TINYINT",
-		"HUGEINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT":
-		return true
-	}
-	return false
-}
-
-// pkSequenceName is the deterministic sequence backing an auto-number primary
-// key. Both identifiers are validated before this is interpolated into DDL.
-func pkSequenceName(table, column string) string {
-	return fmt.Sprintf("_vibe_seq_%s_%s", table, column)
 }
 
 // CreateTable creates a new table with the given columns. Integer primary-key
@@ -1483,8 +1606,8 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	var colDefs, seqDDL []string
 	for _, col := range columns {
 		def := fmt.Sprintf("%s %s", engine.QuoteIdent(col.Name), col.Type)
-		if col.PK && isAutoNumberType(col.Type) {
-			seq := pkSequenceName(name, col.Name)
+		if col.PK && engine.IsIntegerType(col.Type) {
+			seq := engine.AutoNumberSequence(name, col.Name)
 			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START 1", engine.QuoteIdent(seq)))
 			def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
 		}
@@ -1511,6 +1634,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
+	a.markDirty()
 	a.emitEvent("data:changed")
 	return nil
 }
@@ -1535,6 +1659,7 @@ func (a *App) DropTable(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
+	a.markDirty()
 	a.emitEvent("data:changed")
 	return nil
 }
@@ -1547,7 +1672,19 @@ type QueryResult struct {
 	Rows     [][]any      `json:"rows"`
 	Duration string       `json:"duration"`
 	RowCount int          `json:"row_count"`
+	// TotalRows is the query's true row count; RowCount is how many are
+	// actually in Rows (capped at queryGridRowCap). #91: a query like
+	// `SELECT * FROM range(100000)` used to materialize every row into the
+	// webview and could crash it.
+	TotalRows int `json:"total_rows"`
 }
+
+// queryGridRowCap bounds how many rows the Query editor's grid will
+// materialize in one ExecuteQuery call — independent of a2uiQueryRowCap
+// (a2ui components render a compact inline view; the query grid is a full
+// result set the user pages through). #84 adds a cancel button/context on
+// top of this.
+const queryGridRowCap = 5000
 
 // ExecuteQuery runs a SQL query on DuckDB.
 // jsonRoundTripGuard is a last-resort, defence-in-depth check (review fix,
@@ -1571,6 +1708,21 @@ func jsonRoundTripGuard(v any) error {
 	return nil
 }
 
+// humanDuration renders a query's elapsed time the way the run bar shows
+// it: sub-millisecond as "<1 ms" (duration.String() would print something
+// like "312.4µs", a unit the grid never uses elsewhere), whole milliseconds
+// below a second as "%d ms", and a second or more as "%.2f s".
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return "<1 ms"
+	case d < time.Second:
+		return fmt.Sprintf("%d ms", d.Milliseconds())
+	default:
+		return fmt.Sprintf("%.2f s", d.Seconds())
+	}
+}
+
 func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -1579,17 +1731,33 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
+	// Classify BEFORE executing, using the same classifier run_query itself
+	// uses (#81) — a query editor is a broad Studio-only surface (unlike the
+	// agent's sandboxed run_query), so this never blocks anything, only
+	// decides whether to mark the file dirty afterward. PRAGMA/SET/external
+	// reads classify as non-read, which gives a harmless false "dirty".
+	write := !agents.IsReadOnlyStatement(context.Background(), a.container.DuckDBDB(), sqlStr, nil)
+
 	start := time.Now()
-	rs, err := a.engine.Execute(context.Background(), sqlStr, nil)
+	rs, total, err := a.engine.ExecuteCapped(context.Background(), sqlStr, nil, queryGridRowCap)
 	duration := time.Since(start)
 
+	// Mark dirty only for a successful write: a failed statement is rolled
+	// back, and an unresolvable SELECT classifies as a write. A multi-statement
+	// run that commits then fails is missed here, which only costs the prompt
+	// (Close and quit still save).
+	if err == nil && write {
+		a.markDirty()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
 	result := &QueryResult{
-		Duration: duration.String(),
-		RowCount: rs.RowCount(),
+		Duration:  humanDuration(duration),
+		RowCount:  rs.RowCount(),
+		TotalRows: total,
+		Rows:      rs.Rows,
 	}
 
 	for _, col := range rs.Columns {
@@ -1597,19 +1765,6 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 			Name: col.Name,
 			Type: col.Type,
 		})
-	}
-
-	// Convert []byte to string for JSON.
-	for _, row := range rs.Rows {
-		cleaned := make([]any, len(row))
-		for i, v := range row {
-			if b, ok := v.([]byte); ok {
-				cleaned[i] = string(b)
-			} else {
-				cleaned[i] = v
-			}
-		}
-		result.Rows = append(result.Rows, cleaned)
 	}
 
 	if err := jsonRoundTripGuard(result); err != nil {
@@ -1636,7 +1791,11 @@ const a2uiQueryTimeout = 30 * time.Second
 // buildTable in the ported renderer).
 type A2UIQueryResult struct {
 	Columns []string `json:"columns"`
-	Rows    [][]any  `json:"rows"`
+	// Types is the DuckDB type name of each column, parallel to Columns
+	// — A2UITable/A2UIStat need it to format a cell (DECIMAL scale,
+	// alignment) instead of guessing from typeof value.
+	Types []string `json:"types"`
+	Rows  [][]any  `json:"rows"`
 	// Truncated is true when the query returned more than a2uiQueryRowCap
 	// rows and was cut off — the cap is now pushed into the query itself
 	// (RunReadOnlySQL's LIMIT push-down) rather than fetched-then-sliced,
@@ -1666,8 +1825,8 @@ func (a *App) RunA2UIQuery(sqlStr string) (*A2UIQueryResult, error) {
 		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
 	}
-	sandbox := a.metaOr("agent_sandbox", "full")
-	sc := &agents.SandboxConfig{Mode: agents.SandboxMode(sandbox), MaxQueryRows: 10000}
+	policy := a.agentPolicy()
+	sc := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000}
 	// ceiling = ModeFull: RunReadOnlySQL (below) forces read-only regardless
 	// of sc.Mode/ceiling, via its own checkSQLClassReadOnly gate — see this
 	// function's doc comment — so no additional cap is needed here.
@@ -1698,9 +1857,7 @@ func (a *App) RunA2UIQuery(sqlStr string) (*A2UIQueryResult, error) {
 	}
 
 	out := &A2UIQueryResult{Truncated: truncated}
-	for _, c := range rs.Columns {
-		out.Columns = append(out.Columns, c.Name)
-	}
+	out.Columns, out.Types = rs.NamesAndTypes()
 	out.Rows = rs.Rows
 	if err := jsonRoundTripGuard(out); err != nil {
 		return nil, err
@@ -1752,13 +1909,16 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 	return a.registry.Get(context.Background(), id)
 }
 
-// SaveQuery creates or updates a saved query.
-func (a *App) SaveQuery(id, title, sqlStr, description string) error {
+// SaveQuery creates or updates a saved query, returning its id so the
+// caller (QueryEditorView) can select and highlight it without a second
+// round trip (#91: the id used to be discarded, so a freshly-created query
+// couldn't become "selected").
+func (a *App) SaveQuery(id, title, sqlStr, description string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.container == nil {
-		return fmt.Errorf("no file open")
+		return "", fmt.Errorf("no file open")
 	}
 
 	if id == "" {
@@ -1776,9 +1936,11 @@ func (a *App) SaveQuery(id, title, sqlStr, description string) error {
 	// Try update first, create if not found.
 	err := a.registry.Update(context.Background(), q)
 	if err != nil {
-		return a.registry.Create(context.Background(), q)
+		if err := a.registry.Create(context.Background(), q); err != nil {
+			return "", err
+		}
 	}
-	return nil
+	return id, nil
 }
 
 // PreviewFilterSQL renders a FilterSpec (plus optional selected columns from the
@@ -2018,26 +2180,24 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 	// is a Studio-only privileged surface exactly like ExecuteQuery and must be
 	// capability-gated in App Mode (P4.4).
 
+	// Classify before executing, same as ExecuteQuery (#81).
+	write := !agents.IsReadOnlyStatement(context.Background(), a.container.DuckDBDB(), query, nil)
+
 	rs, err := a.engine.Execute(context.Background(), query, nil)
+	// Successful writes only — see ExecuteQuery.
+	if err == nil && write {
+		a.markDirty()
+	}
 	if err != nil {
 		return &AgentResult{Error: err.Error()}, nil
 	}
 
+	// NormalizeValue (inside engine.ScanRows, which a.engine.Execute already
+	// ran) owns []byte -> string now, so rs.Rows needs no per-cell cleanup
+	// here — the same fix ExecuteQuery got.
 	result := &AgentResult{SQL: query}
-	for _, col := range rs.Columns {
-		result.Columns = append(result.Columns, col.Name)
-	}
-	for _, row := range rs.Rows {
-		cleaned := make([]any, len(row))
-		for i, v := range row {
-			if b, ok := v.([]byte); ok {
-				cleaned[i] = string(b)
-			} else {
-				cleaned[i] = v
-			}
-		}
-		result.Rows = append(result.Rows, cleaned)
-	}
+	result.Columns, _ = rs.NamesAndTypes()
+	result.Rows = rs.Rows
 	return result, nil
 }
 
@@ -2047,68 +2207,87 @@ func (a *App) GetAgentStatus() map[string]any {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
+	policy := a.agentPolicy()
 	status := map[string]any{
-		"available": a.container != nil,
-		"mode":      a.metaOr("agent_sandbox", "full"),
-		"provider":  a.llmCfg.Provider,
-		"endpoint":  a.llmCfg.Endpoint,
-		"model":     a.llmCfg.Model,
+		"available":       a.container != nil,
+		"mode":            string(policy.Mode),
+		"askBeforeWrites": policy.AskBeforeWrites,
+		"provider":        a.llmCfg.Provider,
+		"endpoint":        a.llmCfg.Endpoint,
+		"model":           a.llmCfg.Model,
 	}
 	return status
 }
 
-// metaOr reads a _vibe_meta key, returning def when no file is open or the key
-// is absent (e.g. files created before the key existed). Caller holds a.mu.
-func (a *App) metaOr(key, def string) string {
+// agentPolicy resolves the open file's agent policy — sandbox mode plus
+// whether a write needs the user's OK first (#79) — the one place every
+// caller in this file reads it, replacing the eight separate
+// metaOr("agent_sandbox","full") fallbacks this used to be. Caller holds at
+// least a.mu.RLock. A closed file (a.container == nil, e.g. GetAgentStatus
+// polled before any file is open) reports the same fail-safe default
+// agents.ReadFilePolicy returns for a file with no stored keys at all.
+func (a *App) agentPolicy() agents.FilePolicy {
 	if a.container == nil {
-		return def
+		return agents.FilePolicy{Mode: agents.DefaultSandboxMode, AskBeforeWrites: true}
 	}
-	v, err := a.container.Meta(key)
-	if err != nil {
-		return def
-	}
-	return v
+	return agents.ReadFilePolicy(a.container)
 }
 
 // AgentConfig surfaces the agent configuration to the UI. Provider/model/endpoint
 // are app-global and viper-driven (read-only here — configured via ~/.vibe.yaml
-// or VIBE_LLM_* env); only the sandbox is a per-.vibe security setting.
+// or VIBE_LLM_* env); sandbox and askBeforeWrites are per-.vibe security settings.
 type AgentConfig struct {
-	Provider string `json:"provider"` // read-only (viper-driven)
-	Model    string `json:"model"`    // read-only (viper-driven)
-	Endpoint string `json:"endpoint"` // read-only (viper-driven)
-	Sandbox  string `json:"sandbox"`  // editable per-file
+	Provider        string `json:"provider"`        // read-only (viper-driven)
+	Model           string `json:"model"`           // read-only (viper-driven)
+	Endpoint        string `json:"endpoint"`        // read-only (viper-driven)
+	Sandbox         string `json:"sandbox"`         // editable per-file
+	AskBeforeWrites bool   `json:"askBeforeWrites"` // editable per-file
 }
 
 // GetAgentConfig returns the viper-driven provider/model/endpoint plus the
-// per-file sandbox.
+// per-file sandbox and ask-before-writes setting.
 func (a *App) GetAgentConfig() (*AgentConfig, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
+	policy := a.agentPolicy()
 	return &AgentConfig{
-		Provider: a.llmCfg.Provider,
-		Model:    a.llmCfg.Model,
-		Endpoint: a.llmCfg.Endpoint,
-		Sandbox:  a.metaOr("agent_sandbox", "full"),
+		Provider:        a.llmCfg.Provider,
+		Model:           a.llmCfg.Model,
+		Endpoint:        a.llmCfg.Endpoint,
+		Sandbox:         string(policy.Mode),
+		AskBeforeWrites: policy.AskBeforeWrites,
 	}, nil
 }
 
-// SetAgentConfig persists the per-file agent sandbox. Provider/model/endpoint are
-// app-global viper config and are not settable here. Studio-only.
+// SetAgentConfig persists the per-file agent sandbox and ask-before-writes
+// setting. Provider/model/endpoint are app-global viper config and are not
+// settable here. Studio-only. The frontend always sends both fields, so an
+// invalid/empty sandbox value is rejected outright rather than silently
+// falling back — ParseSandboxMode is the same strict parser --sandbox uses.
 func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if cfg.Sandbox != "" {
-		if err := a.container.SetMeta("agent_sandbox", cfg.Sandbox); err != nil {
-			return fmt.Errorf("failed to set agent_sandbox: %w", err)
-		}
+	mode, err := agents.ParseSandboxMode(cfg.Sandbox)
+	if err != nil {
+		return err
 	}
+	if err := a.container.SetMeta(agents.MetaKeySandbox, string(mode)); err != nil {
+		return fmt.Errorf("failed to set %s: %w", agents.MetaKeySandbox, err)
+	}
+	askValue := "true"
+	if !cfg.AskBeforeWrites {
+		askValue = "false"
+	}
+	if err := a.container.SetMeta(agents.MetaKeyAskBeforeWrites, askValue); err != nil {
+		return fmt.Errorf("failed to set %s: %w", agents.MetaKeyAskBeforeWrites, err)
+	}
+	a.emitEvent("agent:config", map[string]any{"sandbox": string(mode), "askBeforeWrites": cfg.AskBeforeWrites})
 	return nil
 }
 
@@ -2142,17 +2321,24 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
 	}
+	policy := a.agentPolicy()
 	cfg := llm.Config{
-		Provider: a.llmCfg.Provider,
-		Endpoint: a.llmCfg.Endpoint,
-		Model:    a.llmCfg.Model,
-		APIKey:   a.llmCfg.APIKey,
-		Sandbox:  a.metaOr("agent_sandbox", "full"),
+		Provider:        a.llmCfg.Provider,
+		Endpoint:        a.llmCfg.Endpoint,
+		Model:           a.llmCfg.Model,
+		APIKey:          a.llmCfg.APIKey,
+		Sandbox:         string(policy.Mode),
+		AskBeforeWrites: policy.AskBeforeWrites,
 	}
 	// Chat has no cap of its own beyond whatever the file's agent_sandbox
 	// setting allows — ceiling = ModeFull lets Tighter (in
 	// agentToolHandler.Handle) resolve to the file's live mode on every
 	// dispatch, same as before this fix.
+	//
+	// AgentChat (the non-streaming binding) is unused by the frontend
+	// (AgentPanel/AgentView both call AgentChatStream) and never gets an
+	// approver attached — a write needing approval here is simply refused,
+	// fail-safe, exactly like a headless MCP client (#79 D5).
 	handler := a.newAgentToolHandler(agents.ModeFull)
 	a.mu.RUnlock()
 
@@ -2185,16 +2371,24 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		a.mu.RUnlock()
 		return nil, fmt.Errorf("no file open")
 	}
+	policy := a.agentPolicy()
 	cfg := llm.Config{
-		Provider: a.llmCfg.Provider,
-		Endpoint: a.llmCfg.Endpoint,
-		Model:    a.llmCfg.Model,
-		APIKey:   a.llmCfg.APIKey,
-		Sandbox:  a.metaOr("agent_sandbox", "full"),
+		Provider:        a.llmCfg.Provider,
+		Endpoint:        a.llmCfg.Endpoint,
+		Model:           a.llmCfg.Model,
+		APIKey:          a.llmCfg.APIKey,
+		Sandbox:         string(policy.Mode),
+		AskBeforeWrites: policy.AskBeforeWrites,
 	}
 	// Chat has no cap of its own beyond whatever the file's agent_sandbox
 	// setting allows — see AgentChat's identical comment.
 	handler := a.newAgentToolHandler(agents.ModeFull)
+	// AgentChatStream is the one surface with a human actually watching this
+	// turn, so it's the only place an approver is ever attached (#79 D4) —
+	// every write the model calls for during this turn now blocks on an
+	// inline "agent:approval" card instead of running (or, absent this,
+	// being refused outright the way MCP/AgentChat are).
+	handler.enableApprovals(turnID)
 	a.mu.RUnlock()
 
 	hist := make([]llm.Turn, 0, len(history))
@@ -2296,7 +2490,7 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 	}
 	// ceiling = ModeReadOnly, NOT cfg.Sandbox/agents.SandboxMode(cfg.Sandbox)
 	// — this is the ceiling that must survive every later per-dispatch
-	// SetSandboxMode refresh in agentToolHandler.Handle (see its doc
+	// SetFilePolicy refresh in agentToolHandler.Handle (see its doc
 	// comment). Passing anything file-mode-derived here would let that
 	// refresh overwrite task mode's "always read-only" contract on the
 	// handler's very first tool call, exactly the regression a reviewer
@@ -2382,9 +2576,9 @@ func (a *App) CancelAgentTask(taskID string) {
 // individual tool call — not just this construction — is locked and
 // container-identity-checked (review fix #4). Callers must hold at least
 // a.mu.RLock and have already checked a.container != nil.
-func (a *App) newAgentToolHandler(ceiling agents.SandboxMode) llm.Handler {
-	fileMode := agents.SandboxMode(a.metaOr("agent_sandbox", "full"))
-	sc := &agents.SandboxConfig{Mode: agents.Tighter(ceiling, fileMode), MaxQueryRows: 10000}
+func (a *App) newAgentToolHandler(ceiling agents.SandboxMode) *agentToolHandler {
+	policy := a.agentPolicy()
+	sc := &agents.SandboxConfig{Mode: agents.Tighter(ceiling, policy.Mode), MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
 	return a.wrapAgentHandler(sc, ceiling)
 }
 
@@ -2397,7 +2591,7 @@ func (a *App) newAgentToolHandler(ceiling agents.SandboxMode) llm.Handler {
 // a.mu.Lock, which also suffices) and have already checked
 // a.container != nil.
 func (a *App) wrapAgentHandler(sc *agents.SandboxConfig, ceiling agents.SandboxMode) *agentToolHandler {
-	inner := agents.NewHandler(a.container, &engineAgentAdapter{mgr: a.engine}, sc, a.logger)
+	inner := agents.NewHandler(a.container, &engineAgentAdapter{app: a}, sc, a.logger)
 	inner.SetActiveNotebook(a.activeNotebookID)
 	return &agentToolHandler{app: a, container: a.container, inner: inner, ceiling: ceiling}
 }
@@ -2465,12 +2659,12 @@ func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *age
 	// for the server's whole lifetime, so it never re-read the setting).
 	// Clamped through h.ceiling (agents.Tighter) so this refresh can never
 	// grant a handler more than its ceiling allows — see ceiling's doc
-	// comment for the AgentTask regression this closes. SetSandboxMode
+	// comment for the AgentTask regression this closes. SetFilePolicy
 	// swaps an atomic pointer inside h.inner rather than mutating a shared
 	// *SandboxConfig's fields in place, so this is safe under concurrent
 	// MCP calls (go test -race covers it).
-	fileMode := agents.SandboxMode(h.app.metaOr("agent_sandbox", "full"))
-	h.inner.SetSandboxMode(agents.Tighter(h.ceiling, fileMode))
+	policy := h.app.agentPolicy()
+	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
 
 	// Re-read the live active notebook on every dispatch, not just at
 	// construction time: StartMCPServer builds ONE agentToolHandler for the
@@ -2483,6 +2677,14 @@ func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *age
 	resp := h.inner.Handle(ctx, req)
 	if resp.Error == nil {
 		h.app.notifyAgentToolChange(req.Method, resp.Result)
+		// Mark dirty for a tool call that wrote DuckDB user data (#81).
+		// agents.IsWriteCall already means exactly that — "content" tools
+		// (add_query_cell, create_or_update_skill, ...) write SQLite only
+		// and are excluded there, not here, so this is the one place both
+		// Studio and `vibe mcp serve` agree on.
+		if agents.IsWriteCall(ctx, h.container.DuckDBDB(), req) {
+			h.app.markDirty()
+		}
 	}
 	return resp
 }
@@ -2499,9 +2701,110 @@ func (h *agentToolHandler) RunReadOnlySQL(ctx context.Context, sqlStr string, pa
 	if h.app.container != h.container {
 		return nil, false, fmt.Errorf("the file was closed or replaced during this agent turn; reopen it and try again")
 	}
-	fileMode := agents.SandboxMode(h.app.metaOr("agent_sandbox", "full"))
-	h.inner.SetSandboxMode(agents.Tighter(h.ceiling, fileMode))
+	policy := h.app.agentPolicy()
+	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
 	return h.inner.RunReadOnlySQL(ctx, sqlStr, params, maxRows)
+}
+
+// enableApprovals installs an approver on h that surfaces each pending write
+// as an "agent:approval" event tagged with turnID, and blocks until the
+// frontend answers via ResolveAgentApproval (or the request times out/is
+// cancelled). Only ever called from AgentChatStream, once, before that
+// turn's tool-calling loop starts — see its call site's comment for why
+// (Studio chat is the one surface with a human watching).
+//
+// Invariant this whole thing depends on: the returned func is only ever
+// invoked from inside h.Handle (via h.inner's approver, itself only called
+// from agents.Handler.Handle/handleRunQuery), which holds h.app.mu.RLock()
+// for its whole dispatch. Releasing that RLock for the DURATION of the wait
+// — not just around the wait, the actual h.app.mu.RUnlock()/RLock() pair
+// below — is what keeps Save/Close/SetAgentConfig responsive while a card
+// sits pending; without it, every one of those (all a.mu.Lock() callers)
+// would queue behind this one in-flight tool call for up to
+// approvalTimeout. h.app.mu is an RWMutex, so releasing this goroutine's
+// read lock while OTHER concurrent readers may still hold theirs is safe —
+// only a Lock()-holder needs every reader gone, and RUnlock/RLock only
+// drops and reacquires THIS goroutine's own hold.
+func (h *agentToolHandler) enableApprovals(turnID string) {
+	h.inner.SetApprover(func(ctx context.Context, req agents.ApprovalRequest) error {
+		timeout := h.app.approvalTimeout
+		if timeout <= 0 {
+			timeout = defaultApprovalTimeout
+		}
+		ctx2, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		// db captures the DuckDB handle this write was approved against
+		// (while the lock is still held, below), so the post-wait check can
+		// tell a revert's session swap apart from an unchanged one — see
+		// that check's own comment.
+		db := h.container.DuckDBDB()
+
+		// The RUnlock happens inside announce, which Wait calls exactly
+		// once, after it registers req and before it blocks. So by the time
+		// CloseFile/OpenFile/CreateFile hold a.mu.Lock, this waiter is
+		// registered and their CancelAll under the lock reaches it; the
+		// CancelAll they run before locking only makes the card end sooner.
+		err := h.app.approvals.Wait(ctx2, req, func(r agents.ApprovalRequest) {
+			h.app.mu.RUnlock()
+			h.app.emitEvent("agent:approval", map[string]any{"turnId": turnID, "request": r})
+		})
+		h.app.mu.RLock()
+
+		// Re-check container identity BEFORE deriving the outcome (round 2
+		// review finding 4): the file may have been closed/replaced while
+		// this goroutine had the lock released, and that must win over
+		// whatever Wait itself returned — otherwise a Resolve(true) that
+		// raced the swap would emit "approved" for a change that the
+		// identity check below is about to refuse anyway. The DuckDB handle
+		// check (#98) covers the case where the container wasn't replaced
+		// but its DuckDB session was swapped out from under it (Revert):
+		// Resolve(true) can win the race against RevertFile's own
+		// CancelAll, and without this check the approved write would then
+		// run on the freshly reverted data instead of what was approved.
+		if h.app.container != h.container || h.container.DuckDBDB() != db {
+			err = agents.ErrApprovalCancelled
+		}
+
+		outcome := "approved"
+		switch {
+		case errors.Is(err, agents.ErrApprovalDeclined):
+			outcome = "declined"
+		case errors.Is(err, agents.ErrApprovalExpired):
+			outcome = "expired"
+		case errors.Is(err, agents.ErrApprovalCancelled):
+			outcome = "cancelled"
+		}
+		h.app.emitEvent("agent:approval_done", map[string]any{"turnId": turnID, "id": req.ID, "outcome": outcome})
+
+		if err != nil {
+			return err
+		}
+
+		// Refresh h.inner's sandbox with the file's CURRENT policy before
+		// reporting "approved" (round 2 review finding 7): the wait can
+		// span minutes with a.mu released, during which Settings -> Agent
+		// may have tightened the file's mode or turned ask back on.
+		// awaitApproval (internal/agents/handler.go) re-checks the write
+		// against h.inner's sandbox the moment this returns nil, so that
+		// re-check needs live policy, not whatever was loaded before the
+		// wait started — a human did approve this exact change, but
+		// "approved" must still mean "still allowed" when it actually runs.
+		policy := h.app.agentPolicy()
+		h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
+		return nil
+	})
+}
+
+// ResolveAgentApproval answers a pending approval card (id, from the
+// "agent:approval" event's request.id) with the user's decision. Deliberately
+// takes no a.mu — the goroutine it wakes up (enableApprovals' approver) is
+// the one holding the file lock, and this call must never queue behind that.
+func (a *App) ResolveAgentApproval(id string, approved bool) error {
+	if a.approvals == nil || !a.approvals.Resolve(id, approved) {
+		return fmt.Errorf("this request is no longer waiting")
+	}
+	return nil
 }
 
 // notifyAgentToolChange emits "data:changed" after a successful agent tool
@@ -2545,12 +2848,17 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 
 // --- Import/Export ---
 
-// SelectCSVFile opens a file dialog to select a CSV file.
-func (a *App) SelectCSVFile() (string, error) {
+// SelectImportFile opens a file dialog to select a data file for import
+// (CSV/TSV or Excel). Replaces SelectCSVFile and the old
+// SelectSpreadsheetFile stub (which always returned "not implemented" —
+// the xlsx Browse button was broken in the real app before this).
+func (a *App) SelectImportFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Import CSV",
+		Title: "Import data",
 		Filters: []runtime.FileFilter{
+			{DisplayName: "Data files (*.csv, *.tsv, *.xlsx)", Pattern: "*.csv;*.tsv;*.xlsx"},
 			{DisplayName: "CSV Files (*.csv)", Pattern: "*.csv"},
+			{DisplayName: "Excel Files (*.xlsx)", Pattern: "*.xlsx"},
 		},
 	})
 	if err != nil {
@@ -2559,296 +2867,100 @@ func (a *App) SelectCSVFile() (string, error) {
 	return path, nil
 }
 
-// SpreadsheetColumn describes a single previewed spreadsheet column: its
-// detected header name and a suggested DuckDB type for the mapping step.
-// STUB for P6.3 (Import Spreadsheet Wizard backend) — not yet implemented.
-type SpreadsheetColumn struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-// SpreadsheetPreview is the result of PreviewSpreadsheet: the workbook's sheet
-// list plus the detected columns and sample rows for the requested sheet.
-// STUB for P6.3 — not yet implemented.
-type SpreadsheetPreview struct {
-	Sheets  []string            `json:"sheets"`
-	Sheet   string              `json:"sheet"`
-	Columns []SpreadsheetColumn `json:"columns"`
-	Rows    [][]any             `json:"rows"`
-}
-
-// ImportColumnMapping maps a source spreadsheet column to a target table column
-// and DuckDB type. STUB for P6.3 — not yet implemented.
-type ImportColumnMapping struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Type   string `json:"type"`
-}
-
-// ImportSpreadsheetOptions parameterizes ImportSpreadsheet: source file, sheet,
-// header detection, target table, mode ("create" or "append"), and the
-// column-type mapping. STUB for P6.3 — not yet implemented.
-type ImportSpreadsheetOptions struct {
-	Path      string                `json:"path"`
-	Sheet     string                `json:"sheet"`
-	HasHeader bool                  `json:"has_header"`
-	TableName string                `json:"table_name"`
-	Mode      string                `json:"mode"`
-	Columns   []ImportColumnMapping `json:"columns"`
-}
-
-// SelectSpreadsheetFile opens a file dialog for choosing an .xlsx workbook.
-// STUB for P6.3 — not yet implemented.
-func (a *App) SelectSpreadsheetFile() (string, error) {
-	return "", fmt.Errorf("SelectSpreadsheetFile not implemented")
-}
-
-// PreviewSpreadsheet returns the workbook's sheet list, the detected headers,
-// suggested DuckDB column types, and a bounded sample of rows for the requested
-// sheet. It drives the Import Spreadsheet Wizard's sheet-picker and
-// field-type-mapping steps (parity plan §6.3).
-func (a *App) PreviewSpreadsheet(path, sheet string, hasHeader bool) (*SpreadsheetPreview, error) {
+// InspectImport stages the whole file and returns its columns (with
+// inferred types and primary-key candidates), a preview of the first 50
+// rows, and the total row count — the data behind the wizard's preview
+// grid. Read-only: it never writes to the container, only to the DuckDB
+// session's own temp catalog, so it takes RLock like any other query.
+func (a *App) InspectImport(src importer.Source) (*importer.Inspection, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-
 	db := a.container.DuckDBDB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
-
-	sheets, err := importer.ListXLSXSheets(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list spreadsheet sheets: %w", err)
-	}
-
-	prev, err := importer.PreviewXLSX(db, path, sheet, hasHeader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to preview spreadsheet: %w", err)
-	}
-
-	cols := make([]SpreadsheetColumn, 0, len(prev.Columns))
-	for _, c := range prev.Columns {
-		cols = append(cols, SpreadsheetColumn{Name: c.Name, Type: c.Type})
-	}
-
-	return &SpreadsheetPreview{
-		Sheets:  sheets,
-		Sheet:   sheet,
-		Columns: cols,
-		Rows:    prev.Rows,
-	}, nil
+	return importer.Inspect(a.ctx, db, src)
 }
 
-// ImportSpreadsheet loads a spreadsheet sheet into a table per the supplied
-// options. Mode "create" builds a new table using the caller's column-type
-// mapping (target name + DuckDB type); mode "append" loads rows into an
-// existing table without recreating it. Rows are read positionally in the
-// source-column order of the mapping (parity plan §6.3).
-func (a *App) ImportSpreadsheet(opts ImportSpreadsheetOptions) (*ImportResult, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	if !isValidIdentifier(opts.TableName) {
-		return nil, fmt.Errorf("invalid table name")
-	}
-	if len(opts.Columns) == 0 {
-		return nil, fmt.Errorf("no column mapping provided")
-	}
-	mode := opts.Mode
-	if mode == "" {
-		mode = "create"
-	}
-	if mode != "create" && mode != "append" {
-		return nil, fmt.Errorf("invalid mode %q (want create or append)", mode)
-	}
-
-	db := a.container.DuckDBDB()
-	if db == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-
-	// Read the full sheet through the excel extension.
-	srcCols, rows, err := importer.ReadXLSXSheet(db, opts.Path, opts.Sheet, opts.HasHeader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read spreadsheet: %w", err)
-	}
-
-	// Map each mapping entry to a source-column index by name.
-	srcIndex := make(map[string]int, len(srcCols))
-	for i, c := range srcCols {
-		srcIndex[c.Name] = i
-	}
-	type boundCol struct {
-		target string
-		typ    string
-		srcIdx int
-	}
-	bound := make([]boundCol, 0, len(opts.Columns))
-	for _, m := range opts.Columns {
-		target := m.Target
-		if target == "" {
-			target = m.Source
-		}
-		if !isValidIdentifier(target) {
-			return nil, fmt.Errorf("invalid target column name %q", m.Target)
-		}
-		typ := strings.TrimSpace(m.Type)
-		if typ == "" {
-			typ = "VARCHAR"
-		}
-		idx, ok := srcIndex[m.Source]
-		if !ok {
-			return nil, fmt.Errorf("source column %q not found in sheet", m.Source)
-		}
-		bound = append(bound, boundCol{target: target, typ: typ, srcIdx: idx})
-	}
-
-	var tableExists int
-	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1", opts.TableName).Scan(&tableExists) //nolint:errcheck
-
-	if mode == "create" {
-		if tableExists > 0 {
-			if _, err := db.Exec(fmt.Sprintf("DROP TABLE %s", engine.QuoteIdent(opts.TableName))); err != nil {
-				return nil, fmt.Errorf("failed to drop existing table: %w", err)
-			}
-		}
-		colDefs := make([]string, 0, len(bound))
-		for _, b := range bound {
-			colDefs = append(colDefs, fmt.Sprintf("%s %s", engine.QuoteIdent(b.target), b.typ))
-		}
-		createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(opts.TableName), strings.Join(colDefs, ", "))
-		if _, err := db.Exec(createSQL); err != nil {
-			return nil, fmt.Errorf("failed to create table: %w", err)
-		}
-	} else if tableExists == 0 {
-		return nil, fmt.Errorf("cannot append: table %q does not exist", opts.TableName)
-	}
-
-	colNames := make([]string, len(bound))
-	placeholders := make([]string, len(bound))
-	for i, b := range bound {
-		colNames[i] = engine.QuoteIdent(b.target)
-		placeholders[i] = "?"
-	}
-	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(opts.TableName),
-		strings.Join(colNames, ", "), strings.Join(placeholders, ", "))
-
-	stmt, err := db.Prepare(insertSQL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare insert: %w", err)
-	}
-	defer stmt.Close()
-
-	// Insert each row independently so a single constraint violation (e.g. an
-	// appended child row whose foreign-key parent is missing) is rejected without
-	// poisoning the rest of the import. DuckDB aborts a transaction on a
-	// constraint error, so we cannot batch valid rows alongside a violating one.
-	imported := 0
-	rejected := 0
-	for _, row := range rows {
-		args := make([]any, len(bound))
-		for i, b := range bound {
-			if b.srcIdx < len(row) {
-				args[i] = row[b.srcIdx]
-			}
-		}
-		if _, err := stmt.Exec(args...); err != nil {
-			rejected++
-			a.logger.Warn("skipping row that violates a table constraint during import",
-				"table", opts.TableName, "sheet", opts.Sheet, "error", err)
-			continue
-		}
-		imported++
-	}
-
-	a.logger.Info("imported spreadsheet",
-		"table", opts.TableName, "sheet", opts.Sheet, "mode", mode,
-		"rows", imported, "rejected", rejected)
-
-	// Skills (#62): write/refresh a workspace-<table> skill with the actual
-	// stored schema (row count, column types, null rates, sample values) so
-	// the agent has grounded facts about this table without a model call.
-	// Best-effort: a failure here must not fail the import itself.
-	if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, opts.TableName); err != nil {
-		a.logger.Warn("failed to write import skill", "table", opts.TableName, "error", err)
-	}
-
-	a.emitEvent("data:changed")
-	return &ImportResult{RowsImported: imported, TableName: opts.TableName}, nil
-}
-
-// ImportResult holds CSV import results.
-type ImportResult struct {
-	RowsImported int    `json:"rows_imported"`
-	TableName    string `json:"table_name"`
-}
-
-// ImportCSV imports a CSV file into a table.
-func (a *App) ImportCSV(csvPath, tableName string) (*ImportResult, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-	if !isValidIdentifier(tableName) {
-		return nil, fmt.Errorf("invalid table name")
-	}
-
-	if _, err := os.Stat(csvPath); err != nil {
-		return nil, fmt.Errorf("failed to read CSV: %w", err)
-	}
-
-	db := a.container.DuckDBDB()
-	if db == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-
-	// Delegate parsing AND type inference to DuckDB's CSV sniffer. The previous
-	// hand-rolled importer split lines on bare commas (breaking quoted fields)
-	// and created every column as TEXT, which made numeric aggregates fail and
-	// left imported tables unable to participate in relationships.
-	escapedPath := strings.ReplaceAll(csvPath, "'", "''")
-	readCSV := fmt.Sprintf("read_csv_auto('%s', header=true)", escapedPath)
-
-	var exists int
-	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1", tableName).Scan(&exists) //nolint:errcheck
-
-	var imported int
-	if exists == 0 {
-		if _, err := db.Exec(fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s", engine.QuoteIdent(tableName), readCSV)); err != nil {
-			return nil, fmt.Errorf("failed to import CSV: %w", err)
-		}
-		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(tableName))).Scan(&imported); err != nil {
-			return nil, fmt.Errorf("failed to count imported rows: %w", err)
-		}
+// ImportFile runs one import per the supplied options — create, replace,
+// append, or upsert — pre-flighted and written atomically by
+// importer.Import. Replaces ImportCSV, ImportSpreadsheet, and
+// PreviewSpreadsheet.
+//
+// A dry run (o.DryRun) only writes to the DuckDB session's temp catalog, so
+// it takes RLock; a real run takes the full Lock. Only a real, successful
+// run (!DryRun && summary.OK) marks the file dirty, refreshes the
+// workspace-<table> skill, and emits data:changed — a dry run or a
+// pre-flight failure leaves the file exactly as it was.
+func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
+	// No isValidIdentifier check here: importer.Import validates o.Table
+	// itself (engine.ValidIdentifier, the same function isValidIdentifier
+	// wraps) and returns a clean "invalid table name" error — a second
+	// check here would just be two call sites that could quietly diverge.
+	if o.DryRun {
+		a.mu.RLock()
+		defer a.mu.RUnlock()
 	} else {
-		// Append into the existing table, matching columns by name so column
-		// order in the file doesn't matter.
-		res, err := db.Exec(fmt.Sprintf("INSERT INTO %s BY NAME SELECT * FROM %s", engine.QuoteIdent(tableName), readCSV))
-		if err != nil {
-			return nil, fmt.Errorf("failed to import CSV: %w", err)
-		}
-		if n, err := res.RowsAffected(); err == nil {
-			imported = int(n)
-		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
 	}
 
-	// Skills (#62): write/refresh a workspace-<table> skill with the actual
-	// stored schema. Best-effort — a failure here must not fail the import.
-	if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, tableName); err != nil {
-		a.logger.Warn("failed to write import skill", "table", tableName, "error", err)
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	db := a.container.DuckDBDB()
+	if db == nil {
+		return nil, fmt.Errorf("DuckDB not available")
 	}
 
-	a.emitEvent("data:changed")
-	return &ImportResult{RowsImported: imported, TableName: tableName}, nil
+	summary, err := importer.Import(a.ctx, db, o)
+	if err != nil {
+		return nil, err
+	}
+
+	if !o.DryRun && summary.OK {
+		// The write already landed atomically inside importer.Import's own
+		// transaction — there is no "mark dirty as writes begin" window to
+		// worry about here, unlike the old per-row importer.
+		a.markDirty()
+		// summary.Table, not o.Table: for append/upsert/replace into an
+		// existing table, Import resolves and returns the CATALOG's own
+		// spelling (a case-insensitive match, e.g. o.Table="customers"
+		// against a table actually named "Customers") — writing the skill
+		// under the caller's original casing could create a second,
+		// wrong-table skill instead of refreshing the real one's.
+		if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, summary.Table); err != nil {
+			a.logger.Warn("failed to write import skill", "table", summary.Table, "error", err)
+		}
+		a.emitEvent("data:changed")
+	}
+
+	return summary, nil
+}
+
+// exportTableTo writes `SELECT * FROM table` to dst via DuckDB COPY with the
+// given WITH-clause options, the same mechanism ExportQueryResults already
+// uses (buildCopySQL). Extracted from ExportTableCSV/ExportTableJSON
+// so the datasheet export is DuckDB-native and testable without a save
+// dialog: the two previously hand-rolled their own scan loops (Go %v with
+// no CSV quoting — a comma in a value broke the file — and a second,
+// slightly different NormalizeValue-based loop for JSON), which could and
+// did disagree with what the grid itself shows for the same row. Caller
+// owns table-name validation; this only builds and runs the COPY.
+func (a *App) exportTableTo(table, dst, copyOpts string) error {
+	ddb := a.container.DuckDBDB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	copySQL := buildCopySQL(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(table)), dst, copyOpts)
+	if _, err := ddb.Exec(copySQL); err != nil {
+		return fmt.Errorf("failed to export table: %w", err)
+	}
+	return nil
 }
 
 // ExportTableCSV exports a table as CSV via save dialog.
@@ -2877,56 +2989,13 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 		return "", nil
 	}
 
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return "", fmt.Errorf("DuckDB not available")
-	}
-	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(tableName)))
-	if err != nil {
-		return "", fmt.Errorf("failed to query table: %w", err)
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return "", fmt.Errorf("failed to get columns: %w", err)
-	}
-
-	var b strings.Builder
-	b.WriteString(strings.Join(columns, ","))
-	b.WriteString("\n")
-
-	for rows.Next() {
-		values := make([]any, len(columns))
-		valuePtrs := make([]any, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return "", fmt.Errorf("failed to scan row: %w", err)
-		}
-		fields := make([]string, len(columns))
-		for i, v := range values {
-			fields[i] = fmt.Sprintf("%v", engine.NormalizeValue(v))
-		}
-		b.WriteString(strings.Join(fields, ","))
-		b.WriteString("\n")
-	}
-
-	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
-		return "", fmt.Errorf("failed to write CSV: %w", err)
+	if err := a.exportTableTo(tableName, path, "FORMAT csv, HEADER true"); err != nil {
+		return "", err
 	}
 	return path, nil
 }
 
 // ExportTableJSON exports a table as JSON via save dialog.
-// ExportTableJSON is the "JSON export" row-returning binding
-// jsonRoundTripGuard's doc comment refers to — it already marshals to JSON
-// itself (json.MarshalIndent below) and checks the error before writing or
-// returning, rather than handing a raw Go value back to Wails to marshal on
-// its own, so it was already safe against the crash jsonRoundTripGuard
-// guards the other row-returning bindings against; no separate call needed
-// here.
 func (a *App) ExportTableJSON(tableName string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -2952,51 +3021,8 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 		return "", nil
 	}
 
-	ddb := a.container.DuckDBDB()
-	if ddb == nil {
-		return "", fmt.Errorf("DuckDB not available")
-	}
-	rows, err := ddb.Query(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(tableName)))
-	if err != nil {
-		return "", fmt.Errorf("failed to query table: %w", err)
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return "", fmt.Errorf("failed to get columns: %w", err)
-	}
-
-	var result []map[string]any
-	for rows.Next() {
-		values := make([]any, len(columns))
-		valuePtrs := make([]any, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return "", fmt.Errorf("failed to scan row: %w", err)
-		}
-		row := make(map[string]any)
-		for i, col := range columns {
-			v := values[i]
-			if b, ok := v.([]byte); ok {
-				v = string(b)
-			} else {
-				v = engine.NormalizeValue(v)
-			}
-			row[col] = v
-		}
-		result = append(result, row)
-	}
-
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to write JSON: %w", err)
+	if err := a.exportTableTo(tableName, path, "FORMAT json, ARRAY true"); err != nil {
+		return "", err
 	}
 	return path, nil
 }
@@ -3043,13 +3069,19 @@ func (a *App) SetMeta(key, value string) error {
 
 // --- MCP Server ---
 
-// engineAgentAdapter wraps engine.Manager to satisfy agents.EngineAccess.
+// engineAgentAdapter wraps App to satisfy agents.EngineAccess, resolving
+// a.engine at call time rather than capturing it at construction. Callers
+// already hold a.mu.RLock for the duration of the call (agentToolHandler.Handle
+// and RunReadOnlySQL), which is what makes reading a.engine safe. Resolving
+// per call — not once, up front — means a handler built before RevertFile
+// (#98) rebuilds the engine, such as the Studio MCP server's long-lived one,
+// or a chat turn already in flight, still executes against the rebuilt one.
 type engineAgentAdapter struct {
-	mgr *engine.Manager
+	app *App
 }
 
 func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error) {
-	return ea.mgr.Execute(ctx, sql, params)
+	return ea.app.engine.Execute(ctx, sql, params)
 }
 
 // StartMCPServer starts the MCP server for the currently open file.
@@ -3064,10 +3096,15 @@ func (a *App) StartMCPServer() (string, error) {
 		return fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()), nil
 	}
 
-	sandbox := &agents.SandboxConfig{Mode: agents.SandboxMode(a.metaOr("agent_sandbox", "full")), MaxQueryRows: 10000}
+	policy := a.agentPolicy()
+	sandbox := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
 	// ceiling = ModeFull: an external MCP client gets whatever the file's
 	// own agent_sandbox setting allows, no additional cap beyond it — see
-	// agentToolHandler.ceiling's doc comment.
+	// agentToolHandler.ceiling's doc comment. No approver is ever attached to
+	// Studio's own SSE MCP server (#79 D5, same as headless `vibe mcp
+	// serve`): a human being present in Studio isn't the same as a human
+	// watching THIS request, so a write needing approval is refused with the
+	// same message cmd/mcp.go uses, deferred to #90 (MCP settings).
 	handler := a.wrapAgentHandler(sandbox, agents.ModeFull)
 
 	srv := vibemcp.New(handler, a.logger)
@@ -3119,22 +3156,29 @@ func (a *App) GetMCPStatus() map[string]any {
 
 // --- Helpers ---
 
+// buildCopySQL wraps a user/saved query in COPY (…) TO '<dst>' WITH
+// (<opts>). Trailing whitespace and semicolons are stripped (a query that
+// runs fine with a trailing ";" must export too — DuckDB rejects a second
+// statement inside the COPY's parenthesized subquery), and the closing
+// paren goes on its own line so a trailing "-- comment" in query can't
+// swallow it. dst's single quotes are doubled so a path containing one
+// stays a single, well-formed string literal.
+//
+// This does not try to parse comments out of query: a "SELECT 1; -- x"
+// still fails, and DuckDB's own parser error says so — good enough, and
+// safer than attempting to strip comments ourselves.
+func buildCopySQL(query, dst, opts string) string {
+	query = strings.TrimRight(query, " \t\r\n;")
+	return fmt.Sprintf("COPY (%s\n) TO '%s' WITH (%s)",
+		query, strings.ReplaceAll(dst, "'", "''"), opts)
+}
+
+// isValidIdentifier is engine.ValidIdentifier under Studio's existing name
+// (used throughout this file) — see its doc comment. Kept as a thin
+// wrapper, not a second implementation, so the two can never quietly
+// diverge on what counts as a safe identifier.
 func isValidIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-			return false
-		}
-	}
-	if name[0] >= '0' && name[0] <= '9' {
-		return false
-	}
-	if strings.HasPrefix(name, "_vibe_") {
-		return false
-	}
-	return true
+	return engine.ValidIdentifier(name)
 }
 
 // copyToXLSX writes the result of the given SELECT source to an .xlsx via the
@@ -3156,8 +3200,7 @@ func (a *App) copyToXLSX(source, dst string) (string, error) {
 	if !strings.HasSuffix(strings.ToLower(xlsxPath), ".xlsx") {
 		xlsxPath += ".xlsx"
 	}
-	copyXLSX := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT xlsx, HEADER true)",
-		source, strings.ReplaceAll(xlsxPath, "'", "''"))
+	copyXLSX := buildCopySQL(source, xlsxPath, "FORMAT xlsx, HEADER true")
 	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err == nil {
 		return xlsxPath, nil
 	} else {
@@ -3166,8 +3209,7 @@ func (a *App) copyToXLSX(source, dst string) (string, error) {
 
 	// CSV fallback.
 	csvPath := strings.TrimSuffix(dst, ".xlsx") + ".csv"
-	copyCSV := fmt.Sprintf("COPY (%s) TO '%s' WITH (FORMAT csv, HEADER true)",
-		source, strings.ReplaceAll(csvPath, "'", "''"))
+	copyCSV := buildCopySQL(source, csvPath, "FORMAT csv, HEADER true")
 	if _, err := ddb.ExecContext(a.ctx, copyCSV); err != nil {
 		return "", err
 	}

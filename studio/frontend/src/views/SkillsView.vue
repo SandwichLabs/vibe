@@ -5,6 +5,7 @@ import { useModalKeys } from '../composables/useModal'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import { errorText } from '../lib/errors'
 
 // SkillsView (#62): lists built-in + file (user/import) Skills, shows a
 // rendered/raw detail pane, and lets the user author or edit file skills.
@@ -52,7 +53,7 @@ async function loadSkills() {
       selectedName.value = skills.value[0].name
     }
   } catch (e: any) {
-    errorMessage.value = 'Failed to load skills: ' + (e.message || e)
+    errorMessage.value = 'Failed to load skills: ' + errorText(e)
   }
   loading.value = false
 }
@@ -99,7 +100,7 @@ async function submitEditor() {
     selectedName.value = formName.value
     viewMode.value = 'rendered'
   } catch (e: any) {
-    formNameError.value = e.message || String(e)
+    formNameError.value = errorText(e)
   }
   saving.value = false
 }
@@ -119,7 +120,7 @@ async function confirmDelete() {
     if (selectedName.value === name) selectedName.value = null
     await loadSkills()
   } catch (e: any) {
-    errorMessage.value = 'Failed to delete skill: ' + (e.message || e)
+    errorMessage.value = 'Failed to delete skill: ' + errorText(e)
   }
 }
 

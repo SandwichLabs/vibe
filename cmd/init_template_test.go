@@ -17,6 +17,7 @@ package cmd
 //     lists the available template names.
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -118,4 +119,66 @@ func TestInitCommand_FromUnknownName_ListsTemplates(t *testing.T) {
 		assert.Contains(t, err.Error(), name,
 			"error should list available template name %q", name)
 	}
+}
+
+// TestInitCommand_FromPathClone_ExistingTargetNotTruncated (#80): cloning
+// into a path that already has content must be refused like Create, never
+// silently truncated — the pre-#80 code used os.Create, which does exactly
+// that.
+func TestInitCommand_FromPathClone_ExistingTargetNotTruncated(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+
+	templatePath := filepath.Join(dir, "source.vibe")
+	_, err := executeCommand("init", templatePath, "--title", "Source App")
+	require.NoError(t, err)
+
+	targetPath := filepath.Join(dir, "target.vibe")
+	const existingContent = "not a vibe file, must survive"
+	require.NoError(t, os.WriteFile(targetPath, []byte(existingContent), 0o600))
+
+	_, err = executeCommand("init", targetPath, "--from", templatePath)
+	require.Error(t, err, "cloning into an existing target must be refused")
+	assert.Contains(t, err.Error(), "already exists")
+
+	got, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, existingContent, string(got), "the existing target must be left untouched")
+}
+
+// TestInitCommand_FromPathClone_LockedTargetLeftIntact (#80): cloning into a
+// path another process holds open (a writer lock on the SAME name #80 just
+// added) must be refused before it can ever delete that process's file out
+// from under it. The O_EXCL guard fixing item 2 catches this at the same
+// "already exists" check as the plain-existing-file case above — the target
+// being locked never even reaches container.Open — so this asserts the
+// held container is left fully intact and still usable afterward, not a
+// distinct error string.
+func TestInitCommand_FromPathClone_LockedTargetLeftIntact(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+
+	templatePath := filepath.Join(dir, "source.vibe")
+	_, err := executeCommand("init", templatePath, "--title", "Source App")
+	require.NoError(t, err)
+
+	targetPath := filepath.Join(dir, "target.vibe")
+	holder, err := container.Create(targetPath, container.WithPassphrase("held-pass"), container.WithLogger(logger))
+	require.NoError(t, err)
+
+	_, err = executeCommand("init", targetPath, "--from", templatePath)
+	require.Error(t, err, "cloning into a locked, already-existing target must be refused")
+	assert.Contains(t, err.Error(), "already exists")
+
+	// The holder's own container must still be fully usable — nothing was
+	// deleted or truncated out from under it.
+	_, err = holder.DuckDBDB().Exec("CREATE TABLE still_alive AS SELECT 1")
+	require.NoError(t, err, "the held container must be untouched by the refused clone")
+	require.NoError(t, holder.Close())
 }

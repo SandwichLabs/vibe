@@ -34,8 +34,16 @@ export function CancelAgentTask(arg1) {
   return window['go']['main']['App']['CancelAgentTask'](arg1);
 }
 
+export function CancelQuit() {
+  return window['go']['main']['App']['CancelQuit']();
+}
+
 export function CloseFile() {
   return window['go']['main']['App']['CloseFile']();
+}
+
+export function CloseFileWithoutSaving() {
+  return window['go']['main']['App']['CloseFileWithoutSaving']();
 }
 
 export function CreateFile(arg1, arg2, arg3, arg4) {
@@ -158,20 +166,24 @@ export function GetTableDataFiltered(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['GetTableDataFiltered'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function ImportCSV(arg1, arg2) {
-  return window['go']['main']['App']['ImportCSV'](arg1, arg2);
+export function ImportFile(arg1) {
+  return window['go']['main']['App']['ImportFile'](arg1);
 }
 
 export function ImportNotebook(arg1) {
   return window['go']['main']['App']['ImportNotebook'](arg1);
 }
 
-export function ImportSpreadsheet(arg1) {
-  return window['go']['main']['App']['ImportSpreadsheet'](arg1);
-}
-
 export function InsertRow(arg1, arg2) {
   return window['go']['main']['App']['InsertRow'](arg1, arg2);
+}
+
+export function InspectImport(arg1) {
+  return window['go']['main']['App']['InspectImport'](arg1);
+}
+
+export function IsDirty() {
+  return window['go']['main']['App']['IsDirty']();
 }
 
 export function IsFileOpen() {
@@ -218,16 +230,20 @@ export function PreviewFilterSQL(arg1, arg2, arg3) {
   return window['go']['main']['App']['PreviewFilterSQL'](arg1, arg2, arg3);
 }
 
-export function PreviewSpreadsheet(arg1, arg2, arg3) {
-  return window['go']['main']['App']['PreviewSpreadsheet'](arg1, arg2, arg3);
-}
-
 export function Quit() {
   return window['go']['main']['App']['Quit']();
 }
 
 export function RenameNotebook(arg1, arg2) {
   return window['go']['main']['App']['RenameNotebook'](arg1, arg2);
+}
+
+export function ResolveAgentApproval(arg1, arg2) {
+  return window['go']['main']['App']['ResolveAgentApproval'](arg1, arg2);
+}
+
+export function RevertFile() {
+  return window['go']['main']['App']['RevertFile']();
 }
 
 export function RunA2UIQuery(arg1) {
@@ -254,8 +270,8 @@ export function SaveSkill(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveSkill'](arg1, arg2, arg3, arg4);
 }
 
-export function SelectCSVFile() {
-  return window['go']['main']['App']['SelectCSVFile']();
+export function SelectImportFile() {
+  return window['go']['main']['App']['SelectImportFile']();
 }
 
 export function SelectNewVibeFile() {
@@ -264,10 +280,6 @@ export function SelectNewVibeFile() {
 
 export function SelectNotebookFile() {
   return window['go']['main']['App']['SelectNotebookFile']();
-}
-
-export function SelectSpreadsheetFile() {
-  return window['go']['main']['App']['SelectSpreadsheetFile']();
 }
 
 export function SelectVibeFile() {

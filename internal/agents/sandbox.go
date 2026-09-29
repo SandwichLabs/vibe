@@ -11,6 +11,91 @@ const (
 	ModeFull      SandboxMode = "full"
 )
 
+// Per-file agent policy (#79). The policy's one home is this file — the
+// container package stays policy-free (container -> agents would be a
+// layering inversion), and every caller (cmd/mcp.go, studio/app.go) reads it
+// through ReadFilePolicy instead of re-deriving its own defaults.
+const (
+	// MetaKeySandbox is the _vibe_meta key holding the file's sandbox mode.
+	// Existing files (created before #79) already have this key stored, most
+	// commonly "full" — see ReadFilePolicy's doc comment for why a NEW file
+	// no longer seeds it.
+	MetaKeySandbox = "agent_sandbox"
+	// MetaKeyAskBeforeWrites is the _vibe_meta key holding whether the agent
+	// must get user approval before any write, on every surface (Studio chat
+	// and MCP alike — one tool surface, one gate, no second per-surface
+	// mode). Absent on every file that exists today, which is deliberate:
+	// ReadFilePolicy treats an absent key as "on".
+	MetaKeyAskBeforeWrites = "agent_ask_before_writes"
+	// DefaultSandboxMode is what a file with no stored MetaKeySandbox runs
+	// at. internal/container no longer seeds MetaKeySandbox on Create, so a
+	// brand-new file's mode comes from here, not from a literal duplicated
+	// in the schema.
+	DefaultSandboxMode = ModeReadWrite
+)
+
+// MetaReader is the read side of container.Container's Meta method — kept as
+// its own tiny interface here (rather than importing internal/container, a
+// layering inversion) so ReadFilePolicy can be called with the real
+// container, a test double, or nil.
+type MetaReader interface {
+	Meta(key string) (string, error)
+}
+
+// FilePolicy is the resolved, ready-to-use agent policy for one open file:
+// which sandbox mode it runs at, and whether a write needs the user's OK
+// first.
+type FilePolicy struct {
+	Mode            SandboxMode
+	AskBeforeWrites bool
+}
+
+// ReadFilePolicy resolves a file's agent policy from its stored _vibe_meta
+// keys, failing closed on anything unexpected:
+//   - MetaKeySandbox absent, or the reader errors reading it -> DefaultSandboxMode.
+//   - MetaKeySandbox present but not one of the three known mode strings ->
+//     ModeReadOnly (the most restrictive), NOT DefaultSandboxMode — an
+//     unrecognized value is corruption or a future format, not "unset", and
+//     the Settings UI should show the user the (safe) truth rather than
+//     silently substituting a permissive default.
+//   - MetaKeyAskBeforeWrites absent, errors, or anything other than the
+//     exact string "false" -> true. This is the deliberate part of #79: a
+//     panel-era file that already has agent_sandbox="full" stored keeps
+//     that mode (no migration touches it — additive-migrations policy), but
+//     since it has no agent_ask_before_writes key at all, it now asks
+//     first. That's the only way to make those existing files safe without
+//     silently downgrading their stored mode.
+func ReadFilePolicy(m MetaReader) FilePolicy {
+	policy := FilePolicy{Mode: DefaultSandboxMode, AskBeforeWrites: true}
+	if m == nil {
+		return policy
+	}
+	if raw, err := m.Meta(MetaKeySandbox); err == nil {
+		if mode, perr := ParseSandboxMode(raw); perr == nil {
+			policy.Mode = mode
+		} else {
+			policy.Mode = ModeReadOnly
+		}
+	}
+	if raw, err := m.Meta(MetaKeyAskBeforeWrites); err == nil && raw == "false" {
+		policy.AskBeforeWrites = false
+	}
+	return policy
+}
+
+// ParseSandboxMode strictly parses s as one of the three known sandbox mode
+// strings, for callers that must reject anything else outright (SetAgentConfig,
+// the --sandbox flag) rather than fail closed the way ReadFilePolicy does for
+// an already-stored, possibly-stale value.
+func ParseSandboxMode(s string) (SandboxMode, error) {
+	switch SandboxMode(s) {
+	case ModeReadOnly, ModeReadWrite, ModeFull:
+		return SandboxMode(s), nil
+	default:
+		return "", fmt.Errorf("unknown sandbox mode: %q (want read-only, read-write, or full)", s)
+	}
+}
+
 // modeStrictness ranks the three sandbox modes from most to least
 // permissive-restricted (read-only is the MOST restrictive, full the LEAST),
 // so Tighter can compare two modes without hand-rolling a switch at every

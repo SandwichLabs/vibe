@@ -170,6 +170,8 @@ In order. Each step is one small PR.
   - `vibe --version`
   - `vibe init` + `vibe info` round-trip on a temp file with `VIBE_PASSPHRASE`, a real CGO smoke test of SQLCipher and DuckDB (fixing #72 first makes this more meaningful)
 - Cache: Go module/build cache, the npm cache, and `~/.duckdb/extensions` if vendoring.
+- Wails CLI v2.11 fails on Go 1.27 (#92). Run the `wails build` steps with `GOTOOLCHAIN` set to the
+  Taskfile's `WAILS_GOTOOLCHAIN` (or install that Go via setup-go) until Wails ships a fixed loader.
 
 ### 5.3 Release: `.github/workflows/release.yml` (on `push` tag `v*`)
 
@@ -182,7 +184,7 @@ goreleaser (ubuntu-22.04) ──┬──► studio-macos (macos-15) ───�
 - **goreleaser**
   - `goreleaser release --clean`, with `release.draft: true`
   - outputs the release tag for the downstream jobs
-- **studio-macos**
+- **studio-macos** (see §5.2's `GOTOOLCHAIN` note for the `wails build` steps below)
   - import the cert into a throwaway keychain
   - `wails build -platform darwin/universal -tags duckdb_arrow -ldflags "-X main.version=…"`
   - `go build` of `vibe` for arm64 and amd64 (`CC="clang -arch x86_64"`), then `lipo -create` into `Contents/MacOS/vibe`
@@ -191,7 +193,7 @@ goreleaser (ubuntu-22.04) ──┬──► studio-macos (macos-15) ───�
   - `xcrun notarytool submit --wait` with the API key, then `xcrun stapler staple`
   - `spctl -a -vvv -t install` as a gate
   - `gh release upload`
-- **studio-linux** (per arch)
+- **studio-linux** (per arch; see §5.2's `GOTOOLCHAIN` note)
   - apt deps, `wails build -tags webkit2_41,duckdb_arrow`
   - `go build` of `vibe`
   - `nfpm pkg` twice (deb, rpm), using `packaging/nfpm.yaml`:

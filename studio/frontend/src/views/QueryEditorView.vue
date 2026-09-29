@@ -8,10 +8,13 @@
 // and the result grid. The subhead exposes Save, CSV/Parquet export (DuckDB
 // COPY via ExportQueryResults), an Ask-agent jump (opens the W0 panel), and
 // Run.
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
+import { errorText } from '../lib/errors'
+import { formatCell, cellClass, isNumericType } from '../lib/formatCell'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
@@ -46,6 +49,18 @@ const dirty = computed(() => sqlText.value.trim() !== '' && sqlText.value !== sa
 const currentTitle = computed(() => {
   const q = queries.value.find((x) => x.id === selectedId.value)
   return q?.title || 'untitled_query.sql'
+})
+// #91 P-F7: the grid only ever holds the first queryGridRowCap rows
+// (ExecuteQuery caps server-side); total_rows carries the true count so the
+// cap bar can say what's missing.
+const truncated = computed(() => !!result.value && result.value.total_rows > result.value.row_count)
+
+// One formatCell call per cell: precomputed once here rather than called
+// 3x per cell (class/title/text) from the template.
+const formattedRows = computed(() => {
+  const r = result.value
+  if (!r) return []
+  return r.rows.map((row) => row.map((cell, j) => formatCell(cell, r.columns[j]?.type)))
 })
 
 async function loadQueries() {
@@ -85,7 +100,7 @@ async function toggleTable(name: string) {
         fk: Boolean(c.fk),
       }))
     } catch (e: any) {
-      errorMessage.value = 'Failed to describe table: ' + (e.message || e)
+      errorMessage.value = 'Failed to describe table: ' + errorText(e)
     }
   }
 }
@@ -117,7 +132,7 @@ async function selectQuery(id: string) {
     savedSQL.value = q.sql
     saveTitle.value = q.title
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
   }
 }
 
@@ -130,7 +145,7 @@ async function runQuery() {
     result.value = await window.go.main.App.ExecuteQuery(sqlText.value)
     lastRunOk.value = true
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
     lastRunOk.value = false
   }
   lastRunAt.value = new Date().toLocaleTimeString()
@@ -140,12 +155,14 @@ async function runQuery() {
 async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
-    await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '')
+    const id = await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '')
+    selectedId.value = id
     savedSQL.value = sqlText.value
     showSaveModal.value = false
+    statusMessage.value = `Saved "${saveTitle.value}"`
     await loadQueries()
   } catch (e: any) {
-    errorMessage.value = 'Save failed: ' + (e.message || e)
+    errorMessage.value = 'Save failed: ' + errorText(e)
   }
 }
 
@@ -157,7 +174,7 @@ async function exportResults(format: 'csv' | 'parquet') {
     const path = await window.go.main.App.ExportQueryResults(sqlText.value, format, '')
     if (path) statusMessage.value = `Exported ${format.toUpperCase()} → ${path}`
   } catch (e: any) {
-    errorMessage.value = 'Export failed: ' + (e.message || e)
+    errorMessage.value = 'Export failed: ' + errorText(e)
   }
 }
 
@@ -186,7 +203,7 @@ async function confirmDeleteQuery() {
     }
     await loadQueries()
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -208,10 +225,23 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+// Re-fetch saved queries (and schema row counts) when the data underneath
+// changes — an agent's save_query tool call, another tab, etc. Mirrors
+// TableBrowserView's identical listener (#91: an agent-saved query used to
+// stay invisible in the rail until a manual reload).
+const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
+async function onDataChanged() {
+  await loadQueries()
+  await loadSchemaTree()
+}
+let unsubDataChanged: (() => void) | null = null
+
 onMounted(() => {
   loadQueries()
   loadSchemaTree()
+  if (hasWailsRuntime()) unsubDataChanged = EventsOn('data:changed', onDataChanged)
 })
+onUnmounted(() => { unsubDataChanged?.() })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
@@ -338,7 +368,7 @@ watch(statusMessage, (msg) => {
         <div v-if="lastRunOk !== null" class="result-bar" data-testid="run-meta">
           <span v-if="lastRunOk" class="badge badge--success" data-testid="run-badge"><span class="dot"></span> Complete</span>
           <span v-else class="badge badge--error" data-testid="run-badge"><span class="dot"></span> Error</span>
-          <span v-if="result"><span class="big ok">{{ result.row_count }}</span> rows</span>
+          <span v-if="result"><span class="big ok">{{ result.total_rows.toLocaleString() }}</span> rows</span>
           <span v-if="result"><span class="big">{{ result.duration }}</span></span>
           <span data-testid="run-engine"><Icon name="zap" :size="11" style="color: var(--sh-success); vertical-align: middle;" /> DuckDB</span>
           <span class="spacer"></span>
@@ -346,18 +376,30 @@ watch(statusMessage, (msg) => {
         </div>
 
         <div style="flex: 1; overflow: auto; min-height: 0;">
-          <div v-if="error" style="padding: 16px; font-size: 14px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
+          <div v-if="error" class="sql-error" style="padding: 16px; font-size: 13px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
           <div v-else-if="running" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Running query…</div>
           <div v-else-if="result" style="overflow: auto; height: 100%;">
+            <div v-if="truncated" class="result-bar" data-testid="query-row-cap">
+              Showing the first {{ result.row_count.toLocaleString() }} of {{ result.total_rows.toLocaleString() }} rows. Export CSV or Parquet to get all of them.
+            </div>
             <table class="table">
               <thead>
                 <tr>
-                  <th v-for="col in result.columns" :key="col.name">{{ col.name }}</th>
+                  <th
+                    v-for="col in result.columns"
+                    :key="col.name"
+                    :class="{ 'cell-num': isNumericType(col.type) }"
+                  >{{ col.name }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, i) in result.rows" :key="i">
-                  <td v-for="(cell, j) in row" :key="j">{{ cell ?? '' }}</td>
+                <tr v-for="(row, i) in formattedRows" :key="i">
+                  <td
+                    v-for="(fc, j) in row"
+                    :key="j"
+                    :class="cellClass(fc, result!.columns[j]?.type)"
+                    :title="fc.title"
+                  >{{ fc.text }}</td>
                 </tr>
               </tbody>
             </table>
@@ -444,18 +486,9 @@ watch(statusMessage, (msg) => {
   border: 1.5px solid var(--vibe-border);
   box-shadow: var(--sh-shadow-xs);
 }
-.status-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: var(--vibe-accent);
-  color: var(--vibe-accent-fg);
-  border: 2px solid var(--vibe-border);
-  border-radius: var(--sh-radius-sm);
-  padding: 10px 16px;
+.sql-error {
+  white-space: pre-wrap;
+  font-family: var(--sh-font-mono);
   font-size: 13px;
-  font-weight: 600;
-  z-index: 1000;
-  max-width: 480px;
 }
 </style>

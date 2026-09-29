@@ -39,9 +39,11 @@ task test:coverage # Tests with coverage report
 task lint         # Run golangci-lint
 task lint:fix     # Lint and auto-fix
 task studio:dev   # Wails dev server (NOT bare `wails dev` — needs -tags webkit2_41,duckdb_arrow)
-task studio:build # Build the Studio desktop app
+task build:studio # Build the Studio desktop app (build:studio:linux on Linux)
 task release:X.Y.Z # Tag, build, and publish a release
 ```
+
+Wails tasks pin `GOTOOLCHAIN` via the `WAILS_GOTOOLCHAIN` Taskfile var (Wails v2.11 can't load Go 1.27 packages, #92); run `wails` through `task`, or prefix `GOTOOLCHAIN=<WAILS_GOTOOLCHAIN>` (value in Taskfile.yml) when running it directly.
 
 Running a single package's tests:
 ```bash
@@ -134,7 +136,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 **`.vibe` file format:** An encrypted SQLite database (SQLCipher) acting as the container envelope. Internal tables use the `_vibe_` prefix (`_vibe_meta`, `_vibe_pages` → `_vibe_notebooks`, `_vibe_queries`, `_vibe_skills`, `_vibe_agent_config`, `_vibe_secrets`, `_vibe_assets`, `_vibe_components`). User data lives in a serialized **DuckDB blob** (`_vibe_duckdb`).
 
-**File lifecycle:** Open (decrypt SQLCipher, materialize DuckDB blob to a hardened temp file) → Session (queries, CRUD, notebooks, agent) → Save (checkpoint DuckDB, re-serialize blob into SQLCipher) → Close (cleanup, zero temp files).
+**File lifecycle:** Open (decrypt SQLCipher, materialize DuckDB blob to a hardened temp file) → Session (queries, CRUD, notebooks, agent) → Save (checkpoint DuckDB, re-serialize blob into SQLCipher) → Close (cleanup, zero temp files). Open takes an exclusive writer lock (`<file>.lock`, flock; #80); read-only opens don't. Studio tracks unsaved table changes (`Container.Dirty`, `file:dirty`) and asks Save / Don't save / Cancel on Close and quit. Everything except an explicit Don't save still saves. Revert to last save re-materializes the DuckDB copy from the saved blob in place (`Container.Revert`), keeping the lock; the last save is also the undo point for agent changes (#98).
 
 **Notebooks (#66):** JSON documents of `sql` / `markdown` / `a2ui` cells. No inter-cell references; outputs are never persisted, every data cell re-runs on open. SQL cells render by synthesizing a one-component A2UI page. The agent authors cells in **task mode**: `preview_query` before a terminal `write_cell` or `need_more_info`; the result is an envelope built from recorded tool calls, never model prose.
 
@@ -142,7 +144,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 **Artifacts / A2UI (#67):** `{ title, components[] }`, thirteen component types, flat list nested by `parent` id, closed color enum, unknown fields rejected. `stat` / `table` / `barChart` / `lineChart` take inline data or a live `sql` binding. Go validates, Vue renders.
 
-**Agent interface:** One tool registry (`internal/agents`) consumed by the in-app runner and exposed over MCP. Sandbox modes `read-only`, `read-write`, `full`, with an approval queue for sensitive operations. Guardrails (#70): grounding check, empty-result explanation, tool-result budget.
+**Agent interface:** One tool registry (`internal/agents`) consumed by the in-app runner and exposed over MCP. Sandbox modes `read-only`, `read-write`, `full`, with per-file "ask before changes" (default on): Studio chat shows an inline approval card; MCP clients are refused. Guardrails (#70): grounding check, empty-result explanation, tool-result budget.
 
 **Pages (retired, #69):** The old markdown + named SQL blocks + directives (`{table:}`, `{chart:}`, `{metric:}`, …) system is gone — see `docs/reference/notebooks.md`, which replaces the retired `docs/reference/pages.md`. `internal/pages` survives only as the parser an old file's pages are migrated through on open (`internal/notebooks.MigratePages`); do not add directives, execution, or rendering.
 

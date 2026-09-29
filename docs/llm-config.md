@@ -3,8 +3,10 @@
 The in-app wizard agent's model provider is **app-global and viper-driven**:
 configure it once in `~/.vibe.yaml` (or via `VIBE_*` environment variables) and
 every `.vibe` you open uses it. (The agent *sandbox* — read-only / read-write /
-full — remains a per-`.vibe` setting, since it's a security boundary for that
-specific app.)
+full — and the per-file "Ask before changes" switch (#79, on by default: the
+agent shows every write for approval before it runs) remain per-`.vibe`
+settings, since they're a security boundary for that specific file. Both
+live in Studio's Settings → Agent.)
 
 ## Providers
 

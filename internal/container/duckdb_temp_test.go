@@ -3,6 +3,7 @@ package container
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,4 +151,40 @@ func TestRoundTrip_StillWorksAfterHardening(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 7, id)
 	assert.Equal(t, "sprocket", name)
+}
+
+// TestTempFileMode_NewAndExisting: the materialized DuckDB temp file is
+// 0600 both for a brand-new file (DuckDB creates the file itself, with the
+// process umask) and for one materialized from an existing blob (written
+// via os.WriteFile with an explicit mode) — see materializeDuckDB's chmod.
+func TestTempFileMode_NewAndExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mode.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+
+	tempDir := c.DuckDBTempDir()
+	tempPath := filepath.Join(tempDir, "analytics.duckdb")
+	info, err := os.Stat(tempPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(), "a brand-new DuckDB temp file must be 0600")
+
+	_, err = c.DuckDBDB().Exec(`CREATE TABLE t (id INTEGER)`)
+	require.NoError(t, err)
+	require.NoError(t, c.Save())
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	tempPath2 := filepath.Join(c2.DuckDBTempDir(), "analytics.duckdb")
+	info2, err := os.Stat(tempPath2)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info2.Mode().Perm(), "a temp file materialized from an existing blob must also be 0600")
 }

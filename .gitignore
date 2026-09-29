@@ -29,3 +29,6 @@ coverage.html
 .DS_Store
 
 tmp/
+
+# Persona-panel screenshots stay local (large); reports reference them by name
+docs/reviews/*/shots/

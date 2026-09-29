@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { EventsOn } from '../wailsjs/runtime/runtime'
+import { EventsOn, WindowSetTitle } from '../wailsjs/runtime/runtime'
 import { flushAll } from '../composables/usePendingSaves'
 import { askConfirm } from '../composables/useConfirm'
+import { fileDirty, startFileDirtyTracking, closeWithPrompt, revertWithPrompt } from '../composables/useFileDirty'
 import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
 import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
+import { errorText } from '../lib/errors'
 
 const theme = useTheme()
-const savedFlash = ref(false)
 
 // Agent wizard panel — a slide-in chat available across every screen.
 const agentOpen = ref(false)
@@ -37,6 +38,7 @@ const navItems = [
 ]
 
 const fileName = ref('Untitled')
+const reverting = ref(false)
 
 function isActive(path: string) {
   return route.path === path || (path !== '/' && route.path.startsWith(path))
@@ -54,12 +56,22 @@ async function save() {
   saving.value = true
   try {
     await window.go.main.App.SaveFile()
-    savedFlash.value = true
-    setTimeout(() => { savedFlash.value = false }, 1500)
   } catch (e: any) {
-    errorMessage.value = 'Save failed: ' + (e.message || e)
+    errorMessage.value = 'Save failed: ' + errorText(e)
   } finally {
     saving.value = false
+  }
+}
+
+async function revert() {
+  if (reverting.value) return
+  reverting.value = true
+  try {
+    await revertWithPrompt()
+  } catch (e: any) {
+    errorMessage.value = 'Revert failed: ' + errorText(e)
+  } finally {
+    reverting.value = false
   }
 }
 
@@ -77,10 +89,15 @@ async function closeFile() {
       })
       if (!proceed) return
     }
-    await window.go.main.App.CloseFile()
+
+    // closeWithPrompt reads IsDirty() fresh (authoritative at click time —
+    // fileDirty may be a beat stale) and only prompts when it's actually
+    // dirty.
+    const closed = await closeWithPrompt(fileName.value)
+    if (!closed) return
     emit('file-closed')
   } catch (e: any) {
-    errorMessage.value = 'Close failed: ' + (e.message || e)
+    errorMessage.value = 'Close failed: ' + errorText(e)
   }
 }
 
@@ -117,6 +134,7 @@ let unsubFileOpened: (() => void) | null = null
 
 onMounted(() => {
   loadFileInfo()
+  startFileDirtyTracking()
   window.addEventListener('vibe:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
   // The sidebar's "Open file" label was captured once at mount and never
@@ -133,11 +151,20 @@ onUnmounted(() => {
   window.removeEventListener('vibe:open-agent', openAgentFromEvent)
   window.removeEventListener('keydown', onGlobalKeydown)
   unsubFileOpened?.()
+  if (hasWailsRuntime()) WindowSetTitle('Vibe Studio')
 })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
 })
+
+// Window title (#81): an "● " prefix while the file has unsaved table
+// changes, so the OS-level title bar/taskbar entry carries the same signal
+// as the sidebar pill even when the window isn't focused.
+watch([fileName, fileDirty], ([name, dirty]) => {
+  if (!hasWailsRuntime()) return
+  WindowSetTitle(`${dirty ? '● ' : ''}${name} — Vibe Studio`)
+}, { immediate: true })
 </script>
 
 <template>
@@ -188,14 +215,34 @@ watch(errorMessage, (msg) => {
       <div style="flex: 1;"></div>
 
       <div class="nav-pill">
-        <span class="label"><span class="dot"></span>Open file</span>
+        <span class="label"><span class="dot" :class="{ warn: fileDirty }"></span>{{ fileDirty ? 'Unsaved changes' : 'Open file' }}</span>
         <span class="url">{{ fileName }}</span>
       </div>
 
       <div style="padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px;">
-        <button @click="save" :disabled="saving" class="btn btn-primary" style="width: 100%; justify-content: center;" :title="`Save file · ${shortcutLabel('S')}`">
-          <Icon :name="savedFlash ? 'check' : 'save'" :size="16" />
-          {{ saving ? 'Saving…' : (savedFlash ? 'Saved' : 'Save') }}
+        <button
+          @click="save"
+          :disabled="saving"
+          :class="fileDirty ? 'btn btn-primary' : 'btn btn-ghost'"
+          style="width: 100%; justify-content: center;"
+          data-testid="save-file"
+          :data-dirty="fileDirty"
+          :title="saving ? 'Saving…' : (fileDirty ? `Save table changes · ${shortcutLabel('S')}` : `No unsaved changes · ${shortcutLabel('S')}`)"
+        >
+          <Icon :name="fileDirty ? 'save' : 'check'" :size="16" />
+          {{ saving ? 'Saving…' : (fileDirty ? 'Save' : 'Saved') }}
+        </button>
+        <button
+          v-if="fileDirty"
+          @click="revert"
+          :disabled="reverting"
+          class="btn btn-ghost"
+          style="width: 100%; justify-content: center;"
+          data-testid="revert-file"
+          title="Discard table changes since your last save"
+        >
+          <Icon name="undo" :size="16" />
+          {{ reverting ? 'Reverting…' : 'Revert to last save' }}
         </button>
         <button @click="closeFile" data-testid="close-file" class="btn btn-ghost" style="width: 100%; justify-content: center;">
           Close file

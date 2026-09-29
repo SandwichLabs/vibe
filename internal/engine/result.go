@@ -3,7 +3,7 @@ package engine
 // Column describes a single column in a query result.
 type Column struct {
 	Name string
-	Type string // go type name
+	Type string // DuckDB type name, e.g. "DECIMAL(12,2)", "INTEGER[]", "UUID"
 }
 
 // ResultSet holds the results of a query execution.
@@ -38,4 +38,19 @@ func (rs *ResultSet) ColumnIndex(name string) int {
 		}
 	}
 	return -1
+}
+
+// NamesAndTypes projects Columns into parallel name/DuckDB-type-name slices
+// — the shape every tabular Wails binding (TableData, A2UIQueryResult) and
+// the agent/MCP run_query result send alongside rows, so a caller doesn't
+// have to reconstruct DECIMAL/BIGINT/UUID scale, grouping or editor kind
+// from JSON alone.
+func (rs *ResultSet) NamesAndTypes() (names, types []string) {
+	names = make([]string, len(rs.Columns))
+	types = make([]string, len(rs.Columns))
+	for i, c := range rs.Columns {
+		names[i] = c.Name
+		types[i] = c.Type
+	}
+	return names, types
 }

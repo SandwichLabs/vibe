@@ -25,39 +25,73 @@ export interface ConfirmOptions {
   confirmLabel?: string
 }
 
+export interface ConfirmChoiceOptions extends ConfirmOptions {
+  // Label for the third button (e.g. "Don't save", #81). See
+  // ConfirmDialog.vue's altLabel prop.
+  altLabel: string
+  // See ConfirmDialog.vue's altDestructive prop — true tints the alt
+  // button red (e.g. "Don't save", which discards data).
+  altDestructive?: boolean
+}
+
 export const confirmVisible = ref(false)
 export const confirmTitle = ref('')
 export const confirmMessage = ref('')
 export const confirmVariant = ref<'destructive' | 'primary'>('destructive')
 export const confirmLabel = ref('Confirm')
+export const confirmAltLabel = ref('')
+export const confirmAltDestructive = ref(false)
 
-let pendingResolve: ((confirmed: boolean) => void) | null = null
+type ConfirmResult = 'confirm' | 'alt' | 'cancel'
 
-// askConfirm shows the shared ConfirmDialog and resolves true/false when
-// the user picks Confirm/Cancel (or dismisses via the overlay, or presses
-// Escape — both of which ConfirmDialog treats as cancel). Only one confirm
-// can be pending at a time; a second call while one is showing resolves the
-// first as false (cancelled) before showing the new one, rather than
-// leaving it to hang forever unresolved.
-export function askConfirm(opts: ConfirmOptions): Promise<boolean> {
+let pendingResolve: ((result: ConfirmResult) => void) | null = null
+
+// openConfirm is the one place that actually populates the shared dialog
+// state and returns a Promise<ConfirmResult> — askChoice and askConfirm are
+// both thin wrappers over it. A second
+// call while one is already pending resolves the first as 'cancel' before
+// showing the new one, rather than leaving it to hang forever unresolved.
+function openConfirm(opts: ConfirmOptions, altLabel: string, altDestructive: boolean): Promise<ConfirmResult> {
   if (pendingResolve) {
-    resolveConfirm(false)
+    resolveConfirmChoice('cancel')
   }
   confirmTitle.value = opts.title ?? 'Confirm'
   confirmMessage.value = opts.message
   confirmVariant.value = opts.variant ?? 'destructive'
   confirmLabel.value = opts.confirmLabel ?? 'Confirm'
+  confirmAltLabel.value = altLabel
+  confirmAltDestructive.value = altDestructive
   confirmVisible.value = true
   return new Promise((resolve) => {
     pendingResolve = resolve
   })
 }
 
-// resolveConfirm is called by App.vue's ConfirmDialog @confirm/@cancel
-// handlers.
-export function resolveConfirm(confirmed: boolean): void {
+// askChoice shows the shared ConfirmDialog with a third ("alt") button and
+// resolves 'confirm' | 'alt' | 'cancel' — the overlay and Escape both
+// resolve 'cancel', matching ConfirmDialog's own cancel behaviour.
+export function askChoice(opts: ConfirmChoiceOptions): Promise<ConfirmResult> {
+  return openConfirm(opts, opts.altLabel, opts.altDestructive ?? false)
+}
+
+// askConfirm is the two-button case: no altLabel (ConfirmDialog renders no
+// third button when it's unset), resolves true/false.
+export function askConfirm(opts: ConfirmOptions): Promise<boolean> {
+  return openConfirm(opts, '', false).then((result) => result === 'confirm')
+}
+
+// resolveConfirmChoice is called by App.vue's ConfirmDialog
+// @confirm/@alt/@cancel handlers.
+export function resolveConfirmChoice(result: ConfirmResult): void {
   confirmVisible.value = false
   const resolve = pendingResolve
   pendingResolve = null
-  resolve?.(confirmed)
+  resolve?.(result)
+}
+
+// resolveConfirm is the legacy true/false entry point — kept so existing
+// @confirm="resolveConfirm(true)" / @cancel="resolveConfirm(false)" callers
+// keep working unchanged.
+export function resolveConfirm(confirmed: boolean): void {
+  resolveConfirmChoice(confirmed ? 'confirm' : 'cancel')
 }

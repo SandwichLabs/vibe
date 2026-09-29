@@ -56,8 +56,9 @@ func seedOfficeLinks(t *testing.T, app *App) (queryID string) {
 	require.NoError(t, err)
 
 	const qid = "q_orders_by_rep"
-	require.NoError(t, app.SaveQuery(qid, "Orders by Rep",
-		"SELECT sales_rep, order_id, amount FROM orders ORDER BY order_id", "office links fixture"))
+	_, err = app.SaveQuery(qid, "Orders by Rep",
+		"SELECT sales_rep, order_id, amount FROM orders ORDER BY order_id", "office links fixture")
+	require.NoError(t, err)
 	return qid
 }
 

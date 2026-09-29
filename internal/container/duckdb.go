@@ -97,11 +97,49 @@ func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
 		return nil, fmt.Errorf("failed to ping DuckDB: %w", err)
 	}
 
+	// A new file (no blob above) had its db file created by DuckDB itself,
+	// with the process umask — typically 0644, not the 0600 an existing
+	// blob got from the os.WriteFile above. The 0700 temp dir already blocks
+	// other users from traversing to it, so this is defense in depth, not a
+	// live leak, but there is no reason to leave it more permissive than the
+	// existing-blob case.
+	//
+	// The WAL file (analytics.duckdb.wal, created the first time a write
+	// checkpoints) is NOT chmodded here — DuckDB creates it later, with the
+	// process umask, same as a brand-new db file above. It is left as-is
+	// deliberately: it lives inside this same 0700 dir, so the directory
+	// permission is what actually protects it, matching the plan's "WAL
+	// file mode: documented, not chmodded" decision.
+	if err := os.Chmod(tempPath, 0600); err != nil {
+		ddb.Close()           //nolint:errcheck
+		os.RemoveAll(tempDir) //nolint:errcheck
+		return nil, fmt.Errorf("failed to secure DuckDB temp file: %w", err)
+	}
+
 	return &duckDBState{
 		db:       ddb,
 		tempPath: tempPath,
 		tempDir:  tempDir,
 	}, nil
+}
+
+// openDuckDBSession materializes the saved DuckDB blob into a fresh hardened
+// temp copy and, for a writable session, retrofits auto-number sequences
+// (backfillAutoNumberPKs). Shared by Open and Revert so both start a session
+// the same way.
+func openDuckDBSession(sqliteDB *sql.DB, readOnly bool, logger *slog.Logger) (*duckDBState, error) {
+	duckState, err := materializeDuckDB(sqliteDB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
+	}
+
+	// Retrofit auto-number sequences onto bare integer PKs created before the
+	// sequence-backed-PK fix, so old files accept id-less form inserts too.
+	if !readOnly {
+		backfillAutoNumberPKs(duckState.db, logger)
+	}
+
+	return duckState, nil
 }
 
 // SweepOrphanedTemp removes DuckDB temp directories left behind by dead

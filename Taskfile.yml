@@ -5,6 +5,10 @@ env:
 
 vars:
   BINARY: vibe
+  # Wails CLI v2.11's package loader can't read Go 1.27 export data ("package ... without types"),
+  # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
+  # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
+  WAILS_GOTOOLCHAIN: go1.26.3
 
 tasks:
   default:
@@ -70,6 +74,8 @@ tasks:
   studio:dev:
     desc: Run Vibe Studio in dev mode
     dir: studio
+    env:
+      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
@@ -83,12 +89,16 @@ tasks:
   build:studio:
     desc: Build Vibe Studio desktop app (macOS)
     dir: studio
+    env:
+      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - wails build
 
   build:studio:linux:
     desc: Build Vibe Studio desktop app (Linux)
     dir: studio
+    env:
+      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - wails build -tags webkit2_41
 

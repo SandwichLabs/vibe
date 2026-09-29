@@ -127,13 +127,18 @@ var defaultMeta = map[string]string{
 	"updated_at":     "", // set at runtime
 	"title":          "",
 	"description":    "",
-	// The in-app wizard agent is the "wizard layer" meant to build schema, so
-	// it defaults to full write access. Users can restrict it via
-	// SetAgentConfig.
-	"agent_sandbox": "full",
+	// agent_sandbox is deliberately NOT seeded here (#79): the agent policy
+	// default lives in agents.DefaultSandboxMode, so a file with no stored
+	// key resolves to that default (agents.ReadFilePolicy) instead of a
+	// literal duplicated in this schema. Existing files created before #79
+	// keep whatever they already have stored — additive migrations never
+	// touch it.
+	//
 	// Note: LLM provider/model/endpoint are app-global and viper-driven
-	// (~/.vibe.yaml + VIBE_LLM_* env), not per-file. Only the agent sandbox above
-	// is a per-.vibe setting.
+	// (~/.vibe.yaml + VIBE_LLM_* env), not per-file. Neither the agent
+	// sandbox nor agent_ask_before_writes (also unseeded — see
+	// agents.ReadFilePolicy) is written by Create; both are per-.vibe
+	// settings that only exist once SetAgentConfig writes them.
 }
 
 // ensureColumn applies an additive ADD COLUMN migration if (and only if) the

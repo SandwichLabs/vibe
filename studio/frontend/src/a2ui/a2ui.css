@@ -162,12 +162,20 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+/* A numeric column's <th> also gets .cell-num (A2UITable.vue's
+   isNumericType check on the column type) — a higher-specificity override
+   of the left-align above, kept here (not theme/bridge.css) because this
+   file is unlayered and would otherwise always beat a bridge.css rule
+   regardless of specificity. */
+.a2ui-page .a2ui-table th.cell-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .a2ui-page .a2ui-table td {
   border-bottom: 1px solid var(--sh-chalk);
   padding: 4px 8px;
   color: var(--sh-ink);
 }
-.a2ui-page .a2ui-td--num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .a2ui-page .a2ui-barchart { display: flex; flex-direction: column; }
 .a2ui-page .a2ui-bar { display: flex; align-items: center; gap: 8px; margin: 3px 0; }

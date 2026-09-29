@@ -21,6 +21,8 @@
 // see NotebookView's doFlush — and flushAll reports every failure by label
 // so a caller (AppShell.closeFile, UnlockView.openFile) can ask the person
 // whether to proceed anyway instead of silently losing the edit.
+import { errorText } from '../lib/errors'
+
 export type FlushFn = () => Promise<void>
 export type LabelFn = () => string
 
@@ -68,7 +70,7 @@ export async function flushAll(): Promise<FlushAllResult> {
   results.forEach((r, i) => {
     if (r.status === 'rejected') {
       const e = r.reason
-      const message = typeof e === 'string' ? e : e?.message || String(e)
+      const message = errorText(e)
       failed.push({ label: entries[i].label(), error: message })
     }
   })

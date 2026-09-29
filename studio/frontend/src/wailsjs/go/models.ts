@@ -70,6 +70,245 @@ export namespace crud {
 
 }
 
+export namespace importer {
+	
+	export class BadValue {
+	    row: number;
+	    column: string;
+	    value: string;
+	    want: string;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BadValue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.row = source["row"];
+	        this.column = source["column"];
+	        this.value = source["value"];
+	        this.want = source["want"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ColType {
+	    type: string;
+	    scale?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ColType(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.scale = source["scale"];
+	    }
+	}
+	export class Column {
+	    name: string;
+	    source_name: string;
+	    inferred: ColType;
+	    candidate: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Column(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.source_name = source["source_name"];
+	        this.inferred = this.convertValues(source["inferred"], ColType);
+	        this.candidate = source["candidate"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Inspection {
+	    sheets?: string[];
+	    sheet?: string;
+	    columns: Column[];
+	    rows: string[][];
+	    row_count: number;
+	    suggested_key: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Inspection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sheets = source["sheets"];
+	        this.sheet = source["sheet"];
+	        this.columns = this.convertValues(source["columns"], Column);
+	        this.rows = source["rows"];
+	        this.row_count = source["row_count"];
+	        this.suggested_key = source["suggested_key"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Options {
+	    path: string;
+	    sheet: string;
+	    has_header: boolean;
+	    table: string;
+	    mode: string;
+	    key: string;
+	    types: Record<string, ColType>;
+	    dry_run: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Options(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.sheet = source["sheet"];
+	        this.has_header = source["has_header"];
+	        this.table = source["table"];
+	        this.mode = source["mode"];
+	        this.key = source["key"];
+	        this.types = this.convertValues(source["types"], ColType, true);
+	        this.dry_run = source["dry_run"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Source {
+	    path: string;
+	    sheet: string;
+	    has_header: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Source(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.sheet = source["sheet"];
+	        this.has_header = source["has_header"];
+	    }
+	}
+	export class Summary {
+	    ok: boolean;
+	    mode: string;
+	    table: string;
+	    exists: boolean;
+	    existing_rows: number;
+	    table_key: string;
+	    modes: string[];
+	    rows: number;
+	    inserted: number;
+	    updated: number;
+	    unchanged: number;
+	    replaced: number;
+	    exact_dupes: number;
+	    missing: string[];
+	    extra: string[];
+	    bad_values: BadValue[];
+	    bad_count: number;
+	    blocked: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.mode = source["mode"];
+	        this.table = source["table"];
+	        this.exists = source["exists"];
+	        this.existing_rows = source["existing_rows"];
+	        this.table_key = source["table_key"];
+	        this.modes = source["modes"];
+	        this.rows = source["rows"];
+	        this.inserted = source["inserted"];
+	        this.updated = source["updated"];
+	        this.unchanged = source["unchanged"];
+	        this.replaced = source["replaced"];
+	        this.exact_dupes = source["exact_dupes"];
+	        this.missing = source["missing"];
+	        this.extra = source["extra"];
+	        this.bad_values = this.convertValues(source["bad_values"], BadValue);
+	        this.bad_count = source["bad_count"];
+	        this.blocked = source["blocked"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace llm {
 	
 	export class EnvelopeCell {
@@ -141,6 +380,7 @@ export namespace main {
 	
 	export class A2UIQueryResult {
 	    columns: string[];
+	    types: string[];
 	    rows: any[][];
 	    truncated: boolean;
 	
@@ -151,6 +391,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
+	        this.types = source["types"];
 	        this.rows = source["rows"];
 	        this.truncated = source["truncated"];
 	    }
@@ -210,6 +451,7 @@ export namespace main {
 	    model: string;
 	    endpoint: string;
 	    sandbox: string;
+	    askBeforeWrites: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentConfig(source);
@@ -221,6 +463,7 @@ export namespace main {
 	        this.model = source["model"];
 	        this.endpoint = source["endpoint"];
 	        this.sandbox = source["sandbox"];
+	        this.askBeforeWrites = source["askBeforeWrites"];
 	    }
 	}
 	export class AgentResult {
@@ -454,76 +697,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class ImportColumnMapping {
-	    source: string;
-	    target: string;
-	    type: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportColumnMapping(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.source = source["source"];
-	        this.target = source["target"];
-	        this.type = source["type"];
-	    }
-	}
-	export class ImportResult {
-	    rows_imported: number;
-	    table_name: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.rows_imported = source["rows_imported"];
-	        this.table_name = source["table_name"];
-	    }
-	}
-	export class ImportSpreadsheetOptions {
-	    path: string;
-	    sheet: string;
-	    has_header: boolean;
-	    table_name: string;
-	    mode: string;
-	    columns: ImportColumnMapping[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportSpreadsheetOptions(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.path = source["path"];
-	        this.sheet = source["sheet"];
-	        this.has_header = source["has_header"];
-	        this.table_name = source["table_name"];
-	        this.mode = source["mode"];
-	        this.columns = this.convertValues(source["columns"], ImportColumnMapping);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class NotebookSaveResult {
 	    notebook: notebooks.Notebook;
 	    warnings: string[];
@@ -561,6 +734,7 @@ export namespace main {
 	    rows: any[][];
 	    duration: string;
 	    row_count: number;
+	    total_rows: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new QueryResult(source);
@@ -572,6 +746,7 @@ export namespace main {
 	        this.rows = source["rows"];
 	        this.duration = source["duration"];
 	        this.row_count = source["row_count"];
+	        this.total_rows = source["total_rows"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -628,58 +803,9 @@ export namespace main {
 	        this.source = source["source"];
 	    }
 	}
-	export class SpreadsheetColumn {
-	    name: string;
-	    type: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new SpreadsheetColumn(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.type = source["type"];
-	    }
-	}
-	export class SpreadsheetPreview {
-	    sheets: string[];
-	    sheet: string;
-	    columns: SpreadsheetColumn[];
-	    rows: any[][];
-	
-	    static createFrom(source: any = {}) {
-	        return new SpreadsheetPreview(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.sheets = source["sheets"];
-	        this.sheet = source["sheet"];
-	        this.columns = this.convertValues(source["columns"], SpreadsheetColumn);
-	        this.rows = source["rows"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class TableData {
 	    columns: string[];
+	    types: string[];
 	    rows: any[][];
 	    page: number;
 	    page_size: number;
@@ -693,6 +819,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
+	        this.types = source["types"];
 	        this.rows = source["rows"];
 	        this.page = source["page"];
 	        this.page_size = source["page_size"];

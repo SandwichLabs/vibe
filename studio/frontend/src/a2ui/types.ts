@@ -11,6 +11,13 @@ export interface A2UIComponentT {
   id: string
   type: string
   parent?: string
+  // Client-only, one DuckDB type name per data column/value, set by
+  // Studio's notebook sql-cell synthesizer (views/NotebookView.vue) so the
+  // table/stat renderer can format a synthesized page's values faithfully.
+  // NEVER part of the A2UI schema (internal/a2ui rejects unknown fields on
+  // any model-authored or saved page) and never persisted — synthesized
+  // pages are render-only.
+  types?: string[]
   [key: string]: any
 }
 

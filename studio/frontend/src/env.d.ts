@@ -23,8 +23,13 @@ declare global {
           ListTemplates(): Promise<TemplateInfo[]>
           CreateFromTemplate(path: string, passphrase: string, template: string): Promise<void>
           CloseFile(): Promise<void>
+          CloseFileWithoutSaving(): Promise<void>
           SaveFile(): Promise<void>
           IsFileOpen(): Promise<boolean>
+          IsDirty(): Promise<boolean>
+          RevertFile(): Promise<void>
+          CancelQuit(): Promise<void>
+          Quit(): Promise<void>
           GetFileInfo(): Promise<FileInfo>
           ListSkills(): Promise<SkillSummary[]>
           SaveSkill(name: string, description: string, instructions: string, tableName: string): Promise<void>
@@ -54,13 +59,17 @@ declare global {
           AlterColumnType(table: string, column: string, newType: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
-          SaveQuery(id: string, title: string, sql: string, engine: string, description: string): Promise<void>
+          SaveQuery(id: string, title: string, sql: string, description: string): Promise<string>
           DeleteQuery(id: string): Promise<void>
           GetDashboard(): Promise<DashboardData>
           SendAgentQuery(query: string): Promise<AgentResult>
           GetAgentStatus(): Promise<Record<string, any>>
-          SelectCSVFile(): Promise<string>
-          ImportCSV(csvPath: string, tableName: string): Promise<ImportResult>
+          GetAgentConfig(): Promise<AgentConfig>
+          SetAgentConfig(cfg: AgentConfig): Promise<void>
+          ResolveAgentApproval(id: string, approved: boolean): Promise<void>
+          SelectImportFile(): Promise<string>
+          InspectImport(src: ImportSource): Promise<ImportInspection>
+          ImportFile(o: ImportOptions): Promise<ImportSummary>
           ExportTableCSV(tableName: string): Promise<string>
           ExportTableJSON(tableName: string): Promise<string>
           GetAllMeta(): Promise<Record<string, string>>
@@ -168,6 +177,7 @@ interface FilterSpec {
 
 interface TableData {
   columns: string[]
+  types: string[]
   rows: any[][]
   page: number
   page_size: number
@@ -180,6 +190,15 @@ interface QueryResult {
   rows: any[][]
   duration: string
   row_count: number
+  total_rows: number
+}
+
+interface AgentConfig {
+  provider: string
+  model: string
+  endpoint: string
+  sandbox: string
+  askBeforeWrites: boolean
 }
 
 interface QuerySummary {
@@ -214,6 +233,7 @@ interface DashboardData {
 // agent sandbox's per-statement SQL classifier, not a bypass.
 interface A2UIQueryResult {
   columns: string[]
+  types: string[]
   rows: any[][]
 }
 
@@ -225,9 +245,75 @@ interface AgentResult {
   error?: string
 }
 
-interface ImportResult {
-  rows_imported: number
-  table_name: string
+// Mirrors internal/importer's Type/ColType/Source/Inspection/Column/Options/
+// Summary/BadValue (#82). Keep in sync with internal/importer/*.go and
+// lib/importTypes.ts.
+type ImportFriendlyType = 'text' | 'integer' | 'decimal' | 'number' | 'date' | 'timestamp' | 'boolean'
+
+interface ImportColType {
+  type: ImportFriendlyType
+  scale?: number
+}
+
+interface ImportSource {
+  path: string
+  sheet?: string
+  has_header: boolean
+}
+
+interface ImportColumn {
+  name: string
+  source_name: string
+  inferred: ImportColType
+  candidate: boolean
+}
+
+interface ImportInspection {
+  sheets?: string[]
+  sheet?: string
+  columns: ImportColumn[]
+  rows: (string | null)[][]
+  row_count: number
+  suggested_key: string
+}
+
+type ImportMode = 'create' | 'replace' | 'append' | 'upsert'
+
+interface ImportOptions extends ImportSource {
+  table: string
+  mode?: ImportMode | ''
+  key?: string
+  types?: Record<string, ImportColType>
+  dry_run?: boolean
+}
+
+interface ImportBadValue {
+  row: number
+  column: string
+  value: string
+  want: string
+  reason: 'type' | 'missing_parent' | 'duplicate_key' | 'null_key'
+}
+
+interface ImportSummary {
+  ok: boolean
+  mode: ImportMode | ''
+  table: string
+  exists: boolean
+  existing_rows: number
+  table_key: string
+  modes: ImportMode[]
+  rows: number
+  inserted: number
+  updated: number
+  unchanged: number
+  replaced: number
+  exact_dupes: number
+  missing: string[] | null
+  extra: string[] | null
+  bad_values: ImportBadValue[] | null
+  bad_count: number
+  blocked: string
 }
 
 export {}

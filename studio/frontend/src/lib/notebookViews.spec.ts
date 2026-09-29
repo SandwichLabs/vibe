@@ -13,6 +13,40 @@ describe('describeShape', () => {
     const shape = describeShape(['month', 'x'], [['Jan', 1], ['Jan', 2]])
     expect(shape.firstDistinct).toBe(false)
   })
+
+  // Classifies by the declared DuckDB type when given, closing the "mixed
+  // column" edge case value-sampling alone had —
+  // a HUGEINT/DECIMAL column whose sampled value is out of JS's safe
+  // integer range crosses the wire as a string (lib/formatCell's wire
+  // contract), which plain `typeof v === 'number'` sampling would wrongly
+  // call a label column.
+  it('classifies by types when given, not by sampling — even when the sampled value is a big-int string', () => {
+    const shape = describeShape(['label', 'total'], [['North', '18014398509481982']], ['VARCHAR', 'HUGEINT'])
+    expect(shape.numeric).toEqual(['total'])
+    expect(shape.label).toEqual(['label'])
+  })
+
+  it('classifies a DECIMAL/BIGINT/DOUBLE type as numeric, and DATE/VARCHAR/nested as label', () => {
+    const shape = describeShape(
+      ['amt', 'name', 'd', 'tags'],
+      [[1, 'x', '2025-01-01', ['a']]],
+      ['DECIMAL(12,2)', 'VARCHAR', 'DATE', 'VARCHAR[]'],
+    )
+    expect(shape.numeric).toEqual(['amt'])
+    expect(shape.label).toEqual(['name', 'd', 'tags'])
+  })
+
+  it('falls back to sampling for a column with no type at hand', () => {
+    // types has fewer entries than columns — untyped columns still sample.
+    const shape = describeShape(['a', 'b'], [[1, 'x']], ['INTEGER'])
+    expect(shape.numeric).toEqual(['a'])
+    expect(shape.label).toEqual(['b'])
+  })
+
+  it('falls back to sampling entirely when types is omitted, unchanged from before', () => {
+    const shape = describeShape(['region', 'revenue'], [['North', 100]])
+    expect(shape.numeric).toEqual(['revenue'])
+  })
 })
 
 describe('viewFit', () => {

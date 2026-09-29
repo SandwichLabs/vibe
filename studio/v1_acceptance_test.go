@@ -12,12 +12,14 @@ package main
 //  2. Generate a messy multi-sheet .xlsx fixture: a "LineItems" sheet whose data
 //     is preceded by an extra blank header row and whose price column is
 //     mixed-type (numbers stored as strings), plus a second "Notes" sheet.
-//  3. PreviewSpreadsheet the messy sheet, then build a column-type mapping that
-//     COERCES the messy column to a concrete DuckDB type.
-//  4. ImportSpreadsheet mode=append into the FK-constrained `order_items`
-//     template table (order_id -> orders.id); assert the rows land, counts are
-//     correct, and FK integrity holds — an appended row referencing a missing
-//     parent order is REJECTED.
+//  3. InspectImport the messy sheet, then override the messy price column
+//     to Decimal.
+//  4. ImportFile mode=append into the FK-constrained `order_items` template
+//     table (order_id -> orders.id): first with an orphan child row (missing
+//     parent order) present — the whole import must be REJECTED (OK=false,
+//     nothing written; #82 replaced the old per-row-skip behavior with
+//     all-or-nothing pre-flighted imports) — then again with a fixture that
+//     omits the orphan, which must land cleanly.
 //  5. ExportTableXLSX the result and re-read it via the P6.2 reader (read_xlsx),
 //     asserting the cleaned/typed values round-trip.
 //  6. Save + reopen and assert persistence of the imported rows.
@@ -34,6 +36,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,7 +54,7 @@ import (
 // append.
 //
 // A second "Notes" sheet exists only to assert multi-sheet preview.
-func writeMessyLineItemsXLSXFixture(t *testing.T, path string, validOrderID, orphanOrderID int) {
+func writeMessyLineItemsXLSXFixture(t *testing.T, path string, validOrderID, orphanOrderID int, includeOrphan bool) {
 	t.Helper()
 	f, err := os.Create(path)
 	require.NoError(t, err)
@@ -97,6 +100,10 @@ func writeMessyLineItemsXLSXFixture(t *testing.T, path string, validOrderID, orp
 	// price column values are inline strings to model a mixed/typed column.
 	validOrder := itoa(validOrderID)
 	orphanOrder := itoa(orphanOrderID)
+	orphanRow := ""
+	if includeOrphan {
+		orphanRow = `<row r="5"><c r="A5"><v>5003</v></c><c r="B5"><v>` + orphanOrder + `</v></c><c r="C5" t="inlineStr"><is><t>Orphan</t></is></c><c r="D5"><v>1</v></c><c r="E5" t="inlineStr"><is><t>7.25</t></is></c></row>`
+	}
 	add("xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetData>
@@ -104,7 +111,7 @@ func writeMessyLineItemsXLSXFixture(t *testing.T, path string, validOrderID, orp
 <row r="2"><c r="A2" t="inlineStr"><is><t>id</t></is></c><c r="B2" t="inlineStr"><is><t>order_id</t></is></c><c r="C2" t="inlineStr"><is><t>product</t></is></c><c r="D2" t="inlineStr"><is><t>quantity</t></is></c><c r="E2" t="inlineStr"><is><t>price</t></is></c></row>
 <row r="3"><c r="A3"><v>5001</v></c><c r="B3"><v>`+validOrder+`</v></c><c r="C3" t="inlineStr"><is><t>Gadget</t></is></c><c r="D3"><v>1</v></c><c r="E3" t="inlineStr"><is><t>99.50</t></is></c></row>
 <row r="4"><c r="A4"><v>5002</v></c><c r="B4"><v>`+validOrder+`</v></c><c r="C4" t="inlineStr"><is><t>Sprocket</t></is></c><c r="D4"><v>2</v></c><c r="E4" t="inlineStr"><is><t>12.00</t></is></c></row>
-<row r="5"><c r="A5"><v>5003</v></c><c r="B5"><v>`+orphanOrder+`</v></c><c r="C5" t="inlineStr"><is><t>Orphan</t></is></c><c r="D5"><v>1</v></c><c r="E5" t="inlineStr"><is><t>7.25</t></is></c></row>
+`+orphanRow+`
 </sheetData>
 </worksheet>`)
 
@@ -187,61 +194,59 @@ func TestV1Acceptance_MessySpreadsheetToRelationalApp(t *testing.T) {
 	var itemsBefore int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items`).Scan(&itemsBefore))
 
-	// 2. Generate the messy multi-sheet xlsx fixture.
+	// 2. Generate the messy multi-sheet xlsx fixture, orphan row included.
 	dir := t.TempDir()
 	xlsxPath := filepath.Join(dir, "messy-lineitems.xlsx")
-	writeMessyLineItemsXLSXFixture(t, xlsxPath, validOrderID, orphanOrderID)
+	writeMessyLineItemsXLSXFixture(t, xlsxPath, validOrderID, orphanOrderID, true)
 
-	// 3. PreviewSpreadsheet must surface both sheets and detect the real header
+	// 3. InspectImport must surface both sheets and detect the real header
 	// row despite the leading blank row.
-	prev, err := app.PreviewSpreadsheet(xlsxPath, "LineItems", true)
+	src := importer.Source{Path: xlsxPath, Sheet: "LineItems", HasHeader: true}
+	insp, err := app.InspectImport(src)
 	require.NoError(t, err)
-	require.NotNil(t, prev)
-	assert.Contains(t, prev.Sheets, "LineItems")
-	assert.Contains(t, prev.Sheets, "Notes")
+	require.NotNil(t, insp)
+	assert.Contains(t, insp.Sheets, "LineItems")
+	assert.Contains(t, insp.Sheets, "Notes")
 
-	colNames := make([]string, 0, len(prev.Columns))
-	for _, c := range prev.Columns {
+	colNames := make([]string, 0, len(insp.Columns))
+	for _, c := range insp.Columns {
 		colNames = append(colNames, c.Name)
 	}
 	assert.ElementsMatch(t, []string{"id", "order_id", "product", "quantity", "price"}, colNames,
 		"the real header row must be detected past the leading blank row")
 
-	// 4. Build a user-supplied column-type mapping that COERCES the messy
-	// string `price` column to DOUBLE, then append into the FK-constrained
-	// `order_items` template table (order_id -> orders.id).
-	opts := ImportSpreadsheetOptions{
-		Path:      xlsxPath,
-		Sheet:     "LineItems",
-		HasHeader: true,
-		TableName: "order_items",
-		Mode:      "append",
-		Columns: []ImportColumnMapping{
-			{Source: "id", Target: "id", Type: "INTEGER"},
-			{Source: "order_id", Target: "order_id", Type: "INTEGER"},
-			{Source: "product", Target: "product", Type: "VARCHAR"},
-			{Source: "quantity", Target: "quantity", Type: "INTEGER"},
-			{Source: "price", Target: "price", Type: "DOUBLE"},
-		},
-	}
+	// 4. Append into the FK-constrained `order_items` template table
+	// (order_id -> orders.id). #82 replaced the old per-row-skip behavior
+	// with an all-or-nothing pre-flighted import: with the orphan row
+	// present the WHOLE import must be rejected, not just that one row.
+	sum, err := app.ImportFile(importer.Options{Source: src, Table: "order_items", Mode: importer.ModeAppend})
+	require.NoError(t, err)
+	require.False(t, sum.OK, "an orphan child row must block the whole import, not just itself")
+	require.NotEmpty(t, sum.BadValues)
+	assert.Equal(t, "missing_parent", sum.BadValues[0].Reason)
 
-	res, err := app.ImportSpreadsheet(opts)
+	var itemsUnchanged int
+	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items`).Scan(&itemsUnchanged))
+	assert.Equal(t, itemsBefore, itemsUnchanged, "a blocked import must leave the table untouched")
+
+	// Re-import a fixture that omits the orphan row: it must land cleanly.
+	xlsxPath2 := filepath.Join(dir, "clean-lineitems.xlsx")
+	writeMessyLineItemsXLSXFixture(t, xlsxPath2, validOrderID, orphanOrderID, false)
+	src2 := importer.Source{Path: xlsxPath2, Sheet: "LineItems", HasHeader: true}
+	sum, err = app.ImportFile(importer.Options{Source: src2, Table: "order_items", Mode: importer.ModeAppend})
 	require.NoError(t, err, "append import into the FK-constrained order_items table should succeed for valid rows")
-	require.NotNil(t, res)
-	assert.Equal(t, "order_items", res.TableName)
+	require.True(t, sum.OK, "%+v", sum)
+	assert.Equal(t, 2, sum.Inserted)
 
-	// FK integrity: the orphan row (order 99999) must be REJECTED, so only the
-	// two valid rows (5001, 5002) land.
 	var itemsAfter int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items`).Scan(&itemsAfter))
-	assert.Equal(t, itemsBefore+2, itemsAfter,
-		"only the two FK-valid rows must be appended; the orphan child row must be rejected")
+	assert.Equal(t, itemsBefore+2, itemsAfter, "only the two FK-valid rows must be appended")
 
 	var orphanLanded int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM order_items WHERE id = 5003`).Scan(&orphanLanded))
 	assert.Zero(t, orphanLanded, "the orphan child row (missing parent order) must not be persisted")
 
-	// The coerced price must be a real number, not a string.
+	// The messy string price must have been coerced to a real number.
 	var price float64
 	require.NoError(t, ddb.QueryRow(`SELECT price FROM order_items WHERE id = 5001`).Scan(&price))
 	assert.InDelta(t, 99.50, price, 0.001, "the messy string price must be coerced to DOUBLE")

@@ -13,20 +13,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
-
-// integerPKTypes is the integer family eligible for auto-numbering.
-func isIntegerPKType(t string) bool {
-	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "BIGINT", "INTEGER", "INT", "INT2", "INT4", "INT8", "SMALLINT", "TINYINT",
-		"HUGEINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT":
-		return true
-	}
-	return false
-}
 
 // backfillAutoNumberPKs retrofits sequence DEFAULTs onto bare integer primary
 // keys in the user's DuckDB data.
@@ -80,7 +69,7 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 				"table", c.table, "column", c.column, "error", err)
 			continue
 		}
-		if hasDefault || !isIntegerPKType(dataType) {
+		if hasDefault || !engine.IsIntegerType(dataType) {
 			continue
 		}
 
@@ -95,7 +84,7 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 			continue
 		}
 
-		seq := fmt.Sprintf("_vibe_seq_%s_%s", c.table, c.column)
+		seq := engine.AutoNumberSequence(c.table, c.column)
 		if _, err := ddb.Exec(fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START %d", engine.QuoteIdent(seq), next)); err != nil {
 			logger.Warn("auto-number backfill: failed to create sequence",
 				"table", c.table, "sequence", seq, "error", err)

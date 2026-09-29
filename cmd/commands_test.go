@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,11 +35,24 @@ func executeCommand(args ...string) (string, error) {
 	rootCmd.SetArgs(args)
 
 	// Reset flag values to defaults (without clearing flag definitions).
-	initCmd.Flags().Set("title", "")       //nolint:errcheck
-	initCmd.Flags().Set("description", "") //nolint:errcheck
-	initCmd.Flags().Set("from", "")        //nolint:errcheck
-	initCmd.Flags().Set("import", "")      //nolint:errcheck
-	infoCmd.Flags().Set("json", "false")   //nolint:errcheck
+	initCmd.Flags().Set("title", "")            //nolint:errcheck
+	initCmd.Flags().Set("description", "")      //nolint:errcheck
+	initCmd.Flags().Set("from", "")             //nolint:errcheck
+	initCmd.Flags().Set("import", "")           //nolint:errcheck
+	infoCmd.Flags().Set("json", "false")        //nolint:errcheck
+	importCmd.Flags().Set("file", "")           //nolint:errcheck
+	importCmd.Flags().Set("csv", "")            //nolint:errcheck
+	importCmd.Flags().Set("table", "")          //nolint:errcheck
+	importCmd.Flags().Set("sheet", "")          //nolint:errcheck
+	importCmd.Flags().Set("no-header", "false") //nolint:errcheck
+	importCmd.Flags().Set("mode", "")           //nolint:errcheck
+	importCmd.Flags().Set("dry-run", "false")   //nolint:errcheck
+	importCmd.Flags().Set("key", "")            //nolint:errcheck
+	// resolveImportKey distinguishes "the user passed --key" from "they
+	// didn't" via Flags().Changed, which the Set() call just above would
+	// otherwise permanently pin to true on this shared *cobra.Command —
+	// reset it directly so each test starts from "not passed".
+	importCmd.Flags().Lookup("key").Changed = false
 
 	err := rootCmd.Execute()
 	return buf.String(), err
@@ -322,4 +336,165 @@ func TestDumpCommand_IncludesNotebooksAndSkills(t *testing.T) {
 	assert.Contains(t, output, "-- Skills")
 	assert.Contains(t, output, "my-skill")
 	assert.Contains(t, output, "A test skill")
+}
+
+// --- #82: `vibe import` on the shared internal/importer, DuckDB-side ---
+
+func writeImportCSV(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	return path
+}
+
+// TestImportCommand_CreatesTableWithPK proves a plain `vibe import` creates
+// the table with a primary key (the suggested customer_id column, not an
+// unkeyed table) and that `vibe info` sees it as a live DuckDB table.
+func TestImportCommand_CreatesTableWithPK(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "customers.vibe")
+	_, err := executeCommand("init", filePath)
+	require.NoError(t, err)
+
+	csvPath := writeImportCSV(t, dir, "customers.csv", "customer_id,name\n1,Ann\n2,Bob\n")
+	output, err := executeCommand("import", filePath, "--file", csvPath)
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "customers")
+
+	info, err := executeCommand("info", filePath, "--json")
+	require.NoError(t, err)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(info), &result))
+	assert.Equal(t, float64(1), result["tables"])
+
+	c, err := container.Open(filePath, container.WithPassphrase("testpass123"), container.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	defer c.Close()
+	var pkCount int
+	require.NoError(t, c.DuckDBDB().QueryRow(
+		`SELECT COUNT(*) FROM duckdb_constraints() WHERE table_name='customers' AND constraint_type='PRIMARY KEY'`,
+	).Scan(&pkCount))
+	assert.Equal(t, 1, pkCount, "the suggested customer_id key must have been used")
+}
+
+// TestImportCommand_RerunWithoutModeErrors proves a second `vibe import`
+// into an existing table without --mode is refused rather than guessing a
+// destructive default.
+func TestImportCommand_RerunWithoutModeErrors(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "customers.vibe")
+	_, err := executeCommand("init", filePath)
+	require.NoError(t, err)
+
+	csvPath := writeImportCSV(t, dir, "customers.csv", "customer_id,name\n1,Ann\n")
+	_, err = executeCommand("import", filePath, "--file", csvPath)
+	require.NoError(t, err)
+
+	_, err = executeCommand("import", filePath, "--file", csvPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "customers")
+}
+
+// TestImportCommand_UpsertReportsUnchanged proves --mode upsert on an
+// unchanged re-import reports "0 new, 0 changed, N unchanged" (re-import
+// idempotence).
+func TestImportCommand_UpsertReportsUnchanged(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "customers.vibe")
+	_, err := executeCommand("init", filePath)
+	require.NoError(t, err)
+
+	lines := "customer_id,name\n"
+	for i := 1; i <= 40; i++ {
+		lines += fmt.Sprintf("%d,Customer %d\n", i, i)
+	}
+	csvPath := writeImportCSV(t, dir, "customers.csv", lines)
+	_, err = executeCommand("import", filePath, "--file", csvPath)
+	require.NoError(t, err)
+
+	output, err := executeCommand("import", filePath, "--file", csvPath, "--mode", "upsert")
+	require.NoError(t, err)
+	assert.Contains(t, output, "0 new, 0 changed, 40 unchanged")
+}
+
+// TestImportCommand_DryRunWritesNothing proves --dry-run leaves the table
+// absent (and, by extension, the .vibe file unsaved).
+func TestImportCommand_DryRunWritesNothing(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "customers.vibe")
+	_, err := executeCommand("init", filePath)
+	require.NoError(t, err)
+
+	csvPath := writeImportCSV(t, dir, "customers.csv", "customer_id,name\n1,Ann\n")
+	output, err := executeCommand("import", filePath, "--file", csvPath, "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, output, "Would import", "a dry run must never claim past tense (Imported/Added/Replaced) — nothing was written")
+
+	c, err := container.Open(filePath, container.WithPassphrase("testpass123"), container.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	defer c.Close()
+	var n int
+	require.NoError(t, c.DuckDBDB().QueryRow(
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_name='customers'").Scan(&n))
+	assert.Equal(t, 0, n)
+}
+
+// TestImportCommand_DryRunUpsertSaysWouldImport proves an upsert dry run
+// against an existing table also uses future tense, with the same counts
+// the real run would produce.
+func TestImportCommand_DryRunUpsertSaysWouldImport(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "customers.vibe")
+	_, err := executeCommand("init", filePath)
+	require.NoError(t, err)
+
+	csvPath := writeImportCSV(t, dir, "customers.csv", "customer_id,name\n1,Ann\n")
+	_, err = executeCommand("import", filePath, "--file", csvPath)
+	require.NoError(t, err)
+
+	output, err := executeCommand("import", filePath, "--file", csvPath, "--mode", "upsert", "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, output, "Would import 0 new, update 0, leave 1 unchanged")
+}
+
+// TestInitCommand_ImportLandsInDuckDB proves `init --import` (the #72 import
+// half) writes to the DuckDB engine, not the legacy SQLite side.
+func TestInitCommand_ImportLandsInDuckDB(t *testing.T) {
+	origReader := readPasswordFunc
+	readPasswordFunc = mockReadPassword("testpass123")
+	defer func() { readPasswordFunc = origReader }()
+
+	dir := t.TempDir()
+	csvPath := writeImportCSV(t, dir, "data.csv", "name,age\nAlice,30\nBob,25\n")
+	filePath := filepath.Join(dir, "imported.vibe")
+	_, err := executeCommand("init", filePath, "--import", csvPath)
+	require.NoError(t, err)
+
+	c, err := container.Open(filePath, container.WithPassphrase("testpass123"), container.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	defer c.Close()
+	var n int
+	require.NoError(t, c.DuckDBDB().QueryRow(
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_name='data'").Scan(&n))
+	assert.Equal(t, 1, n)
 }

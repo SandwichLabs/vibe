@@ -10,6 +10,27 @@ import { ref } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import type { A2UIPageT } from '../a2ui/types'
 import { renderSafeMarkdown } from '../lib/markdown'
+import { errorText } from '../lib/errors'
+
+// PendingApproval mirrors internal/agents.ApprovalRequest (#79), plus a
+// client-only `state` this composable drives as the user answers the card
+// (or it times out/gets cancelled) — see resolveApproval.
+export interface PendingApproval {
+  id: string
+  summary: string
+  sql?: string
+  where?: string
+  destructive: boolean
+  // 'gone' is local-only: ResolveAgentApproval itself failed (e.g. the
+  // request already resolved/expired server-side before the click landed)
+  // — see resolveApproval. Every other state mirrors agent:approval_done's
+  // outcome.
+  state: 'pending' | 'sending' | 'approved' | 'declined' | 'expired' | 'cancelled' | 'gone'
+  // error holds "Save, then do it"'s own failure (#98): SaveFile rejected,
+  // so the card stays 'pending' — Resolve is never even attempted — and
+  // shows why instead of silently doing nothing.
+  error?: string
+}
 
 export interface ToolStep {
   id?: string
@@ -28,6 +49,10 @@ export interface ToolStep {
   // new/updated notebook themselves. Never set for a denied/failed call or
   // any other tool.
   notebookLink?: { id: string; title: string }
+  // approval holds the pending/resolved write-approval card for this step
+  // (#79), correlated to it by tool-call id (ApprovalRequest.callId ==
+  // ToolStep.id). Undefined for every step that never needed approval.
+  approval?: PendingApproval
 }
 
 export interface ChatMessage {
@@ -41,6 +66,32 @@ export interface ChatMessage {
   // "Verifying…" state instead of leaving the first (about-to-be-replaced)
   // answer sitting there looking finished.
   verifying?: boolean
+}
+
+// ApprovalRequestPayload is what "agent:approval" carries under its
+// `request` key. Go's internal/agents.ApprovalRequest has a few more fields
+// (Table, Mode, Rows) that exist for the Go-side summary text and MCP/debug
+// logging but that nothing here renders, so they're left out of this type —
+// the wire payload still carries them; they're just not worth naming twice.
+interface ApprovalRequestPayload {
+  id: string
+  callId: string
+  tool: string
+  summary: string
+  sql?: string
+  where?: string
+  destructive: boolean
+}
+
+interface ApprovalPayload {
+  turnId: string
+  request: ApprovalRequestPayload
+}
+
+interface ApprovalDonePayload {
+  turnId: string
+  id: string
+  outcome: 'approved' | 'declined' | 'expired' | 'cancelled'
 }
 
 interface StreamPayload {
@@ -148,15 +199,46 @@ export function useAgentChat() {
     scroll()
 
     const turnId = nextTurnId()
+
+    // agent:approval / agent:approval_done (#79) run alongside agent:stream,
+    // filtered on the same turnId. Merge-by-id (same reasoning as the 'tool'
+    // case above, in reverse): the approval event can arrive BEFORE the
+    // matching 'tool' stream event, so a step may not exist yet here either.
+    const unsubApproval = EventsOn('agent:approval', (p: ApprovalPayload) => {
+      if (!p || p.turnId !== turnId) return
+      const req = p.request
+      const approval: PendingApproval = {
+        id: req.id, summary: req.summary, sql: req.sql, where: req.where,
+        destructive: req.destructive, state: 'pending',
+      }
+      const step = agentMsg.steps.find((s) => s.id === req.callId)
+      if (step) step.approval = approval
+      else agentMsg.steps.push({ id: req.callId, tool: req.tool, status: 'running', approval })
+      scroll()
+    })
+    const unsubApprovalDone = EventsOn('agent:approval_done', (p: ApprovalDonePayload) => {
+      if (!p || p.turnId !== turnId) return
+      const step = agentMsg.steps.find((s) => s.approval?.id === p.id)
+      if (step?.approval) step.approval.state = p.outcome
+      scroll()
+    })
+
     const unsub = EventsOn('agent:stream', (p: StreamPayload) => {
       if (!p || p.turnId !== turnId) return
       switch (p.kind) {
         case 'delta':
           agentMsg.text += p.text || ''
           break
-        case 'tool':
-          agentMsg.steps.push({ id: p.id, tool: p.tool || '?', input: p.input, status: 'running' })
+        case 'tool': {
+          // Merge by id instead of always pushing (#79): an "agent:approval"
+          // event for this same call can arrive first and already have
+          // created a placeholder step (see the agent:approval handler
+          // below) — a plain push here would then duplicate it.
+          const existing = agentMsg.steps.find((s) => s.id === p.id)
+          if (existing) { existing.tool = p.tool || existing.tool; existing.input = p.input; existing.status = 'running' }
+          else agentMsg.steps.push({ id: p.id, tool: p.tool || '?', input: p.input, status: 'running' })
           break
+        }
         case 'tool_done': {
           const status = p.isError ? 'error' : 'done'
           const page = parsePresentDataPage(p.tool, p.output, p.isError)
@@ -195,7 +277,7 @@ export function useAgentChat() {
         agentMsg.steps.forEach((s) => { if (s.status === 'running') s.status = 'done' })
       }
     } catch (e: any) {
-      const m = typeof e === 'string' ? e : e?.message || String(e)
+      const m = errorText(e)
       agentMsg.role = 'error'
       agentMsg.text = `Agent error: ${m}. Is the LLM server reachable?`
     } finally {
@@ -212,10 +294,47 @@ export function useAgentChat() {
       // turn, so this is where verifying is unconditionally cleared.
       agentMsg.verifying = false
       unsub()
+      unsubApproval()
+      unsubApprovalDone()
       sending.value = false
       scroll()
     }
   }
 
-  return { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, renderMarkdown }
+  // resolveApproval answers a pending card: optimistically flips it to
+  // 'sending' (disabling both buttons immediately — see ApprovalCard), then
+  // calls ResolveAgentApproval. The eventual real state ('approved'/
+  // 'declined'/...) arrives via the "agent:approval_done" handler above; a
+  // call error here means the click itself came too late — the request had
+  // already expired or been cancelled server-side, or the backend simply
+  // isn't reachable — and 'gone' says exactly that ("no longer waiting")
+  // rather than falsely claiming the specific reason was a timeout.
+  // saveFirst is "Save, then do it" (#98): the file has unsaved table
+  // changes, so Revert would otherwise undo those along with whatever the
+  // agent is about to do. Save landing first makes the agent's change the
+  // only thing left to revert. If SaveFile itself fails, the card stays
+  // 'pending' with the error shown — ResolveAgentApproval is never called,
+  // so the write is not silently approved on a save that didn't happen.
+  async function resolveApproval(step: ToolStep, approved: boolean, saveFirst = false) {
+    if (!step.approval) return
+    step.approval.state = 'sending'
+    step.approval.error = undefined
+    if (saveFirst) {
+      try {
+        await window.go.main.App.SaveFile()
+      } catch (e) {
+        step.approval.state = 'pending'
+        step.approval.error = "Couldn't save: " + errorText(e)
+        return
+      }
+    }
+    try {
+      await window.go.main.App.ResolveAgentApproval(step.approval.id, approved)
+    } catch {
+      // Keep a specific 'cancelled'/'expired' that arrived first.
+      if (step.approval.state === 'sending') step.approval.state = 'gone'
+    }
+  }
+
+  return { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, renderMarkdown, resolveApproval }
 }

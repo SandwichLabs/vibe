@@ -8,7 +8,8 @@
 // only through that numeric :style — never a raw model string.
 import { ref, onMounted, computed, inject } from 'vue'
 import type { A2UIComponentT } from './types'
-import { runLiveQuery, formatNumber, toPoints, colorClass, type Point } from './query'
+import { runLiveQuery, toPoints, colorClass, type Point } from './query'
+import { formatNumber } from '../lib/formatCell'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)

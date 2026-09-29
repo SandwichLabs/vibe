@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -44,7 +45,13 @@ else — no prompts, no log lines — is ever written there; passphrase prompts
 and all logging go to stderr.
 
 The container is checkpointed and saved when the session ends, whether that
-is stdin closing (the client disconnected), SIGINT, or SIGTERM.`,
+is stdin closing (the client disconnected), SIGINT, or SIGTERM.
+
+A .vibe file can be open for writing by only one process at a time (#80): if
+Studio or another writable "vibe mcp serve" already has it open, this command
+exits with an error naming the holder. Pass --read-only-file to read the
+file's last saved state alongside that writer instead — it forces a
+read-only sandbox and never saves.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMCPServe,
 	// A SIGINT/SIGTERM shutdown is a normal, expected way for this long-running
@@ -56,48 +63,63 @@ is stdin closing (the client disconnected), SIGINT, or SIGTERM.`,
 	SilenceUsage: true,
 }
 
+// mcpInUseHint is appended to the #80 in-use error so a Claude Desktop-style
+// launch config knows what to do instead of just retrying. It names the
+// actual holder: when it's Studio, that means Studio's own MCP server;
+// otherwise (another vibe mcp serve, or the holder is unknown) the
+// Studio-specific suggestion doesn't apply, so only --read-only-file is
+// offered.
+func mcpInUseHint(inUse *container.InUseError) string {
+	if inUse.Holder != nil && inUse.Holder.App == "Vibe Studio" {
+		return "To use a file that is open in Vibe Studio, start Studio's MCP server (Settings → MCP Server) and connect to that instead, or pass --read-only-file to read its last saved state."
+	}
+	return "Pass --read-only-file to read its last saved state alongside the process that holds it."
+}
+
 func init() {
 	mcpServeCmd.Flags().String("transport", "stdio", "transport: stdio or sse")
 	mcpServeCmd.Flags().String("addr", "127.0.0.1:0", "listen address for --transport sse (127.0.0.1 only; a non-loopback address is rejected)")
 	mcpServeCmd.Flags().String("sandbox", "", "sandbox mode: read-only, read-write, or full — can only TIGHTEN the file's own agent_sandbox setting, never loosen it (default: the file's own setting)")
-	mcpServeCmd.Flags().Bool("read-only-file", false, "open the container itself read-only (no Save on exit, in addition to whatever --sandbox already denies)")
+	mcpServeCmd.Flags().Bool("read-only-file", false, "open the container itself read-only, alongside a writer (Studio or another vibe mcp serve): implies a read-only sandbox and never saves on exit")
 	mcpCmd.AddCommand(mcpServeCmd)
 	rootCmd.AddCommand(mcpCmd)
 }
 
-// resolveSandbox computes the effective sandbox: the file's own
-// agent_sandbox meta, tightened (never loosened) by --sandbox. sandboxRank
-// mirrors internal/agents.SandboxMode's permission ordering.
-func sandboxRank(mode string) int {
-	switch agents.SandboxMode(mode) {
-	case agents.ModeReadOnly:
-		return 0
-	case agents.ModeReadWrite:
-		return 1
-	case agents.ModeFull:
-		return 2
-	default:
-		return 0 // unknown -> treat as most restrictive
-	}
-}
-
-func resolveSandbox(fileSandbox, flagSandbox string) (string, error) {
-	if fileSandbox == "" {
-		fileSandbox = string(agents.ModeFull)
-	}
+// resolveSandbox computes the effective sandbox: the file's own resolved
+// mode, tightened — never loosened — by --sandbox. fileMode always arrives
+// already valid (buildMCPHandler passes agents.ReadFilePolicy's Mode, which
+// owns the one "what does an unset/unknown mode default to" decision — see
+// its doc comment), so this function's only job is parsing and validating
+// the flag string and comparing the two via agents.Tighter (the same helper
+// studio/app.go uses for its own ceiling/file-mode combination) — no second
+// default, no string round-trip.
+func resolveSandbox(fileMode agents.SandboxMode, flagSandbox string) (agents.SandboxMode, error) {
 	if flagSandbox == "" {
-		return fileSandbox, nil
+		return fileMode, nil
 	}
-	switch agents.SandboxMode(flagSandbox) {
-	case agents.ModeReadOnly, agents.ModeReadWrite, agents.ModeFull:
-	default:
+	flagMode, err := agents.ParseSandboxMode(flagSandbox)
+	if err != nil {
 		return "", fmt.Errorf("invalid --sandbox %q: want read-only, read-write, or full", flagSandbox)
 	}
-	if sandboxRank(flagSandbox) > sandboxRank(fileSandbox) {
-		// A flag can only tighten, never loosen, the file's own setting.
-		return fileSandbox, nil
+	return agents.Tighter(fileMode, flagMode), nil
+}
+
+// buildMCPHandler wires up the JSON-RPC tool handler for a `vibe mcp serve`
+// session: resolves the file's agent policy (agents.ReadFilePolicy — mode
+// plus whether writes need approval), tightens the mode by --sandbox, and
+// builds an *agents.Handler with NO approver attached — a headless process
+// has nobody to show an approval card to, so a write that needs one is
+// refused outright (#79 D2) rather than hanging. Split out from
+// runMCPServe so a unit test can exercise the exact same production wiring.
+func buildMCPHandler(c *container.Container, eng *engine.Manager, flagSandbox string, logger *slog.Logger) (*agents.Handler, agents.FilePolicy, error) {
+	filePolicy := agents.ReadFilePolicy(c)
+	mode, err := resolveSandbox(filePolicy.Mode, flagSandbox)
+	if err != nil {
+		return nil, agents.FilePolicy{}, err
 	}
-	return flagSandbox, nil
+	policy := agents.FilePolicy{Mode: mode, AskBeforeWrites: filePolicy.AskBeforeWrites}
+	sandboxCfg := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
+	return agents.NewHandler(c, eng, sandboxCfg, logger), policy, nil
 }
 
 func runMCPServe(cmd *cobra.Command, args []string) error {
@@ -129,9 +151,17 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 		container.WithPassphrase(passphrase),
 		container.WithReadOnly(readOnlyFile),
 		container.WithLogger(logger),
+		container.WithLockApp("vibe mcp serve"),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to open container: %w", err)
+		var inUse *container.InUseError
+		if errors.As(err, &inUse) {
+			// err already carries container.Open's own "failed to open
+			// container:" prefix — don't add a second one.
+			return fmt.Errorf("%w\n%s", err, mcpInUseHint(inUse))
+		}
+		// Likewise already prefixed by container.Open itself.
+		return err
 	}
 	closed := false
 	defer func() {
@@ -147,18 +177,25 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 	// doc comment for why.
 	notebooks.MigrateOnOpen(c.SQLiteDB(), readOnlyFile, logger)
 
-	fileSandbox, err := c.Meta("agent_sandbox")
-	if err != nil || fileSandbox == "" {
-		fileSandbox = string(agents.ModeFull)
+	// --read-only-file opens the container itself read-only (#80): the
+	// sandbox must follow suit, since --sandbox can only TIGHTEN the file's
+	// own setting and never loosen it — resolveSandbox has no way to know
+	// the container is read-only otherwise.
+	if readOnlyFile {
+		flagSandbox = string(agents.ModeReadOnly)
 	}
-	effectiveSandbox, err := resolveSandbox(fileSandbox, flagSandbox)
+
+	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(logger))
+	rpcHandler, policy, err := buildMCPHandler(c, eng, flagSandbox, logger)
 	if err != nil {
 		return err
 	}
-	logger.Info("mcp serve: sandbox resolved", "file_sandbox", fileSandbox, "flag_sandbox", flagSandbox, "effective", effectiveSandbox)
-
-	sandboxCfg := &agents.SandboxConfig{Mode: agents.SandboxMode(effectiveSandbox), MaxQueryRows: 10000}
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(logger))
+	logger.Info("mcp serve: sandbox resolved", "flag_sandbox", flagSandbox, "effective", policy.Mode, "ask_before_writes", policy.AskBeforeWrites)
+	// The notice is moot at read-only: there's nothing to write, asked or
+	// not, so it would just be noise on every read-only session.
+	if policy.AskBeforeWrites && policy.Mode != agents.ModeReadOnly {
+		fmt.Fprintln(os.Stderr, `Ask before changes is on for this file: MCP clients can read but changes will be refused. Turn it off in Vibe Studio → Settings → Agent.`)
+	}
 
 	// dbMu is shared between every tool dispatch (saveHookHandler.Handle,
 	// which takes RLock for the duration of each call) and the debounced/
@@ -181,7 +218,7 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 	// read-heavy session (the common case) never pays a save cost early at
 	// all.
 	saver := newDebouncedSaver(c, logger, readOnlyFile, dbMu)
-	var handler vibemcp.Handler = agents.NewHandler(c, eng, sandboxCfg, logger)
+	var handler vibemcp.Handler = rpcHandler
 	handler = wrapHandlerWithSaveHook(handler, saver, c.DuckDBDB(), dbMu)
 
 	srv := vibemcp.New(handler, logger)
@@ -209,7 +246,17 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 			saver.stop()
 			if !readOnlyFile {
 				dbMu.Lock()
-				saveErr := c.Save()
+				// Only Save if something was actually written this session
+				// (#80 checklist item 3): a list-only session must leave
+				// the file's bytes and updated_at untouched. needsSave must
+				// be checked after taking dbMu.Lock — every tool dispatch
+				// holds dbMu.RLock until after its own markDirty, so by the
+				// time Lock() is acquired, every completed write has
+				// already been counted.
+				var saveErr error
+				if saver.needsSave() {
+					saveErr = c.Save()
+				}
 				dbMu.Unlock()
 				if saveErr != nil {
 					logger.Error("mcp serve: final save failed", "error", saveErr)

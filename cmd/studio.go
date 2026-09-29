@@ -67,7 +67,7 @@ If the file does not exist, it will be created.`,
 			)
 		}
 		if err != nil {
-			return fmt.Errorf("failed to open container: %w", err)
+			return err
 		}
 		defer c.Close()
 

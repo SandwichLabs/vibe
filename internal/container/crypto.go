@@ -2,9 +2,22 @@ package container
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
+
+	sqlite3 "github.com/mutecomm/go-sqlcipher/v4"
 )
+
+// ErrWrongPassphrase is the sentinel verifyPassphrase wraps its underlying
+// SQLCipher error in. SQLCipher can't distinguish a wrong key from "not a
+// SQLCipher database at all" — both fail the same sanity query the same
+// way, with the driver reporting SQLITE_NOTADB (code 26) for both — so the
+// sentinel names both possibilities; callers (Studio's OpenFile) turn it
+// into a single user-facing message rather than trying to tell the two
+// apart. Other verify failures (permission denied, a directory, a locked
+// file, I/O errors) are distinct problems and keep their own error.
+var ErrWrongPassphrase = errors.New("wrong passphrase, or not a .vibe file")
 
 // buildDSN creates a SQLCipher DSN with the passphrase and encryption settings.
 // go-sqlcipher v4 requires the key to be set via the connection string.
@@ -35,6 +48,10 @@ func openSQLCipher(path, passphrase string) (*sql.DB, error) {
 func verifyPassphrase(db *sql.DB) error {
 	_, err := db.Exec("SELECT count(*) FROM sqlite_master;")
 	if err != nil {
+		var se sqlite3.Error
+		if errors.As(err, &se) && se.Code == sqlite3.ErrNotADB {
+			return fmt.Errorf("%w: %w", ErrWrongPassphrase, err)
+		}
 		return fmt.Errorf("failed to verify passphrase (wrong key or corrupt database): %w", err)
 	}
 	return nil

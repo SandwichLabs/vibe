@@ -10,6 +10,7 @@ import { computed, reactive, readonly, watch } from 'vue'
 import { BUILTIN_THEMES, DEFAULT_DARK_ID, DEFAULT_LIGHT_ID, DEFAULT_THEME_ID } from './builtin'
 import { idFromFilename, parseTheme, resolveTheme, ThemeError, type ResolvedTheme, type ThemeSpec } from './schema'
 import { applyReduceMotion, applyThemeToDocument, applyUiScale } from './apply'
+import { errorText } from '../lib/errors'
 
 export const THEME_SYSTEM = 'system'
 
@@ -190,7 +191,7 @@ async function persist(): Promise<void> {
     try {
       await b.SetPreferences(p)
     } catch (e) {
-      state.notice = 'Could not save preferences: ' + ((e as Error).message || e)
+      state.notice = 'Could not save preferences: ' + errorText(e)
     }
   }
 }
@@ -205,7 +206,7 @@ export async function reloadUserThemes(): Promise<void> {
     const r = await b.ListUserThemes()
     ingestUserThemes(r?.themes ?? [], r?.problems ?? [])
   } catch (e) {
-    ingestUserThemes([], ['Could not read the themes folder: ' + ((e as Error).message || e)])
+    ingestUserThemes([], ['Could not read the themes folder: ' + errorText(e)])
   }
 }
 

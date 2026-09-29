@@ -11,6 +11,7 @@ package engine
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // ColumnInfo describes a table column (name, type, nullability, primary-key
@@ -106,10 +107,20 @@ func constraintColumns(db *sql.DB, table, constraintType string) (map[string]boo
 }
 
 // ValidIdentifier reports whether name is a safe SQL identifier (letters,
-// digits, underscores; not starting with a digit). Used to gate identifiers
-// that are interpolated into DDL/DML.
+// digits, underscores; not starting with a digit) naming a table/column a
+// caller may create, read, or write — this is the ONE identifier validator
+// for the whole codebase (studio's own isValidIdentifier is a thin wrapper
+// around it, not a second implementation) used to gate identifiers that are
+// interpolated into DDL/DML.
+//
+// The "_vibe_" prefix is always rejected: those names are reserved for this
+// app's own internal tables (_vibe_meta, _vibe_skills, _vibe_import_stage,
+// ...), and a caller validating a target for its own read/write must never
+// be allowed to touch one, whether by a crafted table name in a shared file
+// or an import/create-table request that happens to collide with the
+// prefix.
 func ValidIdentifier(name string) bool {
-	if name == "" {
+	if name == "" || strings.HasPrefix(name, "_vibe_") {
 		return false
 	}
 	for i, r := range name {

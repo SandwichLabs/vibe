@@ -364,6 +364,52 @@ func TestCoerce_NonStringSourceWarns(t *testing.T) {
 	assert.Contains(t, warnings[0], "not a string")
 }
 
+func TestCoerce_CollapsedRoundTrip(t *testing.T) {
+	raw := map[string]any{
+		"cells": []any{
+			map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "collapsed": true},
+			map[string]any{"id": "c2", "type": "markdown", "source": "# hi", "collapsed": true},
+			map[string]any{
+				"id": "c3", "type": "a2ui", "collapsed": true,
+				"page": map[string]any{
+					"title": "t",
+					"components": []any{
+						map[string]any{"id": "h", "type": "heading", "text": "x"},
+					},
+				},
+			},
+			map[string]any{"id": "c4", "type": "sql", "source": "SELECT 2"}, // collapsed omitted
+		},
+	}
+
+	nb, warnings, err := Coerce(raw)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	require.Len(t, nb.Cells, 4)
+	assert.True(t, nb.Cells[0].Collapsed)
+	assert.True(t, nb.Cells[1].Collapsed)
+	assert.True(t, nb.Cells[2].Collapsed)
+	assert.False(t, nb.Cells[3].Collapsed)
+
+	b, err := json.Marshal(nb)
+	require.NoError(t, err)
+	assert.Equal(t, 3, strings.Count(string(b), `"collapsed":true`))
+
+	// Round-trip a second time through Coerce, from the marshalled JSON.
+	nb2, warnings2, err := Coerce(b)
+	require.NoError(t, err)
+	assert.Empty(t, warnings2)
+	require.Len(t, nb2.Cells, 4)
+	assert.True(t, nb2.Cells[0].Collapsed)
+	assert.True(t, nb2.Cells[1].Collapsed)
+	assert.True(t, nb2.Cells[2].Collapsed)
+	assert.False(t, nb2.Cells[3].Collapsed)
+
+	b2, err := json.Marshal(nb2)
+	require.NoError(t, err)
+	assert.Equal(t, 3, strings.Count(string(b2), `"collapsed":true`))
+}
+
 func TestCell_MarshalJSON_OmitsIrrelevantFields(t *testing.T) {
 	cell := Cell{ID: "c1", Type: CellMarkdown, Source: "hi", View: "bar", ViewPinned: true}
 	b, err := json.Marshal(cell)

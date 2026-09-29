@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,14 +34,20 @@ type Handler struct {
 	// sandbox is an atomic.Pointer, not a plain *SandboxConfig field, because
 	// a long-lived Handler (StartMCPServer builds exactly one for the whole
 	// life of the MCP server) can be dispatched to concurrently while
-	// SetSandboxMode swaps in a live "agent_sandbox" setting change — a
-	// caller that mutated a shared *SandboxConfig's fields in place instead
-	// would race with every concurrent Handle()/RunReadOnlySQL() reading
-	// those same fields. Load() once per call, use the returned pointer for
-	// the rest of that call — never re-Load mid-call, so one call sees one
-	// consistent sandbox even if SetSandboxMode fires concurrently.
-	sandbox  atomic.Pointer[SandboxConfig]
-	approval *ApprovalQueue
+	// SetFilePolicy swaps in a live "agent_sandbox"/"ask before changes"
+	// setting change — a caller that mutated a shared *SandboxConfig's
+	// fields in place instead would race with every concurrent
+	// Handle()/RunReadOnlySQL() reading those same fields. Load() once per
+	// call, use the returned pointer for the rest of that call — never
+	// re-Load mid-call, so one call sees one consistent sandbox even if
+	// SetFilePolicy fires concurrently.
+	sandbox atomic.Pointer[SandboxConfig]
+	// approver, when set, is called to obtain the user's OK for a write
+	// (#79) — see awaitApproval. nil means "nobody can answer": headless
+	// `vibe mcp serve` and Studio's SSE MCP server never call SetApprover,
+	// so a write needing approval on either of those is refused outright
+	// rather than hanging forever waiting for an answer nobody can give.
+	approver ApproveFunc
 	logger   *slog.Logger
 
 	// mode gates task-only tools (preview_query, write_cell,
@@ -151,31 +158,43 @@ func NewHandler(container ContainerAccess, engine EngineAccess, sandbox *Sandbox
 	h := &Handler{
 		container: container,
 		engine:    engine,
-		approval:  NewApprovalQueue(),
 		logger:    logger,
 	}
 	h.sandbox.Store(sandbox)
 	return h
 }
 
-// SetSandboxMode atomically swaps in a new sandbox mode, preserving every
-// other SandboxConfig field (MaxQueryRows, AllowedTables, ...) from whatever
-// is currently stored. Safe to call concurrently with Handle()/
-// RunReadOnlySQL() — see the sandbox field's doc comment. Used by
-// studio/app.go's agentToolHandler to make a long-lived Handler (the one
-// StartMCPServer builds) track the file's live "agent_sandbox" setting on
-// every dispatch, without racing on a shared *SandboxConfig.
-func (h *Handler) SetSandboxMode(mode SandboxMode) {
+// ApproveFunc obtains the user's OK for a pending write (#79). It is called
+// synchronously from inside Handle/handleRunQuery — a blocking call is
+// exactly the intended behaviour (the model's tool call waits for a human
+// answer) — and returns nil only on approval. studio/app.go's
+// agentToolHandler.enableApprovals is the only production implementation: it
+// releases the caller's file lock for the duration of the wait (documented
+// on that function) so Save/Close/Settings stay responsive while a card is
+// pending.
+type ApproveFunc func(ctx context.Context, req ApprovalRequest) error
+
+// SetApprover installs (or, with nil, removes) the function Handle/
+// handleRunQuery calls to obtain approval for a gated write. A Handler with
+// no approver refuses every write that needs one (see awaitApproval) instead
+// of blocking — that is the deliberate MCP behaviour: no
+// approver is ever attached to a headless or SSE MCP server.
+func (h *Handler) SetApprover(fn ApproveFunc) { h.approver = fn }
+
+// SetFilePolicy atomically swaps in both the sandbox mode and the
+// RequireApproval flag together, preserving every other SandboxConfig field
+// (MaxQueryRows, AllowedTables, ...) from whatever is currently stored. One
+// atomic swap — not two separate setters — so a concurrent Handle() call can
+// never observe a mode/approval combination that was never actually the
+// file's policy (e.g. the new mode with the old approval flag). Safe to call
+// concurrently with Handle()/RunReadOnlySQL() — see the sandbox field's doc
+// comment.
+func (h *Handler) SetFilePolicy(mode SandboxMode, requireApproval bool) {
 	cur := h.sandbox.Load()
 	next := *cur
 	next.Mode = mode
+	next.RequireApproval = requireApproval
 	h.sandbox.Store(&next)
-}
-
-// Approvals returns the handler's approval queue so callers (and tests) can
-// drive the approval workflow (Pending/Approve/Reject) for gated write tools.
-func (h *Handler) Approvals() *ApprovalQueue {
-	return h.approval
 }
 
 // Handle processes a JSON-RPC request and returns a response.
@@ -197,7 +216,7 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 	}
 
 	// Load the sandbox ONCE for this call (see the field's doc comment) so a
-	// concurrent SetSandboxMode can't make one request's checks straddle two
+	// concurrent SetFilePolicy can't make one request's checks straddle two
 	// different sandbox configs.
 	sb := h.sandbox.Load()
 
@@ -213,19 +232,81 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 		}
 	}
 
-	// Check if approval is required for write operations.
-	if sb.RequireApproval && isWriteOperation(tool.Category) {
-		approved := h.approval.Submit(&ApprovalRequest{
-			ID:     uuid.New().String(),
-			Method: req.Method,
-			Params: req.Params,
-		})
-		if !approved {
-			return NewErrorResponse(req.ID, ErrApprovalNeeded, "operation was rejected by user")
+	// Approval gate (#79): every write EXCEPT run_query asks here, using the
+	// sandbox's own category gate above as "would this even be allowed" —
+	// approval runs strictly after that check passes, so a call the sandbox
+	// denies never shows a card (a read-only-mode delete_record fails with
+	// ErrPermission above and never reaches this point). run_query is
+	// handled separately, inside handleRunQuery, because whether it asks at
+	// all depends on classifying the SQL text, not just its "data" category.
+	if sb.RequireApproval && isWriteOperation(tool.Category) && req.Method != "run_query" {
+		if r := h.awaitApproval(ctx, req, sb, "", nil, sqlClassWrite); r != nil {
+			return r
 		}
 	}
 
 	return h.dispatch(ctx, req)
+}
+
+// awaitApproval is the one place Handle/handleRunQuery ask for the user's OK
+// on a write that the sandbox has already allowed. sqlText/params/class are
+// only meaningful for run_query (describeWrite's "run_query" case uses class
+// to pick the DML-vs-DDL wording, and a post-approval re-check below
+// reclassifies sqlText/params against the file's live sandbox); every other
+// tool passes sqlText="" and params=nil and ignores class. Returns nil to
+// mean "proceed"; any non-nil *Response is the final answer to send back to
+// the caller without dispatching the tool at all.
+func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText string, params map[string]any, class sqlClass) *Response {
+	if h.approver == nil {
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
+			"%s needs your OK before it runs: this file asks before the agent changes anything (sandbox: %s), and there is no one to ask over MCP. "+
+				`Nothing was changed. To let MCP clients make changes, open the file in Vibe Studio → Settings → Agent and turn off "Ask before changes".`,
+			req.Method, sb.Mode))
+	}
+
+	userDB := h.container.DuckDBDB()
+	ar := describeWrite(ctx, req, userDB, class)
+	if sqlText != "" {
+		ar.SQL = sqlText
+	}
+	ar.Mode = string(sb.Mode)
+	ar.ID = uuid.New().String()
+
+	err := h.approver(ctx, ar)
+	switch {
+	case err == nil:
+		// Round 2 review finding 7: the approver call above can block for
+		// minutes with the caller's file lock released (see
+		// studio/app.go's enableApprovals), during which SetFilePolicy may
+		// have tightened the file's live mode. A human did approve this
+		// exact change, but "approved" must still mean "still allowed" the
+		// moment it actually runs, not "was allowed when the card first
+		// appeared" — so re-check against the CURRENT sandbox (the studio
+		// approver refreshes it via SetFilePolicy right before returning
+		// nil) rather than trusting the sb loaded before the wait.
+		fresh := h.sandbox.Load()
+		if err := fresh.Check(req.Method); err != nil {
+			return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
+				"the agent's access changed while this was waiting for approval: %s", err.Error()))
+		}
+		if req.Method == "run_query" {
+			freshClass, freshReason := classifySQL(ctx, userDB, sqlText, params)
+			if err := fresh.checkSQLClass(freshClass, freshReason); err != nil {
+				return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
+					"the agent's access changed while this was waiting for approval: %s", err.Error()))
+			}
+		}
+		return nil
+	case errors.Is(err, ErrApprovalDeclined):
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
+			"The user declined this change (%s). Nothing was changed. Don't retry it unless the user asks again.", ar.Summary))
+	case errors.Is(err, ErrApprovalExpired):
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, "No answer in time, so nothing was changed.")
+	case errors.Is(err, ErrApprovalCancelled):
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, "The file was closed before this change was approved. Nothing was changed.")
+	default:
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, err.Error())
+	}
 }
 
 // dispatch routes the request to the appropriate handler method.
@@ -504,8 +585,20 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 		return errResp
 	}
 	sb := h.sandbox.Load()
-	if err := sb.checkSQLClass(classifySQL(ctx, userDB, sqlStr, params)); err != nil {
+	class, reason := classifySQL(ctx, userDB, sqlStr, params)
+	if err := sb.checkSQLClass(class, reason); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
+	}
+
+	// Approval gate (#79): run_query asks only when the statement actually
+	// changes something (DML) or reaches outside a plain read (DDL/ATTACH/
+	// COPY/INSTALL/multi-statement) — never for a SELECT. Runs after
+	// checkSQLClass, so a statement the sandbox denies outright never shows
+	// a card.
+	if sb.RequireApproval && class != sqlClassRead {
+		if r := h.awaitApproval(ctx, req, sb, sqlStr, params, class); r != nil {
+			return r
+		}
 	}
 
 	rs, err := h.engine.Execute(ctx, sqlStr, params)
@@ -519,14 +612,17 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 		rows = rows[:sb.MaxQueryRows]
 	}
 
-	cols := make([]string, len(rs.Columns))
-	for i, c := range rs.Columns {
-		cols[i] = c.Name
-	}
+	cols, types := rs.NamesAndTypes()
 
 	result := map[string]any{
 		"columns": cols,
-		"rows":    rows,
+		// types is the DuckDB type name of each column, parallel to
+		// columns — an agent or MCP client reading a run_query result needs
+		// it to know "9007199254740993" is an exact BIGINT and
+		// "12345678901234567.89" an exact DECIMAL, not a value that lost
+		// precision in transit.
+		"types": types,
+		"rows":  rows,
 	}
 
 	// Empty-result explanation (#70): must run BEFORE the row budget below

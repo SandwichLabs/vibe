@@ -3,6 +3,7 @@ import { ref, watch, onMounted } from 'vue'
 import Icon from '../components/Icon.vue'
 import { flushAll } from '../composables/usePendingSaves'
 import { askConfirm } from '../composables/useConfirm'
+import { errorText } from '../lib/errors'
 
 const props = defineProps<{ initialFile?: string }>()
 const emit = defineEmits<{ 'file-opened': [] }>()
@@ -47,7 +48,7 @@ async function selectFile() {
       mode.value = 'open'
     }
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
   }
 }
 
@@ -59,7 +60,7 @@ async function selectNewFile() {
       mode.value = 'create'
     }
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
   }
 }
 
@@ -91,7 +92,7 @@ async function openFile() {
     await window.go.main.App.OpenFile(filePath.value, passphrase.value)
     emit('file-opened')
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
   } finally {
     loading.value = false
   }
@@ -132,7 +133,7 @@ async function createFile() {
     }
     emit('file-opened')
   } catch (e: any) {
-    error.value = e.message || String(e)
+    error.value = errorText(e)
   } finally {
     loading.value = false
   }

@@ -1,5 +1,6 @@
 // A2UI live-query helpers — ported from schoolwork-workspace's
-// src/a2ui/renderer.js (runLiveQuery/toPoints/formatCell), adapted to the
+// src/a2ui/renderer.js (runLiveQuery/toPoints/formatCell — the latter now
+// lives in lib/formatCell.ts), adapted to the
 // column-array + row-array shape RunA2UIQuery returns (matching every other
 // tabular Wails binding in this app — ExecuteQuery, GetTableData, ...) rather
 // than the row-object shape the browser-local DuckDB binding used there.
@@ -8,9 +9,11 @@
 // mounts, so the same chart/table/stat re-reflects whatever data is in the
 // container now, rather than freezing the values the agent saw when it wrote
 // the component.
+import { errorText } from '../lib/errors'
 
 export interface LiveQueryResult {
   columns: string[]
+  types: string[]
   rows: any[][]
   error?: string
 }
@@ -89,17 +92,17 @@ function releaseSlot(priority: QueryPriority): void {
 // applying a stale result to state that has since moved on to different
 // content.
 export async function runLiveQuery(sql: string, signal?: AbortSignal, priority: QueryPriority = 'low'): Promise<LiveQueryResult & { aborted?: boolean }> {
-  if (signal?.aborted) return { columns: [], rows: [], aborted: true }
+  if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
   await acquireSlot(priority)
   try {
-    if (signal?.aborted) return { columns: [], rows: [], aborted: true }
+    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
     const res = await window.go.main.App.RunA2UIQuery(sql)
-    if (signal?.aborted) return { columns: [], rows: [], aborted: true }
-    return { columns: res?.columns ?? [], rows: res?.rows ?? [] }
+    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
+    return { columns: res?.columns ?? [], types: res?.types ?? [], rows: res?.rows ?? [] }
   } catch (e: any) {
-    if (signal?.aborted) return { columns: [], rows: [], aborted: true }
-    const message = typeof e === 'string' ? e : e?.message || String(e)
-    return { columns: [], rows: [], error: message }
+    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
+    const message = errorText(e)
+    return { columns: [], types: [], rows: [], error: message }
   } finally {
     releaseSlot(priority)
   }
@@ -114,34 +117,9 @@ export function _resetQueryPoolForTests(): void {
   lowQueue.length = 0
 }
 
-// numberFormatter is the ONE number formatter every A2UI component uses —
-// stat, table, bar chart, and line chart (review fix, #67 step 2 round 2:
-// the previous per-caller `Number(v.toFixed(4)).toLocaleString()` produced
-// inconsistent decimal counts — e.g. "147,464.2" next to "142,225.12" — since
-// toFixed(4) rounds to 4 places but toLocaleString()'s own default then
-// re-rounds to a different, locale-dependent digit count). Thousands
-// separators, at most 2 decimal places, trailing zeros trimmed
-// (minimumFractionDigits: 0) — one rule, applied everywhere a number is
-// displayed.
-const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 })
-
-// formatNumber formats a finite number with the shared numberFormatter. Used
-// directly by components that only ever display numbers (stat's value, a bar
-// chart's value, a line chart's axis/tooltip labels).
-export function formatNumber(v: number): string {
-  if (!Number.isFinite(v)) return '—'
-  return numberFormatter.format(v)
-}
-
-// formatCell formats one table cell of any type — the table component's
-// only formatter, delegating to formatNumber for numeric cells so a table
-// column reads with exactly the same digit rules as every chart/stat next
-// to it.
-export function formatCell(v: any): string {
-  if (v === null || v === undefined) return '—'
-  if (typeof v === 'number') return formatNumber(v)
-  return String(v)
-}
+// formatNumber (chart values/axis labels) and formatCell (table cells) moved
+// to lib/formatCell.ts — the one shared cell formatter used by every
+// table/grid in the app, not just A2UI's. Import them from there directly.
 
 export interface Point {
   label: string

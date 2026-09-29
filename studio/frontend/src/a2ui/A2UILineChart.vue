@@ -22,7 +22,8 @@
 // unit tests assert the algorithm directly rather than pixel overlap).
 import { ref, onMounted, nextTick, watch, computed, inject } from 'vue'
 import type { A2UIComponentT } from './types'
-import { runLiveQuery, formatNumber, toPoints, colorClass, pickLabelIndices, type Point } from './query'
+import { runLiveQuery, toPoints, colorClass, pickLabelIndices, type Point } from './query'
+import { formatNumber } from '../lib/formatCell'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)

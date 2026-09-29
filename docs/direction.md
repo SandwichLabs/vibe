@@ -26,7 +26,7 @@ The Access application layer was most of the last five merged PRs and roughly a 
 Seven nouns. Everything in the product is one of these.
 
 ### 3.1 Container
-Unchanged. A `.vibe` is a SQLCipher database (AES-256, PBKDF2-HMAC-SHA512) holding `_vibe_*` metadata tables and a serialized DuckDB blob (`_vibe_duckdb`). Open materializes the blob to a hardened temp file; Save checkpoints it back. No plaintext on disk. `internal/container`.
+Unchanged. A `.vibe` is a SQLCipher database (AES-256, PBKDF2-HMAC-SHA512) holding `_vibe_*` metadata tables and a serialized DuckDB blob (`_vibe_duckdb`). Open materializes the blob to a hardened temp file; Save checkpoints it back. The plaintext DuckDB copy exists only while the file is open, in a 0700 dir under `$TMPDIR` (file 0600; its `.wal` inherits the process umask instead, protected by the 0700 dir rather than its own chmod), zeroed and removed on Close, with stale copies swept on the next start. Point `TMPDIR` at a tmpfs to keep it off disk. Table changes reach the encrypted file on Save. SQLCipher-side content (notebooks, queries, skills) is written immediately. Revert to last save discards table changes since the last Save by re-materializing the blob in place, without closing the file (#98). `internal/container`.
 
 ### 3.2 Tables
 DuckDB, single engine, in-process. Schema DDL, CRUD, import (CSV, xlsx via the `excel` extension), export (CSV, JSON, xlsx, Parquet). The table browser keeps inline edit / insert / delete and filter-by-form. `internal/engine`, `internal/crud`, `internal/importer`.

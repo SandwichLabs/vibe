@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -23,9 +24,17 @@ type viewShape struct {
 	firstDistinct bool
 }
 
+// isNumericValue judges a value from a Go-side result set (preview_query,
+// run_query), which runs through engine.NormalizeValue: a small
+// DECIMAL crosses as json.Number, not a Go float, so it must count as
+// numeric too, or every DECIMAL column (which is most money/SUM columns)
+// would stop fitting bar/line/stat and fall back to a label column instead.
+// A json.Number OUT of the safe range crosses as a plain string instead
+// (see the wire contract in engine/normalize.go) and is correctly judged a
+// label here — that's the accepted "mixed column" edge case, not a bug.
 func isNumericValue(v any) bool {
 	switch v.(type) {
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
 		return true
 	default:
 		return false

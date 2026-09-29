@@ -8,7 +8,10 @@ replace the old page system (#66/#69); this file replaces the retired
 
 ## Cell types
 
-Every cell has an `id` and a `type` of `sql`, `markdown`, or `a2ui`.
+Every cell has an `id` and a `type` of `sql`, `markdown`, or `a2ui`. Every
+cell also has `collapsed` (bool, default false): the author's "minimize"
+choice. Studio folds the cell to its title row. It is stored in the
+notebook.
 
 ### sql
 
@@ -26,6 +29,10 @@ change data"). A sql cell also carries:
   explicitly chosen (by the user or by an authoring tool that names one),
   `viewPinned` becomes true and auto-fit stops re-deciding it.
 - `label` — a short cell title.
+
+In Studio the SQL is hidden by default behind a "Show SQL" row, and the
+result shows first. Whether it is open is view state and is never stored. A
+cell with no SQL, or whose run fails, opens it.
 
 ### markdown
 

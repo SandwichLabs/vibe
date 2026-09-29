@@ -82,6 +82,30 @@ describe('AgentPanel (W0.5)', () => {
     expect(chip.classes()).toContain('tool-chip-error')
   })
 
+  // --- #91 P-F12/M-F21: tool chip expands to full input + Copy ---
+  it('opening a tool chip shows the full SQL and a Copy SQL button', async () => {
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'run_query', input: '{"sql":"SELECT * FROM customers WHERE region = \'West\'"}' })
+      streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'run_query', output: '3 rows' })
+      streamHandler!({ turnId, kind: 'final', text: 'Done.' })
+      return { text: 'Done.', steps: [] }
+    })
+    const wrapper = await mountPanel()
+
+    await wrapper.find('[data-testid="agent-input"]').setValue('west region customers')
+    await wrapper.find('[data-testid="agent-send"]').trigger('click')
+    await flushPromises()
+
+    const details = wrapper.find('.tool-step')
+    expect(details.exists()).toBe(true);
+    (details.element as HTMLDetailsElement).open = true
+    await flushPromises()
+
+    const body = wrapper.find('[data-testid="agent-tool-chip-body"]')
+    expect(body.text()).toContain("SELECT * FROM customers WHERE region = 'West'")
+    expect(body.text()).toContain('Copy SQL')
+  })
+
   it('pins the current screen as context', async () => {
     setBinding(async (turnId) => { streamHandler!({ turnId, kind: 'final', text: 'ok' }); return { text: 'ok', steps: [] } })
     const wrapper = await mountPanel()

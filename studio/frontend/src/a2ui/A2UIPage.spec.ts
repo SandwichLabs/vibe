@@ -65,6 +65,45 @@ describe('A2UIPage — static (inline data) rendering', () => {
     expect(rows[0].findAll('td').map((n) => n.text())).toEqual(['x', '1'])
   })
 
+  // types is the client-only field NotebookView's synthesizedPage
+  // stamps on a table/stat component so it formats with the column's real
+  // DuckDB type (never part of the saved/validated A2UI schema).
+  it('renders a synthesized table with types: DECIMAL formatted to its scale, grouped, right-aligned', () => {
+    const wrapper = mount(A2UIPage, {
+      props: {
+        page: page([{
+          id: 'tb',
+          type: 'table',
+          columns: ['id', 'amt'],
+          rows: [['9007199254740993', 15675.3]],
+          types: ['BIGINT', 'DECIMAL(12,2)'],
+        }]),
+      },
+    })
+    const cells = wrapper.findAll('tbody td')
+    expect(cells[0].text()).toBe('9,007,199,254,740,993')
+    expect(cells[1].text()).toBe('15,675.30')
+    expect(cells[1].classes()).toContain('cell-num')
+
+    // Both numeric headers also get .cell-num, right-aligning over the
+    // right-aligned digits below them
+    // (a2ui.css's `.a2ui-table th.cell-num` rule beats the plain left-align
+    // rule — that CSS cascade isn't exercised by jsdom, so this proves the
+    // class is applied).
+    const headers = wrapper.findAll('thead th')
+    expect(headers[0].classes()).toContain('cell-num')
+    expect(headers[1].classes()).toContain('cell-num')
+  })
+
+  // The a2ui-table's numeric-header override lives in a2ui.css itself
+  // (unlayered, so it always beats theme/bridge.css's layered rules
+  // regardless of specificity — see that file's comment), and the old
+  // one-off `.a2ui-td--num` class is gone.
+  it('a2ui.css has a higher-specificity th.cell-num override and no dead .a2ui-td--num rule', () => {
+    expect(a2uiCSS).toMatch(/\.a2ui-page \.a2ui-table th\.cell-num\s*{/)
+    expect(a2uiCSS).not.toMatch(/\.a2ui-td--num\s*{/)
+  })
+
   it('renders an inline bar chart, zero-baselined, with numeric-only widths', () => {
     const wrapper = mount(A2UIPage, {
       props: {

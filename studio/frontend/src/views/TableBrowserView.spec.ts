@@ -21,6 +21,16 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOff: () => { dataChangedHandler = null },
 }))
 
+// A reactive stand-in for the route (#82: ?table= pre-select). Tests set
+// mockRoute.query.table before mounting; it must be genuinely reactive for
+// the component's `watch(() => route.query.table, ...)` to fire.
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const mockRoute = reactive({ query: {} as Record<string, string> })
+  ;(globalThis as any).__mockRoute = mockRoute
+  return { useRoute: () => mockRoute }
+})
+
 import TableBrowserView from './TableBrowserView.vue'
 
 // --- Fake backend (window.go.main.App) ------------------------------------
@@ -33,6 +43,7 @@ function makeApp(opts: {
   updateRow?: (...a: any[]) => Promise<any>
   lookupRows?: any[][]
   lookupCols?: { name: string }[]
+  types?: string[]
 } = {}) {
   const columns = opts.columns ?? [
     { name: 'id', type: 'INTEGER', not_null: true, pk: true },
@@ -46,6 +57,12 @@ function makeApp(opts: {
 
   const toTableData = () => ({
     columns: columns.map(c => c.name),
+    // types is the DuckDB ScanRows type name per column (distinct from
+    // DescribeTable's DDL type above, though usually the same text) — tests
+    // that care about formatCell/cellEditText fidelity pass opts.types;
+    // others fall back to the declared column type, close enough for the
+    // checkbox/date editorType tests that don't touch formatCell scale.
+    types: opts.types ?? columns.map(c => c.type),
     rows: store.map(r => columns.map(c => r[c.name] ?? null)),
     page: 1,
     page_size: 50,
@@ -114,6 +131,7 @@ function dataCells(wrapper: any) {
 describe('TableBrowserView inline datasheet editing', () => {
   beforeEach(() => {
     vi.useRealTimers()
+    ;(globalThis as any).__mockRoute.query = {}
   })
 
   it('double-click opens an editor and Enter commits via UpdateRow with the correct PK', async () => {
@@ -206,6 +224,73 @@ describe('TableBrowserView inline datasheet editing', () => {
     expect(cellAfter.find('.cell-error-msg').text()).toContain('name must be unique')
   })
 
+  // --- #91 M-F16: cell error keyed by table+pk+col, cleared on switch/Escape ---
+
+  it('a cell error clears when a different table is selected', async () => {
+    const { app } = makeApp({
+      rows: [{ id: 1, name: 'Ada' }],
+      updateRow: async () => { throw { message: 'rejected' } },
+    })
+    app.ListTables = vi.fn(async () => ['people', 'other'])
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const nameCell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await nameCell.trigger('dblclick')
+    await nameCell.find('input.cell-input').setValue('Bad')
+    await nameCell.find('input.cell-input').trigger('keydown.enter')
+    await flushPromises()
+    expect(wrapper.find('.cell-error').exists()).toBe(true)
+
+    // DescribeTable/GetTableData are re-mocked for the second table so
+    // selectTable resolves cleanly.
+    app.DescribeTable = vi.fn(async () => ({ name: 'other', columns: [{ name: 'id', type: 'INTEGER', not_null: true, pk: true }] }))
+    app.GetTableData = vi.fn(async () => ({ columns: ['id'], rows: [[1]], page: 1, page_size: 50, total_rows: 1, total_pages: 1 }))
+    await wrapper.findAll('.w-56 [class*=cursor-pointer]')[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.cell-error').exists()).toBe(false)
+  })
+
+  it('Escape clears a standing cell error when no editor is open', async () => {
+    makeApp({
+      rows: [{ id: 1, name: 'Ada' }],
+      updateRow: async () => { throw { message: 'rejected' } },
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const nameCell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await nameCell.trigger('dblclick')
+    await nameCell.find('input.cell-input').setValue('Bad')
+    await nameCell.find('input.cell-input').trigger('keydown.enter')
+    await flushPromises()
+    expect(wrapper.find('.cell-error').exists()).toBe(true)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('.cell-error').exists()).toBe(false)
+  })
+
+  it('a multi-line rejection message shows only its first line, full text in the title', async () => {
+    makeApp({
+      rows: [{ id: 1, name: 'Ada' }],
+      updateRow: async () => { throw { message: 'LINE 1: UPDATE people ...\n         ^\nsyntax error' } },
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const nameCell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await nameCell.trigger('dblclick')
+    await nameCell.find('input.cell-input').setValue('Bad')
+    await nameCell.find('input.cell-input').trigger('keydown.enter')
+    await flushPromises()
+
+    const msg = wrapper.find('.cell-error-msg')
+    expect(msg.text()).toBe('LINE 1: UPDATE people ...')
+    expect(msg.attributes('title')).toContain('syntax error')
+  })
+
   it('renders a checkbox editor for boolean columns', async () => {
     makeApp({
       columns: [
@@ -262,6 +347,154 @@ describe('TableBrowserView inline datasheet editing', () => {
     await cell.trigger('dblclick')
     expect(cell.find('input[type="date"]').exists()).toBe(true)
   })
+
+  // --- Faithful value rendering — DECIMAL scale, TIMESTAMP as text ---
+
+  it('seeds a DECIMAL editor with its declared scale, not JS-trimmed text', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 'amt', type: 'DECIMAL(18,4)', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'DECIMAL(18,4)'],
+      rows: [{ id: 1, amt: 12.5 }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    // Display shows the full scale too, not JS's trimmed "12.5".
+    expect(cell.text()).toContain('12.5000')
+    await cell.trigger('dblclick')
+    const input = cell.find('input.cell-input')
+    expect((input.element as HTMLInputElement).value).toBe('12.5000')
+  })
+
+  it('a TIMESTAMP column gets a text editor, not a date input, seeded with the full value', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 'ts', type: 'TIMESTAMP', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'TIMESTAMP'],
+      rows: [{ id: 1, ts: '2025-04-06 13:45:00' }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await cell.trigger('dblclick')
+    expect(cell.find('input[type="date"]').exists()).toBe(false)
+    const input = cell.find('input.cell-input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('2025-04-06 13:45:00')
+  })
+
+  it('a TIME column gets a text editor seeded with the DuckDB text', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 't', type: 'TIME', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'TIME'],
+      rows: [{ id: 1, t: '13:45:00' }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await cell.trigger('dblclick')
+    expect(cell.find('input[type="date"]').exists()).toBe(false)
+    expect((cell.find('input.cell-input').element as HTMLInputElement).value).toBe('13:45:00')
+  })
+
+  it('an UpdateRow for a BIGINT primary key past 2^53 targets the exact string id', async () => {
+    const { app } = makeApp({
+      columns: [
+        { name: 'id', type: 'BIGINT', not_null: true, pk: true },
+        { name: 'name', type: 'TEXT', not_null: false, pk: false },
+      ],
+      types: ['BIGINT', 'VARCHAR'],
+      rows: [{ id: '9007199254740993', name: 'Ada' }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const nameCell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    await nameCell.trigger('dblclick')
+    await nameCell.find('input.cell-input').setValue('Grace')
+    await nameCell.find('input.cell-input').trigger('keydown.enter')
+    await flushPromises()
+
+    expect(app.UpdateRow).toHaveBeenCalledWith('people', 'id', '9007199254740993', { name: 'Grace' })
+  })
+
+  it('a NULL cell renders as NULL, muted, distinct from an empty string', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 'note', type: 'VARCHAR', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'VARCHAR'],
+      rows: [{ id: 1, note: null }, { id: 2, note: '' }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const rows = wrapper.findAll('tbody tr')
+    const nullCell = rows[0].findAll('td')[1]
+    const emptyCell = rows[1].findAll('td')[1]
+    expect(nullCell.text()).toContain('NULL')
+    expect(nullCell.classes()).toContain('cell-null')
+    expect(emptyCell.text()).not.toContain('NULL')
+    expect(emptyCell.classes()).not.toContain('cell-null')
+  })
+
+  // The datasheet's numeric header right-aligns, and a NULL in that
+  // numeric column right-aligns with it.
+  it('a numeric column header gets .cell-num, and a NULL in it right-aligns', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 'name', type: 'VARCHAR', not_null: false, pk: false },
+        { name: 'amt', type: 'DECIMAL(12,2)', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'VARCHAR', 'DECIMAL(12,2)'],
+      rows: [{ id: 1, name: 'Ada', amt: null }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const headers = wrapper.findAll('thead th')
+    expect(headers[2].classes()).toContain('cell-num')
+    expect(headers[1].classes()).not.toContain('cell-num')
+
+    const amtCell = wrapper.findAll('tbody tr')[0].findAll('td')[2]
+    expect(amtCell.classes()).toContain('cell-null')
+    expect(amtCell.classes()).toContain('cell-num')
+  })
+
+  // A STRUCT/LIST cell's editor opens seeded with the exact JSON text
+  // the cell displays, not
+  // String(value) ("[object Object]"/a bare comma-joined list).
+  it('a STRUCT cell opens the editor seeded with the displayed JSON text', async () => {
+    makeApp({
+      columns: [
+        { name: 'id', type: 'INTEGER', not_null: true, pk: true },
+        { name: 'meta', type: 'STRUCT("a" INTEGER, "b" VARCHAR)', not_null: false, pk: false },
+      ],
+      types: ['INTEGER', 'STRUCT("a" INTEGER, "b" VARCHAR)'],
+      rows: [{ id: 1, meta: { a: 1, b: 'x' } }],
+    })
+    const wrapper = mountView()
+    await openTable(wrapper)
+
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[1]
+    expect(cell.text()).toContain('{"a":1,"b":"x"}')
+    await cell.trigger('dblclick')
+    const input = cell.find('input.cell-input')
+    expect((input.element as HTMLInputElement).value).toBe('{"a":1,"b":"x"}')
+  })
 })
 
 // Review fix #6: an agent-driven create_table/create_record/import previously
@@ -306,5 +539,32 @@ describe('TableBrowserView "data:changed" live refresh', () => {
 
     expect(wrapper.text()).not.toContain('Ada')
     expect(wrapper.text()).toContain('No tables yet')
+  })
+})
+
+// #82: "Open table →" after an import routes here with ?table=<name>.
+describe('TableBrowserView ?table= pre-select', () => {
+  beforeEach(() => {
+    ;(globalThis as any).__mockRoute.query = {}
+  })
+
+  it('selects the table named by ?table= once the table list loads', async () => {
+    ;(globalThis as any).__mockRoute.query = { table: 'people' }
+    const { app } = makeApp({ rows: [{ id: 1, name: 'Ada' }] })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(app.DescribeTable).toHaveBeenCalledWith('people')
+    expect(wrapper.text()).toContain('Ada')
+  })
+
+  it('ignores a ?table= value that is not in the table list', async () => {
+    ;(globalThis as any).__mockRoute.query = { table: 'nope' }
+    const { app } = makeApp({ rows: [{ id: 1, name: 'Ada' }] })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(app.DescribeTable).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('Ada')
   })
 })

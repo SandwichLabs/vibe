@@ -21,6 +21,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
     return () => { fileOpenedHandler = null }
   },
   EventsOff: () => { fileOpenedHandler = null },
+  WindowSetTitle: () => {},
 }))
 
 import AppShell from './AppShell.vue'
@@ -31,6 +32,7 @@ function makeApp(initialPath: string) {
     GetFileInfo: vi.fn(async () => ({ path, session_id: path })),
     SaveFile: vi.fn(async () => {}),
     CloseFile: vi.fn(async () => {}),
+    IsDirty: vi.fn(async () => false),
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
   ;(window as any).go = { main: { App: app } }

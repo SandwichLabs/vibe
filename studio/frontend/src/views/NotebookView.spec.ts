@@ -4,14 +4,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-vi.mock('../composables/useVibeEditor', () => ({
-  createVibeEditor: (el: HTMLElement, opts: any) => ({
-    view: {},
+// createVibeEditor is hoisted so tests can inspect/reset its own mock.fn call
+// count for lazy-mount assertions (#95: the SQL editor only mounts once its
+// drawer is opened).
+const { createVibeEditor } = vi.hoisted(() => ({
+  createVibeEditor: vi.fn((el: HTMLElement, opts: any) => ({
+    view: { focus: vi.fn() },
     setValue: (v: string) => { opts.onChange?.(v) },
     destroy: vi.fn(),
     getValue: () => opts.value ?? '',
-  }),
+  })),
 }))
+vi.mock('../composables/useVibeEditor', () => ({ createVibeEditor }))
 
 // The mocked route must be genuinely Vue-reactive — NotebookView's
 // `watch(() => route.params.id, ...)` (the fix for #66 part A review item
@@ -42,6 +46,22 @@ const BAR_NOTEBOOK = {
   ],
 }
 
+// MIXED_NOTEBOOK (#95): one of each interesting shape — a labeled sql cell,
+// an empty sql cell (should load with its drawer open), a markdown cell with
+// an ATX heading, and an a2ui cell with two components.
+const MIXED_NOTEBOOK = {
+  schemaVersion: 1,
+  id: 'nb1',
+  title: 'Mixed',
+  updatedAt: '2026-01-01T00:00:00Z',
+  cells: [
+    { id: 'c1', type: 'sql', collapsed: false, source: 'SELECT region, sum(revenue) FROM sales GROUP BY ALL', view: 'table', viewPinned: false, label: 'by region' },
+    { id: 'c2', type: 'sql', collapsed: false, source: '', view: 'table', viewPinned: false, label: '' },
+    { id: 'c3', type: 'markdown', collapsed: false, source: 'intro line\n## Intro' },
+    { id: 'c4', type: 'a2ui', collapsed: false, page: { title: 'KPIs', components: [{ id: 'a', type: 'text', text: 'x' }, { id: 'b', type: 'text', text: 'y' }] } },
+  ],
+}
+
 function makeApp(overrides: Partial<Record<string, any>> = {}) {
   const app = {
     GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(BAR_NOTEBOOK))),
@@ -69,6 +89,7 @@ describe('NotebookView', () => {
   beforeEach(() => {
     vi.useRealTimers()
     ;(globalThis as any).__mockRoute.params.id = 'nb1'
+    createVibeEditor.mockClear()
   })
 
   // Every mounted NotebookView keeps a live watch() on the shared mocked
@@ -90,6 +111,32 @@ describe('NotebookView', () => {
     expect(wrapper.find('[data-testid="notebook-title"]').element).toBeTruthy()
     // Auto-fit: 3 distinct regions with a numeric second column -> bar.
     expect(wrapper.find('[data-testid="view-bar"]').classes()).toContain('row-selected')
+  })
+
+  // synthesizedPage stamps the client-only `types` field onto the
+  // table component it builds from a sql cell's result, so a DECIMAL column
+  // renders with its real scale/grouping instead of JS's trimmed number
+  // text — proving the types plumbing end to end (runLiveQuery -> cell.result
+  // -> synthesizedPage -> A2UITable), not just formatCell in isolation.
+  it('a table-view sql cell renders DECIMAL results with their real scale via the synthesized types', async () => {
+    const app = makeApp({
+      RunA2UIQuery: vi.fn(async () => ({
+        columns: ['id', 'amt'],
+        types: ['BIGINT', 'DECIMAL(12,2)'],
+        rows: [['9007199254740993', 15675.3]],
+        truncated: false,
+      })),
+    })
+    const nb = JSON.parse(JSON.stringify(BAR_NOTEBOOK))
+    nb.cells[0].view = 'table'
+    app.GetNotebook = vi.fn(async () => nb)
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    const cells = wrapper.findAll('tbody td')
+    expect(cells[0].text()).toBe('9,007,199,254,740,993')
+    expect(cells[1].text()).toBe('15,675.30')
   })
 
   // #68 follow-up (reviewer-caught data corruption): NotebookView must
@@ -328,5 +375,300 @@ describe('NotebookView', () => {
     await flushPromises()
 
     expect(vm.cells.map((c: any) => c.id)).not.toContain('ghost')
+  })
+
+  // --- #91: export confirms with a toast ---
+  it('exportNotebook shows a status toast with the written path', async () => {
+    const app = makeApp({ ExportNotebook: vi.fn(async () => '/tmp/nb1.json') })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="export-notebook"]').trigger('click')
+    await flushPromises()
+
+    expect(app.ExportNotebook).toHaveBeenCalledWith('nb1', '')
+    expect(wrapper.find('[data-testid="notebook-status"]').text()).toContain('/tmp/nb1.json')
+  })
+
+  // --- #95: SQL hidden by default behind a slide-out drawer ---
+
+  it('loads with SQL hidden: closed drawer, no mounted editor, result still renders', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    const drawer = wrapper.find('[data-testid="sql-drawer"]')
+    expect(drawer.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('[data-testid="sql-drawer-body"]').attributes('inert')).toBeDefined()
+    expect(drawer.text()).toContain('Show SQL · 1 line · SELECT region')
+    expect(wrapper.find('[data-testid="view-bar"]').exists()).toBe(true)
+
+    const vm = wrapper.vm as any
+    // c1 (non-empty source) never got an editor; c2 (empty source) did.
+    const c1Calls = createVibeEditor.mock.calls.filter((c: any) => c[1]?.value === vm.cells[0].source)
+    expect(c1Calls).toHaveLength(0)
+  })
+
+  it('mounts the editor lazily, exactly once, and keeps it mounted across a close/reopen', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const before = createVibeEditor.mock.calls.length
+
+    await vm.toggleSource(vm.cells[0])
+    await flushPromises()
+    expect(createVibeEditor.mock.calls.length).toBe(before + 1)
+    const editor = vm.cells[0].editor
+
+    await vm.toggleSource(vm.cells[0]) // close
+    await vm.toggleSource(vm.cells[0]) // open again
+    await flushPromises()
+    expect(createVibeEditor.mock.calls.length).toBe(before + 1) // still just once
+    expect(editor.destroy).not.toHaveBeenCalled()
+  })
+
+  it('loads an empty sql cell with its drawer already open and an editor mounted', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const emptyCell = vm.cells.find((c: any) => c.id === 'c2')
+    expect(emptyCell.sourceOpen).toBe(true)
+    expect(emptyCell.editor).toBeTruthy()
+  })
+
+  it('addCell("sql") opens the drawer and focuses the new editor', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.addCell('sql')
+    await flushPromises()
+    const newCell = vm.cells[vm.cells.length - 1]
+    expect(newCell.sourceOpen).toBe(true)
+    expect(newCell.editor.view.focus).toHaveBeenCalled()
+  })
+
+  it('opens the drawer on a run error and never auto-closes it again', async () => {
+    const app = makeApp({
+      GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))),
+      RunA2UIQuery: vi.fn(async () => { throw new Error('boom') }),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const c1 = vm.cells[0]
+    expect(c1.sourceOpen).toBe(true)
+    expect(wrapper.find('[data-testid="cell-error"]').exists()).toBe(true)
+
+    app.RunA2UIQuery = vi.fn(async () => ({ columns: ['region'], rows: [['a']], truncated: false }))
+    ;(window as any).go.main.App.RunA2UIQuery = app.RunA2UIQuery
+    await vm.runCell(c1)
+    await flushPromises()
+    expect(c1.sourceOpen).toBe(true) // never auto-closes
+  })
+
+  it('an AI-inserted sql cell stays closed with no editor mounted', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const before = createVibeEditor.mock.calls.length
+
+    vm.insertCellFromEnvelope({ type: 'sql', sql: 'SELECT 1', label: 'x' })
+    await flushPromises()
+    const newCell = vm.cells[vm.cells.length - 1]
+    expect(newCell.sourceOpen).toBe(false)
+    expect(createVibeEditor.mock.calls.length).toBe(before)
+  })
+
+  it('replacing a cell whose drawer is open keeps it open, with a fresh editor for the new source', async () => {
+    makeApp() // BAR_NOTEBOOK's c1 has a non-empty source, so it loads closed
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.toggleSource(vm.cells[0])
+    await flushPromises()
+    expect(vm.cells[0].sourceOpen).toBe(true)
+    const oldEditor = vm.cells[0].editor
+    const before = createVibeEditor.mock.calls.length
+
+    vm.replaceCellFromEnvelope('c1', { type: 'sql', sql: 'SELECT 2', label: 'y' })
+    await flushPromises()
+
+    const replaced = vm.cells[0]
+    expect(replaced.id).toBe('c1')
+    expect(replaced.sourceOpen).toBe(true) // stayed open across the replace
+    expect(oldEditor.destroy).toHaveBeenCalled()
+    expect(replaced.editor).toBeTruthy()
+    expect(replaced.editor).not.toBe(oldEditor) // recreated with the new value
+    expect(createVibeEditor.mock.calls.length).toBe(before + 1)
+  })
+
+  it('toggling the drawer never schedules a save; minimizing does', async () => {
+    const app = makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    app.SaveNotebook.mockClear()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      vm.toggleSource(vm.cells[0])
+      vm.toggleSource(vm.cells[0])
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(app.SaveNotebook).not.toHaveBeenCalled()
+
+      vm.toggleCollapsed(vm.cells[0])
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(app.SaveNotebook).toHaveBeenCalledTimes(1)
+      const payload = app.SaveNotebook.mock.calls[0][0]
+      const savedC1 = payload.cells.find((c: any) => c.id === 'c1')
+      expect(savedC1.collapsed).toBe(true)
+      expect(savedC1.sourceOpen).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows a quiet minimized row for each cell type, with move/delete kept and view/run hidden', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    for (const cell of vm.cells) vm.toggleCollapsed(cell)
+    await flushPromises()
+
+    const sqlCard = wrapper.find('[data-cell-id="c1"]')
+    expect(sqlCard.find('[data-testid="cell-min-title"]').text()).toBe('by region')
+    expect(sqlCard.find('[data-testid="cell-min-meta"]').text()).toBe('3 rows')
+    expect(sqlCard.find('[data-testid="view-bar"]').exists()).toBe(false)
+    expect(sqlCard.find('[data-testid="run-cell"]').exists()).toBe(false)
+    expect(sqlCard.find('button[aria-label="Move cell up"]').exists()).toBe(true)
+    expect(sqlCard.find('button[aria-label="Delete cell"]').exists()).toBe(true)
+    expect(sqlCard.find('[data-testid="cell-minimize"]').attributes('aria-label')).toBe('Expand by region')
+
+    const mdCard = wrapper.find('[data-cell-id="c3"]')
+    expect(mdCard.find('[data-testid="cell-min-title"]').text()).toBe('Intro')
+
+    const a2uiCard = wrapper.find('[data-cell-id="c4"]')
+    expect(a2uiCard.find('[data-testid="cell-min-title"]').text()).toBe('KPIs')
+  })
+
+  it('renders the a2ui drawer labeled "Advanced: card definition", closed with no <pre> until clicked', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MIXED_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    const drawer = wrapper.find('[data-testid="a2ui-drawer"]')
+    expect(drawer.text()).toContain('Advanced: card definition')
+    expect(wrapper.find('[data-testid="a2ui-drawer-body"] pre').exists()).toBe(false)
+
+    await drawer.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="a2ui-drawer-body"] pre').text()).toContain('"title": "KPIs"')
+  })
+
+  // #95 carry-over (lastPersisted guard): a visit that never edits anything
+  // must never overwrite a newer save that may have landed elsewhere. Uses
+  // a markdown-only notebook (no sql cell) so there's no view auto-fit to
+  // count as a "change" — BAR_NOTEBOOK's sql cell auto-fits view on its
+  // first run, which is itself a real local change worth persisting.
+  it('a no-edit visit never calls SaveNotebook on unmount', async () => {
+    const MD_ONLY_NOTEBOOK = {
+      schemaVersion: 1, id: 'nb1', title: 'Notes', updatedAt: '2026-01-01T00:00:00Z',
+      cells: [{ id: 'c1', type: 'markdown', collapsed: false, source: 'hello' }],
+    }
+    const app = makeApp({ GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(MD_ONLY_NOTEBOOK))) })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    app.SaveNotebook.mockClear()
+    wrapper.unmount()
+    mountedWrappers = mountedWrappers.filter((w) => w !== wrapper)
+    await flushPromises()
+
+    expect(app.SaveNotebook).not.toHaveBeenCalled()
+  })
+
+  it('an edited visit calls SaveNotebook once on unmount, with the edit', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    app.SaveNotebook.mockClear()
+    vm.title = 'Renamed'
+    await flushPromises()
+
+    wrapper.unmount()
+    mountedWrappers = mountedWrappers.filter((w) => w !== wrapper)
+    await flushPromises()
+
+    expect(app.SaveNotebook).toHaveBeenCalledTimes(1)
+    expect(app.SaveNotebook.mock.calls[0][0].title).toBe('Renamed')
+  })
+
+  it('after a successful autosave with no further edits, leaving again does not save a second time', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    app.SaveNotebook.mockClear()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      vm.title = 'Renamed'
+      await vi.advanceTimersByTimeAsync(2000)
+    } finally {
+      vi.useRealTimers()
+    }
+    await flushPromises()
+    expect(app.SaveNotebook).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    mountedWrappers = mountedWrappers.filter((w) => w !== wrapper)
+    await flushPromises()
+
+    expect(app.SaveNotebook).toHaveBeenCalledTimes(1)
+  })
+
+  // #98: reverting the file discards table changes since the last save, so
+  // an open notebook's sql cells must re-run against the reverted data —
+  // handleFileReverted is called directly here (as handleNotebooksChanged
+  // is above), exercising the same reload path the "file:reverted" Wails
+  // event drives in production.
+  it('reloads the notebook and re-runs its sql cells on file:reverted', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    app.GetNotebook.mockClear()
+    app.RunA2UIQuery.mockClear()
+
+    await vm.handleFileReverted()
+    await flushPromises()
+    await flushPromises()
+
+    expect(app.GetNotebook).toHaveBeenCalledTimes(1)
+    expect(app.RunA2UIQuery).toHaveBeenCalled()
   })
 })

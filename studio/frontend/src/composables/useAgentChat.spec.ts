@@ -248,3 +248,128 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<script>')
   })
 })
+
+// #79: agent write approval — attaches to the matching step by callId,
+// survives arriving before the 'tool' event, and resolveApproval calls the
+// binding.
+describe('useAgentChat approvals (#79)', () => {
+  it('attaches an agent:approval event to the step with the matching callId', async () => {
+    const handlers: Record<string, (p: any) => void> = {}
+    vi.doMock('../wailsjs/runtime/runtime', () => ({
+      EventsOn: (name: string, cb: (p: any) => void) => { handlers[name] = cb; return () => { delete handlers[name] } },
+    }))
+    vi.resetModules()
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const binding = vi.fn(async (turnId: string) => {
+      handlers['agent:stream']({ turnId, kind: 'tool', id: 'call-1', tool: 'delete_record', input: '{}' })
+      handlers['agent:approval']({ turnId, request: { id: 'appr-1', callId: 'call-1', tool: 'delete_record', summary: 'Delete 3 rows from orders', rows: 3, destructive: true, mode: 'read-write' } })
+      return { text: 'ok', steps: [] }
+    })
+    ;(window as any).go = { main: { App: { AgentChatStream: binding, ResolveAgentApproval: vi.fn(async () => {}) } } }
+
+    const chat = freshUseAgentChat()
+    await chat.send('delete the void orders')
+
+    const step = chat.messages.value[1].steps[0]
+    expect(step.approval?.id).toBe('appr-1')
+    expect(step.approval?.summary).toBe('Delete 3 rows from orders')
+    expect(step.approval?.state).toBe('pending')
+    // Only one step, not a duplicate from the approval event pre-creating one.
+    expect(chat.messages.value[1].steps).toHaveLength(1)
+  })
+
+  it('does not duplicate the step when agent:approval arrives BEFORE the tool event', async () => {
+    const handlers: Record<string, (p: any) => void> = {}
+    vi.doMock('../wailsjs/runtime/runtime', () => ({
+      EventsOn: (name: string, cb: (p: any) => void) => { handlers[name] = cb; return () => { delete handlers[name] } },
+    }))
+    vi.resetModules()
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const binding = vi.fn(async (turnId: string) => {
+      handlers['agent:approval']({ turnId, request: { id: 'appr-2', callId: 'call-2', tool: 'delete_record', summary: 'Delete rows', rows: 3, destructive: true, mode: 'read-write' } })
+      handlers['agent:stream']({ turnId, kind: 'tool', id: 'call-2', tool: 'delete_record', input: '{}' })
+      return { text: 'ok', steps: [] }
+    })
+    ;(window as any).go = { main: { App: { AgentChatStream: binding, ResolveAgentApproval: vi.fn(async () => {}) } } }
+
+    const chat = freshUseAgentChat()
+    await chat.send('delete the void orders')
+
+    expect(chat.messages.value[1].steps).toHaveLength(1)
+    expect(chat.messages.value[1].steps[0].approval?.id).toBe('appr-2')
+    expect(chat.messages.value[1].steps[0].tool).toBe('delete_record')
+  })
+
+  it('agent:approval_done flips the approval state', async () => {
+    const handlers: Record<string, (p: any) => void> = {}
+    vi.doMock('../wailsjs/runtime/runtime', () => ({
+      EventsOn: (name: string, cb: (p: any) => void) => { handlers[name] = cb; return () => { delete handlers[name] } },
+    }))
+    vi.resetModules()
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const binding = vi.fn(async (turnId: string) => {
+      handlers['agent:stream']({ turnId, kind: 'tool', id: 'call-3', tool: 'delete_record', input: '{}' })
+      handlers['agent:approval']({ turnId, request: { id: 'appr-3', callId: 'call-3', tool: 'delete_record', summary: 'Delete rows', rows: 3, destructive: true, mode: 'read-write' } })
+      handlers['agent:approval_done']({ turnId, id: 'appr-3', outcome: 'approved' })
+      return { text: 'ok', steps: [] }
+    })
+    ;(window as any).go = { main: { App: { AgentChatStream: binding, ResolveAgentApproval: vi.fn(async () => {}) } } }
+
+    const chat = freshUseAgentChat()
+    await chat.send('delete the void orders')
+
+    expect(chat.messages.value[1].steps[0].approval?.state).toBe('approved')
+  })
+
+  it('resolveApproval sets state to sending then calls the binding', async () => {
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const resolveBinding = vi.fn(async () => {})
+    ;(window as any).go = { main: { App: { ResolveAgentApproval: resolveBinding } } }
+
+    const chat = freshUseAgentChat()
+    const step = { id: 'call-4', tool: 'delete_record', status: 'running' as const, approval: { id: 'appr-4', summary: 's', destructive: true, state: 'pending' as const } }
+    await chat.resolveApproval(step, true)
+
+    expect(step.approval.state).toBe('sending')
+    expect(resolveBinding).toHaveBeenCalledWith('appr-4', true)
+  })
+
+  it('resolveApproval(step, true, true) calls SaveFile before ResolveAgentApproval, in that order', async () => {
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const calls: string[] = []
+    const saveBinding = vi.fn(async () => { calls.push('save') })
+    const resolveBinding = vi.fn(async () => { calls.push('resolve') })
+    ;(window as any).go = { main: { App: { SaveFile: saveBinding, ResolveAgentApproval: resolveBinding } } }
+
+    const chat = freshUseAgentChat()
+    const step = { id: 'call-5', tool: 'delete_record', status: 'running' as const, approval: { id: 'appr-5', summary: 's', destructive: true, state: 'pending' as const } }
+    await chat.resolveApproval(step, true, true)
+
+    expect(calls).toEqual(['save', 'resolve'])
+    expect(resolveBinding).toHaveBeenCalledWith('appr-5', true)
+  })
+
+  it('when SaveFile rejects, ResolveAgentApproval is never called and the card stays pending with an error', async () => {
+    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
+    ;(globalThis as any).window = (globalThis as any).window || {}
+    const saveBinding = vi.fn(async () => { throw new Error('disk full') })
+    const resolveBinding = vi.fn(async () => {})
+    ;(window as any).go = { main: { App: { SaveFile: saveBinding, ResolveAgentApproval: resolveBinding } } }
+
+    const chat = freshUseAgentChat()
+    const step = { id: 'call-6', tool: 'delete_record', status: 'running' as const, approval: { id: 'appr-6', summary: 's', destructive: true, state: 'pending' as const } }
+    await chat.resolveApproval(step, true, true)
+
+    expect(resolveBinding).not.toHaveBeenCalled()
+    expect(step.approval.state).toBe('pending')
+    expect(step.approval.error).toContain('disk full')
+  })
+})

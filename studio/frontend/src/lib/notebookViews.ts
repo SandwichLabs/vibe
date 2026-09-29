@@ -4,6 +4,7 @@
 // so the picker's hints, the "why is this greyed out" tooltips, the mismatch
 // message, and the auto-fit on first run all tell the same story the prior
 // art did.
+import { typeFamily } from './formatCell'
 
 export type ViewKind = 'table' | 'bar' | 'line' | 'stat'
 
@@ -29,6 +30,13 @@ function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v)
 }
 
+// isNumericFamily reports whether a DuckDB type name (as sent alongside
+// query results) is one formatCell would right-align as a number.
+function isNumericFamily(dbType: string): boolean {
+  const f = typeFamily(dbType, undefined)
+  return f === 'integer' || f === 'decimal' || f === 'float'
+}
+
 export interface Shape {
   cols: string[]
   numeric: string[]
@@ -39,17 +47,31 @@ export interface Shape {
 
 /**
  * Describe a result set (column-array + row-array, RunA2UIQuery's shape):
- * which columns hold numbers, which hold labels. Judged from the rows
- * rather than a declared type, because that is what the renderer actually
- * meets.
+ * which columns hold numbers, which hold labels.
+ *
+ * When `types` (the DuckDB type name per column) is given, a column is
+ * classified by its declared type rather than by sampling a row value. This
+ * closes the "mixed column" edge case the original value-sampling approach
+ * had: a HUGEINT/DECIMAL column whose first non-null value happens to be
+ * out of JS's safe integer range crosses the wire as a string (per
+ * lib/formatCell's wire contract), which `isNum` would misjudge as a label
+ * column even though it is exact, chartable numeric data. Falls back to
+ * sampling — the original behaviour — for any column with no type at hand
+ * (model-authored inline A2UI data has none), so this stays backward
+ * compatible with every caller that doesn't have `types` yet.
  */
-export function describeShape(columns: string[], rows: any[][]): Shape {
+export function describeShape(columns: string[], rows: any[][], types?: string[]): Shape {
   const cols = columns.length ? columns : (rows[0] ? rows[0].map((_, i) => String(i)) : [])
   const numeric: string[] = []
   const label: string[] = []
   const colIndex = new Map(cols.map((c, i) => [c, i]))
   for (const c of cols) {
     const i = colIndex.get(c)!
+    const dbType = types?.[i]
+    if (dbType) {
+      ;(isNumericFamily(dbType) ? numeric : label).push(c)
+      continue
+    }
     const sample = rows.find((r) => r[i] !== null && r[i] !== undefined)
     if (sample === undefined) { label.push(c); continue }
     ;(isNum(sample[i]) ? numeric : label).push(c)

@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -448,4 +449,22 @@ func TestCheckViewFit_Parity(t *testing.T) {
 
 	empty := describeViewShape([]string{}, nil)
 	assert.False(t, checkViewFit("table", empty).OK)
+}
+
+// TestBestViewFor_JSONNumberDecimal proves that engine.NormalizeValue
+// hands a small-magnitude DECIMAL back as json.Number, not a Go float,
+// so a (label, DECIMAL) shape — the common case for a money SUM — must
+// still be judged numeric and suggest "bar", exactly like a plain int/float
+// column already does above.
+func TestBestViewFor_JSONNumberDecimal(t *testing.T) {
+	cols := []string{"region", "revenue"}
+	rows := [][]any{
+		{"East", json.Number("1500.30")},
+		{"West", json.Number("2000.00")},
+		{"North", json.Number("999.99")},
+	}
+	shape := describeViewShape(cols, rows)
+	assert.True(t, shape.numeric["revenue"], "a json.Number column must be judged numeric")
+	assert.Equal(t, "bar", bestViewFor(shape))
+	assert.True(t, checkViewFit("bar", shape).OK)
 }

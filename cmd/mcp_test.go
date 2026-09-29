@@ -12,6 +12,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,44 +32,48 @@ func newTestVibeContainer(t *testing.T) *container.Container {
 }
 
 func TestResolveSandbox_NoFlagKeepsFileSetting(t *testing.T) {
-	got, err := resolveSandbox("read-write", "")
+	got, err := resolveSandbox(agents.ModeReadWrite, "")
 	require.NoError(t, err)
-	assert.Equal(t, "read-write", got)
+	assert.Equal(t, agents.ModeReadWrite, got)
 }
 
 func TestResolveSandbox_FlagCanTighten(t *testing.T) {
-	got, err := resolveSandbox("full", "read-only")
+	got, err := resolveSandbox(agents.ModeFull, "read-only")
 	require.NoError(t, err)
-	assert.Equal(t, "read-only", got)
+	assert.Equal(t, agents.ModeReadOnly, got)
 }
 
 // TestResolveSandbox_FlagCannotLoosen is the core #64 contract: a flag must
 // never grant MORE access than the file's own agent_sandbox setting.
 func TestResolveSandbox_FlagCannotLoosen(t *testing.T) {
-	got, err := resolveSandbox("read-only", "full")
+	got, err := resolveSandbox(agents.ModeReadOnly, "full")
 	require.NoError(t, err)
-	assert.Equal(t, "read-only", got, "a --sandbox flag must never loosen the file's own setting")
+	assert.Equal(t, agents.ModeReadOnly, got, "a --sandbox flag must never loosen the file's own setting")
 }
 
 func TestResolveSandbox_SameLevelKept(t *testing.T) {
-	got, err := resolveSandbox("read-write", "read-write")
+	got, err := resolveSandbox(agents.ModeReadWrite, "read-write")
 	require.NoError(t, err)
-	assert.Equal(t, "read-write", got)
+	assert.Equal(t, agents.ModeReadWrite, got)
 }
 
 func TestResolveSandbox_InvalidFlagRejected(t *testing.T) {
-	_, err := resolveSandbox("full", "godmode")
+	_, err := resolveSandbox(agents.ModeFull, "godmode")
 	assert.Error(t, err)
 }
 
-func TestResolveSandbox_EmptyFileSandboxDefaultsFull(t *testing.T) {
-	got, err := resolveSandbox("", "read-only")
+// TestResolveSandbox_FileModeAlwaysValid documents why resolveSandbox no
+// longer has an "unset fileMode" branch (round 2 review finding 11): its
+// caller, buildMCPHandler, always passes agents.ReadFilePolicy(c).Mode,
+// which is never empty or unrecognized — that one "what does an absent/bad
+// stored mode default to" decision lives solely in ReadFilePolicy (see
+// TestReadFilePolicy in internal/agents). resolveSandbox's only remaining
+// job is parsing --sandbox and tightening against whatever valid mode it's
+// given.
+func TestResolveSandbox_FileModeAlwaysValid(t *testing.T) {
+	got, err := resolveSandbox(agents.DefaultSandboxMode, "read-only")
 	require.NoError(t, err)
-	assert.Equal(t, "read-only", got)
-
-	got, err = resolveSandbox("", "")
-	require.NoError(t, err)
-	assert.Equal(t, "full", got)
+	assert.Equal(t, agents.ModeReadOnly, got)
 }
 
 func TestIsLoopbackAddr(t *testing.T) {
@@ -138,13 +143,19 @@ func TestSaveHookHandler_MarksDirtyOnlyOnSuccessfulWrite(t *testing.T) {
 	_ = h4.Handle(context.Background(), &agents.Request{Method: "totally_unknown"})
 	assert.Equal(t, 0, saver4.calls)
 
-	// content/schema categories are unconditionally writes too.
-	for _, method := range []string{"add_query_cell", "create_table"} {
-		s := &countingDebouncedSaver{}
-		hh := wrapHandlerWithSaveHook(&fakeVibeHandler{resp: agents.NewResponse("1", nil)}, s, nil, dbMu)
-		_ = hh.Handle(context.Background(), &agents.Request{Method: method})
-		assert.Equal(t, 1, s.calls, "method=%s", method)
-	}
+	// "schema" category is unconditionally a write too.
+	saver5 := &countingDebouncedSaver{}
+	h5 := wrapHandlerWithSaveHook(&fakeVibeHandler{resp: agents.NewResponse("1", nil)}, saver5, nil, dbMu)
+	_ = h5.Handle(context.Background(), &agents.Request{Method: "create_table"})
+	assert.Equal(t, 1, saver5.calls)
+
+	// "content" tools (add_query_cell, create_or_update_skill, ...) write
+	// SQLite only (write-through) — never a write, in either caller of
+	// agents.IsWriteCall, which means "wrote DuckDB user data".
+	saver6 := &countingDebouncedSaver{}
+	h6 := wrapHandlerWithSaveHook(&fakeVibeHandler{resp: agents.NewResponse("1", nil)}, saver6, nil, dbMu)
+	_ = h6.Handle(context.Background(), &agents.Request{Method: "add_query_cell"})
+	assert.Equal(t, 0, saver6.calls)
 }
 
 // TestSaveHookHandler_RunQuery_OnlyWritesMarkDirty is the review fix for
@@ -295,6 +306,37 @@ func TestDebouncedSaver_MarkDirtyAfterStop_NeverSaves(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
+// TestDebouncedSaver_NeedsSave is #80's checklist item 3: a session that
+// never wrote anything must not trigger the final shutdown Save.
+func TestDebouncedSaver_NeedsSave(t *testing.T) {
+	c := newTestVibeContainer(t)
+	dbMu := &sync.RWMutex{}
+	saver := &debouncedSaver{c: c, logger: testCmdLogger(), dbMu: dbMu, debounce: 20 * time.Millisecond}
+
+	assert.False(t, saver.needsSave(), "a fresh saver has nothing to save")
+
+	saver.markDirty()
+	assert.True(t, saver.needsSave(), "markDirty must mark the session dirty")
+
+	saver.doSave()
+	assert.False(t, saver.needsSave(), "a successful save clears dirty")
+
+	saver.stop()
+	saver.markDirty() // a tool call that finishes after shutdown started
+	assert.True(t, saver.needsSave(), "a write that completes after stop() must still be counted")
+}
+
+// TestDebouncedSaver_ReadOnlyNeedsSaveAlwaysFalse: a read-only-file saver's
+// markDirty is a no-op (see TestDebouncedSaver_ReadOnlyNeverSaves), so
+// needsSave must never report dirty for one either.
+func TestDebouncedSaver_ReadOnlyNeedsSaveAlwaysFalse(t *testing.T) {
+	c := newTestVibeContainer(t)
+	dbMu := &sync.RWMutex{}
+	saver := &debouncedSaver{c: c, logger: testCmdLogger(), dbMu: dbMu, readOnly: true, debounce: 20 * time.Millisecond}
+	saver.markDirty()
+	assert.False(t, saver.needsSave())
+}
+
 // TestSaveHookHandler_SerializesWithSave: while saveHookHandler.Handle holds
 // dbMu's read lock (a tool call in flight), a concurrent doSave (which needs
 // the exclusive write lock) must wait — proving the two are actually
@@ -327,4 +369,152 @@ func TestSaveHookHandler_SerializesWithSave(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("doSave did not proceed after the read lock was released")
 	}
+}
+
+// --- buildMCPHandler (#79: no approver, ask-before-writes refuses) ---
+
+func TestMCPServe_FreshFile_WritesRefused(t *testing.T) {
+	c := newTestVibeContainer(t)
+	_, err := c.DuckDBDB().Exec(`CREATE TABLE orders (id INTEGER, status VARCHAR); INSERT INTO orders VALUES (1, 'Void')`)
+	require.NoError(t, err)
+	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+
+	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
+	require.NoError(t, err)
+	assert.Equal(t, agents.ModeReadWrite, policy.Mode)
+	assert.True(t, policy.AskBeforeWrites)
+
+	resp := handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: "delete_record", Params: map[string]any{"table": "orders", "where": "status='Void'"}})
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "read-write")
+	assert.Contains(t, resp.Error.Message, "Ask before changes")
+
+	var n int
+	require.NoError(t, c.DuckDBDB().QueryRow("SELECT count(*) FROM orders").Scan(&n))
+	assert.Equal(t, 1, n, "the refused delete must not have run")
+
+	selResp := handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 2, Method: "run_query", Params: map[string]any{"sql": "SELECT * FROM orders"}})
+	assert.Nil(t, selResp.Error, "reads must still work while writes are refused")
+}
+
+func TestMCPServe_OwnerOptIn(t *testing.T) {
+	c := newTestVibeContainer(t)
+	_, err := c.DuckDBDB().Exec(`CREATE TABLE orders (id INTEGER, status VARCHAR); INSERT INTO orders VALUES (1, 'Void')`)
+	require.NoError(t, err)
+	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
+	require.NoError(t, c.SetMeta(agents.MetaKeyAskBeforeWrites, "false"))
+	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+
+	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
+	require.NoError(t, err)
+	assert.Equal(t, agents.ModeFull, policy.Mode)
+	assert.False(t, policy.AskBeforeWrites)
+
+	resp := handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: "delete_record", Params: map[string]any{"table": "orders", "where": "status='Void'"}})
+	require.Nil(t, resp.Error)
+
+	var n int
+	require.NoError(t, c.DuckDBDB().QueryRow("SELECT count(*) FROM orders").Scan(&n))
+	assert.Equal(t, 0, n)
+}
+
+// TestMCPServe_FullStoredFile_AskAbsentStillRefused covers the existing-file
+// case (#79's deliberate tightening): a panel-era file with agent_sandbox
+// stored as "full" and no agent_ask_before_writes key at all still asks —
+// there is no approver over MCP, so it's refused, not silently full access.
+func TestMCPServe_FullStoredFile_AskAbsentStillRefused(t *testing.T) {
+	c := newTestVibeContainer(t)
+	_, err := c.DuckDBDB().Exec(`CREATE TABLE orders (id INTEGER, status VARCHAR); INSERT INTO orders VALUES (1, 'Void')`)
+	require.NoError(t, err)
+	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
+	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+
+	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
+	require.NoError(t, err)
+	assert.Equal(t, agents.ModeFull, policy.Mode)
+	assert.True(t, policy.AskBeforeWrites)
+
+	resp := handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: "delete_record", Params: map[string]any{"table": "orders", "where": "status='Void'"}})
+	require.NotNil(t, resp.Error)
+
+	var n int
+	require.NoError(t, c.DuckDBDB().QueryRow("SELECT count(*) FROM orders").Scan(&n))
+	assert.Equal(t, 1, n)
+}
+
+// TestMCPServe_InUse_RefusedWithHint is the CLI side of #80: `vibe mcp
+// serve` against a file another writer already holds must refuse before
+// touching the stdio server (so stdin is never read/blocked on) and must
+// point the operator at Studio's MCP server or --read-only-file.
+func TestMCPServe_InUse_RefusedWithHint(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "held.vibe")
+	seed, err := container.Create(path, container.WithPassphrase("testpass123"), container.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, seed.Close())
+
+	holder, err := container.Open(path,
+		container.WithPassphrase("testpass123"),
+		container.WithLogger(testCmdLogger()),
+		container.WithLockApp("Vibe Studio"),
+	)
+	require.NoError(t, err)
+	defer holder.Close() //nolint:errcheck
+
+	t.Setenv("VIBE_PASSPHRASE", "testpass123")
+
+	_, err = executeCommand("mcp", "serve", path)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, container.ErrFileInUse)
+	assert.Contains(t, err.Error(), "--read-only-file")
+	assert.Contains(t, err.Error(), "Settings → MCP Server")
+}
+
+// TestMCPServe_WritingSession_SavesOnExit is an end-to-end check of the
+// exact composition runMCPServe wires up (buildMCPHandler +
+// wrapHandlerWithSaveHook + debouncedSaver, and finalize's
+// needsSave-gated final Save) — everything except the stdio transport
+// itself, which runMCPServe reads from a hardcoded os.Stdin/os.Stdout and
+// has no injectable seam for a test to drive. A dispatched write must still
+// be on disk after the container is closed, the same way finalize() leaves
+// it on a real stdin-EOF/SIGINT/SIGTERM shutdown.
+func TestMCPServe_WritingSession_SavesOnExit(t *testing.T) {
+	c := newTestVibeContainer(t)
+	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
+	require.NoError(t, c.SetMeta(agents.MetaKeyAskBeforeWrites, "false"))
+	path := c.Path()
+	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+
+	rpcHandler, _, err := buildMCPHandler(c, eng, "", testCmdLogger())
+	require.NoError(t, err)
+	dbMu := &sync.RWMutex{}
+	saver := newDebouncedSaver(c, testCmdLogger(), false, dbMu)
+	handler := wrapHandlerWithSaveHook(rpcHandler, saver, c.DuckDBDB(), dbMu)
+
+	resp := handler.Handle(context.Background(), &agents.Request{
+		JSONRPC: "2.0", ID: 1, Method: "run_query",
+		Params: map[string]any{"sql": "CREATE TABLE mcp_marker AS SELECT 1 x"},
+	})
+	require.Nil(t, resp.Error)
+
+	// finalize()'s own shutdown sequence, reproduced exactly: stop the
+	// debounced saver FIRST (cancels/waits out its production-length timer —
+	// without this, a still-armed doSave fires against the container after
+	// this test has already Closed it) — then check needsSave only after
+	// taking dbMu.Lock, then the final Save, then Close.
+	saver.stop()
+	dbMu.Lock()
+	require.True(t, saver.needsSave(), "the CREATE TABLE above must have marked the session dirty")
+	require.NoError(t, c.Save())
+	dbMu.Unlock()
+	require.NoError(t, c.Close())
+
+	reopened, err := container.Open(path, container.WithPassphrase("testpass123"), container.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	defer reopened.Close() //nolint:errcheck
+	var n int
+	require.NoError(t, reopened.DuckDBDB().QueryRow(
+		"SELECT count(*) FROM information_schema.tables WHERE table_name='mcp_marker'",
+	).Scan(&n))
+	assert.Equal(t, 1, n, "the write must have survived the save-on-exit path")
 }

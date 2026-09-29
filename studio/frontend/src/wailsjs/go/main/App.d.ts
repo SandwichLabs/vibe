@@ -6,6 +6,7 @@ import {notebooks} from '../models';
 import {crud} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
+import {importer} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -23,7 +24,11 @@ export function AnalyzeQueryInExcel(arg1:string,arg2:string):Promise<string>;
 
 export function CancelAgentTask(arg1:string):Promise<void>;
 
+export function CancelQuit():Promise<void>;
+
 export function CloseFile():Promise<void>;
+
+export function CloseFileWithoutSaving():Promise<void>;
 
 export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
@@ -85,13 +90,15 @@ export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg
 
 export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
 
-export function ImportCSV(arg1:string,arg2:string):Promise<main.ImportResult>;
+export function ImportFile(arg1:importer.Options):Promise<importer.Summary>;
 
 export function ImportNotebook(arg1:string):Promise<main.NotebookSaveResult>;
 
-export function ImportSpreadsheet(arg1:main.ImportSpreadsheetOptions):Promise<main.ImportResult>;
-
 export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.WriteResult>;
+
+export function InspectImport(arg1:importer.Source):Promise<importer.Inspection>;
+
+export function IsDirty():Promise<boolean>;
 
 export function IsFileOpen():Promise<boolean>;
 
@@ -115,11 +122,13 @@ export function OpenThemesDir():Promise<string>;
 
 export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
 
-export function PreviewSpreadsheet(arg1:string,arg2:string,arg3:boolean):Promise<main.SpreadsheetPreview>;
-
 export function Quit():Promise<void>;
 
 export function RenameNotebook(arg1:string,arg2:string):Promise<void>;
+
+export function ResolveAgentApproval(arg1:string,arg2:boolean):Promise<void>;
+
+export function RevertFile():Promise<void>;
 
 export function RunA2UIQuery(arg1:string):Promise<main.A2UIQueryResult>;
 
@@ -129,17 +138,15 @@ export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<st
 
 export function SaveNotebook(arg1:Record<string, any>,arg2:string):Promise<main.NotebookSaveResult>;
 
-export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SaveSkill(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function SelectCSVFile():Promise<string>;
+export function SelectImportFile():Promise<string>;
 
 export function SelectNewVibeFile():Promise<string>;
 
 export function SelectNotebookFile():Promise<string>;
-
-export function SelectSpreadsheetFile():Promise<string>;
 
 export function SelectVibeFile():Promise<string>;
 

@@ -25,8 +25,8 @@ import (
 const saveDebounce = 5 * time.Second
 
 // debouncedSaver periodically checkpoints + saves a container after a tool
-// call that actually wrote something (see saveHookHandler.wroteData),
-// without paying a Save cost on every single call — a read-heavy session,
+// call that actually wrote something (see agents.IsWriteCall), without
+// paying a Save cost on every single call — a read-heavy session,
 // the common case, never marks anything dirty and never saves early at all;
 // only the final save on exit applies to it.
 type debouncedSaver struct {
@@ -44,9 +44,14 @@ type debouncedSaver struct {
 	// timer-fires case fast without changing the production constant.
 	debounce time.Duration
 
-	mu      sync.Mutex // guards timer and stopped
+	mu      sync.Mutex // guards timer, stopped, and dirty
 	timer   *time.Timer
 	stopped bool
+	// dirty is true from the first markDirty since the last successful
+	// doSave. needsSave lets the final shutdown Save (cmd/mcp.go) skip
+	// itself entirely for a session that never wrote anything, so a
+	// list-only MCP session leaves the file's bytes and updated_at alone.
+	dirty bool
 
 	// saveMu serializes actual Save() calls and lets stop() wait for one
 	// already in flight to finish — review fix (finding 5): timer.Stop()
@@ -76,6 +81,12 @@ func (s *debouncedSaver) markDirty() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Counted even if stopped — a tool call already in flight under
+	// saveHookHandler's dbMu.RLock can finish and call markDirty after
+	// stop() returns, and the caller's final Save (cmd/mcp.go's finalize,
+	// which takes dbMu.Lock only after this write completes) must still see
+	// it as dirty.
+	s.dirty = true
 	if s.stopped {
 		return
 	}
@@ -98,9 +109,21 @@ func (s *debouncedSaver) doSave() {
 	defer s.dbMu.Unlock()
 	if err := s.c.Save(); err != nil {
 		s.logger.Error("mcp serve: periodic save failed", "error", err)
-	} else {
-		s.logger.Debug("mcp serve: periodic save completed")
+		return
 	}
+	s.logger.Debug("mcp serve: periodic save completed")
+	s.mu.Lock()
+	s.dirty = false
+	s.mu.Unlock()
+}
+
+// needsSave reports whether anything has been written since the last
+// successful Save — false for a session that only ever read, so the final
+// shutdown save (cmd/mcp.go) can skip itself and leave the file untouched.
+func (s *debouncedSaver) needsSave() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dirty
 }
 
 // stop cancels any pending (not-yet-fired) debounced save, THEN waits for a
@@ -125,18 +148,6 @@ func (s *debouncedSaver) stop() {
 	s.saveMu.Unlock() //nolint:staticcheck // deliberate lock/unlock-as-barrier, not a real critical section
 }
 
-// writeToolCategories are the ToolDef categories that are ALWAYS a write
-// when the tool call succeeds — every category isWriteOperation
-// (internal/agents) treats as requiring approval, EXCEPT "data": run_query
-// is also category "data" but is very often a plain SELECT, so it needs its
-// own classification (wroteData) rather than a blanket category match. The
-// non-run_query "data" tools (create_record/update_record/delete_record/
-// bulk_insert) are unconditionally writes — handled as a special case in
-// wroteData, not lumped in here.
-var writeToolCategories = map[string]bool{
-	"content": true, "schema": true,
-}
-
 // dirtyMarker is the narrow interface saveHookHandler needs from a
 // debouncedSaver — factored out so tests can substitute a counting double
 // without letting a real save timer fire.
@@ -146,8 +157,8 @@ type dirtyMarker interface {
 
 // saveHookHandler wraps a vibemcp.Handler so every successful tool call
 // that actually wrote something marks a debouncedSaver dirty — see
-// wroteData. Every dispatch is also serialized against a concurrent Save
-// via dbMu (review fix, finding 5).
+// agents.IsWriteCall. Every dispatch is also serialized against a
+// concurrent Save via dbMu (review fix, finding 5).
 type saveHookHandler struct {
 	inner  vibemcp.Handler
 	saver  dirtyMarker
@@ -163,46 +174,10 @@ func (h *saveHookHandler) Handle(ctx context.Context, req *agents.Request) *agen
 	h.dbMu.RLock()
 	defer h.dbMu.RUnlock()
 	resp := h.inner.Handle(ctx, req)
-	if resp != nil && resp.Error == nil && h.wroteData(ctx, req) {
+	if resp != nil && resp.Error == nil && agents.IsWriteCall(ctx, h.duckDB, req) {
 		h.saver.markDirty()
 	}
 	return resp
-}
-
-// wroteData reports whether req (already dispatched successfully) actually
-// wrote something — review fix (finding 6): the ORIGINAL version marked
-// dirty for ANY successful "data"-category call, including a plain SELECT
-// via run_query, triggering a full checkpoint+Save on every read. run_query
-// is reclassified per call using agents.IsReadOnlyStatement — the SAME
-// classifier handleRunQuery itself uses — so this can never drift from what
-// the handler actually decided was safe to execute. Every other
-// "data"-category tool (create_record/update_record/delete_record/
-// bulk_insert) has no read form at all, so it is unconditionally a write;
-// page/schema tools are likewise unconditionally writes
-// (writeToolCategories). Anything else (introspect, list_skills, etc.) is
-// never a write.
-func (h *saveHookHandler) wroteData(ctx context.Context, req *agents.Request) bool {
-	tool := agents.GetTool(req.Method)
-	if tool == nil {
-		return false
-	}
-	if tool.Category == "data" {
-		if req.Method != "run_query" {
-			return true // create_record/update_record/delete_record/bulk_insert
-		}
-		sqlText, _ := req.Params["sql"].(string)
-		var params map[string]any
-		if p, ok := req.Params["params"].(map[string]any); ok {
-			params = p
-		}
-		if h.duckDB == nil {
-			// Can't classify — fail toward saving rather than silently
-			// losing a write we couldn't verify was safe to skip.
-			return true
-		}
-		return !agents.IsReadOnlyStatement(ctx, h.duckDB, sqlText, params)
-	}
-	return writeToolCategories[tool.Category]
 }
 
 // splitHostPortLenient splits addr into host/port, tolerating a bare host

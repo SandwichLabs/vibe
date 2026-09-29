@@ -29,7 +29,7 @@ Prompts for the current passphrase and then the new passphrase.`,
 			container.WithLogger(logger),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to open container: %w", err)
+			return err
 		}
 		defer c.Close()
 

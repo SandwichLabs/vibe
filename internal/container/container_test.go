@@ -122,6 +122,59 @@ func TestOpen_WrongPassphrase_Error(t *testing.T) {
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open container")
+	assert.ErrorIs(t, err, ErrWrongPassphrase, "#91: the sentinel must survive the wrap chain so callers (Studio's OpenFile) can give a friendly message")
+}
+
+// TestOpen_UnreadableFile_CorrectPassphrase_IsNotWrongPassphrase is the
+// review round-1 fix (required #1): an unreadable file (permission denied)
+// opened with the CORRECT passphrase must never satisfy
+// errors.Is(err, ErrWrongPassphrase) — a permission/IO problem is not the
+// same as a wrong key or a corrupt/non-database file, and collapsing them
+// together hid the real cause behind "check Caps Lock". Skipped when
+// running as root, since root ignores file permission bits and the file
+// would open successfully.
+func TestOpen_UnreadableFile_CorrectPassphrase_IsNotWrongPassphrase(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits are not enforced")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.vibe")
+
+	c, err := Create(path,
+		WithPassphrase(testPassphrase),
+		WithLogger(testLogger()),
+	)
+	require.NoError(t, err)
+	require.NoError(t, c.Close())
+
+	require.NoError(t, os.Chmod(path, 0))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err = Open(path,
+		WithPassphrase(testPassphrase),
+		WithLogger(testLogger()),
+	)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrWrongPassphrase, "a permission error with the correct passphrase must not be reported as a wrong passphrase")
+	assert.Contains(t, err.Error(), "permission denied")
+}
+
+// TestOpen_GarbageFile_IsWrongPassphrase pins the other side: a file that is
+// simply not a SQLite/SQLCipher database at all (SQLITE_NOTADB) must still
+// resolve to ErrWrongPassphrase, since the sentinel is documented to cover
+// both "wrong key" and "not a .vibe file".
+func TestOpen_GarbageFile_IsWrongPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "garbage.vibe")
+	require.NoError(t, os.WriteFile(path, []byte("hello this is not sqlite at all, just some text padding padding"), 0o600))
+
+	_, err := Open(path,
+		WithPassphrase("x"),
+		WithLogger(testLogger()),
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWrongPassphrase)
 }
 
 func TestClose_TempDirectoryRemoved(t *testing.T) {
@@ -166,7 +219,6 @@ func TestMeta_ContainsRequiredKeys(t *testing.T) {
 		"updated_at",
 		"title",
 		"description",
-		"agent_sandbox",
 	}
 
 	for _, key := range requiredKeys {
@@ -188,10 +240,11 @@ func TestMeta_ContainsRequiredKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Testing metadata", description)
 
-	sandbox, err := c.Meta("agent_sandbox")
-	require.NoError(t, err)
-	// The in-app wizard agent (Studio-only) defaults to full write access.
-	assert.Equal(t, "full", sandbox)
+	// agent_sandbox is deliberately NOT seeded on a new file (#79): a
+	// missing key means agents.DefaultSandboxMode, not a literal stored
+	// here — see schema.go's defaultMeta comment.
+	_, err = c.Meta("agent_sandbox")
+	assert.Error(t, err, "a new file must not have agent_sandbox stored")
 }
 
 func TestCreate_MissingPassphrase_Error(t *testing.T) {
@@ -471,4 +524,79 @@ func TestOpenBackfillsAutoNumberPKs(t *testing.T) {
 	var id int64
 	require.NoError(t, c2.DuckDBDB().QueryRow(`SELECT id FROM customers WHERE name = 'new'`).Scan(&id))
 	assert.Equal(t, int64(8), id)
+}
+
+// TestDirty_MarkAndSave: a fresh container is clean; MarkDirty reports true
+// on the clean->dirty edge and false on a repeat call; Dirty() reflects it;
+// Save() clears it.
+func TestDirty_MarkAndSave(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dirty.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	assert.False(t, c.Dirty())
+	assert.True(t, c.MarkDirty(), "the first call must report the clean->dirty edge")
+	assert.False(t, c.MarkDirty(), "a repeat call while already dirty reports no edge")
+	assert.True(t, c.Dirty())
+
+	require.NoError(t, c.Save())
+	assert.False(t, c.Dirty())
+}
+
+// TestDirty_ReadOnlyNeverDirty: MarkDirty is a no-op on a read-only container.
+func TestDirty_ReadOnlyNeverDirty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dirty-ro.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	require.NoError(t, c.Close())
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()), WithReadOnly(true))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	assert.False(t, c2.MarkDirty())
+	assert.False(t, c2.Dirty())
+}
+
+// TestDirty_SaveFailureKeepsDirty: a Save that fails to checkpoint (the
+// DuckDB connection is already closed out from under it) must leave the
+// dirty flag set rather than silently clearing it.
+func TestDirty_SaveFailureKeepsDirty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dirty-fail.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	c.MarkDirty()
+	require.NoError(t, c.DuckDBDB().Close())
+
+	assert.Error(t, c.Save())
+	assert.True(t, c.Dirty(), "a failed save must leave the file dirty")
+}
+
+// TestCreate_TemplateTablesDurableWithoutSave: Create(WithTemplate(...))
+// must save once after seeding, so a crash right after Create (no explicit
+// Save) still leaves the template's tables on disk.
+func TestCreate_TemplateTablesDurableWithoutSave(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "template.vibe")
+
+	c, err := Create(path, WithPassphrase(testPassphrase), WithLogger(testLogger()), WithTemplate("contacts"))
+	require.NoError(t, err)
+	require.NoError(t, c.Close()) // no explicit Save
+
+	c2, err := Open(path, WithPassphrase(testPassphrase), WithLogger(testLogger()))
+	require.NoError(t, err)
+	defer c2.Close() //nolint:errcheck
+
+	var count int
+	require.NoError(t, c2.DuckDBDB().QueryRow(`SELECT COUNT(*) FROM contacts`).Scan(&count))
+	assert.Greater(t, count, 0, "the template's seeded rows must survive a Close with no explicit Save")
 }

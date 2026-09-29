@@ -64,7 +64,7 @@ onUnmounted(() => {
       </div>
       <div class="row">
         <button class="btn" @click="router.push('/import')">
-          <Icon name="download" :size="16" /> Import CSV
+          <Icon name="download" :size="16" /> Import data
         </button>
         <button class="btn btn-primary" @click="router.push('/notebooks?new=1')">
           <Icon name="plus" :size="16" /> New notebook

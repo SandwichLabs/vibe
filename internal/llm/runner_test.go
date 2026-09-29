@@ -468,14 +468,14 @@ func TestDefaultModelFor(t *testing.T) {
 }
 
 func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
-	full := systemPromptFor(SandboxFull, "")
+	full := systemPromptFor(SandboxFull, false, "")
 	assert.Contains(t, full, "create_table")
 	assert.Contains(t, full, "FULL WRITE ACCESS")
 	assert.NotContains(t, full, "READ-ONLY access:")
 	assert.NotContains(t, full, "READ-WRITE access to DATA ONLY")
 	assert.NotContains(t, full, "NOT PERMITTED", "every tool must be permitted under full sandbox")
 
-	rw := systemPromptFor(SandboxReadWrite, "")
+	rw := systemPromptFor(SandboxReadWrite, false, "")
 	// Under the unified agents.SandboxConfig, schema/page categories (e.g.
 	// create_table) require full, not just read-write — a deliberate
 	// tightening from the old runner-only gate so Studio chat and MCP agree.
@@ -491,7 +491,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	// documented in the tool's own description below.
 	assert.False(t, runQueryLineDenied(rw), "run_query must never be flagged NOT PERMITTED — gating is per-statement")
 
-	ro := systemPromptFor(SandboxReadOnly, "")
+	ro := systemPromptFor(SandboxReadOnly, false, "")
 	assert.Contains(t, ro, "READ-ONLY access:")
 	assert.Contains(t, ro, "create_table: Create a new table in the container [NOT PERMITTED")
 	assert.NotContains(t, ro, "FULL WRITE ACCESS")
@@ -507,6 +507,21 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 		assert.NotContains(t, prompt, "propose_schema [NOT PERMITTED", "propose_schema must be permitted in every sandbox")
 		assert.False(t, runQueryLineDenied(prompt), "run_query must never be flagged NOT PERMITTED — gating is per-statement")
 	}
+}
+
+func TestSystemPromptFor_AskBeforeWrites(t *testing.T) {
+	const askSentence = "Every change you make"
+
+	askOn := systemPromptFor(SandboxReadWrite, true, "")
+	assert.Contains(t, askOn, askSentence)
+
+	askOff := systemPromptFor(SandboxReadWrite, false, "")
+	assert.NotContains(t, askOff, askSentence)
+
+	// Read-only never writes anything, so the approval sentence would be
+	// noise even with ask on.
+	roAskOn := systemPromptFor(SandboxReadOnly, true, "")
+	assert.NotContains(t, roAskOn, askSentence)
 }
 
 // runQueryLineDenied reports whether the "- run_query: ..." line in a

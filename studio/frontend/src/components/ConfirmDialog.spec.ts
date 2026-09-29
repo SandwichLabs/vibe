@@ -40,4 +40,72 @@ describe('ConfirmDialog', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Cancel')!.trigger('click')
     expect(wrapper.emitted('cancel')).toBeTruthy()
   })
+
+  // #81: the optional third button for the Save/Don't save/Cancel prompt.
+  it('renders a third button and emits alt when altLabel is set', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: { visible: true, message: 'Save changes?', altLabel: "Don't save" },
+    })
+    const buttons = wrapper.findAll('button')
+    expect(buttons).toHaveLength(3)
+    const altBtn = buttons.find((b) => b.text() === "Don't save")!
+    expect(altBtn).toBeTruthy()
+    await altBtn.trigger('click')
+    expect(wrapper.emitted('alt')).toBeTruthy()
+    expect(wrapper.emitted('confirm')).toBeFalsy()
+    expect(wrapper.emitted('cancel')).toBeFalsy()
+  })
+
+  it('renders only two buttons when altLabel is not set (regression)', () => {
+    const wrapper = mount(ConfirmDialog, { props: { visible: true, message: 'x' } })
+    expect(wrapper.findAll('button')).toHaveLength(2)
+  })
+
+  it('gives the alt button the destructive tint when altDestructive is set', () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: { visible: true, message: 'x', altLabel: "Don't save", altDestructive: true, variant: 'primary' },
+    })
+    const altBtn = wrapper.findAll('button').find((b) => b.text() === "Don't save")!
+    expect(altBtn.classes()).toContain('btn-destructive')
+    expect(altBtn.classes()).not.toContain('btn-ghost')
+  })
+
+  it('keeps the alt button ghost-styled by default', () => {
+    const wrapper = mount(ConfirmDialog, { props: { visible: true, message: 'x', altLabel: 'Alt' } })
+    const altBtn = wrapper.findAll('button').find((b) => b.text() === 'Alt')!
+    expect(altBtn.classes()).toContain('btn-ghost')
+    expect(altBtn.classes()).not.toContain('btn-destructive')
+  })
+
+  // #81's Save/Don't save/Cancel prompt passes variant: 'primary' (Save
+  // isn't destructive) and keeps focusing the confirm button, third button
+  // or not, so Enter still means "Save" there.
+  it('focuses the confirm button on the closed->open transition when variant is primary, even with a third button present', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: { visible: false, message: 'x', altLabel: 'Alt', variant: 'primary' },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ visible: true })
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.vm.$nextTick()
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Confirm')!
+    expect(document.activeElement).toBe(confirmBtn.element)
+    wrapper.unmount()
+  })
+
+  // A destructive confirm (the default) must never let Enter discard data
+  // by accident, so initial focus goes to Cancel instead of the button
+  // that destroys something.
+  it('focuses Cancel, not the destructive confirm button, on the closed->open transition by default', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: { visible: false, message: 'Discard unsaved table changes?' },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ visible: true })
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.vm.$nextTick()
+    const cancelBtn = wrapper.findAll('button').find((b) => b.text() === 'Cancel')!
+    expect(document.activeElement).toBe(cancelBtn.element)
+    wrapper.unmount()
+  })
 })

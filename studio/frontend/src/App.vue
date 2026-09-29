@@ -4,8 +4,10 @@ import { EventsOn } from './wailsjs/runtime/runtime'
 import UnlockView from './views/UnlockView.vue'
 import AppShell from './components/AppShell.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
-import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, resolveConfirm } from './composables/useConfirm'
+import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, confirmAltLabel, confirmAltDestructive, resolveConfirm, resolveConfirmChoice, askConfirm } from './composables/useConfirm'
+import { startFileDirtyTracking, closeWithPrompt } from './composables/useFileDirty'
 import { flushAll } from './composables/usePendingSaves'
+import { errorText } from './lib/errors'
 
 const isOpen = ref(false)
 const initialFile = ref('')
@@ -47,13 +49,44 @@ const BEFORE_CLOSE_TIMEOUT_MS = 3000
 // FIRST window-close/quit attempt and emits this event instead of letting
 // the process exit, so every view with a pending debounced save gets a
 // chance to flush before the container (and the process) goes away. Once
-// flushed (or the timeout fires), Quit() is called, which sets a
-// server-side flag so the NEXT OnBeforeClose lets the close through.
-async function handleBeforeClose() {
+// flushed (or the timeout fires):
+//   - a clean file (payload.dirty false) calls Quit() straight away, as
+//     before, which sets a server-side flag so the NEXT OnBeforeClose lets
+//     the close through;
+//   - a dirty file (#81) goes through the SAME closeWithPrompt AppShell's
+//     Close button uses (useFileDirty.ts, required item 5): Cancel calls
+//     CancelQuit() so the NEXT attempt prompts again from scratch; Save/
+//     Don't save close the container (releasing it BEFORE Quit(), same as
+//     AppShell.closeFile) and then Quit().
+async function handleBeforeClose(payload?: { dirty?: boolean }) {
   await Promise.race([
     flushAll(),
     new Promise<void>((resolve) => setTimeout(resolve, BEFORE_CLOSE_TIMEOUT_MS)),
   ])
+
+  if (payload?.dirty) {
+    let fileName = 'this file'
+    try {
+      const info = await window.go.main.App.GetFileInfo()
+      fileName = info?.path?.split('/').pop() || fileName
+    } catch { /* fall back to the generic name */ }
+
+    try {
+      const closed = await closeWithPrompt(fileName)
+      if (!closed) {
+        try { await window.go.main.App.CancelQuit() } catch { /* nothing left to do */ }
+        return
+      }
+    } catch (e: any) {
+      // The close itself failed (e.g. a save error) — cancel the quit
+      // rather than proceeding to Quit() with the container still open in
+      // an unknown state.
+      await askConfirm({ title: 'Could not close the file', message: errorText(e), confirmLabel: 'OK', variant: 'primary' })
+      try { await window.go.main.App.CancelQuit() } catch { /* nothing left to do */ }
+      return
+    }
+  }
+
   try {
     await window.go.main.App.Quit()
   } catch {
@@ -68,6 +101,7 @@ let unsubBeforeClose: (() => void) | null = null
 onMounted(async () => {
   await checkFileOpen()
   await loadInitialFile()
+  startFileDirtyTracking()
   // Review fix, step 4a round 2 #2: EventsOn returns an unsubscribe
   // function scoped to THIS listener — the global EventsOff(name) this
   // used to call removes EVERY listener registered for that event name,
@@ -100,8 +134,11 @@ onUnmounted(() => {
       :message="confirmMessage"
       :variant="confirmVariant"
       :confirm-label="confirmLabel"
+      :alt-label="confirmAltLabel || undefined"
+      :alt-destructive="confirmAltDestructive"
       @confirm="resolveConfirm(true)"
       @cancel="resolveConfirm(false)"
+      @alt="resolveConfirmChoice('alt')"
     />
   </div>
 </template>

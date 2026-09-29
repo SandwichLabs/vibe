@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/spf13/cobra"
 )
 
@@ -73,18 +77,33 @@ exclusive). Run without any of these for a bare, empty workspace.`,
 
 		c, err := container.Create(filePath, opts...)
 		if err != nil {
-			return fmt.Errorf("failed to create container: %w", err)
+			return err
 		}
 
-		// Handle --import CSV.
+		// Handle --import: the same importer.Import DuckDB path `vibe import`
+		// uses, with create defaults (KeyAuto — a bare `init --import` has no
+		// interactive key picker, so every table gets an editable primary key).
 		if importCSV != "" {
-			tableName := tableNameFromCSVPath(importCSV)
-			rowCount, csvErr := importCSVIntoTable(c.SQLiteDB(), importCSV, tableName)
-			if csvErr != nil {
+			tableName := importer.NormalizeName(tableNameFromCSVPath(importCSV))
+			src := importer.Source{Path: importCSV, HasHeader: true}
+			sum, err := importer.Import(context.Background(), c.DuckDBDB(), importer.Options{
+				Source: src, Table: tableName, Key: importer.KeyAuto,
+			})
+			if err != nil {
 				c.Close()
-				return fmt.Errorf("failed to import CSV: %w", csvErr)
+				return fmt.Errorf("failed to import %q: %w", importCSV, err)
 			}
-			fmt.Fprintf(out, "Imported %d rows into %q\n", rowCount, tableName)
+			if !sum.OK {
+				c.Close()
+				if sum.Blocked != "" {
+					return fmt.Errorf("failed to import %q: %s", importCSV, sum.Blocked)
+				}
+				return fmt.Errorf("failed to import %q: %d value(s) don't fit their column type", importCSV, sum.BadCount)
+			}
+			if err := agents.WriteImportSkill(c.SQLiteDB(), c.DuckDBDB(), tableName); err != nil {
+				logger.Warn("failed to write import skill", "table", tableName, "error", err)
+			}
+			fmt.Fprintf(out, "Imported %d rows into %q\n", sum.Rows, tableName)
 		}
 
 		// Save and close.
@@ -175,8 +194,15 @@ func initCloneFromFile(filePath, templatePath, passphrase, title, description st
 	}
 	defer src.Close()
 
-	dst, err := os.Create(filePath)
+	// O_EXCL, like Create: a clone must never silently truncate an existing
+	// file at filePath (it's also how a locked target's Open error below is
+	// safe to react to by removing filePath — this command must always be
+	// the one that created it).
+	dst, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("failed to create file: file already exists at %s", filePath)
+		}
 		return fmt.Errorf("failed to create file: %w", err)
 	}
 
@@ -196,6 +222,13 @@ func initCloneFromFile(filePath, templatePath, passphrase, title, description st
 	)
 	if err != nil {
 		os.Remove(filePath)
+		var inUse *container.InUseError
+		if errors.As(err, &inUse) {
+			// Already carries container.Open's own "failed to open
+			// container:" prefix — the passphrase-mismatch wording below
+			// would be actively misleading for this error.
+			return err
+		}
 		return fmt.Errorf("failed to open copied template (passphrase may not match template): %w", err)
 	}
 

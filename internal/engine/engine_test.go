@@ -225,6 +225,44 @@ func TestManager_ExecuteViaManager(t *testing.T) {
 	assert.Equal(t, "Bob", rs.Value(0, 0))
 }
 
+// --- ExecuteCapped tests ---
+
+func TestDuckDBEngine_ExecuteCapped(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	eng := NewDuckDBEngine(db)
+	ctx := context.Background()
+
+	rs, total, err := eng.ExecuteCapped(ctx, "SELECT * FROM range(10)", nil, 3)
+	require.NoError(t, err)
+	assert.Equal(t, 3, rs.RowCount())
+	assert.Equal(t, 10, total)
+
+	rs, total, err = eng.ExecuteCapped(ctx, "SELECT * FROM range(10)", nil, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 10, rs.RowCount())
+	assert.Equal(t, 10, total)
+
+	rs, total, err = eng.ExecuteCapped(ctx, "CREATE TABLE cap_ddl (x INTEGER)", nil, 3)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rs.RowCount())
+	assert.Equal(t, 0, total)
+}
+
+func TestManager_ExecuteCapped(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	m := NewManager(db, WithLogger(slog.Default()))
+	ctx := context.Background()
+
+	rs, total, err := m.ExecuteCapped(ctx, "SELECT * FROM range(6000)", nil, 5000)
+	require.NoError(t, err)
+	assert.Equal(t, 5000, rs.RowCount())
+	assert.Equal(t, 6000, total)
+}
+
 func TestSQLiteEngine_Close(t *testing.T) {
 	db := openTestDB(t)
 	eng := NewSQLiteEngine(db, false)

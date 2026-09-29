@@ -16,6 +16,7 @@
 import { reactive } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { capPromptList } from '../lib/notebookMerge'
+import { errorText } from '../lib/errors'
 
 export type DialogState = 'closed' | 'prompt' | 'working' | 'proposal' | 'needs_info' | 'unresolved'
 
@@ -301,7 +302,7 @@ export function useAiCellDialog(host: DialogHost) {
       if (state.taskId !== dispatchTaskId) return
       state.working = false
       state.dialogState = 'unresolved'
-      state.error = typeof e === 'string' ? e : e?.message || String(e)
+      state.error = errorText(e)
       state.envelope = { outcome: 'unresolved', notes: state.error, checked: state.checked }
     } finally {
       if (state.taskId === dispatchTaskId) stopListening()

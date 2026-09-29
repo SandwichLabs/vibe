@@ -468,7 +468,7 @@ func TestTableHasRows_QuotedAndUnicodeTableNames_StillGateCorrectly(t *testing.T
 		require.NoError(t, WriteImportSkill(sqliteDB, duckDB, tableName))
 		var instructions string
 		require.NoError(t, sqliteDB.QueryRow(
-			`SELECT instructions FROM _vibe_skills WHERE name = ?`, "workspace-"+tableName,
+			`SELECT instructions FROM _vibe_skills WHERE table_name = ? AND source = 'import'`, tableName,
 		).Scan(&instructions))
 		assert.Contains(t, instructions, "## Columns as stored")
 	}
@@ -893,4 +893,178 @@ func TestRenderSkillsBlock_AmpersandInAlreadyEscapedText(t *testing.T) {
 	// character of "&amp;", which must itself be escaped); documented here
 	// so the exact contract is explicit and tested.
 	assert.Contains(t, block, "&amp;amp; stuff")
+}
+
+// --- #91: skill-name slugging ---
+
+// TestWriteImportSkill_OrderItemsGetsValidName is the regression for the
+// panel finding: "order_items" used to produce "workspace-order_items",
+// which fails SkillNamePattern (underscore not allowed) and was silently
+// dropped by LoadSkills. It must now produce a valid, visible, readable
+// name.
+func TestWriteImportSkill_OrderItemsGetsValidName(t *testing.T) {
+	sqliteDB, duckDB := skillsTestDBs(t)
+	_, err := duckDB.Exec(`CREATE TABLE order_items (item_id INTEGER)`)
+	require.NoError(t, err)
+	_, err = duckDB.Exec(`INSERT INTO order_items VALUES (1)`)
+	require.NoError(t, err)
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "order_items"))
+
+	var tableName string
+	require.NoError(t, sqliteDB.QueryRow(
+		`SELECT table_name FROM _vibe_skills WHERE name = 'workspace-order-items'`,
+	).Scan(&tableName))
+	assert.Equal(t, "order_items", tableName)
+
+	entries, err := LoadSkills(sqliteDB, duckDB, nil)
+	require.NoError(t, err)
+	var found bool
+	for _, e := range entries {
+		if e.Name == "workspace-order-items" {
+			found = true
+		}
+	}
+	assert.True(t, found, "LoadSkills must return the slugged skill, not silently drop it")
+
+	sandbox := &SandboxConfig{Mode: ModeReadOnly, MaxQueryRows: 100}
+	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	handler := NewHandler(container, &mockEngine{}, sandbox, logger)
+	resp := handler.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "read_skill", Params: map[string]any{"name": "workspace-order-items"}})
+	require.Nil(t, resp.Error, "read_skill must succeed for the slugged name")
+}
+
+// TestImportSkillName_CollisionGetsDistinctSuffix: two table names that
+// slug to the same base ("order_items" and "Order Items") must resolve to
+// two distinct, valid names, each bound to its own table. Re-importing
+// either one keeps its own name (no new row is created).
+func TestImportSkillName_CollisionGetsDistinctSuffix(t *testing.T) {
+	sqliteDB, duckDB := skillsTestDBs(t)
+	for _, tbl := range []string{"order_items", "Order Items"} {
+		_, err := duckDB.Exec(`CREATE TABLE ` + quoteIdentForTest(tbl) + ` (a INT)`)
+		require.NoError(t, err)
+		_, err = duckDB.Exec(`INSERT INTO ` + quoteIdentForTest(tbl) + ` VALUES (1)`)
+		require.NoError(t, err)
+		require.NoError(t, WriteImportSkill(sqliteDB, duckDB, tbl))
+	}
+
+	name1 := importSkillName(sqliteDB, "order_items")
+	name2 := importSkillName(sqliteDB, "Order Items")
+	assert.NotEqual(t, name1, name2)
+	assert.True(t, SkillNamePattern.MatchString(name1))
+	assert.True(t, SkillNamePattern.MatchString(name2))
+
+	var count int
+	require.NoError(t, sqliteDB.QueryRow(`SELECT COUNT(*) FROM _vibe_skills WHERE source = 'import'`).Scan(&count))
+	assert.Equal(t, 2, count)
+
+	// Re-importing each keeps its own name — no new row appears.
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "order_items"))
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "Order Items"))
+	require.NoError(t, sqliteDB.QueryRow(`SELECT COUNT(*) FROM _vibe_skills WHERE source = 'import'`).Scan(&count))
+	assert.Equal(t, 2, count)
+	assert.Equal(t, name1, importSkillName(sqliteDB, "order_items"))
+	assert.Equal(t, name2, importSkillName(sqliteDB, "Order Items"))
+}
+
+// TestImportSkillName_UnboundUserSkillNotTakenOver is the #82 fix: an
+// unbound, hand-authored user skill (table_name = "") whose name happens to
+// slug-collide with an import's base name must never be silently overwritten
+// by that import. Before the fix, the takeover check required owner != ""
+// as well as owner != table, so an unbound skill's empty owner exempted it
+// from the hashed-suffix path and importing "customers" clobbered it.
+func TestImportSkillName_UnboundUserSkillNotTakenOver(t *testing.T) {
+	sqliteDB, duckDB := skillsTestDBs(t)
+	_, err := duckDB.Exec(`CREATE TABLE customers (a INT)`)
+	require.NoError(t, err)
+	_, err = duckDB.Exec(`INSERT INTO customers VALUES (1)`)
+	require.NoError(t, err)
+
+	// An unbound user skill already sits at "workspace-customers".
+	require.NoError(t, SaveUserSkill(sqliteDB, duckDB, "workspace-customers", "my notes", "mine", ""))
+
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "customers"))
+
+	// The unbound skill survives byte-for-byte...
+	var desc, instr, tableName, source string
+	require.NoError(t, sqliteDB.QueryRow(
+		`SELECT description, instructions, table_name, source FROM _vibe_skills WHERE name = 'workspace-customers'`,
+	).Scan(&desc, &instr, &tableName, &source))
+	assert.Equal(t, "my notes", desc)
+	assert.Equal(t, "mine", instr)
+	assert.Equal(t, "", tableName)
+	assert.Equal(t, "user", source)
+
+	// ...and the import landed at a distinct, hashed name instead.
+	importedName := importSkillName(sqliteDB, "customers")
+	assert.NotEqual(t, "workspace-customers", importedName)
+	assert.True(t, SkillNamePattern.MatchString(importedName))
+	var importedSource string
+	require.NoError(t, sqliteDB.QueryRow(`SELECT source FROM _vibe_skills WHERE name = ?`, importedName).Scan(&importedSource))
+	assert.Equal(t, "import", importedSource)
+
+	// A bound import skill (table_name = table) is still refreshed in place,
+	// not given a new hashed name.
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "customers"))
+	assert.Equal(t, importedName, importSkillName(sqliteDB, "customers"))
+	var count int
+	require.NoError(t, sqliteDB.QueryRow(`SELECT COUNT(*) FROM _vibe_skills WHERE source = 'import'`).Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+// TestImportSkillSlug_LengthAndCharset covers the slug/name edge cases the
+// plan calls out directly: a long table name still matches SkillNamePattern
+// within the 64-char cap, a name with one non-ASCII letter degrades that
+// letter to "-", and an all-non-ASCII name falls back to "table".
+func TestImportSkillSlug_LengthAndCharset(t *testing.T) {
+	long := strings.Repeat("x", 100)
+	sqliteDB, _ := skillsTestDBs(t)
+	name := importSkillName(sqliteDB, long)
+	assert.True(t, SkillNamePattern.MatchString(name), "name %q must match SkillNamePattern", name)
+	assert.LessOrEqual(t, len(name), 64)
+
+	assert.Equal(t, "workspace-caf", importSkillName(sqliteDB, "café"))
+	assert.Equal(t, "workspace-table", importSkillName(sqliteDB, "日本語"))
+}
+
+// TestWriteImportSkill_LegacyRowRemoved: a pre-#91 file has a leftover
+// invalid "workspace-order_items" row (source='import', never visible to
+// LoadSkills because SkillNamePattern rejects it — so it can't hold user
+// prose). Running WriteImportSkill for that table must delete the legacy
+// row once the new slugged one is written.
+func TestWriteImportSkill_LegacyRowRemoved(t *testing.T) {
+	sqliteDB, duckDB := skillsTestDBs(t)
+	_, err := duckDB.Exec(`CREATE TABLE order_items (item_id INTEGER)`)
+	require.NoError(t, err)
+	_, err = duckDB.Exec(`INSERT INTO order_items VALUES (1)`)
+	require.NoError(t, err)
+	insertSkill(t, sqliteDB, "workspace-order_items", "old", "old body", "order_items", "import")
+
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "order_items"))
+
+	var count int
+	require.NoError(t, sqliteDB.QueryRow(`SELECT COUNT(*) FROM _vibe_skills WHERE name = 'workspace-order_items'`).Scan(&count))
+	assert.Equal(t, 0, count, "the legacy invalid-named row must be gone")
+	require.NoError(t, sqliteDB.QueryRow(`SELECT COUNT(*) FROM _vibe_skills WHERE name = 'workspace-order-items'`).Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+// TestWriteImportSkill_SampleValuesRenderAsDuckDBText: a DATE column's
+// sample renders as DuckDB's own text form ("2025-04-06"), not Go's
+// time.Time stringification, and a DECIMAL sample keeps its declared scale.
+func TestWriteImportSkill_SampleValuesRenderAsDuckDBText(t *testing.T) {
+	sqliteDB, duckDB := skillsTestDBs(t)
+	_, err := duckDB.Exec(`CREATE TABLE priced (d DATE, amt DECIMAL(10,2))`)
+	require.NoError(t, err)
+	_, err = duckDB.Exec(`INSERT INTO priced VALUES (DATE '2025-04-06', 12.50)`)
+	require.NoError(t, err)
+	require.NoError(t, WriteImportSkill(sqliteDB, duckDB, "priced"))
+
+	var instructions string
+	require.NoError(t, sqliteDB.QueryRow(
+		`SELECT instructions FROM _vibe_skills WHERE table_name = 'priced' AND source = 'import'`,
+	).Scan(&instructions))
+	assert.Contains(t, instructions, `"2025-04-06"`)
+	assert.NotContains(t, instructions, "UTC")
+	assert.Contains(t, instructions, `"12.50"`)
 }

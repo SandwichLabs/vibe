@@ -545,17 +545,17 @@ func TestHandler_CreateAndUpdateSkill(t *testing.T) {
 	assert.Contains(t, result["instructions"], "# About Us")
 }
 
-// TestHandler_SetSandboxModeConcurrentWithHandle is a regression guard for a
+// TestHandler_SetFilePolicyConcurrentWithHandle is a regression guard for a
 // data race a reviewer caught live: studio/app.go's agentToolHandler used to
 // mutate a *SandboxConfig's Mode field in place on every dispatch so a
 // long-lived Handler (the one StartMCPServer builds for the whole life of
 // the MCP server) would track a live SetAgentConfig change — but that shared
 // mutable struct raced with concurrent Handle() calls reading the same
-// fields. SetSandboxMode (atomic.Pointer swap) replaces that; this test
+// fields. SetFilePolicy (atomic.Pointer swap) replaces that; this test
 // hammers both concurrently under `go test -race` to prove there is no data
 // race, and that every call still observes some valid, fully-formed sandbox
 // (never a torn/partial config).
-func TestHandler_SetSandboxModeConcurrentWithHandle(t *testing.T) {
+func TestHandler_SetFilePolicyConcurrentWithHandle(t *testing.T) {
 	handler, _ := newTestHandler(t, ModeReadOnly)
 	ctx := context.Background()
 
@@ -573,7 +573,7 @@ func TestHandler_SetSandboxModeConcurrentWithHandle(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				handler.SetSandboxMode(modes[i%len(modes)])
+				handler.SetFilePolicy(modes[i%len(modes)], false)
 				i++
 			}
 		}

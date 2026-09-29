@@ -1,0 +1,142 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/importer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// --- #91 quick wins: studio binding tests ---
+
+// TestOpenFile_WrongPassphrase_FriendlyMessage proves OpenFile turns
+// container.ErrWrongPassphrase into the plan's exact user-facing copy,
+// stripping the "failed to open file: ..." wrap chain.
+func TestOpenFile_WrongPassphrase_FriendlyMessage(t *testing.T) {
+	logger := testLogger()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "wrong.vibe")
+
+	c, err := container.Create(path, container.WithPassphrase(testPassphrase), container.WithLogger(logger))
+	require.NoError(t, err)
+	require.NoError(t, c.Close())
+
+	app := NewApp(logger)
+	app.ctx = context.Background()
+	err = app.OpenFile(path, "totally-wrong-passphrase")
+	require.Error(t, err)
+	assert.Equal(t, "That passphrase didn't work. Check Caps Lock and try again.", err.Error())
+}
+
+// TestSaveQuery_ReturnsID proves SaveQuery("", ...) returns a non-empty id,
+// and calling SaveQuery(id, ...) again updates the same row rather than
+// creating a second one (#91: the id used to be discarded entirely).
+func TestSaveQuery_ReturnsID(t *testing.T) {
+	app := newOpenApp(t)
+
+	id, err := app.SaveQuery("", "First title", "SELECT 1", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, id)
+
+	id2, err := app.SaveQuery(id, "Second title", "SELECT 2", "")
+	require.NoError(t, err)
+	assert.Equal(t, id, id2)
+
+	list, err := app.ListQueries()
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, "Second title", list[0].Title)
+}
+
+// TestBuildCopySQL covers the trailing-semicolon / trailing-comment /
+// embedded-quote cases the plan calls out — buildCopySQL must strip a
+// trailing ";" (with surrounding whitespace) but must NOT try to parse a
+// trailing "-- comment" out of the query.
+func TestBuildCopySQL(t *testing.T) {
+	cases := []struct {
+		name, query, dst, opts, want string
+	}{
+		{"plain", "SELECT 1", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing semicolon", "SELECT 1;", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing semicolon + blank lines", "SELECT 1 ;\n\n", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing comment kept", "SELECT 1 -- note", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1 -- note\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"semicolon inside a string literal kept", "SELECT ';' AS x", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT ';' AS x\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"quote in path doubled", "SELECT 1", "/tmp/o'brien.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/o''brien.csv' WITH (FORMAT csv)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, buildCopySQL(tc.query, tc.dst, tc.opts))
+		})
+	}
+}
+
+// TestExportQueryResults_TrailingSemicolonAndComment proves the fix
+// end-to-end (P-F10): a query ending in ";" or "-- comment" must export,
+// not error.
+func TestExportQueryResults_TrailingSemicolonAndComment(t *testing.T) {
+	app := newOpenApp(t)
+
+	for _, tc := range []struct {
+		name, query string
+	}{
+		{"semicolon", "SELECT 1 AS a;"},
+		{"comment", "SELECT 1 AS a -- c"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dst := filepath.Join(t.TempDir(), "out.csv")
+			path, err := app.ExportQueryResults(tc.query, "csv", dst)
+			require.NoError(t, err)
+			assert.NotEmpty(t, path)
+			_, statErr := os.Stat(path)
+			assert.NoError(t, statErr)
+		})
+	}
+}
+
+// TestExecuteQuery_RowCap proves a query returning more than
+// queryGridRowCap rows is capped in RowCount while TotalRows reports the
+// true count.
+func TestExecuteQuery_RowCap(t *testing.T) {
+	app := newOpenApp(t)
+
+	result, err := app.ExecuteQuery("SELECT * FROM range(6000)")
+	require.NoError(t, err)
+	assert.Equal(t, queryGridRowCap, result.RowCount)
+	assert.Equal(t, 6000, result.TotalRows)
+	assert.Len(t, result.Rows, queryGridRowCap)
+}
+
+// TestGetTableData_DateColumnRendersAsPlainDate proves the datasheet scan
+// path (GetTableData -> engine.ScanRows -> engine.NormalizeColumnValue)
+// formats a DATE cell as "2026-06-01", not Go's default time.Time
+// stringification.
+func TestGetTableData_DateColumnRendersAsPlainDate(t *testing.T) {
+	app := newOpenApp(t)
+
+	csvPath := filepath.Join(t.TempDir(), "calls.csv")
+	require.NoError(t, os.WriteFile(csvPath, []byte(
+		"id,name,total,active,visited\n"+
+			"1,\"Acme, Inc.\",250.50,true,2026-06-01\n"+
+			"2,Beta,125.00,false,2026-06-02\n"), 0o644))
+	sum, err := app.ImportFile(importer.Options{
+		Source: importer.Source{Path: csvPath, HasHeader: true}, Table: "calls_dated", Key: importer.KeyNone,
+	})
+	require.NoError(t, err)
+	require.True(t, sum.OK, "%+v", sum)
+
+	data, err := app.GetTableData("calls_dated", 1, 50, "id", "ASC")
+	require.NoError(t, err)
+	visitedIdx := -1
+	for i, c := range data.Columns {
+		if c == "visited" {
+			visitedIdx = i
+		}
+	}
+	require.GreaterOrEqual(t, visitedIdx, 0)
+	assert.Equal(t, "2026-06-01", data.Rows[0][visitedIdx])
+}

@@ -30,6 +30,9 @@ import { describeShape, viewFit, bestView, VIEWS, VIEW_LABELS, VIEW_COMPONENT, V
 import { cellsToMerge, pruneConfirmedTombstones } from '../lib/notebookMerge'
 import AiCellDialog from '../components/AiCellDialog.vue'
 import { useAiCellDialog, type EnvelopeCell } from '../composables/useAiCellDialog'
+import { errorText } from '../lib/errors'
+import CellDrawer from '../components/CellDrawer.vue'
+import { sqlSummary, cellTitle, cellMeta, CELL_FALLBACK_TITLE } from '../lib/cellSummary'
 
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
@@ -60,10 +63,12 @@ interface CellState {
   page: A2UIPageT | null
   // Runtime-only (never saved):
   lastRunSource: string | null
-  result: { columns: string[]; rows: any[][]; error?: string } | null
+  result: { columns: string[]; types: string[]; rows: any[][]; error?: string } | null
   running: boolean
   mdPreview: boolean
-  a2uiSourceOpen: boolean
+  // SQL drawer / a2ui card definition open. Runtime-only, never saved (not
+  // in buildSavePayload or the autosave key).
+  sourceOpen: boolean
   editorEl?: HTMLElement | null
   editor?: VibeEditorInstance | null
   // Lazy-mount (review fix, step 4a #1): an a2ui cell's A2UIPage — and every
@@ -89,6 +94,9 @@ const errorMessage = ref('')
 // so they never appear in the red --sh-error toast, which the SchoolHouse
 // palette reserves for destructive/failed states.
 const infoMessage = ref('')
+// statusMessage is a success confirmation (#91: notebook export) — same
+// click-to-dismiss shape as infoMessage, plus a 4s auto-dismiss timeout.
+const statusMessage = ref('')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let suppressAutosave = true // true while loading, so the initial populate doesn't trigger a save
@@ -103,6 +111,25 @@ let suppressAutosave = true // true while loading, so the initial populate doesn
 // overwrite the wrong notebook. Every save below reads loadedNotebookId,
 // never the live route.
 let loadedNotebookId = ''
+
+// lastPersisted is the JSON.stringify of the last payload known to match
+// what the server has (set after loadNotebook populates, after a
+// successful saveNow, and after a successful doFlush — #95 carry-over):
+// doFlush skips its own save entirely when the current payload matches, so
+// a no-edit visit (route-leave/unmount with nothing changed since load or
+// the last save) never overwrites a save that happened elsewhere (e.g. an
+// agent append merged in, or a concurrent MCP write) with a stale local
+// copy. Reset to '' wherever loadedNotebookId is cleared.
+//
+// saveSeq guards against a narrow ordering race: if a doFlush (e.g. from a route-leave) starts and finishes
+// WHILE an earlier saveNow's await is still in flight, that earlier
+// saveNow resolving afterward must not stomp lastPersisted back to its own
+// (now-stale) payload. Every save grabs the next seq before awaiting the
+// binding and only writes lastPersisted if it is still the most recently
+// STARTED save when it resolves — an in-flight save that got superseded by
+// a later one silently skips updating the baseline.
+let lastPersisted = ''
+let saveSeq = 0
 
 // loadedSessionId is the file-open session (studio.App.sessionID, surfaced
 // via GetFileInfo().session_id) in effect when THIS component instance
@@ -143,7 +170,7 @@ function newCellState(raw: RawCell): CellState {
     result: null,
     running: false,
     mdPreview: (raw.source ?? '').trim() !== '',
-    a2uiSourceOpen: false,
+    sourceOpen: raw.type === 'sql' && !(raw.source ?? '').trim(),
     editorEl: null,
     editor: null,
     visible: raw.type !== 'a2ui', // only a2ui cells start hidden/lazy
@@ -208,6 +235,7 @@ async function loadNotebook(id: string) {
     loadedSessionId = fileInfo?.session_id ?? ''
     title.value = nb.title
     cells.value = (nb.cells || []).map((c: RawCell) => newCellState(c))
+    lastPersisted = JSON.stringify(buildSavePayload(id, title.value, cells.value))
     // loading must flip BEFORE the nextTick below — the cell list template
     // is behind `v-if="!loading"`, so while loading is still true the cell
     // DOM (and therefore every editorEl ref) does not exist yet, and
@@ -221,7 +249,7 @@ async function loadNotebook(id: string) {
     await replayPendingNotebooksChanged(id)
   } catch (e: any) {
     notFound.value = true
-    errorMessage.value = 'Failed to load notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to load notebook: ' + errorText(e)
     loading.value = false
   }
   await nextTick()
@@ -232,6 +260,7 @@ function mountEditors() {
   for (const cell of cells.value) {
     if (cell.type === 'a2ui') continue
     if (cell.collapsed) continue
+    if (cell.type === 'sql' && !cell.sourceOpen) continue
     if (!cell.editorEl || cell.editor) continue
     cell.editor = createVibeEditor(cell.editorEl, {
       value: cell.source,
@@ -246,7 +275,7 @@ function mountEditors() {
 
 function shapeOf(cell: CellState): Shape | null {
   if (!cell.result || cell.result.error) return null
-  return describeShape(cell.result.columns, cell.result.rows)
+  return describeShape(cell.result.columns, cell.result.rows, cell.result.types)
 }
 
 function isStale(cell: CellState): boolean {
@@ -267,12 +296,16 @@ async function runCell(cell: CellState) {
   cell.running = false
   cell.lastRunSource = cell.source.trim()
   if (res.error) {
-    cell.result = { columns: [], rows: [], error: res.error }
+    cell.result = { columns: [], types: [], rows: [], error: res.error }
+    // Any run that errors opens the drawer so the failing SQL is visible —
+    // it never auto-closes afterward, even once a later run succeeds.
+    cell.sourceOpen = true
+    nextTick(mountEditors)
     return
   }
-  cell.result = { columns: res.columns, rows: res.rows }
+  cell.result = { columns: res.columns, types: res.types, rows: res.rows }
   if (!cell.viewPinned) {
-    cell.view = bestView(describeShape(res.columns, res.rows))
+    cell.view = bestView(describeShape(res.columns, res.rows, res.types))
   }
 }
 
@@ -307,13 +340,17 @@ function pickView(cell: CellState, view: ViewKind) {
 // one component, whose own caption is enough.
 function synthesizedPage(cell: CellState): A2UIPageT | null {
   if (!cell.result || cell.result.error) return null
-  const { columns, rows } = cell.result
+  const { columns, rows, types } = cell.result
   const componentType = VIEW_COMPONENT[cell.view]
   const base = { id: 'c', type: componentType, label: cell.label || undefined }
   let fields: Record<string, any> = {}
   switch (cell.view) {
     case 'table':
-      fields = { columns, rows }
+      // types is client-only: stamped on the synthesized component so
+      // A2UITable can format each column with its real DuckDB type (DECIMAL
+      // scale, BIGINT grouping, …). Never part of the A2UI schema and never
+      // persisted — synthesizedPage's output is render-only (a2ui/types.ts).
+      fields = { columns, rows, types }
       break
     case 'bar':
       fields = { bars: toPoints(columns, rows) }
@@ -324,7 +361,7 @@ function synthesizedPage(cell: CellState): A2UIPageT | null {
     case 'stat':
       // a2ui's "stat" type requires a label — fall back to a column name or
       // a generic "Result" rather than an empty required field.
-      fields = { label: cell.label || columns[0] || 'Result', value: rows[0]?.[0] ?? null }
+      fields = { label: cell.label || columns[0] || 'Result', value: rows[0]?.[0] ?? null, types: [types[0]] }
       break
   }
   return { title: '', components: [{ ...base, ...fields }] }
@@ -365,7 +402,10 @@ function addCell(type: CellState['type'], atEnd = true) {
   if (type === 'markdown') cell.mdPreview = false
   if (atEnd) cells.value.push(cell)
   else cells.value.unshift(cell)
-  nextTick(mountEditors)
+  // sourceOpen is already true for a hand-added sql cell (its source starts
+  // empty — see newCellState), so mounting it right away and focusing the
+  // editor lets the person start typing immediately.
+  nextTick(() => { mountEditors(); if (type === 'sql') cell.editor?.view.focus() })
 }
 
 // --- AI cell authoring (#66 part B) ---
@@ -386,6 +426,10 @@ function envelopeToRaw(id: string, ec: EnvelopeCell): RawCell {
 // path lands the new cell where "below" actually means — coordinator
 // follow-up #1. With no afterCellId (create mode; no live target to be
 // below) it appends at the end, same as before.
+// AI-authored sql cells stay closed (newCellState's sourceOpen is only true
+// for an EMPTY source, and the agent always proposes actual SQL) — if the
+// follow-up auto-run below errors, runCell's own error-open path takes care
+// of it, which is exactly the "any run that errors" rule.
 function insertCellFromEnvelope(ec: EnvelopeCell, afterCellId?: string) {
   const id = 'cell_' + Math.random().toString(36).slice(2, 10)
   const cell = newCellState(envelopeToRaw(id, ec))
@@ -404,9 +448,15 @@ function insertCellFromEnvelope(ec: EnvelopeCell, afterCellId?: string) {
 function replaceCellFromEnvelope(cellId: string, ec: EnvelopeCell) {
   const idx = cells.value.findIndex((c) => c.id === cellId)
   if (idx === -1) { insertCellFromEnvelope(ec); return } // target vanished mid-task — never silently drop the proposal
+  const previousSourceOpen = cells.value[idx].sourceOpen
   cells.value[idx].editor?.destroy()
   const replacement = newCellState(envelopeToRaw(cellId, ec))
   if (ec.type === 'markdown') replacement.mdPreview = false
+  // A drawer the person had open to read/compare the SQL must not snap shut
+  // just because the AI replaced its content — "never auto-closes" applies
+  // here too, not just to a run error. A closed drawer stays closed
+  // (newCellState's own default for non-empty SQL already covers that).
+  replacement.sourceOpen = previousSourceOpen || replacement.sourceOpen
   cells.value.splice(idx, 1, replacement)
   nextTick(mountEditors)
   if (replacement.type === 'sql') nextTick(() => runCell(replacement))
@@ -430,17 +480,8 @@ async function loadAiCellTables(): Promise<string[]> {
     return []
   }
 }
-function firstLine(s: string): string {
-  return (s || '').split('\n')[0]
-}
 function aiCellNotebookSummary(): string[] {
-  return cells.value
-    .map((c) => {
-      if (c.type === 'sql') return c.label || firstLine(c.source)
-      if (c.type === 'markdown') return firstLine(c.source)
-      return c.page?.title || ''
-    })
-    .filter((s) => s.trim() !== '')
+  return cells.value.map(cellTitle).filter((s) => s.trim() !== '')
 }
 
 const aiCellDialog = useAiCellDialog({
@@ -509,6 +550,40 @@ function toggleCollapsed(cell: CellState) {
   else { cell.editor?.destroy(); cell.editor = null }
 }
 
+// toggleSource opens/closes the SQL drawer (or the a2ui "card definition"
+// drawer). It does NOT destroy the editor on close — nothing writes
+// cell.source while an editor is unmounted-but-alive (merge only appends
+// cells; replace destroys and rebuilds), so keeping it mounted preserves
+// undo history across a peek.
+function toggleSource(cell: CellState) {
+  cell.sourceOpen = !cell.sourceOpen
+  if (cell.sourceOpen) nextTick(mountEditors)
+}
+
+const CELL_ICON = { sql: 'terminal', markdown: 'fileText', a2ui: 'barChart' } as const
+const CELL_KIND = { sql: 'Query cell', markdown: 'Text cell', a2ui: 'Card cell' } as const
+
+function titleOf(cell: CellState): string {
+  return cellTitle(cell) || CELL_FALLBACK_TITLE[cell.type]
+}
+
+// ariaTitleOf caps titleOf at 60 chars for the minimize chevron's
+// aria-label — an unlabelled sql cell's title falls back to its first SQL
+// line, which can run well past what a screen reader should read as a
+// button name.
+function ariaTitleOf(cell: CellState): string {
+  const t = titleOf(cell)
+  return t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t
+}
+
+// summaryOf computes the "Show SQL · N lines · first line" text once per
+// cell per render, rather than re-parsing cell.source three times in the
+// template.
+function summaryOf(cell: CellState): string {
+  const s = sqlSummary(cell.source)
+  return `Show SQL · ${s.lines} line${s.lines === 1 ? '' : 's'}${s.firstLine ? ' · ' + s.firstLine : ''}`
+}
+
 // --- save ---
 
 // buildSavePayload takes id/title/cellsSnapshot as EXPLICIT arguments,
@@ -539,6 +614,7 @@ function captureSavePayload(): ReturnType<typeof buildSavePayload> | null {
 async function saveNow() {
   const payload = captureSavePayload()
   if (!payload) return
+  const seq = ++saveSeq
   saveState.value = 'saving'
   try {
     const result = await window.go.main.App.SaveNotebook(payload, loadedSessionId)
@@ -547,8 +623,9 @@ async function saveNow() {
     }
     saveState.value = 'saved'
     tombstones = pruneConfirmedTombstones(tombstones, new Set(payload.cells.map((c) => c.id)))
+    if (seq === saveSeq) lastPersisted = JSON.stringify(payload)
   } catch (e: any) {
-    errorMessage.value = 'Failed to save notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to save notebook: ' + errorText(e)
     saveState.value = 'idle'
   }
 }
@@ -574,11 +651,19 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
   }
   const p = payload ?? captureSavePayload()
   if (!p) return
+  // #95 carry-over: nothing has changed since the last load/save, so
+  // there's nothing local to write — skip the save rather than overwriting
+  // a newer save that may have landed from elsewhere (an agent append, a
+  // concurrent MCP write) with this stale copy.
+  const serialized = JSON.stringify(p)
+  if (serialized === lastPersisted) return
+  const seq = ++saveSeq
   try {
     await window.go.main.App.SaveNotebook(p, loadedSessionId)
     tombstones = pruneConfirmedTombstones(tombstones, new Set(p.cells.map((c) => c.id)))
+    if (seq === saveSeq) lastPersisted = serialized
   } catch (e: any) {
-    const message = 'Failed to save notebook: ' + (e.message || e)
+    const message = 'Failed to save notebook: ' + errorText(e)
     errorMessage.value = message
     throw new Error(message)
   }
@@ -604,6 +689,9 @@ function scheduleSave() {
   saveTimer = setTimeout(saveNow, 800)
 }
 
+watch(statusMessage, (msg) => {
+  if (msg) setTimeout(() => { statusMessage.value = '' }, 4000)
+})
 watch(title, scheduleSave)
 watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}`).join('|'), scheduleSave)
 watch(() => cells.value.length, scheduleSave)
@@ -641,9 +729,9 @@ async function exportNotebook() {
   if (!loadedNotebookId) return
   try {
     const path = await window.go.main.App.ExportNotebook(loadedNotebookId, '')
-    if (path) errorMessage.value = '' // clear any stale error; a real success has no toast today, matching ExportTableCSV's silent-on-success convention
+    if (path) statusMessage.value = `Exported to ${path}`
   } catch (e: any) {
-    errorMessage.value = 'Failed to export notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to export notebook: ' + errorText(e)
   }
 }
 
@@ -755,6 +843,28 @@ function handleFileClosed() {
   flushSave()
   loadedNotebookId = ''
   loadedSessionId = ''
+  lastPersisted = ''
+}
+
+// handleFileReverted (#98) reloads the notebook from the reverted container
+// so its SQL cells re-run against the reverted data, matching what happens
+// on open. A pending debounced save is flushed first (best-effort, same as
+// every other internal call site) so a hand edit made just before the
+// revert isn't silently lost by the reload that follows. A running/proposed
+// AI-cell task belongs to the pre-revert data (its previews ran against
+// it), so it's closed the same way the notebook-switch watcher closes one.
+async function handleFileReverted() {
+  await flushSave()
+  // loadNotebook replaces cells.value wholesale but — unlike the
+  // route.params.id watcher's own reload, which is the only other caller —
+  // doesn't tear down the CURRENT cells' CodeMirror editors first, since it
+  // is normally only ever called once per mount. Do that here, matching the
+  // watcher's teardown, so reloading the SAME notebook after a revert
+  // doesn't leak the old editor instances. loadNotebook itself disconnects
+  // cellObserver first thing, so that teardown isn't repeated here.
+  for (const cell of cells.value) cell.editor?.destroy()
+  aiCellDialog.close()
+  await loadNotebook(String(route.params.id))
 }
 
 onBeforeRouteLeave(async () => {
@@ -768,12 +878,14 @@ onBeforeRouteLeave(async () => {
 // calling the specific unsubscribe function this component was given
 // removes only this listener.
 let unsubFileClosed: (() => void) | null = null
+let unsubFileReverted: (() => void) | null = null
 let unsubNotebooksChanged: (() => void) | null = null
 let unregisterPendingSave: (() => void) | null = null
 
 onMounted(() => {
   loadNotebook(String(route.params.id))
   if (hasWailsRuntime()) unsubFileClosed = EventsOn('file:closed', handleFileClosed)
+  if (hasWailsRuntime()) unsubFileReverted = EventsOn('file:reverted', handleFileReverted)
   if (hasWailsRuntime()) unsubNotebooksChanged = EventsOn('notebooks:changed', handleNotebooksChanged)
   // Review fix, step 4a round 2 #1 / round 3 #2: register this view's flush
   // with the shared registry so AppShell's close path (and the app-quit
@@ -794,6 +906,7 @@ onBeforeUnmount(() => {
   cellObserver?.disconnect()
   loadAbort?.abort()
   unsubFileClosed?.()
+  unsubFileReverted?.()
   unsubNotebooksChanged?.()
   unregisterPendingSave?.()
   aiCellDialog.close()
@@ -807,6 +920,7 @@ onBeforeUnmount(() => {
 defineExpose({
   cells, runCell, moveCell, deleteCell, addCell, title,
   flushSave, exportNotebook,
+  toggleSource, toggleCollapsed, insertCellFromEnvelope, replaceCellFromEnvelope,
   getLoadedNotebookId: () => loadedNotebookId,
   getLoadedSessionId: () => loadedSessionId,
   // Exposed for NotebookView.spec.ts's queue/replay coverage (coordinator
@@ -815,6 +929,7 @@ defineExpose({
   // under; calling handleNotebooksChanged directly exercises the exact same
   // queue-while-loading / replay-after-load logic loadNotebook itself uses.
   handleNotebooksChanged,
+  handleFileReverted,
   isLoading: () => loading.value,
 })
 </script>
@@ -863,53 +978,68 @@ defineExpose({
         >
           <!-- Cell toolbar -->
           <div class="row" style="justify-content: space-between; align-items: center; padding: var(--sh-space-2) var(--sh-space-3); background: var(--sh-paper-2); border-bottom: var(--sh-border-thin); flex-wrap: wrap; gap: var(--sh-space-2);">
-            <div class="row" style="gap: var(--sh-space-2); align-items: center; min-width: 0; flex-wrap: nowrap; overflow: hidden;">
-              <button @click="toggleCollapsed(cell)" class="btn btn-ghost btn-sm" style="padding: 2px; flex: none;" :aria-label="cell.collapsed ? 'Expand cell' : 'Collapse cell'" :aria-expanded="!cell.collapsed">
+            <div class="row" style="flex: 1 1 0; gap: var(--sh-space-2); align-items: center; min-width: 0; flex-wrap: nowrap; overflow: hidden;">
+              <button
+                @click="toggleCollapsed(cell)"
+                class="btn btn-ghost btn-sm"
+                style="padding: 2px; flex: none;"
+                :aria-label="`${cell.collapsed ? 'Expand' : 'Minimize'} ${ariaTitleOf(cell)}`"
+                :aria-expanded="!cell.collapsed"
+                data-testid="cell-minimize"
+              >
                 <Icon :name="cell.collapsed ? 'chevronRight' : 'chevronDown'" :size="14" />
               </button>
-              <span class="badge badge--graphite" style="flex: none;">{{ cell.type }}</span>
-              <input
-                v-if="cell.type === 'sql'"
-                v-model="cell.label"
-                placeholder="label"
-                class="sh-mono"
-                title="Label"
-                style="border: none; background: transparent; font-size: var(--sh-fs-xs); color: var(--sh-graphite); flex: 0 1 110px; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-              />
-              <span
-                v-if="isStale(cell)"
-                class="badge"
-                style="background: var(--vibe-highlight); color: var(--vibe-highlight-fg); white-space: nowrap; flex: none;"
-                data-testid="stale-badge"
-              >EDITED · RUN TO UPDATE</span>
+              <Icon :name="CELL_ICON[cell.type]" :size="14" role="img" :aria-label="CELL_KIND[cell.type]" :title="CELL_KIND[cell.type]" style="flex: none;" />
+              <template v-if="cell.collapsed">
+                <span class="sh-mono" style="min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;" data-testid="cell-min-title" @click="toggleCollapsed(cell)">{{ titleOf(cell) }}</span>
+                <span v-if="cellMeta(cell)" class="sh-mono" data-testid="cell-min-meta" style="color: var(--sh-graphite); font-size: var(--sh-fs-xs); white-space: nowrap; flex: none;">{{ cellMeta(cell) }}</span>
+              </template>
+              <template v-else>
+                <input
+                  v-if="cell.type === 'sql'"
+                  v-model="cell.label"
+                  placeholder="label"
+                  class="sh-mono"
+                  title="Label"
+                  style="border: none; background: transparent; font-size: var(--sh-fs-xs); color: var(--sh-graphite); flex: 1 1 110px; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                />
+                <span
+                  v-if="isStale(cell)"
+                  class="badge"
+                  style="background: var(--vibe-highlight); color: var(--vibe-highlight-fg); white-space: nowrap; flex: none;"
+                  data-testid="stale-badge"
+                >EDITED · RUN TO UPDATE</span>
+              </template>
             </div>
             <div class="row" style="gap: var(--sh-space-1); flex: none;">
-              <template v-if="cell.type === 'sql'">
+              <template v-if="!cell.collapsed">
+                <template v-if="cell.type === 'sql'">
+                  <button
+                    v-for="v in VIEWS"
+                    :key="v"
+                    @click="pickView(cell, v)"
+                    class="btn btn-ghost btn-sm"
+                    :class="{ 'row-selected': cell.view === v }"
+                    :style="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? { opacity: 0.45 } : {}"
+                    :title="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? viewFit(v, shapeOf(cell)!).why : VIEW_HINTS[v]"
+                    :data-testid="`view-${v}`"
+                  >{{ VIEW_LABELS[v] }}</button>
+                  <button @click="runCell(cell)" :disabled="cell.running" class="btn btn-primary btn-sm" data-testid="run-cell">
+                    <Icon name="play" :size="12" /> {{ cell.running ? 'Running…' : 'Run' }}
+                  </button>
+                </template>
+                <template v-else-if="cell.type === 'markdown'">
+                  <button @click="toggleMdPreview(cell)" class="btn btn-ghost btn-sm">{{ cell.mdPreview ? 'Edit' : 'Preview' }}</button>
+                </template>
                 <button
-                  v-for="v in VIEWS"
-                  :key="v"
-                  @click="pickView(cell, v)"
+                  v-if="AI_CELL_ENABLED && (cell.type === 'sql' || cell.type === 'markdown')"
+                  @click="openAiCellEdit(cell)"
                   class="btn btn-ghost btn-sm"
-                  :class="{ 'row-selected': cell.view === v }"
-                  :style="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? { opacity: 0.45 } : {}"
-                  :title="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? viewFit(v, shapeOf(cell)!).why : VIEW_HINTS[v]"
-                  :data-testid="`view-${v}`"
-                >{{ VIEW_LABELS[v] }}</button>
-                <button @click="runCell(cell)" :disabled="cell.running" class="btn btn-primary btn-sm" data-testid="run-cell">
-                  <Icon name="play" :size="12" /> {{ cell.running ? 'Running…' : 'Run' }}
-                </button>
+                  title="Edit with AI"
+                  aria-label="Edit with AI"
+                  :data-testid="`ai-cell-edit-${cell.id}`"
+                ><Icon name="sparkle" :size="14" /></button>
               </template>
-              <template v-else-if="cell.type === 'markdown'">
-                <button @click="toggleMdPreview(cell)" class="btn btn-ghost btn-sm">{{ cell.mdPreview ? 'Edit' : 'Preview' }}</button>
-              </template>
-              <button
-                v-if="AI_CELL_ENABLED && (cell.type === 'sql' || cell.type === 'markdown')"
-                @click="openAiCellEdit(cell)"
-                class="btn btn-ghost btn-sm"
-                title="Edit with AI"
-                aria-label="Edit with AI"
-                :data-testid="`ai-cell-edit-${cell.id}`"
-              ><Icon name="sparkle" :size="14" /></button>
               <button @click="moveCell(cell, -1)" class="btn btn-ghost btn-sm" title="Move up" aria-label="Move cell up"><Icon name="chevronUp" :size="14" /></button>
               <button @click="moveCell(cell, 1)" class="btn btn-ghost btn-sm" title="Move down" aria-label="Move cell down"><Icon name="chevronDown" :size="14" /></button>
               <button @click="deleteCell(cell)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" title="Delete cell" aria-label="Delete cell"><Icon name="trash" :size="14" /></button>
@@ -919,27 +1049,33 @@ defineExpose({
           <div v-show="!cell.collapsed">
             <!-- SQL cell -->
             <template v-if="cell.type === 'sql'">
-              <div :ref="(el) => { cell.editorEl = el as HTMLElement }" style="min-height: 90px; border-bottom: var(--sh-border-thin);"></div>
-              <div
-                v-if="AI_CELL_ENABLED && !cell.source.trim()"
-                class="sh-mono"
-                style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: var(--sh-space-1) var(--sh-space-3); display: flex; align-items: center; gap: 6px;"
-              >
-                write SQL or
-                <button @click="openAiCellEdit(cell, 'Generate with AI')" class="btn btn-ghost btn-sm" style="padding: 2px 6px;" :data-testid="`ai-cell-generate-empty-${cell.id}`">
-                  <Icon name="sparkle" :size="12" /> generate it with AI
-                </button>
-              </div>
-              <!-- Standing explanation of the selected view, moved below the
-                   editor (review fix, step 4a round 2 #6 — ported from
-                   notebook.js's nb-cell__viewhint) so the toolbar above stays
-                   on one row instead of wrapping under the picker buttons. -->
-              <div class="sh-mono" data-testid="view-hint" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: var(--sh-space-1) var(--sh-space-3);">
-                {{ VIEW_LABELS[cell.view] }} · {{ VIEW_HINTS[cell.view] }}<template v-if="!cell.viewPinned"> · auto</template>
-              </div>
-              <div class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: 0 var(--sh-space-3) var(--sh-space-1);">
-                Notebook cells are read-only queries — use the Query editor to change data. (Ctrl/Cmd+Enter to run.)
-              </div>
+              <CellDrawer :open="cell.sourceOpen" testid="sql-drawer" @toggle="toggleSource(cell)">
+                <template #summary>
+                  <template v-if="cell.sourceOpen">Hide SQL</template>
+                  <template v-else>{{ summaryOf(cell) }}</template>
+                </template>
+                <div :ref="(el) => { cell.editorEl = el as HTMLElement }" style="min-height: 90px; border-top: var(--sh-border-thin); border-bottom: var(--sh-border-thin);"></div>
+                <div
+                  v-if="AI_CELL_ENABLED && !cell.source.trim()"
+                  class="sh-mono"
+                  style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: var(--sh-space-1) var(--sh-space-3); display: flex; align-items: center; gap: 6px;"
+                >
+                  write SQL or
+                  <button @click="openAiCellEdit(cell, 'Generate with AI')" class="btn btn-ghost btn-sm" style="padding: 2px 6px;" :data-testid="`ai-cell-generate-empty-${cell.id}`">
+                    <Icon name="sparkle" :size="12" /> generate it with AI
+                  </button>
+                </div>
+                <!-- Standing explanation of the selected view (review fix,
+                     step 4a round 2 #6 — ported from notebook.js's
+                     nb-cell__viewhint), now inside the drawer alongside the
+                     editor it explains. -->
+                <div class="sh-mono" data-testid="view-hint" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: var(--sh-space-1) var(--sh-space-3);">
+                  {{ VIEW_LABELS[cell.view] }} · {{ VIEW_HINTS[cell.view] }}<template v-if="!cell.viewPinned"> · auto</template>
+                </div>
+                <div class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: 0 var(--sh-space-3) var(--sh-space-1);">
+                  Notebook cells are read-only queries — use the Query editor to change data. (Ctrl/Cmd+Enter to run.)
+                </div>
+              </CellDrawer>
               <div style="padding: var(--sh-space-3);">
                 <div v-if="cell.result?.error" class="sh-mono" style="color: var(--sh-error); font-size: var(--sh-fs-sm);" data-testid="cell-error">
                   {{ cell.result.error }}
@@ -980,10 +1116,15 @@ defineExpose({
                 <div v-else class="sh-mono" style="color: var(--sh-graphite); font-size: var(--sh-fs-xs);">Scroll into view to render…</div>
               </div>
               <div style="border-top: var(--sh-border-thin);">
-                <button @click="cell.a2uiSourceOpen = !cell.a2uiSourceOpen" class="btn btn-ghost btn-sm" style="margin: var(--sh-space-2) var(--sh-space-3);">
-                  <Icon :name="cell.a2uiSourceOpen ? 'chevronDown' : 'chevronRight'" :size="12" /> A2UI source
-                </button>
-                <pre v-if="cell.a2uiSourceOpen" class="sh-mono" style="font-size: var(--sh-fs-xs); padding: var(--sh-space-3); overflow: auto; background: var(--sh-paper-2); margin: 0;">{{ JSON.stringify(cell.page, null, 2) }}</pre>
+                <CellDrawer :open="cell.sourceOpen" testid="a2ui-drawer" @toggle="toggleSource(cell)">
+                  <template #summary>Advanced: card definition</template>
+                  <!-- Kept behind v-if (rather than always rendering) so the
+                       view doesn't stringify every a2ui page on every
+                       keystroke re-render — the cost is that closing this
+                       one snaps instead of sliding, which goes away once
+                       #88 makes the body an editor instead of a <pre>. -->
+                  <pre v-if="cell.sourceOpen" class="sh-mono" style="font-size: var(--sh-fs-xs); padding: var(--sh-space-3); overflow: auto; background: var(--sh-paper-2); margin: 0;">{{ JSON.stringify(cell.page, null, 2) }}</pre>
+                </CellDrawer>
               </div>
             </template>
           </div>
@@ -1008,6 +1149,7 @@ defineExpose({
 
     <div v-if="errorMessage" class="error-toast" @click="errorMessage = ''">{{ errorMessage }}</div>
     <div v-if="infoMessage" class="info-toast" data-testid="ai-cell-info-toast" @click="infoMessage = ''">{{ infoMessage }}</div>
+    <div v-if="statusMessage" class="status-toast" data-testid="notebook-status" @click="statusMessage = ''">{{ statusMessage }}</div>
 
     <AiCellDialog v-if="AI_CELL_ENABLED" :dialog="aiCellDialog" @applied="onAiCellApplied" />
   </div>

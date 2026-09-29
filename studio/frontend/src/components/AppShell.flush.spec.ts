@@ -17,6 +17,8 @@ function makeApp() {
     GetFileInfo: vi.fn(async () => ({ path: '/tmp/acme.vibe' })),
     SaveFile: vi.fn(async () => {}),
     CloseFile: vi.fn(async () => { calls.push('CloseFile') }),
+    CloseFileWithoutSaving: vi.fn(async () => { calls.push('CloseFileWithoutSaving') }),
+    IsDirty: vi.fn(async () => false),
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
   ;(window as any).go = { main: { App: app } }

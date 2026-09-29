@@ -6,6 +6,7 @@ import { useRouter, useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
+import { errorText } from '../lib/errors'
 
 interface NotebookSummary { id: string; title: string; cellCount: number; updatedAt: string }
 
@@ -54,7 +55,7 @@ async function createNotebook() {
     await loadNotebooks()
     openNotebook(nb.id)
   } catch (e: any) {
-    errorMessage.value = 'Failed to create notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to create notebook: ' + errorText(e)
   }
 }
 
@@ -72,7 +73,7 @@ async function confirmDeleteNotebook() {
     await window.go.main.App.DeleteNotebook(id)
     await loadNotebooks()
   } catch (e: any) {
-    errorMessage.value = 'Failed to delete notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to delete notebook: ' + errorText(e)
   }
 }
 
@@ -88,7 +89,7 @@ async function importNotebook() {
     }
     if (result?.notebook?.id) openNotebook(result.notebook.id)
   } catch (e: any) {
-    errorMessage.value = 'Failed to import notebook: ' + (e.message || e)
+    errorMessage.value = 'Failed to import notebook: ' + errorText(e)
   }
   importing.value = false
 }

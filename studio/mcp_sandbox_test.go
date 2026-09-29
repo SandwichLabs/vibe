@@ -6,15 +6,15 @@ package main
 // was "read-only" — live-proven with create_table succeeding against a
 // read-only file. The fix makes agentToolHandler re-resolve the sandbox mode
 // from the live "agent_sandbox" _vibe_meta value on every dispatch
-// (agents.Handler.SetSandboxMode, an atomic swap — see
-// TestHandler_SetSandboxModeConcurrentWithHandle in internal/agents for the
+// (agents.Handler.SetFilePolicy, an atomic swap — see
+// TestHandler_SetFilePolicyConcurrentWithHandle in internal/agents for the
 // -race coverage of that mechanism), so a SetAgentConfig change takes effect
 // on a long-lived MCP handler's very next call without restarting the server.
 //
 // This test drives the EXACT construction path StartMCPServer uses
-// (a.wrapAgentHandler, gated by a.metaOr("agent_sandbox", "full")) rather
-// than a full MCP/SSE round trip, since agentToolHandler.Handle is the one
-// dispatch point both StartMCPServer and Studio chat share.
+// (a.wrapAgentHandler, gated by a.agentPolicy()) rather than a full
+// MCP/SSE round trip, since agentToolHandler.Handle is the one dispatch
+// point both StartMCPServer and Studio chat share.
 
 import (
 	"context"
@@ -37,7 +37,8 @@ func TestMCPHandlerSandboxTracksLiveAgentConfig(t *testing.T) {
 	// Build the handler the same way StartMCPServer does: read the live
 	// agent_sandbox setting, wrap it.
 	app.mu.Lock()
-	sandbox := &agents.SandboxConfig{Mode: agents.SandboxMode(app.metaOr("agent_sandbox", "full")), MaxQueryRows: 10000}
+	policy := app.agentPolicy()
+	sandbox := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
 	handler := app.wrapAgentHandler(sandbox, agents.ModeFull)
 	app.mu.Unlock()
 
@@ -83,7 +84,7 @@ func TestStartMCPServerUsesLiveAgentSandbox(t *testing.T) {
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-only"}))
 
 	app.mu.Lock()
-	got := app.metaOr("agent_sandbox", "full")
+	got := app.agentPolicy().Mode
 	app.mu.Unlock()
-	assert.Equal(t, "read-only", got, "StartMCPServer's sandbox := agents.SandboxConfig{Mode: agents.SandboxMode(a.metaOr(...))} must resolve to the live setting, not a hard-coded full")
+	assert.Equal(t, agents.ModeReadOnly, got, "StartMCPServer's sandbox := agents.SandboxConfig{Mode: policy.Mode} must resolve to the live setting, not a hard-coded full")
 }

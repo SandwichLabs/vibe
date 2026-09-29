@@ -265,23 +265,29 @@ func TestRunA2UIQuery_DeniesDisguisedExternalAccessWrites(t *testing.T) {
 
 // TestRunA2UIQuery_NonFiniteFloatDoesNotCrash is the #1 review requirement
 // (the process-killing crash): a NaN/Inf result must come back as a normal
-// (nil-valued) row, never an error that propagates as an unmarshalable
-// value, and must never panic/crash the call.
+// row, never an error that propagates as an unmarshalable value, and must
+// never panic/crash the call. The value is DuckDB's own text
+// ("nan"/"inf"/"-inf"), not nil — NaN/Inf are real values distinct from
+// SQL NULL, so the wire rule keeps them faithful (matching CSV export)
+// rather than collapsing them into NULL.
 func TestRunA2UIQuery_NonFiniteFloatDoesNotCrash(t *testing.T) {
 	app := newOpenApp(t)
 	setAgentSandbox(t, app, "full")
 
-	for _, sql := range []string{
-		"SELECT 'nan'::DOUBLE",
-		"SELECT 'inf'::DOUBLE",
-		"SELECT '-inf'::DOUBLE",
+	for _, tc := range []struct {
+		sql  string
+		want any
+	}{
+		{"SELECT 'nan'::DOUBLE", "nan"},
+		{"SELECT 'inf'::DOUBLE", "inf"},
+		{"SELECT '-inf'::DOUBLE", "-inf"},
 	} {
-		t.Run(sql, func(t *testing.T) {
+		t.Run(tc.sql, func(t *testing.T) {
 			require.NotPanics(t, func() {
-				res, err := app.RunA2UIQuery(sql)
+				res, err := app.RunA2UIQuery(tc.sql)
 				require.NoError(t, err)
 				require.Len(t, res.Rows, 1)
-				assert.Nil(t, res.Rows[0][0])
+				assert.Equal(t, tc.want, res.Rows[0][0])
 			})
 		})
 	}

@@ -7,6 +7,7 @@ import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
 import ThemeCard from './ThemeCard.vue'
 import { useTheme, THEME_SYSTEM } from '../theme/useTheme'
+import { errorText } from '../lib/errors'
 
 const theme = useTheme()
 const followSystem = computed(() => theme.prefs.theme === THEME_SYSTEM)
@@ -47,7 +48,7 @@ async function openFolder() {
   try {
     themesDir.value = await window.go.main.App.OpenThemesDir()
   } catch (e: any) {
-    flash('Could not open the themes folder: ' + (e?.message || e))
+    flash('Could not open the themes folder: ' + errorText(e))
   } finally {
     opening.value = false
   }

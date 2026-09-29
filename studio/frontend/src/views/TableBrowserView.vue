@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import { errorText } from '../lib/errors'
+import { formatCell, cellClass, cellEditText, isNumericType } from '../lib/formatCell'
+
+// #82: opening /tables?table=orders (e.g. "Open table →" after an import)
+// pre-selects that table once the table list has loaded.
+const route = useRoute()
 
 // Autofocus + select directive for the inline cell editor. select() only exists
 // on text inputs, so guard it for checkbox/date/select editors.
@@ -37,6 +44,7 @@ const newTableName = ref('')
 const newTableCols = ref<ColumnInfo[]>([{ name: '', type: 'TEXT', not_null: false, pk: false }])
 const newRowValues = ref<Record<string, string>>({})
 const errorMessage = ref('')
+const statusMessage = ref('')
 const showConfirmDrop = ref(false)
 const pendingDropTable = ref<string | null>(null)
 const showConfirmDeleteRow = ref(false)
@@ -75,18 +83,62 @@ const FILTER_OPS = [
 // Cell-level validation feedback: which cell failed and the message to show.
 // This is independent of the global errorMessage toast so the user sees WHICH
 // cell rejected without the change being persisted.
-const cellError = ref<{ row: number; col: number; message: string } | null>(null)
+//
+// Keyed by table + primary key + column name (#91 M-F16), not row/col index:
+// a row index is only stable within one page of one table's current sort —
+// switching tables, re-sorting, or paging used to leave a stale-looking red
+// cell pointing at whatever now happened to sit at that index.
+const cellError = ref<{ table: string; pk: string; col: string; message: string } | null>(null)
+
+// isCellError reports whether the cell at (row, j) of the currently loaded
+// page is the one cellError refers to.
+function isCellError(row: any[], j: number): boolean {
+  if (!cellError.value || !selectedTable.value || !tableData.value) return false
+  const pk = pkColumn()
+  if (!pk) return false
+  const pkIdx = tableData.value.columns.indexOf(pk.name)
+  if (pkIdx < 0) return false
+  return cellError.value.table === selectedTable.value &&
+    cellError.value.pk === String(row[pkIdx]) &&
+    cellError.value.col === tableData.value.columns[j]
+}
 
 // editorType resolves the inline editor to use for a column from its
 // declared SQL type (#68 dropped the Access-style field-meta control_type/
 // combo-lookup layer). Returns one of: 'checkbox' | 'date' | 'text'.
+//
+// Only DATE gets the native date input. TIME/TIMESTAMP[TZ] used to get
+// one too, which opens empty (a date input can't hold a time-of-day or a
+// timestamp) and silently drops the time on save — they now get a plain
+// text input seeded with cellEditText's DuckDB-faithful text
+// ("13:45:00", "2025-04-06 13:45:00").
 function editorType(colName: string): 'checkbox' | 'date' | 'text' {
   const col = tableInfo.value?.columns.find(c => c.name === colName)
   const t = (col?.type || '').toUpperCase()
   if (t.includes('BOOL')) return 'checkbox'
-  if (t.includes('DATE') || t.includes('TIME')) return 'date'
+  if (t === 'DATE') return 'date'
   return 'text'
 }
+
+// colType returns the DuckDB type name for a column of the currently loaded
+// table's data (ScanRows-sourced, e.g. "DECIMAL(18,4)"), for formatCell/
+// cellEditText — distinct from editorType's DDL-sourced tableInfo type,
+// which drives which input control to show.
+function colType(colIdx: number): string | undefined {
+  return tableData.value?.types?.[colIdx]
+}
+
+// One formatCell call per cell: computed once here and indexed
+// (formattedRows[i][j]) from the template, rather than called repeatedly
+// (class/title/display text) per cell per render. The
+// template still reads the raw cell value directly where it needs it
+// (checkbox checked-state, filter-by-selection's exact-match value,
+// startEdit's editor seed) — formatCell's job is display only.
+const formattedRows = computed(() => {
+  const td = tableData.value
+  if (!td) return []
+  return td.rows.map((row) => row.map((cell, j) => formatCell(cell, colType(j))))
+})
 
 async function loadTables() {
   loading.value = true
@@ -94,7 +146,19 @@ async function loadTables() {
     tables.value = (await window.go.main.App.ListTables()) || []
   } catch { /* ignore */ }
   loading.value = false
+  applyRouteTable()
 }
+
+// applyRouteTable selects the table named by ?table= (once it's in the
+// loaded list), without disturbing a selection the user already made.
+function applyRouteTable() {
+  const t = route.query.table
+  if (typeof t !== 'string' || !t) return
+  if (t === selectedTable.value) return
+  if (tables.value.includes(t)) selectTable(t)
+}
+
+watch(() => route.query.table, applyRouteTable)
 
 // Re-fetch the table list (and the currently open table's rows, if any) when
 // the data underneath changes — an agent-driven create_table/create_record/
@@ -121,6 +185,7 @@ async function selectTable(name: string) {
   currentPage.value = 1
   sortCol.value = ''
   sortDir.value = 'ASC'
+  cellError.value = null
   clearFilter()
   try {
     tableInfo.value = await window.go.main.App.DescribeTable(name)
@@ -206,12 +271,14 @@ async function applyFbF() {
 async function saveFilterAsQuery() {
   if (!activeFilter.value || !selectedTable.value) return
   const columns = tableData.value?.columns ?? []
+  const title = `${selectedTable.value} (filtered)`
   try {
     await window.go.main.App.SaveFilterAsQuery(
-      selectedTable.value, activeFilter.value, columns, `${selectedTable.value} (filtered)`
+      selectedTable.value, activeFilter.value, columns, title
     )
+    statusMessage.value = `Saved query "${title}". Find it under Queries.`
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -249,7 +316,7 @@ async function createTable() {
     newTableCols.value = [{ name: '', type: 'TEXT', not_null: false, pk: false }]
     await loadTables()
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -276,7 +343,7 @@ async function confirmDropTable() {
     }
     await loadTables()
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -300,7 +367,7 @@ async function insertRow() {
     showAddRowModal.value = false
     await loadData()
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -328,7 +395,7 @@ async function confirmDeleteRow() {
     await window.go.main.App.DeleteRow(selectedTable.value, pkCol.name, row[pkIdx])
     await loadData()
   } catch (e: any) {
-    errorMessage.value = 'Failed: ' + (e.message || e)
+    errorMessage.value = 'Failed: ' + errorText(e)
   }
 }
 
@@ -352,17 +419,18 @@ function startEdit(rowIdx: number, colIdx: number) {
   }
   if (tableData.value.columns[colIdx] === pk.name) return
   // Clear any stale cell error when (re)opening an editor on a different cell.
-  if (cellError.value && (cellError.value.row !== rowIdx || cellError.value.col !== colIdx)) {
+  if (cellError.value && !isCellError(tableData.value.rows[rowIdx], colIdx)) {
     cellError.value = null
   }
   const cell = tableData.value.rows[rowIdx][colIdx]
-  editValue.value = cell == null ? '' : String(cell)
+  editValue.value = cellEditText(cell, colType(colIdx))
   editing.value = { row: rowIdx, col: colIdx }
 }
 
 function cancelEdit() {
   editing.value = null
   editValue.value = ''
+  cellError.value = null
 }
 
 async function saveEdit() {
@@ -377,8 +445,12 @@ async function saveEdit() {
   const row = tableData.value.rows[cur.row]
   const original = row[cur.col]
   const next = editValue.value
-  // No change → just close the editor; avoid a needless round-trip.
-  if ((original == null ? '' : String(original)) === next) { cancelEdit(); return }
+  // No change → just close the editor; avoid a needless round-trip. Compare
+  // against cellEditText's rendering, not String(original) — a DECIMAL's
+  // original wire number drops trailing zeros under String() (12.5 vs the
+  // seeded "12.5000"), which made every DECIMAL edit look "changed" even
+  // when the user left the seeded text untouched.
+  if (cellEditText(original, colType(cur.col)) === next) { cancelEdit(); return }
 
   savingCell.value = true
   cellError.value = null
@@ -397,8 +469,8 @@ async function saveEdit() {
     // bad value is NOT persisted, and surface cell-level feedback identifying
     // exactly which cell was rejected (not just a global toast).
     row[colIdx] = original
-    const msg = (e && (e.message || e)) ? String(e.message || e) : 'Update rejected'
-    cellError.value = { row: rowIdx, col: colIdx, message: msg }
+    const msg = e ? errorText(e) : 'Update rejected'
+    cellError.value = { table: selectedTable.value!, pk: String(row[pkIdx]), col: colName, message: msg }
   } finally {
     savingCell.value = false
   }
@@ -420,8 +492,22 @@ let unsubDataChanged: (() => void) | null = null
 onMounted(() => { if (hasWailsRuntime()) unsubDataChanged = EventsOn('data:changed', onDataChanged) })
 onUnmounted(() => { unsubDataChanged?.() })
 
+// Escape clears a standing cell error when no editor is open — useModalKeys
+// (used by the New table / Add row modals) stops propagation at document,
+// so an open modal's Escape never reaches this (#91 M-F16).
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !editing.value) {
+    cellError.value = null
+  }
+}
+onMounted(() => window.addEventListener('keydown', handleGlobalKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
+})
+watch(statusMessage, (msg) => {
+  if (msg) setTimeout(() => { statusMessage.value = '' }, 4000)
 })
 </script>
 
@@ -514,8 +600,9 @@ watch(errorMessage, (msg) => {
             <thead class="sticky top-0">
               <tr>
                 <th
-                  v-for="col in tableData.columns"
+                  v-for="(col, ci) in tableData.columns"
                   :key="col"
+                  :class="{ 'cell-num': isNumericType(colType(ci)) }"
                   @click="toggleSort(col)"
                 >
                   {{ col }}
@@ -532,10 +619,14 @@ watch(errorMessage, (msg) => {
                     :key="j"
                     @click="startEdit(i, j)"
                     @dblclick="startEdit(i, j)"
-                    :class="{
-                      'cell-editing': editing && editing.row === i && editing.col === j,
-                      'cell-error': cellError && cellError.row === i && cellError.col === j,
-                    }"
+                    :class="[
+                      editorType(tableData.columns[j]) === 'checkbox' ? [] : cellClass(formattedRows[i][j], colType(j)),
+                      {
+                        'cell-editing': editing && editing.row === i && editing.col === j,
+                        'cell-error': isCellError(row, j),
+                      },
+                    ]"
+                    :title="editorType(tableData.columns[j]) === 'checkbox' ? undefined : formattedRows[i][j].title"
                   >
                     <template v-if="editing && editing.row === i && editing.col === j">
                       <!-- Boolean checkbox editor. -->
@@ -581,21 +672,25 @@ watch(errorMessage, (msg) => {
                         disabled
                         class="cell-checkbox"
                       />
-                      <span v-else>{{ cell ?? '' }}</span>
+                      <span v-else>{{ formattedRows[i][j].text }}</span>
                       <!-- Filter-by-Selection affordance: a funnel that filters
                            the datasheet to rows where this column equals this
-                           cell's value (Access right-click "Filter by Selection"). -->
+                           cell's value (Access right-click "Filter by Selection").
+                           Passes the raw wire value (filterBySelection needs the
+                           exact value to match against, not its display text);
+                           the title uses the faithfully formatted text. -->
                       <button
                         class="filter-selection-btn"
                         data-filter-selection
-                        :title="`Filter by ${tableData.columns[j]} = ${cell}`"
+                        :title="`Filter by ${tableData.columns[j]} = ${formattedRows[i][j].text}`"
                         @click.stop="filterBySelection(tableData.columns[j], cell)"
                       ><Icon name="filter" :size="11" /></button>
                     </template>
                     <div
-                      v-if="cellError && cellError.row === i && cellError.col === j"
+                      v-if="isCellError(row, j)"
                       class="cell-error-msg"
-                    >{{ cellError.message }}</div>
+                      :title="cellError!.message"
+                    >{{ cellError!.message.split('\n')[0] }}</div>
                   </td>
                   <td>
                     <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" aria-label="Delete row" title="Delete row"><Icon name="trash" :size="14" /></button>
@@ -681,6 +776,7 @@ watch(errorMessage, (msg) => {
     <div v-if="errorMessage" class="error-toast">
       {{ errorMessage }}
     </div>
+    <div v-if="statusMessage" class="status-toast" data-testid="table-status">{{ statusMessage }}</div>
   </div>
 </template>
 
