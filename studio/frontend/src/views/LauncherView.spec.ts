@@ -33,15 +33,15 @@ const mountView = () => mount(LauncherView, { attachTo: document.body, global: {
 describe('LauncherView', () => {
   beforeEach(() => { _resetForTests(); document.body.innerHTML = '' })
 
-  it('first run: the empty state offers New workspace and Open folder, and no legacy import', async () => {
+  it('first run: the empty state offers New workspace, Open folder and Import .vibe (a bundle, not a legacy container)', async () => {
     makeApp([])
     const w = mountView()
     await flushPromises()
     expect(w.text()).toContain('Pick a folder to start')
     expect(w.find('[data-testid="new-workspace"]').exists()).toBe(true)
     expect(w.find('[data-testid="open-folder"]').exists()).toBe(true)
-    expect(w.text()).not.toMatch(/\.vibe/)
-    expect(w.text()).not.toContain('Import')
+    expect(w.find('[data-testid="import-bundle"]').exists()).toBe(true)
+    expect(w.text()).not.toMatch(/legacy/i)
     await w.find('[data-testid="new-workspace"]').trigger('click')
     expect(newWorkspaceOpen.value).toBe(true)
     w.unmount()

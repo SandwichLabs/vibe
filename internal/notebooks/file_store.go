@@ -169,7 +169,7 @@ func (s *FileStore) Save(_ context.Context, raw any, opts ...SaveOption) (Notebo
 		expect = o.rev
 	}
 	id := nb.ID
-	if autoID.MatchString(id) {
+	if autoID.MatchString(id) && !o.keepID {
 		// A brand-new notebook (Empty, a template): name the file after the
 		// title instead of an opaque uuid.
 		id = s.freeID(nb.Title)

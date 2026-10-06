@@ -44,9 +44,11 @@ A desktop data tool in the DataGrip / DBeaver mould, built around an agent.
 - **An agent** — sandboxed, reads freely, and asks before any write. The same
   tools are exposed over **MCP**, so Claude Code, Claude Desktop, Cursor, or
   your own agent can work in the workspace with Studio open or closed.
-- **`.vibe` files** — planned as a portable bundle of notebooks, queries and
-  skills for sharing outside git (#118). The older data-holding `.vibe`
-  container is not opened any more.
+- **`.vibe` files** — a portable bundle of notebooks, queries and skills (and,
+  if you choose, connection definitions) for sharing outside git: no data, no
+  credentials, optionally locked with a passphrase. `vibe export bundle`,
+  `vibe import <file.vibe>`, or **Import .vibe…** in Studio. The older
+  data-holding `.vibe` container is not opened any more.
 
 Everything works without AI. SQL and notebooks are first-class by hand.
 
@@ -59,6 +61,8 @@ vibe workspace info                                     # connections, counts, a
 vibe import customers.csv --into customers              # CSV / TSV / xlsx into a writable connection
 vibe query "SELECT count(*) FROM customers"             # [-c conn] [--format table|csv|json] [--limit N]
 vibe export customers -o customers.parquet              # csv, parquet, json or xlsx; or --sql "..."
+vibe export bundle -o share.vibe [--encrypt]            # notebooks, queries, skills; no data, no credentials
+vibe import share.vibe [--on-conflict rename|overwrite|skip]
 vibe studio                                             # terminal UI: SQL REPL, table browser, notebook list
 vibe studio --gui                                       # the desktop app (add a folder to open it: vibe studio --gui acme)
 vibe mcp serve                                          # let Claude and other MCP clients use the workspace
@@ -105,7 +109,7 @@ Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) — workspaces 
 1. **Design pass** (#106) and **DuckDB spike** (#107).
 2. **Workspace = folder** — session hub (#108), workspace + file stores (#109), launcher/switcher (#111), MCP on workspaces (#112), CLI (#113).
 3. **Connections & credentials** — keychain (#114), connection types (#115), agent SQL policy (#116), connections UI (#117: a Connections rail, a connection editor with write-only credentials, a Run-on selector in queries and notebook cells; see [`docs/reference/connections.md`](docs/reference/connections.md#in-vibe-studio)).
-4. **Exchange & breadth** — `.vibe` bundles (#118), more types (#119), packaging (#77).
+4. **Exchange & breadth** — `.vibe` bundles (done, #118), more types (#119), packaging (#77).
 
 Multi-user / Tailscale mesh remains deferred.
 

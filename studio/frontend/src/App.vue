@@ -7,6 +7,9 @@ import AppShell from './components/AppShell.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import NewWorkspaceDialog from './components/NewWorkspaceDialog.vue'
 import TakeOverDialog from './components/TakeOverDialog.vue'
+import BundleExportDialog from './components/BundleExportDialog.vue'
+import BundleImportDialog from './components/BundleImportDialog.vue'
+import { openBundleImport } from './composables/useBundle'
 import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, confirmAltLabel, confirmAltDestructive, resolveConfirm, resolveConfirmChoice } from './composables/useConfirm'
 import { flushAll } from './composables/usePendingSaves'
 import { askConfirm } from './composables/useConfirm'
@@ -100,6 +103,7 @@ onMounted(async () => {
       const initial = await window.go.main.App.GetInitialWorkspace()
       if (initial?.message) launcherNotice.value = initial.message
       else if (initial?.path) await openWorkspacePath(initial.path)
+      else if (initial?.bundlePath) openBundleImport(workspaceOpen.value ? 'here' : 'new', initial.bundlePath)
     } catch {
       // ignore
     }
@@ -122,6 +126,8 @@ onUnmounted(() => {
 
     <NewWorkspaceDialog />
     <TakeOverDialog />
+    <BundleExportDialog />
+    <BundleImportDialog />
 
     <!-- Shared promise-based confirm (composables/useConfirm.ts) — the ONE
          ConfirmDialog every askConfirm() caller in the app resolves through,

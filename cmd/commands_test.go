@@ -581,9 +581,11 @@ func TestImport_UnsupportedFileTypeAndVibeFile(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported file type")
 
-	_, _, err = runVibe("import", "old.vibe", "--workspace", root)
+	// A .vibe argument is a bundle now; an older container is refused plainly.
+	old := writeFile(t, t.TempDir(), "old.vibe", "SQLite format 3\x00 and then some data")
+	_, _, err = runVibe("import", old, "--workspace", root)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no longer opened")
+	assert.Contains(t, err.Error(), "older .vibe file that holds data")
 }
 
 func TestImport_WhenAnotherProcessOwnsTheHub(t *testing.T) {

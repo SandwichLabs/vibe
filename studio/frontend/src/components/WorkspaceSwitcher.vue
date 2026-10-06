@@ -11,6 +11,7 @@ import {
   closeWorkspace, relativeTime,
 } from '../composables/useWorkspace'
 import { shortcutLabel } from '../composables/useModal'
+import { openBundleExport, openBundleImport } from '../composables/useBundle'
 import { errorText } from '../lib/errors'
 
 const emit = defineEmits<{ error: [message: string] }>()
@@ -107,6 +108,16 @@ function newWorkspace() {
   newWorkspaceOpen.value = true
 }
 
+function exportBundle() {
+  close(false)
+  openBundleExport()
+}
+
+function importBundle() {
+  close(false)
+  openBundleImport('here')
+}
+
 async function manage() {
   close(false)
   const res = await closeWorkspace()
@@ -139,7 +150,7 @@ async function manage() {
       class="menu"
       role="menu"
       aria-label="Workspaces"
-      style="left: 0; top: calc(100% + 8px); width: 400px; max-width: calc(100vw - 32px);"
+      style="left: 0; top: calc(100% + 8px); width: 400px; max-width: calc(100vw - 32px); max-height: calc(100vh - 88px); overflow-y: auto;"
       data-testid="ws-menu"
       @keydown="onMenuKey"
     >
@@ -181,6 +192,13 @@ async function manage() {
       </button>
       <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-new" @click="newWorkspace">
         <Icon name="plus" :size="16" /><span class="grow"><span class="t">New workspace…</span></span><span class="end"><kbd>{{ shortcutLabel('N') }}</kbd></span>
+      </button>
+      <div class="msep"></div>
+      <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-export-bundle" @click="exportBundle">
+        <Icon name="upload" :size="16" /><span class="grow"><span class="t">Export workspace content…</span><span class="sub">Notebooks, queries and skills as a .vibe file</span></span>
+      </button>
+      <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-import-bundle" @click="importBundle">
+        <Icon name="download" :size="16" /><span class="grow"><span class="t">Import .vibe…</span><span class="sub">Add a bundle to this workspace</span></span>
       </button>
       <div class="msep"></div>
       <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-manage" @click="manage">

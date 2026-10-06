@@ -17,7 +17,7 @@ declare global {
           ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
           OpenThemesDir(): Promise<string>
           // Workspaces (#111)
-          GetInitialWorkspace(): Promise<{ path: string; message: string }>
+          GetInitialWorkspace(): Promise<{ path: string; message: string; bundlePath: string }>
           ListRecentWorkspaces(): Promise<RecentWorkspace[]>
           RemoveRecentWorkspace(path: string): Promise<RecentWorkspace | null>
           RestoreRecentWorkspace(r: RecentWorkspace): Promise<void>
@@ -30,6 +30,15 @@ declare global {
           OpenWorkspaceReadOnly(path: string): Promise<OpenWorkspaceResult>
           SwitchWorkspace(req: { path: string }): Promise<OpenWorkspaceResult>
           CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
+          // .vibe bundles (#118)
+          GetBundleContent(): Promise<BundleContent>
+          ChooseBundleSaveFile(defaultName: string): Promise<string>
+          SelectBundleFile(): Promise<string>
+          ExportBundle(req: BundleExportRequest): Promise<BundleExportResult>
+          PreviewBundleImport(path: string, passphrase: string): Promise<BundlePreview>
+          CommitBundleImport(handle: string, d: BundleDecisions): Promise<BundleResult>
+          ImportBundleIntoNewWorkspace(handle: string, req: CreateWorkspaceRequest, d: BundleDecisions): Promise<{ opened: OpenWorkspaceResult; result: BundleResult }>
+          DiscardBundleImport(handle: string): Promise<void>
           CloseWorkspace(): Promise<void>
           TakeOverWorkspace(): Promise<OpenWorkspaceResult>
           GetWorkspaceInfo(): Promise<WorkspaceInfo>
@@ -565,3 +574,53 @@ interface ImportSummary {
 }
 
 export {}
+
+// --- .vibe bundles (#118): mirrors studio/bundle.go and internal/bundle ---
+
+interface BundleContentItem { id: string; title: string }
+interface BundleContentConnection {
+  name: string; type: string; summary: string
+  scope: 'team' | 'this computer'
+  portable: boolean; reason?: string
+}
+interface BundleContent {
+  workspaceName: string
+  notebooks: BundleContentItem[]
+  queries: BundleContentItem[]
+  skills: BundleContentItem[]
+  connections: BundleContentConnection[]
+}
+interface BundleSelection {
+  all: boolean
+  notebooks: string[]; queries: string[]; skills: string[]
+  sharedConnections: boolean
+  teamConnections: string[]
+  localConnections: string[]
+}
+interface BundleExportRequest { path: string; selection: BundleSelection; passphrase: string }
+interface BundleExportResult {
+  path: string; cancelled: boolean; encrypted: boolean
+  notebooks: number; queries: number; skills: number; connections: number
+  bytes: number; warnings: string[]
+}
+type BundleAction = 'rename' | 'overwrite' | 'skip'
+interface BundlePreviewItem { key: string; kind: 'notebook' | 'query' | 'skill'; id: string; title: string; size: number; conflict: boolean }
+interface BundlePreviewConnection {
+  key: string; name: string; type: string; summary: string
+  details: string[]; risks: string[]; askedWritable: boolean
+  conflict: boolean; conflictScope?: string; renamedTo?: string
+}
+interface BundlePreview {
+  handle: string
+  needsPassphrase: boolean
+  wrongPassphrase: boolean
+  path: string
+  workspaceName: string; createdAt: string; createdBy: string; encrypted: boolean
+  items: BundlePreviewItem[]
+  connections: BundlePreviewConnection[]
+  warnings: string[]
+  makerNotes: string[]
+}
+interface BundleDecisions { onConflict: BundleAction; items: Record<string, BundleAction>; connections: string[] }
+interface BundleOutcome { key: string; kind: string; id: string; finalId?: string; result: string; error?: string }
+interface BundleResult { outcomes: BundleOutcome[]; dryRun: boolean; warnings: string[] }

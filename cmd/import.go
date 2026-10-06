@@ -42,7 +42,9 @@ workspace, creates the empty data/local.duckdb file.`,
 func runImport(cmd *cobra.Command, args []string) error {
 	file := args[0]
 	if isVibeFile(file) {
-		return errLegacyFileArg
+		// A .vibe argument is a bundle (#118); an older container is refused
+		// by the bundle reader with a plain message.
+		return runImportBundle(cmd, file)
 	}
 	dir, _ := cmd.Flags().GetString("workspace")
 	into, _ := cmd.Flags().GetString("into")

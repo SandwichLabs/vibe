@@ -2,7 +2,7 @@
 
 A **workspace** is a folder, optionally a git repository, that holds your notebooks, saved queries and skills as ordinary files, plus a small `vibe.yaml` that marks it. Your data stays wherever it already lives; the workspace only describes how to reach it.
 
-This page is the file-level reference, the command line, and how Studio opens, creates and switches workspaces (#111). Everything below is implemented by `internal/workspace` and its stores. `.vibe` container files are not opened by anything any more.
+This page is the file-level reference, the command line, and how Studio opens, creates and switches workspaces (#111). Everything below is implemented by `internal/workspace` and its stores. `.vibe` here means a bundle (see "Sharing without git"); the older data-holding container files are not opened by anything any more.
 
 ## In Studio
 
@@ -16,7 +16,7 @@ This page is the file-level reference, the command line, and how Studio opens, c
 - **No Save.** Notebooks, queries and skills save as you go; table edits go straight to their connection. There is no Save, Revert or unsaved-changes prompt.
 - **Settings.** *Workspace*: name, default connection, the agent's **team limit** (committed, can only tighten), **this computer** (your own choice, up to the team limit), and Studio's MCP switch with **Copy Claude Code config** / **Copy Claude Desktop config**. *App*: theme and the agent's model, including its API key as a write-only field ("In your keychain, Replace, Clear", and a one-time offer to move a plaintext key out of `~/.vibe.yaml`; see [`../llm-config.md`](../llm-config.md)). Neither shows a token.
 
-Studio takes a workspace folder on the command line: `vibe studio --gui <dir>` (or `vibe-studio <dir>`). A `.vibe` file is refused with a plain message.
+Studio takes a workspace folder on the command line: `vibe studio --gui <dir>` (or `vibe-studio <dir>`). A `.vibe` file on the command line (the OS opening one with Vibe) opens the **Import .vibe…** dialog instead.
 
 ## Layout
 
@@ -288,14 +288,17 @@ On non-unix platforms the lock and take over are no-ops (Windows is not a releas
 
 ## Command line
 
-The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, or the current directory and then each parent until a `vibe.yaml` turns up. A `.vibe` path anywhere is refused with "`.vibe` files are no longer opened; create a workspace with `vibe workspace init`". `vibe verify`, `compact`, `rekey`, `dump`, `passphrase` and `info <file>` belonged to the container and are gone (the names stay registered, hidden, to say so).
+The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, or the current directory and then each parent until a `vibe.yaml` turns up. A `.vibe` path where a workspace folder is expected is refused with "`.vibe` files are no longer opened; create a workspace with `vibe workspace init`"; `vibe import <file.vibe>` is the exception: it imports a bundle. `vibe verify`, `compact`, `rekey`, `dump`, `passphrase` and `info <file>` belonged to the container and are gone (the names stay registered, hidden, to say so).
 
 | Command | What it does |
 |---|---|
 | `vibe workspace init [dir] [--name N] [--git] [--template T]` | Wraps `workspace.Init` (above). `dir` defaults to `.`. `--git` runs `git init` when git is installed. `--template` (`contacts`, `inventory`, `order-entry`, `training-registrations`) seeds `data/local.duckdb` with the template's sample tables and writes its starter notebook to `notebooks/`. Prints the next steps. `vibe init [dir]` is an alias. |
 | `vibe workspace info [--workspace DIR] [--json]` | Root, id and name; every connection with its scope, status, read-only flag and (for attached ones) table count; notebook, query and skill counts; the effective agent policy; who owns the hub. Never takes the hub or creates a data file. |
 | `vibe query "<sql>" [-c conn] [--format table\|csv\|json] [--limit N] [--read-only]` | One statement through the session. `-c` makes that connection's catalog the default for unqualified names. `-` reads the statement from standard input. `--limit` defaults to 1000 (0 for all), and a cap is reported on standard error. |
-| `vibe import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. |
+| `vibe import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. A `.vibe` file is routed to `vibe import bundle`. |
+| `vibe export bundle [-o file.vibe] [--notebooks a,b] [--queries ...] [--skills ...] [--with-connections] [--with-local-connections a,b] [--encrypt] [--force]` | Write a `.vibe` bundle of the workspace's content (everything unless some are named). Takes no hub lock: it only reads files. See "Sharing without git". |
+| `vibe export notebook <id> [-o file.vnb]` / `vibe import notebook <file.vnb> [--on-conflict ...]` | One notebook, through the same checks as a bundle. |
+| `vibe import bundle <file.vibe> [--on-conflict rename\|overwrite\|skip] [--with-connections all\|a,b] [--dry-run]` | Import a bundle into the workspace. |
 | `vibe export <[conn.]table> \| --sql "<query>" [-o file]` | See `import-office.md`. |
 | `vibe studio [dir] [--gui] [--read-only]` | The terminal UI: a SQL REPL on the session, a read-only table browser across every attached connection (remote tables are listed without counts), and a notebook list. Connection problems are shown at the top of the REPL, since the alternate screen hides stderr. `--gui` launches the desktop app instead, opening `dir` there. |
 | `vibe mcp serve [--workspace DIR]` | See `docs/mcp.md`. |
@@ -303,3 +306,46 @@ The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, 
 **Who may write.** A command that can write (`query`, `import`, `export` without `--read-only`, `studio`) first takes the workspace's hub lock (see "One owner at a time"). If Studio or `vibe mcp serve` holds it, the command stops and names the holder: `workspace acme is open in Vibe Studio (pid 4242), which owns its database; close it, or re-run with --read-only`. Only commands that have a `--read-only` flag (`query`, `export`, `studio`) suggest it. It skips the lock and attaches every connection read-only (and refuses `COPY ... TO`). DuckDB cannot mix a writer with readers on one file, and an owner keeps the workspace's local `.duckdb` files open for writing, so while someone owns the workspace `--read-only` reaches only its other connections (MotherDuck, Postgres, ...). A locked local file is reported in plain words ("a local DuckDB file that Vibe Studio (pid 4242) has open for writing"), and `studio` does not offer read-only when the default database is one. A workspace that has no data file yet reports "has no data file yet" instead of creating one. `studio` offers `--read-only` interactively when stdin is a terminal.
 
 **SQL checks.** The CLI is you acting directly, not the agent, so SQL runs as written and the agent's allow-list does not apply. As a courtesy `query` (and the TUI's REPL) refuse `ATTACH`, `DETACH`, `INSTALL`, `LOAD`, `SET` / `RESET` and `CREATE`/`DROP SECRET`, with an explanation (connections come from the workspace, credentials from the keychain). This is a check for common slips, not a security boundary: DuckDB's configuration lock does not itself stop those statements. The check understands comments and quoted text (`'...'`, `"..."`, `E'...'`, `$tag$...$tag$`). `export --sql` must be exactly one `SELECT`, judged by DuckDB's parser (`json_serialize_sql`), since the text is placed inside `COPY (...)`. A write to a connection that is `read_only` fails with a hint to set `read_only: false`. Writes go straight to their connection; there is nothing to save.
+
+## Sharing without git: `.vibe` bundles
+
+A `.vibe` file is a **bundle**: a zip of a workspace's notebooks, queries and skills, and optionally its connection definitions, for sharing by email or chat when git is not in the picture. It is implemented by `internal/bundle`; Studio and the CLI are two front ends to it. It is a person's action: no agent tool and no MCP method can export or import a bundle (a test keeps `internal/agents`, `internal/llm` and `internal/mcp` from importing the package).
+
+**A bundle holds no data and no credentials.** There is no `data/` directory and no `.duckdb` file in it. Connection definitions never carry a sign-in method, a keychain reference, a fingerprint, a nonce or any per-person setting; they are read from the committed team definitions (and the "This computer" ones the person ticks) and then sanitised with the strictest rule there is, the one for the committed `vibe.yaml`: no absolute path or path outside the workspace, no `${ENV}` reference, nothing credential-shaped, and any option whose value is an absolute path is left out. A definition that cannot be made portable is left out and named in the manifest's `warnings`. The workspace's own default `local` connection is not exported, since there is no data to go with it.
+
+### Format, version 2
+
+```
+manifest.json
+notebooks/<id>.vnb
+queries/<id>.sql
+skills/<name>/SKILL.md
+connections.yaml            (optional)
+```
+
+`manifest.json` has `kind: "vibe/bundle"`, `formatVersion: 2`, `createdAt`, `createdBy` (the app version), `workspaceName`, `warnings`, and `contents`: one `{path, kind, id, sha256, size}` per entry. The entries are the stores' own file bytes, so an export followed by an import into an empty workspace gives byte-identical files. `connections.yaml` is `version: 1` plus `connections:` and nothing else.
+
+### Locking a bundle
+
+A bundle is unencrypted by default. **Lock with a passphrase** (Studio) or `--encrypt` (CLI) wraps the whole zip in one [age](https://age-encryption.org) envelope with a scrypt passphrase recipient, from `filippo.io/age`; there is no bespoke cryptography here. The age header (`age-encryption.org/v1`) is the unencrypted marker: the importer recognises it and asks for the passphrase before anything else. A wrong passphrase says "wrong passphrase", a damaged file says it is damaged, and Vibe cannot recover a forgotten passphrase. The CLI asks twice on a terminal; for scripts `VIBE_BUNDLE_PASSPHRASE` supplies it (less safe: other processes of yours can read the environment). Studio's passphrase crosses the bridge in one direction only and is not stored.
+
+### Importing
+
+Studio: **Import .vibe…** in the workspace menu imports into the open workspace; **Import .vibe…** on the launcher creates a new workspace from the bundle. The file is opened, verified and previewed first; nothing is written until **Import**. Each item that already exists in the workspace gets its own choice: **Keep both** (the new one is saved as `<id>-2`, `-3`, ...), **Replace mine** (a compare-and-write against the revision just read, so a file changed in between is reported, never clobbered) or **Skip**; every item can also be unticked. CLI: `--on-conflict rename|overwrite|skip` (default rename) and `--dry-run`.
+
+Import treats the file as hostile:
+
+- The set of entry names is closed: the five patterns above. Absolute paths, `..`, backslashes, drive letters, directories, symlinks, nested paths, encrypted zip entries and any unknown file refuse the whole bundle. Ids and skill names must pass the stores' own id rules.
+- Every entry's SHA-256 and size must match the manifest, and the manifest must list exactly the entries in the archive.
+- Caps: 10 MB per entry, 50 MB unpacked in all, 2,000 entries, 64 MB on disk. Declared sizes are checked before decompression and the real byte count is enforced while reading, so a zip bomb is refused. An encrypted bundle's scrypt work factor is capped at 18, the value Vibe itself encrypts with; a header asking for more is refused ("this bundle was made with settings Vibe won't use").
+- Each document is parsed by its own store's rules (`notebooks.Coerce`, `queries.Decode`, `skills.Decode`) before anything is written. A skill can never claim `source: built-in` (it is imported as an ordinary skill, with a warning) and cannot take a built-in's name; every skill that arrives in a bundle is saved with `source: import` and badged **Imported** in the Skills view.
+- Writes go through `notebooks.Store`, `queries.Store` and `skills.Store`.
+- **Connections** are never added unless the person names them (Studio: tick them in the preview; CLI: `--with-connections all|a,b`). The preview shows everything a definition sets (host, database, path, region, storage scope, every option) and warns about TLS turned off, `sslmode=disable|allow|prefer`, a non-AWS endpoint for `s3`, and a storage scope that is a whole bucket. A definition always arrives **read-only**, whatever it asks for (Overwrite keeps your own read/write choice, and clears your sign-in choice and saved credential for that name, so it arrives needing credentials). They go to **This computer** for the workspace, never the committed `vibe.yaml`, and arrive with no credentials, so each shows *needs credentials* until you sign in. Move one to the team later with the usual scope move. A bundle cannot replace a team or all-workspaces connection of the same name; the imported one is renamed (`name_2`) or skipped. An imported notebook still runs its SQL when opened, as any notebook from a git pull does; read a bundle from someone you do not know before you open its notebooks.
+
+A file that is a **formatVersion 1** bundle or a file with SQLite's header gets one plain message: "This is an older .vibe file that holds data. Vibe no longer opens these." An SQLCipher container has no header at all, so it, like anything else that is not a bundle, says "this is not a Vibe bundle (an older .vibe file that held data is not opened either)". A bundle from a newer Vibe asks you to update.
+
+Text the bundle's maker wrote (workspace name, created-by, the manifest's own warnings) is length-capped, stripped of control and bidirectional characters, and shown apart as "From the person who made this bundle". Notebook ids are kept as they are, including `nb_<uuid>` ones, so Replace replaces. Studio reads each existing item's revision when it previews, and Replace only replaces that version.
+
+Single notebooks: `vibe export notebook <id> [-o x.vnb]` and `vibe import notebook <x.vnb> [--on-conflict ...]` (it also accepts Studio's single-notebook export) use `bundle.NotebookPackage`, the bundle's own import path.
+
+The single-notebook export and import in Studio (`ExportNotebook` / `ImportNotebook`) use the same size cap and `bundle.CheckNotebook`, so a notebook is judged by one rule whether it arrives alone or in a bundle.

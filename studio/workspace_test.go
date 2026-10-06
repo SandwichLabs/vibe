@@ -54,19 +54,20 @@ func TestOpenWorkspace_OpensAndRecords(t *testing.T) {
 	assert.ErrorIs(t, err, errNoWorkspace)
 }
 
-func TestOpenWorkspace_VibeFileRefused(t *testing.T) {
+func TestOpenWorkspace_VibeFileIsImportedNotOpened(t *testing.T) {
 	app := newBareApp(t)
 	path := filepath.Join(t.TempDir(), "old.vibe")
 	require.NoError(t, os.WriteFile(path, []byte("SQLite format 3"), 0o600))
 	_, err := app.OpenWorkspace(path)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".vibe files are no longer opened")
+	assert.Contains(t, err.Error(), "Import .vibe")
 	assert.False(t, app.IsWorkspaceOpen())
 
+	// A .vibe on the command line is offered to the import flow, not opened.
 	app.setInitialArg(path)
 	init := app.GetInitialWorkspace()
 	assert.Empty(t, init.Path)
-	assert.Contains(t, init.Message, ".vibe files are no longer opened")
+	assert.Equal(t, path, init.BundlePath)
 }
 
 func TestSetInitialArg(t *testing.T) {

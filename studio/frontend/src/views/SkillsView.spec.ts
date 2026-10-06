@@ -51,7 +51,7 @@ describe('SkillsView', () => {
     expect(text).toContain('workspace-sales')
     expect(text).toContain('revenue-rules')
     expect(text).toContain('built-in')
-    expect(text).toContain('import')
+    expect(text).toContain('Imported')
     expect(text).toContain('user')
   })
 

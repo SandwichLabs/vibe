@@ -1101,3 +1101,45 @@ func TestOpenSession_ForceReadOnly(t *testing.T) {
 	}
 	assert.True(t, found)
 }
+
+// Opening a workspace never rewrites the folder's mark: a later open (another
+// process, another run) must keep the settings stamped with it trusted.
+func TestOpenNeverRewritesTheNonce(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "n")
+	res, err := Init(dir)
+	require.NoError(t, err)
+	root := res.Workspace.Root()
+	require.NoError(t, res.Workspace.Close())
+	cfg := t.TempDir()
+	open := func() Workspace {
+		ws, err := Open(root, WithConfigDir(cfg), WithUserConfig(UserConfig{Version: ConfigVersion}))
+		require.NoError(t, err)
+		return ws
+	}
+	nonceFile := filepath.Join(root, ".vibe-local", "nonce")
+
+	ws := open()
+	first, err := os.ReadFile(nonceFile)
+	require.NoError(t, err)
+	require.NotEmpty(t, first)
+	for i := 0; i < 3; i++ { // no settings file yet: the old code re-stamped here
+		require.NoError(t, ws.Close())
+		ws = open()
+		again, err := os.ReadFile(nonceFile)
+		require.NoError(t, err)
+		assert.Equal(t, string(first), string(again), "open %d rewrote the nonce", i+2)
+	}
+	l := ws.Local()
+	l.Agent.Sandbox = SandboxReadOnly
+	require.NoError(t, ws.SaveLocal(l))
+	require.NoError(t, ws.Close())
+	for i := 0; i < 3; i++ {
+		ws = open()
+		again, err := os.ReadFile(nonceFile)
+		require.NoError(t, err)
+		assert.Equal(t, string(first), string(again))
+		assert.True(t, ws.LocalTrusted())
+		assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox, "settings stay in force")
+		require.NoError(t, ws.Close())
+	}
+}

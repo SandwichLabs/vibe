@@ -288,9 +288,11 @@ func (w *workspace) reload() error {
 			}
 		default:
 			local = LocalConfig{Version: ConfigVersion}
-			// First open (or settings deleted): make this folder's mark. Always
-			// a fresh one, never a value the folder arrived with.
-			if folder := w.readNonce(); folder == "" || folder != w.ownNonce {
+			// First open (or settings deleted): make this folder's mark once,
+			// when it has none. An open never rewrites an existing mark:
+			// another process may have stamped it into a settings file, and
+			// changing it would make those settings look like another folder's.
+			if w.readNonce() == "" {
 				w.writeNonce()
 			}
 		}

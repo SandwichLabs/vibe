@@ -53,6 +53,91 @@ export namespace a2ui {
 
 }
 
+export namespace bundle {
+	
+	export class Outcome {
+	    key: string;
+	    kind: string;
+	    id: string;
+	    finalId?: string;
+	    result: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Outcome(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.kind = source["kind"];
+	        this.id = source["id"];
+	        this.finalId = source["finalId"];
+	        this.result = source["result"];
+	        this.error = source["error"];
+	    }
+	}
+	export class Result {
+	    outcomes: Outcome[];
+	    dryRun: boolean;
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.outcomes = this.convertValues(source["outcomes"], Outcome);
+	        this.dryRun = source["dryRun"];
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Selection {
+	    all: boolean;
+	    notebooks: string[];
+	    queries: string[];
+	    skills: string[];
+	    sharedConnections: boolean;
+	    teamConnections: string[];
+	    localConnections: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Selection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.all = source["all"];
+	        this.notebooks = source["notebooks"];
+	        this.queries = source["queries"];
+	        this.skills = source["skills"];
+	        this.sharedConnections = source["sharedConnections"];
+	        this.teamConnections = source["teamConnections"];
+	        this.localConnections = source["localConnections"];
+	    }
+	}
+
+}
+
 export namespace connections {
 	
 	export class Capabilities {
@@ -677,6 +762,454 @@ export namespace main {
 	        this.text = source["text"];
 	    }
 	}
+	export class BundleContentConnection {
+	    name: string;
+	    type: string;
+	    summary: string;
+	    scope: string;
+	    portable: boolean;
+	    reason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleContentConnection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.summary = source["summary"];
+	        this.scope = source["scope"];
+	        this.portable = source["portable"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class BundleContentItem {
+	    id: string;
+	    title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleContentItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	    }
+	}
+	export class BundleContent {
+	    workspaceName: string;
+	    notebooks: BundleContentItem[];
+	    queries: BundleContentItem[];
+	    skills: BundleContentItem[];
+	    connections: BundleContentConnection[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceName = source["workspaceName"];
+	        this.notebooks = this.convertValues(source["notebooks"], BundleContentItem);
+	        this.queries = this.convertValues(source["queries"], BundleContentItem);
+	        this.skills = this.convertValues(source["skills"], BundleContentItem);
+	        this.connections = this.convertValues(source["connections"], BundleContentConnection);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class BundleDecisions {
+	    onConflict: string;
+	    items: Record<string, string>;
+	    connections: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleDecisions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.onConflict = source["onConflict"];
+	        this.items = source["items"];
+	        this.connections = source["connections"];
+	    }
+	}
+	export class BundleExportRequest {
+	    path: string;
+	    selection: bundle.Selection;
+	    passphrase: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleExportRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.selection = this.convertValues(source["selection"], bundle.Selection);
+	        this.passphrase = source["passphrase"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BundleExportResult {
+	    path: string;
+	    cancelled: boolean;
+	    encrypted: boolean;
+	    notebooks: number;
+	    queries: number;
+	    skills: number;
+	    connections: number;
+	    bytes: number;
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleExportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.cancelled = source["cancelled"];
+	        this.encrypted = source["encrypted"];
+	        this.notebooks = source["notebooks"];
+	        this.queries = source["queries"];
+	        this.skills = source["skills"];
+	        this.connections = source["connections"];
+	        this.bytes = source["bytes"];
+	        this.warnings = source["warnings"];
+	    }
+	}
+	export class HolderInfo {
+	    app: string;
+	    pid: number;
+	    servesMcp: boolean;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HolderInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.app = source["app"];
+	        this.pid = source["pid"];
+	        this.servesMcp = source["servesMcp"];
+	        this.text = source["text"];
+	    }
+	}
+	export class WorkspaceCounts {
+	    notebooks: number;
+	    queries: number;
+	    skills: number;
+	    tables: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceCounts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.notebooks = source["notebooks"];
+	        this.queries = source["queries"];
+	        this.skills = source["skills"];
+	        this.tables = source["tables"];
+	    }
+	}
+	export class ServerChange {
+	    old: string;
+	    new: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerChange(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.old = source["old"];
+	        this.new = source["new"];
+	    }
+	}
+	export class ConnectionInfo {
+	    name: string;
+	    type: string;
+	    scope: string;
+	    shadows?: string[];
+	    readOnly: boolean;
+	    default: boolean;
+	    status: string;
+	    detail?: string;
+	    lockedByPid?: number;
+	    remote: boolean;
+	    catalogless?: boolean;
+	    signIn?: string;
+	    extension?: string;
+	    serverChanged?: ServerChange;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.scope = source["scope"];
+	        this.shadows = source["shadows"];
+	        this.readOnly = source["readOnly"];
+	        this.default = source["default"];
+	        this.status = source["status"];
+	        this.detail = source["detail"];
+	        this.lockedByPid = source["lockedByPid"];
+	        this.remote = source["remote"];
+	        this.catalogless = source["catalogless"];
+	        this.signIn = source["signIn"];
+	        this.extension = source["extension"];
+	        this.serverChanged = this.convertValues(source["serverChanged"], ServerChange);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WorkspaceInfo {
+	    root: string;
+	    id: string;
+	    name: string;
+	    sessionId: string;
+	    gitBranch: string;
+	    isGit: boolean;
+	    defaultConnection: string;
+	    connections: ConnectionInfo[];
+	    counts: WorkspaceCounts;
+	    policy: AgentPolicyInfo;
+	    team: AgentPolicyInfo;
+	    local: AgentPolicyInfo;
+	    teamSandboxSet: boolean;
+	    readOnly: boolean;
+	    holder?: HolderInfo;
+	    issues: workspace.SessionIssue[];
+	    warnings: string[];
+	    duplicateIds: string[];
+	    localUntrusted: boolean;
+	    mcpRunning: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.root = source["root"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.sessionId = source["sessionId"];
+	        this.gitBranch = source["gitBranch"];
+	        this.isGit = source["isGit"];
+	        this.defaultConnection = source["defaultConnection"];
+	        this.connections = this.convertValues(source["connections"], ConnectionInfo);
+	        this.counts = this.convertValues(source["counts"], WorkspaceCounts);
+	        this.policy = this.convertValues(source["policy"], AgentPolicyInfo);
+	        this.team = this.convertValues(source["team"], AgentPolicyInfo);
+	        this.local = this.convertValues(source["local"], AgentPolicyInfo);
+	        this.teamSandboxSet = source["teamSandboxSet"];
+	        this.readOnly = source["readOnly"];
+	        this.holder = this.convertValues(source["holder"], HolderInfo);
+	        this.issues = this.convertValues(source["issues"], workspace.SessionIssue);
+	        this.warnings = source["warnings"];
+	        this.duplicateIds = source["duplicateIds"];
+	        this.localUntrusted = source["localUntrusted"];
+	        this.mcpRunning = source["mcpRunning"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class OpenWorkspaceResult {
+	    status: string;
+	    path: string;
+	    info?: WorkspaceInfo;
+	    warnings?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new OpenWorkspaceResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.path = source["path"];
+	        this.info = this.convertValues(source["info"], WorkspaceInfo);
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BundleImportOpened {
+	    opened?: OpenWorkspaceResult;
+	    result?: bundle.Result;
+	
+	    static createFrom(source: any = {}) {
+	        return new BundleImportOpened(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.opened = this.convertValues(source["opened"], OpenWorkspaceResult);
+	        this.result = this.convertValues(source["result"], bundle.Result);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BundlePreview {
+	    handle: string;
+	    needsPassphrase: boolean;
+	    wrongPassphrase: boolean;
+	    path: string;
+	    workspaceName: string;
+	    createdAt: string;
+	    createdBy: string;
+	    encrypted: boolean;
+	    items: bundle.PreviewItem[];
+	    connections: bundle.PreviewConnection[];
+	    warnings: string[];
+	    makerNotes: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BundlePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.handle = source["handle"];
+	        this.needsPassphrase = source["needsPassphrase"];
+	        this.wrongPassphrase = source["wrongPassphrase"];
+	        this.path = source["path"];
+	        this.workspaceName = source["workspaceName"];
+	        this.createdAt = source["createdAt"];
+	        this.createdBy = source["createdBy"];
+	        this.encrypted = source["encrypted"];
+	        this.items = this.convertValues(source["items"], bundle.PreviewItem);
+	        this.connections = this.convertValues(source["connections"], bundle.PreviewConnection);
+	        this.warnings = source["warnings"];
+	        this.makerNotes = source["makerNotes"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CatalogTable {
 	    name: string;
 	    qualified: string;
@@ -906,76 +1439,6 @@ export namespace main {
 	        this.secret = source["secret"];
 	        this.remember = source["remember"];
 	    }
-	}
-	export class ServerChange {
-	    old: string;
-	    new: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ServerChange(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.old = source["old"];
-	        this.new = source["new"];
-	    }
-	}
-	export class ConnectionInfo {
-	    name: string;
-	    type: string;
-	    scope: string;
-	    shadows?: string[];
-	    readOnly: boolean;
-	    default: boolean;
-	    status: string;
-	    detail?: string;
-	    lockedByPid?: number;
-	    remote: boolean;
-	    catalogless?: boolean;
-	    signIn?: string;
-	    extension?: string;
-	    serverChanged?: ServerChange;
-	
-	    static createFrom(source: any = {}) {
-	        return new ConnectionInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.type = source["type"];
-	        this.scope = source["scope"];
-	        this.shadows = source["shadows"];
-	        this.readOnly = source["readOnly"];
-	        this.default = source["default"];
-	        this.status = source["status"];
-	        this.detail = source["detail"];
-	        this.lockedByPid = source["lockedByPid"];
-	        this.remote = source["remote"];
-	        this.catalogless = source["catalogless"];
-	        this.signIn = source["signIn"];
-	        this.extension = source["extension"];
-	        this.serverChanged = this.convertValues(source["serverChanged"], ServerChange);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class ConnectionDetail {
 	    name: string;
@@ -1208,27 +1671,11 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class HolderInfo {
-	    app: string;
-	    pid: number;
-	    servesMcp: boolean;
-	    text: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new HolderInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.app = source["app"];
-	        this.pid = source["pid"];
-	        this.servesMcp = source["servesMcp"];
-	        this.text = source["text"];
-	    }
-	}
 	export class InitialWorkspace {
 	    path: string;
 	    message: string;
+	    bundlePath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new InitialWorkspace(source);
@@ -1238,6 +1685,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.message = source["message"];
+	        this.bundlePath = source["bundlePath"];
 	    }
 	}
 	export class InstallExtensionRequest {
@@ -1342,128 +1790,7 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class WorkspaceCounts {
-	    notebooks: number;
-	    queries: number;
-	    skills: number;
-	    tables: number;
 	
-	    static createFrom(source: any = {}) {
-	        return new WorkspaceCounts(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.notebooks = source["notebooks"];
-	        this.queries = source["queries"];
-	        this.skills = source["skills"];
-	        this.tables = source["tables"];
-	    }
-	}
-	export class WorkspaceInfo {
-	    root: string;
-	    id: string;
-	    name: string;
-	    sessionId: string;
-	    gitBranch: string;
-	    isGit: boolean;
-	    defaultConnection: string;
-	    connections: ConnectionInfo[];
-	    counts: WorkspaceCounts;
-	    policy: AgentPolicyInfo;
-	    team: AgentPolicyInfo;
-	    local: AgentPolicyInfo;
-	    teamSandboxSet: boolean;
-	    readOnly: boolean;
-	    holder?: HolderInfo;
-	    issues: workspace.SessionIssue[];
-	    warnings: string[];
-	    duplicateIds: string[];
-	    localUntrusted: boolean;
-	    mcpRunning: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new WorkspaceInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.root = source["root"];
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.sessionId = source["sessionId"];
-	        this.gitBranch = source["gitBranch"];
-	        this.isGit = source["isGit"];
-	        this.defaultConnection = source["defaultConnection"];
-	        this.connections = this.convertValues(source["connections"], ConnectionInfo);
-	        this.counts = this.convertValues(source["counts"], WorkspaceCounts);
-	        this.policy = this.convertValues(source["policy"], AgentPolicyInfo);
-	        this.team = this.convertValues(source["team"], AgentPolicyInfo);
-	        this.local = this.convertValues(source["local"], AgentPolicyInfo);
-	        this.teamSandboxSet = source["teamSandboxSet"];
-	        this.readOnly = source["readOnly"];
-	        this.holder = this.convertValues(source["holder"], HolderInfo);
-	        this.issues = this.convertValues(source["issues"], workspace.SessionIssue);
-	        this.warnings = source["warnings"];
-	        this.duplicateIds = source["duplicateIds"];
-	        this.localUntrusted = source["localUntrusted"];
-	        this.mcpRunning = source["mcpRunning"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class OpenWorkspaceResult {
-	    status: string;
-	    path: string;
-	    info?: WorkspaceInfo;
-	    warnings?: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new OpenWorkspaceResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.status = source["status"];
-	        this.path = source["path"];
-	        this.info = this.convertValues(source["info"], WorkspaceInfo);
-	        this.warnings = source["warnings"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class QueryResult {
 	    columns: ColumnInfo[];
 	    rows: any[][];

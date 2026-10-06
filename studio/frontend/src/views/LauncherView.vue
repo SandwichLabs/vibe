@@ -13,6 +13,7 @@ import {
   openWorkspacePath, openFolderDialog, launcherNotice, newWorkspaceOpen, relativeTime,
 } from '../composables/useWorkspace'
 import { shortcutLabel } from '../composables/useModal'
+import { openBundleImport } from '../composables/useBundle'
 import { errorText } from '../lib/errors'
 
 const recents = ref<RecentWorkspace[]>([])
@@ -153,6 +154,9 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
             <button class="btn" type="button" data-testid="open-folder" :disabled="!!opening" @click="openFolder">
               <Icon name="folderOpen" :size="16" /> Open folder…
             </button>
+            <button class="btn" type="button" data-testid="import-bundle" :disabled="!!opening" @click="openBundleImport('new')">
+              <Icon name="download" :size="16" /> Import .vibe…
+            </button>
           </div>
         </div>
         <div v-if="error" class="banner attn" role="alert" style="max-width: 760px; width: 100%;" data-testid="launcher-error">
@@ -231,6 +235,10 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
               <button ref="newBtn" class="card act-card" type="button" data-testid="new-workspace" :disabled="!!opening" @click="newWorkspaceOpen = true">
                 <span class="ai"><Icon name="plus" :size="20" /></span>
                 <span><span class="at">New workspace… <kbd>{{ shortcutLabel('N') }}</kbd></span><span class="ad">Make a new folder. Pick a name, turn on git if you like, start blank or from a template.</span></span>
+              </button>
+              <button class="card act-card" type="button" data-testid="import-bundle" :disabled="!!opening" @click="openBundleImport('new')">
+                <span class="ai"><Icon name="download" :size="20" /></span>
+                <span><span class="at">Import .vibe…</span><span class="ad">Start a new workspace from a bundle someone shared with you.</span></span>
               </button>
             </div>
           </section>

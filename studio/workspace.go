@@ -54,7 +54,7 @@ const prefsRecentKey = "recentWorkspaces"
 const releaseGrace = 400 * time.Millisecond
 
 // legacyVibeMessage is what Studio says about a .vibe file.
-const legacyVibeMessage = ".vibe files are no longer opened directly. Open a workspace folder, or create a new workspace."
+const legacyVibeMessage = ".vibe files are bundles: use Import .vibe… to bring one into a workspace. Open a workspace folder to work in it."
 
 // conflictPrefix starts the message of a save refused because the file changed
 // on disk; the frontend matches it to show the conflict banner.
@@ -183,6 +183,9 @@ type OpenWorkspaceResult struct {
 type InitialWorkspace struct {
 	Path    string `json:"path"`
 	Message string `json:"message"`
+	// BundlePath is a .vibe bundle passed on the command line (the OS opened
+	// one with Vibe): the launcher offers to import it.
+	BundlePath string `json:"bundlePath"`
 }
 
 // CreateWorkspaceRequest asks for a new workspace.
@@ -287,7 +290,11 @@ func (a *App) setInitialArg(arg string) {
 		return
 	}
 	if strings.EqualFold(filepath.Ext(arg), ".vibe") {
-		a.initialNote = legacyVibeMessage
+		// A bundle (#118). An older container that holds data is told so by
+		// the import preview, not here.
+		if abs, err := filepath.Abs(arg); err == nil {
+			a.initialBundle = abs
+		}
 		return
 	}
 	abs, err := filepath.Abs(arg)
@@ -309,7 +316,7 @@ func (a *App) setInitialArg(arg string) {
 // GetInitialWorkspace returns the folder passed on the command line (empty when
 // none) and a note when the argument could not be used.
 func (a *App) GetInitialWorkspace() InitialWorkspace {
-	return InitialWorkspace{Path: a.initialPath, Message: a.initialNote}
+	return InitialWorkspace{Path: a.initialPath, Message: a.initialNote, BundlePath: a.initialBundle}
 }
 
 // ---- recents ----
@@ -746,6 +753,8 @@ func (a *App) CloseWorkspace() error {
 // open the DuckDB files the moment the lock is free. A no-op with none open.
 // reason rides on "workspace:closed" ("closed", "switch", "released").
 func (a *App) closeWorkspaceLocked(reason string) {
+	// Previewed bundles were compared with this workspace: forget them.
+	a.bundles.clear()
 	if a.ws == nil {
 		return
 	}

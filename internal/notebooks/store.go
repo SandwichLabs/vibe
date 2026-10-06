@@ -50,11 +50,18 @@ type saveOpts struct {
 	overwrite bool
 	rev       string
 	hasRev    bool
+	keepID    bool
 }
 
 // Overwrite skips the conflict check: the caller has chosen "overwrite" in the
 // conflict banner.
 func Overwrite() SaveOption { return func(o *saveOpts) { o.overwrite = true } }
+
+// KeepID stores the notebook under its own id even when that id looks like a
+// generated one (nb_<uuid>), which Save otherwise replaces with a name taken
+// from the title. A bundle import uses it so that an id means the same thing
+// in the bundle and in the workspace.
+func KeepID() SaveOption { return func(o *saveOpts) { o.keepID = true } }
 
 // IfRev sets the revision the caller loaded, overriding the notebook's own
 // "rev" field.

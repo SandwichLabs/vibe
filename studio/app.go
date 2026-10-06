@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/bundle"
 	"github.com/sandwich-labs/vibe-app/internal/config"
 	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
@@ -73,6 +74,8 @@ type App struct {
 	// plain-language problem with it (a .vibe file, a missing folder).
 	initialPath string
 	initialNote string
+	// initialBundle is a .vibe bundle named on the command line.
+	initialBundle string
 
 	// sessionID identifies the CURRENTLY open workspace. It is regenerated on
 	// every successful open and cleared on close. A frontend view that reads
@@ -158,6 +161,9 @@ type App struct {
 	// answer before the tool call gives up. An App field, not a package
 	// constant, so tests can shorten it instead of waiting out 5 minutes.
 	approvalTimeout time.Duration
+
+	// bundles holds .vibe bundles that were previewed and await their commit (#118).
+	bundles bundleStore
 }
 
 // defaultApprovalTimeout is how long an approval card waits for the user
@@ -631,11 +637,13 @@ func (a *App) SelectNotebookFile() (string, error) {
 // never overwrites a notebook already in this container — the file's own id/
 // updatedAt are stripped before Coerce so a fresh id is always assigned,
 // matching model.js's importFile ("Import always lands as a new notebook").
-// maxImportNotebookFileBytes caps an imported notebook file at 8MB (review
+// maxImportNotebookFileBytes caps an imported notebook file at the same
+// per-entry limit a .vibe bundle applies (bundle.MaxEntryBytes, #118), so a
+// single notebook and a bundled one share one validation path (review
 // fix, step 4a #7c) — checked via os.Stat BEFORE the file is read, so a
 // multi-hundred-MB file (or a symlink/fifo pointed at one) never gets
 // fully loaded into memory just to be rejected.
-const maxImportNotebookFileBytes = 8 * 1024 * 1024
+const maxImportNotebookFileBytes = bundle.MaxEntryBytes
 
 func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 	a.mu.Lock()
@@ -679,6 +687,15 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 		delete(wrapper, "updatedAt")
 	}
 
+	// The same checks a notebook in a bundle gets (bundle.CheckNotebook), then
+	// the store's own Save.
+	inner, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, fmt.Errorf("invalid notebook file: %w", err)
+	}
+	if _, _, err := bundle.CheckNotebook(inner); err != nil {
+		return nil, err
+	}
 	nb, warnings, err := a.ws.Notebooks().Save(context.Background(), wrapper)
 	if err != nil {
 		return nil, err

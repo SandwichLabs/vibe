@@ -51,6 +51,10 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const selected = computed(() => skills.value.find((s) => s.name === selectedName.value) || null)
 
+function sourceLabel(source: string) {
+  return source === 'import' ? 'Imported' : source
+}
+
 function sourceBadgeClass(source: string) {
   if (source === 'built-in') return 'badge--teal'
   if (source === 'import') return 'badge--graphite'
@@ -276,7 +280,7 @@ onUnmounted(() => {
               <div style="font-size: var(--sh-fs-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.name }}</div>
             </div>
             <div class="row" style="gap: var(--sh-space-1); margin-top: var(--sh-space-1);">
-              <span class="badge" :class="sourceBadgeClass(s.source)">{{ s.source }}</span>
+              <span class="badge" :class="sourceBadgeClass(s.source)">{{ sourceLabel(s.source) }}</span>
               <span v-if="s.table_name" class="badge badge--graphite" style="white-space: nowrap;" :title="`Loads only while ${s.table_name} has rows`">table: {{ s.table_name }}</span>
             </div>
           </div>
@@ -296,7 +300,7 @@ onUnmounted(() => {
           <div>
             <div class="row" style="gap: var(--sh-space-2); align-items: center;">
               <h2 class="card-title" style="margin: 0; font-size: 28px;">{{ selected.name }}</h2>
-              <span class="badge" :class="sourceBadgeClass(selected.source)">{{ selected.source }}</span>
+              <span class="badge" :class="sourceBadgeClass(selected.source)">{{ sourceLabel(selected.source) }}</span>
             </div>
             <p class="sh-mono" style="color: var(--sh-graphite); margin-top: var(--sh-space-1);">{{ selected.description }}</p>
           </div>

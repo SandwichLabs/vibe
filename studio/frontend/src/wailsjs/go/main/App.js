@@ -46,6 +46,10 @@ export function CheckWorkspaceDir(arg1, arg2) {
   return window['go']['main']['App']['CheckWorkspaceDir'](arg1, arg2);
 }
 
+export function ChooseBundleSaveFile(arg1) {
+  return window['go']['main']['App']['ChooseBundleSaveFile'](arg1);
+}
+
 export function ChooseFolder(arg1) {
   return window['go']['main']['App']['ChooseFolder'](arg1);
 }
@@ -60,6 +64,10 @@ export function ClearLLMKey(arg1) {
 
 export function CloseWorkspace() {
   return window['go']['main']['App']['CloseWorkspace']();
+}
+
+export function CommitBundleImport(arg1, arg2) {
+  return window['go']['main']['App']['CommitBundleImport'](arg1, arg2);
 }
 
 export function ConnectConnection(arg1) {
@@ -106,6 +114,10 @@ export function DescribeTable(arg1) {
   return window['go']['main']['App']['DescribeTable'](arg1);
 }
 
+export function DiscardBundleImport(arg1) {
+  return window['go']['main']['App']['DiscardBundleImport'](arg1);
+}
+
 export function DisconnectConnection(arg1) {
   return window['go']['main']['App']['DisconnectConnection'](arg1);
 }
@@ -120,6 +132,10 @@ export function DropTable(arg1) {
 
 export function ExecuteQuery(arg1) {
   return window['go']['main']['App']['ExecuteQuery'](arg1);
+}
+
+export function ExportBundle(arg1) {
+  return window['go']['main']['App']['ExportBundle'](arg1);
 }
 
 export function ExportNotebook(arg1, arg2) {
@@ -152,6 +168,10 @@ export function GetAgentConfig() {
 
 export function GetAgentStatus() {
   return window['go']['main']['App']['GetAgentStatus']();
+}
+
+export function GetBundleContent() {
+  return window['go']['main']['App']['GetBundleContent']();
 }
 
 export function GetClaudeConfig() {
@@ -220,6 +240,10 @@ export function GetWorkspaceInfo() {
 
 export function HoldQuit() {
   return window['go']['main']['App']['HoldQuit']();
+}
+
+export function ImportBundleIntoNewWorkspace(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ImportBundleIntoNewWorkspace'](arg1, arg2, arg3);
 }
 
 export function ImportFile(arg1) {
@@ -322,6 +346,10 @@ export function OpenWorkspaceReadOnly(arg1) {
   return window['go']['main']['App']['OpenWorkspaceReadOnly'](arg1);
 }
 
+export function PreviewBundleImport(arg1, arg2) {
+  return window['go']['main']['App']['PreviewBundleImport'](arg1, arg2);
+}
+
 export function PreviewFilterSQL(arg1, arg2, arg3) {
   return window['go']['main']['App']['PreviewFilterSQL'](arg1, arg2, arg3);
 }
@@ -400,6 +428,10 @@ export function SaveQueryOn(arg1) {
 
 export function SaveSkill(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SaveSkill'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SelectBundleFile() {
+  return window['go']['main']['App']['SelectBundleFile']();
 }
 
 export function SelectImportFile() {
