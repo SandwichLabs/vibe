@@ -1,13 +1,11 @@
 # Import & Export
 
-> **Changing (#108, #113).** Import will target any **writable connection** (default: the workspace's `local` DuckDB) as `<connection>.<table>`, and `vibe import` will run through the same session as Studio (this closes #72).
-
 ## Import
 
 One **Import** wizard (`ImportView.vue`, on `internal/importer`) handles both
 CSV/TSV and XLSX. It is also the only importer: the Studio bindings
-(`SelectImportFile`, `InspectImport`, `ImportFile`), `vibe import`, and
-`vibe init --import` all call `importer.Import` — there is no separate
+(`SelectImportFile`, `InspectImport`, `ImportFile`) and `vibe import` both
+call `importer.Import` on the workspace session — there is no separate
 "quick" path and no per-row skip-and-continue behaviour. Every import is
 **all-or-nothing**: it runs in one DuckDB transaction, and any unexpected
 failure rolls the whole thing back.
@@ -96,16 +94,36 @@ own, so append/upsert onto one always uses the plain (non-FK) preflight.
 
 ### CLI
 
-`vibe import <file.vibe> --file data.csv|data.xlsx [--table T] [--sheet S]
-[--no-header] [--mode create|replace|append|upsert] [--key COL|auto|none]
-[--type col=type ...] [--dry-run]` runs the same `importer.Import` on DuckDB
-as the Studio wizard — a CLI-imported table is immediately visible to
-Studio, the agent, and MCP. If the table already exists and `--mode` is
-omitted, the command errors rather than guessing a destructive default. It
-prints the same summary line the wizard shows, or the bad-value table on
-failure, and exits non-zero on anything but a clean, unblocked import.
-`vibe init --import` runs the same importer with default (auto-key, create)
-options. `vibe notebook import/export` is tracked separately in #9.
+```
+vibe import <file> [--into [conn.]table] [--workspace DIR]
+            [--mode create|replace|append|upsert] [--key COL|auto|none]
+            [--sheet S] [--no-header] [--type col=type ...] [--dry-run]
+```
+
+`vibe import` runs `importer.Import` on the workspace's DuckDB session, the
+same call as the Studio wizard, so an imported table is immediately visible to
+`vibe query`, Studio, the agent and MCP (#113 closed #72: the CLI used to write
+into the old SQLite envelope).
+
+- **Target.** `--into` is `table`, `conn.table` or `conn.schema.table`. The
+  connection defaults to the workspace's `default_connection`. Without
+  `--into` the table is named after the file. The connection must be writable
+  (`read_only: false`); a read-only one is refused with a pointer to that
+  setting.
+- **Formats.** CSV, TSV and `.xlsx`. Parquet is not an import format: query it
+  in place with `read_parquet('file.parquet')`, or attach it as a connection.
+- **Modes.** If the table already exists and `--mode` is omitted, the command
+  errors rather than guessing a destructive default. It prints the same
+  summary line the wizard shows, or the bad-value list on failure, and exits
+  non-zero on anything but a clean, unblocked import. `--dry-run` writes
+  nothing (no table, no skill).
+- **Ownership.** It takes the workspace's hub lock for the duration, so while
+  Studio or `vibe mcp serve` has the workspace open it stops with a message
+  naming that process.
+- A successful import writes or refreshes the `workspace-<table>` skill into
+  `skills/`, as Studio's does.
+
+`vibe notebook import/export` is tracked separately in #9.
 
 ## Export
 
@@ -141,9 +159,19 @@ feature in #73, not a report one.
 
 ### CLI
 
-`vibe import` is documented above (Import § CLI) — it runs on DuckDB as of
-#82. `vibe export`/`vibe dump`, and migration of any legacy SQLite-side
-tables, are the remaining half of #72: those commands **still read and
-write the SQLite envelope instead of DuckDB**, so use the Studio Export
-actions above, or the agent's tools over `vibe mcp serve`, until that's
-fixed. `vibe notebook import/export` is tracked in #9.
+```
+vibe export <[conn.]table> -o file.{csv,parquet,json,xlsx} [--force]
+vibe export --sql "<query>" [-c conn] -o file.{csv,parquet,json,xlsx}
+vibe export <[conn.]table> [--format csv|json]          # to standard output
+```
+
+`vibe export` writes a table or a query's result with DuckDB's `COPY ... TO`
+through the workspace session; the format comes from the file's extension. An
+existing destination is only replaced with `--force`. Excel needs the `excel`
+extension (fetched once, see above). Without `-o` the rows go to standard
+output as CSV or JSON. Exporting only reads, so `--read-only` works without
+taking the workspace's hub lock.
+
+`vibe query "<sql>" [--format table|csv|json] [--limit N]` prints a result
+directly; see `docs/reference/workspaces.md` (Command line).
+`vibe notebook import/export` is tracked in #9.

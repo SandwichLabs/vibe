@@ -580,3 +580,24 @@ func TestSetDefaultCatalog(t *testing.T) {
 
 	assert.Error(t, s.SetDefaultCatalog(ctx, "nope"))
 }
+
+// TestListSchemasIncludesMainAndExcludesSystemSchemas: DuckDB 1.4 marks "main"
+// internal, so it must be listed by name rules, not by the internal flag.
+func TestListSchemasIncludesMainAndExcludesSystemSchemas(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	a := mkDuckFile(t, "a", "CREATE TABLE people(id INTEGER)", "CREATE SCHEMA archive", "CREATE TABLE archive.old(id INTEGER)")
+	require.NoError(t, s.Attach(ctx, Spec{Name: "sales", Path: a}))
+
+	schemas, err := s.ListSchemas(ctx, "sales")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"archive", "main"}, schemas)
+
+	all, err := AllTables(ctx, s, "sales")
+	require.NoError(t, err)
+	var names []string
+	for _, ti := range all {
+		names = append(names, ti.Schema+"."+ti.Name)
+	}
+	assert.ElementsMatch(t, []string{"main.people", "archive.old"}, names)
+}

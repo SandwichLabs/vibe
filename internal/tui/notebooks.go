@@ -30,7 +30,7 @@ func NewNotebooksModel() NotebooksModel {
 	return NotebooksModel{viewport: viewport.New(80, 20)}
 }
 
-// LoadNotebooks refreshes the notebook list from the container.
+// LoadNotebooks refreshes the notebook list from the workspace.
 func (m *NotebooksModel) LoadNotebooks(store notebooks.Store) {
 	if store == nil {
 		return
@@ -63,7 +63,7 @@ func (m *NotebooksModel) Back() {
 }
 
 // Update handles input for the notebooks view.
-func (m NotebooksModel) Update(msg tea.Msg, container ContainerAccess) (NotebooksModel, tea.Cmd) {
+func (m NotebooksModel) Update(msg tea.Msg, ws WorkspaceAccess) (NotebooksModel, tea.Cmd) {
 	if m.viewing {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
 			m.viewing = false
@@ -88,13 +88,13 @@ func (m NotebooksModel) Update(msg tea.Msg, container ContainerAccess) (Notebook
 			m.cursor++
 		}
 	case "enter":
-		if m.cursor < len(m.items) && container != nil {
+		if m.cursor < len(m.items) && ws != nil {
 			sel := m.items[m.cursor]
 			m.title = sanitizeForTerminal(sel.Title, false)
 			m.err = ""
 			var nb notebooks.Notebook
 			var err error
-			if store := container.Notebooks(); store == nil {
+			if store := ws.Notebooks(); store == nil {
 				err = errors.New("no notebook store")
 			} else {
 				nb, _, err = store.Get(context.Background(), sel.ID)
@@ -157,7 +157,7 @@ func (m NotebooksModel) View(width, height int) string {
 	}
 
 	if len(m.items) == 0 {
-		return dimStyle.Render("No notebooks in this file.")
+		return dimStyle.Render("No notebooks in this workspace.")
 	}
 
 	title := contentTitleStyle.Render("Notebooks")

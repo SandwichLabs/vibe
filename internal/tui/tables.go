@@ -37,27 +37,52 @@ func NewTablesModel() TablesModel {
 	return TablesModel{browser: NewTableBrowserModel()}
 }
 
-// LoadTables refreshes the table list (and row counts) from the session's
-// default catalog and schema.
+// LoadTables refreshes the table list from every attached connection (catalog).
+// Tables of the default connection's default schema keep their bare name; any
+// other is listed qualified ("sales.orders", "sales.archive.orders"). Row counts
+// are read for local DuckDB catalogs only: counting a remote table can be slow
+// or expensive, so those show no count.
 func (m *TablesModel) LoadTables(sess session.Session) {
 	if sess == nil {
 		return
 	}
 	ctx := context.Background()
-	tables, err := sess.ListTables(ctx, "", "")
+	catalogs, err := sess.ListCatalogs(ctx)
 	if err != nil {
 		return
 	}
+	defCat := sess.DefaultCatalog()
+	defSchema, _ := sess.DefaultSchema(ctx, "")
 
 	var items []TableInfo
-	for _, ti := range tables {
-		t := TableInfo{Name: ti.Name, SQL: ti.Ref().SQL()}
-		sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL + ";").Scan(&t.RowCount) //nolint:errcheck
-		items = append(items, t)
+	for _, cat := range catalogs {
+		tables, err := session.AllTables(ctx, sess, cat.Name)
+		if err != nil {
+			continue
+		}
+		for _, ti := range tables {
+			t := TableInfo{Name: displayTableName(ti, defCat, defSchema), SQL: ti.Ref().SQL(), RowCount: -1}
+			if cat.Type == "duckdb" {
+				sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL + ";").Scan(&t.RowCount) //nolint:errcheck
+			}
+			items = append(items, t)
+		}
 	}
 	m.items = items
 	if m.cursor >= len(m.items) {
 		m.cursor = 0
+	}
+}
+
+// displayTableName is the name a table is listed under.
+func displayTableName(ti session.TableInfo, defCat, defSchema string) string {
+	switch {
+	case ti.Catalog == defCat && ti.Schema == defSchema:
+		return ti.Name
+	case ti.Schema == "main" || ti.Schema == "":
+		return ti.Catalog + "." + ti.Name
+	default:
+		return ti.Catalog + "." + ti.Schema + "." + ti.Name
 	}
 }
 
@@ -170,13 +195,16 @@ func (m TablesModel) View(width, height int) string {
 	}
 
 	if len(m.items) == 0 {
-		return dimStyle.Render("No tables in this file.")
+		return dimStyle.Render("No tables in this workspace.")
 	}
 
 	title := contentTitleStyle.Render("Tables")
 	lines := []string{title}
 	for i, t := range m.items {
-		line := fmt.Sprintf("%s  %d rows", sanitizeForTerminal(t.Name, false), t.RowCount)
+		line := sanitizeForTerminal(t.Name, false)
+		if t.RowCount >= 0 {
+			line += fmt.Sprintf("  %d rows", t.RowCount)
+		}
 		if i == m.cursor {
 			lines = append(lines, selectedItemStyle.Render("> "+line))
 		} else {

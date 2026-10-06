@@ -16,8 +16,9 @@ and asks before it writes. Credentials stay in your OS keychain.
 ---
 
 > **In transition (2026-10-06).** Vibe is moving from a single encrypted `.vibe`
-> file that *holds* your data to a workspace that *points at* your data. Today's
-> build still opens `.vibe` containers; the workspace and connections land in
+> file that *holds* your data to a workspace that *points at* your data. The
+> command line and `vibe mcp serve` already work on workspaces; the Studio
+> desktop app still opens `.vibe` containers until #111. Tracked in
 > epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105). Why and how:
 > [`docs/direction.md`](docs/direction.md),
 > [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md).
@@ -47,6 +48,27 @@ A desktop data tool in the DataGrip / DBeaver mould, built around an agent.
   files import into a workspace.
 
 Everything works without AI. SQL and notebooks are first-class by hand.
+
+## Command line
+
+```bash
+vibe workspace init acme --template order-entry --git   # a folder with vibe.yaml, notebooks/, data/ ...
+cd acme
+vibe workspace info                                     # connections, counts, agent policy, who owns the hub
+vibe import customers.csv --into customers              # CSV / TSV / xlsx into a writable connection
+vibe query "SELECT count(*) FROM customers"             # [-c conn] [--format table|csv|json] [--limit N]
+vibe export customers -o customers.parquet              # csv, parquet, json or xlsx; or --sql "..."
+vibe studio                                             # terminal UI: SQL REPL, table browser, notebook list
+vibe studio --gui                                       # the desktop app (opens workspace folders from #111)
+vibe mcp serve                                          # let Claude and other MCP clients use the workspace
+```
+
+Commands find the workspace the way git finds `.git` (or take `--workspace DIR`).
+One process owns a workspace's database at a time; if Studio or `vibe mcp serve`
+has it, a command says so. `--read-only` (on `query`, `export` and `studio`) reads without
+taking ownership, but the owner keeps the workspace's own `.duckdb` files locked, so it only
+reaches other connections such as MotherDuck or Postgres.
+Details in [`docs/reference/workspaces.md`](docs/reference/workspaces.md#command-line).
 
 ## Who it's for
 
@@ -80,7 +102,7 @@ Studio / vibe mcp serve ── DuckDB hub ─┬─ local   (data/local.duckdb)
 Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) — workspaces first, then connections:
 
 1. **Design pass** (#106) and **DuckDB spike** (#107).
-2. **Workspace = folder** — session hub (#108), workspace + file stores (#109), legacy `.vibe` import (#110), launcher/switcher (#111), MCP on workspaces (#112), CLI (#113).
+2. **Workspace = folder** — session hub (#108), workspace + file stores (#109), launcher/switcher (#111), MCP on workspaces (#112), CLI (#113).
 3. **Connections & credentials** — keychain (#114), connection types (#115), agent SQL policy (#116), connections UI (#117).
 4. **Exchange & breadth** — `.vibe` bundles (#118), more types (#119), packaging (#77).
 
@@ -103,7 +125,7 @@ task studio:dev   # Wails dev server for the Studio app
 Run a single package's tests:
 
 ```bash
-go test -v ./internal/container/
+go test -v ./internal/workspace/
 ```
 
 ## Documentation

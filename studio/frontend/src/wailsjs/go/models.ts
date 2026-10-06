@@ -697,20 +697,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class QuerySaveResult {
-	    id: string;
-	    rev: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new QuerySaveResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.rev = source["rev"];
-	    }
-	}
 	export class NotebookSaveResult {
 	    notebook: notebooks.Notebook;
 	    warnings: string[];
@@ -780,6 +766,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class QuerySaveResult {
+	    id: string;
+	    rev: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuerySaveResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.rev = source["rev"];
+	    }
 	}
 	export class QuerySummary {
 	    id: string;

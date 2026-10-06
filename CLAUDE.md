@@ -8,7 +8,7 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 
 **North star:** `docs/direction.md` (2026-10-06). Read it before planning any feature work. **Plan:** `docs/plans/workspaces-and-connections.md`. **Tracking:** epic #105 (issues #106–#119), workspaces first, then connections.
 
-**Direction change (2026-10-06) — today vs target:** the code **still** opens one SQLCipher `.vibe` container holding a DuckDB blob (everything under *Architecture* and *Key Concepts* below describes that, and stays accurate until Slice 1 #108–#113 lands). Do not extend the container as the place data lives: no new `_vibe_*` tables for content, no new per-file settings, no new Save/Revert semantics for table data. New work goes behind the interfaces the plan names (`internal/session`, `internal/workspace`, `notebooks.Store`/`queries.Store`/`skills.Store`, `internal/secrets`, `internal/connections`). Never store a credential in a config file, a `.vibe`, a log line, or anything the agent can read.
+**Direction change (2026-10-06) — today vs target:** Studio (the desktop app) **still** opens one SQLCipher `.vibe` container holding a DuckDB blob (everything under *Architecture* and *Key Concepts* below describes that, and stays accurate until Studio moves to workspaces in #111; the CLI, TUI and `mcp serve` already run on workspaces). Do not extend the container as the place data lives: no new `_vibe_*` tables for content, no new per-file settings, no new Save/Revert semantics for table data. New work goes behind the interfaces the plan names (`internal/session`, `internal/workspace`, `notebooks.Store`/`queries.Store`/`skills.Store`, `internal/secrets`, `internal/connections`). Never store a credential in a config file, a `.vibe`, a log line, or anything the agent can read.
 
 **Earlier direction change (2026-09-22):** Vibe was previously aimed at Microsoft Access 97 application parity (bound forms, subforms, switchboard, App Mode, macros). That direction is **superseded**. The Access application layer was removed in #68; datasheet editing stays. The parity docs are kept for history and carry a superseded banner. Do not add forms, macros, nav, field meta, or App Mode.
 
@@ -56,9 +56,13 @@ go test -v ./internal/container/
 
 ```
 main.go                    # Entry point — calls cmd.Execute()
-cmd/                       # Cobra commands: init, info, import, export, dump, verify, compact, rekey, passphrase, studio
-                           #   (+ `mcp serve [--workspace DIR]`: workspace-only, owner or proxy to Studio, #64/#112;
-                           #   no `.vibe` argument any more)
+cmd/                       # Cobra commands, all on workspaces (#113): `workspace init|info`, `init` (alias),
+                           #   `query`, `import --into [conn.]table`, `export`, `studio [dir] [--gui]` (TUI is the default),
+                           #   `mcp serve [--workspace DIR]` (owner or proxy to Studio, #64/#112).
+                           #   Writers take the hub lock (internal/hub) or say who holds it; `--read-only` skips it.
+                           #   wsopen.go is the one place that opens workspace + hub + session for a command.
+                           #   No command opens a `.vibe` any more; info/verify/compact/rekey/dump/passphrase
+                           #   survive only as hidden stubs that point to `workspace init`.
 
 studio/                    # Wails v2 desktop app
 ├── app.go                 # Go backend — all Wails-bound methods
@@ -103,10 +107,13 @@ internal/
 ├── pages/                 # Legacy page markup PARSER ONLY (#69) — no executor, no renderer, no Studio
                            #   bindings. Survives solely so internal/notebooks can parse an old page's
                            #   content during migration. Do not add execution/rendering here.
-├── tui/                   # BubbleTea TUI (#69): SQL REPL, read-only table browser, notebook list —
-                           #   no page viewer/editor, no directive execution
+├── tui/                   # BubbleTea TUI (#69, on workspaces in #113): SQL REPL on the session, read-only table
+                           #   browser across every attached connection, notebook list from the workspace's
+                           #   store. No save step (writes land in their connection). No page viewer/editor.
+├── templates/             # Starter templates (tables + seed rows + a notebook): shared by `vibe workspace init
+                           #   --template` and the legacy container's WithTemplate (#113)
 ├── docsref/               # Test keeping docs/reference/notebooks.md in sync with the a2ui component
-                           #   registry and container's starter templates
+                           #   registry and the starter templates
 └── config/                # Configuration types
 ```
 

@@ -1,6 +1,6 @@
 # Packaging and release plan: macOS and Linux
 
-> **Changing (epic #105).** Studio will open **workspace folders** (`vibe studio <dir>`, and on macOS a folder via `OnFileOpen`). A `.vibe` file becomes an exchange bundle or a legacy file that is *imported* into a workspace, so the `.vibe` file association should route to Import rather than Open. Packaging must also test OS-keychain access from signed and notarised macOS builds (go-keyring shells out to `/usr/bin/security`), and decide whether to pre-bundle DuckDB extensions for offline use. See `docs/plans/workspaces-and-connections.md` (Slice 3, D11, D12).
+> **Changing (epic #105).** Studio will open **workspace folders** (`vibe studio --gui <dir>` once #111 lands, and on macOS a folder via `OnFileOpen`). A `.vibe` file becomes an exchange bundle or a legacy file that is *imported* into a workspace, so the `.vibe` file association should route to Import rather than Open. Packaging must also test OS-keychain access from signed and notarised macOS builds (go-keyring shells out to `/usr/bin/security`), and decide whether to pre-bundle DuckDB extensions for offline use. See `docs/plans/workspaces-and-connections.md` (Slice 3, D11, D12).
 
 **Date:** 2026-09-23
 **Status:** Proposed. Nothing here is built yet. Tracking: epic #77.
@@ -170,7 +170,7 @@ In order. Each step is one small PR.
 - `build-smoke` matrix (`ubuntu-22.04`, `ubuntu-22.04-arm`, `macos-15`):
   - `wails build` with the release tags
   - `vibe --version`
-  - `vibe init` + `vibe info` round-trip on a temp file with `VIBE_PASSPHRASE`, a real CGO smoke test of SQLCipher and DuckDB (fixing #72 first makes this more meaningful)
+  - `vibe workspace init` + `vibe import` + `vibe query` round-trip in a temp folder, a real CGO smoke test of DuckDB (the #72 CLI bug is fixed, #113)
 - Cache: Go module/build cache, the npm cache, and `~/.duckdb/extensions` if vendoring.
 - Wails CLI v2.11 fails on Go 1.27 (#92). Run the `wails build` steps with `GOTOOLCHAIN` set to the
   Taskfile's `WAILS_GOTOOLCHAIN` (or install that Go via setup-go) until Wails ships a fixed loader.

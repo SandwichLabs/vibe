@@ -1,52 +1,46 @@
 package tui
 
 import (
-	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"context"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	_ "github.com/mutecomm/go-sqlcipher/v4" // registers "sqlite3"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type fakeContainer struct{ db *sql.DB }
+// fakeWorkspace is a WorkspaceAccess over a notebook store and an optional
+// session.
+type fakeWorkspace struct {
+	nb   notebooks.Store
+	sess session.Session
+}
 
-func (f *fakeContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(f.db) }
-func (f *fakeContainer) DuckDBDB() *sql.DB          { return f.db }
-func (f *fakeContainer) Save() error                { return nil }
-func (f *fakeContainer) Close() error               { return nil }
+func (f *fakeWorkspace) Notebooks() notebooks.Store { return f.nb }
+func (f *fakeWorkspace) Session() session.Session   { return f.sess }
 
-func newNotebookTestDB(t *testing.T) *sql.DB {
+// newNotebookTestStore is a file store in a temp workspace folder holding one
+// notebook, "Sales".
+func newNotebookTestStore(t *testing.T) notebooks.Store {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	store := notebooks.NewFileStore(t.TempDir())
+	nb := notebooks.Empty("Sales")
+	nb.Cells = []notebooks.Cell{
+		{ID: "c1", Type: notebooks.CellMarkdown, Source: "# Notes"},
+		{ID: "c2", Type: notebooks.CellSQL, Source: "SELECT 1", View: "table"},
+	}
+	_, _, err := store.Insert(context.Background(), nb)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.Exec(`CREATE TABLE _vibe_notebooks (
-		id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cells TEXT NOT NULL DEFAULT '[]',
-		created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
-	);`)
-	require.NoError(t, err)
-
-	_, _, err = notebooks.Insert(db, notebooks.Notebook{
-		ID:    "nb1",
-		Title: "Sales",
-		Cells: []notebooks.Cell{
-			{ID: "c1", Type: notebooks.CellMarkdown, Source: "# Notes"},
-			{ID: "c2", Type: notebooks.CellSQL, Source: "SELECT 1", View: "table"},
-		},
-	})
-	require.NoError(t, err)
-	return db
+	return store
 }
 
 func TestNotebooksModel_LoadAndNavigate(t *testing.T) {
-	db := newNotebookTestDB(t)
+	store := newNotebookTestStore(t)
 
 	m := NewNotebooksModel()
-	m.LoadNotebooks(notebooks.NewSQLiteStore(db))
+	m.LoadNotebooks(store)
 	require.Len(t, m.items, 1)
 	assert.Equal(t, "Sales", m.items[0].Title)
 	assert.Equal(t, 2, m.items[0].CellCount)
@@ -56,14 +50,14 @@ func TestNotebooksModel_LoadAndNavigate(t *testing.T) {
 }
 
 func TestNotebooksModel_EnterDumpsCells(t *testing.T) {
-	db := newNotebookTestDB(t)
-	container := &fakeContainer{db: db}
+	store := newNotebookTestStore(t)
+	ws := &fakeWorkspace{nb: store}
 
 	m := NewNotebooksModel()
 	m.SetSize(80, 20)
-	m.LoadNotebooks(notebooks.NewSQLiteStore(db))
+	m.LoadNotebooks(store)
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}, container)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}, ws)
 	assert.True(t, m.viewing)
 	assert.Empty(t, m.err)
 
@@ -74,5 +68,3 @@ func TestNotebooksModel_EnterDumpsCells(t *testing.T) {
 	m.Back()
 	assert.False(t, m.viewing)
 }
-
-func (f *fakeContainer) Session() session.Session { return nil }

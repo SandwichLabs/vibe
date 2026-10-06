@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,137 +14,176 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/container"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/hub"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/tui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var studioCmd = &cobra.Command{
-	Use:   "studio <file>",
-	Short: "Launch the TUI editor (Vibe Studio)",
-	Long: `Open a .vibe file in the interactive terminal UI: a SQL REPL, a
-read-only table browser, and a notebook list (source only — no rendering).
-Notebooks, skills, and A2UI dashboards are authored in the Studio desktop
-app (--gui), not here.
+	Use:   "studio [dir]",
+	Short: "Open Vibe Studio on a workspace (terminal UI; --gui for the desktop app)",
+	Long: `Open a workspace in the terminal UI: a SQL REPL on the workspace's DuckDB
+session, a read-only table browser across its connections, and a notebook list
+(source only). The workspace is dir or the nearest folder above the current
+directory that holds a vibe.yaml.
 
-If the file does not exist, it will be created.`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath := args[0]
+The TUI takes ownership of the workspace's database while it runs, like Studio
+does. If something else has it open you are told who; when stdin is a terminal
+and the workspace has connections other than local DuckDB files, you are
+offered --read-only (reading without ownership). The owner keeps the
+workspace's local .duckdb files locked, so read-only cannot reach those.
 
-		// Launch the desktop GUI if --gui is set.
-		gui, _ := cmd.Flags().GetBool("gui")
-		if gui {
-			return launchGUI(filePath)
-		}
+--gui launches the desktop app instead. It opens workspace folders from #111 on;
+until then it only starts the app, and a folder argument is refused.
 
-		// Determine if creating or opening.
-		_, statErr := os.Stat(filePath)
-		isNew := os.IsNotExist(statErr)
-
-		var passphrase string
-		var err error
-
-		if isNew {
-			fmt.Fprintf(cmd.OutOrStdout(), "File %s does not exist. Creating new container.\n", filePath)
-			passphrase, err = promptPassphraseConfirm()
-		} else {
-			passphrase, err = promptPassphrase("Enter passphrase: ")
-		}
-		if err != nil {
-			return err
-		}
-
-		var c *container.Container
-		if isNew {
-			c, err = container.Create(filePath,
-				container.WithPassphrase(passphrase),
-				container.WithLogger(logger),
-			)
-		} else {
-			c, err = container.Open(filePath,
-				container.WithPassphrase(passphrase),
-				container.WithLogger(logger),
-			)
-		}
-		if err != nil {
-			return err
-		}
-		defer c.Close()
-
-		// Legacy content (pages, banded reports) becomes visible to the TUI's
-		// notebook list the same way it would in Studio or `vibe mcp serve` —
-		// every entry point that opens a .vibe file runs the same one-time
-		// migration. `vibe studio` has no read-only-open flag, so this always
-		// persists.
-		notebooks.MigrateOnOpen(c.SQLiteDB(), false, logger)
-
-		// Create the engine manager (DuckDB-only).
-		eng := engine.NewManager(
-			c.Session(),
-			engine.WithLogger(logger),
-		)
-
-		// Start agent if --agent-cmd or --agent-listen is set.
-		agentCmd, _ := cmd.Flags().GetString("agent-cmd")
-		agentListen, _ := cmd.Flags().GetString("agent-listen")
-		agentModeStr, _ := cmd.Flags().GetString("agent-mode")
-
-		if agentCmd != "" || agentListen != "" {
-			sandboxCfg := agents.DefaultSandboxConfig()
-			sandboxCfg.Mode = parseSandboxMode(agentModeStr)
-
-			handler := agents.NewHandler(c, eng, &sandboxCfg, logger)
-
-			agentCtx, agentCancel := context.WithCancel(context.Background())
-			defer agentCancel()
-
-			if agentCmd != "" {
-				srv, proc, startErr := startAgentCmd(agentCmd, handler, agentCtx)
-				if startErr != nil {
-					return fmt.Errorf("failed to start agent command: %w", startErr)
-				}
-				defer func() {
-					srv.Stop()  //nolint:errcheck
-					proc.Kill() //nolint:errcheck
-				}()
-			}
-
-			if agentListen != "" {
-				srv, startErr := startAgentListener(agentListen, handler, agentCtx)
-				if startErr != nil {
-					return fmt.Errorf("failed to start agent listener: %w", startErr)
-				}
-				defer srv.Stop() //nolint:errcheck
-			}
-		}
-
-		// Create and load the TUI app.
-		app := tui.NewApp(c, eng, logger)
-		app.LoadData()
-
-		// Run the BubbleTea program.
-		p := tea.NewProgram(app, tea.WithAltScreen())
-		if _, err := p.Run(); err != nil {
-			return fmt.Errorf("TUI error: %w", err)
-		}
-
-		return nil
-	},
+Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
+	Args:         cobra.MaximumNArgs(1),
+	RunE:         runStudio,
+	SilenceUsage: true,
 }
 
-// parseSandboxMode converts a string flag value to a SandboxMode.
-func parseSandboxMode(mode string) agents.SandboxMode {
-	switch strings.ToLower(mode) {
-	case "read-write":
-		return agents.ModeReadWrite
-	case "full":
-		return agents.ModeFull
-	default:
-		return agents.ModeReadOnly
+// guiOpensWorkspaces flips to true when Studio can open a workspace folder
+// (#111); it, and the check in runStudio that reads it, can then be deleted.
+const guiOpensWorkspaces = false
+
+func runStudio(cmd *cobra.Command, args []string) error {
+	dir := ""
+	if len(args) == 1 {
+		dir = args[0]
 	}
+	if isVibeFile(dir) {
+		return errLegacyFileArg
+	}
+	if gui, _ := cmd.Flags().GetBool("gui"); gui {
+		if dir != "" && !guiOpensWorkspaces {
+			return fmt.Errorf("Studio opens workspace folders after #111; use `vibe studio` (the terminal UI) for now")
+		}
+		return launchGUI(dir)
+	}
+	return runTUI(cmd, dir, cmd.InOrStdin(), cmd.OutOrStdout())
+}
+
+// defaultIsLocalDuckDB reports whether the workspace's default connection is a
+// local DuckDB file, which a read-only open cannot reach while an owner holds it.
+func defaultIsLocalDuckDB(o *openedWorkspace) bool {
+	c, ok := o.knownConnection(o.WS.DefaultConnection())
+	return ok && c.Type == "duckdb"
+}
+
+func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
+	readOnly, _ := cmd.Flags().GetBool("read-only")
+	agentCmd, _ := cmd.Flags().GetString("agent-cmd")
+	agentListen, _ := cmd.Flags().GetString("agent-listen")
+	agentMode, _ := cmd.Flags().GetString("agent-mode")
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	errW := cmd.ErrOrStderr()
+
+	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe studio", errW)
+	if err != nil && !readOnly && errors.Is(err, hub.ErrHubHeld) && stdinIsTerminal() {
+		// Offer read-only only when it can show something: probe first, since
+		// a locked default database would leave the TUI empty.
+		probe, perr := openWorkspace(ctx, dir, true, true, "vibe studio", io.Discard)
+		switch {
+		case perr != nil:
+		case defaultIsLocalDuckDB(probe) && probe.hasIssue(probe.WS.DefaultConnection()):
+			probe.Close()
+			return fmt.Errorf("%w\n(read-only would not help: this workspace's own database is a local DuckDB file the owner keeps locked)", err)
+		default:
+			fmt.Fprintln(errW, err)
+			if askYesNo(errW, "Open read-only instead?") {
+				readOnly, o, err = true, probe, nil
+			} else {
+				probe.Close()
+			}
+		}
+	}
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+
+	// A default database that is locked would leave an empty TUI: say so now.
+	if d := o.WS.DefaultConnection(); o.hasIssue(d) {
+		if i, _ := o.issueFor(d); isLockMessage(i.Message) {
+			return fmt.Errorf("connection %s is %s", d, lockedMessage(o.WS.Root(), d))
+		}
+	}
+	// The alternate screen would hide anything printed to stderr from here on,
+	// so connection problems go into the REPL's first lines.
+	var notices []string
+	for _, i := range o.Issues {
+		msg := i.Message
+		if isLockMessage(msg) {
+			msg = lockedMessage(o.WS.Root(), i.Connection)
+		}
+		notices = append(notices, fmt.Sprintf("-- connection %s is not available: %s", i.Connection, msg))
+	}
+
+	// An agent over stdio or a socket gets the same tools and gating as MCP.
+	// A read-only open never serves one: it does not own the database.
+	if agentCmd != "" || agentListen != "" {
+		if readOnly {
+			return fmt.Errorf("--agent-cmd and --agent-listen need the workspace's database; they cannot run with --read-only")
+		}
+		handler, _, err := hub.NewAgentHandler(o.WS, o.Sess, agentMode, logger)
+		if err != nil {
+			return err
+		}
+		agentCtx, agentCancel := context.WithCancel(ctx)
+		defer agentCancel()
+		if agentCmd != "" {
+			srv, proc, startErr := startAgentCmd(agentCmd, handler, agentCtx)
+			if startErr != nil {
+				return fmt.Errorf("failed to start agent command: %w", startErr)
+			}
+			defer func() {
+				srv.Stop()  //nolint:errcheck
+				proc.Kill() //nolint:errcheck
+			}()
+		}
+		if agentListen != "" {
+			srv, startErr := startAgentListener(agentListen, handler, agentCtx)
+			if startErr != nil {
+				return fmt.Errorf("failed to start agent listener: %w", startErr)
+			}
+			defer srv.Stop() //nolint:errcheck
+		}
+	}
+
+	app := tui.NewApp(tuiWorkspace{o}, o.Eng, logger,
+		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(notices...))
+	app.LoadData()
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithInput(in), tea.WithOutput(out))
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+	return nil
+}
+
+// tuiWorkspace adapts an opened workspace to tui.WorkspaceAccess.
+type tuiWorkspace struct{ o *openedWorkspace }
+
+func (w tuiWorkspace) Notebooks() notebooks.Store { return w.o.WS.Notebooks() }
+func (w tuiWorkspace) Session() session.Session   { return w.o.Sess }
+
+func stdinIsTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+
+// askYesNo asks a yes/no question on w and reads the answer from stdin; the
+// default is no.
+func askYesNo(w io.Writer, question string) bool {
+	fmt.Fprintf(w, "%s [y/N] ", question)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	}
+	return false
 }
 
 // startAgentCmd spawns a subprocess and connects via stdio transport.
@@ -197,33 +239,44 @@ func startAgentListener(addr string, handler *agents.Handler, ctx context.Contex
 	return srv, nil
 }
 
-// launchGUI finds and executes the vibe-studio binary, replacing the current process.
-func launchGUI(filePath string) error {
+// launchGUI finds and executes the vibe-studio binary, replacing the current
+// process. dir is passed through as its one argument (Studio learns to open a
+// workspace folder in #111); empty means no argument.
+func launchGUI(dir string) error {
 	const binName = "vibe-studio"
+	argv := []string{binName}
+	if dir != "" {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve %q: %w", dir, err)
+		}
+		argv = append(argv, abs)
+	}
 	var searched []string
 
-	// First, look next to the current executable.
 	if exe, err := os.Executable(); err == nil {
 		beside := filepath.Join(filepath.Dir(exe), binName)
 		searched = append(searched, beside)
 		if _, err := os.Stat(beside); err == nil {
-			return syscall.Exec(beside, []string{binName, filePath}, os.Environ())
+			return syscall.Exec(beside, argv, os.Environ())
 		}
 	}
 
-	// Then, try PATH.
 	if found, err := exec.LookPath(binName); err == nil {
-		return syscall.Exec(found, []string{binName, filePath}, os.Environ())
+		return syscall.Exec(found, argv, os.Environ())
 	}
 	searched = append(searched, "$PATH")
 
-	return fmt.Errorf("vibe-studio binary not found; searched: %s", strings.Join(searched, ", "))
+	return fmt.Errorf("vibe-studio binary not found; searched: %s (`vibe studio` without --gui opens the terminal UI)", strings.Join(searched, ", "))
 }
 
 func init() {
-	studioCmd.Flags().Bool("gui", false, "launch the desktop GUI instead of the TUI")
+	studioCmd.Flags().Bool("gui", false, "launch the desktop app instead of the terminal UI")
+	studioCmd.Flags().Bool("tui", false, "the terminal UI (the default; accepted for older scripts)")
+	_ = studioCmd.Flags().MarkHidden("tui")
+	studioCmd.Flags().Bool("read-only", false, "open without taking ownership of the workspace's database (reaches connections other than local DuckDB files)")
 	studioCmd.Flags().String("agent-cmd", "", "agent command to spawn (stdio transport)")
 	studioCmd.Flags().String("agent-listen", "", "agent socket address to listen on")
-	studioCmd.Flags().String("agent-mode", "read-only", "agent sandbox mode: read-only, read-write, full")
+	studioCmd.Flags().String("agent-mode", "read-only", "the agent's sandbox: read-only, read-write or full (can only tighten the workspace's own policy)")
 	rootCmd.AddCommand(studioCmd)
 }

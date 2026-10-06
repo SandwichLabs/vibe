@@ -3,6 +3,10 @@
 // the page editor/wizard/renderer that used to live here were removed along
 // with the page system (#66/#69); notebooks and A2UI dashboards are authored
 // in the Wails Studio app, not the TUI.
+//
+// It runs on a workspace (#113): the DuckDB session for the REPL and the table
+// browser, and the workspace's notebook store for the notebook list. Writes go
+// straight to their connection, so there is nothing to save.
 package tui
 
 import (
@@ -19,6 +23,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/usersql"
 )
 
 // mode selects which of the three top-level views is active.
@@ -43,14 +48,12 @@ func (m mode) String() string {
 	}
 }
 
-// ContainerAccess is the minimal container surface the TUI needs.
-type ContainerAccess interface {
+// WorkspaceAccess is the minimal workspace surface the TUI needs.
+type WorkspaceAccess interface {
 	// Notebooks is the notebook store (nil when there is none).
 	Notebooks() notebooks.Store
-	DuckDBDB() *sql.DB
+	// Session is the workspace's DuckDB hub.
 	Session() session.Session
-	Save() error
-	Close() error
 }
 
 // EngineAccess is the minimal query-execution surface the TUI needs.
@@ -60,9 +63,9 @@ type EngineAccess interface {
 
 // App is the top-level BubbleTea model for Vibe Studio's TUI.
 type App struct {
-	container ContainerAccess
-	engine    EngineAccess
-	logger    *slog.Logger
+	ws     WorkspaceAccess
+	engine EngineAccess
+	logger *slog.Logger
 
 	mode mode
 
@@ -76,21 +79,41 @@ type App struct {
 	height   int
 	showHelp bool
 	quitting bool
-	status   string // one-line transient status (e.g. save result), cleared on next keypress
+	status   string // one-line transient status, cleared on next keypress
 
-	// unsaved tracks whether a write has happened in this session (a REPL
-	// statement that wasn't a plain read) since the last successful Save.
-	// Drives the status-bar indicator, and whether quitting auto-saves.
-	unsaved bool
+	// readOnly marks a TUI opened without owning the workspace's database
+	// (`vibe studio --read-only`); shown in the status bar.
+	readOnly bool
+	// name is the workspace name shown in the status bar.
+	name string
+}
+
+// Option configures NewApp.
+type Option func(*App)
+
+// WithReadOnly marks the app as running without ownership of the workspace.
+func WithReadOnly(on bool) Option { return func(a *App) { a.readOnly = on } }
+
+// WithWorkspaceName sets the workspace name shown in the status bar.
+func WithWorkspaceName(name string) Option { return func(a *App) { a.name = name } }
+
+// WithNotices puts lines (connection problems, say) at the top of the REPL's
+// output, where the alternate screen cannot hide them.
+func WithNotices(lines ...string) Option {
+	return func(a *App) {
+		for _, l := range lines {
+			a.repl.AppendOutput(l)
+		}
+	}
 }
 
 // NewApp creates a new TUI application model.
-func NewApp(container ContainerAccess, eng EngineAccess, logger *slog.Logger) *App {
+func NewApp(ws WorkspaceAccess, eng EngineAccess, logger *slog.Logger, opts ...Option) *App {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	a := &App{
-		container: container,
+		ws:        ws,
 		engine:    eng,
 		logger:    logger,
 		mode:      modeREPL,
@@ -108,16 +131,19 @@ func NewApp(container ContainerAccess, eng EngineAccess, logger *slog.Logger) *A
 	// silently un-typeable on a fresh app until the user tabbed away and
 	// back (setMode is the only other place that calls repl.Focus()).
 	a.repl.Focus()
+	for _, o := range opts {
+		o(a)
+	}
 	return a
 }
 
-// LoadData loads the table list and notebook list from the container.
+// LoadData loads the table list and notebook list from the workspace.
 func (a *App) LoadData() {
-	if a.container == nil {
+	if a.ws == nil {
 		return
 	}
-	a.tables.LoadTables(a.container.Session())
-	a.notebooks.LoadNotebooks(a.container.Notebooks())
+	a.tables.LoadTables(a.ws.Session())
+	a.notebooks.LoadNotebooks(a.ws.Notebooks())
 }
 
 // Init implements tea.Model.
@@ -140,23 +166,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case replResultMsg:
 		a.repl.AppendOutput(msg.output)
 		if msg.wrote {
-			a.unsaved = true
+			// The statement may have changed what exists: refresh the lists.
+			a.LoadData()
 		}
 		return a, nil
 	case tableDataMsg:
 		a.tables.SetData(msg)
-		return a, nil
-	case saveResultMsg:
-		if msg.err != "" {
-			a.status = "save failed: " + msg.err
-		} else {
-			a.status = "saved"
-			a.unsaved = false
-		}
-		if msg.thenQuit {
-			a.quitting = true
-			return a, tea.Quit
-		}
 		return a, nil
 	}
 	return a, nil
@@ -176,13 +191,6 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return a, a.quit()
-	// ctrl+s saves in every mode, including the REPL — unlike the bare "s"
-	// shortcut (which the REPL's textinput owns for typing), ctrl+s is never
-	// a character a query could contain, so it's safe to intercept globally
-	// ahead of the showHelp/mode dispatch below.
-	case "ctrl+s":
-		a.status = ""
-		return a, a.save(false)
 	}
 
 	if a.showHelp {
@@ -233,10 +241,6 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.setMode(modeNotebooks)
 			return a, nil
 		}
-	case "s":
-		if !a.captureText() {
-			return a, a.save(false)
-		}
 	}
 
 	var cmd tea.Cmd
@@ -248,7 +252,7 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.tables, loadCmd = a.tables.Update(msg, a.engine)
 		cmd = loadCmd
 	case modeNotebooks:
-		a.notebooks, cmd = a.notebooks.Update(msg, a.container)
+		a.notebooks, cmd = a.notebooks.Update(msg, a.ws)
 	}
 	return a, cmd
 }
@@ -285,10 +289,15 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 		if a.engine == nil {
 			return replResultMsg{output: "-- Error: no engine available"}
 		}
+		if err := usersql.Check(query, a.readOnly); err != nil {
+			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
+		}
 		ctx := context.Background()
 		var duckDB *sql.DB
-		if a.container != nil {
-			duckDB = a.container.DuckDBDB()
+		if a.ws != nil {
+			if sess := a.ws.Session(); sess != nil {
+				duckDB = sess.DB()
+			}
 		}
 		// agents.IsReadOnlyStatement is the SAME classifier run_query uses
 		// (real DuckDB parsing + statement counting), not a keyword-prefix
@@ -342,43 +351,11 @@ func capRowsIfSafe(query string, readOnly bool) string {
 	return fmt.Sprintf("SELECT * FROM (%s) AS _vibe_repl_cap LIMIT %d", trimmed, replRowCap+1)
 }
 
-// saveResultMsg is sent after a save operation completes. thenQuit carries
-// the quit-with-unsaved-writes request through to the Update handler, which
-// only sets a.quitting/returns tea.Quit once the save this message reports
-// on has actually finished — never before, so a write made moments before
-// quitting is never silently dropped.
-type saveResultMsg struct {
-	err      string
-	thenQuit bool
-}
-
-// save persists the container. When thenQuit is true (the auto-save-on-quit
-// path — see quit()), the returned saveResultMsg carries that through so the
-// program only exits after the save attempt completes, whether it succeeded
-// or not — a failed save must still let the user quit rather than trap them,
-// but it must never race the quit against an in-flight write.
-func (a *App) save(thenQuit bool) tea.Cmd {
-	return func() tea.Msg {
-		if a.container == nil {
-			return saveResultMsg{err: "no container open", thenQuit: thenQuit}
-		}
-		if err := a.container.Save(); err != nil {
-			return saveResultMsg{err: err.Error(), thenQuit: thenQuit}
-		}
-		return saveResultMsg{thenQuit: thenQuit}
-	}
-}
-
-// quit auto-saves any unsaved write before exiting (issue #69 follow-up:
-// REPL writes — INSERT/UPDATE/CREATE TABLE/etc — used to be silently
-// discarded on quit, since only Ctrl+C/`q` and never a save ran on the way
-// out). A clean quit with nothing unsaved exits immediately, same as before.
+// quit leaves the TUI. Writes already landed in their connections as they
+// ran, so there is nothing to flush.
 func (a *App) quit() tea.Cmd {
-	if !a.unsaved {
-		a.quitting = true
-		return tea.Quit
-	}
-	return a.save(true)
+	a.quitting = true
+	return tea.Quit
 }
 
 // View implements tea.Model.
@@ -435,8 +412,11 @@ func (a *App) renderModeBar() string {
 
 func (a *App) renderStatusBar() string {
 	status := " VIBE STUDIO"
-	if a.unsaved {
-		status += " [unsaved]"
+	if a.name != "" {
+		status += " " + sanitizeForTerminal(a.name, false)
+	}
+	if a.readOnly {
+		status += " [read-only]"
 	}
 	if a.status != "" {
 		status += " — " + a.status

@@ -1052,3 +1052,45 @@ func TestHandWrittenLocalSettingsAreAdoptedAndStamped(t *testing.T) {
 	data, _ := os.ReadFile(ws.LocalConfigPath())
 	assert.Contains(t, string(data), "nonce:")
 }
+
+func TestOpenSession_ForceReadOnly(t *testing.T) {
+	ctx := context.Background()
+	ws, root := newWorkspace(t)
+
+	// Nothing written yet: a read-only session reports the missing data file
+	// as an issue and creates nothing.
+	sess, issues, err := OpenSession(ctx, ws, nil, WithForceReadOnly())
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	assert.Equal(t, "local", issues[0].Connection)
+	assert.Contains(t, issues[0].Message, "no data file yet")
+	require.NoError(t, sess.Close())
+	assert.NoFileExists(t, filepath.Join(root, "data", "local.duckdb"))
+
+	// With a file, everything is attached read-only whatever the definition
+	// says (local is read_only: false).
+	rw, issues, err := OpenSession(ctx, ws, nil)
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	_, err = rw.Exec(ctx, "CREATE TABLE t AS SELECT 1 AS id")
+	require.NoError(t, err)
+	require.NoError(t, rw.Close())
+
+	ro, issues, err := OpenSession(ctx, ws, nil, WithForceReadOnly())
+	require.NoError(t, err)
+	defer ro.Close() //nolint:errcheck
+	require.Empty(t, issues)
+	var n int
+	require.NoError(t, ro.DB().QueryRow("SELECT count(*) FROM t").Scan(&n))
+	assert.Equal(t, 1, n)
+	_, err = ro.Exec(ctx, "INSERT INTO t VALUES (2)")
+	require.Error(t, err)
+	var found bool
+	for _, st := range ro.Connections() {
+		if st.Name == "local" {
+			found = true
+			assert.True(t, st.ReadOnly)
+		}
+	}
+	assert.True(t, found)
+}

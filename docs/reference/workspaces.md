@@ -2,7 +2,7 @@
 
 A **workspace** is a folder, optionally a git repository, that holds your notebooks, saved queries and skills as ordinary files, plus a small `vibe.yaml` that marks it. Your data stays wherever it already lives; the workspace only describes how to reach it.
 
-This page is the file-level reference. Opening, creating and switching workspaces in Studio and the CLI arrive with #111 and #113; `vibe mcp serve --workspace` and the hub lock (#112) are in. Until Studio moves over it still opens `.vibe` containers, and everything below is implemented by `internal/workspace` and its stores.
+This page is the file-level reference, plus the command line. Opening, creating and switching workspaces in Studio arrives with #111; the CLI (#113), `vibe mcp serve --workspace` and the hub lock (#112) are in. Until Studio moves over it still opens `.vibe` containers, and everything below is implemented by `internal/workspace` and its stores.
 
 ## Layout
 
@@ -231,3 +231,21 @@ DuckDB lets one process write a `.duckdb` file, or many read it, never a mix. So
 Take over: `hub.RequestRelease` sends `SIGUSR1` to the owner after checking it is on this host, is not the caller, and advertised `control: "sigusr1"`; `hub.TakeOver` then waits for the lock and returns the new hold. A signal rather than a control socket because a socket path under a deep folder can exceed the OS limit and a signal opens no extra listener. The owner's handler closes its session, releases the lock and exits.
 
 On non-unix platforms the lock and take over are no-ops (Windows is not a release target).
+
+## Command line
+
+The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, or the current directory and then each parent until a `vibe.yaml` turns up. A `.vibe` path anywhere is refused with "`.vibe` files are no longer opened; create a workspace with `vibe workspace init`". `vibe verify`, `compact`, `rekey`, `dump`, `passphrase` and `info <file>` belonged to the container and are gone (the names stay registered, hidden, to say so).
+
+| Command | What it does |
+|---|---|
+| `vibe workspace init [dir] [--name N] [--git] [--template T]` | Wraps `workspace.Init` (above). `dir` defaults to `.`. `--git` runs `git init` when git is installed. `--template` (`contacts`, `inventory`, `order-entry`, `training-registrations`) seeds `data/local.duckdb` with the template's sample tables and writes its starter notebook to `notebooks/`. Prints the next steps. `vibe init [dir]` is an alias. |
+| `vibe workspace info [--workspace DIR] [--json]` | Root, id and name; every connection with its scope, status, read-only flag and (for attached ones) table count; notebook, query and skill counts; the effective agent policy; who owns the hub. Never takes the hub or creates a data file. |
+| `vibe query "<sql>" [-c conn] [--format table\|csv\|json] [--limit N] [--read-only]` | One statement through the session. `-c` makes that connection's catalog the default for unqualified names. `-` reads the statement from standard input. `--limit` defaults to 1000 (0 for all), and a cap is reported on standard error. |
+| `vibe import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. |
+| `vibe export <[conn.]table> \| --sql "<query>" [-o file]` | See `import-office.md`. |
+| `vibe studio [dir] [--gui] [--read-only]` | The terminal UI: a SQL REPL on the session, a read-only table browser across every attached connection (remote tables are listed without counts), and a notebook list. Connection problems are shown at the top of the REPL, since the alternate screen hides stderr. `--gui` launches the desktop app instead; until #111 teaches Studio to open a workspace folder, `--gui` with a folder is refused (`guiOpensWorkspaces` in `cmd/studio.go`). |
+| `vibe mcp serve [--workspace DIR]` | See `docs/mcp.md`. |
+
+**Who may write.** A command that can write (`query`, `import`, `export` without `--read-only`, `studio`) first takes the workspace's hub lock (see "One owner at a time"). If Studio or `vibe mcp serve` holds it, the command stops and names the holder: `workspace acme is open in Vibe Studio (pid 4242), which owns its database; close it, or re-run with --read-only`. Only commands that have a `--read-only` flag (`query`, `export`, `studio`) suggest it. It skips the lock and attaches every connection read-only (and refuses `COPY ... TO`). DuckDB cannot mix a writer with readers on one file, and an owner keeps the workspace's local `.duckdb` files open for writing, so while someone owns the workspace `--read-only` reaches only its other connections (MotherDuck, Postgres, ...). A locked local file is reported in plain words ("a local DuckDB file that Vibe Studio (pid 4242) has open for writing"), and `studio` does not offer read-only when the default database is one. A workspace that has no data file yet reports "has no data file yet" instead of creating one. `studio` offers `--read-only` interactively when stdin is a terminal.
+
+**SQL checks.** The CLI is you acting directly, not the agent, so SQL runs as written and the agent's allow-list does not apply. As a courtesy `query` (and the TUI's REPL) refuse `ATTACH`, `DETACH`, `INSTALL`, `LOAD`, `SET` / `RESET` and `CREATE`/`DROP SECRET`, with an explanation (connections come from the workspace, credentials from the keychain). This is a check for common slips, not a security boundary: DuckDB's configuration lock does not itself stop those statements. The check understands comments and quoted text (`'...'`, `"..."`, `E'...'`, `$tag$...$tag$`). `export --sql` must be exactly one `SELECT`, judged by DuckDB's parser (`json_serialize_sql`), since the text is placed inside `COPY (...)`. A write to a connection that is `read_only` fails with a hint to set `read_only: false`. Writes go straight to their connection; there is nothing to save.

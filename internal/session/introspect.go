@@ -110,3 +110,21 @@ func PrimaryKeyColumns(ctx context.Context, q Queryer, ref TableRef) ([]string, 
 	}
 	return out, rows.Err()
 }
+
+// AllTables lists the tables and views of every user schema of catalog
+// ("" = the default catalog).
+func AllTables(ctx context.Context, s Session, catalog string) ([]TableInfo, error) {
+	schemas, err := s.ListSchemas(ctx, catalog)
+	if err != nil {
+		return nil, err
+	}
+	var out []TableInfo
+	for _, sc := range schemas {
+		ts, err := s.ListTables(ctx, catalog, sc)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ts...)
+	}
+	return out, nil
+}

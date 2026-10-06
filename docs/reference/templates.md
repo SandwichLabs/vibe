@@ -1,8 +1,8 @@
 # Starter Templates
 
-> **Changing (#109, #111).** Templates will seed a new **workspace** instead: notebooks as files, plus sample tables in its local `data/local.duckdb` connection.
+> **Changing (#111).** `vibe workspace init --template` (#113) already seeds a new **workspace**: the notebook as a `notebooks/*.vnb` file, plus the sample tables in its local `data/local.duckdb` connection. Studio's Home picker and the `.vibe` template flow move over in #111.
 
-A **template** seeds a fresh `.vibe` with a complete little relational dataset:
+A **template** seeds a fresh workspace (or, until #111, a `.vibe`) with a complete little relational dataset:
 DuckDB user tables (with inline foreign keys so referential integrity is
 enforced), sample data, and a starter **notebook** with a cell over each table
 so the workspace is immediately explorable. (#68: forms, the switchboard,

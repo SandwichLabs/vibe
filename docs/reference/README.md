@@ -1,6 +1,6 @@
 # Vibe v1.0 Reference
 
-> **Changing (epic #105).** `workspaces.md` (#109) describes the folder-shaped workspace that replaces the single `.vibe` file; its Go packages are in, and Studio, the CLI and MCP switch over in #110 to #113. The other references still describe the current single-file build. `connections.md` arrives with #115.
+> **Changing (epic #105).** `workspaces.md` (#109) describes the folder-shaped workspace that replaces the single `.vibe` file; its Go packages, the CLI (`vibe workspace`, `query`, `import`, `export`, `studio`, #113) and MCP (#112) are on it, and Studio switches over in #111. The other references still describe the current single-file build. `connections.md` arrives with #115.
 
 This is the shipped reference documentation for the Vibe application surface —
 a local-first, encrypted, single-file agentic data workspace. It is split by
@@ -16,7 +16,7 @@ surface so each area is easy to find:
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui`, every starter template in
-`internal/container` and every `vibe.yaml` / connections.yaml key in the
+`internal/templates` and every `vibe.yaml` / connections.yaml key in the
 workspace schema must appear here.
 
 > **Direction note (2026-09-23).** Per [`../direction.md`](../direction.md), the page

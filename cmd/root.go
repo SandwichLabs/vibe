@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -22,26 +21,19 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "vibe",
-	Short: "Vibe — portable, encrypted application containers",
-	Long: `Vibe is a local-first, encrypted, single-file agentic data workspace. A
-.vibe file bundles DuckDB tables, notebooks (SQL/markdown/A2UI cells),
-skills (domain context for an AI agent), and the agent itself into one
-portable, passphrase-protected file — exposed to the Studio desktop app and
-to external agents over MCP (` + "`vibe mcp serve`" + `).
+	Short: "Vibe — an agentic desktop workspace for working with data where it lives",
+	Long: `Vibe is an agentic workspace for data that stays where it already lives:
+local DuckDB files, MotherDuck, Postgres, SQLite, object storage, all reached
+through one DuckDB hub. A workspace is a folder (optionally a git repository)
+holding notebooks, saved queries and skills as plain files, plus a vibe.yaml
+that lists its connections. Credentials live in your OS keychain or
+environment, never in the folder. The workspace is exposed to the Studio
+desktop app and to external agents over MCP (` + "`vibe mcp serve`" + `).
 
-Two applications share one file format:
-  - Vibe Studio (TUI) — a SQL REPL, a read-only table browser, and a
-    notebook list, for quick terminal access to a .vibe file
-  - Vibe Studio (GUI, ` + "`vibe studio --gui`" + `) — the full Wails desktop app
-    for authoring notebooks, tables, skills, and talking to the agent`,
+Start with ` + "`vibe workspace init`" + `, then ` + "`vibe query`" + `, ` + "`vibe import`" + `,
+` + "`vibe export`" + `, ` + "`vibe studio`" + ` (the terminal UI; --gui for the desktop app)
+and ` + "`vibe mcp serve`" + `.`,
 	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
-	// PersistentPreRun runs after cobra.OnInitialize (initConfig) has wired the
-	// logger, so orphan-temp recovery from crashed processes happens once per
-	// CLI invocation, before any command opens a container. Best-effort: it logs
-	// but never blocks command execution.
-	PersistentPreRun: func(_ *cobra.Command, _ []string) {
-		container.StartupSweep(logger)
-	},
 }
 
 // Execute runs the root command.
@@ -56,6 +48,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vibe.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "enable verbose logging")
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 }
 
 func initConfig() {
@@ -79,7 +72,9 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 
 	// Initialize logger.
-	level := slog.LevelInfo
+	// A CLI prints its own messages: the structured log stays quiet unless
+	// --verbose, so data commands do not spray JSON on a terminal.
+	level := slog.LevelError
 	if viper.GetBool("verbose") {
 		level = slog.LevelDebug
 	}

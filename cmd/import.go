@@ -4,118 +4,125 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/spf13/cobra"
 )
 
 var importCmd = &cobra.Command{
-	Use:   "import <file>",
-	Short: "Import data into a .vibe file",
-	Long: `Import a CSV/TSV or Excel (.xlsx) file into a table in a .vibe file, on
-the same DuckDB importer as Studio's Import wizard: full-file type inference,
-a primary key, and a lossless pre-flight before anything is written.
+	Use:   "import <file> [--into [conn.]table]",
+	Short: "Import a CSV, TSV or Excel file into a connection's table",
+	Long: `Import a CSV/TSV or Excel (.xlsx) file into a table of a writable connection,
+through the same workspace session and the same importer as Studio's Import
+wizard: full-file type inference, a primary key, and a lossless pre-flight
+before anything is written. Every import is one transaction.
 
-If the table does not exist, it is created (--mode is optional and defaults
-to create). If it already exists, --mode is required: upsert (update
-matching rows by key), replace (drop and recreate), or append (add rows).
-Every import is one transaction — all or nothing.`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath := args[0]
+--into names the target as table, conn.table or conn.schema.table. The
+connection defaults to the workspace's default connection and must be writable
+(read_only: false). Without --into the table is named after the file. Parquet
+is not an import format (query it in place with read_parquet('file.parquet')
+or attach it as a connection).
 
-		file, _ := cmd.Flags().GetString("file")
-		if file == "" {
-			file, _ = cmd.Flags().GetString("csv") // hidden alias
+If the table does not exist it is created (--mode defaults to create). If it
+exists, --mode is required: upsert (update matching rows by key), replace
+(drop and recreate) or append (add rows).
+
+The command takes ownership of the workspace's database for its duration; if
+Vibe Studio or "vibe mcp serve" has the workspace open it says so and stops.
+--dry-run writes no table, but it still takes ownership and, on a fresh
+workspace, creates the empty data/local.duckdb file.`,
+	Args:         cobra.ExactArgs(1),
+	RunE:         runImport,
+	SilenceUsage: true,
+}
+
+func runImport(cmd *cobra.Command, args []string) error {
+	file := args[0]
+	if isVibeFile(file) {
+		return errLegacyFileArg
+	}
+	dir, _ := cmd.Flags().GetString("workspace")
+	into, _ := cmd.Flags().GetString("into")
+	sheet, _ := cmd.Flags().GetString("sheet")
+	noHeader, _ := cmd.Flags().GetBool("no-header")
+	modeFlag, _ := cmd.Flags().GetString("mode")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	typeFlags, _ := cmd.Flags().GetStringArray("type")
+	errW := cmd.ErrOrStderr()
+	out := cmd.OutOrStdout()
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	types, err := parseImportTypeFlags(typeFlags)
+	if err != nil {
+		return err
+	}
+	switch importer.Mode(modeFlag) {
+	case "", importer.ModeCreate, importer.ModeReplace, importer.ModeAppend, importer.ModeUpsert:
+	default:
+		return fmt.Errorf("invalid --mode %q: use create, replace, append or upsert", modeFlag)
+	}
+	if into == "" {
+		into = importer.NormalizeName(tableNameFromCSVPath(file))
+	}
+
+	o, err := openWorkspace(ctx, dir, false, false, "vibe import", errW)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+
+	ref, err := o.resolveTarget(ctx, into, errW)
+	if err != nil {
+		return err
+	}
+	if c, ok := o.knownConnection(ref.Catalog); ok && c.IsReadOnly() {
+		return fmt.Errorf("connection %s is read-only, so nothing can be imported into it; set `read_only: false` on it in vibe.yaml or your connections file", ref.Catalog)
+	}
+
+	src := importer.Source{Path: file, Sheet: sheet, HasHeader: !noHeader}
+	key, err := resolveImportKey(ctx, cmd, o, src)
+	if err != nil {
+		return err
+	}
+	sum, err := importer.Import(ctx, o.Sess.DB(), importer.Options{
+		Source: src,
+		Table:  ref.String(),
+		Mode:   importer.Mode(modeFlag),
+		Key:    key,
+		Types:  types,
+		DryRun: dryRun,
+	})
+	if err != nil {
+		return err
+	}
+	if !sum.OK {
+		printImportProblems(out, sum)
+		return fmt.Errorf("import into %q failed", into)
+	}
+	if !dryRun {
+		o.Sess.InvalidateSchema(ref.Catalog)
+		// sum.Table, not into: for append/upsert/replace the importer returns
+		// the catalog's own spelling of an existing table, which the skill
+		// must be written under.
+		if err := agents.WriteImportSkill(o.WS.Skills(), o.Sess, sum.Table); err != nil {
+			logger.Warn("failed to write import skill", "table", sum.Table, "error", err)
 		}
-		if file == "" {
-			return fmt.Errorf("--file flag is required")
-		}
-		table, _ := cmd.Flags().GetString("table")
-		if table == "" {
-			table = importer.NormalizeName(tableNameFromCSVPath(file))
-		}
-		sheet, _ := cmd.Flags().GetString("sheet")
-		noHeader, _ := cmd.Flags().GetBool("no-header")
-		modeFlag, _ := cmd.Flags().GetString("mode")
-		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		typeFlags, _ := cmd.Flags().GetStringArray("type")
-
-		types, err := parseImportTypeFlags(typeFlags)
-		if err != nil {
-			return err
-		}
-
-		passphrase, err := promptPassphrase("Enter passphrase: ")
-		if err != nil {
-			return err
-		}
-
-		c, err := container.Open(filePath,
-			container.WithPassphrase(passphrase),
-			container.WithLogger(logger),
-		)
-		if err != nil {
-			return err
-		}
-		defer c.Close()
-
-		src := importer.Source{Path: file, Sheet: sheet, HasHeader: !noHeader}
-
-		key, err := resolveImportKey(cmd, c, src)
-		if err != nil {
-			return err
-		}
-
-		opts := importer.Options{
-			Source: src,
-			Table:  table,
-			Mode:   importer.Mode(modeFlag),
-			Key:    key,
-			Types:  types,
-			DryRun: dryRun,
-		}
-
-		sum, err := importer.Import(context.Background(), c.DuckDBDB(), opts)
-		if err != nil {
-			return err
-		}
-
-		out := cmd.OutOrStdout()
-		if !sum.OK {
-			printImportProblems(out, sum)
-			return fmt.Errorf("import into %q failed", table)
-		}
-
-		if !dryRun {
-			// sum.Table, not the local table: for append/upsert/replace
-			// into an existing table, Import resolves and returns the
-			// catalog's own spelling (a case-insensitive match), which
-			// the skill must be written under — see studio/app.go's
-			// ImportFile for the same fix and its longer comment.
-			if err := agents.WriteImportSkill(c.Skills(), c.Session(), sum.Table); err != nil {
-				logger.Warn("failed to write import skill", "table", sum.Table, "error", err)
-			}
-			if err := c.Save(); err != nil {
-				return fmt.Errorf("failed to save: %w", err)
-			}
-		}
-
-		fmt.Fprintln(out, importSummaryLine(sum, dryRun))
-		return nil
-	},
+	}
+	fmt.Fprintln(out, importSummaryLine(sum, dryRun))
+	return nil
 }
 
 // resolveImportKey turns --key (auto|none|<column>, or unset) into an
-// importer.Options.Key value. When --key wasn't given, it inspects the file
-// and uses the suggested key — the same default the Studio wizard
-// pre-selects — so `vibe import` doesn't force every user to already know a
-// candidate key's name. Ignored for append/upsert, where the table's own
-// key is used regardless.
-func resolveImportKey(cmd *cobra.Command, c *container.Container, src importer.Source) (string, error) {
+// importer.Options.Key value. When --key was not given it inspects the file and
+// uses the suggested key, the same default the Studio wizard pre-selects.
+// Ignored for append/upsert, where the table's own key is used.
+func resolveImportKey(ctx context.Context, cmd *cobra.Command, o *openedWorkspace, src importer.Source) (string, error) {
 	keyFlag, _ := cmd.Flags().GetString("key")
 	if cmd.Flags().Changed("key") {
 		switch keyFlag {
@@ -127,11 +134,29 @@ func resolveImportKey(cmd *cobra.Command, c *container.Container, src importer.S
 			return keyFlag, nil
 		}
 	}
-	insp, err := importer.Inspect(context.Background(), c.DuckDBDB(), src)
+	insp, err := importer.Inspect(ctx, o.Sess.DB(), src)
 	if err != nil {
 		return "", err
 	}
 	return insp.SuggestedKey, nil
+}
+
+// tableNameFromCSVPath derives a table name from a data file path.
+func tableNameFromCSVPath(csvPath string) string {
+	base := filepath.Base(csvPath)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	var sb strings.Builder
+	for _, c := range name {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			sb.WriteRune(c)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	if sb.Len() == 0 {
+		return "imported"
+	}
+	return sb.String()
 }
 
 // parseImportTypeFlags parses --type col=decimal (repeatable) into a
@@ -222,15 +247,13 @@ func importSummaryLine(sum *importer.Summary, dryRun bool) string {
 }
 
 func init() {
-	importCmd.Flags().String("file", "", "data file to import (.csv, .tsv, .xlsx)")
-	importCmd.Flags().String("csv", "", "alias for --file")
-	importCmd.Flags().MarkHidden("csv") //nolint:errcheck
-	importCmd.Flags().String("table", "", "target table name (default: derived from the file name)")
+	importCmd.Flags().String("into", "", "target table: table, conn.table or conn.schema.table (default: a table named after the file, in the default connection)")
 	importCmd.Flags().String("sheet", "", "xlsx sheet name (default: the workbook's first sheet)")
 	importCmd.Flags().Bool("no-header", false, "the file's first row is data, not a header")
 	importCmd.Flags().String("mode", "", "create|replace|append|upsert (required when the table already exists)")
 	importCmd.Flags().String("key", "", "primary key column, \"auto\" for a generated id, or \"none\" (default: the suggested key)")
 	importCmd.Flags().StringArray("type", nil, "column type override, col=type (repeatable); type is one of text|integer|decimal|number|date|timestamp|boolean")
 	importCmd.Flags().Bool("dry-run", false, "pre-flight only; write nothing")
+	addWorkspaceFlag(importCmd)
 	rootCmd.AddCommand(importCmd)
 }

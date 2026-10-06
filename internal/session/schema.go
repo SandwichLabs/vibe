@@ -172,7 +172,7 @@ func (h *hub) ListSchemas(ctx context.Context, catalog string) ([]string, error)
 	}
 	rows, err := h.db.QueryContext(ctx, `
 		SELECT schema_name FROM duckdb_schemas()
-		 WHERE database_name = $1 AND NOT internal
+		 WHERE database_name = $1
 		   AND schema_name NOT IN ('information_schema', 'pg_catalog')
 		 ORDER BY schema_name`, catalog)
 	if err != nil {

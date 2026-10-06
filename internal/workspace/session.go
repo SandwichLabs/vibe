@@ -24,9 +24,17 @@ type SessionIssue struct {
 type SessionOption func(*sessionOpts)
 
 type sessionOpts struct {
-	lookup  LookupFunc
-	session []session.Option
+	lookup   LookupFunc
+	session  []session.Option
+	readOnly bool
 }
+
+// WithForceReadOnly attaches every connection read-only whatever its
+// definition says, for a process that does not own the hub (`vibe query
+// --read-only`, `vibe workspace info`). A local DuckDB file that does not
+// exist yet is reported as an issue instead of being created, and no folder
+// is created for it.
+func WithForceReadOnly() SessionOption { return func(o *sessionOpts) { o.readOnly = true } }
 
 // WithSessionEnv replaces the environment lookup for ${ENV} interpolation.
 func WithSessionEnv(f LookupFunc) SessionOption { return func(o *sessionOpts) { o.lookup = f } }
@@ -87,7 +95,7 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 			fail(c.Name, err)
 			continue
 		}
-		spec := session.Spec{Name: resolved.Name, Type: resolved.Type, ReadOnly: resolved.IsReadOnly()}
+		spec := session.Spec{Name: resolved.Name, Type: resolved.Type, ReadOnly: resolved.IsReadOnly() || o.readOnly}
 		if resolved.Type == "duckdb" {
 			p, err := ResolveLocalPath(ws.Root(), resolved.Path, c.Scope)
 			if err != nil {
@@ -95,6 +103,12 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 				continue
 			}
 			spec.Path = p
+			if o.readOnly {
+				if _, err := os.Stat(p); err != nil {
+					fail(c.Name, fmt.Errorf("connection %q has no data file yet; it is created the first time something writes to it", c.Name))
+					continue
+				}
+			}
 			// Only ever create folders inside the workspace; a path the user
 			// pointed elsewhere must already have its folder.
 			if !spec.ReadOnly && insideRoot(ws.Root(), p) {

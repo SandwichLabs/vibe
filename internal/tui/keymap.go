@@ -11,7 +11,6 @@ type KeyMap struct {
 	Back        key.Binding
 	Quit        key.Binding
 	ForceQuit   key.Binding
-	Save        key.Binding
 	Help        key.Binding
 	NavUp       key.Binding
 	NavDown     key.Binding
@@ -29,7 +28,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.SwitchView, k.NavUp, k.NavDown, k.Select, k.Back},
 		{k.HistoryUp, k.HistoryDown},
-		{k.Save, k.Help, k.Quit, k.ForceQuit},
+		{k.Help, k.Quit, k.ForceQuit},
 	}
 }
 
@@ -55,10 +54,6 @@ func DefaultKeyMap() KeyMap {
 		ForceQuit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "force quit"),
-		),
-		Save: key.NewBinding(
-			key.WithKeys("s", "ctrl+s"),
-			key.WithHelp("ctrl+s", "save"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),

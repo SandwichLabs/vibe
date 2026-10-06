@@ -103,7 +103,10 @@ func (t TableBrowserModel) View(width, height int) string {
 	}
 
 	title := contentTitleStyle.Render(t.tableName)
-	info := dimStyle.Render(fmt.Sprintf("%d rows", t.rowCount))
+	info := dimStyle.Render("first 1000 rows")
+	if t.rowCount >= 0 {
+		info = dimStyle.Render(fmt.Sprintf("%d rows", t.rowCount))
+	}
 	header := title + "\n" + info + "\n"
 
 	if t.loading {
