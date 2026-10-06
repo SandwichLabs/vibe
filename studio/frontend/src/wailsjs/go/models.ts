@@ -889,6 +889,30 @@ export namespace main {
 	        this.message = source["message"];
 	    }
 	}
+	export class LLMKeyStatus {
+	    provider: string;
+	    source: string;
+	    set: boolean;
+	    fileKey: boolean;
+	    canMigrate: boolean;
+	    keychainAvailable: boolean;
+	    detail?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMKeyStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.source = source["source"];
+	        this.set = source["set"];
+	        this.fileKey = source["fileKey"];
+	        this.canMigrate = source["canMigrate"];
+	        this.keychainAvailable = source["keychainAvailable"];
+	        this.detail = source["detail"];
+	    }
+	}
 	export class MCPStatus {
 	    running: boolean;
 	    url: string;
@@ -1573,6 +1597,27 @@ export namespace queries {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace secrets {
+	
+	export class Probe {
+	    available: boolean;
+	    backend: string;
+	    detail?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Probe(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.backend = source["backend"];
+	        this.detail = source["detail"];
+	    }
 	}
 
 }

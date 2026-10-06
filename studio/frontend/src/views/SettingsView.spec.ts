@@ -26,6 +26,7 @@ function makeApp(mcp: Partial<MCPStatus> = {}) {
     GetClaudeConfig: vi.fn(async () => ({ name: 'vibe-a', desktop: '{"mcpServers":{}}', code: 'claude mcp add vibe-a -- vibe mcp serve --workspace /w/a' })),
     SetWorkspaceSettings: vi.fn(async (s: WorkspaceSettings) => ({ ...INFO, name: s.name })),
     GetAgentConfig: vi.fn(async () => ({ provider: 'local', model: 'llama', endpoint: 'http://x', sandbox: 'read-write', askBeforeWrites: true })),
+    GetLLMKeyStatus: vi.fn(async () => ({ provider: 'local', source: 'none', set: false, fileKey: false, canMigrate: false, keychainAvailable: true, keychainHasKey: false })),
     GetPreferences: vi.fn(async () => ({ theme: 'schoolhouse', systemLight: 'schoolhouse', systemDark: 'schoolhouse-dark', reduceMotion: false, uiScale: 100 })),
     ListUserThemes: vi.fn(async () => ({ themes: [], problems: [], dir: '' })),
   }

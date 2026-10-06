@@ -1,7 +1,5 @@
 # LLM provider configuration
 
-> **Changing (#114).** `llm.api_key` in `~/.vibe.yaml` moves to the OS keychain. A one-time migration will offer to move an existing plaintext key and blank it. `VIBE_LLM_API_KEY` and the providers' standard env vars keep working and still take precedence. Until then, prefer env vars over writing a key into the file.
-
 The in-app wizard agent's model provider is **app-global and viper-driven**:
 configure it once in `~/.vibe.yaml` (or via `VIBE_*` environment variables) and
 every workspace you open uses it. (The agent *sandbox* — read-only / read-write /
@@ -29,7 +27,7 @@ llm:
   provider: local                      # local | anthropic | gemini
   endpoint: http://localhost:8080/v1   # local provider only
   model: ""                            # blank = per-provider default
-  # api_key: ""                        # optional; prefer the standard env var below
+  # api_key: ""                        # legacy; keep it out of this file, see "API key" below
 ```
 
 Per-provider default models (overridable via `llm.model`):
@@ -54,9 +52,50 @@ export VIBE_LLM_MODEL=my-local-model
 ```
 
 Cloud API keys are read from the provider's **standard** env var
-(`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) when `llm.api_key` is unset, so secrets
-stay out of config files. An explicit `VIBE_LLM_API_KEY` takes precedence.
+(`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`), so secrets stay out of config files.
+An explicit `VIBE_LLM_API_KEY` takes precedence. See "API key" below.
+
+## API key (#114)
+
+The key lives in your **OS keychain** (macOS Keychain, Windows Credential
+Manager, Linux Secret Service), never in a config file, a log or the agent's
+context. It is write-only: Vibe can save, replace and remove it, and tell you
+where it comes from, but nothing shows it back.
+
+**Where a key is read from**, first match wins:
+
+1. `VIBE_LLM_API_KEY`
+2. the provider's standard variable (`ANTHROPIC_API_KEY`; `GEMINI_API_KEY`, then `GOOGLE_API_KEY`)
+3. the keychain item for the provider (`llm-anthropic`, `llm-gemini`, `llm-local`)
+4. `llm.api_key` in `~/.vibe.yaml` (legacy, read-only: Vibe never writes a key there). It is a single value, used for whichever provider is selected, so switching provider while only the file key exists sends that key to the new provider. The keychain and provider variables are per provider.
+
+**Set it** in Studio under Settings, App, "The agent's model" (paste a key,
+Save to keychain; then "In your keychain, Replace, Clear"), or from a terminal:
+
+```bash
+vibe config llm-key set            # prompts without echo; or pipe one line on stdin
+vibe config llm-key status         # where the key comes from (never the key)
+vibe config llm-key clear
+vibe config llm-key set --provider gemini
+```
+
+**No keychain** (an SSH session, a headless box, a locked collection)? Studio
+says so and Vibe does not fall back to a file. Set `VIBE_LLM_API_KEY` in the
+environment Vibe starts from instead. Every keychain call has a short timeout,
+so a locked keychain shows as "not reachable" instead of freezing the app.
+
+**Migration.** If `~/.vibe.yaml` still has a plaintext `llm.api_key` and the
+keychain works, Studio shows "Found a key in ~/.vibe.yaml. Move it to the
+keychain" (or run `vibe config llm-key migrate`). Accepting stores the key,
+reads it back to be sure, then blanks only that value in the file
+(`api_key: ""`): comments and the rest of the file stay as they are. A backup is
+written first to `~/.vibe.yaml.bak` (mode 0600) with the key already removed, so
+the backup does not keep the secret. If anything fails before the final rename,
+the file is untouched. A symlinked `~/.vibe.yaml` is followed: the target is edited in place (its backup sits next to it) and the link stays. If the key is written in a form that cannot be blanked safely (a YAML alias or tag, a multi-line value, several documents, or repeated in a comment) Vibe says so and tells you to run `vibe config llm-key set` and remove it by hand; nothing is stored first. If the keychain already holds a different key, migrating asks first in Studio and needs `--force` on the CLI.
+
+Testing and QA can point at another file with `VIBE_CONFIG_FILE` and another
+keychain service name with `VIBE_KEYRING_SERVICE`.
 
 ## Precedence
 
-Built-in defaults → `~/.vibe.yaml` → `VIBE_*` environment variables.
+Built-in defaults → `~/.vibe.yaml` → `VIBE_*` environment variables. The API key follows its own order, above.

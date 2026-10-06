@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/usersql"
 	"regexp"
 	"strings"
 	"sync"
@@ -884,6 +885,9 @@ var pragmaReadAllowlist = map[string]bool{
 // reference to a param that plain doesn't exist, itself a bind error) —
 // exactly the case that must keep failing closed.
 func classifySQL(ctx context.Context, userDB queryDB, raw string, params map[string]any) (sqlClass, string) {
+	if touchesSecrets(raw) {
+		return sqlClassOther, secretsDeniedMsg
+	}
 	boundSQL, args, err := engine.BindParams(raw, params)
 	if err != nil {
 		return sqlClassOther, fmt.Sprintf("could not validate query: %v", err)
@@ -1185,11 +1189,83 @@ func stripCommentsAndStrings(sql string) string {
 	return b.String()
 }
 
+// secretsDeniedMsg is the reason for a statement that creates, drops, lists or
+// attaches with a DuckDB secret. It is denied in EVERY sandbox mode, full
+// included, and no approval can lift it: credentials are the session's to
+// create (Session.CreateTemporarySecret), never the agent's (#114).
+const secretsDeniedMsg = "run_query: secrets are managed by Vibe and cannot be created, listed or referenced from SQL"
+
+// touchesSecrets reports whether the statement(s) create, drop, list or use a
+// DuckDB secret. It works on the comment-free token stream from usersql, so
+// comments, quoting and string literals cannot hide a keyword, and it errs
+// towards denying. #116 replaces it with the AST policy.
+func touchesSecrets(raw string) bool { return tokensTouchSecrets(usersql.Tokens(raw), 0) }
+
+var secretDDLModifiers = map[string]bool{
+	"OR": true, "REPLACE": true, "PERSISTENT": true, "TEMPORARY": true, "TEMP": true,
+	"IF": true, "NOT": true, "EXISTS": true,
+}
+
+func tokensTouchSecrets(stmts [][]usersql.Token, depth int) bool {
+	if depth > 4 {
+		return true
+	}
+	isName := func(t usersql.Token, name string) bool {
+		return (t.Kind == usersql.TokWord || t.Kind == usersql.TokIdent) && strings.EqualFold(t.Text, name)
+	}
+	for _, st := range stmts {
+		first := ""
+		if len(st) > 0 && st[0].Kind == usersql.TokWord {
+			first = st[0].Text
+		}
+		for i, t := range st {
+			if isName(t, "duckdb_secrets") || isName(t, "which_secret") || isName(t, "duckdb_secret_types") {
+				return true
+			}
+			if (t.Kind == usersql.TokWord || t.Kind == usersql.TokIdent) && strings.EqualFold(t.Text, "secret") {
+				if first == "ATTACH" {
+					return true
+				}
+				for j := i - 1; j >= 0; j-- {
+					if st[j].Kind != usersql.TokWord {
+						break
+					}
+					if secretDDLModifiers[st[j].Text] {
+						continue
+					}
+					if st[j].Text == "CREATE" || st[j].Text == "DROP" || st[j].Text == "ALTER" {
+						return true
+					}
+					break
+				}
+			}
+			if (first == "SET" || first == "RESET") && strings.Contains(strings.ToUpper(t.Text), "SECRET") {
+				return true
+			}
+			if (isName(t, "query") || isName(t, "query_table")) && i+1 < len(st) && st[i+1].Kind == usersql.TokParen && st[i+1].Text == "(" {
+				// Only a single constant string literal is allowed, and its
+				// content is checked in turn.
+				if i+3 < len(st) && st[i+2].Kind == usersql.TokString && st[i+3].Kind == usersql.TokParen && st[i+3].Text == ")" {
+					if tokensTouchSecrets(usersql.Tokens(st[i+2].Text), depth+1) {
+						return true
+					}
+					continue
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // checkSQLClass gates a run_query statement's classified risk tier against
 // the sandbox mode: reads are always allowed, DML needs read-write or full,
 // anything else needs full. reason, when non-empty (an external-access
 // violation), is surfaced verbatim instead of the generic per-mode message.
 func (sc *SandboxConfig) checkSQLClass(class sqlClass, reason string) error {
+	if reason == secretsDeniedMsg {
+		return errors.New(secretsDeniedMsg)
+	}
 	switch sc.Mode {
 	case ModeReadOnly:
 		if class != sqlClassRead {

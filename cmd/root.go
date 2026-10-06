@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -12,6 +13,9 @@ import (
 var (
 	cfgFile string
 	logger  *slog.Logger
+	// cliRedactor scrubs credential-shaped text from the log and from
+	// workspace sessions' errors; the CLI resolves no secret values itself.
+	cliRedactor = secrets.NewRedactor()
 
 	// Version info set via ldflags.
 	version = "dev"
@@ -78,5 +82,6 @@ func initConfig() {
 	if viper.GetBool("verbose") {
 		level = slog.LevelDebug
 	}
-	logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	logger = slog.New(secrets.NewRedactingHandler(
+		slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}), cliRedactor))
 }

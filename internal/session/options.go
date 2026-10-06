@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ type Option func(*config)
 
 type config struct {
 	logger        *slog.Logger
+	redactor      *secrets.Redactor
 	tempDir       string        // DuckDB temp_directory (spill files)
 	extensionDir  string        // app-private extension_directory
 	secretDir     string        // secret_directory (SET; DSN ignores it)
@@ -24,7 +26,7 @@ type config struct {
 }
 
 func newConfig(opts []Option) *config {
-	c := &config{logger: slog.Default()}
+	c := &config{logger: slog.Default(), redactor: secrets.NewRedactor()}
 	for _, o := range opts {
 		o(c)
 	}
@@ -87,3 +89,14 @@ func WithRowCap(n int) QueryOption {
 // session default. Per-connection timeout/row-cap defaults of that catalog's
 // Spec apply unless overridden.
 func WithCatalog(name string) QueryOption { return func(c *callConfig) { c.catalog = name } }
+
+// WithRedactor shares a redactor with the session, so secrets another
+// component resolved are scrubbed from the session's errors and logs. Without
+// it the session keeps its own, fed by CreateTemporarySecret.
+func WithRedactor(r *secrets.Redactor) Option {
+	return func(c *config) {
+		if r != nil {
+			c.redactor = r
+		}
+	}
+}

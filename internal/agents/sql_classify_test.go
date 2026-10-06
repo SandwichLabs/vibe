@@ -1152,3 +1152,42 @@ func TestClassifySQL_NextvalIsNeverRead(t *testing.T) {
 	// An ordinary read must be unaffected.
 	assert.Equal(t, sqlClassRead, classify(t, "SELECT * FROM t"))
 }
+
+// Credential DDL and secret listings are never agent SQL (#114): the session
+// creates secrets itself, on its own non-logging path. Denied in every mode.
+func TestClassifyDeniesSecretStatements(t *testing.T) {
+	for _, q := range []string{
+		`CREATE SECRET s (TYPE http, BEARER_TOKEN 'x')`,
+		`CREATE OR REPLACE TEMPORARY SECRET s (TYPE http)`,
+		`DROP SECRET s`,
+		`SELECT * FROM duckdb_secrets()`,
+		`SELECT which_secret('s3://b/x', 's3')`,
+		`ATTACH '' AS pg (TYPE postgres, SECRET mysecret)`,
+		`SET s3_secret_access_key='x'`,
+		`SELECT 1; CREATE SECRET s (TYPE http)`,
+		`select 1; attach 'x' as y (secret z)`,
+		"CREATE/**/SECRET s (TYPE http)",
+		"CREATE -- c\nSECRET s (TYPE http)",
+		"/* c */ ATTACH '' AS pg (TYPE postgres, SECRET pg)",
+		`/* x */ SELECT * FROM "duckdb_secrets"()`,
+		`SELECT * FROM query('SELECT * FROM duckdb_' || 'secrets()')`,
+		`SELECT * FROM query_table(some_expr)`,
+		`SELECT * FROM query('SELECT * FROM duckdb_secrets()')`,
+		`SELECT * FROM query($$ create secret s (type http) $$)`,
+		`CREATE OR REPLACE PERSISTENT SECRET s (TYPE http)`,
+		`DROP SECRET IF EXISTS s`,
+		`SELECT * FROM QUERY ( 'x' || 'y' )`,
+	} {
+		assert.Equal(t, sqlClassOther, classify(t, q), q)
+		for _, mode := range []SandboxMode{ModeReadOnly, ModeReadWrite, ModeFull} {
+			class, reason := classifyReason(t, q)
+			err := (&SandboxConfig{Mode: mode}).checkSQLClass(class, reason)
+			require.Error(t, err, "%s in %s", q, mode)
+		}
+	}
+	// A column or table merely named like a secret is still just SQL.
+	assert.Equal(t, sqlClassRead, classify(t, `SELECT 1 AS secret`))
+	assert.Equal(t, sqlClassRead, classify(t, `SELECT 'create secret' AS note -- create secret`))
+	assert.False(t, touchesSecrets(`SELECT secret FROM t`))
+	assert.False(t, touchesSecrets(`SELECT * FROM query('SELECT 1')`))
+}

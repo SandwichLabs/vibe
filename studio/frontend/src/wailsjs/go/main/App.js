@@ -50,6 +50,10 @@ export function ChooseFolder(arg1) {
   return window['go']['main']['App']['ChooseFolder'](arg1);
 }
 
+export function ClearLLMKey(arg1) {
+  return window['go']['main']['App']['ClearLLMKey'](arg1);
+}
+
 export function CloseWorkspace() {
   return window['go']['main']['App']['CloseWorkspace']();
 }
@@ -142,6 +146,10 @@ export function GetInitialWorkspace() {
   return window['go']['main']['App']['GetInitialWorkspace']();
 }
 
+export function GetLLMKeyStatus() {
+  return window['go']['main']['App']['GetLLMKeyStatus']();
+}
+
 export function GetMCPStatus() {
   return window['go']['main']['App']['GetMCPStatus']();
 }
@@ -172,6 +180,10 @@ export function GetTableDataFiltered(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function GetWorkspaceInfo() {
   return window['go']['main']['App']['GetWorkspaceInfo']();
+}
+
+export function HoldQuit() {
+  return window['go']['main']['App']['HoldQuit']();
 }
 
 export function ImportFile(arg1) {
@@ -238,6 +250,10 @@ export function ListUserThemes() {
   return window['go']['main']['App']['ListUserThemes']();
 }
 
+export function MigrateLLMKeyToKeychain() {
+  return window['go']['main']['App']['MigrateLLMKeyToKeychain']();
+}
+
 export function OpenThemesDir() {
   return window['go']['main']['App']['OpenThemesDir']();
 }
@@ -252,6 +268,10 @@ export function OpenWorkspaceReadOnly(arg1) {
 
 export function PreviewFilterSQL(arg1, arg2, arg3) {
   return window['go']['main']['App']['PreviewFilterSQL'](arg1, arg2, arg3);
+}
+
+export function ProbeKeychain() {
+  return window['go']['main']['App']['ProbeKeychain']();
 }
 
 export function Quit() {
@@ -332,6 +352,10 @@ export function SetActiveNotebook(arg1) {
 
 export function SetAgentConfig(arg1) {
   return window['go']['main']['App']['SetAgentConfig'](arg1);
+}
+
+export function SetLLMKey(arg1, arg2) {
+  return window['go']['main']['App']['SetLLMKey'](arg1, arg2);
 }
 
 export function SetPreferences(arg1) {

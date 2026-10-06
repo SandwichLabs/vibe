@@ -77,6 +77,11 @@ declare global {
           SendAgentQuery(query: string): Promise<AgentResult>
           GetAgentStatus(): Promise<Record<string, any>>
           GetAgentConfig(): Promise<AgentConfig>
+          ProbeKeychain(): Promise<KeychainProbe>
+          GetLLMKeyStatus(): Promise<LLMKeyStatus>
+          SetLLMKey(provider: string, key: string): Promise<void>
+          ClearLLMKey(provider: string): Promise<void>
+          MigrateLLMKeyToKeychain(overwrite: boolean): Promise<void>
           SetAgentConfig(cfg: AgentConfig): Promise<void>
           ResolveAgentApproval(id: string, approved: boolean): Promise<void>
           SelectImportFile(): Promise<string>
@@ -293,6 +298,25 @@ interface QueryResult {
   duration: string
   row_count: number
   total_rows: number
+}
+
+// KeychainProbe / LLMKeyStatus (#114): where the agent's API key comes from.
+// There is no way to read the key itself; the bindings set, clear and report.
+interface KeychainProbe {
+  available: boolean
+  backend: string
+  detail?: string
+}
+
+interface LLMKeyStatus {
+  provider: string
+  source: 'env' | 'keychain' | 'file' | 'none'
+  set: boolean
+  fileKey: boolean
+  canMigrate: boolean
+  keychainAvailable: boolean
+  keychainHasKey: boolean
+  detail?: string
 }
 
 interface AgentConfig {

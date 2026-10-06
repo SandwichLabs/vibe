@@ -14,7 +14,7 @@ This page is the file-level reference, the command line, and how Studio opens, c
 - **Changed on disk.** The workspace is watched. An open notebook, query or skill that changes on disk with no unsaved edit is reloaded quietly; with an unsaved edit a banner offers **Reload from disk**, **Keep mine** and **Save mine as a copy**. A save that would overwrite a newer file is refused, never forced.
 - **Constraints come from the database.** Studio coerces typed values for datasheet edits but no longer carries its own required-field or validation rules (those were Access-era metadata): `NOT NULL`, `CHECK`, keys and foreign keys declared in the database are what stop a bad row, and the datasheet shows the database's message.
 - **No Save.** Notebooks, queries and skills save as you go; table edits go straight to their connection. There is no Save, Revert or unsaved-changes prompt.
-- **Settings.** *Workspace*: name, default connection, the agent's **team limit** (committed, can only tighten), **this computer** (your own choice, up to the team limit), and Studio's MCP switch with **Copy Claude Code config** / **Copy Claude Desktop config**. *App*: theme and the agent's model. Neither shows a token.
+- **Settings.** *Workspace*: name, default connection, the agent's **team limit** (committed, can only tighten), **this computer** (your own choice, up to the team limit), and Studio's MCP switch with **Copy Claude Code config** / **Copy Claude Desktop config**. *App*: theme and the agent's model, including its API key as a write-only field ("In your keychain, Replace, Clear", and a one-time offer to move a plaintext key out of `~/.vibe.yaml`; see [`../llm-config.md`](../llm-config.md)). Neither shows a token.
 
 Studio takes a workspace folder on the command line: `vibe studio --gui <dir>` (or `vibe-studio <dir>`). A `.vibe` file is refused with a plain message.
 
@@ -160,6 +160,38 @@ Connection definitions come from three files and are merged most-specific-wins.
 <!-- /keys -->
 
 `.vibe-local/state.json` holds `lastNotebook` and `openTabs`; it carries no trust and stays in the folder. It is never a reason for anything to fail: an unreadable file is an empty state.
+
+## Credentials
+
+A connection's secrets never live in `vibe.yaml`, in `local.yaml`, in a log line, in the agent's context or in a bundle. They are kept per person, by a **sign-in method** you choose per connection (it is stored in your `local.yaml`, or the user `connections.yaml` for user connections, never committed):
+
+| Method | Where the secret is | Notes |
+|---|---|---|
+| `keychain` (default) | your OS keychain, service `vibe` | one JSON entry per connection: `user`, `password`, `token`, `key_id`, `secret`, plus a fingerprint and a host-level description of the server |
+| `env:PREFIX` | environment variables, read only | see the mapping below |
+| `prompt` | process memory, until Vibe quits | "Remember in my keychain" is off by default and promotes the entry to the keychain only when you tick it |
+
+There is **no plaintext-file fallback**. With no keychain (SSH, a locked collection, no desktop) Vibe says so and names the `env:` alternative. Every keychain call has a five second timeout, so a locked keychain reads "not reachable" instead of freezing Studio.
+
+**Environment mapping** for `env:PREFIX` (read at connect time, never written):
+
+| Variable | Fills |
+|---|---|
+| `PREFIX_USER` | username (readable) |
+| `PREFIX_PASSWORD` | password |
+| `PREFIX_TOKEN` | token |
+| `PREFIX_KEY_ID` | S3/GCS/R2 key id (readable) |
+| `PREFIX_SECRET` | S3/GCS/R2 secret key |
+
+`env:MOTHERDUCK` therefore reads `MOTHERDUCK_TOKEN`: MotherDuck's token is only ever used when you choose that source, never picked up from the ambient environment. An env credential has no fingerprint (choosing it is your say-so).
+
+**Write-only.** Studio, MCP and the agent can set, replace, clear and ask whether a secret is set, never read it back. Only secrets are write-only: the username and the key id are readable and shown, and redacted errors keep `user='rosa'` while hiding the password. The status the UI gets is `{method, username or keyId, secretSet, fingerprintMatches, available, detail}`.
+
+**Fingerprint.** A keychain or prompt credential is bound to a hash of the connection's type, host, port, database, storage scope, path, region and every option (endpoint, url_style, hostaddr, sslmode, account and so on), checked at resolve time on the environment-resolved definition. If a pull changes any of them the connection becomes *needs-credentials* ("the server changed since you signed in (db.internal to db-new.internal). Sign in again") and the saved password is not sent to the new server. Renaming a connection or toggling read-only does not change it; any option does, on purpose (a redirected endpoint must ask you to sign in again). Re-saving after a server change starts the secret fresh, so the old password is not carried over.
+
+**Redaction.** Every secret value Vibe resolves is registered with a redactor that scrubs it (also as echoed SQL-quoted, URL-escaped or JSON-escaped), plus credential-shaped text: `password='...'`, `password=...`, prefixed names such as `aws_secret_access_key=`, `motherduck_token=` and `PGPASSWORD=`, the DDL form `PASSWORD '...'`, `"password": "..."`, `scheme://user:pw@host` (the password only) and `Bearer ...`. It scrubs these from connect and query errors and from logs (DuckDB's Postgres errors echo `password='...'` verbatim). Only secret-bearing options (`PASSWORD`, `SECRET`, `*TOKEN`, `ACCOUNT_KEY`, `CONNECTION_STRING`, ...) are registered, never plain ones like `HOST`, `USER`, `DATABASE` or `REGION`, so `user='rosa'` stays readable and ordinary words are never masked. Secret DDL (`CREATE TEMPORARY SECRET`) runs only on the session's dedicated non-logging connection, under the attach lock, with every value quoted; the statement text is never logged or returned, and on failure every quoted literal in DuckDB's error is replaced. The agent's SQL policy refuses `CREATE`/`DROP SECRET`, `duckdb_secrets()`, `which_secret()`, any `ATTACH`/`SET`/`COPY`/... that names a secret, in every sandbox tier including `full`, with no approval path.
+
+The agent's own model key is handled the same way: see [`../llm-config.md`](../llm-config.md).
 
 ## The agent limit
 

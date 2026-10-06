@@ -313,12 +313,12 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 	switch provider {
 	case ProviderAnthropic:
 		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("anthropic provider requires an API key (set ANTHROPIC_API_KEY or llm.api_key)")
+			return nil, fmt.Errorf("anthropic provider requires an API key (set ANTHROPIC_API_KEY, or save a key in Settings > App)")
 		}
 		p, err = anthropic.New(anthropic.WithAPIKey(cfg.APIKey))
 	case ProviderGemini:
 		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("gemini provider requires an API key (set GEMINI_API_KEY or llm.api_key)")
+			return nil, fmt.Errorf("gemini provider requires an API key (set GEMINI_API_KEY, or save a key in Settings > App)")
 		}
 		p, err = google.New(google.WithGeminiAPIKey(cfg.APIKey))
 	case ProviderLocal:

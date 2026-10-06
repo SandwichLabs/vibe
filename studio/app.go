@@ -23,6 +23,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/prefs"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -104,6 +105,13 @@ type App struct {
 	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
 	llmCfg config.LLMConfig
 
+	// secrets resolves credentials (keychain, env, prompt) and owns the
+	// redactor that scrubs resolved secret values from logs and errors
+	// (#114). keyCache holds the resolved LLM key briefly; see secrets.go.
+	secrets  *secrets.Resolver
+	keyCache llmKeyCache
+	llmSnap  atomic.Pointer[config.LLMConfig]
+
 	// quitConfirmed gates beforeClose: the FIRST window-close/quit attempt is
 	// intercepted (OnBeforeClose returns true, preventing it) so the frontend
 	// gets a chance to flush any pending debounced saves via the
@@ -157,12 +165,16 @@ const closeWatchdogTimeout = 5 * time.Second
 // NewApp creates a new App instance. The LLM config is loaded eagerly so it is
 // available even before the Wails startup hook (and in tests).
 func NewApp(logger *slog.Logger) *App {
+	red := secrets.NewRedactor()
+	logger = slog.New(secrets.NewRedactingHandler(logger.Handler(), red))
 	app := &App{
 		logger:          logger,
+		secrets:         secrets.NewResolver(secrets.WithRedactor(red), secrets.WithResolverLogger(logger)),
 		llmCfg:          config.Load().LLM,
 		approvals:       agents.NewApprovalQueue(),
 		approvalTimeout: defaultApprovalTimeout,
 	}
+	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(); err == nil {
 		app.prefs = prefs.NewStore(dir)
 	} else {
@@ -2072,7 +2084,7 @@ func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error)
 		Provider:        a.llmCfg.Provider,
 		Endpoint:        a.llmCfg.Endpoint,
 		Model:           a.llmCfg.Model,
-		APIKey:          a.llmCfg.APIKey,
+		APIKey:          a.llmAPIKey(),
 		Sandbox:         string(policy.Mode),
 		AskBeforeWrites: policy.AskBeforeWrites,
 	}
@@ -2122,7 +2134,7 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 		Provider:        a.llmCfg.Provider,
 		Endpoint:        a.llmCfg.Endpoint,
 		Model:           a.llmCfg.Model,
-		APIKey:          a.llmCfg.APIKey,
+		APIKey:          a.llmAPIKey(),
 		Sandbox:         string(policy.Mode),
 		AskBeforeWrites: policy.AskBeforeWrites,
 	}
@@ -2220,7 +2232,7 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 		Provider: a.llmCfg.Provider,
 		Endpoint: a.llmCfg.Endpoint,
 		Model:    a.llmCfg.Model,
-		APIKey:   a.llmCfg.APIKey,
+		APIKey:   a.llmAPIKey(),
 		// Task mode ALWAYS runs read-only, regardless of the file's own
 		// agent_sandbox setting (review fix, CRITICAL: previously this used
 		// the file's sandbox — often "full" — which combined with

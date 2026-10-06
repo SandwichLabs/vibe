@@ -1,0 +1,306 @@
+package secrets
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+)
+
+// Sign-in methods. A method is "keychain", "prompt" or "env:PREFIX"; it is
+// per person (workspace local.yaml or user scope), never committed.
+const (
+	MethodKeychain = "keychain"
+	MethodPrompt   = "prompt"
+	MethodEnvPref  = "env:"
+)
+
+// Binding ties a credential to the server it was entered for.
+type Binding struct {
+	// Fingerprint is workspace.Fingerprint of the environment-resolved
+	// definition.
+	Fingerprint string
+	// Server is a host-level description ("db.internal:5432") for messages.
+	Server string
+}
+
+// ErrFingerprintChanged means the connection now points at a different server
+// than the one the saved credential was entered for. The secret is not handed
+// out. Old and New are host-level descriptions, never secrets.
+type ErrFingerprintChanged struct {
+	Old, New string
+}
+
+func (e *ErrFingerprintChanged) Error() string {
+	switch {
+	case e.Old != "" && e.New != "":
+		return fmt.Sprintf("the server changed since you signed in (%s to %s). Sign in again", e.Old, e.New)
+	default:
+		return "the server changed since you signed in. Sign in again"
+	}
+}
+
+// ErrNeedsCredentials means no credential is available by the chosen method.
+// Its message names the env: alternative.
+type ErrNeedsCredentials struct {
+	Method string
+	// Reason is "not set" or the store's unavailability detail.
+	Reason string
+	Ref    Ref
+}
+
+func (e *ErrNeedsCredentials) Error() string {
+	ex := strings.ToUpper(e.Ref.Name)
+	return fmt.Sprintf("no credentials for %s (%s): sign in, or choose Environment variables and set %s_USER and %s_PASSWORD (or %s_TOKEN)", e.Ref.Name, e.Reason, ex, ex, ex)
+}
+
+// Resolver picks the store for a person's sign-in method and enforces the
+// fingerprint binding. Every secret it resolves or stores is registered with
+// its Redactor.
+type Resolver struct {
+	keyring  Store
+	memory   *MemoryStore
+	redactor *Redactor
+	logger   *slog.Logger
+	getenv   func(string) string
+}
+
+// ResolverOption configures NewResolver.
+type ResolverOption func(*Resolver)
+
+// WithKeychain sets the keychain store (default: the OS keyring).
+func WithKeychain(s Store) ResolverOption { return func(r *Resolver) { r.keyring = s } }
+
+// WithRedactor sets the redactor that learns resolved values.
+func WithRedactor(x *Redactor) ResolverOption { return func(r *Resolver) { r.redactor = x } }
+
+// WithResolverLogger sets the logger (names and statuses only).
+func WithResolverLogger(l *slog.Logger) ResolverOption {
+	return func(r *Resolver) {
+		if l != nil {
+			r.logger = l
+		}
+	}
+}
+
+// WithEnv replaces os.Getenv (tests).
+func WithEnv(f func(string) string) ResolverOption { return func(r *Resolver) { r.getenv = f } }
+
+// NewResolver returns a resolver over the OS keychain, process memory and the
+// environment.
+func NewResolver(opts ...ResolverOption) *Resolver {
+	r := &Resolver{
+		memory:   NewMemoryStore(),
+		redactor: NewRedactor(),
+		logger:   slog.Default(),
+		getenv:   os.Getenv,
+	}
+	for _, o := range opts {
+		o(r)
+	}
+	if r.keyring == nil {
+		r.keyring = NewKeyringStore()
+	}
+	return r
+}
+
+// Redactor returns the redactor learning this resolver's secrets.
+func (r *Resolver) Redactor() *Redactor { return r.redactor }
+
+// Keychain returns the keychain store (for the LLM key and probes).
+func (r *Resolver) Keychain() Store { return r.keyring }
+
+// ParseMethod splits a sign-in method. "" means keychain.
+func ParseMethod(m string) (kind, prefix string, err error) {
+	switch {
+	case m == "" || m == MethodKeychain:
+		return MethodKeychain, "", nil
+	case m == MethodPrompt:
+		return MethodPrompt, "", nil
+	case strings.HasPrefix(m, MethodEnvPref) && len(m) > len(MethodEnvPref):
+		return "env", strings.TrimPrefix(m, MethodEnvPref), nil
+	}
+	return "", "", fmt.Errorf("invalid sign-in method %q: want keychain, prompt or env:PREFIX", m)
+}
+
+func (r *Resolver) env(prefix string) *EnvStore { return NewEnvStore(prefix).WithGetenv(r.getenv) }
+
+// Resolve returns the credential for ref by the person's sign-in method, after
+// checking the binding. It never returns a secret from a keychain or prompt
+// entry that was saved for a different server.
+func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Binding) (Credential, error) {
+	kind, prefix, err := ParseMethod(method)
+	if err != nil {
+		return Credential{}, err
+	}
+	var cred Credential
+	switch kind {
+	case "env":
+		c, ok := r.env(prefix).Load()
+		if !ok {
+			return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "none of " + strings.Join(EnvVarNames(prefix), ", ") + " is set", Ref: ref}
+		}
+		r.redactor.AddCredential(c)
+		return c, nil
+	case MethodPrompt:
+		cred, err = r.load(ctx, r.memory, ref, method)
+	default:
+		cred, err = r.load(ctx, r.keyring, ref, method)
+	}
+	if err != nil {
+		return Credential{}, err
+	}
+	if cred.Fingerprint != b.Fingerprint {
+		return Credential{}, &ErrFingerprintChanged{Old: cred.Server, New: b.Server}
+	}
+	r.redactor.AddCredential(cred)
+	return cred, nil
+}
+
+func (r *Resolver) load(ctx context.Context, s Store, ref Ref, method string) (Credential, error) {
+	raw, err := s.Get(ctx, ref)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "not set", Ref: ref}
+	case err != nil:
+		return Credential{}, err
+	}
+	return ParseCredential(raw)
+}
+
+// SetCredentials stores cred for ref under method, bound to b. Empty secret
+// fields keep the stored value when the stored binding still matches (so the
+// write-only UI can change a username alone); after a server change they do
+// not carry over. For "prompt" the value is kept in memory only; pass
+// remember to also promote it to the keychain (D9).
+func (r *Resolver) SetCredentials(ctx context.Context, ref Ref, method string, cred Credential, b Binding, remember bool) error {
+	kind, _, err := ParseMethod(method)
+	if err != nil {
+		return err
+	}
+	if kind == "env" {
+		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+	}
+	store := r.keyring
+	if kind == MethodPrompt {
+		store = r.memory
+	}
+	prev, gerr := r.loadExisting(ctx, store, ref)
+	if gerr != nil && !errors.Is(gerr, ErrNotFound) {
+		// Could not tell what is stored (keychain down, unreadable entry):
+		// do not overwrite blind and lose a secret the person meant to keep.
+		return fmt.Errorf("failed to read the existing credentials for %s: %w", ref.Name, gerr)
+	}
+	if gerr == nil && prev.Fingerprint == b.Fingerprint {
+		if cred.User == "" {
+			cred.User = prev.User
+		}
+		if cred.Password == "" {
+			cred.Password = prev.Password
+		}
+		if cred.Token == "" {
+			cred.Token = prev.Token
+		}
+		if cred.KeyID == "" {
+			cred.KeyID = prev.KeyID
+		}
+		if cred.Secret == "" {
+			cred.Secret = prev.Secret
+		}
+	}
+	cred.Fingerprint, cred.Server = b.Fingerprint, b.Server
+	raw, err := cred.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := store.Set(ctx, ref, raw); err != nil {
+		return fmt.Errorf("failed to save credentials for %s: %w", ref.Name, err)
+	}
+	r.redactor.AddCredential(cred)
+	if kind == MethodPrompt && remember {
+		if err := r.keyring.Set(ctx, ref, raw); err != nil {
+			return fmt.Errorf("failed to remember credentials for %s in the keychain: %w", ref.Name, err)
+		}
+	}
+	return nil
+}
+
+func (r *Resolver) loadExisting(ctx context.Context, s Store, ref Ref) (Credential, error) {
+	raw, err := s.Get(ctx, ref)
+	if err != nil {
+		return Credential{}, err
+	}
+	return ParseCredential(raw)
+}
+
+// Credential field names for ClearCredentialField.
+const (
+	FieldUser     = "user"
+	FieldPassword = "password"
+	FieldToken    = "token"
+	FieldKeyID    = "key_id"
+	FieldSecret   = "secret"
+)
+
+// ClearCredentialField removes one field of the stored credential (an empty
+// field in SetCredentials means "keep", so this is the way to drop one).
+func (r *Resolver) ClearCredentialField(ctx context.Context, ref Ref, method, field string) error {
+	kind, _, err := ParseMethod(method)
+	if err != nil {
+		return err
+	}
+	if kind == "env" {
+		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+	}
+	store := r.keyring
+	if kind == MethodPrompt {
+		store = r.memory
+	}
+	cred, err := r.loadExisting(ctx, store, ref)
+	if err != nil {
+		return err
+	}
+	switch field {
+	case FieldUser:
+		cred.User = ""
+	case FieldPassword:
+		cred.Password = ""
+	case FieldToken:
+		cred.Token = ""
+	case FieldKeyID:
+		cred.KeyID = ""
+	case FieldSecret:
+		cred.Secret = ""
+	default:
+		return fmt.Errorf("unknown credential field %q", field)
+	}
+	raw, err := cred.Marshal()
+	if err != nil {
+		return err
+	}
+	return store.Set(ctx, ref, raw)
+}
+
+// RememberPrompted promotes a prompt credential held in memory to the
+// keychain. Off by default: nothing calls it unless the person ticks Remember.
+func (r *Resolver) RememberPrompted(ctx context.Context, ref Ref) error {
+	raw, err := r.memory.Get(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("nothing to remember for %s: %w", ref.Name, err)
+	}
+	if err := r.keyring.Set(ctx, ref, raw); err != nil {
+		return fmt.Errorf("failed to remember credentials for %s in the keychain: %w", ref.Name, err)
+	}
+	return nil
+}
+
+// ClearCredentials removes the keychain entry and any in-memory one.
+func (r *Resolver) ClearCredentials(ctx context.Context, ref Ref) error {
+	_ = r.memory.Delete(ctx, ref)
+	if err := r.keyring.Delete(ctx, ref); err != nil {
+		return fmt.Errorf("failed to clear credentials for %s: %w", ref.Name, err)
+	}
+	return nil
+}

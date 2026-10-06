@@ -153,7 +153,7 @@ func openWorkspace(ctx context.Context, dir string, readOnly, advise bool, app s
 	for _, w := range ws.Warnings() {
 		fmt.Fprintln(errW, "warning:", w)
 	}
-	var sopts []workspace.SessionOption
+	sopts := []workspace.SessionOption{workspace.WithSessionOptions(session.WithRedactor(cliRedactor))}
 	if readOnly {
 		sopts = append(sopts, workspace.WithForceReadOnly())
 	}

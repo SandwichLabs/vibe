@@ -663,7 +663,9 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 		}
 	}
 
-	var sopts []workspace.SessionOption
+	// The session shares the app's redactor, so a credential resolved for a
+	// connection is scrubbed from its connect and query errors (#114).
+	sopts := []workspace.SessionOption{workspace.WithSessionOptions(session.WithRedactor(a.secrets.Redactor()))}
 	if readOnly {
 		sopts = append(sopts, workspace.WithForceReadOnly())
 	}
@@ -996,7 +998,7 @@ func (a *App) ListCatalogGroups() ([]CatalogGroup, error) {
 		if c.Status == string(session.StatusOK) {
 			tabs, err := a.sess.ListTables(ctx, c.Name, "")
 			if err != nil {
-				g.Status, g.Detail = string(session.StatusError), session.Redact(err.Error())
+				g.Status, g.Detail = string(session.StatusError), a.sess.Redact(err.Error())
 			}
 			for _, t := range tabs {
 				kind := "table"
@@ -1113,7 +1115,7 @@ func (a *App) CreateWorkspace(req CreateWorkspaceRequest) (*OpenWorkspaceResult,
 		if a.readOnly {
 			opened.Warnings = append(opened.Warnings, "The workspace's database is in use by another program, so the starter template was not added.")
 		} else if err := a.seedTemplateLocked(tmpl); err != nil {
-			opened.Warnings = append(opened.Warnings, fmt.Sprintf("The workspace was created, but adding the %q template failed: %s", req.Template, session.Redact(err.Error())))
+			opened.Warnings = append(opened.Warnings, fmt.Sprintf("The workspace was created, but adding the %q template failed: %s", req.Template, a.sess.Redact(err.Error())))
 		} else {
 			opened.Info = a.infoLocked()
 			a.emitEvent("data:changed")

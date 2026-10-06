@@ -84,7 +84,7 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 
 	var issues []SessionIssue
 	fail := func(name string, err error) {
-		msg := session.Redact(err.Error())
+		msg := sess.Redact(err.Error())
 		logger.Warn("connection not available", "name", name, "reason", msg)
 		issues = append(issues, SessionIssue{Connection: name, Message: msg})
 	}

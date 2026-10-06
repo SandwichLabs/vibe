@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // Mock is a Session for tests of packages that depend on one. Set the *Fn
@@ -22,6 +23,7 @@ type Mock struct {
 	DescribeTableFn func(ctx context.Context, qualified string) (*TableDescription, error)
 	AttachFn        func(ctx context.Context, spec Spec) error
 	DetachFn        func(ctx context.Context, name string) error
+	CreateSecretFn  func(ctx context.Context, name, secretType string, params []SecretParam) error
 }
 
 var _ Session = (*Mock)(nil)
@@ -135,4 +137,17 @@ func (m *Mock) DescribeTable(ctx context.Context, q string) (*TableDescription, 
 }
 
 func (m *Mock) InvalidateSchema(string) {}
-func (m *Mock) Close() error            { return nil }
+
+func (m *Mock) Redact(s string) string { return secrets.RedactPatterns(s) }
+
+func (m *Mock) Redactor() *secrets.Redactor { return nil }
+
+func (m *Mock) CreateTemporarySecret(ctx context.Context, name, secretType string, params []SecretParam) error {
+	if m.CreateSecretFn != nil {
+		return m.CreateSecretFn(ctx, name, secretType, params)
+	}
+	return nil
+}
+
+func (m *Mock) DropSecret(context.Context, string) error { return nil }
+func (m *Mock) Close() error                             { return nil }

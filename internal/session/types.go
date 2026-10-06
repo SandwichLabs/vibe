@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"regexp"
 	"strings"
 	"time"
@@ -114,21 +115,17 @@ type TableDescription struct {
 	Columns []ColumnInfo `json:"columns"`
 }
 
-var (
-	passwordRE = regexp.MustCompile(`(?i)(password|pwd|token|secret|key)\s*=\s*('[^']*'|"[^"]*"|[^\s;,)]+)`)
-	pidRE      = regexp.MustCompile(`\(PID (\d+)\)`)
-)
+var pidRE = regexp.MustCompile(`\(PID (\d+)\)`)
 
 // Redact strips credential-shaped values from a DuckDB error or message
 // (spike #107: Postgres connect errors echo password='...' verbatim) before it
-// reaches a log, the UI or the agent.
-func Redact(s string) string {
-	return passwordRE.ReplaceAllString(s, "$1='***'")
-}
+// reaches a log, the UI or the agent. It knows patterns only; a Session's own
+// Redact also scrubs the secret values it has seen.
+func Redact(s string) string { return secrets.RedactPatterns(s) }
 
 // classifyAttachError maps a DuckDB ATTACH failure to a status.
-func classifyAttachError(err error) (StatusKind, string, int) {
-	msg := Redact(err.Error())
+func classifyAttachError(err error, redact func(string) string) (StatusKind, string, int) {
+	msg := redact(err.Error())
 	lower := strings.ToLower(msg)
 	if strings.Contains(lower, "could not set lock on file") {
 		pid := 0

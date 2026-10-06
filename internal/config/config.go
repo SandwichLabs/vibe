@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,7 +45,12 @@ type LLMConfig struct {
 	Provider string `mapstructure:"provider"` // local | anthropic | gemini
 	Model    string `mapstructure:"model"`    // model id; empty = per-provider default
 	Endpoint string `mapstructure:"endpoint"` // base URL for the local (OpenAI-compatible) provider
-	APIKey   string `mapstructure:"api_key"`  // optional; else taken from the provider's standard env var
+	APIKey   string `mapstructure:"api_key"`  // legacy: env or ~/.vibe.yaml value; use ResolveLLMKey (keychain aware)
+
+	// FileAPIKey is the plaintext llm.api_key found in ~/.vibe.yaml (legacy,
+	// read-only; #114 offers to move it into the keychain). Never set from the
+	// environment.
+	FileAPIKey string `mapstructure:"-"`
 }
 
 // WebConfig configures the embedded web preview server.
@@ -110,9 +116,9 @@ func Load() Config {
 	v.SetDefault("llm.model", cfg.LLM.Model)
 	v.SetDefault("llm.api_key", cfg.LLM.APIKey)
 
-	if home, err := os.UserHomeDir(); err == nil {
-		v.AddConfigPath(home)
-		v.SetConfigName(".vibe")
+	path := LegacyConfigPath()
+	if path != "" {
+		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
 	}
 	v.SetEnvPrefix("VIBE")
@@ -123,6 +129,17 @@ func Load() Config {
 	if err := v.Unmarshal(&cfg); err != nil {
 		// On a malformed config, fall back to defaults rather than failing the app.
 		return DefaultConfig()
+	}
+
+	// The file's own value, kept apart from env so the key resolution order
+	// (env, keychain, file) and the migration can tell where a key came from.
+	if path != "" {
+		fv := viper.New()
+		fv.SetConfigFile(path)
+		fv.SetConfigType("yaml")
+		if fv.ReadInConfig() == nil {
+			cfg.LLM.FileAPIKey = strings.TrimSpace(fv.GetString("llm.api_key"))
+		}
 	}
 
 	cfg.LLM.resolve()
@@ -150,6 +167,18 @@ func (l *LLMConfig) resolve() {
 	if l.Endpoint == "" {
 		l.Endpoint = DefaultLLMEndpoint
 	}
+}
+
+// LegacyConfigPath is the app config file: $VIBE_CONFIG_FILE if set, else
+// ~/.vibe.yaml. "" when neither can be determined.
+func LegacyConfigPath() string {
+	if p := strings.TrimSpace(os.Getenv("VIBE_CONFIG_FILE")); p != "" {
+		return p
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".vibe.yaml")
+	}
+	return ""
 }
 
 // MetaKeys defines the required keys in _vibe_meta.

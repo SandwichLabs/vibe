@@ -94,6 +94,9 @@ func (m *Manager) execute(ctx context.Context, connection, query string, params 
 		return nil, 0, fmt.Errorf("duckdb engine is not available")
 	}
 
+	// This logs statement text. Credential DDL (CREATE SECRET, #114) must never
+	// come through here: it runs on session.CreateTemporarySecret's dedicated,
+	// non-logging path, and the agent SQL policy refuses CREATE SECRET.
 	m.logger.DebugContext(ctx, "executing query",
 		slog.String("engine", "duckdb"),
 		slog.String("query", query),

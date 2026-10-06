@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // Session is the DuckDB hub: one DuckDB instance whose attached catalogs are
@@ -67,6 +69,23 @@ type Session interface {
 	// Session-run DDL, attach and detach invalidate on their own.
 	InvalidateSchema(name string)
 
+	// Redact scrubs every secret value this session knows about, plus
+	// credential-shaped patterns (password='...'), from a message. Errors
+	// the session returns are already scrubbed; use it for text that did
+	// not come through the session.
+	Redact(s string) string
+	// Redactor is the redactor behind Redact. Give it to the secrets
+	// Resolver so resolved credentials are scrubbed too.
+	Redactor() *secrets.Redactor
+
+	// CreateTemporarySecret runs CREATE OR REPLACE TEMPORARY SECRET on the
+	// dedicated admin connection, under the attach mutex. Values are quoted
+	// with QuoteLiteral, registered with the redactor, and neither the
+	// statement nor the values are ever logged or put in an error.
+	CreateTemporarySecret(ctx context.Context, name, secretType string, params []SecretParam) error
+	// DropSecret drops a temporary secret (no error if it does not exist).
+	DropSecret(ctx context.Context, name string) error
+
 	Close() error
 }
 
@@ -87,6 +106,8 @@ type hub struct {
 
 	defMu          sync.RWMutex // guards defaultCatalog and defSchemaName
 	defaultCatalog string
+
+	redactor *secrets.Redactor
 
 	adminMu sync.Mutex // serialises ATTACH / DETACH / secret DDL
 
@@ -198,7 +219,8 @@ func wrap(db *sql.DB, c *config, owns bool) (*hub, error) {
 // newHub builds the hub value; def is the instance's current_database().
 func newHub(db *sql.DB, c *config, def, defSchema string, owns bool) *hub {
 	h := &hub{
-		db: db, ownsDB: owns, cfg: c, logger: c.logger, types: NewRegistry(),
+		db: db, ownsDB: owns, cfg: c, types: NewRegistry(), redactor: c.redactor,
+		logger:  slog.New(secrets.NewRedactingHandler(c.logger.Handler(), c.redactor)),
 		tempDir: c.tempDir, defaultCatalog: def,
 		conns:         map[string]*entry{},
 		defaultSchema: map[string]string{def: defSchema},
@@ -299,7 +321,7 @@ func (h *hub) QueryWith(ctx context.Context, query string, args []any, opts ...Q
 		if err != nil {
 			_ = conn.Close()
 			cancel()
-			return nil, fmt.Errorf("failed to run query: %w", err)
+			return nil, h.wrapErr("failed to run query", err)
 		}
 		return &Rows{Rows: r, cap: cc.rowCap, cancel: cancel, release: conn.Close}, nil
 	}
@@ -319,7 +341,7 @@ func (h *hub) QueryWith(ctx context.Context, query string, args []any, opts ...Q
 	if err != nil {
 		_ = conn.Close()
 		cancel()
-		return nil, fmt.Errorf("failed to run query: %w", err)
+		return nil, h.wrapErr("failed to run query", err)
 	}
 	return &Rows{Rows: r, cap: cc.rowCap, cancel: cancel, release: conn.Close}, nil
 }
@@ -366,7 +388,7 @@ func (h *hub) ExecWith(ctx context.Context, query string, args []any, opts ...Qu
 		h.InvalidateSchema("")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute statement: %w", err)
+		return nil, h.wrapErr("failed to execute statement", err)
 	}
 	return res, nil
 }
@@ -424,7 +446,7 @@ func (c *Conn) Query(ctx context.Context, query string, args ...any) (*Rows, err
 	r, err := c.c.QueryContext(ctx, query, args...)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to run query: %w", err)
+		return nil, c.h.wrapErr("failed to run query", err)
 	}
 	return &Rows{Rows: r, cap: c.cfg.rowCap, cancel: cancel}, nil
 }
@@ -438,7 +460,7 @@ func (c *Conn) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 		c.h.InvalidateSchema("")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute statement: %w", err)
+		return nil, c.h.wrapErr("failed to execute statement", err)
 	}
 	return res, nil
 }
@@ -523,8 +545,8 @@ func (h *hub) Connect(ctx context.Context, name string) error {
 	}
 	stmts, err := t.AttachSQL(e.spec)
 	if err != nil {
-		h.setStatus(name, StatusError, Redact(err.Error()), 0)
-		return fmt.Errorf("failed to attach %q: %s", name, Redact(err.Error()))
+		h.setStatus(name, StatusError, h.redact(err.Error()), 0)
+		return fmt.Errorf("failed to attach %q: %s", name, h.redact(err.Error()))
 	}
 
 	// Attach / secret DDL is serialised on a dedicated connection and is never
@@ -538,7 +560,7 @@ func (h *hub) Connect(ctx context.Context, name string) error {
 	defer conn.Close() //nolint:errcheck
 	for _, s := range stmts {
 		if _, err := conn.ExecContext(ctx, s); err != nil {
-			kind, msg, pid := classifyAttachError(err)
+			kind, msg, pid := classifyAttachError(err, h.redact)
 			h.setStatus(name, kind, msg, pid)
 			return fmt.Errorf("failed to attach %q: %s", name, msg)
 		}
@@ -629,7 +651,7 @@ func (h *hub) Detach(ctx context.Context, name string) error {
 		_ = conn.Close()
 		h.adminMu.Unlock()
 		if err != nil {
-			return fmt.Errorf("failed to detach %q: %s", name, Redact(err.Error()))
+			return fmt.Errorf("failed to detach %q: %s", name, h.redact(err.Error()))
 		}
 	}
 	h.mu.Lock()

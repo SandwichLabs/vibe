@@ -204,8 +204,7 @@ func TestFingerprint(t *testing.T) {
 	renamed := base
 	renamed.Name = "other"
 	renamed.ReadOnly = Bool(false)
-	renamed.Options = map[string]string{"sslmode": "require"}
-	assert.Equal(t, fp, Fingerprint(renamed), "name, read_only and options are not part of server identity")
+	assert.Equal(t, fp, Fingerprint(renamed), "name and read_only are not part of server identity")
 
 	assert.Equal(t, fp, Fingerprint(ConnectionDef{Type: " Postgres ", Host: "DB.internal", Port: 5432, Database: "analytics"}), "case and spaces normalised")
 
@@ -215,6 +214,10 @@ func TestFingerprint(t *testing.T) {
 		"database": func(d *ConnectionDef) { d.Database = "other" },
 		"type":     func(d *ConnectionDef) { d.Type = "mysql" },
 		"scope":    func(d *ConnectionDef) { d.Scope = "s3://b/" },
+		"region":   func(d *ConnectionDef) { d.Region = "eu-west-1" },
+		"path":     func(d *ConnectionDef) { d.Path = "/x.db" },
+		"endpoint": func(d *ConnectionDef) { d.Options = map[string]string{"endpoint": "evil.example"} },
+		"sslmode":  func(d *ConnectionDef) { d.Options = map[string]string{"sslmode": "require"} },
 	} {
 		d := base
 		mut(&d)

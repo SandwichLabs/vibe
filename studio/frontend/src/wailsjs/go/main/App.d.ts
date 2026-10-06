@@ -9,6 +9,7 @@ import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
 import {session} from '../models';
+import {secrets} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -33,6 +34,8 @@ export function CheckGitAvailable():Promise<boolean>;
 export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<main.WorkspaceDirCheck>;
 
 export function ChooseFolder(arg1:string):Promise<string>;
+
+export function ClearLLMKey(arg1:string):Promise<void>;
 
 export function CloseWorkspace():Promise<void>;
 
@@ -80,6 +83,8 @@ export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetInitialWorkspace():Promise<main.InitialWorkspace>;
 
+export function GetLLMKeyStatus():Promise<main.LLMKeyStatus>;
+
 export function GetMCPStatus():Promise<main.MCPStatus>;
 
 export function GetNotebook(arg1:string):Promise<notebooks.Notebook>;
@@ -95,6 +100,8 @@ export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg
 export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
 
 export function GetWorkspaceInfo():Promise<main.WorkspaceInfo>;
+
+export function HoldQuit():Promise<void>;
 
 export function ImportFile(arg1:importer.Options):Promise<importer.Summary>;
 
@@ -128,6 +135,8 @@ export function ListTemplates():Promise<Array<main.TemplateInfo>>;
 
 export function ListUserThemes():Promise<main.UserThemesResult>;
 
+export function MigrateLLMKeyToKeychain():Promise<void>;
+
 export function OpenThemesDir():Promise<string>;
 
 export function OpenWorkspace(arg1:string):Promise<main.OpenWorkspaceResult>;
@@ -135,6 +144,8 @@ export function OpenWorkspace(arg1:string):Promise<main.OpenWorkspaceResult>;
 export function OpenWorkspaceReadOnly(arg1:string):Promise<main.OpenWorkspaceResult>;
 
 export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
+
+export function ProbeKeychain():Promise<secrets.Probe>;
 
 export function Quit():Promise<void>;
 
@@ -175,6 +186,8 @@ export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 export function SetActiveNotebook(arg1:string):Promise<void>;
 
 export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
+
+export function SetLLMKey(arg1:string,arg2:string):Promise<void>;
 
 export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
 
