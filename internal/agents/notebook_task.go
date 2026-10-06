@@ -50,7 +50,11 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	// errors.Is distinguishes "not a read" (ErrPermission) from a genuine
 	// execution failure (ErrInternal) — the pre-fix code classified this
 	// itself just to get ErrPermission right; this preserves that distinction.
-	rs, rowsTruncated, err := h.RunReadOnlySQL(ctx, sqlStr, nil, previewQueryRowCap)
+	connection, cerr := h.validConnection(stringParam(req.Params["connection"]))
+	if cerr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
+	}
+	rs, rowsTruncated, err := h.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, previewQueryRowCap)
 	if err != nil {
 		if errors.Is(err, errReadOnlyBindingDenied) {
 			return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("preview_query only runs read-only statements: %v", err))
@@ -94,7 +98,7 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	// Success: record the exact (trimmed) sql string as "previewed this
 	// turn" so write_cell can require it — see wasPreviewed/markPreviewed
 	// and handleWriteCell's check (review fix, finding 4).
-	h.markPreviewed(sqlStr)
+	h.markPreviewed(connection, sqlStr)
 
 	return NewResponse(req.ID, map[string]any{
 		"rowCount":      len(rs.Rows),
@@ -192,14 +196,20 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 		// turn. userDB may be unavailable in a test double with no DuckDB;
 		// treat that as an internal error rather than silently skipping the
 		// gate.
-		userDB, errResp := h.duckDB(req.ID)
-		if errResp != nil {
+		if _, errResp := h.duckDB(req.ID); errResp != nil {
 			return errResp
 		}
-		connectErr := h.connectReferenced(ctx, "", sqlStr)
-		class, reason := classifySQL(ctx, userDB, sqlStr, nil)
-		if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
-			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("write_cell only accepts read-only sql: %v", withConnectError(err, connectErr)))
+		connection, cerr := h.validConnection(stringParam(req.Params["connection"]))
+		if cerr != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
+		}
+		connectErr := h.connectReferenced(ctx, connection, sqlStr)
+		v, verr := h.classifyIn(ctx, connection, sqlStr, nil)
+		if verr != nil {
+			return NewErrorResponse(req.ID, ErrInternal, verr.Error())
+		}
+		if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("write_cell only accepts read-only sql: %v: %s", withConnectError(err, connectErr), v.Reason))
 		}
 		// review fix (finding 4): require this EXACT (trimmed) sql to have
 		// been run through preview_query earlier in this same task turn —
@@ -207,7 +217,7 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 		// mode exists to prevent (see the task-notebook-cells skill). This
 		// is a validation rejection (no StopTurn), so the model can preview
 		// and retry within the same step budget.
-		if !h.wasPreviewed(sqlStr) {
+		if !h.wasPreviewed(connection, sqlStr) {
 			return NewErrorResponse(req.ID, ErrInvalidParams, "this sql has not been checked with preview_query this turn (must match exactly, including whitespace after trimming) — call preview_query with this sql first, then write_cell again.")
 		}
 		resp := NewResponse(req.ID, map[string]any{
@@ -217,6 +227,9 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 				"sql":   sqlStr,
 				"view":  normalizeCellView(stringParam(req.Params["view"])),
 				"label": strings.TrimSpace(stringParam(req.Params["label"])),
+				// connection is set only when the agent named one (validated
+				// against the registered connections above).
+				"connection": connection,
 			},
 			"explanation": explanation,
 		})

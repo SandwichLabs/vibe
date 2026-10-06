@@ -160,6 +160,8 @@ Verified against the embedded engine (go-duckdb v2.4.3 → **DuckDB v1.4.1**): `
 
 ### 4.5 Agent, SQL policy, MCP
 
+> **(as built, #116)** `docs/reference/agent-policy.md` is the shipped policy. Choices the plan left open: `SET VARIABLE` is refused entirely (not "inner query classified"); `duckdb_databases()` is refused (use `list_connections`, which has no paths) rather than allowed through a projection; relative paths are refused (DuckDB resolves them against the working directory), so file reads are literal absolute paths inside `data/`; the plan-operator list is the second layer after the AST/token check, and remote catalog scans pass by their `Table` entry (`POSTGRES_SCAN`), with DML operators matched by pattern (`PG_INSERT`, ...); "local" means a `duckdb` or `sqlite` connection, everything else always needs approval; a DML/DDL statement's target catalogs come from its SQL (EXPLAIN's plan does not name the target).
+
 > **(review #115, for #116)** The `motherduck` extension registers functions of its own (MotherDuck table and scalar functions: remote query passthrough, sharing and database management) beside the ones the policy lists. Once a MotherDuck workspace has loaded it, the allow-list must name what is allowed and deny the rest; do not assume the 1.4.1 core function list. Remote catalog scans (`POSTGRES_SCAN` and the like) are also absent from the plan-operator allow-list today, which is why `run_query` over MCP on `pg.*` is refused; deciding that is #116.
 
 - `agents.Handler` takes two narrow interfaces — `Workspace` (notebook/query/skill stores) and `Session` (query/exec/catalog/connections) — replacing `ContainerAccess`. Tools keep names; data tools accept catalog-qualified names and default to `default_connection`.

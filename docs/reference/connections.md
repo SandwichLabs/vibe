@@ -13,6 +13,7 @@ Manage them with `vibe conn add | list | test | connect | rm | move | credential
 - **Extensions are installed only on consent.** A missing extension is `extension-missing`; `vibe conn test|connect --install` (or Studio's Install button) downloads it into Vibe's private extension directory. Connecting never installs.
 - **Test** attaches the definition in a throwaway, hardened, in-memory DuckDB with a 10 second limit and reports ok with latency and a count, or a redacted error. It never touches the workspace session. MotherDuck is tested in a subprocess (`vibe __conn-test`, hidden), with the token on stdin only, because one process holds one MotherDuck token.
 - **Read-only is a client-side guard.** `read_only` (the default) makes DuckDB refuse writes through ordinary SQL, but a database role that can write can still be reached by other means, so **use a read-only database role** for anything you must not change. See each type below.
+- **What the agent may do with a connection** (reads, the three write gates, files and URLs, the never-list) is in [agent-policy.md](agent-policy.md). In short: the agent reads any attached catalog; a write needs the tier, a writable (`read_only: false`) connection and the person's OK; and the OK is **always** required for anything that is not a local `duckdb`/`sqlite` file, so headless MCP refuses those writes. `list_connections` shows the agent each connection's name, type, status, read-only flag, local or remote and (for storage) scope, never a DSN or credential.
 
 ## First use, failures and sign-in
 
@@ -69,7 +70,7 @@ MotherDuck has no `CREATE SECRET` on DuckDB 1.4.1. The token is `SET motherduck_
 
 ### `s3`, `gcs`, `r2`
 
-Object storage. These have **no catalog**: connecting creates a scoped temporary secret, and you read data with `read_parquet('<scope>...')`. The **scope** is the storage boundary (agent URL reads are allowed only inside it, #116).
+Object storage. These have **no catalog**: connecting creates a scoped temporary secret, and you read data with `read_parquet('<scope>...')`. The **scope** is the storage boundary: the agent may read a URL only when it is a plain literal that starts with the scope of a connection that is ready (`ok` or `not-connected`), never `https://` or another bucket ([agent-policy.md](agent-policy.md#files-and-urls)).
 
 | Field | Notes |
 |---|---|

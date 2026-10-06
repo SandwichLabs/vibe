@@ -64,14 +64,24 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		return NewErrorResponse(req.ID, ErrInvalidParams, "sql is required")
 	}
 
-	userDB, errResp := h.duckDB(req.ID)
-	if errResp != nil {
+	if _, errResp := h.duckDB(req.ID); errResp != nil {
 		return errResp
 	}
-	connectErr := h.connectReferenced(ctx, "", sqlStr)
-	class, reason := classifySQL(ctx, userDB, sqlStr, nil)
-	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
-		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v", withConnectError(err, connectErr)))
+	// An agent-authored cell may name the connection it runs on, validated
+	// against the registered names; the cell is classified on that connection
+	// so its unqualified names resolve the way they will when it runs.
+	connection, cerr := h.validConnection(stringParam(req.Params["connection"]))
+	if cerr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
+	}
+	connectErr := h.connectReferenced(ctx, connection, sqlStr)
+	v, verr := h.classifyIn(ctx, connection, sqlStr, nil)
+	if verr != nil {
+		return NewErrorResponse(req.ID, ErrInternal, verr.Error())
+	}
+	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
+		h.logger.Debug("notebook cell denied", "reason", v.Reason)
+		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v: %s", withConnectError(err, connectErr), v.Reason))
 	}
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))
@@ -86,6 +96,7 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		return NewErrorResponse(req.ID, ErrInternal, err.Error())
 	}
 	cell.Source = sqlStr
+	cell.Connection = connection
 	cell.Label = label
 	if view := strings.TrimSpace(stringParam(req.Params["view"])); view != "" {
 		cell.View = normalizeCellView(view)

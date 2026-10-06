@@ -33,6 +33,13 @@ type ContainerAccess interface {
 	Skills() skills.Store
 }
 
+// DataDirProvider is implemented by a ContainerAccess that has a workspace:
+// the folder (data/) the agent may read files from and COPY ... TO. A legacy
+// container does not implement it, so agent SQL there reads no files at all.
+type DataDirProvider interface {
+	DataDir() string
+}
+
 // EngineAccess provides query execution.
 type EngineAccess interface {
 	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
@@ -138,21 +145,21 @@ func (h *Handler) resolveActiveNotebook() string {
 }
 
 // markPreviewed records sql (trimmed) as successfully previewed this turn.
-func (h *Handler) markPreviewed(sql string) {
+func (h *Handler) markPreviewed(connection, sql string) {
 	h.previewedMu.Lock()
 	if h.previewedSQL == nil {
 		h.previewedSQL = make(map[string]bool, 4)
 	}
-	h.previewedSQL[strings.TrimSpace(sql)] = true
+	h.previewedSQL[connection+"\x00"+strings.TrimSpace(sql)] = true
 	h.previewedMu.Unlock()
 }
 
 // wasPreviewed reports whether sql (trimmed) was previously recorded by
 // markPreviewed.
-func (h *Handler) wasPreviewed(sql string) bool {
+func (h *Handler) wasPreviewed(connection, sql string) bool {
 	h.previewedMu.Lock()
 	defer h.previewedMu.Unlock()
-	return h.previewedSQL[strings.TrimSpace(sql)]
+	return h.previewedSQL[connection+"\x00"+strings.TrimSpace(sql)]
 }
 
 // duckDB returns the DuckDB connection or an error response if unavailable.
@@ -320,9 +327,23 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 	// ErrPermission above and never reaches this point). run_query is
 	// handled separately, inside handleRunQuery, because whether it asks at
 	// all depends on classifying the SQL text, not just its "data" category.
-	if sb.RequireApproval && isWriteOperation(tool.Category) && req.Method != "run_query" {
-		if r := h.awaitApproval(ctx, req, sb, "", nil, sqlClassWrite); r != nil {
-			return r
+	if isWriteOperation(tool.Category) && req.Method != "run_query" {
+		var nonLocal []string
+		if t, ok, err := h.toolTarget(ctx, req); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
+		} else if ok {
+			// Three-gate writes (#116): the tier allowed the tool above; the
+			// target connection must be writable; and anything that is not a
+			// local file is always approved by the person.
+			var gerr error
+			if nonLocal, gerr = writeGates([]sqlTarget{t}); gerr != nil {
+				return NewErrorResponse(req.ID, ErrPermission, gerr.Error())
+			}
+		}
+		if sb.RequireApproval || len(nonLocal) > 0 {
+			if r := h.awaitApproval(ctx, req, sb, "", nil, sqlClassWrite, nonLocal); r != nil {
+				return r
+			}
 		}
 	}
 
@@ -337,8 +358,18 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 // tool passes sqlText="" and params=nil and ignores class. Returns nil to
 // mean "proceed"; any non-nil *Response is the final answer to send back to
 // the caller without dispatching the tool at all.
-func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText string, params map[string]any, class sqlClass) *Response {
+//
+// nonLocal names the connections this write changes that are not the
+// workspace's own local files. Approval is forced for those whatever the
+// person's "Ask before changes" setting is (the third write gate, #116).
+func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText string, params map[string]any, class sqlClass, nonLocal []string) *Response {
 	if h.approver == nil {
+		if len(nonLocal) > 0 {
+			return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
+				"%s changes %s, which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when \"Ask before changes\" is off), and there is no one to ask over MCP. "+
+					"Nothing was changed. Open the workspace in Vibe Studio: with its MCP server on, `vibe mcp serve` passes through to it and Studio shows you an approval card, or make the change from Studio's agent chat.",
+				req.Method, strings.Join(nonLocal, ", ")))
+		}
 		return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
 			"%s needs your OK before it runs: this workspace asks before the agent changes anything (sandbox: %s), and there is no one to ask over MCP. "+
 				"Nothing was changed. Changes to any connection other than the workspace's local database always need Vibe Studio: open the workspace there and approve the change. "+
@@ -350,6 +381,10 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	ar := describeWrite(ctx, req, userDB, class)
 	if sqlText != "" {
 		ar.SQL = sqlText
+	}
+	if len(nonLocal) > 0 {
+		ar.Connections = nonLocal
+		ar.Summary = fmt.Sprintf("%s (on %s, not a local file)", ar.Summary, strings.Join(nonLocal, ", "))
 	}
 	ar.Mode = string(sb.Mode)
 	ar.ID = uuid.New().String()
@@ -372,10 +407,14 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 				"the agent's access changed while this was waiting for approval: %s", err.Error()))
 		}
 		if req.Method == "run_query" {
-			freshClass, freshReason := classifySQL(ctx, userDB, sqlText, params)
-			if err := fresh.checkSQLClass(freshClass, freshReason); err != nil {
+			v := h.classify(ctx, userDB, sqlText, params)
+			if err := fresh.checkSQLClass(v.Class, v.Reason); err != nil {
 				return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
 					"the agent's access changed while this was waiting for approval: %s", err.Error()))
+			}
+			if _, err := writeGates(v.Targets); err != nil {
+				return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
+					"a connection changed while this was waiting for approval: %s", err.Error()))
 			}
 		}
 		return nil
@@ -395,6 +434,8 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	switch req.Method {
 	// Introspect
+	case "list_connections":
+		return h.handleListConnections(ctx, req)
 	case "introspect_schema":
 		return h.handleIntrospectSchema(ctx, req)
 	case "describe_table":
@@ -624,43 +665,33 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	if userDB == nil {
 		return nil, false, fmt.Errorf("DuckDB not available")
 	}
-	var classifyOn queryDB = userDB
 	exec := func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
 		return h.engine.Execute(ctx, q, p)
 	}
-	releaseClassifyConn := func() {}
 	if connection != "" {
 		ce, ok := h.engine.(ConnectionEngine)
-		sess := h.container.Session()
-		if !ok || sess == nil {
+		if !ok {
 			return nil, false, fmt.Errorf("connections are not available here")
 		}
-		pinned, err := sess.Conn(ctx, session.WithCatalog(connection))
-		if err != nil {
-			return nil, false, fmt.Errorf("unknown connection %q: %w", connection, err)
-		}
-		classifyOn = pinned.SQLConn()
-		releaseClassifyConn = func() { _ = pinned.Close() }
 		exec = func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
 			return ce.ExecuteIn(ctx, connection, q, p)
 		}
 	}
 	connectErr := h.connectReferenced(ctx, connection, sqlStr)
-	class, reason := classifySQL(ctx, classifyOn, sqlStr, params)
-	// The classification connection is released before the statement runs, so
-	// a bound statement holds one pooled connection, not two.
-	releaseClassifyConn()
+	v, err := h.classifyIn(ctx, connection, sqlStr, params)
+	if err != nil {
+		return nil, false, err
+	}
+	class, reason := v.Class, v.Reason
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
 		if connectErr != nil {
 			return nil, false, connectErr
 		}
 		// The user/agent-facing error is one fixed, mode-agnostic message
-		// (see errReadOnlyBindingDenied) — it never surfaces classifySQL's
-		// reason, which named a specific sandbox-mode requirement
-		// (e.g. "requires the full sandbox") that is actively false for a
-		// full-mode caller hitting this same denial. The reason is still
-		// useful for debugging a denial that looks surprising, so it's
-		// logged here at debug level only.
+		// (see errReadOnlyBindingDenied) — it never surfaces the policy's
+		// reason, which can name a tier requirement that is false for a
+		// full-tier caller. The reason is still useful for debugging a denial
+		// that looks surprising, so it's logged here at debug level only.
 		h.logger.Debug("render-time sql binding denied", "class", class, "reason", reason, "sql", sqlStr)
 		return nil, false, err
 	}
@@ -713,9 +744,16 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	}
 	connectErr := h.connectReferenced(ctx, "", sqlStr)
 	sb := h.sandboxFor(ctx)
-	class, reason := classifySQL(ctx, userDB, sqlStr, params)
-	if err := sb.checkSQLClass(class, reason); err != nil {
+	v := h.classify(ctx, userDB, sqlStr, params)
+	class := v.Class
+	if err := sb.checkSQLClass(v.Class, v.Reason); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
+	}
+	// The second write gate: every connection the statement changes must be
+	// writable.
+	nonLocal, err := writeGates(v.Targets)
+	if err != nil {
+		return NewErrorResponse(req.ID, ErrPermission, "run_query: "+err.Error())
 	}
 
 	// Approval gate (#79): run_query asks only when the statement actually
@@ -723,8 +761,10 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	// COPY/INSTALL/multi-statement) — never for a SELECT. Runs after
 	// checkSQLClass, so a statement the sandbox denies outright never shows
 	// a card.
-	if sb.RequireApproval && class != sqlClassRead {
-		if r := h.awaitApproval(ctx, req, sb, sqlStr, params, class); r != nil {
+	// The third write gate: the person's OK. It is forced on for anything that
+	// is not a local file, whatever the "Ask before changes" setting is.
+	if class != sqlClassRead && (sb.RequireApproval || len(nonLocal) > 0) {
+		if r := h.awaitApproval(ctx, req, sb, sqlStr, params, class, nonLocal); r != nil {
 			return r
 		}
 	}
@@ -794,12 +834,15 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 // plan), not by this function — it just enforces the class this record tool
 // needs.
 func (h *Handler) requireWriteStatement(ctx context.Context, userDB *sql.DB, query string, params map[string]any) error {
-	class, reason := classifySQL(ctx, userDB, query, params)
-	if class != sqlClassWrite {
-		if reason != "" {
-			return fmt.Errorf("%s", reason)
+	v := h.classify(ctx, userDB, query, params)
+	if v.Class != sqlClassWrite {
+		if v.Reason != "" {
+			return fmt.Errorf("%s", v.Reason)
 		}
 		return fmt.Errorf("this operation is not a single, plain write statement — denied")
+	}
+	if _, err := writeGates(v.Targets); err != nil {
+		return err
 	}
 	return nil
 }

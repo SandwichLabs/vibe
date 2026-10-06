@@ -40,6 +40,12 @@ type ParamDef struct {
 var Tools = []ToolDef{
 	// Introspect tools
 	{
+		Name:        "list_connections",
+		Description: "List the workspace's connections (places data lives): name, type, status, read_only, location (local file or remote), the storage scope for object stores, and the workspace data/ folder. Use the connection name as the catalog in SQL (name.schema.table). Never returns DSNs, credentials or paths outside the workspace.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+	{
 		Name:        "introspect_schema",
 		Description: "List the tables of a connection (catalog). Omit connection for the default one; tables of any other connection are returned fully qualified (catalog.schema.table) so they can be used as-is in other tools.",
 		Category:    "introspect",
@@ -113,7 +119,7 @@ var Tools = []ToolDef{
 	// Data tools
 	{
 		Name:        "run_query",
-		Description: "Execute a SQL query and return results. Gated per-statement, not just by sandbox category: read statements (SELECT, a CTE ending in SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE, a read-style PRAGMA) are allowed in every sandbox including read-only; INSERT/UPDATE/DELETE additionally require read-write or full; anything else (DDL, ATTACH/COPY/INSTALL, administrative SET/PRAGMA, multi-statement SQL) requires full.",
+		Description: "Execute a SQL query and return results. Gated per statement by an allow-list, not just by sandbox category. Reads (SELECT, WITH, SHOW, DESCRIBE, SUMMARIZE, EXPLAIN but not EXPLAIN ANALYZE, a read-style PRAGMA) over any connection are allowed in every tier; files may be read only with a literal absolute path inside the workspace data/ folder, and URLs only inside a storage connection's scope. INSERT/UPDATE/DELETE additionally need the read-write or full tier. CREATE/DROP/ALTER and COPY ... TO a data/ file need the full tier. A write also needs the target connection to be writable (read_only: false) and the user's approval, which is always required for a connection that is not a local file. Never allowed in any tier: ATTACH/DETACH/USE, SET/RESET/PRAGMA changes, INSTALL/LOAD, secrets, EXPORT/IMPORT DATABASE, EXPLAIN ANALYZE, raw passthroughs (postgres_query, postgres_execute, ...), settings and environment functions. Every statement of a script is checked.",
 		Category:    "data",
 		Params: []ParamDef{
 			{Name: "sql", Type: "string", Required: true, Desc: "SQL query to execute"},
@@ -302,6 +308,7 @@ var Tools = []ToolDef{
 		Modes:       []string{"task"},
 		Params: []ParamDef{
 			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only statement (SELECT, WITH...SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE)"},
+			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the cell runs on; unqualified table names resolve there. Defaults to the workspace default. See list_connections."},
 		},
 	},
 	{
@@ -312,6 +319,7 @@ var Tools = []ToolDef{
 		Params: []ParamDef{
 			{Name: "cell_type", Type: "string", Required: true, Desc: "\"sql\" or \"markdown\""},
 			{Name: "sql", Type: "string", Required: false, Desc: "The previewed SQL (sql cells only)"},
+			{Name: "connection", Type: "string", Required: false, Desc: "The connection the SQL was previewed on (sql cells only); must match preview_query's connection"},
 			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (sql cells only; defaults to preview_query's suggestedView)"},
 			{Name: "label", Type: "string", Required: false, Desc: "Short, specific label — a chart title, not \"Query 1\" (sql cells only)"},
 			{Name: "markdown", Type: "string", Required: false, Desc: "The cell's markdown text (markdown cells only)"},
@@ -344,6 +352,7 @@ var Tools = []ToolDef{
 		Params: []ParamDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
 			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only SQL statement"},
+			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the cell runs on; must be a registered connection (see list_connections). Defaults to the workspace default."},
 			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (default: auto-fit to the result shape the first time it runs)"},
 			{Name: "label", Type: "string", Required: false, Desc: "Short label for the cell (also used as the new notebook's title, if one is created)"},
 		},

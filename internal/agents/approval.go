@@ -29,6 +29,10 @@ type ApprovalRequest struct {
 	Rows        int64  `json:"rows"` // estimated rows affected; -1 = unknown
 	Mode        string `json:"mode"`
 	Destructive bool   `json:"destructive"` // delete/drop/update, and any writing run_query -> red button
+	// Connections names the changed connections that are not local files
+	// (Postgres, MotherDuck, ...): approval is forced for them whatever the
+	// "Ask before changes" setting is (#116).
+	Connections []string `json:"connections,omitempty"`
 }
 
 // Approval outcomes. ErrApprovalDeclined/Expired/Cancelled are returned by
@@ -229,8 +233,8 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 		ar.Rows = -1
 		ar.SQL = stringParam(req.Params["sql"])
 		ar.Destructive = true
-		if class == sqlClassOther {
-			ar.Summary = "Run SQL that changes the file's structure or reaches outside it"
+		if class == sqlClassDDL || class == sqlClassOther {
+			ar.Summary = "Run SQL that changes a connection's structure or writes a file"
 		} else {
 			ar.Summary = "Run SQL that changes data"
 		}

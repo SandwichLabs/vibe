@@ -1,6 +1,6 @@
 # Vibe v1.0 Reference
 
-> **Changing (epic #105).** `workspaces.md` (#109, #111) describes the folder-shaped workspace that replaced the single `.vibe` file; Studio, the CLI (`vibe workspace`, `query`, `import`, `export`, `studio`, #113) and MCP (#112) all work on it, and `.vibe` containers are no longer opened. `connections.md` arrives with #115.
+> **Changing (epic #105).** `workspaces.md` (#109, #111) describes the folder-shaped workspace that replaced the single `.vibe` file; Studio, the CLI (`vibe workspace`, `query`, `import`, `export`, `studio`, #113) and MCP (#112) all work on it, and `.vibe` containers are no longer opened. `connections.md` (#115) and `agent-policy.md` (#116) describe the connections and what the agent may run against them.
 
 This is the shipped reference documentation for the Vibe application surface —
 a local-first agentic data workspace: a folder of plain files that points at your data. It is split by
@@ -14,6 +14,7 @@ surface so each area is easy to find:
 | [`templates.md`](templates.md) | Bundled starter **templates** |
 | [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
 | [`connections.md`](connections.md) | **Connections**: Postgres, MotherDuck, SQLite, S3/GCS/R2 types, fields, credentials, read-only, Test |
+| [`agent-policy.md`](agent-policy.md) | **The agent's SQL policy**: what each tier allows, the three-gate rule for writes, file and URL rules, the never-list, `list_connections` |
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui`, every starter template in

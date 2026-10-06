@@ -101,7 +101,8 @@ func fakePG(t *testing.T) (int, <-chan string) {
 			}(c)
 		}
 	}()
-	return ln.Addr().(*net.TCPAddr).Port, ch
+	addr, _ := ln.Addr().(*net.TCPAddr)
+	return addr.Port, ch
 }
 
 func openWith(t *testing.T, ws workspace.Workspace, ext string) session.Session {

@@ -63,6 +63,10 @@ type Session interface {
 	Connect(ctx context.Context, name string) error
 	Detach(ctx context.Context, name string) error
 	Connections() []Status
+	// ConnectionInfos describes every registered connection for the agent SQL
+	// policy: type, state, read-only flag, remote or local, and the storage
+	// scope. No DSN, credential or path.
+	ConnectionInfos() []ConnectionInfo
 	// ConnectReferenced connects every registered, not yet attached connection
 	// that sqlText (or the default catalog argument) names, so a query that
 	// mentions pg.public.orders dials pg on first use. Opening a workspace
@@ -1085,6 +1089,37 @@ func (h *hub) Connections() []Status {
 	out := make([]Status, 0, len(h.conns))
 	for _, e := range h.conns {
 		out = append(out, e.status)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Default != out[j].Default {
+			return out[i].Default
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// ConnectionInfos implements Session.
+func (h *hub) ConnectionInfos() []ConnectionInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]ConnectionInfo, 0, len(h.conns))
+	for _, e := range h.conns {
+		info := ConnectionInfo{
+			Name: e.spec.Name, Type: e.spec.Type, Kind: e.status.Kind,
+			ReadOnly: e.spec.ReadOnly, Default: e.status.Default,
+		}
+		if t, err := h.types.Get(e.spec.Type); err == nil {
+			info.Remote = t.Remote()
+			if c, ok := t.(CataloglessType); ok && c.Catalogless() {
+				info.Catalogless = true
+				info.Scope = e.spec.Params["scope"]
+			}
+		} else {
+			// An unknown type is never "local".
+			info.Remote = true
+		}
+		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Default != out[j].Default {

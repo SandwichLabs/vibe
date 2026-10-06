@@ -277,7 +277,7 @@ func TestHandleWriteCell_RejectsWriteSQLEvenIfSomehowPreviewed(t *testing.T) {
 	// Simulate a write string having been marked previewed some other way
 	// (defense in depth: write_cell must classify independently, never
 	// trust the previewed-set alone).
-	handler.markPreviewed("DELETE FROM t")
+	handler.markPreviewed("", "DELETE FROM t")
 
 	resp := handler.Handle(context.Background(), &Request{
 		JSONRPC: "2.0", ID: "1", Method: "write_cell",

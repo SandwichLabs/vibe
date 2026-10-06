@@ -95,9 +95,9 @@ func TestClassifySQL(t *testing.T) {
 		{"merge", "MERGE INTO t USING t2 ON t.id = t2.id WHEN MATCHED THEN UPDATE SET name = 'x'", sqlClassWrite},
 		{"cte with delete", "WITH x AS (SELECT id FROM t WHERE id > 100) DELETE FROM t WHERE id IN (SELECT id FROM x)", sqlClassWrite},
 
-		{"create table", "CREATE TABLE u (id INTEGER)", sqlClassOther},
-		{"drop table", "DROP TABLE t", sqlClassOther},
-		{"alter table", "ALTER TABLE t ADD COLUMN x INTEGER", sqlClassOther},
+		{"create table", "CREATE TABLE u (id INTEGER)", sqlClassDDL},
+		{"drop table", "DROP TABLE t", sqlClassDDL},
+		{"alter table", "ALTER TABLE t ADD COLUMN x INTEGER", sqlClassDDL},
 		{"attach", "ATTACH 'foo.db' AS foo", sqlClassOther},
 		{"detach", "DETACH foo", sqlClassOther},
 		{"copy", "COPY t TO 'file.csv'", sqlClassOther},
@@ -110,10 +110,10 @@ func TestClassifySQL(t *testing.T) {
 		{"set", "SET memory_limit='1GB'", sqlClassOther},
 		{"vacuum", "VACUUM", sqlClassOther},
 		{"explain analyze", "EXPLAIN ANALYZE SELECT 1", sqlClassOther},
-		{"multi-statement select+drop", "SELECT 1; DROP TABLE t;", sqlClassOther},
-		{"multi-statement lowercase", "select 1; drop table t", sqlClassOther},
-		{"multi-statement selects only", "SELECT 1; SELECT 2;", sqlClassOther},
-		{"mixed dml and ddl", "INSERT INTO t VALUES (1,'x'); CREATE TABLE u (id INTEGER)", sqlClassOther},
+		{"multi-statement select+drop", "SELECT 1; DROP TABLE t;", sqlClassDDL},
+		{"multi-statement lowercase", "select 1; drop table t", sqlClassDDL},
+		{"multi-statement selects only: every statement is checked and all are reads", "SELECT 1; SELECT 2;", sqlClassRead},
+		{"mixed dml and ddl", "INSERT INTO t VALUES (1,'x'); CREATE TABLE u (id INTEGER)", sqlClassDDL},
 		{"empty", "", sqlClassOther},
 		{"whitespace only", "   \n\t", sqlClassOther},
 		{"unrecognized shape", "frobnicate t", sqlClassOther},
@@ -125,15 +125,15 @@ func TestClassifySQL(t *testing.T) {
 		// duckdb_extract_statements (round 3 item A), which correctly
 		// counts both as 2 statements regardless of what the fallback
 		// lexer would have guessed.
-		{"bypass: dollar-quote smuggled DROP", `SELECT $$'$$ AS probe; DROP TABLE t; --'`, sqlClassOther},
-		{"bypass: E'' escape smuggled DROP", `SELECT E'\'' AS probe; DROP TABLE t; --'`, sqlClassOther},
+		{"bypass: dollar-quote smuggled DROP", `SELECT $$'$$ AS probe; DROP TABLE t; --'`, sqlClassDDL},
+		{"bypass: E'' escape smuggled DROP", `SELECT E'\'' AS probe; DROP TABLE t; --'`, sqlClassDDL},
 		{"bypass: tagged dollar-quote smuggled DROP", `SELECT $tag$'$tag$ AS probe; DROP TABLE t; --'`, sqlClassOther},
 
 		// --- Round 3 review, item 1: the same class of bypass, but through
 		// the Write tier (DELETE/INSERT hiding a smuggled DROP), which
 		// round 2 missed because it only fixed the Read decision.
-		{"bypass write: DELETE hides smuggled DROP via dollar-quote", `DELETE FROM t WHERE name = $$'$$; DROP TABLE t2; --'`, sqlClassOther},
-		{"bypass write: INSERT hides smuggled DROP via E'' escape", `INSERT INTO t VALUES (1, E'\''); DROP TABLE t2; --'`, sqlClassOther},
+		{"bypass write: DELETE hides smuggled DROP via dollar-quote", `DELETE FROM t WHERE name = $$'$$; DROP TABLE t2; --'`, sqlClassDDL},
+		{"bypass write: INSERT hides smuggled DROP via E'' escape", `INSERT INTO t VALUES (1, E'\''); DROP TABLE t2; --'`, sqlClassDDL},
 
 		// --- Round 2 review: external file/network access (item B). A
 		// syntactically pure SELECT that still reaches outside the
@@ -198,7 +198,7 @@ func TestClassifySQL_ExternalAccessReason(t *testing.T) {
 	} {
 		class, reason := classifyReason(t, sql)
 		assert.Equal(t, sqlClassOther, class, "classifySQL(%q)", sql)
-		assert.Equal(t, externalAccessDeniedMsg, reason, "classifySQL(%q) reason", sql)
+		assert.Contains(t, reason, "file reads are not available here", "classifySQL(%q) reason", sql)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestClassifySQL_UnresolvedPlainTableReason(t *testing.T) {
 	} {
 		class, reason := classifyReason(t, sql)
 		assert.Equal(t, sqlClassOther, class, "classifySQL(%q)", sql)
-		assert.Equal(t, externalAccessDeniedMsg, reason, "classifySQL(%q) reason", sql)
+		assert.Contains(t, reason, "file reads are not available here", "classifySQL(%q) reason", sql)
 	}
 }
 
@@ -238,21 +238,26 @@ func TestSandboxConfig_CheckSQLClass(t *testing.T) {
 	ro := &SandboxConfig{Mode: ModeReadOnly}
 	assert.NoError(t, ro.checkSQLClass(sqlClassRead, ""))
 	assert.Error(t, ro.checkSQLClass(sqlClassWrite, ""))
+	assert.Error(t, ro.checkSQLClass(sqlClassDDL, ""))
 	assert.Error(t, ro.checkSQLClass(sqlClassOther, ""))
 
 	rw := &SandboxConfig{Mode: ModeReadWrite}
 	assert.NoError(t, rw.checkSQLClass(sqlClassRead, ""))
 	assert.NoError(t, rw.checkSQLClass(sqlClassWrite, ""))
+	assert.Error(t, rw.checkSQLClass(sqlClassDDL, ""))
 	assert.Error(t, rw.checkSQLClass(sqlClassOther, ""))
 
 	full := &SandboxConfig{Mode: ModeFull}
 	assert.NoError(t, full.checkSQLClass(sqlClassRead, ""))
 	assert.NoError(t, full.checkSQLClass(sqlClassWrite, ""))
-	assert.NoError(t, full.checkSQLClass(sqlClassOther, ""))
+	assert.NoError(t, full.checkSQLClass(sqlClassDDL, ""))
+	// The never-list is denied in EVERY tier, full included (#116).
+	err := full.checkSQLClass(sqlClassOther, "ATTACH is not allowed")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ATTACH is not allowed")
 
-	// An external-access reason is surfaced verbatim instead of the generic
-	// per-mode message.
-	err := ro.checkSQLClass(sqlClassOther, externalAccessDeniedMsg)
+	// A denial's reason is surfaced verbatim instead of the generic per-tier message.
+	err = ro.checkSQLClass(sqlClassOther, externalAccessDeniedMsg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), externalAccessDeniedMsg)
 }
@@ -648,7 +653,7 @@ func TestHandleRunQuery_RealDuckDB_BypassesAreDenied(t *testing.T) {
 		resp := runQuery(handler, "SELECT * FROM read_csv('/etc/passwd')")
 		require.NotNil(t, resp.Error)
 		assert.Equal(t, ErrPermission, resp.Error.Code)
-		assert.Contains(t, resp.Error.Message, externalAccessDeniedMsg)
+		assert.Contains(t, resp.Error.Message, "file reads are not available here")
 	})
 
 	t.Run("read-only denies current_setting", func(t *testing.T) {

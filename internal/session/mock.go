@@ -14,16 +14,17 @@ type Mock struct {
 	Catalog string
 	DBFn    func() *sql.DB
 
-	QueryFn         func(ctx context.Context, query string, args []any, opts []QueryOption) (*Rows, error)
-	ExecFn          func(ctx context.Context, query string, args []any, opts []QueryOption) (sql.Result, error)
-	ConnectionsFn   func() []Status
-	ListCatalogsFn  func(ctx context.Context) ([]CatalogInfo, error)
-	ListSchemasFn   func(ctx context.Context, catalog string) ([]string, error)
-	ListTablesFn    func(ctx context.Context, catalog, schema string) ([]TableInfo, error)
-	DescribeTableFn func(ctx context.Context, qualified string) (*TableDescription, error)
-	AttachFn        func(ctx context.Context, spec Spec) error
-	DetachFn        func(ctx context.Context, name string) error
-	CreateSecretFn  func(ctx context.Context, name, secretType string, params []SecretParam) error
+	QueryFn           func(ctx context.Context, query string, args []any, opts []QueryOption) (*Rows, error)
+	ExecFn            func(ctx context.Context, query string, args []any, opts []QueryOption) (sql.Result, error)
+	ConnectionsFn     func() []Status
+	ConnectionInfosFn func() []ConnectionInfo
+	ListCatalogsFn    func(ctx context.Context) ([]CatalogInfo, error)
+	ListSchemasFn     func(ctx context.Context, catalog string) ([]string, error)
+	ListTablesFn      func(ctx context.Context, catalog, schema string) ([]TableInfo, error)
+	DescribeTableFn   func(ctx context.Context, qualified string) (*TableDescription, error)
+	AttachFn          func(ctx context.Context, spec Spec) error
+	DetachFn          func(ctx context.Context, name string) error
+	CreateSecretFn    func(ctx context.Context, name, secretType string, params []SecretParam) error
 }
 
 var _ Session = (*Mock)(nil)
@@ -106,6 +107,13 @@ func (m *Mock) Connections() []Status {
 		return m.ConnectionsFn()
 	}
 	return []Status{{Name: m.DefaultCatalog(), Type: "duckdb", Kind: StatusOK, Default: true}}
+}
+
+func (m *Mock) ConnectionInfos() []ConnectionInfo {
+	if m.ConnectionInfosFn != nil {
+		return m.ConnectionInfosFn()
+	}
+	return []ConnectionInfo{{Name: m.DefaultCatalog(), Type: "duckdb", Kind: StatusOK, Default: true}}
 }
 
 func (m *Mock) ListCatalogs(ctx context.Context) ([]CatalogInfo, error) {

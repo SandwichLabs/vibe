@@ -48,7 +48,7 @@ func Tokens(sqlText string) [][]Token {
 		switch {
 		case r == '-' && i+1 < len(rs) && rs[i+1] == '-':
 			flushWord()
-			for i < len(rs) && rs[i] != '\n' {
+			for i < len(rs) && rs[i] != '\n' && rs[i] != '\r' {
 				i++
 			}
 		case r == '/' && i+1 < len(rs) && rs[i+1] == '*':

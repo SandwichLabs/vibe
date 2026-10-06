@@ -59,6 +59,25 @@ type Status struct {
 	Default     bool       `json:"default,omitempty"`
 }
 
+// ConnectionInfo is what the agent SQL policy (#116) and list_connections need to
+// know about a registered connection. It never carries a DSN, a credential or a
+// path: Scope is a storage URL prefix the person configured, nothing more.
+type ConnectionInfo struct {
+	Name     string     `json:"name"`
+	Type     string     `json:"type"`
+	Kind     StatusKind `json:"status"`
+	ReadOnly bool       `json:"read_only"`
+	// Remote is true for anything that is not a file on this computer
+	// (Postgres, MotherDuck, object storage). Writes to a remote connection
+	// always need the person's approval.
+	Remote bool `json:"remote"`
+	// Catalogless connections (s3, gcs, r2) attach no catalog; they only add a
+	// scoped secret, and Scope is the URL prefix reads are allowed inside.
+	Catalogless bool   `json:"catalogless,omitempty"`
+	Scope       string `json:"scope,omitempty"`
+	Default     bool   `json:"default,omitempty"`
+}
+
 // Spec declares a connection. For the duckdb type, Path is the file to attach.
 // Timeout / RowCap are this connection's statement timeout and row cap
 // defaults (0 = none).

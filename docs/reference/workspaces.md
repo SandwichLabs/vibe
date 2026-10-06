@@ -209,7 +209,7 @@ What the agent actually gets is `EffectivePolicy(committed, local)`:
 - **Ask before writes** is on unless you turned it off locally and the committed file does not require it. A committed `true` cannot be loosened by anyone. A committed `false` or no value loosens nobody.
 - **Anything unrecognised** fails closed to `read-only`.
 
-The workspace's own `local` database is the only connection where the gate can be turned off. For every other connection the agent always asks.
+The gate can be turned off only for the workspace's own local files (`duckdb` and `sqlite` connections). For every other connection (Postgres, MotherDuck, anything that is not a local file) the agent **always asks**, whatever your setting, and headless MCP refuses those writes. A write also needs the connection to be writable (`read_only: false`); see [agent-policy.md](agent-policy.md) for the whole policy, tier by tier.
 
 ## File formats
 

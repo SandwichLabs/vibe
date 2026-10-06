@@ -404,14 +404,16 @@ func TestHandler_DispatchListQueries(t *testing.T) {
 }
 
 func TestHandler_DispatchRunQuery(t *testing.T) {
-	handler, _ := newTestHandler(t, ModeFull)
+	// run_query is classified against the live DuckDB catalog (#116), which a
+	// SQLite mock cannot answer, so this one uses a real DuckDB handler.
+	handler, _ := newRealDuckDBHandler(t, ModeFull)
 	ctx := context.Background()
 
 	req := &Request{
 		JSONRPC: "2.0",
 		ID:      6,
 		Method:  "run_query",
-		Params:  map[string]any{"sql": "SELECT * FROM users"},
+		Params:  map[string]any{"sql": "SELECT * FROM t"},
 	}
 	resp := handler.Handle(ctx, req)
 

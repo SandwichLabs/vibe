@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"database/sql"
+	"path/filepath"
 
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
@@ -35,6 +36,10 @@ func (a *AgentAccess) DuckDBDB() *sql.DB {
 	}
 	return a.sess.DB()
 }
+
+// DataDir is the workspace's data/ folder: the only place the agent may read
+// files from and COPY ... TO (agent SQL policy, #116).
+func (a *AgentAccess) DataDir() string { return filepath.Join(a.ws.Root(), "data") }
 
 // Session is the catalog-aware hub.
 func (a *AgentAccess) Session() session.Session { return a.sess }

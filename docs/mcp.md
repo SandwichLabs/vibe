@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol)
 
-> **Changing (epic #105).** The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116). Studio's own MCP switch and its "Copy Claude config" buttons shipped with #111 (Settings → Workspace → Claude and other tools); the Go side they call is described below.
+> **Changing (epic #105).** The agent's SQL policy is an allow-list per tier (#116, [reference/agent-policy.md](reference/agent-policy.md)), and writes to connections that are not local files always need approval, so headless MCP refuses them. Studio's own MCP switch and its "Copy Claude config" buttons shipped with #111 (Settings → Workspace → Claude and other tools); the Go side they call is described below.
 
 Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
 
@@ -50,7 +50,13 @@ Over stdio, `vibe mcp serve` duplicates stdout to a private handle for the proto
 
 The effective policy is the workspace's: this person's chosen tier (default **read-write**) clamped to the committed `vibe.yaml` ceiling, and "Ask before changes" on unless this person turned it off and the ceiling allows it (`Workspace.AgentPolicy`). `--sandbox` can only make a session **more** restrictive, never less: a launch config, which may be shared in a dotfiles repo, can never grant more than the owner chose.
 
-A headless process has no one to show an approval card to, so **while "Ask before changes" is on, an MCP client can read but any write is refused outright**. The refusal says so, and that changes to any connection other than the workspace's own local database always need Vibe Studio. To let MCP clients change the local database, turn the gate off in **Vibe Studio → Settings → Agent**; there is no flag or environment variable that bypasses it from the MCP side. To make changes with approval, open the workspace in Studio, which approves them in its chat UI while `vibe mcp serve` proxies to it.
+A write over MCP needs **three gates** (#116): the **tier** allows it (read-write: `INSERT`/`UPDATE`/`DELETE`; full: also DDL and `COPY ... TO` a `data/` file), the **connection is writable** (`read_only: false`), and **the person approves it**. A headless process has no one to show an approval card to, so:
+
+- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Agent**; there is no flag or environment variable that bypasses it from the MCP side.
+- **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**: approval is forced for those connections, and the refusal says "...which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when "Ask before changes" is off), and there is no one to ask over MCP. Nothing was changed."
+- To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `vibe mcp serve` proxies to it.
+
+Reads are not gated: the agent can read any attached catalog, including a remote one (`pg.public.orders`), but never `ATTACH`, `SET`, `INSTALL`/`LOAD`, secrets, settings, raw passthroughs such as `postgres_query`/`postgres_execute`, MotherDuck sharing functions or `EXPLAIN ANALYZE`, and a file or URL only by a literal path inside the workspace `data/` folder or a storage connection's scope. Every denial returns its reason as a tool error. The full list is in [reference/agent-policy.md](reference/agent-policy.md); `list_connections` tells a client what is connected.
 
 ### Take over
 
@@ -154,7 +160,7 @@ See "Copy Claude config" above: no passphrase and no token are needed. The older
 
 `vibe mcp serve` (owner or proxy) and Studio's SSE server all advertise exactly
 `agents.ListToolsForMode(agents.ModeMCP)` — every non-task-mode tool
-(`run_query`, `introspect_schema`, `describe_table`, `create_record`,
+(`run_query`, `list_connections`, `introspect_schema`, `describe_table`, `create_record`,
 `create_table`, `present_data`, skills, notebook-authoring tools, etc.).
 Task-mode-only tools (`preview_query`, `write_cell`, `need_more_info`) are
 never listed or dispatchable over MCP — those exist purely for the in-app
