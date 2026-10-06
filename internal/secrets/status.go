@@ -16,10 +16,13 @@ type EnvVarStatus struct {
 // the readable fields, and whether the secret is set. It never carries a
 // secret value.
 type CredentialStatus struct {
-	Method             string         `json:"method"`
-	Username           string         `json:"username,omitempty"`
-	KeyID              string         `json:"keyId,omitempty"`
-	SecretSet          bool           `json:"secretSet"`
+	Method    string `json:"method"`
+	Username  string `json:"username,omitempty"`
+	KeyID     string `json:"keyId,omitempty"`
+	SecretSet bool   `json:"secretSet"`
+	// SessionOnly is true when the credential is held in memory for this session
+	// only (the sign-in prompt with "Remember" off), not in the keychain.
+	SessionOnly        bool           `json:"sessionOnly,omitempty"`
 	FingerprintMatches bool           `json:"fingerprintMatches"`
 	Available          bool           `json:"available"`
 	Detail             string         `json:"detail,omitempty"`
@@ -57,6 +60,8 @@ func (r *Resolver) Status(ctx context.Context, ref Ref, method string, b Binding
 	store := r.keyring
 	if kind == MethodPrompt {
 		store = r.memory
+	} else if _, merr := r.memory.Get(ctx, ref); merr == nil {
+		store, st.SessionOnly = r.memory, true
 	}
 	raw, err := store.Get(ctx, ref)
 	switch {

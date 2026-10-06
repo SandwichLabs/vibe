@@ -428,8 +428,10 @@ func TestEnvSignInIsBoundToTheDefinitionItWasChosenFor(t *testing.T) {
 	assert.False(t, st.FingerprintMatches)
 	assert.False(t, st.SecretSet)
 
-	// Signing in again (choosing the method for the new definition) restores it.
-	require.NoError(t, ws.SetSignIn("pg", "env:PGP"))
+	// Choosing the method again does not silently follow the pulled host...
+	require.ErrorIs(t, ws.SetSignIn("pg", "env:PGP"), ErrRebindNeedsConfirm)
+	// ...a confirmed re-bind does.
+	require.NoError(t, ws.RebindSignIn("pg", "env:PGP"))
 	_, _, err = ConnectionCredential(ctx, ws, "pg", nil)
 	require.NoError(t, err)
 }
@@ -531,4 +533,53 @@ func TestParallelAddsAllLand(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 8, n)
+}
+
+func TestSetSignIn_NeverRebindsAnEnvBindingSilently(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	require.NoError(t, ws.AddConnection(ScopeShared, pgConn("pg")))
+	require.NoError(t, ws.SetSignIn("pg", "env:PGPROD")) // a first binding is the person's choice
+
+	// A pull points the connection somewhere else.
+	moved := pgConn("pg")
+	moved.Host = "db-new.internal"
+	require.NoError(t, ws.UpdateConnection(ScopeShared, moved))
+
+	err := ws.SetSignIn("pg", "env:PGPROD")
+	require.ErrorIs(t, err, ErrRebindNeedsConfirm)
+	c, _ := findConn(ws, "pg")
+	assert.Equal(t, "db.internal:5432/analytics", c.SignInServer, "the binding still names the old server")
+	assert.Error(t, signInGuard(c, mustResolve(t, c)), "so the credential is still withheld")
+
+	// Switching to a method that carries its own binding needs no confirmation.
+	require.NoError(t, ws.SetSignIn("pg", "keychain"))
+	// A confirmed re-bind goes through and records the new server.
+	require.NoError(t, ws.RebindSignIn("pg", "env:PGPROD"))
+	c, _ = findConn(ws, "pg")
+	assert.Equal(t, "db-new.internal:5432/analytics", c.SignInServer)
+	assert.NoError(t, signInGuard(c, mustResolve(t, c)))
+
+	// The guard's error names both servers, for env as for the keychain.
+	require.NoError(t, ws.UpdateConnection(ScopeShared, pgConn("pg")))
+	c, _ = findConn(ws, "pg")
+	var fc *secrets.ErrFingerprintChanged
+	require.ErrorAs(t, signInGuard(c, mustResolve(t, c)), &fc)
+	assert.Equal(t, "db-new.internal:5432/analytics", fc.Old)
+	assert.Equal(t, "db.internal:5432/analytics", fc.New)
+}
+
+func findConn(ws Workspace, name string) (Connection, bool) {
+	for _, c := range ws.Connections() {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return Connection{}, false
+}
+
+func mustResolve(t *testing.T, c Connection) ConnectionDef {
+	t.Helper()
+	d, err := c.ConnectionDef.Resolve(nil, c.Scope)
+	require.NoError(t, err)
+	return d
 }

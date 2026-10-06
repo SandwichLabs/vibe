@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/connections"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/filestore"
 	"github.com/sandwich-labs/vibe-app/internal/hub"
@@ -97,6 +98,18 @@ type ConnectionInfo struct {
 	Status      string   `json:"status"`
 	Detail      string   `json:"detail,omitempty"`
 	LockedByPID int      `json:"lockedByPid,omitempty"`
+	// Remote connections dial on first use (Postgres, MotherDuck, storage);
+	// Catalogless ones (s3, gcs, r2) have no tables, only a scoped secret.
+	Remote      bool `json:"remote"`
+	Catalogless bool `json:"catalogless,omitempty"`
+	// SignIn is this person's sign-in method (keychain, prompt or env:PREFIX).
+	SignIn string `json:"signIn,omitempty"`
+	// Extension names the DuckDB extension an extension-missing connection
+	// needs, for the install prompt.
+	Extension string `json:"extension,omitempty"`
+	// ServerChanged is set when a needs-credentials status is because the
+	// definition now points at a different server than the saved sign-in.
+	ServerChanged *ServerChange `json:"serverChanged,omitempty"`
 }
 
 // WorkspaceCounts are the live counts shown on Home.
@@ -681,6 +694,7 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	a.ws, a.sess, a.hold = ws, sess, hold
 	a.engine = engine.NewManager(sess, engine.WithLogger(a.logger))
 	a.issues = issues
+	a.recordConnSigs(ws)
 	a.readOnly, a.holder = readOnly, holder
 	a.sessionID = uuid.New().String()
 	a.duplicateOf = workspace.DuplicateIDs(root, ws.ID(), a.knownIDs())
@@ -736,6 +750,8 @@ func (a *App) closeWorkspaceLocked(reason string) {
 		return
 	}
 	root := a.ws.Root()
+	// Credentials held in memory (ask each time, session-only) end with the session.
+	a.secrets.ForgetSession()
 	if a.wmcp != nil {
 		_ = a.wmcp.Stop()
 		a.wmcp, a.mcpTool = nil, nil
@@ -852,6 +868,10 @@ func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 	if ch.Kind == workspace.KindConfig {
 		if err := ws.Reload(); err != nil {
 			a.logger.Warn("vibe.yaml changed on disk but could not be reloaded", "error", err)
+		} else {
+			// A host changed by a git pull must not keep using the old
+			// registration (and the old credential binding).
+			a.syncConnections()
 		}
 		a.emitEvent("workspace:changed", map[string]any{"kind": string(ch.Kind)})
 	}
@@ -953,11 +973,19 @@ func (a *App) connectionInfosLocked() []ConnectionInfo {
 	for _, i := range a.issues {
 		issue[i.Connection] = i.Message
 	}
+	infos := map[string]session.ConnectionInfo{}
+	for _, i := range a.sess.ConnectionInfos() {
+		infos[i.Name] = i
+	}
 	out := make([]ConnectionInfo, 0)
 	for _, c := range a.ws.Connections() {
 		ci := ConnectionInfo{
 			Name: c.Name, Type: c.Type, Scope: string(c.Scope), ReadOnly: c.IsReadOnly(),
-			Default: c.Default, Status: string(session.StatusNotConnected),
+			Default: c.Default, Status: string(session.StatusNotConnected), SignIn: c.SignIn,
+			Remote: connections.IsRemote(c.Type),
+		}
+		if i, ok := infos[c.Name]; ok {
+			ci.Remote, ci.Catalogless = i.Remote, i.Catalogless
 		}
 		for _, sc := range c.Shadows {
 			ci.Shadows = append(ci.Shadows, string(sc))
@@ -972,6 +1000,22 @@ func (a *App) connectionInfosLocked() []ConnectionInfo {
 				ci.Status, ci.Detail = string(session.StatusError), msg
 			} else if ci.Detail == "" {
 				ci.Detail = msg
+			}
+		}
+		if ci.Status == string(session.StatusError) && ci.Detail != "" {
+			// One plain line for the rail; the raw (redacted) text is in the editor's Test.
+			if e := classifyTestError(connections.TestResult{Error: ci.Detail}, c.ConnectionDef); e.Code != "error" {
+				ci.Detail = e.Message
+			}
+		}
+		switch ci.Status {
+		case string(session.StatusExtensionMissing):
+			if ti, err := connections.TypeInfoFor(c.Type); err == nil && len(ti.Extensions) > 0 {
+				ci.Extension = ti.Extensions[0]
+			}
+		case string(session.StatusNeedsCredentials):
+			if m := serverChangedRE.FindStringSubmatch(ci.Detail); m != nil {
+				ci.ServerChanged = &ServerChange{Old: m[1], New: m[2]}
 			}
 		}
 		out = append(out, ci)

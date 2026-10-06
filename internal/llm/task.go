@@ -78,6 +78,9 @@ type TaskCell struct {
 	View   string `json:"view,omitempty"`
 	Label  string `json:"label,omitempty"`
 	Source string `json:"source,omitempty"` // markdown cells: current text
+	// Connection is the connection the cell runs on ("" = the workspace
+	// default). The model keeps it unless the person asks to change it.
+	Connection string `json:"connection,omitempty"`
 }
 
 // TaskTurn is one prior turn of THIS task thread (REFINE / ANSWER & RETRY),
@@ -116,6 +119,9 @@ type EnvelopeCell struct {
 	View     string `json:"view,omitempty"`
 	Label    string `json:"label,omitempty"`
 	Markdown string `json:"markdown,omitempty"`
+	// Connection is the connection the previewed SQL ran on (sql cells). The
+	// Studio frontend keeps it when it applies the proposal (#117).
+	Connection string `json:"connection,omitempty"`
 }
 
 // TaskEvent is one incremental update emitted during Task, mirroring
@@ -144,6 +150,10 @@ type TaskEmitter func(TaskEvent)
 // other's proposal.
 type taskRecorder struct {
 	mu sync.Mutex
+
+	// defaultConnection is the connection of the cell being edited: preview_query
+	// and write_cell that name none use it, so the preview and the Apply agree.
+	defaultConnection string
 
 	outcome     string // "", "cell", "needs_info", "unresolved"
 	cell        *EnvelopeCell
@@ -243,6 +253,9 @@ func buildTaskMessages(req TaskRequest) []fantasy.Message {
 		fmt.Fprintf(&b, "  type: %s\n", req.Cell.Type)
 		if req.Cell.Type == "sql" {
 			fmt.Fprintf(&b, "  view: %s\n  label: %s\n  sql: %s\n", req.Cell.View, req.Cell.Label, req.Cell.SQL)
+			if req.Cell.Connection != "" {
+				fmt.Fprintf(&b, "  connection: %s (pass this connection to preview_query and write_cell)\n", req.Cell.Connection)
+			}
 		} else {
 			fmt.Fprintf(&b, "  label: %s\n  source: %s\n", req.Cell.Label, req.Cell.Source)
 		}
@@ -317,6 +330,9 @@ func (r *Runner) Task(ctx context.Context, cfg Config, req TaskRequest, emit Tas
 	}
 
 	rec := &taskRecorder{}
+	if req.Cell != nil {
+		rec.defaultConnection = req.Cell.Connection
+	}
 	var checked []string
 	var lastText strings.Builder
 	pendingChecked := map[string]string{}
@@ -479,12 +495,16 @@ func describeTaskExhaustion(result *fantasy.AgentResult, checked []string, maxSt
 func (r *Runner) buildTaskTools(rec *taskRecorder) []fantasy.AgentTool {
 	defs := agents.ListToolsForMode(agents.ModeTask)
 	tools := make([]fantasy.AgentTool, 0, len(defs))
+	h := Handler(r.handler)
+	if rec.defaultConnection != "" {
+		h = connectionDefaulter{inner: r.handler, connection: rec.defaultConnection}
+	}
 	for _, td := range defs {
 		switch td.Name {
 		case "write_cell", "need_more_info":
-			tools = append(tools, &taskTerminalTool{td: td, handler: r.handler, rec: rec})
+			tools = append(tools, &taskTerminalTool{td: td, handler: h, rec: rec})
 		default:
-			tools = append(tools, &handlerTool{td: td, handler: r.handler, rec: &recorder{}})
+			tools = append(tools, &handlerTool{td: td, handler: h, rec: &recorder{}})
 		}
 	}
 	return tools
@@ -545,6 +565,9 @@ func (t *taskTerminalTool) Run(ctx context.Context, call fantasy.ToolCall) (fant
 			View:     stringOf(cellMap["view"]),
 			Label:    stringOf(cellMap["label"]),
 			Markdown: stringOf(cellMap["markdown"]),
+			// The connection the previewed SQL ran on; dropping it would
+			// silently re-point the cell at the default (review #116).
+			Connection: stringOf(cellMap["connection"]),
 		}
 		recorded = t.rec.recordCell(cell, stringOf(result["explanation"]))
 	case "need_more_info":
@@ -583,4 +606,28 @@ func toStringSlice(v any) []string {
 		}
 	}
 	return out
+}
+
+// connectionDefaulter fills in the edited cell's connection on preview_query and
+// write_cell calls that name none, so editing a cell that runs on prod_pg does
+// not silently preview (and propose) against the workspace default.
+type connectionDefaulter struct {
+	inner      Handler
+	connection string
+}
+
+func (d connectionDefaulter) Handle(ctx context.Context, req *agents.Request) *agents.Response {
+	if req != nil && (req.Method == "preview_query" || req.Method == "write_cell") {
+		if c, _ := req.Params["connection"].(string); strings.TrimSpace(c) == "" {
+			p := make(map[string]any, len(req.Params)+1)
+			for k, v := range req.Params {
+				p[k] = v
+			}
+			p["connection"] = d.connection
+			cp := *req
+			cp.Params = p
+			req = &cp
+		}
+	}
+	return d.inner.Handle(ctx, req)
 }

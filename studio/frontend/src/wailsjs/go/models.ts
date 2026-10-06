@@ -53,6 +53,63 @@ export namespace a2ui {
 
 }
 
+export namespace connections {
+	
+	export class Capabilities {
+	    catalog: boolean;
+	    writable: boolean;
+	    readOnlyAttach: boolean;
+	    remote: boolean;
+	    test: boolean;
+	    subprocess?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Capabilities(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.catalog = source["catalog"];
+	        this.writable = source["writable"];
+	        this.readOnlyAttach = source["readOnlyAttach"];
+	        this.remote = source["remote"];
+	        this.test = source["test"];
+	        this.subprocess = source["subprocess"];
+	    }
+	}
+	export class Field {
+	    name: string;
+	    label: string;
+	    kind: string;
+	    help?: string;
+	    default?: string;
+	    choices?: string[];
+	    required: boolean;
+	    secret: boolean;
+	    perPerson: boolean;
+	    option?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Field(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
+	        this.kind = source["kind"];
+	        this.help = source["help"];
+	        this.default = source["default"];
+	        this.choices = source["choices"];
+	        this.required = source["required"];
+	        this.secret = source["secret"];
+	        this.perPerson = source["perPerson"];
+	        this.option = source["option"];
+	    }
+	}
+
+}
+
 export namespace crud {
 	
 	export class WriteResult {
@@ -338,6 +395,7 @@ export namespace llm {
 	    view?: string;
 	    label?: string;
 	    markdown?: string;
+	    connection?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new EnvelopeCell(source);
@@ -350,6 +408,7 @@ export namespace llm {
 	        this.view = source["view"];
 	        this.label = source["label"];
 	        this.markdown = source["markdown"];
+	        this.connection = source["connection"];
 	    }
 	}
 	export class TaskEnvelope {
@@ -545,6 +604,7 @@ export namespace main {
 	    view?: string;
 	    label?: string;
 	    source?: string;
+	    connection?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TaskCellArg(source);
@@ -557,6 +617,7 @@ export namespace main {
 	        this.view = source["view"];
 	        this.label = source["label"];
 	        this.source = source["source"];
+	        this.connection = source["connection"];
 	    }
 	}
 	export class AgentTaskRequest {
@@ -674,7 +735,98 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class CatalogNode {
+	    kind: string;
+	    name: string;
+	    qualified?: string;
+	    rows: number;
+	    dataType?: string;
+	    pk?: boolean;
+	    fk?: boolean;
 	
+	    static createFrom(source: any = {}) {
+	        return new CatalogNode(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.qualified = source["qualified"];
+	        this.rows = source["rows"];
+	        this.dataType = source["dataType"];
+	        this.pk = source["pk"];
+	        this.fk = source["fk"];
+	    }
+	}
+	export class CatalogListing {
+	    kind: string;
+	    schema: string;
+	    flattened: boolean;
+	    nodes: CatalogNode[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogListing(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.schema = source["schema"];
+	        this.flattened = source["flattened"];
+	        this.nodes = this.convertValues(source["nodes"], CatalogNode);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class CatalogRequest {
+	    connection: string;
+	    schema: string;
+	    table: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.connection = source["connection"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	    }
+	}
+	
+	export class ClearCredentialsRequest {
+	    name: string;
+	    field: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClearCredentialsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.field = source["field"];
+	    }
+	}
 	export class ColumnInfo {
 	    name: string;
 	    type: string;
@@ -731,6 +883,44 @@ export namespace main {
 	        this.title = source["title"];
 	    }
 	}
+	export class ConnectWithCredentialsRequest {
+	    name: string;
+	    username: string;
+	    keyId: string;
+	    password: string;
+	    token: string;
+	    secret: string;
+	    remember: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectWithCredentialsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.username = source["username"];
+	        this.keyId = source["keyId"];
+	        this.password = source["password"];
+	        this.token = source["token"];
+	        this.secret = source["secret"];
+	        this.remember = source["remember"];
+	    }
+	}
+	export class ServerChange {
+	    old: string;
+	    new: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerChange(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.old = source["old"];
+	        this.new = source["new"];
+	    }
+	}
 	export class ConnectionInfo {
 	    name: string;
 	    type: string;
@@ -741,6 +931,11 @@ export namespace main {
 	    status: string;
 	    detail?: string;
 	    lockedByPid?: number;
+	    remote: boolean;
+	    catalogless?: boolean;
+	    signIn?: string;
+	    extension?: string;
+	    serverChanged?: ServerChange;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConnectionInfo(source);
@@ -757,6 +952,124 @@ export namespace main {
 	        this.status = source["status"];
 	        this.detail = source["detail"];
 	        this.lockedByPid = source["lockedByPid"];
+	        this.remote = source["remote"];
+	        this.catalogless = source["catalogless"];
+	        this.signIn = source["signIn"];
+	        this.extension = source["extension"];
+	        this.serverChanged = this.convertValues(source["serverChanged"], ServerChange);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ConnectionDetail {
+	    name: string;
+	    scope: string;
+	    def: workspace.ConnectionDef;
+	    shadows: string[];
+	    shadowedBy?: string;
+	    signIn: string;
+	    signInHint?: string;
+	    credential: secrets.CredentialStatus;
+	    info: ConnectionInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectionDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.scope = source["scope"];
+	        this.def = this.convertValues(source["def"], workspace.ConnectionDef);
+	        this.shadows = source["shadows"];
+	        this.shadowedBy = source["shadowedBy"];
+	        this.signIn = source["signIn"];
+	        this.signInHint = source["signInHint"];
+	        this.credential = this.convertValues(source["credential"], secrets.CredentialStatus);
+	        this.info = this.convertValues(source["info"], ConnectionInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class ConnectionList {
+	    connections: ConnectionInfo[];
+	    relaunchRequired: boolean;
+	    relaunchMessage?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectionList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.connections = this.convertValues(source["connections"], ConnectionInfo);
+	        this.relaunchRequired = source["relaunchRequired"];
+	        this.relaunchMessage = source["relaunchMessage"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ConnectionRef {
+	    name: string;
+	    scope: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectionRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.scope = source["scope"];
 	    }
 	}
 	export class CreateWorkspaceRequest {
@@ -779,6 +1092,26 @@ export namespace main {
 	        this.git = source["git"];
 	        this.template = source["template"];
 	        this.inPlace = source["inPlace"];
+	    }
+	}
+	export class CredentialInput {
+	    username: string;
+	    keyId: string;
+	    password: string;
+	    token: string;
+	    secret: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CredentialInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.username = source["username"];
+	        this.keyId = source["keyId"];
+	        this.password = source["password"];
+	        this.token = source["token"];
+	        this.secret = source["secret"];
 	    }
 	}
 	export class DashboardData {
@@ -807,6 +1140,24 @@ export namespace main {
 	        this.local_tables = source["local_tables"];
 	        this.default_connection = source["default_connection"];
 	        this.read_only = source["read_only"];
+	    }
+	}
+	export class ExtensionInfo {
+	    name: string;
+	    purpose: string;
+	    neededBy: string[];
+	    installed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtensionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.purpose = source["purpose"];
+	        this.neededBy = source["neededBy"];
+	        this.installed = source["installed"];
 	    }
 	}
 	export class FilterCondition {
@@ -889,6 +1240,18 @@ export namespace main {
 	        this.message = source["message"];
 	    }
 	}
+	export class InstallExtensionRequest {
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstallExtensionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	    }
+	}
 	export class LLMKeyStatus {
 	    provider: string;
 	    source: string;
@@ -896,6 +1259,7 @@ export namespace main {
 	    fileKey: boolean;
 	    canMigrate: boolean;
 	    keychainAvailable: boolean;
+	    keychainHasKey: boolean;
 	    detail?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -910,6 +1274,7 @@ export namespace main {
 	        this.fileKey = source["fileKey"];
 	        this.canMigrate = source["canMigrate"];
 	        this.keychainAvailable = source["keychainAvailable"];
+	        this.keychainHasKey = source["keychainHasKey"];
 	        this.detail = source["detail"];
 	    }
 	}
@@ -929,6 +1294,20 @@ export namespace main {
 	        this.url = source["url"];
 	        this.canStart = source["canStart"];
 	        this.reason = source["reason"];
+	    }
+	}
+	export class MoveConnectionRequest {
+	    name: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MoveConnectionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.to = source["to"];
 	    }
 	}
 	export class NotebookSaveResult {
@@ -1175,6 +1554,111 @@ export namespace main {
 	        this.missing = source["missing"];
 	    }
 	}
+	export class RunQueryRequest {
+	    sql: string;
+	    connection: string;
+	    tabId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RunQueryRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sql = source["sql"];
+	        this.connection = source["connection"];
+	        this.tabId = source["tabId"];
+	    }
+	}
+	export class SaveConnectionRequest {
+	    scope: string;
+	    def: workspace.ConnectionDef;
+	    isNew: boolean;
+	    signIn: string;
+	    confirmRebind: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveConnectionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.def = this.convertValues(source["def"], workspace.ConnectionDef);
+	        this.isNew = source["isNew"];
+	        this.signIn = source["signIn"];
+	        this.confirmRebind = source["confirmRebind"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SaveQueryRequest {
+	    id: string;
+	    title: string;
+	    sql: string;
+	    description: string;
+	    rev: string;
+	    connection: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveQueryRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.sql = source["sql"];
+	        this.description = source["description"];
+	        this.rev = source["rev"];
+	        this.connection = source["connection"];
+	    }
+	}
+	
+	export class SetCredentialsRequest {
+	    name: string;
+	    method: string;
+	    username: string;
+	    keyId: string;
+	    password: string;
+	    token: string;
+	    secret: string;
+	    remember: boolean;
+	    confirmRebind: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SetCredentialsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.method = source["method"];
+	        this.username = source["username"];
+	        this.keyId = source["keyId"];
+	        this.password = source["password"];
+	        this.token = source["token"];
+	        this.secret = source["secret"];
+	        this.remember = source["remember"];
+	        this.confirmRebind = source["confirmRebind"];
+	    }
+	}
 	export class SkillSummary {
 	    name: string;
 	    description: string;
@@ -1207,6 +1691,24 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
+	    }
+	}
+	export class TableCapabilities {
+	    connection: string;
+	    editable: boolean;
+	    reason: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableCapabilities(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.connection = source["connection"];
+	        this.editable = source["editable"];
+	        this.reason = source["reason"];
+	        this.text = source["text"];
 	    }
 	}
 	export class TableData {
@@ -1294,6 +1796,150 @@ export namespace main {
 	        this.name = source["name"];
 	        this.description = source["description"];
 	    }
+	}
+	export class TestConnectionRequest {
+	    scope: string;
+	    def: workspace.ConnectionDef;
+	    signIn: string;
+	    credentials: CredentialInput;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestConnectionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.def = this.convertValues(source["def"], workspace.ConnectionDef);
+	        this.signIn = source["signIn"];
+	        this.credentials = this.convertValues(source["credentials"], CredentialInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TestError {
+	    code: string;
+	    message: string;
+	    details: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.message = source["message"];
+	        this.details = source["details"];
+	    }
+	}
+	export class TestResultView {
+	    ok: boolean;
+	    status: string;
+	    ms: number;
+	    count: number;
+	    detail?: string;
+	    summary?: string;
+	    error?: TestError;
+	    installExtension?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestResultView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.status = source["status"];
+	        this.ms = source["ms"];
+	        this.count = source["count"];
+	        this.detail = source["detail"];
+	        this.summary = source["summary"];
+	        this.error = this.convertValues(source["error"], TestError);
+	        this.installExtension = source["installExtension"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TypeSpec {
+	    id: string;
+	    label: string;
+	    description: string;
+	    fields: connections.Field[];
+	    credentials: connections.Field[];
+	    requiresExtension: string[];
+	    capabilities: connections.Capabilities;
+	    fingerprintFields: string[];
+	    signInMethods: string[];
+	    soon: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TypeSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.fields = this.convertValues(source["fields"], connections.Field);
+	        this.credentials = this.convertValues(source["credentials"], connections.Field);
+	        this.requiresExtension = source["requiresExtension"];
+	        this.capabilities = this.convertValues(source["capabilities"], connections.Capabilities);
+	        this.fingerprintFields = source["fingerprintFields"];
+	        this.signInMethods = source["signInMethods"];
+	        this.soon = source["soon"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class UserThemesResult {
 	    themes: prefs.ThemeFile[];
@@ -1603,6 +2249,67 @@ export namespace queries {
 
 export namespace secrets {
 	
+	export class EnvVarStatus {
+	    name: string;
+	    set: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnvVarStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.set = source["set"];
+	    }
+	}
+	export class CredentialStatus {
+	    method: string;
+	    username?: string;
+	    keyId?: string;
+	    secretSet: boolean;
+	    sessionOnly?: boolean;
+	    fingerprintMatches: boolean;
+	    available: boolean;
+	    detail?: string;
+	    env?: EnvVarStatus[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CredentialStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.method = source["method"];
+	        this.username = source["username"];
+	        this.keyId = source["keyId"];
+	        this.secretSet = source["secretSet"];
+	        this.sessionOnly = source["sessionOnly"];
+	        this.fingerprintMatches = source["fingerprintMatches"];
+	        this.available = source["available"];
+	        this.detail = source["detail"];
+	        this.env = this.convertValues(source["env"], EnvVarStatus);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class Probe {
 	    available: boolean;
 	    backend: string;
@@ -1622,37 +2329,40 @@ export namespace secrets {
 
 }
 
-export namespace session {
+export namespace workspace {
 	
-	export class Status {
+	export class ConnectionDef {
 	    name: string;
 	    type: string;
-	    status: string;
-	    message?: string;
-	    locked_by_pid?: number;
-	    read_only: boolean;
-	    default?: boolean;
+	    path?: string;
+	    host?: string;
+	    port?: number;
+	    database?: string;
+	    region?: string;
+	    scope?: string;
+	    read_only?: boolean;
+	    credentials?: string;
+	    options?: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
-	        return new Status(source);
+	        return new ConnectionDef(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.type = source["type"];
-	        this.status = source["status"];
-	        this.message = source["message"];
-	        this.locked_by_pid = source["locked_by_pid"];
+	        this.path = source["path"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.database = source["database"];
+	        this.region = source["region"];
+	        this.scope = source["scope"];
 	        this.read_only = source["read_only"];
-	        this.default = source["default"];
+	        this.credentials = source["credentials"];
+	        this.options = source["options"];
 	    }
 	}
-
-}
-
-export namespace workspace {
-	
 	export class SessionIssue {
 	    connection: string;
 	    message: string;

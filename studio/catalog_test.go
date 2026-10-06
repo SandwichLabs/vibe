@@ -43,12 +43,12 @@ func TestStudio_SecondCatalog_BrowseAndDescribe(t *testing.T) {
 
 	conns, err := app.ListConnections()
 	require.NoError(t, err)
-	byName := map[string]session.Status{}
-	for _, c := range conns {
+	byName := map[string]ConnectionInfo{}
+	for _, c := range conns.Connections {
 		byName[c.Name] = c
 	}
 	assert.True(t, byName["local"].Default, "the workspace's own database is the default")
-	assert.Equal(t, session.StatusOK, byName["other"].Kind)
+	assert.Equal(t, "ok", byName["local"].Status)
 
 	tabs, err := app.ListCatalogTables("other")
 	require.NoError(t, err)

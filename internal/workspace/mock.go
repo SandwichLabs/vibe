@@ -140,6 +140,7 @@ func (m *Mock) UpdateConnection(Scope, ConnectionDef) error                { ret
 func (m *Mock) RemoveConnection(context.Context, Scope, string) error      { return errMockNoConn }
 func (m *Mock) MoveConnection(context.Context, string, Scope, Scope) error { return errMockNoConn }
 func (m *Mock) SetSignIn(string, string) error                             { return errMockNoConn }
+func (m *Mock) RebindSignIn(string, string) error                          { return errMockNoConn }
 func (m *Mock) SetCredentials(context.Context, string, secrets.Credential, bool) error {
 	return errMockNoConn
 }

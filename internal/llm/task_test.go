@@ -1,6 +1,8 @@
 package llm
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -218,4 +220,44 @@ func TestAppendChecked_Dedupes(t *testing.T) {
 	got = appendChecked(got, "b")
 	got = appendChecked(got, "a")
 	assert.Equal(t, []string{"a", "b"}, got)
+}
+
+func TestEnvelopeCell_CarriesTheConnectionTheSQLWasPreviewedOn(t *testing.T) {
+	b, err := json.Marshal(EnvelopeCell{Type: "sql", SQL: "SELECT 1", Connection: "prod_pg"})
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"connection":"prod_pg"`)
+	b, err = json.Marshal(EnvelopeCell{Type: "sql", SQL: "SELECT 1"})
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "connection", "no connection chosen: the field is omitted")
+}
+
+type recordingHandler struct{ got []*agents.Request }
+
+func (h *recordingHandler) Handle(_ context.Context, req *agents.Request) *agents.Response {
+	h.got = append(h.got, req)
+	return agents.NewResponse(req.ID, map[string]any{})
+}
+
+func TestConnectionDefaulter_FillsTheEditedCellsConnection(t *testing.T) {
+	inner := &recordingHandler{}
+	d := connectionDefaulter{inner: inner, connection: "prod_pg"}
+	d.Handle(context.Background(), &agents.Request{Method: "preview_query", Params: map[string]any{"sql": "SELECT 1"}})
+	d.Handle(context.Background(), &agents.Request{Method: "write_cell", Params: map[string]any{"sql": "SELECT 1", "connection": ""}})
+	d.Handle(context.Background(), &agents.Request{Method: "write_cell", Params: map[string]any{"sql": "SELECT 1", "connection": "other"}})
+	d.Handle(context.Background(), &agents.Request{Method: "run_query", Params: map[string]any{"sql": "SELECT 1"}})
+	require.Len(t, inner.got, 4)
+	assert.Equal(t, "prod_pg", inner.got[0].Params["connection"])
+	assert.Equal(t, "prod_pg", inner.got[1].Params["connection"])
+	assert.Equal(t, "other", inner.got[2].Params["connection"], "an explicit choice wins")
+	_, has := inner.got[3].Params["connection"]
+	assert.False(t, has, "other tools are untouched")
+
+	// The tool set is wired through it only when the edited cell has a connection.
+	r := &Runner{handler: inner}
+	for _, tl := range r.buildTaskTools(&taskRecorder{defaultConnection: "prod_pg"}) {
+		if tt, ok := tl.(*taskTerminalTool); ok {
+			_, wrapped := tt.handler.(connectionDefaulter)
+			assert.True(t, wrapped)
+		}
+	}
 }

@@ -8,26 +8,30 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import QueryEditorView from './QueryEditorView.vue'
 import { flushAll, _resetForTests as resetSaves } from '../composables/usePendingSaves'
+import { _resetConnectionsForTests } from '../composables/useConnections'
+
+// The editor reads ?conn= / ?sql= from the route ("New query here" in the rail).
+const routeQuery: Record<string, string> = {}
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: routeQuery, path: '/queries' }),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}))
 
 function makeApp(opts: { execError?: string; execResult?: any; saveId?: string } = {}) {
   const app = {
     ListQueries: vi.fn(async () => [{ id: 'q1', title: 'Top customers' }]),
     GetQuery: vi.fn(async () => ({ id: 'q1', title: 'Top customers', sql: 'SELECT 1' })),
-    SaveQuery: vi.fn(async () => ({ id: opts.saveId ?? 'q9', rev: 'r1' })),
-    DeleteQuery: vi.fn(async () => {}),
-    ListTableStats: vi.fn(async () => [
-      { name: 'customers', rows: 89 },
-      { name: 'service_calls', rows: 142 },
-    ]),
-    DescribeTable: vi.fn(async (name: string) => ({
-      name,
-      columns: [
-        { name: 'id', type: 'BIGINT', not_null: true, pk: true, fk: false },
-        { name: 'customer_id', type: 'BIGINT', not_null: false, pk: false, fk: true },
-        { name: 'status', type: 'VARCHAR', not_null: false, pk: false, fk: false },
+    SaveQueryOn: vi.fn(async (_req: any) => ({ id: opts.saveId ?? 'q9', rev: 'r1' })),
+    ListConnections: vi.fn(async () => ({
+      connections: [
+        { name: 'local', type: 'duckdb', scope: 'shared', readOnly: false, default: true, status: 'ok', remote: false },
+        { name: 'prod_pg', type: 'postgres', scope: 'local', readOnly: true, default: false, status: 'not-connected', remote: true },
       ],
+      relaunchRequired: false,
     })),
-    ExecuteQuery: vi.fn(async () => {
+    ConnectConnection: vi.fn(async () => null),
+    DeleteQuery: vi.fn(async () => {}),
+    RunQuery: vi.fn(async (_req: any) => {
       if (opts.execError) throw new Error(opts.execError)
       return opts.execResult ?? {
         columns: [{ name: 'x' }],
@@ -51,48 +55,50 @@ async function mountView() {
 }
 
 describe('QueryEditorView (W5 Query Explorer)', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks(); _resetConnectionsForTests() })
 
-  it('renders the schema tree with row counts from ListTableStats', async () => {
+  it('has no schema tree of its own: the global Connections rail replaces it', async () => {
     makeApp()
     const wrapper = await mountView()
-
-    expect(wrapper.find('[data-testid="schema-tree"]').exists()).toBe(true)
-    const tables = wrapper.findAll('[data-testid="tree-table"]')
-    expect(tables).toHaveLength(2)
-    expect(tables[0].text()).toContain('customers')
-    expect(tables[0].text()).toContain('89')
-    expect(tables[1].text()).toContain('142')
+    expect(wrapper.find('[data-testid="schema-tree"]').exists()).toBe(false)
   })
 
-  it('expanding a table lazily describes it and badges PK/FK columns', async () => {
+  it('runs on the chosen connection, per editor (RunQuery carries it)', async () => {
     const app = makeApp()
     const wrapper = await mountView()
-
-    const calls = wrapper.findAll('[data-testid="tree-table"]')[1]
-    await calls.trigger('click')
+    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 1')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
     await flushPromises()
+    expect(app.RunQuery).toHaveBeenLastCalledWith(expect.objectContaining({ sql: 'SELECT 1', connection: '' }))
 
-    expect(app.DescribeTable).toHaveBeenCalledWith('service_calls')
-    const cols = wrapper.findAll('[data-testid="tree-col"]')
-    expect(cols).toHaveLength(3)
-    expect(cols[0].text()).toContain('PK · int')
-    expect(cols[1].text()).toContain('FK · int')
-    expect(cols[2].text()).toContain('text')
-
-    // Collapse on second click; no re-describe on re-expand (cached).
-    await calls.trigger('click')
-    expect(wrapper.findAll('[data-testid="tree-col"]')).toHaveLength(0)
-    await calls.trigger('click')
-    expect(app.DescribeTable).toHaveBeenCalledTimes(1)
+    ;(wrapper.vm as any).conn = 'prod_pg'
+    await flushPromises()
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(app.RunQuery).toHaveBeenLastCalledWith(expect.objectContaining({ connection: 'prod_pg' }))
+    expect(wrapper.find('[data-testid="run-engine"]').text()).toContain('ran on prod_pg')
   })
 
-  it('double-clicking a tree table seeds a starter SELECT', async () => {
+  it('says a statement ran across the connections its qualified names pulled in', async () => {
     makeApp()
     const wrapper = await mountView()
-    await wrapper.findAll('[data-testid="tree-table"]')[0].trigger('dblclick')
-    const input = wrapper.find('[data-testid="sql-input"]').element as HTMLTextAreaElement
-    expect(input.value).toBe('SELECT * FROM "customers" LIMIT 100')
+    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT * FROM local.main.a JOIN prod_pg.public.b USING (id)')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="run-engine"]').text()).toContain('ran across local + prod_pg')
+  })
+
+  it('saves the Run on choice with the query and restores it on open', async () => {
+    const app = makeApp({ saveId: 'q9' })
+    app.GetQuery.mockResolvedValue({ id: 'q1', title: 'Top customers', sql: 'SELECT 1', connection: 'prod_pg' } as any)
+    const wrapper = await mountView()
+    await wrapper.find('[data-testid="saved-query"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).conn).toBe('prod_pg')
+    ;(wrapper.vm as any).saveTitle = 'Top customers'
+    await (wrapper.vm as any).saveQuery()
+    await flushPromises()
+    expect(app.SaveQueryOn).toHaveBeenCalledWith(expect.objectContaining({ id: 'q1', connection: 'prod_pg' }))
   })
 
   it('a successful run surfaces the metadata bar: Complete badge, DuckDB label, last-run time', async () => {
@@ -225,14 +231,14 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     await modalSaveBtn().trigger('click')
     await flushPromises()
 
-    expect(app.SaveQuery).toHaveBeenNthCalledWith(1, '', 'My query', '', '', '')
+    expect(app.SaveQueryOn).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: '', title: 'My query', sql: '', rev: '' }))
 
     await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 3')
     await saveBtn().trigger('click')
     await modalSaveBtn().trigger('click')
     await flushPromises()
 
-    expect(app.SaveQuery).toHaveBeenNthCalledWith(2, 'q9', 'My query', 'SELECT 3', '', 'r1')
+    expect(app.SaveQueryOn).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'q9', title: 'My query', sql: 'SELECT 3', rev: 'r1' }))
     expect(wrapper.find('[data-testid="query-status"]').text()).toContain('My query')
   })
 
@@ -270,7 +276,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
       await flushPromises()
       const res = await flushAll()
       expect(res.failed).toEqual([])
-      expect(app.SaveQuery).toHaveBeenCalledWith('q1', 'Top customers', 'SELECT 2', '', 'r0')
+      expect(app.SaveQueryOn).toHaveBeenCalledWith(expect.objectContaining({ id: 'q1', title: 'Top customers', sql: 'SELECT 2', rev: 'r0' }))
     })
 
     it('a never-saved scratch buffer cannot be flushed, so the caller asks', async () => {
@@ -287,7 +293,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
       const app = makeApp()
       await mountView()
       expect((await flushAll()).failed).toEqual([])
-      expect(app.SaveQuery).not.toHaveBeenCalled()
+      expect(app.SaveQueryOn).not.toHaveBeenCalled()
     })
   })
 
@@ -300,7 +306,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     const vm = wrapper.vm as any
     await vm.selectQuery('q1')
     vm.sqlText = 'SELECT 2'
-    app.SaveQuery.mockRejectedValueOnce(new Error('conflict: queries/q1.sql changed on disk since it was loaded'))
+    app.SaveQueryOn.mockRejectedValueOnce(new Error('conflict: queries/q1.sql changed on disk since it was loaded'))
     vm.saveTitle = 'Top customers'
     await vm.saveQuery()
     await flushPromises()

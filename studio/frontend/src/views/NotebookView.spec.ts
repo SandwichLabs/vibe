@@ -880,3 +880,85 @@ describe('NotebookView', () => {
     expect(wrapper.text()).toContain('changed on disk again')
   })
 })
+
+// #117: a cell's connection survives AI Apply (review #116 follow-up) and is
+// saved with the cell.
+describe('NotebookView connections (#117)', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    ;(globalThis as any).__mockRoute.params.id = 'nb1'
+    createVibeEditor.mockClear()
+  })
+
+  it('an AI proposal that names a connection keeps it when inserted', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.insertCellFromEnvelope({ type: 'sql', sql: 'SELECT 1', label: 'x', connection: 'prod_pg' })
+    await flushPromises()
+    expect(vm.cells[vm.cells.length - 1].connection).toBe('prod_pg')
+  })
+
+  it('an AI proposal that names a connection keeps it when it replaces a cell', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.replaceCellFromEnvelope('c1', { type: 'sql', sql: 'SELECT 2', connection: 'prod_pg' })
+    await flushPromises()
+    expect(vm.cells[0].connection).toBe('prod_pg')
+  })
+
+  it('a replacing proposal with no connection keeps the cell\'s own connection', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.cells[0].connection = 'prod_pg'
+    vm.replaceCellFromEnvelope('c1', { type: 'sql', sql: 'SELECT 2' })
+    await flushPromises()
+    expect(vm.cells[0].connection).toBe('prod_pg')
+  })
+
+  it('a proposal with no connection leaves the cell on the workspace default', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.insertCellFromEnvelope({ type: 'sql', sql: 'SELECT 1' })
+    await flushPromises()
+    expect(vm.cells[vm.cells.length - 1].connection).toBe('')
+  })
+
+  it('the cell chip shows the default until a connection is chosen, and the choice is saved', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const app = makeApp()
+    ;(app as any).ListConnections = vi.fn(async () => ({
+      connections: [
+        { name: 'local', type: 'duckdb', scope: 'shared', readOnly: false, default: true, status: 'ok', remote: false },
+        { name: 'prod_pg', type: 'postgres', scope: 'local', readOnly: true, default: false, status: 'ok', remote: true },
+      ],
+      relaunchRequired: false,
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const chip = wrapper.find('[data-testid="conn-select"]')
+    expect(chip.text()).toContain('Default')
+    vm.cells[0].connection = 'prod_pg'
+    await flushPromises()
+    vi.advanceTimersByTime(5000)
+    await flushPromises()
+    expect(app.SaveNotebook).toHaveBeenCalledWith(
+      expect.objectContaining({ cells: [expect.objectContaining({ id: 'c1', connection: 'prod_pg' })] }),
+      expect.anything(),
+    )
+    vi.useRealTimers()
+  })
+})

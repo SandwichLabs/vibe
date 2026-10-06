@@ -22,7 +22,7 @@ onMounted(() => {
       const r = p.request
       items.value.push({
         tool: r.tool,
-        approval: { id: r.id, summary: r.summary, sql: r.sql, where: r.where, destructive: !!r.destructive, state: 'pending' },
+        approval: { id: r.id, summary: r.summary, sql: r.sql, where: r.where, destructive: !!r.destructive, connections: r.connections, rows: r.rows, state: 'pending' },
       })
     }),
     EventsOn('agent:approval_done', (p: { turnId: string; id: string; outcome: PendingApproval['state'] }) => {

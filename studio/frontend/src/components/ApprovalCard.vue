@@ -4,7 +4,11 @@
 // correlated by tool-call id, so the transcript keeps explaining why the
 // agent is asking right next to the ask itself — a modal dialog (useModal)
 // would block that context instead.
+import { computed, ref, onMounted, nextTick } from 'vue'
 import type { PendingApproval } from '../composables/useAgentChat'
+import ConnTypeTile from './ConnTypeTile.vue'
+import Icon from './Icon.vue'
+import { connectionByName } from '../composables/useConnections'
 
 // done: true once the matching ToolStep has left 'running' (set by
 // ToolStepChip from step.status), so the state line can say "Approved."
@@ -12,19 +16,56 @@ import type { PendingApproval } from '../composables/useAgentChat'
 // forever.
 const props = defineProps<{ approval: PendingApproval; done?: boolean }>()
 const emit = defineEmits<{ resolve: [approved: boolean] }>()
+
+// A change to anything that is not a local file names where it goes (#117,
+// SPEC 10): the header, a connection chip, and the button all say so. The
+// target comes from the policy (the approval's connections), never model prose.
+const targets = computed(() => props.approval.connections ?? [])
+const target = computed(() => targets.value.join(', '))
+const targetInfo = computed(() => (targets.value.length === 1 ? connectionByName(targets.value[0]) : undefined))
+const isDelete = computed(() => props.approval.destructive && /\b(delete|drop|truncate)\b/i.test(`${props.approval.sql ?? ''} ${props.approval.summary}`))
+const title = computed(() => {
+  if (!target.value) return 'Allow this change?'
+  return isDelete.value ? `Allow delete in ${target.value}?` : `Allow this change to ${target.value}?`
+})
+const doLabel = computed(() => {
+  if (!target.value) return 'Do it'
+  return isDelete.value ? `Allow delete in ${target.value}` : `Allow change to ${target.value}`
+})
+// The row count is the policy's estimate (never model prose); without one the
+// card says nothing about counts.
+const rowNote = computed(() => {
+  const n = props.approval.rows
+  return props.approval.destructive && typeof n === 'number' && n >= 0 ? `It affects about ${n.toLocaleString()} row${n === 1 ? '' : 's'}. Check that is what you expect before you allow it.` : ''
+})
+
+// Focus starts on Cancel, the safe default, never on Allow. Escape cancels.
+const cancelBtn = ref<HTMLButtonElement | null>(null)
+onMounted(() => {
+  if (props.approval.state === 'pending') void nextTick(() => cancelBtn.value?.focus({ preventScroll: true }))
+})
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.approval.state === 'pending') { e.stopPropagation(); emit('resolve', false) }
+}
 </script>
 
 <template>
-  <div class="approval-card" role="group" aria-label="Approval needed" data-testid="approval-card">
-    <div class="approval-card__title">Allow this change?</div>
+  <div class="approval-card" role="group" :aria-label="target ? `Approval needed for ${target}` : 'Approval needed'" data-testid="approval-card" @keydown="onKey">
+    <div class="approval-card__title"><Icon v-if="target" name="shield" :size="16" /> {{ title }}</div>
+    <span v-if="target" class="ap-conn" data-testid="approval-connection">
+      <ConnTypeTile v-if="targetInfo" :type="targetInfo.type" />
+      {{ target }} <span class="small">not your local data</span>
+    </span>
     <p class="approval-card__summary">{{ props.approval.summary }}</p>
     <!-- where is already folded into the summary sentence (see describeWrite
          in internal/agents/approval.go) — the <pre> only adds anything new
          for run_query, where sql is the full statement, not a paraphrase. -->
     <pre v-if="props.approval.sql" class="approval-card__detail">{{ props.approval.sql }}</pre>
+    <p v-if="target" class="approval-card__hint" data-testid="approval-undo-note">This is outside your workspace's local data, so Vibe can't undo it for you.<template v-if="rowNote"> {{ rowNote }}</template></p>
 
     <div class="approval-card__actions">
       <button
+        ref="cancelBtn"
         type="button"
         class="btn btn-sm"
         :disabled="props.approval.state !== 'pending'"
@@ -41,7 +82,7 @@ const emit = defineEmits<{ resolve: [approved: boolean] }>()
         data-testid="approval-do-it"
         @click="emit('resolve', true)"
       >
-        Do it
+        {{ doLabel }}
       </button>
     </div>
 
@@ -67,7 +108,16 @@ const emit = defineEmits<{ resolve: [approved: boolean] }>()
 .approval-card__title {
   font-weight: 700;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sh-font-display);
 }
+.ap-conn {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 4px 10px;
+  border: 1.5px solid var(--vibe-border); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); font-weight: 600;
+}
+.ap-conn .small { font-weight: 400; color: var(--sh-graphite); font-size: 12px; }
 .approval-card__summary {
   margin: 0 0 6px;
 }

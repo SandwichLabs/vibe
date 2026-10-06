@@ -659,7 +659,14 @@ func runConnCredsSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s connections have no credentials", c.Type)
 	}
 	if m := flagString(cmd, "sign-in"); m != "" {
-		if err := ws.SetSignIn(c.Name, m); err != nil {
+		err := ws.SetSignIn(c.Name, m)
+		if errors.Is(err, workspace.ErrRebindNeedsConfirm) {
+			if yes, _ := cmd.Flags().GetBool("confirm-rebind"); !yes {
+				return fmt.Errorf("%w (run again with --confirm-rebind if %s should use %s for its new server)", err, c.Name, m)
+			}
+			err = ws.RebindSignIn(c.Name, m)
+		}
+		if err != nil {
 			return err
 		}
 		c, _ = findConn(ws, args[0])
@@ -787,6 +794,7 @@ func init() {
 	addConnWorkspaceFlag(connMoveCmd)
 
 	connCredsSetCmd.Flags().String("sign-in", "", "sign-in method: keychain, prompt or env:PREFIX")
+	connCredsSetCmd.Flags().Bool("confirm-rebind", false, "use an env: sign-in for a server other than the one it was chosen for")
 	addConnWorkspaceFlag(connCredsSetCmd)
 	addConnWorkspaceFlag(connCredsClearCmd)
 	addConnWorkspaceFlag(connCredsStatusCmd)

@@ -41,6 +41,26 @@ declare global {
           ResolveConflict(req: ConflictRequest): Promise<ConflictResult>
           ListTemplates(): Promise<TemplateInfo[]>
           ListCatalogGroups(): Promise<CatalogGroup[]>
+          // Connections (#117)
+          ListConnectionTypes(): Promise<ConnTypeSpec[]>
+          ListConnections(): Promise<ConnectionList>
+          GetConnection(name: string): Promise<ConnectionDetail>
+          GetConnectionInScope(ref: ConnectionRef): Promise<ConnectionDetail>
+          SaveConnection(req: SaveConnectionRequest): Promise<ConnectionDetail>
+          MoveConnection(req: { name: string; to: ConnScope }): Promise<ConnectionDetail>
+          DeleteConnection(ref: ConnectionRef): Promise<void>
+          TestConnection(req: TestConnectionRequest): Promise<TestResultView>
+          ConnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
+          ConnectWithCredentials(req: ConnectWithCredentialsRequest): Promise<ConnectionInfo | null>
+          DisconnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
+          RefreshCatalog(ref: ConnectionRef): Promise<void>
+          SetConnectionCredentials(req: SetCredentialsRequest): Promise<ConnectionInfo | null>
+          ClearConnectionCredentials(req: { name: string; field: string }): Promise<ConnectionInfo | null>
+          GetConnectionCredentialStatus(name: string): Promise<ConnCredentialStatus>
+          ListCatalog(req: { connection: string; schema: string; table: string }): Promise<CatalogListing>
+          GetTableCapabilities(table: string): Promise<TableCapabilities>
+          InstallExtension(req: { name: string }): Promise<void>
+          ListExtensions(): Promise<ExtensionInfo[]>
           ListCatalogTables(connection: string): Promise<string[]>
           StartMCP(): Promise<MCPStatus>
           StopMCP(): Promise<void>
@@ -63,6 +83,7 @@ declare global {
           CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string): Promise<QueryResult>
+          RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
           RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
           RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
           AddColumn(table: string, column: string, colType: string): Promise<void>
@@ -71,6 +92,7 @@ declare global {
           AlterColumnType(table: string, column: string, newType: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
+          SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
           SaveQuery(id: string, title: string, sql: string, description: string, rev: string): Promise<{ id: string; rev: string }>
           DeleteQuery(id: string): Promise<void>
           GetDashboard(): Promise<DashboardData>
@@ -127,17 +149,112 @@ interface RecentWorkspace {
   missing: boolean
 }
 
+type ConnScope = 'shared' | 'local' | 'user'
+
 interface ConnectionInfo {
   name: string
   type: string
-  scope: 'shared' | 'local' | 'user'
+  scope: ConnScope
   shadows?: string[]
   readOnly: boolean
   default: boolean
   status: string
   detail?: string
   lockedByPid?: number
+  remote: boolean
+  catalogless?: boolean
+  signIn?: string
+  extension?: string
+  serverChanged?: { old: string; new: string }
 }
+
+// --- Connections (#117): mirrors studio/connections.go. No field here is a
+// secret; the password, token and secret key are write-only. ---
+
+interface ConnField {
+  name: string
+  label: string
+  kind: 'text' | 'number' | 'enum' | 'path' | 'url'
+  help?: string
+  default?: string
+  choices?: string[]
+  required: boolean
+  secret: boolean
+  perPerson: boolean
+  option?: boolean
+}
+interface ConnTypeSpec {
+  id: string
+  label: string
+  description: string
+  fields: ConnField[]
+  credentials: ConnField[]
+  requiresExtension: string[]
+  capabilities: { catalog: boolean; writable: boolean; readOnlyAttach: boolean; remote: boolean; test: boolean; subprocess?: boolean }
+  fingerprintFields: string[]
+  signInMethods: string[]
+  soon: boolean
+}
+interface ConnectionList {
+  connections: ConnectionInfo[]
+  relaunchRequired: boolean
+  relaunchMessage?: string
+}
+interface ConnectionRef { name: string; scope: ConnScope | '' }
+interface ConnectionDef {
+  name: string
+  type: string
+  path?: string
+  host?: string
+  port?: number
+  database?: string
+  region?: string
+  scope?: string
+  read_only?: boolean | null
+  credentials?: string
+  options?: Record<string, string>
+}
+interface ConnCredentialStatus {
+  method: string
+  username?: string
+  keyId?: string
+  secretSet: boolean
+  sessionOnly?: boolean
+  fingerprintMatches: boolean
+  available: boolean
+  detail?: string
+  env?: { name: string; set: boolean }[]
+}
+interface ConnectionDetail {
+  name: string
+  scope: ConnScope
+  def: ConnectionDef
+  shadows: string[]
+  shadowedBy?: string
+  signIn: string
+  signInHint?: string
+  credential: ConnCredentialStatus
+  info: ConnectionInfo
+}
+interface SaveConnectionRequest { scope: ConnScope; def: ConnectionDef; isNew: boolean; signIn: string; confirmRebind?: boolean }
+interface CredentialInput { username: string; keyId: string; password: string; token: string; secret: string }
+interface SetCredentialsRequest extends CredentialInput { name: string; method: string; remember: boolean; confirmRebind?: boolean }
+interface ConnectWithCredentialsRequest extends CredentialInput { name: string; remember: boolean }
+interface TestConnectionRequest { scope: ConnScope; def: ConnectionDef; signIn: string; credentials: CredentialInput }
+interface TestResultView {
+  ok: boolean
+  status: string
+  ms: number
+  count: number
+  detail?: string
+  summary?: string
+  error?: { code: string; message: string; details: string }
+  installExtension?: string
+}
+interface CatalogNode { kind: 'schema' | 'table' | 'view' | 'column'; name: string; qualified?: string; rows: number; dataType?: string; pk?: boolean; fk?: boolean }
+interface CatalogListing { kind: 'schemas' | 'tables' | 'columns'; schema: string; flattened: boolean; nodes: CatalogNode[] }
+interface TableCapabilities { connection: string; editable: boolean; reason: string; text: string }
+interface ExtensionInfo { name: string; purpose: string; neededBy: string[]; installed: boolean }
 
 interface AgentPolicyInfo {
   sandbox: string
@@ -209,6 +326,7 @@ interface ConflictRequest {
   action: 'reload' | 'overwrite' | 'saveCopy'
   data: Record<string, any>
   rev?: string
+  connection?: string
 }
 interface ConflictResult { id: string; rev: string; title: string }
 

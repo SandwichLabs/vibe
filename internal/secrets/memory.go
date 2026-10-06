@@ -47,6 +47,16 @@ func (s *MemoryStore) Delete(_ context.Context, ref Ref) error {
 	return nil
 }
 
+// Clear zeroes and forgets every entry.
+func (s *MemoryStore) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ref := range s.m {
+		s.zero(ref)
+	}
+	s.m = map[Ref][]byte{}
+}
+
 func (s *MemoryStore) zero(ref Ref) {
 	for i := range s.m[ref] {
 		s.m[ref][i] = 0

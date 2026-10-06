@@ -12,6 +12,8 @@ import AgentPanel from './AgentPanel.vue'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 import WorkspaceBanner from './WorkspaceBanner.vue'
 import McpApprovals from './McpApprovals.vue'
+import ConnectionRail from './ConnectionRail.vue'
+import ConnectionDialogs from './ConnectionDialogs.vue'
 import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
 import { workspaceInfo } from '../composables/useWorkspace'
@@ -26,11 +28,11 @@ const errorMessage = ref('')
 const info = computed(() => workspaceInfo.value)
 
 // Home, then the content that lives in files, then the data views. The
-// connections rail replaces "Tables" in #117.
+// Connections rail below the nav replaces "Tables" (#117); /tables stays as a
+// route for deep links.
 const navItems = [
   { path: '/', label: 'Home', icon: 'home' },
   { path: '/notebooks', label: 'Notebooks', icon: 'layers' },
-  { path: '/tables', label: 'Tables', icon: 'database' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
   { path: '/skills', label: 'Skills', icon: 'bookOpen' },
   { path: '/agent', label: 'Agent', icon: 'bot' },
@@ -110,7 +112,7 @@ watch(() => info.value?.name, (name) => {
 </script>
 
 <template>
-  <div class="app has-switcher">
+  <div class="app has-switcher has-rail">
     <div class="topbar" style="height: 64px;">
       <div class="brand"><span class="mark mark-only" aria-hidden="true">V</span></div>
       <WorkspaceSwitcher @error="(m: string) => (errorMessage = m)" />
@@ -139,8 +141,8 @@ watch(() => info.value?.name, (name) => {
     </div>
 
     <!-- Sidebar (nav). -->
-    <aside class="sidebar" style="display: flex; flex-direction: column;">
-      <nav aria-label="Workspace">
+    <aside class="sidebar with-rail">
+      <nav class="navblock" aria-label="Workspace">
         <div class="side-section">Workspace</div>
         <router-link
           v-for="item in navItems"
@@ -157,7 +159,7 @@ watch(() => info.value?.name, (name) => {
         </router-link>
       </nav>
 
-      <div style="flex: 1;"></div>
+      <ConnectionRail @error="(m: string) => (errorMessage = m)" />
 
       <div v-if="info" class="nav-pill" style="margin: 10px 12px 12px;" data-testid="folder-pill">
         <span class="label"><span class="dot"></span>Saved as you go</span>
@@ -176,6 +178,7 @@ watch(() => info.value?.name, (name) => {
 
     <AgentPanel :open="agentOpen" @close="agentOpen = false" />
     <McpApprovals />
+    <ConnectionDialogs />
 
     <div v-if="errorMessage" class="error-toast" role="alert">{{ errorMessage }}</div>
   </div>

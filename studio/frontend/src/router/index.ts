@@ -8,6 +8,7 @@ import SkillsView from '../views/SkillsView.vue'
 import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import AgentView from '../views/AgentView.vue'
+import ConnectionEditorView from '../views/ConnectionEditorView.vue'
 
 // #68: the Access application layer (forms, subforms, relationships UI,
 // switchboard, macros, banded reports, App Mode) is gone. Studio is the
@@ -21,7 +22,12 @@ const routes = [
   { path: '/', name: 'dashboard', component: DashboardView },
   { path: '/notebooks', name: 'notebooks', component: NotebooksView },
   { path: '/notebooks/:id', name: 'notebook', component: NotebookView },
+  // The rail replaces the Tables nav item (#117); the route stays for deep links
+  // (/tables?table=prod_pg.public.orders).
   { path: '/tables', name: 'tables', component: TableBrowserView },
+  // Connection editor (#117): a page, not a modal, so the rail stays visible.
+  { path: '/connections/new', name: 'connection-new', component: ConnectionEditorView },
+  { path: '/connections/:name', name: 'connection-edit', component: ConnectionEditorView },
   { path: '/queries', name: 'queries', component: QueryEditorView },
   // Skills (#62) — domain context the agent loads on demand.
   { path: '/skills', name: 'skills', component: SkillsView },

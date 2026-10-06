@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
 import { isReadOnly, workspaceInfo } from '../composables/useWorkspace'
+import { connect } from '../composables/useConnections'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { formatCell, cellClass, cellEditText, isNumericType } from '../lib/formatCell'
@@ -12,6 +13,7 @@ import { formatCell, cellClass, cellEditText, isNumericType } from '../lib/forma
 // #82: opening /tables?table=orders (e.g. "Open table →" after an import)
 // pre-selects that table once the table list has loaded.
 const route = useRoute()
+const router = useRouter()
 
 // Autofocus + select directive for the inline cell editor. select() only exists
 // on text inputs, so guard it for checkbox/date/select editors.
@@ -32,7 +34,20 @@ const vFocus = {
 // Opened read-only (another program owns the database): nothing here can write,
 // and the controls say why instead of failing later.
 const readOnlyReason = computed(() => `Opened read-only: ${workspaceInfo.value?.holder?.text || 'another program'} is using this workspace's database. Take over the workspace to make changes.`)
+// #117: why the selected table can't be edited (a read-only connection, a view,
+// a locked file), from GetTableCapabilities. Null means editable.
+const caps = ref<TableCapabilities | null>(null)
+const locked = computed(() => isReadOnly.value || (caps.value !== null && !caps.value.editable))
+const lockText = computed(() => {
+  if (caps.value && !caps.value.editable) return caps.value.text
+  return readOnlyReason.value
+})
 const tables = ref<string[]>([])
+// base table or view, for the Drop table button (a view is dropped elsewhere)
+const selectedKind = computed(() => {
+  for (const g of groups.value) for (const t of g.tables) if (t.qualified === selectedTable.value) return t.kind
+  return 'table'
+})
 const groups = ref<CatalogGroup[]>([])
 // Connections that could not be listed (locked by another program, an error); a
 // plain "not connected yet" is not a problem.
@@ -156,6 +171,14 @@ async function loadTables() {
   loading.value = true
   try {
     groups.value = (await window.go.main.App.ListCatalogGroups()) || []
+    // A deep link (/tables?table=prod_pg.public.orders) to a connection that has
+    // not been used yet connects it first (the rail does the same on expand).
+    const want = route.query.table
+    const cn = typeof want === 'string' && want.includes('.') ? want.split('.')[0] : ''
+    if (cn && groups.value.some((g) => g.connection === cn && g.status === 'not-connected')) {
+      await connect(cn)
+      groups.value = (await window.go.main.App.ListCatalogGroups()) || []
+    }
     tables.value = groups.value.flatMap((g) => g.tables.map((t) => t.qualified))
   } catch { /* ignore */ }
   loading.value = false
@@ -208,6 +231,9 @@ async function selectTable(name: string) {
   try {
     tableInfo.value = await window.go.main.App.DescribeTable(name)
   } catch { tableInfo.value = null }
+  try {
+    caps.value = await window.go.main.App.GetTableCapabilities(name)
+  } catch { caps.value = null }
   await loadData()
 }
 
@@ -366,7 +392,7 @@ async function confirmDropTable() {
 }
 
 function openAddRow() {
-  if (!tableInfo.value) return
+  if (!tableInfo.value || locked.value) return
   newRowValues.value = {}
   for (const col of tableInfo.value.columns) {
     newRowValues.value[col.name] = ''
@@ -426,7 +452,7 @@ function pkColumn(): ColumnInfo | undefined {
 // table has a primary key (so UpdateRow has something to target) and the cell
 // being edited is not itself the primary-key column (PKs are immutable here).
 function startEdit(rowIdx: number, colIdx: number) {
-  if (!tableData.value) return
+  if (!tableData.value || locked.value) return
   // If already editing this exact cell, keep the in-flight value (avoids a
   // single-click resetting an edit the user started with double-click).
   if (editing.value && editing.value.row === rowIdx && editing.value.col === colIdx) return
@@ -531,40 +557,6 @@ watch(statusMessage, (msg) => {
 
 <template>
   <div class="flex h-full">
-    <!-- Table list -->
-    <div class="w-56 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
-      <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
-        <h2 class="sh-label" style="margin: 0;">Tables</h2>
-        <button @click="showNewTableModal = true" class="btn btn-primary btn-sm" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : 'Create a table'" data-testid="new-table"><Icon name="plus" :size="14" /> New</button>
-      </div>
-      <div class="flex-1 overflow-auto">
-        <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
-        <div v-else-if="tables.length === 0 && groups.every((g) => g.status === 'ok')" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No tables</div>
-        <template v-else>
-          <section v-for="g in groups" :key="g.connection" :aria-label="`Tables in ${g.connection}`" data-testid="table-group">
-            <div class="side-section" style="padding: 10px 16px 4px; display: flex; align-items: center; gap: 6px;">
-              <span>{{ g.connection }}</span>
-              <Icon v-if="g.readOnly" name="lock" :size="11" aria-label="Read-only" />
-              <span style="margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500;" v-if="g.status !== 'ok'" :title="g.detail || g.status">{{ g.status === 'not-connected' ? 'not connected' : g.status === 'locked-by' ? 'in use' : g.status }}</span>
-            </div>
-            <div v-if="g.status === 'ok' && g.tables.length === 0" class="px-4 py-1 sh-micro" style="color: var(--sh-graphite);">No tables yet</div>
-            <div
-              v-for="t in g.tables"
-              :key="t.qualified"
-              @click="selectTable(t.qualified)"
-              class="px-4 py-2 cursor-pointer border-b border-line flex items-center justify-between group text-sm font-medium"
-              :class="selectedTable === t.qualified ? 'row-selected' : 'hover:bg-[var(--sh-hover)]'"
-              data-testid="table-row"
-              :data-table="t.qualified"
-            >
-              <span class="truncate flex items-center gap-2"><Icon :name="t.kind === 'view' ? 'eye' : 'database'" :size="14" /> {{ t.name }}</span>
-              <button v-if="t.kind !== 'view'" @click.stop="dropTable(t.qualified)" class="btn btn-ghost btn-sm hover-reveal" style="color: var(--sh-error);" :aria-label="`Drop table ${t.name}`" :title="`Drop ${t.name}`"><Icon name="trash" :size="14" /></button>
-            </div>
-          </section>
-        </template>
-      </div>
-    </div>
-
     <!-- Data area -->
     <div class="flex-1 overflow-auto flex flex-col">
       <div v-if="!selectedTable && tables.length === 0 && !loading && unavailable.length" class="flex-1 flex flex-col items-center justify-center gap-4" data-testid="tables-unavailable">
@@ -586,7 +578,10 @@ watch(statusMessage, (msg) => {
           <button @click="showNewTableModal = true" class="btn btn-primary" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : undefined"><Icon name="plus" :size="16" /> Create table</button>
         </div>
       </div>
-      <div v-else-if="!selectedTable" class="flex-1 flex items-center justify-center text-[var(--sh-graphite)] sh-mono">Select a table</div>
+      <div v-else-if="!selectedTable" class="flex-1 flex flex-col items-center justify-center gap-3 text-[var(--sh-graphite)]" data-testid="pick-from-rail">
+        <span class="sh-mono">Choose a table in the Connections list on the left.</span>
+        <button @click="showNewTableModal = true" class="btn btn-sm" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : 'Create a table'" data-testid="new-table"><Icon name="plus" :size="14" /> New table</button>
+      </div>
       <template v-else>
         <!-- Toolbar -->
         <div class="page-subhead" style="padding: 14px 24px;">
@@ -595,7 +590,18 @@ watch(statusMessage, (msg) => {
           <button @click="openFbF" class="btn btn-sm"><Icon name="filter" :size="14" /> Filter by Form</button>
           <button v-if="activeFilter" @click="saveFilterAsQuery" class="btn btn-sm"><Icon name="save" :size="14" /> Save as query</button>
           <button v-if="activeFilter" @click="(clearFilter(), loadData())" class="btn btn-ghost btn-sm"><Icon name="x" :size="14" /> Clear filter</button>
-          <button @click="openAddRow" class="btn btn-primary btn-sm" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : 'Add a row'" data-testid="add-row"><Icon name="plus" :size="14" /> Add row</button>
+          <button v-if="!locked && selectedKind === 'table'" @click="dropTable(selectedTable!)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" data-testid="drop-table"><Icon name="trash" :size="14" /> Drop table</button>
+          <span v-if="locked && caps" class="badge" data-testid="readonly-badge"><Icon name="lock" :size="11" /> Read-only</span>
+          <button @click="openAddRow" class="btn btn-primary btn-sm" :disabled="locked" :title="locked ? lockText : 'Add a row'" data-testid="add-row"><Icon name="plus" :size="14" /> Add row</button>
+        </div>
+        <!-- Why this table can't be edited (SPEC 07 E). -->
+        <div v-if="caps && !caps.editable" class="note attn" role="status" data-testid="readonly-reason" style="margin: 12px 24px 0;">
+          <Icon name="lock" :size="16" />
+          <div>
+            <b>This table is read-only.</b>{{ ' ' }}<span>{{ caps.text }}</span>
+            <span v-if="caps.reason === 'connection-read-only'" class="help" style="display: block;">To change data, turn off Read-only for the connection. For production data, use a database user that is allowed to write.</span>
+          </div>
+          <button v-if="caps.reason === 'connection-read-only'" class="btn btn-sm" style="margin-left: auto;" @click="router.push(`/connections/${caps.connection}`)">Edit connection</button>
         </div>
 
         <!-- Record-count bar -->
@@ -658,6 +664,7 @@ watch(statusMessage, (msg) => {
                   <td
                     v-for="(cell, j) in row"
                     :key="j"
+                    :aria-readonly="locked ? 'true' : undefined"
                     @click="startEdit(i, j)"
                     @dblclick="startEdit(i, j)"
                     :class="[
@@ -734,7 +741,7 @@ watch(statusMessage, (msg) => {
                     >{{ cellError!.message.split('\n')[0] }}</div>
                   </td>
                   <td>
-                    <button @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" aria-label="Delete row" title="Delete row"><Icon name="trash" :size="14" /></button>
+                    <button v-if="!locked" @click="deleteRow(row)" class="btn btn-ghost btn-sm" style="color: var(--sh-error);" aria-label="Delete row" title="Delete row"><Icon name="trash" :size="14" /></button>
                   </td>
                 </tr>
               </template>

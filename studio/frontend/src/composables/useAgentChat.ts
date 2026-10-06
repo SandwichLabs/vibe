@@ -21,6 +21,11 @@ export interface PendingApproval {
   sql?: string
   where?: string
   destructive: boolean
+  // Connections names the changed connections that are not local files
+  // (Postgres, MotherDuck, ...): the card says where the change goes (#117).
+  connections?: string[]
+  // rows is the policy's estimate of rows affected (-1 or absent: unknown).
+  rows?: number
   // 'gone' is local-only: ResolveAgentApproval itself failed (e.g. the
   // request already resolved/expired server-side before the click landed)
   // — see resolveApproval. Every other state mirrors agent:approval_done's
@@ -79,6 +84,8 @@ interface ApprovalRequestPayload {
   sql?: string
   where?: string
   destructive: boolean
+  connections?: string[]
+  rows?: number
 }
 
 interface ApprovalPayload {
@@ -207,7 +214,7 @@ export function useAgentChat() {
       const req = p.request
       const approval: PendingApproval = {
         id: req.id, summary: req.summary, sql: req.sql, where: req.where,
-        destructive: req.destructive, state: 'pending',
+        destructive: req.destructive, connections: req.connections, rows: req.rows, state: 'pending',
       }
       const step = agentMsg.steps.find((s) => s.id === req.callId)
       if (step) step.approval = approval

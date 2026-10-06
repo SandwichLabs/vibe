@@ -28,7 +28,7 @@ vi.mock('vue-router', async () => {
   const { reactive } = await import('vue')
   const mockRoute = reactive({ query: {} as Record<string, string> })
   ;(globalThis as any).__mockRoute = mockRoute
-  return { useRoute: () => mockRoute }
+  return { useRoute: () => mockRoute, useRouter: () => ({ push: () => {} }) }
 })
 
 import TableBrowserView from './TableBrowserView.vue'
@@ -122,8 +122,8 @@ function mountView() {
 async function openTable(wrapper: any) {
   await flushPromises()
   // Click the table in the sidebar list.
-  const item = wrapper.findAll('.cursor-pointer').find((w: any) => w.text().includes('people'))
-  await item!.trigger('click')
+  // The Connections rail is the table list now: opening a table is a route query.
+  ;(globalThis as any).__mockRoute.query.table = 'people'
   await flushPromises()
 }
 
@@ -252,7 +252,7 @@ describe('TableBrowserView inline datasheet editing', () => {
     // selectTable resolves cleanly.
     app.DescribeTable = vi.fn(async () => ({ name: 'other', columns: [{ name: 'id', type: 'INTEGER', not_null: true, pk: true }] }))
     app.GetTableData = vi.fn(async () => ({ columns: ['id'], rows: [[1]], page: 1, page_size: 50, total_rows: 1, total_pages: 1 }))
-    await wrapper.findAll('.w-56 [class*=cursor-pointer]')[1].trigger('click')
+    ;(globalThis as any).__mockRoute.query.table = 'other'
     await flushPromises()
 
     expect(wrapper.find('.cell-error').exists()).toBe(false)
@@ -579,11 +579,55 @@ describe('TableBrowserView ?table= pre-select', () => {
     workspaceInfo.value = { readOnly: true, holder: { text: 'vibe mcp serve (pid 4182)' } } as unknown as WorkspaceInfo
     makeApp()
     const wrapper = mountView()
-    await openTable(wrapper)
+    await flushPromises()
     const nw = wrapper.find('[data-testid="new-table"]')
     expect((nw.element as HTMLButtonElement).disabled).toBe(true)
     expect(nw.attributes('title')).toContain('vibe mcp serve (pid 4182)')
+    await openTable(wrapper)
     expect((wrapper.find('[data-testid="add-row"]').element as HTMLButtonElement).disabled).toBe(true)
     resetWorkspace()
+  })
+
+  // #117: a read-only connection, a view or a locked file says why (SPEC 07 E).
+  it('has no table list of its own: the Connections rail is the list, and a table opens from the route', async () => {
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="table-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pick-from-rail"]').exists()).toBe(true)
+    await openTable(wrapper)
+    expect(wrapper.find('[data-testid="pick-from-rail"]').exists()).toBe(false)
+    expect(wrapper.find('h1').text()).toBe('people')
+  })
+
+  it('a table on a read-only connection is locked, with the reason and a way to the connection', async () => {
+    const { app } = makeApp()
+    ;(app as any).GetTableCapabilities = vi.fn(async () => ({ connection: 'prod_pg', editable: false, reason: 'connection-read-only', text: 'prod_pg is set to read-only, so rows can\'t be added, edited or deleted here.' }))
+    const wrapper = mountView()
+    await openTable(wrapper)
+    const reason = wrapper.find('[data-testid="readonly-reason"]')
+    expect(reason.exists()).toBe(true)
+    expect(reason.text()).toContain('This table is read-only.')
+    expect(reason.text()).toContain('prod_pg is set to read-only')
+    expect(reason.text()).toContain('turn off Read-only for the connection')
+    expect(wrapper.find('[data-testid="readonly-badge"]').exists()).toBe(true)
+    const add = wrapper.find('[data-testid="add-row"]')
+    expect((add.element as HTMLButtonElement).disabled).toBe(true)
+    expect(add.attributes('title')).toContain('prod_pg is set to read-only')
+    // no delete affordance, and a click on a cell does not start an edit
+    expect(wrapper.find('button[aria-label="Delete row"]').exists()).toBe(false)
+    const td = wrapper.findAll('tbody td').find((t: any) => t.text().includes('Ada'))
+    await td?.trigger('click')
+    expect(wrapper.find('.cell-input').exists()).toBe(false)
+    expect(td?.attributes('aria-readonly')).toBe('true')
+  })
+
+  it('an editable table shows no banner', async () => {
+    const { app } = makeApp()
+    ;(app as any).GetTableCapabilities = vi.fn(async () => ({ connection: 'local', editable: true, reason: '', text: '' }))
+    const wrapper = mountView()
+    await openTable(wrapper)
+    expect(wrapper.find('[data-testid="readonly-reason"]').exists()).toBe(false)
+    expect((wrapper.find('[data-testid="add-row"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 })

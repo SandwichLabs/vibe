@@ -61,6 +61,14 @@ type App struct {
 	// duplicateOf lists other known workspace folders that carry this one's id.
 	duplicateOf []string
 
+	// connSigs is, per connection, a signature of the definition and sign-in
+	// the session was last registered from (connections.go syncConnections):
+	// a change on disk or in the editor re-registers just that connection.
+	connSigMu sync.Mutex
+	// syncMu serialises whole syncs (an editor save and the file watcher can race).
+	syncMu   sync.Mutex
+	connSigs map[string]string
+
 	// initialPath is the folder passed on the command line, and initialNote a
 	// plain-language problem with it (a .vibe file, a missing folder).
 	initialPath string
@@ -746,22 +754,6 @@ func (a *App) ListTables() ([]string, error) {
 		tables = append(tables, t.Name)
 	}
 	return tables, nil
-}
-
-// ListConnections returns every connection of the session with its status
-// (the default catalog first). Status messages are already redacted.
-func (a *App) ListConnections() ([]session.Status, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return nil, err
-	}
-	sess := a.sess
-	if sess == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-	return sess.Connections(), nil
 }
 
 // ListCatalogTables returns the tables of one connection's default schema,
@@ -1460,6 +1452,29 @@ func humanDuration(d time.Duration) string {
 }
 
 func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
+	return a.RunQuery(RunQueryRequest{SQL: sqlStr})
+}
+
+// RunQueryRequest is the query editor's run (#117, SPEC 08). Connection is the
+// "Run on" choice of this editor tab: the catalog unqualified names resolve
+// against, pinned to one pooled connection for this run (USE is per
+// connection). Empty is the workspace default. Qualified names
+// (prod_pg.public.orders) work whatever it is, and may span connections.
+type RunQueryRequest struct {
+	SQL        string `json:"sql"`
+	Connection string `json:"connection"`
+	// TabID names the editor tab; it only labels the run (the choice is never
+	// session-global).
+	TabID string `json:"tabId"`
+}
+
+// RunQuery runs the query editor's statement on the chosen connection.
+func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
+	if req.Connection != "" {
+		if err := session.ValidateName(req.Connection); err != nil {
+			return nil, fmt.Errorf("unknown connection %q", req.Connection)
+		}
+	}
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -1467,8 +1482,11 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 		return nil, err
 	}
 
+	sqlStr := req.SQL
+	before := statusSnapshot(a.sess)
 	start := time.Now()
-	rs, total, err := a.engine.ExecuteCapped(context.Background(), sqlStr, nil, queryGridRowCap)
+	rs, total, err := a.engine.ExecuteCappedIn(context.Background(), req.Connection, sqlStr, nil, queryGridRowCap)
+	a.afterRun(a.sess, before, sqlStr)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -1566,6 +1584,7 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	// of the sandbox mode, via its own checkSQLClassReadOnly gate — see this
 	// function's doc comment — so no additional cap is needed here.
 	handler := a.newAgentToolHandler(agents.ModeFull)
+	runSess := a.sess
 	a.mu.RUnlock()
 
 	// Row cap enforced server side (review fix) and pushed down into the
@@ -1586,7 +1605,9 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	// Go-side wait.
 	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
 	defer cancel()
+	before := statusSnapshot(runSess)
 	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
+	a.afterRun(runSess, before, sqlStr)
 	if err != nil {
 		return nil, a.explainReadOnlyDenial(err)
 	}
@@ -1657,6 +1678,32 @@ type QuerySaveResult struct {
 // round trip (#91: the id used to be discarded, so a freshly-created query
 // couldn't become "selected").
 func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveResult, error) {
+	return a.saveQuery(id, title, sqlStr, description, rev, nil)
+}
+
+// SaveQueryRequest is SaveQuery with the editor's "Run on" choice (#117): the
+// connection is saved with the query (its front matter) so a teammate runs it
+// on the same connection. An empty Connection clears it (the workspace default).
+type SaveQueryRequest struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	SQL         string `json:"sql"`
+	Description string `json:"description"`
+	Rev         string `json:"rev"`
+	Connection  string `json:"connection"`
+}
+
+// SaveQueryOn creates or updates a saved query together with its connection.
+func (a *App) SaveQueryOn(req SaveQueryRequest) (*QuerySaveResult, error) {
+	if req.Connection != "" {
+		if err := session.ValidateName(req.Connection); err != nil {
+			return nil, fmt.Errorf("unknown connection %q", req.Connection)
+		}
+	}
+	return a.saveQuery(req.ID, req.Title, req.SQL, req.Description, req.Rev, &req.Connection)
+}
+
+func (a *App) saveQuery(id, title, sqlStr, description, rev string, connection *string) (*QuerySaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1682,6 +1729,9 @@ func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveR
 				q.Description = base.Description
 			}
 		}
+	}
+	if connection != nil {
+		q.Connection = *connection
 	}
 
 	// Update first for an existing query; a new one (or an id the store does
@@ -2190,6 +2240,9 @@ type TaskCellArg struct {
 	View   string `json:"view,omitempty"`
 	Label  string `json:"label,omitempty"`
 	Source string `json:"source,omitempty"`
+	// Connection is the connection the cell runs on ("" = the workspace default);
+	// the model is told to keep it (#117).
+	Connection string `json:"connection,omitempty"`
 }
 
 type TaskTurnArg struct {
@@ -2209,6 +2262,20 @@ type AgentTaskRequest struct {
 	Tables          []string      `json:"tables,omitempty"`
 	NotebookSummary []string      `json:"notebookSummary,omitempty"`
 	FollowUp        []TaskTurnArg `json:"followUp,omitempty"`
+}
+
+// taskCellFrom converts the cell the person is editing into the task's cell. A
+// connection name is validated before it can reach the prompt.
+func taskCellFrom(c *TaskCellArg) (*llm.TaskCell, error) {
+	if c == nil {
+		return nil, nil
+	}
+	if c.Connection != "" {
+		if err := session.ValidateName(c.Connection); err != nil {
+			return nil, fmt.Errorf("unknown connection %q", c.Connection)
+		}
+	}
+	return &llm.TaskCell{Type: c.Type, SQL: c.SQL, View: c.View, Label: c.Label, Source: c.Source, Connection: c.Connection}, nil
 }
 
 // AgentTask runs one task-mode turn (#66 part B): a bounded, single-purpose
@@ -2274,9 +2341,9 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 		cancel()
 	}()
 
-	var cell *llm.TaskCell
-	if req.Cell != nil {
-		cell = &llm.TaskCell{Type: req.Cell.Type, SQL: req.Cell.SQL, View: req.Cell.View, Label: req.Cell.Label, Source: req.Cell.Source}
+	cell, err := taskCellFrom(req.Cell)
+	if err != nil {
+		return nil, err
 	}
 	followUp := make([]llm.TaskTurn, 0, len(req.FollowUp))
 	for _, t := range req.FollowUp {

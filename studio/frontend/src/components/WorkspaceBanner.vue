@@ -4,7 +4,8 @@
 // owns its database. Read-only is explained here, not in the agent pill.
 import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
-import { workspaceInfo, takeOverOpen } from '../composables/useWorkspace'
+import { workspaceInfo, takeOverOpen, openWorkspacePath } from '../composables/useWorkspace'
+import { relaunch, refreshConnections } from '../composables/useConnections'
 import { errorText } from '../lib/errors'
 
 const dismissed = ref('')
@@ -14,6 +15,21 @@ const who = computed(() => info.value?.holder?.text || 'Another program')
 
 const error = ref('')
 const busy = ref(false)
+
+// MotherDuck accepts one token per process (D10): after its extension is
+// installed or its token changed, the workspace session has to be closed and
+// reopened. That is cheaper than relaunching the app, and a fresh session is
+// all it needs.
+const reopening = ref(false)
+async function reopen() {
+  if (!info.value) return
+  reopening.value = true
+  error.value = ''
+  const res = await openWorkspacePath(info.value.root)
+  if (!res.ok && res.error) error.value = res.error
+  await refreshConnections()
+  reopening.value = false
+}
 
 // A copied folder shares its original's id, and so its keychain entries.
 const dupes = computed(() => info.value?.duplicateIds ?? [])
@@ -34,6 +50,14 @@ async function trust() {
 </script>
 
 <template>
+  <div v-if="relaunch.required && info" class="ws-banner" role="status" data-testid="relaunch-banner">
+    <Icon name="refresh" :size="20" class="lead-ico" />
+    <div class="bt">
+      <b>Reopen this workspace to finish connecting.</b> {{ relaunch.message || 'MotherDuck signs in once, when the workspace opens.' }}
+      <span class="sub">It takes a moment and keeps your notebooks. Unsaved edits are saved first. {{ error }}</span>
+    </div>
+    <div class="row"><button class="btn btn-primary btn-sm" type="button" :disabled="reopening" data-testid="relaunch" @click="reopen">{{ reopening ? 'Reopening…' : 'Reopen workspace' }}</button></div>
+  </div>
   <div v-if="info?.localUntrusted" class="ws-banner attn" role="alert" data-testid="untrusted-banner">
     <Icon name="alert" :size="20" class="lead-ico" />
     <div class="bt">

@@ -38,6 +38,17 @@ describe('built-in themes', () => {
     aa(c['syntax.string'], c['editor.bg'])
     aa(c['syntax.number'], c['editor.bg'])
     aa(c['syntax.comment'], c['editor.bg'])
+    // Connection status icons (#117, design review): the warn (needs credentials)
+    // and info (extension needed) glyphs, and the not-connected ring in fg.muted,
+    // are non-text marks on the sidebar and on content surfaces; 3:1 applies.
+    // fg.disabled is deliberately not used for a status mark.
+    for (const bg of ['sidebar.bg', 'surface', 'bg'] as const) {
+      aa(c['warn'], c[bg], 3)
+      aa(c['info'], c[bg], 3)
+      aa(c['fg.muted'], c[bg], 3)
+      aa(c['success'], c[bg], 3)
+      aa(c['error'], c[bg], 3)
+    }
     // Borders are structural; 3:1 is the non-text minimum.
     aa(c['border'], c['bg'], 3)
     aa(c['focus'], c['bg'], 3)

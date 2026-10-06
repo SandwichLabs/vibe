@@ -99,3 +99,22 @@ describe('WorkspaceBanner (read-only)', () => {
     expect(w.find('[data-testid="untrusted-banner"]').exists()).toBe(false)
   })
 })
+
+describe('WorkspaceBanner relaunch prompt (#117, D10)', () => {
+  beforeEach(() => { _resetForTests(); document.body.innerHTML = '' })
+
+  it('asks to reopen the workspace when MotherDuck needs a fresh session, and reopening is a close-and-open of the same folder', async () => {
+    const { relaunch } = await import('../composables/useConnections')
+    const app = makeApp({ OpenWorkspace: vi.fn(async () => ({ status: 'opened', path: '/w/a', info: base })), IsWorkspaceOpen: vi.fn(async () => true), ListConnections: vi.fn(async () => ({ connections: [], relaunchRequired: false })) })
+    workspaceInfo.value = base
+    relaunch.value = { required: true, message: 'The MotherDuck extension is installed now. Reopen the workspace so it can sign in.' }
+    const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
+    const b = w.find('[data-testid="relaunch-banner"]')
+    expect(b.text()).toContain('Reopen this workspace to finish connecting.')
+    expect(b.text()).toContain('The MotherDuck extension is installed now.')
+    await w.find('[data-testid="relaunch"]').trigger('click')
+    await flushPromises()
+    expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/a')
+    relaunch.value = { required: false, message: '' }
+  })
+})

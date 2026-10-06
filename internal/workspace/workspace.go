@@ -81,6 +81,10 @@ type Workspace interface {
 	// SetSignIn chooses this person's sign-in method for a connection
 	// (keychain, prompt or env:PREFIX); it is stored outside the folder.
 	SetSignIn(name, method string) error
+	// RebindSignIn is SetSignIn for a person who confirmed the server changed:
+	// SetSignIn refuses (ErrRebindNeedsConfirm) to bind an environment sign-in to
+	// a server other than the one the saved sign-in was chosen for.
+	RebindSignIn(name, method string) error
 	// SetCredentials saves a credential for a connection under its sign-in
 	// method, bound to the current fingerprint. Empty secret fields keep the
 	// stored ones. Write-only: nothing here reads a secret back.

@@ -171,7 +171,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
               <td><code>{{ c.name }}</code></td>
               <td>
                 <template v-if="isOwn(c)">Yes, and it asks you first unless you turned that off.</template>
-                <template v-else><Icon name="lock" :size="12" /> Yes, and it always asks first.</template>
+                <template v-else><span style="display: inline-flex; align-items: center; gap: 6px;"><Icon name="lock" :size="12" /> Yes, and it always asks first.</span></template>
               </td>
             </tr>
             <tr>

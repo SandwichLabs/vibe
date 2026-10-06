@@ -1,14 +1,16 @@
 <script setup lang="ts">
 // QueryEditorView — the Query Explorer (parity W5; mockup #8 hifi-power).
 //
-// Left rail: a live schema tree (tables with row counts; expanding a table
-// lazily describes its columns with PK/FK badges) above the kept saved-query
-// list. Right: the SQL editor over a result bar carrying run-status metadata
+// Left rail: the saved-query list (the schema tree moved to the global
+// Connections rail, #117). Right: the SQL editor over a result bar carrying run-status metadata
 // (success badge, row count, duration, DuckDB engine label, last-run time)
 // and the result grid. The subhead exposes Save, CSV/Parquet export (DuckDB
 // COPY via ExportQueryResults), an Ask-agent jump (opens the W0 panel), and
 // Run.
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import ConnectionSelect from '../components/ConnectionSelect.vue'
+import { connectionList, defaultConnectionName, refreshConnections, openPromptFor, startConnectionTracking } from '../composables/useConnections'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import ConflictBanner from '../components/ConflictBanner.vue'
@@ -59,14 +61,15 @@ const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 const lastRunAt = ref('')
 const lastRunOk = ref<boolean | null>(null)
 
-// Schema tree state (W5).
-interface TableStat { name: string; rows: number }
-interface TreeColumn { name: string; type: string; pk: boolean; fk: boolean }
-const tableStats = ref<TableStat[]>([])
-const expandedTable = ref<string | null>(null)
-const columnsByTable = ref<Record<string, TreeColumn[]>>({})
+// The "Run on" choice of THIS editor (SPEC 08): per editor, saved with a saved
+// query, never session-global. '' is the workspace default.
+const route = useRoute()
+const router = useRouter()
+const conn = ref('')
+const savedConn = ref('')
+const tabId = Math.random().toString(36).slice(2, 8)
 
-const dirty = computed(() => sqlText.value.trim() !== '' && sqlText.value !== savedSQL.value)
+const dirty = computed(() => sqlText.value.trim() !== '' && (sqlText.value !== savedSQL.value || (selectedId.value !== null && conn.value !== savedConn.value)))
 const currentTitle = computed(() => {
   const q = queries.value.find((x) => x.id === selectedId.value)
   return q?.title || 'untitled_query.sql'
@@ -92,59 +95,6 @@ async function loadQueries() {
   loading.value = false
 }
 
-async function loadSchemaTree() {
-  try {
-    tableStats.value = (await window.go.main.App.ListTableStats()) || []
-  } catch {
-    tableStats.value = []
-  }
-}
-
-// toggleTable expands/collapses a tree node, lazily describing its columns.
-// PK and FK flags both come straight from the backend (DescribeTable reads
-// DuckDB's own duckdb_constraints() catalog — #68 dropped the
-// _vibe_relationships metadata table, but a plain-SQL inline REFERENCES is
-// still a real DuckDB constraint the catalog reports).
-async function toggleTable(name: string) {
-  if (expandedTable.value === name) {
-    expandedTable.value = null
-    return
-  }
-  expandedTable.value = name
-  if (!columnsByTable.value[name]) {
-    try {
-      const info = await window.go.main.App.DescribeTable(name)
-      columnsByTable.value[name] = (info?.columns ?? []).map((c: any) => ({
-        name: c.name,
-        type: friendlyColType(c.type),
-        pk: Boolean(c.pk),
-        fk: Boolean(c.fk),
-      }))
-    } catch (e: any) {
-      errorMessage.value = 'Failed to describe table: ' + errorText(e)
-    }
-  }
-}
-
-// friendlyColType compacts DuckDB type names for the narrow tree rail.
-function friendlyColType(t: string): string {
-  const u = (t || '').toUpperCase()
-  if (u.startsWith('VARCHAR') || u === 'TEXT') return 'text'
-  if (u === 'BIGINT' || u === 'INTEGER' || u === 'SMALLINT') return 'int'
-  if (u === 'DOUBLE' || u === 'FLOAT' || u === 'REAL') return 'float'
-  if (u.startsWith('DECIMAL') || u.startsWith('NUMERIC')) return 'decimal'
-  if (u.startsWith('TIMESTAMP')) return 'timestamp'
-  if (u === 'DATE') return 'date'
-  if (u === 'BOOLEAN') return 'bool'
-  return t.toLowerCase()
-}
-
-// insertTableQuery seeds the editor with a starter SELECT for a tree table
-// (double-click affordance).
-function insertTableQuery(name: string) {
-  sqlText.value = `SELECT * FROM "${name}" LIMIT 100`
-}
-
 async function selectQuery(id: string) {
   selectedId.value = id
   try {
@@ -152,6 +102,8 @@ async function selectQuery(id: string) {
     selectedRev.value = q.rev ?? ''
     sqlText.value = q.sql
     savedSQL.value = q.sql
+    conn.value = (q as { connection?: string }).connection ?? ''
+    savedConn.value = conn.value
     saveTitle.value = q.title
   } catch (e: any) {
     error.value = errorText(e)
@@ -164,20 +116,40 @@ async function runQuery() {
   error.value = ''
   result.value = null
   try {
-    result.value = await window.go.main.App.ExecuteQuery(sqlText.value)
+    ranOn.value = ranOnText(sqlText.value)
+    result.value = await window.go.main.App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId })
     lastRunOk.value = true
   } catch (e: any) {
     error.value = errorText(e)
     lastRunOk.value = false
+    // A connection the statement names may need a sign-in or an extension: say
+    // so with the prompt, not only with an error line.
+    await refreshConnections()
+    const needy = connectionList.value.find((c) => ['needs-credentials', 'extension-missing'].includes(c.status) && (c.name === conn.value || mentions(sqlText.value, c.name)))
+    if (needy) openPromptFor(needy)
   }
   lastRunAt.value = new Date().toLocaleTimeString()
   running.value = false
 }
 
+// mentions: the statement names a connection in qualifier position (name.).
+function mentions(sql: string, name: string): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9_"])"?${name.replace(/[^A-Za-z0-9_]/g, '')}"?\\s*\\.`).test(sql)
+}
+// ranOnText says where the last run went: the chosen connection plus any other
+// a qualified name pulled in ("DuckDB · ran across local + prod_pg").
+const ranOn = ref('')
+function ranOnText(sql: string): string {
+  const base = conn.value || defaultConnectionName.value
+  const also = connectionList.value.filter((c) => c.name !== base && mentions(sql, c.name)).map((c) => c.name)
+  return also.length ? `ran across ${[base, ...also].join(' + ')}` : `ran on ${base}`
+}
+
 async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
-    const saved = await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '', selectedRev.value)
+    const saved = await window.go.main.App.SaveQueryOn({ id: selectedId.value || '', title: saveTitle.value, sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
+    savedConn.value = conn.value
     selectedId.value = saved.id
     // The save changed the file: its new revision goes with the next save.
     selectedRev.value = saved.rev ?? ''
@@ -243,9 +215,10 @@ async function flushPending() {
   const id = selectedId.value
   if (!id) throw new Error('this query was never saved (use Save query)')
   try {
-    const saved = await window.go.main.App.SaveQuery(id, saveTitle.value || currentTitle.value.replace('.sql', ''), sqlText.value, '', selectedRev.value)
+    const saved = await window.go.main.App.SaveQueryOn({ id, title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
     selectedRev.value = saved.rev ?? ''
     savedSQL.value = sqlText.value
+    savedConn.value = conn.value
   } catch (e: any) {
     if (isConflict(e)) raiseConflict(false)
     throw new Error(errorText(e))
@@ -312,6 +285,8 @@ async function confirmDeleteQuery() {
 function newQuery() {
   selectedId.value = null
   sqlText.value = ''
+  conn.value = ''
+  savedConn.value = ''
   savedSQL.value = ''
   result.value = null
   error.value = ''
@@ -334,7 +309,6 @@ function handleKeydown(e: KeyboardEvent) {
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 async function onDataChanged() {
   await loadQueries()
-  await loadSchemaTree()
 }
 let unsubDataChanged: (() => void) | null = null
 let unsubDisk: (() => void) | null = null
@@ -342,13 +316,27 @@ let unsubDisk: (() => void) | null = null
 onMounted(() => {
   unregisterPending = registerPendingSave(() => 'The query editor', flushPending)
   loadQueries()
-  loadSchemaTree()
+  startConnectionTracking()
+  applyRouteIntent()
   if (hasWailsRuntime()) {
     unsubDataChanged = EventsOn('data:changed', onDataChanged)
     unsubDisk = EventsOn('workspace:changed-on-disk', onDiskChange)
   }
 })
 onUnmounted(() => { unsubDataChanged?.(); unsubDisk?.(); unregisterPending?.() })
+
+// "New query here" / "New query on this table" in the rail open a fresh editor on
+// that connection: ?conn=prod_pg&sql=SELECT…&new=<stamp>.
+function applyRouteIntent() {
+  const c = route.query.conn
+  if (typeof c !== 'string' || !route.query.new) return
+  newQuery()
+  conn.value = c
+  const q = route.query.sql
+  if (typeof q === 'string') sqlText.value = q
+  void router.replace({ path: route.path })
+}
+watch(() => route.query.new, applyRouteIntent)
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
@@ -369,7 +357,8 @@ watch(statusMessage, (msg) => {
           <span v-if="dirty" class="badge badge--warn" data-testid="query-dirty">Unsaved</span>
         </div>
       </div>
-      <span class="spacer"></span>
+      <div class="subhead-actions">
+      <ConnectionSelect v-model="conn" />
       <button @click="saveTitle = saveTitle || currentTitle.replace('.sql',''), showSaveModal = true" class="btn btn-sm">
         <Icon name="save" :size="14" /> Save query
       </button>
@@ -391,6 +380,7 @@ watch(statusMessage, (msg) => {
       <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm" data-testid="run-query">
         <Icon name="play" :size="14" /> {{ running ? 'Running…' : `Run · ${shortcutLabel('Enter')}` }}
       </button>
+      </div>
     </div>
 
     <ConflictBanner
@@ -405,47 +395,8 @@ watch(statusMessage, (msg) => {
     />
 
     <div class="row" style="flex: 1; gap: 0; align-items: stretch; min-height: 0;">
-      <!-- LEFT RAIL — schema tree + saved queries -->
+      <!-- LEFT RAIL — saved queries (the schema tree is the global Connections rail) -->
       <div class="col rail">
-        <div class="rail-label">Tables · DuckDB</div>
-        <div class="schema-tree" data-testid="schema-tree">
-          <template v-for="t in tableStats" :key="t.name">
-            <div
-              class="table-name"
-              :class="{ on: expandedTable === t.name }"
-              data-testid="tree-table"
-              :title="'Double-click to query ' + t.name"
-              @click="toggleTable(t.name)"
-              @dblclick="insertTableQuery(t.name)"
-            >
-              <span style="display: inline-flex; align-items: center; gap: 6px;">
-                <Icon :name="expandedTable === t.name ? 'chevronDown' : 'chevronRight'" :size="12" />
-                {{ t.name }}
-              </span>
-              <span class="count" data-testid="tree-count">{{ t.rows }}</span>
-            </div>
-            <template v-if="expandedTable === t.name">
-              <div
-                v-for="c in columnsByTable[t.name] ?? []"
-                :key="c.name"
-                class="col"
-                data-testid="tree-col"
-              >
-                <span style="display: inline-flex; align-items: center; gap: 5px;">
-                  <Icon v-if="c.pk" name="key" :size="11" style="color: var(--sh-marigold);" />
-                  <Icon v-else-if="c.fk" name="link" :size="11" style="color: var(--sh-teal);" />
-                  {{ c.name }}
-                </span>
-                <span class="ct" :class="{ pk: c.pk, fk: c.fk }">
-                  {{ c.pk ? 'PK · ' : c.fk ? 'FK · ' : '' }}{{ c.type }}
-                </span>
-              </div>
-            </template>
-          </template>
-          <p v-if="tableStats.length === 0" class="sh-mono rail-empty">No tables yet</p>
-        </div>
-
-        <div class="rail-divider"></div>
         <div class="row" style="justify-content: space-between; align-items: center;">
           <div class="rail-label" style="margin: 0;">Saved queries</div>
           <button @click="newQuery" class="btn btn-ghost btn-sm" title="New query"><Icon name="plus" :size="14" /></button>
@@ -488,7 +439,7 @@ watch(statusMessage, (msg) => {
           <span v-else class="badge badge--error" data-testid="run-badge"><span class="dot"></span> Error</span>
           <span v-if="result"><span class="big ok">{{ result.total_rows.toLocaleString() }}</span> rows</span>
           <span v-if="result"><span class="big">{{ result.duration }}</span></span>
-          <span data-testid="run-engine"><Icon name="zap" :size="11" style="color: var(--sh-success); vertical-align: middle;" /> DuckDB</span>
+          <span data-testid="run-engine"><Icon name="zap" :size="11" style="color: var(--sh-success); vertical-align: middle;" /> DuckDB<template v-if="ranOn"> · {{ ranOn }}</template></span>
           <span class="spacer"></span>
           <span data-testid="run-last">Last run · {{ lastRunAt }}</span>
         </div>

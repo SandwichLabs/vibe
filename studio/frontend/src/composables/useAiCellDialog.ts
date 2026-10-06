@@ -26,6 +26,8 @@ export interface TaskCellArg {
   view?: string
   label?: string
   source?: string
+  // The connection the cell runs on ('' / undefined = the workspace default).
+  connection?: string
 }
 
 export interface FollowUpTurn {
@@ -39,6 +41,8 @@ export interface EnvelopeCell {
   view?: string
   label?: string
   markdown?: string
+  // The connection the proposal's SQL was previewed on; Apply must keep it.
+  connection?: string
 }
 
 export interface TaskEnvelope {
@@ -91,6 +95,7 @@ export interface CellSnapshot {
   source: string
   label?: string
   view?: string
+  connection?: string
 }
 
 /** Whether two snapshots represent the same cell content. Both null (no
@@ -98,7 +103,7 @@ export interface CellSnapshot {
 export function snapshotsEqual(a: CellSnapshot | null, b: CellSnapshot | null): boolean {
   if (a === b) return true
   if (!a || !b) return false
-  return a.source === b.source && a.label === b.label && a.view === b.view
+  return a.source === b.source && a.label === b.label && a.view === b.view && (a.connection ?? '') === (b.connection ?? '')
 }
 
 export interface ApplyPreview {
@@ -348,7 +353,10 @@ export function useAiCellDialog(host: DialogHost) {
 
     let note = ''
     if (action.kind === 'replace' && liveTarget && !preview?.cellDrifted) {
-      host.replaceCell(liveTarget.id, proposed)
+      // The proposal replaces this cell in place: when the model named no
+      // connection, the cell keeps the one it had (#117).
+      const keep = (liveTarget as { connection?: string }).connection
+      host.replaceCell(liveTarget.id, proposed.type === 'sql' && !proposed.connection && keep ? { ...proposed, connection: keep } : proposed)
     } else {
       // Coordinator follow-up #1: when there IS a live target (the drift or
       // C2 type-mismatch path), insert right after it — never append at the
@@ -370,7 +378,7 @@ export function useAiCellDialog(host: DialogHost) {
 function cellArgFromHost(host: DialogHost, id: string): TaskCellArg | undefined {
   const cell: any = host.cells.value.find((c) => c.id === id)
   if (!cell) return undefined
-  if (cell.type === 'sql') return { type: 'sql', sql: cell.source, view: cell.view, label: cell.label }
+  if (cell.type === 'sql') return { type: 'sql', sql: cell.source, view: cell.view, label: cell.label, ...(cell.connection ? { connection: cell.connection } : {}) }
   if (cell.type === 'markdown') return { type: 'markdown', source: cell.source }
   return undefined
 }

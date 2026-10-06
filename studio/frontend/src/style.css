@@ -15,6 +15,7 @@
 @import "./theme/bridge.css" layer(components);
 /* Workspace shell: launcher, switcher, menus, dialogs, banners (#111). */
 @import "./workspace.css" layer(components);
+@import "./connections.css" layer(components);
 
 /* === Tailwind @theme — utility classes wired to the theme roles === */
 @theme {

@@ -347,3 +347,46 @@ describe('useAiCellDialog state machine', () => {
     expect(host.insertCell).toHaveBeenCalledWith(expect.objectContaining({ sql: 'SELECT 1' }), undefined)
   })
 })
+
+describe('useAiCellDialog keeps the proposal\'s connection (#117)', () => {
+  it('sends the edited cell\'s connection to the task and hands the proposal\'s connection to the host unchanged', async () => {
+    const task = setBinding(async () => ({
+      outcome: 'cell',
+      cell: { type: 'sql', sql: 'SELECT * FROM orders', connection: 'prod_pg' },
+      explanation: 'ok',
+    }))
+    const host = makeHost([{ id: 'c1', type: 'sql', source: 'SELECT 1', connection: 'prod_pg' } as any])
+    const d = useAiCellDialog(host as any)
+    d.openEdit({ id: 'c1', type: 'sql' })
+    await d.submit('show orders')
+    expect(task).toHaveBeenCalledWith(expect.objectContaining({ cell: expect.objectContaining({ connection: 'prod_pg' }) }))
+    expect(d.apply()).toBe(true)
+    expect(host.replaceCell).toHaveBeenCalledWith('c1', expect.objectContaining({ connection: 'prod_pg' }))
+  })
+
+  it('treats a changed connection as drift: the cell is not silently overwritten', async () => {
+    setBinding(async () => ({ outcome: 'cell', cell: { type: 'sql', sql: 'SELECT 2' }, explanation: '' }))
+    const host = makeHost([{ id: 'c1', type: 'sql', source: 'SELECT 1', connection: 'a' } as any])
+    host.snapshotCell = vi.fn((id: string) => {
+      const c: any = host.cells.value.find((x: any) => x.id === id)
+      return { source: c.source, label: c.label, view: c.view, connection: c.connection }
+    })
+    const d = useAiCellDialog(host as any)
+    d.openEdit({ id: 'c1', type: 'sql' })
+    await d.submit('x')
+    ;(host.cells.value[0] as any).connection = 'b'
+    expect(d.previewApply()?.cellDrifted).toBe(true)
+  })
+})
+
+describe('Apply keeps the original cell\'s connection when the proposal has none (#117)', () => {
+  it('fills it in on replace, not on insert', async () => {
+    setBinding(async () => ({ outcome: 'cell', cell: { type: 'sql', sql: 'SELECT 2' }, explanation: '' }))
+    const host = makeHost([{ id: 'c1', type: 'sql', source: 'SELECT 1', connection: 'prod_pg' } as any])
+    const d = useAiCellDialog(host as any)
+    d.openEdit({ id: 'c1', type: 'sql' })
+    await d.submit('x')
+    d.apply()
+    expect(host.replaceCell).toHaveBeenCalledWith('c1', expect.objectContaining({ sql: 'SELECT 2', connection: 'prod_pg' }))
+  })
+})

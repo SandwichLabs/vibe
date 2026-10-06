@@ -32,6 +32,8 @@ import AiCellDialog from '../components/AiCellDialog.vue'
 import { useAiCellDialog, type EnvelopeCell } from '../composables/useAiCellDialog'
 import { errorText } from '../lib/errors'
 import CellDrawer from '../components/CellDrawer.vue'
+import ConnectionSelect from '../components/ConnectionSelect.vue'
+import { defaultConnectionName } from '../composables/useConnections'
 import ConflictBanner from '../components/ConflictBanner.vue'
 import { sqlSummary, cellTitle, cellMeta, CELL_FALLBACK_TITLE } from '../lib/cellSummary'
 
@@ -443,7 +445,7 @@ function addCell(type: CellState['type'], atEnd = true) {
 // mountEditors — so an agent-authored cell is indistinguishable from a
 // hand-typed one the moment it lands.
 function envelopeToRaw(id: string, ec: EnvelopeCell): RawCell {
-  if (ec.type === 'sql') return { id, type: 'sql', source: ec.sql || '', view: (ec.view as ViewKind) || 'table', viewPinned: !!ec.view, label: ec.label || '' }
+  if (ec.type === 'sql') return { id, type: 'sql', source: ec.sql || '', view: (ec.view as ViewKind) || 'table', viewPinned: !!ec.view, label: ec.label || '', ...(ec.connection ? { connection: ec.connection } : {}) }
   return { id, type: 'markdown', source: ec.markdown || '' }
 }
 
@@ -476,6 +478,10 @@ function replaceCellFromEnvelope(cellId: string, ec: EnvelopeCell) {
   const idx = cells.value.findIndex((c) => c.id === cellId)
   if (idx === -1) { insertCellFromEnvelope(ec); return } // target vanished mid-task — never silently drop the proposal
   const previousSourceOpen = cells.value[idx].sourceOpen
+  // A proposal that names no connection replaces the cell in place, so the cell
+  // keeps the one it had (#117): the preview ran there, and Apply must match.
+  const prevConnection = cells.value[idx].connection
+  if (ec.type === 'sql' && !ec.connection && prevConnection) ec = { ...ec, connection: prevConnection }
   cells.value[idx].editor?.destroy()
   const replacement = newCellState(envelopeToRaw(cellId, ec))
   if (ec.type === 'markdown') replacement.mdPreview = false
@@ -497,7 +503,7 @@ function replaceCellFromEnvelope(cellId: string, ec: EnvelopeCell) {
 function snapshotAiCell(id: string) {
   const c = cells.value.find((c) => c.id === id)
   if (!c) return null
-  return { source: c.source, label: c.label, view: c.view }
+  return { source: c.source, label: c.label, view: c.view, connection: c.connection }
 }
 async function loadAiCellTables(): Promise<string[]> {
   if (!hasWailsRuntime()) return []
@@ -733,7 +739,7 @@ watch(statusMessage, (msg) => {
   if (msg) setTimeout(() => { statusMessage.value = '' }, 4000)
 })
 watch(title, scheduleSave)
-watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}`).join('|'), scheduleSave)
+watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}:${c.connection}`).join('|'), scheduleSave)
 watch(() => cells.value.length, scheduleSave)
 
 // Review fix, step 4a #3: vue-router reuses this component instance across
@@ -1141,6 +1147,7 @@ defineExpose({
                   title="Label"
                   style="border: none; background: transparent; font-size: var(--sh-fs-xs); color: var(--sh-graphite); flex: 1 1 110px; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
                 />
+                <ConnectionSelect v-if="cell.type === 'sql'" v-model="cell.connection" variant="cell" style="flex: none;" />
                 <span
                   v-if="isStale(cell)"
                   class="badge"
@@ -1236,6 +1243,9 @@ defineExpose({
                   <A2UIPage v-else-if="synthesizedPage(cell)" :page="synthesizedPage(cell)!" :signal="loadAbort?.signal" />
                 </template>
                 <div v-else class="sh-mono" style="color: var(--sh-graphite); font-size: var(--sh-fs-xs);">Not run yet.</div>
+                <div v-if="cell.result && !cell.result.error && !cell.connection && defaultConnectionName !== 'local'" class="sh-mono" style="color: var(--sh-graphite); font-size: var(--sh-fs-xs); margin-top: var(--sh-space-2);" data-testid="cell-default-note">
+                  No connection chosen, so this ran on the workspace default ({{ defaultConnectionName }}).
+                </div>
               </div>
             </template>
 

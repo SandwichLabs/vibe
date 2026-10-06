@@ -83,7 +83,7 @@ func signInGuard(c Connection, resolved ConnectionDef) error {
 	if c.SignInFingerprint != "" && c.SignInFingerprint == Fingerprint(resolved) {
 		return nil
 	}
-	return &secrets.ErrFingerprintChanged{New: ServerDescription(resolved)}
+	return &secrets.ErrFingerprintChanged{Old: c.SignInServer, New: ServerDescription(resolved)}
 }
 
 // ResolvedConnection is a merged connection with its ${ENV} references

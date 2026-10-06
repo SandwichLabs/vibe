@@ -19,7 +19,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 // resolve to something.
 vi.mock('vue-router', async () => {
   const { reactive } = await import('vue')
-  return { useRoute: () => reactive({ query: {} }) }
+  const mockRoute = reactive({ query: {} as Record<string, string> })
+  ;(globalThis as any).__mockRoute = mockRoute
+  return { useRoute: () => mockRoute, useRouter: () => ({ push: () => {} }) }
 })
 
 import TableBrowserView from './TableBrowserView.vue'
@@ -91,8 +93,8 @@ function mountView() {
 
 async function openTable(wrapper: any) {
   await flushPromises()
-  const item = wrapper.findAll('.cursor-pointer').find((w: any) => w.text().includes('people'))
-  await item!.trigger('click')
+  // The Connections rail is the table list now: opening a table is a route query.
+  ;(globalThis as any).__mockRoute.query.table = 'people'
   await flushPromises()
 }
 

@@ -147,7 +147,13 @@ func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Bindin
 	case MethodPrompt:
 		cred, err = r.load(ctx, r.memory, ref, method)
 	default:
-		cred, err = r.load(ctx, r.keyring, ref, method)
+		// A credential typed in the sign-in prompt with "Remember" off is held
+		// in memory for this session and wins over the keychain's.
+		if c, merr := r.load(ctx, r.memory, ref, method); merr == nil {
+			cred = c
+		} else {
+			cred, err = r.load(ctx, r.keyring, ref, method)
+		}
 	}
 	if err != nil {
 		return Credential{}, err
@@ -258,6 +264,24 @@ func (r *Resolver) ClearCredentialField(ctx context.Context, ref Ref, method, fi
 	if kind == MethodPrompt {
 		store = r.memory
 	}
+	// A credential held for this session only (sign-in prompt, Remember off) is
+	// cleared from memory too.
+	var memErr error
+	if kind != MethodPrompt {
+		if _, merr := r.memory.Get(ctx, ref); merr == nil {
+			memErr = r.clearField(ctx, r.memory, ref, field)
+			if _, kerr := r.keyring.Get(ctx, ref); errors.Is(kerr, ErrNotFound) {
+				return memErr
+			}
+		}
+	}
+	if err := r.clearField(ctx, store, ref, field); err != nil {
+		return err
+	}
+	return memErr
+}
+
+func (r *Resolver) clearField(ctx context.Context, store Store, ref Ref, field string) error {
 	cred, err := r.loadExisting(ctx, store, ref)
 	if err != nil {
 		return err
@@ -295,6 +319,30 @@ func (r *Resolver) RememberPrompted(ctx context.Context, ref Ref) error {
 	}
 	return nil
 }
+
+// SetSessionCredentials holds cred in memory only, bound to b, for a
+// connection whose sign-in method stays the keychain: the sign-in prompt with
+// "Remember" off. Nothing is written to the keychain, and the person's sign-in
+// method is not changed. It is gone when the process ends or the credential is
+// cleared.
+func (r *Resolver) SetSessionCredentials(ctx context.Context, ref Ref, cred Credential, b Binding) error {
+	cred.Fingerprint, cred.Server = b.Fingerprint, b.Server
+	raw, err := cred.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := r.memory.Set(ctx, ref, raw); err != nil {
+		return fmt.Errorf("failed to hold credentials for %s: %w", ref.Name, err)
+	}
+	r.redactor.AddCredential(cred)
+	return nil
+}
+
+// ForgetSession zeroes everything held in memory: "ask each time" credentials and
+// session-only ones from the sign-in prompt. Studio calls it when a workspace
+// closes, is switched away from, or is released, so a credential typed for one
+// session never outlives it.
+func (r *Resolver) ForgetSession() { r.memory.Clear() }
 
 // ClearCredentials removes the keychain entry and any in-memory one.
 func (r *Resolver) ClearCredentials(ctx context.Context, ref Ref) error {

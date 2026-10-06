@@ -50,12 +50,24 @@ export function ChooseFolder(arg1) {
   return window['go']['main']['App']['ChooseFolder'](arg1);
 }
 
+export function ClearConnectionCredentials(arg1) {
+  return window['go']['main']['App']['ClearConnectionCredentials'](arg1);
+}
+
 export function ClearLLMKey(arg1) {
   return window['go']['main']['App']['ClearLLMKey'](arg1);
 }
 
 export function CloseWorkspace() {
   return window['go']['main']['App']['CloseWorkspace']();
+}
+
+export function ConnectConnection(arg1) {
+  return window['go']['main']['App']['ConnectConnection'](arg1);
+}
+
+export function ConnectWithCredentials(arg1) {
+  return window['go']['main']['App']['ConnectWithCredentials'](arg1);
 }
 
 export function CreateNotebook(arg1) {
@@ -68,6 +80,10 @@ export function CreateTable(arg1, arg2) {
 
 export function CreateWorkspace(arg1) {
   return window['go']['main']['App']['CreateWorkspace'](arg1);
+}
+
+export function DeleteConnection(arg1) {
+  return window['go']['main']['App']['DeleteConnection'](arg1);
 }
 
 export function DeleteNotebook(arg1) {
@@ -88,6 +104,10 @@ export function DeleteSkill(arg1) {
 
 export function DescribeTable(arg1) {
   return window['go']['main']['App']['DescribeTable'](arg1);
+}
+
+export function DisconnectConnection(arg1) {
+  return window['go']['main']['App']['DisconnectConnection'](arg1);
 }
 
 export function DropColumn(arg1, arg2) {
@@ -138,6 +158,18 @@ export function GetClaudeConfig() {
   return window['go']['main']['App']['GetClaudeConfig']();
 }
 
+export function GetConnection(arg1) {
+  return window['go']['main']['App']['GetConnection'](arg1);
+}
+
+export function GetConnectionCredentialStatus(arg1) {
+  return window['go']['main']['App']['GetConnectionCredentialStatus'](arg1);
+}
+
+export function GetConnectionInScope(arg1) {
+  return window['go']['main']['App']['GetConnectionInScope'](arg1);
+}
+
 export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
 }
@@ -168,6 +200,10 @@ export function GetQuery(arg1) {
 
 export function GetSessionID() {
   return window['go']['main']['App']['GetSessionID']();
+}
+
+export function GetTableCapabilities(arg1) {
+  return window['go']['main']['App']['GetTableCapabilities'](arg1);
 }
 
 export function GetTableData(arg1, arg2, arg3, arg4, arg5) {
@@ -202,8 +238,16 @@ export function InspectImport(arg1) {
   return window['go']['main']['App']['InspectImport'](arg1);
 }
 
+export function InstallExtension(arg1) {
+  return window['go']['main']['App']['InstallExtension'](arg1);
+}
+
 export function IsWorkspaceOpen() {
   return window['go']['main']['App']['IsWorkspaceOpen']();
+}
+
+export function ListCatalog(arg1) {
+  return window['go']['main']['App']['ListCatalog'](arg1);
 }
 
 export function ListCatalogGroups() {
@@ -214,8 +258,16 @@ export function ListCatalogTables(arg1) {
   return window['go']['main']['App']['ListCatalogTables'](arg1);
 }
 
+export function ListConnectionTypes() {
+  return window['go']['main']['App']['ListConnectionTypes']();
+}
+
 export function ListConnections() {
   return window['go']['main']['App']['ListConnections']();
+}
+
+export function ListExtensions() {
+  return window['go']['main']['App']['ListExtensions']();
 }
 
 export function ListNotebooks() {
@@ -250,8 +302,12 @@ export function ListUserThemes() {
   return window['go']['main']['App']['ListUserThemes']();
 }
 
-export function MigrateLLMKeyToKeychain() {
-  return window['go']['main']['App']['MigrateLLMKeyToKeychain']();
+export function MigrateLLMKeyToKeychain(arg1) {
+  return window['go']['main']['App']['MigrateLLMKeyToKeychain'](arg1);
+}
+
+export function MoveConnection(arg1) {
+  return window['go']['main']['App']['MoveConnection'](arg1);
 }
 
 export function OpenThemesDir() {
@@ -276,6 +332,10 @@ export function ProbeKeychain() {
 
 export function Quit() {
   return window['go']['main']['App']['Quit']();
+}
+
+export function RefreshCatalog(arg1) {
+  return window['go']['main']['App']['RefreshCatalog'](arg1);
 }
 
 export function RegenerateWorkspaceID() {
@@ -314,6 +374,14 @@ export function RunA2UIQueryIn(arg1, arg2) {
   return window['go']['main']['App']['RunA2UIQueryIn'](arg1, arg2);
 }
 
+export function RunQuery(arg1) {
+  return window['go']['main']['App']['RunQuery'](arg1);
+}
+
+export function SaveConnection(arg1) {
+  return window['go']['main']['App']['SaveConnection'](arg1);
+}
+
 export function SaveFilterAsQuery(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveFilterAsQuery'](arg1, arg2, arg3, arg4);
 }
@@ -324,6 +392,10 @@ export function SaveNotebook(arg1, arg2) {
 
 export function SaveQuery(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SaveQueryOn(arg1) {
+  return window['go']['main']['App']['SaveQueryOn'](arg1);
 }
 
 export function SaveSkill(arg1, arg2, arg3, arg4, arg5) {
@@ -354,6 +426,10 @@ export function SetAgentConfig(arg1) {
   return window['go']['main']['App']['SetAgentConfig'](arg1);
 }
 
+export function SetConnectionCredentials(arg1) {
+  return window['go']['main']['App']['SetConnectionCredentials'](arg1);
+}
+
 export function SetLLMKey(arg1, arg2) {
   return window['go']['main']['App']['SetLLMKey'](arg1, arg2);
 }
@@ -380,6 +456,10 @@ export function SwitchWorkspace(arg1) {
 
 export function TakeOverWorkspace() {
   return window['go']['main']['App']['TakeOverWorkspace']();
+}
+
+export function TestConnection(arg1) {
+  return window['go']['main']['App']['TestConnection'](arg1);
 }
 
 export function TrustLocalSettings() {

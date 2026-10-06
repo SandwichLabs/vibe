@@ -39,6 +39,9 @@ type UserConfig struct {
 	// the sign-in was chosen for (review #115). A changed definition withholds
 	// even an env: credential until the person signs in again.
 	SignInFingerprint map[string]string `yaml:"sign_in_fingerprint,omitempty"`
+	// SignInServer is, per connection, the host-level description of the server
+	// the sign-in was chosen for, so "the server changed (a to b)" can name both.
+	SignInServer map[string]string `yaml:"sign_in_server,omitempty"`
 }
 
 // LocalConfig is this person's connections and settings for one workspace on
@@ -57,6 +60,8 @@ type LocalConfig struct {
 	SignIn map[string]string `yaml:"sign_in,omitempty"`
 	// SignInFingerprint binds each sign-in to the definition it was chosen for.
 	SignInFingerprint map[string]string `yaml:"sign_in_fingerprint,omitempty"`
+	// SignInServer is the host-level description of the server each sign-in was chosen for.
+	SignInServer map[string]string `yaml:"sign_in_server,omitempty"`
 	// Agent holds this person's agent loosening; see EffectivePolicy.
 	Agent LocalAgent `yaml:"agent,omitempty"`
 	// MCPPort is the loopback port Studio's MCP server last used for this
@@ -255,6 +260,8 @@ type Connection struct {
 	// SignInFingerprint is the definition fingerprint this person's sign-in
 	// was chosen for ("" when never chosen here).
 	SignInFingerprint string `json:"-"`
+	// SignInServer describes the server that sign-in was chosen for ("" when never chosen here).
+	SignInServer string `json:"-"`
 	// Default marks the workspace's default connection.
 	Default bool `json:"default,omitempty"`
 	// Fingerprint is Fingerprint(ConnectionDef) of the unresolved definition;
@@ -288,7 +295,7 @@ func Merge(user UserConfig, shared Config, local LocalConfig, defaultName string
 		for _, lo := range cs[1:] {
 			c.Shadows = append(c.Shadows, lo.scope)
 		}
-		c.SignIn, c.SignInFingerprint = signInFor(win.def, win.scope, user, local)
+		c.SignIn, c.SignInFingerprint, c.SignInServer = signInFor(win.def, win.scope, user, local)
 		c.SignInHint = win.def.Credentials
 		c.Fingerprint = Fingerprint(win.def)
 		out = append(out, c)
@@ -297,14 +304,14 @@ func Merge(user UserConfig, shared Config, local LocalConfig, defaultName string
 	return out
 }
 
-func signInFor(d ConnectionDef, scope Scope, user UserConfig, local LocalConfig) (method, fp string) {
+func signInFor(d ConnectionDef, scope Scope, user UserConfig, local LocalConfig) (method, fp, server string) {
 	if m, ok := local.SignIn[d.Name]; ok {
-		return m, local.SignInFingerprint[d.Name]
+		return m, local.SignInFingerprint[d.Name], local.SignInServer[d.Name]
 	}
 	if scope == ScopeUser {
 		if m, ok := user.SignIn[d.Name]; ok {
-			return m, user.SignInFingerprint[d.Name]
+			return m, user.SignInFingerprint[d.Name], user.SignInServer[d.Name]
 		}
 	}
-	return "keychain", ""
+	return "keychain", "", ""
 }

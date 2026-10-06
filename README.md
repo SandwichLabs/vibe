@@ -104,7 +104,7 @@ Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) — workspaces 
 
 1. **Design pass** (#106) and **DuckDB spike** (#107).
 2. **Workspace = folder** — session hub (#108), workspace + file stores (#109), launcher/switcher (#111), MCP on workspaces (#112), CLI (#113).
-3. **Connections & credentials** — keychain (#114), connection types (#115), agent SQL policy (#116), connections UI (#117).
+3. **Connections & credentials** — keychain (#114), connection types (#115), agent SQL policy (#116), connections UI (#117: a Connections rail, a connection editor with write-only credentials, a Run-on selector in queries and notebook cells; see [`docs/reference/connections.md`](docs/reference/connections.md#in-vibe-studio)).
 4. **Exchange & breadth** — `.vibe` bundles (#118), more types (#119), packaging (#77).
 
 Multi-user / Tailscale mesh remains deferred.

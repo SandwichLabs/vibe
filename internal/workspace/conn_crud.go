@@ -253,6 +253,7 @@ func (w *workspace) RemoveConnection(ctx context.Context, scope Scope, name stri
 		if _, ok := u.SignIn[name]; ok {
 			delete(u.SignIn, name)
 			delete(u.SignInFingerprint, name)
+			delete(u.SignInServer, name)
 			if err := w.saveUser(u); err != nil && first == nil {
 				first = err
 			}
@@ -261,6 +262,7 @@ func (w *workspace) RemoveConnection(ctx context.Context, scope Scope, name stri
 		if _, ok := l.SignIn[name]; ok {
 			delete(l.SignIn, name)
 			delete(l.SignInFingerprint, name)
+			delete(l.SignInServer, name)
 			if err := w.SaveLocal(l); err != nil && first == nil {
 				first = err
 			}
@@ -345,7 +347,7 @@ func (w *workspace) migrateCredential(ctx context.Context, def ConnectionDef, fr
 func (w *workspace) signInFor(scope Scope, d ConnectionDef) string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	m, _ := signInFor(d, scope, w.user, w.local)
+	m, _, _ := signInFor(d, scope, w.user, w.local)
 	return m
 }
 
@@ -366,11 +368,27 @@ func copyMap(m map[string]string) map[string]string {
 	return out
 }
 
+// ErrRebindNeedsConfirm is returned by SetSignIn when it would bind an
+// environment sign-in to a server other than the one the saved sign-in was
+// chosen for (a pull changed the host): the variables would go to the new server.
+// RebindSignIn is the explicit, confirmed form.
+var ErrRebindNeedsConfirm = errors.New("the server changed since this sign-in was chosen, so the environment variables would be sent to the new server; confirm to use them for it")
+
 // SetSignIn records this person's sign-in method for a connection together
 // with the fingerprint of the definition it is chosen for, so that if the
 // definition later points elsewhere (a pull changes the host) even an env:
 // credential is withheld until the person signs in again.
-func (w *workspace) SetSignIn(name, method string) error {
+//
+// It never re-binds silently: choosing an environment sign-in for a connection
+// whose saved sign-in was bound to a different server returns
+// ErrRebindNeedsConfirm. A first binding (nothing saved) and a switch to a
+// method that carries its own binding (keychain, prompt) are fine.
+func (w *workspace) SetSignIn(name, method string) error { return w.setSignIn(name, method, false) }
+
+// RebindSignIn is SetSignIn after the person confirmed the server change.
+func (w *workspace) RebindSignIn(name, method string) error { return w.setSignIn(name, method, true) }
+
+func (w *workspace) setSignIn(name, method string, confirmed bool) error {
 	if err := ValidateSignIn(method); err != nil {
 		return err
 	}
@@ -383,20 +401,24 @@ func (w *workspace) SetSignIn(name, method string) error {
 		return err
 	}
 	fp := Fingerprint(resolved)
+	server := ServerDescription(resolved)
+	if kind, _, _ := secrets.ParseMethod(method); kind == "env" && !confirmed && c.SignInFingerprint != "" && c.SignInFingerprint != fp {
+		return ErrRebindNeedsConfirm
+	}
 	if c.Scope == ScopeUser {
 		return w.retryConflict(func() error {
 			w.mu.RLock()
 			u := w.user
 			w.mu.RUnlock()
-			u.SignIn, u.SignInFingerprint = copyMap(u.SignIn), copyMap(u.SignInFingerprint)
-			u.SignIn[name], u.SignInFingerprint[name] = method, fp
+			u.SignIn, u.SignInFingerprint, u.SignInServer = copyMap(u.SignIn), copyMap(u.SignInFingerprint), copyMap(u.SignInServer)
+			u.SignIn[name], u.SignInFingerprint[name], u.SignInServer[name] = method, fp, server
 			return w.saveUser(u)
 		})
 	}
 	return w.retryConflict(func() error {
 		l := w.Local()
-		l.SignIn, l.SignInFingerprint = copyMap(l.SignIn), copyMap(l.SignInFingerprint)
-		l.SignIn[name], l.SignInFingerprint[name] = method, fp
+		l.SignIn, l.SignInFingerprint, l.SignInServer = copyMap(l.SignIn), copyMap(l.SignInFingerprint), copyMap(l.SignInServer)
+		l.SignIn[name], l.SignInFingerprint[name], l.SignInServer[name] = method, fp, server
 		return w.SaveLocal(l)
 	})
 }

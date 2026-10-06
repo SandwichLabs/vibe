@@ -5,11 +5,10 @@ import {llm} from '../models';
 import {notebooks} from '../models';
 import {crud} from '../models';
 import {hub} from '../models';
+import {secrets} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
-import {session} from '../models';
-import {secrets} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -35,15 +34,23 @@ export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<main.Workspac
 
 export function ChooseFolder(arg1:string):Promise<string>;
 
+export function ClearConnectionCredentials(arg1:main.ClearCredentialsRequest):Promise<main.ConnectionInfo>;
+
 export function ClearLLMKey(arg1:string):Promise<void>;
 
 export function CloseWorkspace():Promise<void>;
+
+export function ConnectConnection(arg1:main.ConnectionRef):Promise<main.ConnectionInfo>;
+
+export function ConnectWithCredentials(arg1:main.ConnectWithCredentialsRequest):Promise<main.ConnectionInfo>;
 
 export function CreateNotebook(arg1:string):Promise<notebooks.Notebook>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
 
 export function CreateWorkspace(arg1:main.CreateWorkspaceRequest):Promise<main.OpenWorkspaceResult>;
+
+export function DeleteConnection(arg1:main.ConnectionRef):Promise<void>;
 
 export function DeleteNotebook(arg1:string):Promise<void>;
 
@@ -54,6 +61,8 @@ export function DeleteRow(arg1:string,arg2:string,arg3:any):Promise<crud.WriteRe
 export function DeleteSkill(arg1:string):Promise<void>;
 
 export function DescribeTable(arg1:string):Promise<main.TableInfo>;
+
+export function DisconnectConnection(arg1:main.ConnectionRef):Promise<main.ConnectionInfo>;
 
 export function DropColumn(arg1:string,arg2:string):Promise<void>;
 
@@ -79,6 +88,12 @@ export function GetAgentStatus():Promise<Record<string, any>>;
 
 export function GetClaudeConfig():Promise<hub.ClaudeConfig>;
 
+export function GetConnection(arg1:string):Promise<main.ConnectionDetail>;
+
+export function GetConnectionCredentialStatus(arg1:string):Promise<secrets.CredentialStatus>;
+
+export function GetConnectionInScope(arg1:main.ConnectionRef):Promise<main.ConnectionDetail>;
+
 export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetInitialWorkspace():Promise<main.InitialWorkspace>;
@@ -94,6 +109,8 @@ export function GetPreferences():Promise<prefs.Preferences>;
 export function GetQuery(arg1:string):Promise<queries.Query>;
 
 export function GetSessionID():Promise<string>;
+
+export function GetTableCapabilities(arg1:string):Promise<main.TableCapabilities>;
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
@@ -111,13 +128,21 @@ export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.Wri
 
 export function InspectImport(arg1:importer.Source):Promise<importer.Inspection>;
 
+export function InstallExtension(arg1:main.InstallExtensionRequest):Promise<void>;
+
 export function IsWorkspaceOpen():Promise<boolean>;
+
+export function ListCatalog(arg1:main.CatalogRequest):Promise<main.CatalogListing>;
 
 export function ListCatalogGroups():Promise<Array<main.CatalogGroup>>;
 
 export function ListCatalogTables(arg1:string):Promise<Array<string>>;
 
-export function ListConnections():Promise<Array<session.Status>>;
+export function ListConnectionTypes():Promise<Array<main.TypeSpec>>;
+
+export function ListConnections():Promise<main.ConnectionList>;
+
+export function ListExtensions():Promise<Array<main.ExtensionInfo>>;
 
 export function ListNotebooks():Promise<Array<notebooks.Summary>>;
 
@@ -135,7 +160,9 @@ export function ListTemplates():Promise<Array<main.TemplateInfo>>;
 
 export function ListUserThemes():Promise<main.UserThemesResult>;
 
-export function MigrateLLMKeyToKeychain():Promise<void>;
+export function MigrateLLMKeyToKeychain(arg1:boolean):Promise<void>;
+
+export function MoveConnection(arg1:main.MoveConnectionRequest):Promise<main.ConnectionDetail>;
 
 export function OpenThemesDir():Promise<string>;
 
@@ -148,6 +175,8 @@ export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<str
 export function ProbeKeychain():Promise<secrets.Probe>;
 
 export function Quit():Promise<void>;
+
+export function RefreshCatalog(arg1:main.ConnectionRef):Promise<void>;
 
 export function RegenerateWorkspaceID():Promise<main.WorkspaceInfo>;
 
@@ -167,11 +196,17 @@ export function RunA2UIQuery(arg1:string):Promise<main.A2UIQueryResult>;
 
 export function RunA2UIQueryIn(arg1:string,arg2:string):Promise<main.A2UIQueryResult>;
 
+export function RunQuery(arg1:main.RunQueryRequest):Promise<main.QueryResult>;
+
+export function SaveConnection(arg1:main.SaveConnectionRequest):Promise<main.ConnectionDetail>;
+
 export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SaveNotebook(arg1:Record<string, any>,arg2:string):Promise<main.NotebookSaveResult>;
 
 export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.QuerySaveResult>;
+
+export function SaveQueryOn(arg1:main.SaveQueryRequest):Promise<main.QuerySaveResult>;
 
 export function SaveSkill(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
@@ -187,6 +222,8 @@ export function SetActiveNotebook(arg1:string):Promise<void>;
 
 export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 
+export function SetConnectionCredentials(arg1:main.SetCredentialsRequest):Promise<main.ConnectionInfo>;
+
 export function SetLLMKey(arg1:string,arg2:string):Promise<void>;
 
 export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
@@ -200,6 +237,8 @@ export function StopMCP():Promise<void>;
 export function SwitchWorkspace(arg1:main.SwitchRequest):Promise<main.OpenWorkspaceResult>;
 
 export function TakeOverWorkspace():Promise<main.OpenWorkspaceResult>;
+
+export function TestConnection(arg1:main.TestConnectionRequest):Promise<main.TestResultView>;
 
 export function TrustLocalSettings():Promise<main.WorkspaceInfo>;
 
