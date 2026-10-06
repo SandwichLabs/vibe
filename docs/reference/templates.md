@@ -1,5 +1,7 @@
 # Starter Templates
 
+> **Changing (#109, #111).** Templates will seed a new **workspace** instead: notebooks as files, plus sample tables in its local `data/local.duckdb` connection.
+
 A **template** seeds a fresh `.vibe` with a complete little relational dataset:
 DuckDB user tables (with inline foreign keys so referential integrity is
 enforced), sample data, and a starter **notebook** with a cell over each table

@@ -1,5 +1,7 @@
 # Notebooks & A2UI Reference
 
+> **Changing (#108, #109).** Notebook format v2 adds an optional `connection` to SQL cells and A2UI `sql` bindings; when it's unset, the workspace's default connection is used. Notebooks will be stored one per file (`notebooks/*.vnb`) in a workspace folder rather than in `_vibe_notebooks`. v1 notebooks load unchanged.
+
 A **Notebook** is a JSON document stored in `_vibe_notebooks`: a title plus
 an ordered list of **cells**. There is no page markup, no directives, and no
 inter-cell references — the database is the only shared state. Notebooks

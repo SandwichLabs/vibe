@@ -1,5 +1,7 @@
 # Import & Export
 
+> **Changing (#108, #113).** Import will target any **writable connection** (default: the workspace's `local` DuckDB) as `<connection>.<table>`, and `vibe import` will run through the same session as Studio (this closes #72).
+
 ## Import
 
 One **Import** wizard (`ImportView.vue`, on `internal/importer`) handles both

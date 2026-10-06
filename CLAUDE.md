@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vibe is a **local-first, encrypted, single-file agentic data workspace**. A `.vibe` file bundles DuckDB tables, notebooks, skills (domain context for the agent), and an AI agent into one portable, passphrase-protected file, and exposes all of it to the built-in Studio desktop app and to external agents over MCP. Think of it as the local, offline, file-shaped counterpart to MotherDuck's platform (tables, notebooks, guides, MCP).
+Vibe is an **agentic desktop workspace for working with data where it already lives** — DataGrip/DBeaver-shaped, with an AI agent, live notebooks, skills and A2UI artifacts, all exposed to external agents over MCP. Data stays resident in **connections** (local DuckDB, MotherDuck, Postgres, SQLite, S3/GCS/R2, … attached into one DuckDB hub); a **workspace** is a folder (optionally a git repo) holding notebooks, queries, skills and secret-free connection definitions; **credentials** live in the OS keychain or env vars; `.vibe` is an import/export format.
 
-**North star:** `docs/direction.md`. Read it before planning any feature work. It defines the seven primitives (Container, Tables, Notebooks, Skills, Artifacts/A2UI, Agent+MCP, Import/Export), what is being removed, and the sequencing (issues #62–#70).
+**North star:** `docs/direction.md` (2026-10-06). Read it before planning any feature work. **Plan:** `docs/plans/workspaces-and-connections.md`. **Tracking:** epic #105 (issues #106–#119), workspaces first, then connections.
 
-**Direction change (2026-09-22):** Vibe was previously aimed at Microsoft Access 97 application parity (bound forms, subforms, switchboard, App Mode, macros). That direction is **superseded**. The Access application layer was removed in #68; datasheet editing stays. The parity docs are kept for history and carry a superseded banner. Do not add forms, macros, nav, field meta, or App Mode.
+**Direction change (2026-10-06) — today vs target:** the code **still** opens one SQLCipher `.vibe` container holding a DuckDB blob (everything under *Architecture* and *Key Concepts* below describes that, and stays accurate until Slice 1 #108–#113 lands). Do not extend the container as the place data lives: no new `_vibe_*` tables for content, no new per-file settings, no new Save/Revert semantics for table data. New work goes behind the interfaces the plan names (`internal/session`, `internal/workspace`, `notebooks.Store`/`queries.Store`/`skills.Store`, `internal/secrets`, `internal/connections`). Never store a credential in a config file, a `.vibe`, a log line, or anything the agent can read.
+
+**Earlier direction change (2026-09-22):** Vibe was previously aimed at Microsoft Access 97 application parity (bound forms, subforms, switchboard, App Mode, macros). That direction is **superseded**. The Access application layer was removed in #68; datasheet editing stays. The parity docs are kept for history and carry a superseded banner. Do not add forms, macros, nav, field meta, or App Mode.
 
 **Status:** Container, encryption, DuckDB engine, CRUD, import/export, Wails+Vue Studio, agent + MCP are all working. The **primitive migration** is complete: one agent tool surface (#63), Skills (#62), A2UI artifacts (#67), Notebooks with agent task-mode authoring (#66), headless `vibe mcp serve` (#64), guardrails (#70), removal of the Access layer (#68 — forms/subforms/relationships-UI/switchboard/macros/App Mode/banded reports are gone, foreign keys are plain SQL, reports migrate into notebooks), and retirement of the page system (#69 — web preview server, page renderers, Studio page views/bindings, and the page agent tools are gone; the TUI is a SQL REPL + read-only table browser + notebook list). Multi-user / Tailscale mesh remains deferred.
 
@@ -125,7 +127,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 - **Dependency injection** — create services in `main.go`/`cmd/root.go` and pass them down; no globals
 - **CGO_ENABLED=1** — required for SQLCipher and DuckDB C bindings
 - **Goreleaser** — use `.goreleaser.yaml` for cross-platform release builds with ldflags for version injection
-- **Additive migrations** — `_vibe_*` tables are only ever added in `internal/container/schema.go`; removals stop creating a table and stop requiring it in `vibe verify`, never drop it from existing files
+- **Additive migrations** (legacy container) — `_vibe_*` tables are only ever added in `internal/container/schema.go`; removals stop creating a table and stop requiring it in `vibe verify`, never drop it from existing files
 - **One tool surface** — new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`
 - **Model output never reaches a style attribute** — A2UI colors are a closed enum; validators reject unknown fields
 - **No hex in stylesheets** — every colour in `studio/frontend` is a `--vibe-*` role (or a bridged `--sh-*` token); translucent variants use `color-mix()` on a role. Theme files are validated by `theme/schema.ts` (hex only, closed role list). Built-ins must pass the AA contrast spec in `theme/schema.spec.ts`
@@ -134,7 +136,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 ## Key Concepts
 
-**`.vibe` file format:** An encrypted SQLite database (SQLCipher) acting as the container envelope. Internal tables use the `_vibe_` prefix (`_vibe_meta`, `_vibe_pages` → `_vibe_notebooks`, `_vibe_queries`, `_vibe_skills`, `_vibe_agent_config`, `_vibe_secrets`, `_vibe_assets`, `_vibe_components`). User data lives in a serialized **DuckDB blob** (`_vibe_duckdb`).
+**`.vibe` file format (current; becomes legacy-import-only in #110, replaced by the bundle format in #118):** An encrypted SQLite database (SQLCipher) acting as the container envelope. Internal tables use the `_vibe_` prefix (`_vibe_meta`, `_vibe_pages` → `_vibe_notebooks`, `_vibe_queries`, `_vibe_skills`, `_vibe_agent_config`, `_vibe_secrets`, `_vibe_assets`, `_vibe_components`). User data lives in a serialized **DuckDB blob** (`_vibe_duckdb`).
 
 **File lifecycle:** Open (decrypt SQLCipher, materialize DuckDB blob to a hardened temp file) → Session (queries, CRUD, notebooks, agent) → Save (checkpoint DuckDB, re-serialize blob into SQLCipher) → Close (cleanup, zero temp files). Open takes an exclusive writer lock (`<file>.lock`, flock; #80); read-only opens don't. Studio tracks unsaved table changes (`Container.Dirty`, `file:dirty`) and asks Save / Don't save / Cancel on Close and quit. Everything except an explicit Don't save still saves. Revert to last save re-materializes the DuckDB copy from the saved blob in place (`Container.Revert`), keeping the lock; the last save is also the undo point for agent changes (#98).
 
@@ -150,11 +152,14 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 ## Design Principles
 
-- **File is the app** — `.vibe` files are fully self-contained, no external dependencies
-- **Local-first & data sovereignty** — the data lives in the building, not someone else's server
-- **Encryption by default** — passphrase required, no plaintext data on disk
-- **Single-user first** — no concurrent access or conflict resolution (multi-user mesh deferred)
+(2026-10-06; replaces "file is the app" and "encryption by default" — see `docs/direction.md` §6)
+
+- **Data stays where it lives** — Vibe reaches data in its connections; it doesn't copy it into its own format
+- **The workspace is the app** — a folder of plain, diff-friendly files you can version, review and share via git
+- **Credentials in the keychain** — never in the folder, a bundle, logs, or the agent's context; write-only across the Wails bridge and MCP
+- **Read-only until asked** — connections default to read-only; agent writes need the sandbox tier, a writable connection, and user approval
+- **Single-user first** — sharing is via shared backends + git, not live collaboration (multi-user mesh deferred)
 - **One tool surface** — the built-in agent and external MCP clients see the same tools with the same gating
 - **AI as collaborator, not dependency** — everything works without AI; notebooks and SQL are first-class by hand
 - **Live, not frozen** — notebooks and artifacts store questions (SQL), not answers; outputs re-run on open
-- **Progressive disclosure** — skills advertise a line and load on demand; complexity available, never imposed
+- **Progressive disclosure** — skills advertise a line and load on demand; connections connect on first use; complexity available, never imposed

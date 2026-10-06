@@ -1,5 +1,7 @@
 # LLM provider configuration
 
+> **Changing (#114).** `llm.api_key` in `~/.vibe.yaml` moves to the OS keychain. A one-time migration will offer to move an existing plaintext key and blank it. `VIBE_LLM_API_KEY` and the providers' standard env vars keep working and still take precedence. Until then, prefer env vars over writing a key into the file.
+
 The in-app wizard agent's model provider is **app-global and viper-driven**:
 configure it once in `~/.vibe.yaml` (or via `VIBE_*` environment variables) and
 every `.vibe` you open uses it. (The agent *sandbox* — read-only / read-write /

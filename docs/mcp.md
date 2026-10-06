@@ -1,5 +1,7 @@
 # MCP (Model Context Protocol)
 
+> **Changing (epic #105).** This describes today's per-file server. `vibe mcp serve` will take a workspace folder instead of a `.vibe` file (`--workspace`, or discovered by walking up from the current directory), and will hand requests to Studio's server when Studio already has the workspace open (#112). The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116).
+
 Vibe exposes a `.vibe` file's tools — the same registry (`internal/agents`)
 Studio's own chat panel uses — to external MCP clients (Claude Desktop, any
 other MCP-speaking agent) in two ways:

@@ -1,5 +1,7 @@
 # Vibe v1.0 Reference
 
+> **Changing (epic #105).** These references describe the current single-file build. Two new references arrive with the workspace and connections work: `workspaces.md` (#109) and `connections.md` (#115).
+
 This is the shipped reference documentation for the Vibe application surface —
 a local-first, encrypted, single-file agentic data workspace. It is split by
 surface so each area is easy to find:
