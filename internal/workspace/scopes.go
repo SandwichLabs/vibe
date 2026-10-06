@@ -52,6 +52,11 @@ type LocalConfig struct {
 	SignIn map[string]string `yaml:"sign_in,omitempty"`
 	// Agent holds this person's agent loosening; see EffectivePolicy.
 	Agent LocalAgent `yaml:"agent,omitempty"`
+	// MCPPort is the loopback port Studio's MCP server last used for this
+	// workspace, so a client's saved address survives a restart (#112). 0 means
+	// none yet. It is not a secret and grants nothing: the bearer token is
+	// regenerated on every start.
+	MCPPort int `yaml:"mcp_port,omitempty"`
 	// Nonce ties the file to the folder it was made for (the same value is in
 	// the folder's git-ignored .vibe-local/nonce). Written by SaveLocal.
 	Nonce string `yaml:"nonce,omitempty"`
@@ -90,6 +95,9 @@ func (l LocalConfig) Validate() error {
 	}
 	if err := ValidateSandbox(l.Agent.Sandbox); err != nil {
 		return fmt.Errorf("agent: %w", err)
+	}
+	if l.MCPPort < 0 || l.MCPPort > 65535 {
+		return fmt.Errorf("mcp_port %d is not a valid port", l.MCPPort)
 	}
 	return validateSignInMap(l.SignIn)
 }

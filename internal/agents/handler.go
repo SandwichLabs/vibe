@@ -274,7 +274,7 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 	// Load the sandbox ONCE for this call (see the field's doc comment) so a
 	// concurrent SetFilePolicy can't make one request's checks straddle two
 	// different sandbox configs.
-	sb := h.sandbox.Load()
+	sb := h.sandboxFor(ctx)
 
 	// Check sandbox permissions.
 	if err := sb.Check(req.Method); err != nil {
@@ -315,8 +315,9 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText string, params map[string]any, class sqlClass) *Response {
 	if h.approver == nil {
 		return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
-			"%s needs your OK before it runs: this file asks before the agent changes anything (sandbox: %s), and there is no one to ask over MCP. "+
-				`Nothing was changed. To let MCP clients make changes, open the file in Vibe Studio → Settings → Agent and turn off "Ask before changes".`,
+			"%s needs your OK before it runs: this workspace asks before the agent changes anything (sandbox: %s), and there is no one to ask over MCP. "+
+				"Nothing was changed. Changes to any connection other than the workspace's local database always need Vibe Studio: open the workspace there and approve the change. "+
+				`To let MCP clients change the local database without asking, turn off "Ask before changes" in Vibe Studio → Settings → Agent.`,
 			req.Method, sb.Mode))
 	}
 
@@ -340,7 +341,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 		// appeared" — so re-check against the CURRENT sandbox (the studio
 		// approver refreshes it via SetFilePolicy right before returning
 		// nil) rather than trusting the sb loaded before the wait.
-		fresh := h.sandbox.Load()
+		fresh := h.sandboxFor(ctx)
 		if err := fresh.Check(req.Method); err != nil {
 			return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
 				"the agent's access changed while this was waiting for approval: %s", err.Error()))
@@ -623,7 +624,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	// The classification connection is released before the statement runs, so
 	// a bound statement holds one pooled connection, not two.
 	releaseClassifyConn()
-	if err := h.sandbox.Load().checkSQLClassReadOnly(class, reason); err != nil {
+	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
 		// The user/agent-facing error is one fixed, mode-agnostic message
 		// (see errReadOnlyBindingDenied) — it never surfaces classifySQL's
 		// reason, which named a specific sandbox-mode requirement
@@ -681,7 +682,7 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	if errResp != nil {
 		return errResp
 	}
-	sb := h.sandbox.Load()
+	sb := h.sandboxFor(ctx)
 	class, reason := classifySQL(ctx, userDB, sqlStr, params)
 	if err := sb.checkSQLClass(class, reason); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())

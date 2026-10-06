@@ -2,7 +2,7 @@
 
 A **workspace** is a folder, optionally a git repository, that holds your notebooks, saved queries and skills as ordinary files, plus a small `vibe.yaml` that marks it. Your data stays wherever it already lives; the workspace only describes how to reach it.
 
-This page is the file-level reference. Opening, creating and switching workspaces in Studio, the CLI and MCP arrive with #110 to #113; until then Studio still opens `.vibe` containers, and everything below is implemented by `internal/workspace` and its stores.
+This page is the file-level reference. Opening, creating and switching workspaces in Studio and the CLI arrive with #111 and #113; `vibe mcp serve --workspace` and the hub lock (#112) are in. Until Studio moves over it still opens `.vibe` containers, and everything below is implemented by `internal/workspace` and its stores.
 
 ## Layout
 
@@ -20,6 +20,7 @@ acme-analytics/
 ├── .gitignore                .vibe-local/, data/*.duckdb, data/*.duckdb.wal
 ├── .gitattributes            *.vnb text eol=lf
 └── .vibe-local/              never committed; non-trust state only
+    ├── hub.lock              held while a process owns the workspace, see "One owner at a time"
     ├── nonce                 this folder's mark, see "Re-cloning"
     └── state.json            open tabs, last notebook
 ```
@@ -132,6 +133,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 | `connections` | This computer's private connections and overrides, same shape as above. |
 | `sign_in` | Connection name to sign-in method, for this person. |
 | `agent` | This person's agent settings: `sandbox` and `ask_before_writes`. |
+| `mcp_port` | The loopback port Studio's MCP server last used for this workspace, so a client's saved address survives a restart. Not a secret; the bearer token changes on every start. |
 | `nonce` | Written by Vibe. Ties the file to the folder it was made for (see below). |
 <!-- /keys -->
 
@@ -214,3 +216,18 @@ Files are the source of truth. You can edit them in an editor, `git pull`, or le
 ## Opening a workspace as a session
 
 `OpenSession` builds the workspace's DuckDB hub and registers every merged connection. Local `duckdb` file connections attach straight away (they are local files, nothing to dial); every other type connects on first use. `${ENV}` is expanded only in your own scopes. `default_connection` becomes the default catalog, so `SELECT * FROM sales` reads the default connection's table. A connection that cannot be set up (a missing environment variable, a relative path that escapes the folder, a path in your own scope whose folder does not exist, a type that is not available yet) is reported as an issue with a redacted message and left out, and the rest of the workspace still opens.
+
+## One owner at a time (the hub lock)
+
+DuckDB lets one process write a `.duckdb` file, or many read it, never a mix. So exactly one process per workspace owns the hub: Studio, or a headless `vibe mcp serve`. Ownership is a non-blocking `flock` on `.vibe-local/hub.lock` (the same crash-safe lock `.vibe` files used, `internal/filelock`). It dies with the process, so a crash never leaves the workspace locked; the leftover file is ignored.
+
+`hub.lock` is mode `0600` JSON, written by the owner: `app`, `pid`, `host`, and while it serves MCP an `mcp` object (`url`, `token`), plus `control: "sigusr1"` when it can be asked to let go. Another process reads it with `hub.ReadHolder` without holding the lock, and only trusts it when all of these hold:
+
+- the flock is really held right now (a file left by a crash, or committed to a cloned repository, is ignored);
+- it is a regular file owned by the current user with no group or world permissions (this is a same-user trust model; the token is protected by file permissions and your user directory, nothing more);
+- the endpoint is a plain `http://` loopback address;
+- `.vibe-local` is a real directory (not a symlink) owned by you, and `hub.lock` is a single-link regular file: the lock is opened with `O_NOFOLLOW`, so a symlink or hard link committed to a repository is refused, never written through.
+
+Take over: `hub.RequestRelease` sends `SIGUSR1` to the owner after checking it is on this host, is not the caller, and advertised `control: "sigusr1"`; `hub.TakeOver` then waits for the lock and returns the new hold. A signal rather than a control socket because a socket path under a deep folder can exceed the OS limit and a signal opens no extra listener. The owner's handler closes its session, releases the lock and exits.
+
+On non-unix platforms the lock and take over are no-ops (Windows is not a release target).

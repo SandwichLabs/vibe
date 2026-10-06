@@ -197,7 +197,7 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 			return errResp
 		}
 		class, reason := classifySQL(ctx, userDB, sqlStr, nil)
-		if err := h.sandbox.Load().checkSQLClassReadOnly(class, reason); err != nil {
+		if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
 			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("write_cell only accepts read-only sql: %v", err))
 		}
 		// review fix (finding 4): require this EXACT (trimmed) sql to have

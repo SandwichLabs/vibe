@@ -1,120 +1,118 @@
 # MCP (Model Context Protocol)
 
-> **Changing (epic #105).** This describes today's per-file server. `vibe mcp serve` will take a workspace folder instead of a `.vibe` file (`--workspace`, or discovered by walking up from the current directory), and will hand requests to Studio's server when Studio already has the workspace open (#112). The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116).
+> **Changing (epic #105).** The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116). Studio's own MCP switch, and its "Copy Claude config" buttons, arrive with #111; the Go side they call is described below.
 
-Vibe exposes a `.vibe` file's tools — the same registry (`internal/agents`)
-Studio's own chat panel uses — to external MCP clients (Claude Desktop, any
-other MCP-speaking agent) in two ways:
+Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
 
-- **`vibe mcp serve <file.vibe>`** — a standalone headless server, for
-  launching from an MCP client's own config (stdio, the default) or for
-  pointing a network client at (`--transport sse`).
-- **Studio's built-in SSE server** — Settings → MCP Server → Start, for
-  reaching a file that's already open in the desktop app.
+- **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
+- **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port.
 
-Every tool called through either path goes through the exact same sandbox
-gating, per-file "ask before changes" policy, and result
-truncation/empty-result/row-budget guardrails as Studio's own chat agent
-(#63, #70, #79) — there is one tool surface, not a separate, looser one for
-MCP.
+Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. `.vibe` files are no longer opened directly: pass a workspace folder.
 
 ## `vibe mcp serve`
 
 ```
-vibe mcp serve <file.vibe> [flags]
+vibe mcp serve [--workspace DIR] [flags]
 
 Flags:
-      --transport string      stdio or sse (default "stdio")
-      --addr string            listen address for --transport sse (default "127.0.0.1:0")
-      --sandbox string         read-only, read-write, or full — can only TIGHTEN
-                                the file's own agent_sandbox setting, never loosen it
-      --read-only-file          open the container itself read-only, alongside a writer
-                                (Studio or another vibe mcp serve): implies a read-only
-                                sandbox and never saves on exit
+      --workspace string   workspace folder (default: the nearest folder above the
+                           current directory that holds a vibe.yaml)
+      --transport string   stdio or sse (default "stdio")
+      --addr string        listen address for --transport sse (default "127.0.0.1:0")
+      --sandbox string     read-only, read-write, or full. Can only TIGHTEN the
+                           workspace's own policy, never loosen it
 ```
 
-### Sandbox
+The workspace is found the way git finds `.git`: `--workspace` (or the current directory) and then each parent until a `vibe.yaml` turns up. A `.vibe` path, as an argument or as `--workspace`, is refused with "`.vibe` files are no longer opened directly; open or create a workspace folder". The old `<file.vibe>` argument, `--read-only-file` and `VIBE_PASSPHRASE` are gone.
 
-`--sandbox` can only make a session **more** restrictive than the file's own
-sandbox mode (set in Studio's Settings → Agent) — never less. Passing
-`--sandbox full` against a file saved as `read-only` has no effect; the
-file's own setting still wins. This means a launch config (which may be
-shared, checked into a dotfiles repo, etc.) can never silently grant more
-access than the file's owner configured in Studio. A fresh file's default
-mode is **read-write** (not full — see #79).
+### One owner per workspace: owner mode and proxy mode
 
-### Ask before changes (#79)
+DuckDB allows one read-write process or many read-only ones per database file, never a mix, so one process owns a workspace's hub at a time, recorded in `.vibe-local/hub.lock` (see `docs/reference/workspaces.md`). `vibe mcp serve` looks at the lock first:
 
-Every file also has an **"Ask before changes"** switch, on by default —
-including for every file created before #79 shipped, which had no such
-setting at all. In Studio chat, a pending write shows an inline card the
-user approves or cancels before it runs. Over MCP there is no one to show
-that card to, so **while "Ask before changes" is on, an MCP client can read
-but any write is refused outright** — the error text names the file's
-sandbox mode and points back to the switch. This is true for both
-`vibe mcp serve` and Studio's own SSE MCP server; the desktop app being open
-doesn't count as "someone is watching this specific request".
+| Who holds the hub | What `vibe mcp serve` does |
+|---|---|
+| Nobody | **Owner mode.** Takes the lock, opens the workspace and its DuckDB hub, serves the tools. Writes go straight to their sources: there is nothing to save on exit, and a crash loses nothing but the call in flight. |
+| Studio, serving MCP | **Proxy mode.** Passes stdio through to Studio's MCP server. The client sees the same tools, Studio's approval cards apply to writes, and there is no DuckDB lock error. |
+| Another `vibe mcp serve` | Proxy mode, to that one (an owner over stdio also serves loopback SSE and publishes it in `hub.lock`, so a second client such as Claude Code next to Claude Desktop just works). |
+| Studio with MCP off | Fails with a message naming it: "Studio (pid N) has this workspace open but its MCP server is off. Turn it on in Settings → Workspace → MCP, or close Studio." |
 
-To let MCP clients make changes, open the file in **Vibe Studio → Settings →
-Agent** and turn **"Ask before changes" off** — there is no flag or
-environment variable that bypasses it from the MCP side; a launch config
-must never be able to loosen what the file owner set.
+Proxy mode is a transparent pipe, not an MCP client: every SSE `message` event is copied verbatim to stdout (responses, notifications, server-to-client requests) and every stdin line is POSTed verbatim, so the tool list cannot drift and there is no client-side request timeout (a write waiting for an approval card in Studio can take minutes and is never retried by the proxy). Only the stream ending, a 401 or a refused connection means the owner is gone: then every request in flight is answered with a JSON-RPC error (-32001), a short message goes to stderr, and the process exits non-zero; reconnect the client to continue. A failed POST answers just that request. A proxy ends when stdin closes (after a brief drain of replies in flight) and never asks Studio to quit. `--transport sse` needs this process to be the owner.
 
-### Passphrase
+Two clients started at the same moment (Claude Desktop and Claude Code) both work: the first takes the lock and publishes `mcp: {pending: true}` in its very first write, the second waits up to 15 s for the real endpoint and then proxies.
 
-The passphrase is read from the `VIBE_PASSPHRASE` environment variable if
-set (the non-interactive path, for a client like Claude Desktop that has no
-TTY to prompt on), otherwise from an interactive terminal prompt — the same
-two-step resolution `vibe export`/`vibe info` use. Either way, prompts and
-all logging go to **stderr**, never stdout: for `--transport stdio`, stdout
-is the JSON-RPC protocol channel and must carry nothing else.
+`--sandbox` in proxy mode is sent to the owner as an `X-Vibe-Sandbox` header on the SSE stream and **enforced by the owner**: for that session the effective mode is the stricter of the owner's policy and the header (tighten-only, bound at connection time, applied to every tool, including content tools). Unknown values are rejected with 400. The owner advertises `mcp.caps: ["sandbox-header"]` in `hub.lock`; a proxy started with `--sandbox` refuses an owner without it.
 
-### Lifecycle
+### Stdout is the protocol channel
 
-The container is checkpointed and saved once, on the way out, whichever of
-three things ends the session first: stdin closing (the client
-disconnected), `SIGINT`, or `SIGTERM` — all treated as a clean, expected
-shutdown (exit code 0), not an error. Shutdown order: stop accepting new SSE
-requests (SSE only), stop the debounced saver (waiting for any save already
-in flight to finish), one final synchronous save, then close.
+Over stdio, `vibe mcp serve` duplicates stdout to a private handle for the protocol and points file descriptor 1 at stderr for the rest of the process. A Go `fmt.Println`, a C library's `printf`, or a MotherDuck sign-in link printed by DuckDB therefore lands on stderr and cannot corrupt the JSON-RPC stream. Prompts, notices and logs are all stderr.
 
-In between, a debounced background save runs ~5 seconds after the last tool
-call that actually **wrote** something, so a session that's killed
-uncleanly (`kill -9`, an OOM) loses at most a few seconds of real writes
-rather than the whole session. "Wrote something" is judged per call, not
-per category: a plain `SELECT` via `run_query` is classified the same way
-`run_query` itself classifies it and never marks the file dirty, so a
-read-only or read-heavy session never pays a save cost early at all —
-only `INSERT`/`UPDATE`/`DELETE` (via `run_query` or `create_record`/
-`update_record`/`delete_record`/`bulk_insert`) and schema/content
-tools do.
+### Sandbox and "Ask before changes"
 
-### One writer per file (#80)
+The effective policy is the workspace's: this person's chosen tier (default **read-write**) clamped to the committed `vibe.yaml` ceiling, and "Ask before changes" on unless this person turned it off and the ceiling allows it (`Workspace.AgentPolicy`). `--sandbox` can only make a session **more** restrictive, never less: a launch config, which may be shared in a dotfiles repo, can never grant more than the owner chose.
 
-A `.vibe` file can be open for **writing** by one process at a time — Studio,
-`vibe mcp serve`, or a CLI command (`compact`, `rekey`, `import`, `studio`
-TUI). Whichever opens it second is refused, with the holder's app name and
-pid: `f.vibe is already open in Vibe Studio (pid 4242); close it there
-first`. `vibe info`/`export`/`dump`/`verify` and `mcp serve
---read-only-file` don't take this lock and can read the file's last saved
-state alongside a writer.
+A headless process has no one to show an approval card to, so **while "Ask before changes" is on, an MCP client can read but any write is refused outright**. The refusal says so, and that changes to any connection other than the workspace's own local database always need Vibe Studio. To let MCP clients change the local database, turn the gate off in **Vibe Studio → Settings → Agent**; there is no flag or environment variable that bypasses it from the MCP side. To make changes with approval, open the workspace in Studio, which approves them in its chat UI while `vibe mcp serve` proxies to it.
 
-If you're already working in a file in Studio and also want an MCP client
-(e.g. Claude Desktop) connected to it, don't launch a second
-`vibe mcp serve` against it — start **Studio's own MCP server** (Settings →
-MCP Server) and point the client at that SSE endpoint instead. Or pass
-`--read-only-file` to read the file's last saved state: unsaved Studio edits
-won't be visible, and the sandbox is forced to read-only regardless of
-`--sandbox` or the file's own setting.
+### Take over
 
-The lock is a sidecar `f.vibe.lock` next to the file, held for the life of
-the writable session. If the holder is killed (`kill -9`, a crash, an OOM),
-the operating system releases the lock immediately — the leftover
-`f.vibe.lock` file is harmless and the next writer overwrites it
-automatically; there is nothing to clean up by hand. This is not enforced
-across machines: a `.vibe` file on a synced folder (Dropbox, a network
-share) opened for writing on two machines at once is not caught by this
-lock.
+Studio, opening a workspace a headless `vibe mcp serve` owns, can offer to take over: `hub.TakeOver(ctx, ws, "Vibe Studio", timeout)` signals the server (`SIGUSR1`; on Linux through a pidfd, re-verifying the lock still names that pid after the pid is pinned, so a recycled pid is never signalled; it checks it is a live owner on this host that advertised release control; if a client auto-reconnects and a different releasable owner appears while waiting, that one is asked too), the server closes its session, releases the lock and **exits with status 0**, and Studio gets the lock. The Claude session that was using it sees its server end and must reconnect (Claude Code: `/mcp`; Claude Desktop: restart the server or the app); the reconnected `vibe mcp serve` then proxies to Studio. Nothing is deleted, and open notebooks are plain files so they are unaffected.
+
+### For Studio (#111)
+
+```go
+hold, err := hub.AcquireHub(ws, hub.AppStudio, hub.WithReleaseHandler(onReleaseRequested))
+var held *hub.HeldError              // errors.Is(err, hub.ErrHubHeld): open read-only, or take over
+hold, err = hub.TakeOver(ctx, ws, hub.AppStudio, 10*time.Second, opts...)
+sess, issues, _ := workspace.OpenSession(ctx, ws, logger)   // only after the lock is held
+m, err := hub.StartWorkspaceMCP(ws, sess, hold, hub.WithMCPRememberPort())
+m.Handler.SetApprover(approve)       // Studio's approval cards; proxies get them too
+m.URL(); m.Token()                   // for the Settings screen; token is a secret
+m.Stop()                             // MCP off: clears the endpoint from hub.lock
+hold.Release()                       // after closing the session
+cfg, _ := hub.BuildClaudeConfig(ws.Root(), exe)   // exe from hub.LocateVibe()
+holder, err := hub.ReadHolder(ws.Root())          // who holds it, without the lock
+```
+
+What #111 has to wire (none of it is in the UI yet):
+
+1. **Opening a workspace:** `AcquireHub` first. On `ErrHubHeld`, read `held.Holder` and show the read-only banner (SPEC 7 C): "Open read-only" opens `workspace.Open` only (stores are files, so notebooks/queries/skills stay editable) and does **not** call `OpenSession` for the local `duckdb` connections, which show `locked-by(pid)`; "Take over" calls `TakeOver`, then continues as the owner. `ErrNotReleasable` or a timeout is shown as the reason, never a hang.
+2. **Releasable owner:** pass `WithReleaseHandler` (one per process; Studio holds one workspace at a time). The handler must ask the person if needed, close the session, stop MCP, `Release()`, and switch the window to the launcher or read-only. A second releasable hold in the process is an error (`ErrOneReleasableHold`).
+3. **MCP switch (Settings → Workspace → MCP):** On = `StartWorkspaceMCP` then `m.Handler.SetApprover(...)` wired to the existing approval card (an approval can take minutes; the proxy waits). Off = `m.Stop()`. Reflect whether a holder advertises MCP with `ReadHolder`. Wrap the handler with `WithMCPHandlerWrap` if Studio needs its own lock around calls.
+4. **Copy Claude Desktop / Claude Code config:** `hub.BuildClaudeConfig(ws.Root(), exe)` with `exe` from `hub.LocateVibe()`; copy `.Desktop` or `.Code`. Never show or copy the token with these.
+5. **Workspace switcher:** release the old workspace's hold (stop MCP, close the session, `hold.Release()`) **before** acquiring the new one. The release signal is process-wide, so only one releasable hold may exist at a time, and a second `WithReleaseHandler` fails with `ErrOneReleasableHold`.
+6. **Quit/close:** `m.Stop()`, close the session, then `hold.Release()` (the lock goes last).
+
+### Copy Claude config
+
+`hub.BuildClaudeConfig(root, exe)` returns the two snippets Studio copies. **Neither contains a token**: they launch `vibe mcp serve --workspace DIR` over stdio, and when Studio owns the workspace that process reads the token from `hub.lock` at run time.
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "vibe-acme-analytics": {
+      "command": "/path/to/vibe",
+      "args": ["mcp", "serve", "--workspace", "/path/to/acme-analytics"]
+    }
+  }
+}
+```
+
+Claude Code:
+
+```
+claude mcp add vibe-acme-analytics -- /path/to/vibe mcp serve --workspace /path/to/acme-analytics
+```
+
+The server name is `vibe-<folder>` so two workspaces do not collide. With "Ask before changes" on (the default), the client can read but every write is refused until the gate is off or Studio owns the workspace.
+
+### Security notes
+
+- `hub.lock` is `0600` and holds the endpoint and bearer token of a local server. The trust model is **same user only**: a reader refuses the file unless it is a regular file owned by the current uid with no group or world permission bits, ignores it unless the flock is really held, and accepts only a plain-`http` loopback URL, so a lock file committed to a cloned repository (or left by a crash) can never point a client, or its token, anywhere.
+- The lock file is never written through a link: it is opened with `O_NOFOLLOW`, and must be a regular, single-link file owned by you (a committed `hub.lock -> victim` symlink, a hard link or a FIFO is refused, not truncated or hung on); `.vibe-local` itself must be a real directory owned by you. The `.vibe` writer lock uses the same code.
+- The token never appears on a command line, in the Claude config snippets, in the structured logs, or in error messages. It is regenerated each time a server starts. The one place it is printed is `vibe mcp serve --transport sse`, which writes it to stderr once so a network client can be configured; with stdio (what the Claude snippets use) it is never printed. Anything that can read your files as you can read it; that is the same trust as your own keychain-free local config.
+- A proxy sends the token only as an `Authorization: Bearer` header.
+- `SIGUSR1` is only sent to a pid whose lock file says it advertised release control, on this host, with the lock verified held and (Linux) the process pinned by a pidfd. One signal listener exists per process and is never torn down, so a stray signal cannot kill a Vibe process.
 
 ### SSE transport security
 
@@ -150,36 +148,11 @@ for its one `GET`.
 
 ## Claude Desktop configuration
 
-Add to Claude Desktop's `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "vibe": {
-      "command": "/path/to/vibe",
-      "args": ["mcp", "serve", "/path/to/your-file.vibe", "--sandbox", "read-write"],
-      "env": {
-        "VIBE_PASSPHRASE": "your-passphrase-here"
-      }
-    }
-  }
-}
-```
-
-If the file still has "Ask before changes" on (the default — see above),
-Claude Desktop will be able to read through this connection but every write
-will come back refused. Turn the switch off in Vibe Studio → Settings →
-Agent first if you want this connection to be able to write.
-
-Claude Desktop launches this as a subprocess and speaks stdio JSON-RPC to
-it, so `--transport stdio` (the default) is correct here — omit
-`--transport` entirely. Storing a real passphrase in this file is a
-tradeoff the same way any MCP server credential is; treat
-`claude_desktop_config.json` as sensitive once you've added this.
+See "Copy Claude config" above: no passphrase and no token are needed. The older `VIBE_PASSPHRASE` setup applied to `.vibe` files and is gone.
 
 ## Tool list
 
-`vibe mcp serve` and Studio's SSE server both advertise exactly
+`vibe mcp serve` (owner or proxy) and Studio's SSE server all advertise exactly
 `agents.ListToolsForMode(agents.ModeMCP)` — every non-task-mode tool
 (`run_query`, `introspect_schema`, `describe_table`, `create_record`,
 `create_table`, `present_data`, skills, notebook-authoring tools, etc.).

@@ -1,6 +1,9 @@
 package agents
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // SandboxMode defines the permission level for agent operations.
 type SandboxMode string
@@ -256,4 +259,34 @@ func (sc *SandboxConfig) IsTableAllowed(table string) bool {
 		}
 	}
 	return false
+}
+
+type sandboxCeilingKey struct{}
+
+// WithSandboxCeiling returns a context that caps every call dispatched with it
+// at mode (tighten-only): the effective mode is the stricter of the handler's
+// own and mode. MCP uses it to bind a connection's requested sandbox (a proxy's
+// --sandbox) to its session. An unknown mode caps at read-only.
+func WithSandboxCeiling(ctx context.Context, mode SandboxMode) context.Context {
+	if _, err := ParseSandboxMode(string(mode)); err != nil {
+		mode = ModeReadOnly
+	}
+	return context.WithValue(ctx, sandboxCeilingKey{}, mode)
+}
+
+// sandboxFor loads the handler's sandbox once for a call, tightened by any
+// ceiling on ctx. The handler's own config is never modified.
+func (h *Handler) sandboxFor(ctx context.Context) *SandboxConfig {
+	cur := h.sandbox.Load()
+	ceil, ok := ctx.Value(sandboxCeilingKey{}).(SandboxMode)
+	if !ok || cur == nil {
+		return cur
+	}
+	tight := Tighter(cur.Mode, ceil)
+	if tight == cur.Mode {
+		return cur
+	}
+	next := *cur
+	next.Mode = tight
+	return &next
 }

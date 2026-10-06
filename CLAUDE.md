@@ -57,7 +57,8 @@ go test -v ./internal/container/
 ```
 main.go                    # Entry point — calls cmd.Execute()
 cmd/                       # Cobra commands: init, info, import, export, dump, verify, compact, rekey, passphrase, studio
-                           #   (+ `mcp serve`, #64)
+                           #   (+ `mcp serve [--workspace DIR]`: workspace-only, owner or proxy to Studio, #64/#112;
+                           #   no `.vibe` argument any more)
 
 studio/                    # Wails v2 desktop app
 ├── app.go                 # Go backend — all Wails-bound methods
@@ -87,7 +88,15 @@ internal/
 │                          #   reads content via ContainerAccess.Notebooks/Queries/Skills stores (never the SQLite
 │                          #   handle) and policy via `PolicySource` (container: `MetaPolicy`; workspace: `AgentPolicy()`)
 ├── llm/                   # In-app agent runner on fantasy (consumes agents.Handler tools, #63; task mode, #66)
-├── mcp/                   # MCP server bridging agents.Handler tools (SSE; stdio via `vibe mcp serve`, #64)
+├── mcp/                   # MCP server bridging agents.Handler tools (SSE; stdio via `vibe mcp serve`, #64),
+                           #   plus ProxyStdio: the stdio ⇄ SSE bridge `vibe mcp serve` uses when Studio owns the hub (#112)
+├── filelock/              # crash-safe non-blocking flock + holder payload; behind container's .vibe lock (#80)
+                           #   and the workspace hub lock (#112)
+├── hub/                   # who owns a workspace's DuckDB hub (#112): AcquireHub / ReadHolder / TakeOver on
+                           #   .vibe-local/hub.lock, Serve (`vibe mcp serve` owner/proxy), StartWorkspaceMCP,
+                           #   NewAgentHandler, BuildClaudeConfig, ProtectStdout. Same-user trust, see docs/mcp.md
+├── workspace/             # workspace folder, scopes, file stores, watcher (#109); AgentAccess adapts a
+                           #   workspace + session to agents.ContainerAccess
 ├── a2ui/                  # A2UI component schema + validator (#67); Go validates, Vue renders
 ├── notebooks/             # Notebook model (#66) + `Store` (SQLite impl for .vibe, `FileStore` -> notebooks/<id>.vnb), plus the page->notebook and report->notebook
                            #   one-time migrations (internal/notebooks/migrate*.go) run on open
@@ -158,6 +167,8 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 **Skills (#62):** `SKILL.md` documents (`name`, `description` frontmatter + markdown instructions). The system prompt advertises name and description; the agent fetches bodies with `read_skill`. Built-ins are embedded; user skills live in `_vibe_skills`. Table-bound skills load only when the table has rows.
 
 **Artifacts / A2UI (#67):** `{ title, components[] }`, thirteen component types, flat list nested by `parent` id, closed color enum, unknown fields rejected. `stat` / `table` / `barChart` / `lineChart` take inline data or a live `sql` binding. Go validates, Vue renders.
+
+**Hub ownership (#112):** one process per workspace owns the DuckDB hub, recorded by a flock on `.vibe-local/hub.lock` (0600 JSON: app/pid/host, plus `mcp {url, token}` while serving MCP and `control: sigusr1` when releasable). `vibe mcp serve` owns the hub if free, else proxies stdio to the owner's MCP; `hub.TakeOver` asks an owner to release via SIGUSR1. The lock file is trusted for the same user only (owner uid, no group/world bits, flock really held, loopback http endpoint); the token never goes in argv, config snippets, structured logs or errors (only `--transport sse` prints it, once, to stderr). The lock is opened `O_NOFOLLOW` and must be a single-link regular file you own; `--sandbox` in proxy mode is enforced by the owner via `X-Vibe-Sandbox` (tighten-only per session). Over stdio, fd 1 is redirected to stderr (`hub.ProtectStdout`) so nothing but JSON-RPC reaches stdout. No save-on-exit: writes go straight to their sources.
 
 **Agent interface:** One tool registry (`internal/agents`) consumed by the in-app runner and exposed over MCP. Sandbox modes `read-only`, `read-write`, `full`, with per-file "ask before changes" (default on): Studio chat shows an inline approval card; MCP clients are refused. Guardrails (#70): grounding check, empty-result explanation, tool-result budget.
 

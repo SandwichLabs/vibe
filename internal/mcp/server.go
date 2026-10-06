@@ -12,7 +12,10 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -47,7 +50,18 @@ type Server struct {
 	// can't set headers, e.g. a raw EventSource) on every request. Empty
 	// only before the first Start.
 	token string
+
+	// sessionCeil maps an SSE session id to the sandbox ceiling its client
+	// asked for with the SandboxHeader on the stream request. Bound at
+	// connection time and applied tighten-only to every call on that session,
+	// so a later request cannot drop it.
+	sessionCeil sync.Map // string -> agents.SandboxMode
 }
+
+// SandboxHeader is the request header a proxying `vibe mcp serve --sandbox X`
+// sends on its SSE connection. The owner caps that session's sandbox at X
+// (never above its own policy). Unknown values are rejected with 400.
+const SandboxHeader = "X-Vibe-Sandbox"
 
 // New creates a new MCP server backed by the given tool-dispatch Handler.
 func New(handler Handler, logger *slog.Logger) *Server {
@@ -61,11 +75,11 @@ func New(handler Handler, logger *slog.Logger) *Server {
 // every ModeMCP tool against it. Shared by Start (SSE transport) and
 // ServeStdio (stdio transport) so a stdio and an SSE client see byte
 // identical tool lists — one registration path, not two.
-func (s *Server) buildMCPServer() *server.MCPServer {
+func (s *Server) buildMCPServer(extra ...server.ServerOption) *server.MCPServer {
 	mcpServer := server.NewMCPServer(
 		"Vibe Studio",
 		"1.0.0",
-		server.WithToolCapabilities(true),
+		append([]server.ServerOption{server.WithToolCapabilities(true)}, extra...)...,
 	)
 	for _, tool := range agents.ListToolsForMode(agents.ModeMCP) {
 		mcpTool := toolDefToMCPTool(tool)
@@ -92,7 +106,11 @@ func generateToken() (string, error) {
 // arrive as a same-machine, non-browser client regardless of what Start was
 // told to bind to.
 func (s *Server) Start(addr string) error {
-	s.mcpServer = s.buildMCPServer()
+	hooks := &server.Hooks{}
+	hooks.AddOnUnregisterSession(func(_ context.Context, sess server.ClientSession) {
+		s.sessionCeil.Delete(sess.SessionID())
+	})
+	s.mcpServer = s.buildMCPServer(server.WithHooks(hooks))
 
 	token, err := generateToken()
 	if err != nil {
@@ -100,7 +118,17 @@ func (s *Server) Start(addr string) error {
 	}
 	s.token = token
 
-	sseServer := server.NewSSEServer(s.mcpServer)
+	sseServer := server.NewSSEServer(s.mcpServer, server.WithSessionIDGenerator(func(_ context.Context, r *http.Request) (string, error) {
+		id := uuid.New().String()
+		if v := r.Header.Get(SandboxHeader); v != "" {
+			mode, err := agents.ParseSandboxMode(v)
+			if err != nil {
+				return "", err // authMiddleware already rejected this; fail closed anyway
+			}
+			s.sessionCeil.Store(id, mode)
+		}
+		return id, nil
+	}))
 	s.sseServer = sseServer
 
 	ln, err := net.Listen("tcp", addr)
@@ -255,6 +283,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if v := r.Header.Get(SandboxHeader); v != "" {
+			if _, err := agents.ParseSandboxMode(v); err != nil {
+				http.Error(w, "bad request: unknown "+SandboxHeader, http.StatusBadRequest)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -333,6 +367,13 @@ func (s *Server) makeToolHandler(toolName string) server.ToolHandlerFunc {
 			Params:  params,
 		}
 
+		if sess := server.ClientSessionFromContext(ctx); sess != nil {
+			if v, ok := s.sessionCeil.Load(sess.SessionID()); ok {
+				if mode, ok := v.(agents.SandboxMode); ok {
+					ctx = agents.WithSandboxCeiling(ctx, mode)
+				}
+			}
+		}
 		resp := s.handler.Handle(ctx, req)
 
 		if resp.Error != nil {

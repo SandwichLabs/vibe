@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/sandwich-labs/vibe-app/internal/filelock"
 )
 
 // ErrFileInUse is returned (wrapped) when another process already holds a
@@ -76,4 +78,35 @@ func readHolder(lp string) *LockHolder {
 		return nil
 	}
 	return &h
+}
+
+// fileLock is the writer lock on a .vibe file's sidecar <file>.lock, held for
+// the lifetime of a writable Container. The flock itself is internal/filelock.
+type fileLock struct{ l *filelock.Lock }
+
+// acquireLock takes the writer lock for vibePath, non-blocking, and names this
+// process as the holder. A conflict returns *InUseError.
+func acquireLock(vibePath, app string) (*fileLock, error) {
+	lp := lockPath(vibePath)
+	holder := LockHolder{App: app, PID: os.Getpid()}
+	if hostname, err := os.Hostname(); err == nil {
+		holder.Host = hostname
+	}
+	payload, _ := json.Marshal(holder)
+	l, err := filelock.Acquire(lp, payload)
+	if err != nil {
+		if errors.Is(err, filelock.ErrHeld) {
+			return nil, &InUseError{Path: vibePath, Holder: readHolder(lp)}
+		}
+		return nil, err
+	}
+	return &fileLock{l: l}, nil
+}
+
+// release drops the lock and removes the sidecar file.
+func (l *fileLock) release() error {
+	if l == nil {
+		return nil
+	}
+	return l.l.Release()
 }

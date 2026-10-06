@@ -69,7 +69,7 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		return errResp
 	}
 	class, reason := classifySQL(ctx, userDB, sqlStr, nil)
-	if err := h.sandbox.Load().checkSQLClassReadOnly(class, reason); err != nil {
+	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v", err))
 	}
 
