@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 Import .vibe - Vibe Studio design mockups</title>
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+
+</head>
+<body class="sh">
+<header class="doc-bar">
+  <a href="index.html" data-keep-theme>&larr; All screens</a>
+  <span class="ttl">03 &middot; Import .vibe</span>
+  <span class="tag">Epic #105 &middot; Design pass #106 &middot; static mockup, not shipped code</span>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme-toggle" type="button" aria-label="Toggle light and dark theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span id="theme-label">Light</span></button>
+</header>
+<div class="stage">
+
+<section class="artboard">
+  <div class="ab-label"><b>A. Unlock (older, locked file)</b><span class="note-t">Plain language, the "can't be recovered" warning up front, no jargon on a wrong passphrase.</span></div>
+  <div class="frame h-600">
+<div class="center-stage">
+<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="im1-6">
+  <div class="d-head"><div class="stepper" aria-label="Step 1 of 3">
+  <span class="on"><span class="n">1</span> Unlock</span><span class="bar"></span>
+  <span class=""><span class="n">2</span> Preview</span><span class="bar"></span>
+  <span class=""><span class="n">3</span> Done</span></div><h2 id="im1-6" style="margin-top:12px">Import a .vibe file</h2><p>Older Vibe files keep their data inside one locked file. Vibe will copy it into a normal workspace folder. The original isn't changed.</p></div>
+  <div class="d-body">
+    <div class="url-tile" style="font-size:13px;display:flex;gap:10px;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span style="flex:1">~/Documents/<span class="acc">harbor-lane.vibe</span></span><button class="linkbtn" type="button">Choose another&hellip;</button></div>
+    <div class="field"><label for="pp-6">Passphrase</label>
+      <input id="pp-6" class="field-input" type="password" value="" placeholder="The passphrase you chose when you made this file" aria-describedby="pp-h-6" autocomplete="off">
+      
+    </div>
+    <div class="note attn" id="pp-h-6"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Vibe can't recover a forgotten passphrase.</b> There is no reset and no back door: the passphrase is the only key. If it's lost, nobody can open this file, including us.</span></div>
+    
+  </div>
+  <div class="d-foot"><span class="left">Got a bundle, not an old file? It opens straight to the preview.</span><button class="btn" type="button">Cancel</button><button class="btn btn-primary" type="button">Unlock and preview</button></div>
+</div></div>
+  </div>
+</section>
+
+<section class="artboard">
+  <div class="ab-label"><b>A2. Wrong passphrase</b><span class="note-t">Inline error on the field, technical details tucked away.</span></div>
+  <div class="frame h-600">
+<div class="center-stage">
+<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="im1-7">
+  <div class="d-head"><div class="stepper" aria-label="Step 1 of 3">
+  <span class="on"><span class="n">1</span> Unlock</span><span class="bar"></span>
+  <span class=""><span class="n">2</span> Preview</span><span class="bar"></span>
+  <span class=""><span class="n">3</span> Done</span></div><h2 id="im1-7" style="margin-top:12px">Import a .vibe file</h2><p>Older Vibe files keep their data inside one locked file. Vibe will copy it into a normal workspace folder. The original isn't changed.</p></div>
+  <div class="d-body">
+    <div class="url-tile" style="font-size:13px;display:flex;gap:10px;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span style="flex:1">~/Documents/<span class="acc">harbor-lane.vibe</span></span><button class="linkbtn" type="button">Choose another&hellip;</button></div>
+    <div class="field"><label for="pp-7">Passphrase</label>
+      <input id="pp-7" class="field-input field-input-error" type="password" value="harborlane1" placeholder="The passphrase you chose when you made this file" aria-invalid="true" aria-describedby="pp-err-7" autocomplete="off">
+      <div class="help" id="pp-err-7" style="color:var(--sh-error);font-weight:600">That passphrase didn't work. Check Caps Lock and try again.</div>
+    </div>
+    <div class="note attn" id="pp-h-7"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Vibe can't recover a forgotten passphrase.</b> There is no reset and no back door: the passphrase is the only key. If it's lost, nobody can open this file, including us.</span></div>
+    <details class="help"><summary style="cursor:pointer;font-weight:600">Show technical details</summary><div class="details" style="margin-top:8px">decrypt failed: HMAC check failed (file is intact, key is wrong)</div></details>
+  </div>
+  <div class="d-foot"><span class="left">Got a bundle, not an old file? It opens straight to the preview.</span><button class="btn" type="button">Cancel</button><button class="btn btn-primary" type="button">Unlock and preview</button></div>
+</div></div>
+  </div>
+</section>
+
+<section class="artboard">
+  <div class="ab-label"><b>B. Preview</b><span class="note-t">What will be created, as a tree. Nothing written yet. (Bundles skip step 1 when not encrypted.)</span></div>
+  <div class="frame h-900">
+<div class="center-stage">
+<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="im2-8">
+  <div class="d-head"><div class="stepper" aria-label="Step 2 of 3">
+  <span class="done"><span class="n"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m5 12 5 5 9-11"/></svg></span> Unlock</span><span class="bar"></span>
+  <span class="on"><span class="n">2</span> Preview</span><span class="bar"></span>
+  <span class=""><span class="n">3</span> Done</span></div><h2 id="im2-8" style="margin-top:12px">Here's what Vibe will create</h2><p>Nothing is written until you press Import.</p></div>
+  <div class="d-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="field"><label for="iw-name-8">Workspace name</label><input id="iw-name-8" class="field-input" value="Harbor Lane Hardware"></div>
+      <div class="field"><label for="iw-loc-8">Where to put it</label><div class="row" style="gap:8px"><input id="iw-loc-8" class="field-input" value="~/work"><button class="btn" type="button" style="flex:none">Choose&hellip;</button></div></div>
+    </div>
+    <div class="count-row" role="list" aria-label="What was found in the file">
+      <div class="stat" role="listitem"><div class="label">Notebooks</div><div class="num">6</div></div>
+      <div class="stat" role="listitem"><div class="label">Saved queries</div><div class="num">4</div></div>
+      <div class="stat" role="listitem"><div class="label">Skills</div><div class="num">2</div></div>
+      <div class="stat" role="listitem"><div class="label">Tables</div><div class="num">9</div></div>
+    </div>
+    <div class="tree-plan" role="group" aria-label="Files and folders that will be created">
+      <span class="new">~/work/harbor-lane-hardware/</span>
+      <span class="ind1"><span class="new">vibe.yaml</span> <span class="d">&nbsp;two connections: harbor_lane (your data, the default) and local (empty)</span></span>
+      <span class="ind1">notebooks/ <span class="d">&nbsp;6 notebooks (2 older pages become notebooks)</span></span>
+      <span class="ind1">queries/ <span class="d">&nbsp;4 saved queries</span></span>
+      <span class="ind1">skills/ <span class="d">&nbsp;2 skills</span></span>
+      <span class="ind1">data/</span>
+      <span class="ind2"><span class="new">harbor-lane.duckdb</span> <span class="d">&nbsp;your 9 tables, 797 orders, 14 MB. Kept out of git.</span></span>
+      <span class="ind2"><span class="new">local.duckdb</span> <span class="d">&nbsp;an empty database for new work. Kept out of git.</span></span>
+    </div>
+    <div class="note warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span><b>In the new workspace your data is a normal file, not locked with a passphrase.</b> Use your computer's disk encryption if this data is sensitive.</span></div>
+    <div class="note info"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>Your original <code>harbor-lane.vibe</code> stays exactly as it is. Delete it once you've checked the new workspace.</span></div>
+  </div>
+  <div class="d-foot"><button class="btn" type="button">Back</button><button class="btn" type="button">Cancel</button><button class="btn btn-primary" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Import</button></div>
+</div></div>
+  </div>
+</section>
+
+<section class="artboard">
+  <div class="ab-label"><b>C. Result</b><span class="note-t">Success, what was written, and anything to double-check.</span></div>
+  <div class="frame h-600">
+<div class="center-stage">
+<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="im3-9">
+  <div class="d-head"><div class="stepper" aria-label="Step 3 of 3">
+  <span class="done"><span class="n"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m5 12 5 5 9-11"/></svg></span> Unlock</span><span class="bar"></span>
+  <span class="done"><span class="n"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m5 12 5 5 9-11"/></svg></span> Preview</span><span class="bar"></span>
+  <span class="on"><span class="n">3</span> Done</span></div><h2 id="im3-9" style="margin-top:12px">Imported into a new workspace</h2></div>
+  <div class="d-body">
+    <div class="banner teal" role="status"><div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m5 12 5 5 9-11"/></svg></div><div class="body"><div class="ttl">Harbor Lane Hardware is ready</div><div class="sub" style="font-family:var(--sh-font-mono)">~/work/harbor-lane-hardware</div></div></div>
+    <ul role="list" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:14px">
+      <li class="row" style="gap:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span>6 notebooks, 4 saved queries and 2 skills were written as files.</span></li>
+      <li class="row" style="gap:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg><span>Your data was copied to <code>data/harbor-lane.duckdb</code> and added as the connection <code>harbor_lane</code>, the default. A new empty <code>local</code> database is there too.</span></li>
+      <li class="row" style="gap:10px;align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--sh-warn);flex:none;margin-top:3px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>2 older pages were converted to notebooks. Charts and tables carry over, but have a quick look at <b>Monthly summary</b> and <b>Reorder list</b>. <button class="linkbtn" type="button" style="padding:0 2px">See what changed</button></span></li>
+    </ul>
+  </div>
+  <div class="d-foot"><span class="left"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> The old file's passphrase is no longer needed.</span><button class="btn" type="button">Show in folder</button><button class="btn btn-primary" type="button">Open workspace</button></div>
+</div></div>
+  </div>
+</section>
+</div>
+</body>
+</html>

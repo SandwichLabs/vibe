@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 Agent approval card - Vibe Studio design mockups</title>
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+
+</head>
+<body class="sh">
+<header class="doc-bar">
+  <a href="index.html" data-keep-theme>&larr; All screens</a>
+  <span class="ttl">10 &middot; Agent approval card</span>
+  <span class="tag">Epic #105 &middot; Design pass #106 &middot; static mockup, not shipped code</span>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme-toggle" type="button" aria-label="Toggle light and dark theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span id="theme-label">Light</span></button>
+</header>
+<div class="stage">
+
+<section class="artboard">
+  <div class="ab-label"><b>A. Write to a non-local connection</b><span class="note-t">The card names the connection, its scope and the exact statement. "Allow" is the only way it runs. The agent can already read; this is about changing.</span></div>
+  <div class="frame h-1000">
+
+<div class="app has-rail" >
+
+<div class="topbar">
+  <div class="brand"><span class="mark mark-only" aria-hidden="true">V</span></div>
+  <button class="ws-switch" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Workspace: Acme Analytics. Switch workspace">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span class="ws-name">Acme Analytics</span><span class="ws-branch"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>main</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+  </button>
+  <div class="topright" style="gap:10px;">
+    <span class="pill"><span class="dot ok"></span>Agent asks before changes</span>
+    <button class="btn btn-inverted" type="button" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg> Agent</button>
+    <button class="icon-btn" type="button" style="color:var(--vibe-chrome-fg);border-color:var(--vibe-chrome-fg);width:32px;height:32px;" aria-label="Switch to dark theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+  </div>
+</div>
+
+<aside class="sidebar with-rail">
+  <nav class="navblock" aria-label="Workspace">
+    <div class="side-section">Workspace</div>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>Home</span></a>
+    <a class="side-link active" href="#" aria-current="page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m12 2 10 6-10 6L2 8Z"/><path d="m2 17 10 6 10-6M2 12l10 6 10-6"/></svg><span>Notebooks</span></a>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg><span>Queries</span></a>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>Skills</span></a>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg><span>Agent</span></a>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span>Import</span></a>
+    <a class="side-link" href="#" ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+  </nav>
+  <div class="conn-rail" role="region" aria-label="Connections">
+    <div class="rail-head">
+      <div class="side-section" id="rail-h-34">Connections</div>
+      <button class="icon-btn rail-toggle" type="button" aria-label="Show connections" aria-expanded="false" title="Connections"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></button>
+      <button class="icon-btn keep" type="button" aria-label="New connection" title="New connection"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-btn" type="button" aria-label="Refresh all connections" title="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 12a9 9 0 1 1-3.46-7.1L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    </div>
+    <div class="rail-filter"><label class="sr" style="position:absolute;left:-9999px" for="rf-34">Filter tables</label><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="rf-34" type="text" placeholder="Filter tables and columns" aria-label="Filter tables and columns"></div>
+    <div class="tree" role="tree" aria-labelledby="rail-h-34" >
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="true" style="padding-left:4px" title="local"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m6 9 6 6 6-6"/></svg><span class="ctype " aria-hidden="true">DK</span><span class="nm">local</span><span class="rowtail"><span class="scope shared" title="Saved in vibe.yaml, shared with the team through git">Team</span><span class="st ok" role="img" aria-label="Connected" title="Connected"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/></svg></span></span></div>
+<div class="tn" role="treeitem" aria-level="2" style="padding-left:18px"><span class="chev none"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg><span class="nm">customers</span><span class="meta ">12,480</span></div>
+<div class="tn" role="treeitem" aria-level="2" style="padding-left:18px"><span class="chev none"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg><span class="nm">orders</span><span class="meta ">48,213</span></div>
+<div class="tn" role="treeitem" aria-level="2" style="padding-left:18px"><span class="chev none"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg><span class="nm">v_monthly_revenue</span><span class="meta ">view</span></div>
+<div class="tn" role="treeitem" aria-level="2" style="padding-left:18px"><span class="chev none"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg><span class="nm">products</span><span class="meta ">1,206</span></div>
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="false" style="padding-left:4px" title="prod_pg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m9 18 6-6-6-6"/></svg><span class="ctype " aria-hidden="true">PG</span><span class="nm">prod_pg</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" aria-label="Read-only" role="img"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="scope shared" title="Saved in vibe.yaml, shared with the team through git">Team</span><span class="st ok" role="img" aria-label="Connected" title="Connected"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="false" style="padding-left:4px" title="warehouse"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m9 18 6-6-6-6"/></svg><span class="ctype " aria-hidden="true">PG</span><span class="nm">warehouse</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" role="img" aria-label="Overrides a shared connection"><path d="m12 2 10 6-10 6L2 8Z"/><path d="m2 17 10 6 10-6M2 12l10 6 10-6"/></svg><span class="scope local" title="Saved on this computer only, for this workspace">This computer</span><span class="st creds" role="img" aria-label="Needs credentials: PG_WAREHOUSE_PASSWORD is not set" title="Needs credentials: PG_WAREHOUSE_PASSWORD is not set"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="7.5" cy="15.5" r="4.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="false" style="padding-left:4px" title="md"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m9 18 6-6-6-6"/></svg><span class="ctype " aria-hidden="true">MD</span><span class="nm">md</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" aria-label="Read-only" role="img"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="scope user" title="Saved for you, in every workspace">All my workspaces</span><span class="st creds" role="img" aria-label="Needs credentials" title="Needs credentials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="7.5" cy="15.5" r="4.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" style="padding-left:4px" title="lake"><span class="chev none"></span><span class="ctype " aria-hidden="true">S3</span><span class="nm">lake</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" aria-label="Read-only" role="img"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="scope shared" title="Saved in vibe.yaml, shared with the team through git">Team</span><span class="st ext" role="img" aria-label="Extension needed" title="Extension needed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="false" style="padding-left:4px" title="staging_pg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m9 18 6-6-6-6"/></svg><span class="ctype " aria-hidden="true">PG</span><span class="nm">staging_pg</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" aria-label="Read-only" role="img"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="scope local" title="Saved on this computer only, for this workspace">This computer</span><span class="st err" role="img" aria-label="Can’t connect" title="Can’t connect"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" style="padding-left:4px" title="ops_db"><span class="chev none"></span><span class="ctype " aria-hidden="true">DK</span><span class="nm">ops_db</span><span class="rowtail"><span class="scope shared" title="Saved in vibe.yaml, shared with the team through git">Team</span><span class="st lock" role="img" aria-label="In use by vibe mcp serve (pid 4182)" title="In use by vibe mcp serve (pid 4182)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></span></div>
+<div class="tn conn" role="treeitem" aria-level="1" aria-expanded="false" style="padding-left:4px" title="legacy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="m9 18 6-6-6-6"/></svg><span class="ctype " aria-hidden="true">SQ</span><span class="nm">legacy</span><span class="rowtail"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ro" aria-label="Read-only" role="img"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="scope local" title="Saved on this computer only, for this workspace">This computer</span><span class="st off" role="img" aria-label="Not connected" title="Not connected"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="9"/></svg></span></span></div>
+    </div>
+  </div>
+  <div class="nav-pill" style="margin:10px 12px 12px;flex:none;">
+    <span class="label"><span class="dot"></span>Saved as you go</span>
+    <span class="url">~/work/<span class="acc">acme-analytics</span></span>
+    <span class="git"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg> main &middot; 2 changed files</span>
+  </div>
+</aside>
+<main><div class="nb-wrap"><div class="headrow" style="margin-bottom:0"><div><div class="crumb">Notebooks <span class="sep">/</span> weekly-revenue</div><h1>Weekly revenue</h1></div></div>
+  
+<div class="cell-card" style="position:relative"><div class="cell-head"><span class="kind">SQL &middot; revenue by week</span><span class="spacer"></span>
+  <button class="conn-select cell" type="button" aria-haspopup="listbox" aria-label="Run on: local (workspace default)"><span class="ctype " aria-hidden="true">DK</span>Default &middot; local<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="cv"><path d="m6 9 6 6 6-6"/></svg></button>
+  <button class="btn btn-sm btn-primary" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m6 4 14 8L6 20Z"/></svg> Run</button></div>
+  <pre class="sqlbox"><span class="k">SELECT</span> date_trunc(<span class="s">'week'</span>, ordered_at) week, <span class="k">sum</span>(total) revenue <span class="k">FROM</span> orders <span class="k">GROUP BY</span> 1;</pre></div></div></main>
+
+
+<aside class="agent-side agent-over" aria-label="Agent">
+  <div class="head"><span class="title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg> Agent</span><span class="meta"><span class="status-dot ok"></span>Reads freely &middot; asks first</span></div>
+  <div class="stream" style="overflow:auto"><div class="amsg"><span class="av user">ZO</span><div class="body"><div class="who">You</div><div class="user-bubble">Mark order 10482 as shipped in the warehouse database.</div></div></div><div class="amsg"><span class="av bot">V</span><div class="body"><div class="who">Agent</div><p>I'll check the order first, then update it.</p><div class="tool-chip"><span class="lab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg> describe_table warehouse.public.orders</span><span class="check">&#10003;</span></div><div class="tool-chip"><span class="lab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg> preview_query &middot; 1 row</span><span class="check">&#10003;</span></div></div></div>
+<div class="approval" role="group" aria-label="Approval needed">
+  <div class="ap-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--sh-coral)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="t">Allow this change to warehouse?</span></div>
+  <div class="ap-body">
+    <span class="ap-conn"><span class="ctype " aria-hidden="true">PG</span>warehouse<span class="small">not your local data</span></span>
+    <p>Update 1 row in <b>warehouse</b>: set the status of order 10482 to "shipped".</p>
+    <pre>UPDATE warehouse.public.orders
+SET status = 'shipped'
+WHERE id = 10482;</pre>
+    <p class="help">This is outside your workspace's local data, so Vibe can't undo it for you.</p>
+  </div>
+  <div class="ap-foot"><button class="btn btn-sm" type="button" >Cancel</button><button class="btn btn-sm btn-primary" type="button" >Allow change to warehouse</button></div>
+  <div class="ap-state" role="status" aria-live="polite"></div>
+</div><div class="amsg"><span class="av user">ZO</span><div class="body"><div class="who">You</div><div class="user-bubble">Now do the same in prod.</div></div></div><div class="amsg"><span class="av bot">V</span><div class="body"><div class="who">Agent</div><p>I can't. <b>prod_pg</b> is set to read-only, so I can look but not change it. If you want me to, turn off Read-only on that connection first.</p></div></div></div>
+  <div class="input"><div class="tools"><span class="ic"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> Default: local</span><span class="ic"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Asks before changes</span></div><div class="box">Ask about your data&hellip;</div></div>
+</aside>
+</div>
+  </div>
+</section>
+
+<section class="artboard">
+  <div class="ab-label"><b>B. Other states of the same card</b><span class="note-t">Destructive wording is explicit; approved shows progress; the headless MCP case says why it is blocked.</span></div>
+  <div class="frame h-600">
+<div class="center-stage" style="align-items:flex-start;overflow:auto"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%;max-width:1200px">
+        <div class="col" style="gap:8px"><div class="sh-label">Destructive, pending</div>
+<div class="approval" role="group" aria-label="Approval needed">
+  <div class="ap-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--sh-coral)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="t">Delete rows from warehouse?</span></div>
+  <div class="ap-body">
+    <span class="ap-conn"><span class="ctype " aria-hidden="true">PG</span>warehouse<span class="small">not your local data</span></span>
+    <p>Delete <b>1,204 rows</b> from <b>warehouse</b>.public.events where the row is older than 2025-01-01.</p>
+    <pre>DELETE FROM warehouse.public.events
+WHERE created_at < '2025-01-01';</pre>
+    <p class="help">This can't be undone. Check the number of rows before you allow it.</p>
+  </div>
+  <div class="ap-foot"><button class="btn btn-sm" type="button" >Cancel</button><button class="btn btn-sm btn-destructive" type="button" >Delete rows in warehouse</button></div>
+  <div class="ap-state" role="status" aria-live="polite"></div>
+</div></div>
+        <div class="col" style="gap:8px"><div class="sh-label">Approved, running</div>
+<div class="approval" role="group" aria-label="Approval needed">
+  <div class="ap-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--sh-coral)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="t">Allow this change to warehouse?</span></div>
+  <div class="ap-body">
+    <span class="ap-conn"><span class="ctype " aria-hidden="true">PG</span>warehouse<span class="small">not your local data</span></span>
+    <p>Update 1 row in <b>warehouse</b>: set the status of order 10482 to "shipped".</p>
+    <pre>UPDATE warehouse.public.orders
+SET status = 'shipped'
+WHERE id = 10482;</pre>
+    
+  </div>
+  <div class="ap-foot"><button class="btn btn-sm" type="button" disabled>Cancel</button><button class="btn btn-sm btn-primary" type="button" disabled>Allow change to warehouse</button></div>
+  <div class="ap-state" role="status" aria-live="polite">Approved, running…</div>
+</div></div>
+        <div class="col" style="gap:8px"><div class="sh-label">Asked through vibe mcp serve, Studio closed</div><div class="banner attn" role="status" style="align-items:flex-start"><div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="body"><div class="ttl">Blocked: nobody to ask</div><div class="sub" style="color:var(--sh-ink)">A tool tried to change <b>prod_pg</b> through <code>vibe mcp serve</code>, but this workspace isn't open in Vibe Studio, so there's no one to approve it. Open the workspace in Vibe Studio to allow it, or let the tool read only.</div></div></div></div>
+      </div></div>
+  </div>
+</section>
+</div>
+</body>
+</html>

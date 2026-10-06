@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workspaces and connections - Vibe Studio design mockups</title>
+<link rel="stylesheet" href="mock.css"><script src="mock.js"></script>
+<style>.gcard .thumb iframe{transform:scale(var(--s,0.3))} .intro{max-width:760px;padding:24px 20px 8px} .intro h1{font-size:34px;margin:0 0 8px} .intro p{color:var(--sh-graphite);font-size:15px;line-height:1.6;margin:0 0 8px}</style>
+<script>
+// scale the thumbnail iframes to their card width
+addEventListener('DOMContentLoaded',function(){function f(){document.querySelectorAll('.gcard .thumb').forEach(function(t){t.querySelector('iframe').style.transform='scale('+(t.clientWidth/1280)+')'})};f();addEventListener('resize',f)})
+</script></head>
+<body class="sh">
+<header class="doc-bar"><span class="ttl">Vibe Studio &middot; workspaces and connections</span><span class="tag">Design pass #106 &middot; epic #105</span><span class="sp"></span>
+<a href="SPEC.md">Read the spec (SPEC.md)</a>
+<button class="tbtn" id="theme-toggle" type="button" aria-label="Toggle light and dark theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span id="theme-label">Light</span></button></header>
+<div style="max-width:1280px;margin:0 auto">
+<div class="intro"><h1>Workspaces and connections</h1>
+<p>Static, high-fidelity mockups of the new Studio surfaces, built from the real SchoolHouse stylesheets and the <code>--vibe-*</code> theme roles. Use the Light/Dark button to flip every page. These are documents, not shipped code.</p>
+<p>Each page shows several states. The copy on them is the proposed final wording; the spec lists the Go bindings, events and reusable components for each.</p></div>
+<div class="gallery" style="padding-bottom:48px">
+  <a class="card gcard" href="01-launcher.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="01-launcher.html" src="01-launcher.html" tabindex="-1" title="Launcher" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">01 &middot; #111</span><span class="h">Launcher</span><span class="d">Replaces the unlock screen: recent workspaces, open, new, import, first-run.</span></div>
+  </a>
+  <a class="card gcard" href="02-new-workspace.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="02-new-workspace.html" src="02-new-workspace.html" tabindex="-1" title="New workspace" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">02 &middot; #111</span><span class="h">New workspace</span><span class="d">Name, location, git init, starter template. Validation state.</span></div>
+  </a>
+  <a class="card gcard" href="03-import-vibe.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="03-import-vibe.html" src="03-import-vibe.html" tabindex="-1" title="Import .vibe" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">03 &middot; #110 #111</span><span class="h">Import .vibe</span><span class="d">Unlock with a "can't be recovered" warning, preview what will be created, result.</span></div>
+  </a>
+  <a class="card gcard" href="04-shell-switcher.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="04-shell-switcher.html" src="04-shell-switcher.html" tabindex="-1" title="Shell + workspace switcher" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">04 &middot; #111</span><span class="h">Shell + workspace switcher</span><span class="d">Vault-style menu in the header, and the restart-to-switch-MotherDuck prompt.</span></div>
+  </a>
+  <a class="card gcard" href="05-connections-rail.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="05-connections-rail.html" src="05-connections-rail.html" tabindex="-1" title="Connections rail" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">05 &middot; #117</span><span class="h">Connections rail</span><span class="d">Explorer tree, status dots, scope badges, shadowing, context menu, empty states.</span></div>
+  </a>
+  <a class="card gcard" href="06-connection-editor.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="06-connection-editor.html" src="06-connection-editor.html" tabindex="-1" title="Connection editor" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">06 &middot; #117</span><span class="h">Connection editor</span><span class="d">Type picker, generated form, write-only credentials, Test, scope, read-only.</span></div>
+  </a>
+  <a class="card gcard" href="07-states.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="07-states.html" src="07-states.html" tabindex="-1" title="States" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">07 &middot; #111 #112 #117</span><span class="h">States</span><span class="d">Needs credentials, extension consent, opened read-only, conflict banner, read-only datasheet.</span></div>
+  </a>
+  <a class="card gcard" href="08-query-editor-cells.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="08-query-editor-cells.html" src="08-query-editor-cells.html" tabindex="-1" title="Query editor + SQL cells" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">08 &middot; #117</span><span class="h">Query editor + SQL cells</span><span class="d">Connection selector in the editor and per notebook cell.</span></div>
+  </a>
+  <a class="card gcard" href="09-settings.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="09-settings.html" src="09-settings.html" tabindex="-1" title="Settings split" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">09 &middot; #111 #117</span><span class="h">Settings split</span><span class="d">Workspace vs App.</span></div>
+  </a>
+  <a class="card gcard" href="10-agent-approval.html" data-keep-theme>
+    <div class="thumb" aria-hidden="true"><iframe data-src="10-agent-approval.html" src="10-agent-approval.html" tabindex="-1" title="Agent approval card" loading="lazy" style="transform:scale(0.3)"></iframe></div>
+    <div class="gt"><span class="n">10 &middot; #116 #117</span><span class="h">Agent approval card</span><span class="d">A write to a non-local connection names the connection.</span></div>
+  </a></div></div>
+</body></html>
