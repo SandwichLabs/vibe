@@ -73,7 +73,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   <div v-if="visible" class="modal-overlay" @click.self="$emit('cancel')">
     <div class="card card-pad" style="width: 100%; max-width: 384px;" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
       <h3 v-if="title" id="confirm-dialog-title" class="card-title" style="font-size: 22px; margin-bottom: 8px;">{{ title }}</h3>
-      <p id="confirm-dialog-message" class="sh-body" style="margin-bottom: 16px; color: var(--sh-graphite);">{{ message }}</p>
+      <p id="confirm-dialog-message" class="sh-body" style="margin-bottom: 16px; color: var(--sh-graphite); white-space: pre-line; overflow-wrap: anywhere;">{{ message }}</p>
       <div class="row" style="justify-content: flex-end;">
         <button ref="cancelBtn" @click="$emit('cancel')" class="btn btn-ghost">Cancel</button>
         <button v-if="altLabel" @click="$emit('alt')" :class="altDestructive ? 'btn btn-destructive' : 'btn btn-ghost'">{{ altLabel }}</button>

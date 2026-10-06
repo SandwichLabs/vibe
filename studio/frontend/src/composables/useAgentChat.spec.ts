@@ -340,36 +340,4 @@ describe('useAgentChat approvals (#79)', () => {
     expect(step.approval.state).toBe('sending')
     expect(resolveBinding).toHaveBeenCalledWith('appr-4', true)
   })
-
-  it('resolveApproval(step, true, true) calls SaveFile before ResolveAgentApproval, in that order', async () => {
-    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
-    ;(globalThis as any).window = (globalThis as any).window || {}
-    const calls: string[] = []
-    const saveBinding = vi.fn(async () => { calls.push('save') })
-    const resolveBinding = vi.fn(async () => { calls.push('resolve') })
-    ;(window as any).go = { main: { App: { SaveFile: saveBinding, ResolveAgentApproval: resolveBinding } } }
-
-    const chat = freshUseAgentChat()
-    const step = { id: 'call-5', tool: 'delete_record', status: 'running' as const, approval: { id: 'appr-5', summary: 's', destructive: true, state: 'pending' as const } }
-    await chat.resolveApproval(step, true, true)
-
-    expect(calls).toEqual(['save', 'resolve'])
-    expect(resolveBinding).toHaveBeenCalledWith('appr-5', true)
-  })
-
-  it('when SaveFile rejects, ResolveAgentApproval is never called and the card stays pending with an error', async () => {
-    const { useAgentChat: freshUseAgentChat } = await import('./useAgentChat')
-    ;(globalThis as any).window = (globalThis as any).window || {}
-    const saveBinding = vi.fn(async () => { throw new Error('disk full') })
-    const resolveBinding = vi.fn(async () => {})
-    ;(window as any).go = { main: { App: { SaveFile: saveBinding, ResolveAgentApproval: resolveBinding } } }
-
-    const chat = freshUseAgentChat()
-    const step = { id: 'call-6', tool: 'delete_record', status: 'running' as const, approval: { id: 'appr-6', summary: 's', destructive: true, state: 'pending' as const } }
-    await chat.resolveApproval(step, true, true)
-
-    expect(resolveBinding).not.toHaveBeenCalled()
-    expect(step.approval.state).toBe('pending')
-    expect(step.approval.error).toContain('disk full')
-  })
 })

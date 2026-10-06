@@ -3,14 +3,15 @@ package crud_test
 // P6.1: DuckDB CRUD/FK viability regression spike at Phase-6 scale (parity plan
 // §8/§4.1). Phase 6 introduces bulk xlsx/CSV loads into FK-constrained relational
 // apps, which re-stresses the per-row write + FK-enforcement path at larger row
-// counts. This is a focused INTEGRATION test against a REAL .vibe container + REAL
+// counts. This is a focused INTEGRATION test against a REAL workspace + REAL
 // DuckDB (no mocks): it bulk-loads a parent+child table set with an enforced FK,
 // then exercises per-row UPDATE/DELETE, a referential-integrity rejection, a
-// successful child-then-parent delete, and a Save+reopen checkpoint round-trip.
+// successful child-then-parent delete, and a close+reopen round-trip.
 //
 // No production code is expected to change unless this spike surfaces a defect.
 
 import (
+	"context"
 	"database/sql"
 	"io"
 	"log/slog"
@@ -19,13 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/crud"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-const fkScalePassphrase = "test-passphrase-12345"
 
 func fkScaleLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -46,17 +45,17 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 		t.Skip("skipping FK-scale spike in -short mode")
 	}
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, "fk-scale.vibe")
-
-	c, err := container.Create(path,
-		container.WithPassphrase(fkScalePassphrase),
-		container.WithLogger(fkScaleLogger()),
-	)
+	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	res, err := workspace.Init(filepath.Join(t.TempDir(), "fk-scale"))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	ws := res.Workspace
+	t.Cleanup(func() { _ = ws.Close() })
+	ctx := context.Background()
+	sess, _, err := workspace.OpenSession(ctx, ws, fkScaleLogger())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
 
-	ddb := c.DuckDBDB()
+	ddb := sess.DB()
 	require.NotNil(t, ddb)
 
 	// Relational app: customers(id PK) and orders(id PK, customer_id) + total.
@@ -102,12 +101,9 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 	assertCount(t, ddb, "customers", numCustomers)
 	assertCount(t, ddb, "orders", numOrders)
 
-	store := crud.NewFieldMetaStore(c.SQLiteDB())
-
 	ordersColTypes, err := crud.ColumnTypes(ddb, "orders")
 	require.NoError(t, err)
-	ordersMetas, err := crud.FieldMetaMap(store, "orders")
-	require.NoError(t, err)
+	ordersMetas := map[string]crud.FieldMeta{} // no field metadata in a workspace
 	custColTypes, err := crud.ColumnTypes(ddb, "customers")
 	require.NoError(t, err)
 
@@ -159,19 +155,15 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 
 	assertCount(t, ddb, "customers", numCustomers-1)
 
-	// (d) Save + reopen: row counts and the FK constraint must survive the
-	// checkpoint round-trip.
-	require.NoError(t, c.Save())
-	require.NoError(t, c.Close())
+	// (d) Close + reopen: row counts and the FK constraint must survive the
+	// round-trip through the workspace's own DuckDB file.
+	require.NoError(t, sess.Close())
 
-	reopened, err := container.Open(path,
-		container.WithPassphrase(fkScalePassphrase),
-		container.WithLogger(fkScaleLogger()),
-	)
+	reopened, _, err := workspace.OpenSession(ctx, ws, fkScaleLogger())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reopened.Close() })
 
-	rddb := reopened.DuckDBDB()
+	rddb := reopened.DB()
 	require.NotNil(t, rddb)
 
 	assertCount(t, rddb, "customers", numCustomers-1)

@@ -61,13 +61,13 @@ const hasWails = typeof window !== 'undefined' && !!(window as any).go?.main?.Ap
   <section class="appearance" data-testid="appearance-settings">
     <div class="sec-title">
       <h2 style="font-size: 22px;">Appearance</h2>
-      <span class="label">App-wide · not stored in the file</span>
+      <span class="label">Every workspace · this computer</span>
     </div>
 
     <div class="card card-pad col" style="gap: var(--sh-space-5);">
       <!-- Follow system -->
-      <div class="row" style="justify-content: space-between; gap: var(--sh-space-4);">
-        <div>
+      <div class="row" style="justify-content: space-between; gap: var(--sh-space-4); flex-wrap: wrap;">
+        <div style="min-width: 0; flex: 1 1 260px;">
           <div style="font-weight: 600;">Follow system appearance</div>
           <div class="sh-meta">Switches between your light and dark picks when the OS does. Currently {{ theme.systemDark.value ? 'dark' : 'light' }}.</div>
         </div>

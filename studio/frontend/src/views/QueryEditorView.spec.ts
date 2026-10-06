@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import QueryEditorView from './QueryEditorView.vue'
+import { flushAll, _resetForTests as resetSaves } from '../composables/usePendingSaves'
 
 function makeApp(opts: { execError?: string; execResult?: any; saveId?: string } = {}) {
   const app = {
@@ -254,5 +255,58 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     expect(cap.exists()).toBe(true)
     expect(cap.text()).toContain('5,000')
     expect(cap.text()).toContain('100,000')
+  })
+
+  describe('pending saves (switch / close / quit flush an edited query)', () => {
+    beforeEach(() => resetSaves())
+
+    it('flushAll saves an edited saved query with the revision it loaded', async () => {
+      const app = makeApp()
+      app.GetQuery.mockResolvedValue({ id: 'q1', title: 'Top customers', sql: 'SELECT 1', rev: 'r0' } as any)
+      const wrapper = await mountView()
+      const vm = wrapper.vm as any
+      await vm.selectQuery?.('q1')
+      vm.sqlText = 'SELECT 2'
+      await flushPromises()
+      const res = await flushAll()
+      expect(res.failed).toEqual([])
+      expect(app.SaveQuery).toHaveBeenCalledWith('q1', 'Top customers', 'SELECT 2', '', 'r0')
+    })
+
+    it('a never-saved scratch buffer cannot be flushed, so the caller asks', async () => {
+      makeApp()
+      const wrapper = await mountView()
+      ;(wrapper.vm as any).sqlText = 'SELECT 42'
+      await flushPromises()
+      const res = await flushAll()
+      expect(res.failed).toHaveLength(1)
+      expect(res.failed[0].label).toBe('The query editor')
+    })
+
+    it('an untouched editor flushes cleanly', async () => {
+      const app = makeApp()
+      await mountView()
+      expect((await flushAll()).failed).toEqual([])
+      expect(app.SaveQuery).not.toHaveBeenCalled()
+    })
+  })
+
+  it('"Keep mine" sends the revision the banner was raised against', async () => {
+    const app = makeApp() as any
+    let n = 0
+    app.GetQuery.mockImplementation(async () => ({ id: 'q1', title: 'Top customers', sql: 'SELECT 1', rev: n++ === 0 ? 'r0' : 'r5' }))
+    app.ResolveConflict = vi.fn(async () => ({ id: 'q1', rev: 'r6', title: 'Top customers' }))
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    await vm.selectQuery('q1')
+    vm.sqlText = 'SELECT 2'
+    app.SaveQuery.mockRejectedValueOnce(new Error('conflict: queries/q1.sql changed on disk since it was loaded'))
+    vm.saveTitle = 'Top customers'
+    await vm.saveQuery()
+    await flushPromises()
+    expect(vm.conflict).not.toBeNull()
+    await vm.resolveConflict('overwrite')
+    await flushPromises()
+    expect(app.ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ kind: 'query', action: 'overwrite', rev: 'r5' }))
   })
 })

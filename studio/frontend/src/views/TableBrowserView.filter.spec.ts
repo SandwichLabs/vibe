@@ -26,6 +26,11 @@ import TableBrowserView from './TableBrowserView.vue'
 
 interface Row { [k: string]: any }
 
+const groupsOf = (names: string[]) => [{
+  connection: 'local', type: 'duckdb', status: 'ok', readOnly: false, default: true,
+  tables: names.map((n) => ({ name: n, qualified: n, kind: 'table' })),
+}]
+
 function makeApp(opts: {
   rows?: Row[]
   columns?: { name: string; type: string; not_null: boolean; pk: boolean }[]
@@ -54,7 +59,7 @@ function makeApp(opts: {
   })
 
   const app = {
-    ListTables: vi.fn(async () => ['people']),
+    ListCatalogGroups: vi.fn(async () => groupsOf(['people'])),
     DescribeTable: vi.fn(async () => ({ name: 'people', columns })),
     ExecuteQuery: vi.fn(async () => ({ columns: [], rows: [], duration: '0s', row_count: 0 })),
     GetTableData: vi.fn(async () => toTableData(store, store.length)),

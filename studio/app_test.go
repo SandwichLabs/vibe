@@ -5,73 +5,88 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/container"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/stretchr/testify/require"
 )
-
-const testPassphrase = "test-passphrase-12345"
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-// newOpenApp constructs an App backed by a real .vibe container (SQLCipher +
-// DuckDB) and returns it ready for binding-level tests. It wires the container
-// directly (rather than via CreateFile) so the Wails runtime.EventsEmit
-// lifecycle call — which requires the real Wails context — is not invoked.
-func newOpenApp(t *testing.T) *App {
+// eventLog collects the events an App emits, so lifecycle tests can assert on
+// them without a live Wails runtime.
+type eventLog struct {
+	mu     sync.Mutex
+	events []string
+	data   map[string][]any
+}
+
+func (e *eventLog) sink(event string, data ...any) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.events = append(e.events, event)
+	if e.data == nil {
+		e.data = map[string][]any{}
+	}
+	e.data[event] = append(e.data[event], data...)
+}
+
+func (e *eventLog) count(event string) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	n := 0
+	for _, x := range e.events {
+		if x == event {
+			n++
+		}
+	}
+	return n
+}
+
+// newBareApp is an App with no workspace open and an isolated per-user config
+// directory (recent list, per-person workspace settings).
+func newBareApp(t *testing.T) *App {
 	t.Helper()
-
-	logger := testLogger()
-	app := NewApp(logger)
+	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	app := NewApp(testLogger())
 	app.ctx = context.Background()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "app.vibe")
-	c, err := container.Create(path,
-		container.WithPassphrase(testPassphrase),
-		container.WithLogger(logger),
-		container.WithTitle("App Test"),
-	)
-	require.NoError(t, err)
-
-	app.container = c
-	app.engine = engine.NewManager(c.Session(), engine.WithLogger(logger))
-	app.registry = queries.NewRegistry(c.SQLiteDB(), logger)
-	app.filePath = path
-	app.beginFileSession()
-
-	t.Cleanup(func() {
-		_ = c.Close()
-	})
-
+	t.Cleanup(func() { _ = app.CloseWorkspace() })
 	return app
 }
 
-// reopenApp saves and closes app's container, then reopens the same file
-// path and rewires app.container/engine/registry to the fresh handles — used
-// to assert that state survives a Save + Close + Open round-trip.
+// newWorkspaceDir makes an empty workspace folder (vibe.yaml, notebooks/, ...)
+// and returns its path.
+func newWorkspaceDir(t *testing.T, name string) string {
+	t.Helper()
+	res, err := workspace.Init(filepath.Join(t.TempDir(), "ws"), workspace.WithName(name))
+	require.NoError(t, err)
+	root := res.Workspace.Root()
+	require.NoError(t, res.Workspace.Close())
+	return root
+}
+
+// newOpenApp constructs an App with a real workspace open (its `local` DuckDB
+// file, file-backed notebook/query/skill stores) and returns it ready for
+// binding-level tests.
+func newOpenApp(t *testing.T) *App {
+	t.Helper()
+	app := newBareApp(t)
+	res, err := app.OpenWorkspace(newWorkspaceDir(t, "App Test"))
+	require.NoError(t, err)
+	require.Equal(t, "opened", res.Status)
+	return app
+}
+
+// reopenApp closes and reopens app's workspace, to assert that state survives
+// a close/open round trip.
 func reopenApp(t *testing.T, app *App) {
 	t.Helper()
-
-	path := app.filePath
-	require.NoError(t, app.container.Save())
-	require.NoError(t, app.container.Close())
-
-	c, err := container.Open(path,
-		container.WithPassphrase(testPassphrase),
-		container.WithLogger(app.logger),
-	)
+	root := app.ws.Root()
+	require.NoError(t, app.CloseWorkspace())
+	res, err := app.OpenWorkspace(root)
 	require.NoError(t, err)
-
-	app.container = c
-	app.engine = engine.NewManager(c.Session(), engine.WithLogger(app.logger))
-	app.registry = queries.NewRegistry(c.SQLiteDB(), app.logger)
-	app.beginFileSession()
-
-	t.Cleanup(func() { _ = c.Close() })
+	require.Equal(t, "opened", res.Status)
 }

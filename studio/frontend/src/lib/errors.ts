@@ -9,6 +9,15 @@
 // stripping those would eat real information.
 const WRAP_PREFIX = /^(?:query failed|failed to (?:[^:"]|"[^"]*")*): /i
 
+// settingsError renders a failed settings save: a refusal because the committed
+// file changed meanwhile drops the internal "conflict: " marker and says what to
+// do (the panels offer a "Reload settings" button when stale is true).
+export function settingsError(e: unknown): { text: string; stale: boolean } {
+  const t = errorText(e)
+  if (t.startsWith('conflict: ')) return { text: t.slice('conflict: '.length), stale: true }
+  return { text: t, stale: false }
+}
+
 export function errorText(e: unknown): string {
   const raw = typeof e === 'string' ? e : (e as { message?: string } | null | undefined)?.message ?? String(e)
   let message = raw.trim()

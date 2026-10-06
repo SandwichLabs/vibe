@@ -67,7 +67,7 @@ function onKeydown(e: KeyboardEvent) {
           <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
 
           <template v-for="(s, si) in m.steps" :key="si">
-            <ToolStepChip :step="s" :preview-len="80" @resolve="(ok, saveFirst) => resolveApproval(s, ok, saveFirst)" />
+            <ToolStepChip :step="s" :preview-len="80" @resolve="(ok) => resolveApproval(s, ok)" />
             <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
           </template>
         </div>

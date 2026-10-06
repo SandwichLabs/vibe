@@ -1,33 +1,34 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+// AppShell — the workspace shell (#111, SPEC 04): top bar with the workspace
+// switcher and the agent-trust pill, the nav sidebar with the "Saved as you go"
+// footer, a banner slot for the read-only state, and the routed view. Save,
+// Revert, Close file and the dirty pill are gone: notebooks, queries and skills
+// save as files, and data writes go straight to the connection.
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { EventsOn, WindowSetTitle } from '../wailsjs/runtime/runtime'
-import { flushAll } from '../composables/usePendingSaves'
-import { askConfirm } from '../composables/useConfirm'
-import { fileDirty, startFileDirtyTracking, closeWithPrompt, revertWithPrompt } from '../composables/useFileDirty'
+import { WindowSetTitle } from '../wailsjs/runtime/runtime'
 import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
+import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
+import WorkspaceBanner from './WorkspaceBanner.vue'
+import McpApprovals from './McpApprovals.vue'
 import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
-import { errorText } from '../lib/errors'
+import { workspaceInfo } from '../composables/useWorkspace'
 
 const theme = useTheme()
 
 // Agent wizard panel — a slide-in chat available across every screen.
 const agentOpen = ref(false)
-
-const emit = defineEmits<{ 'file-closed': [] }>()
 const route = useRoute()
-
-const fileInfo = ref<FileInfo | null>(null)
-const saving = ref(false)
 const errorMessage = ref('')
 
-// #68: Studio is the only mode. The App Mode / Access-application chrome
-// (locked switchboard shell, mode toggle, unlock entrypoint) is gone —
-// this is now a single always-on builder shell.
+const info = computed(() => workspaceInfo.value)
+
+// Home, then the content that lives in files, then the data views. The
+// connections rail replaces "Tables" in #117.
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: 'home' },
+  { path: '/', label: 'Home', icon: 'home' },
   { path: '/notebooks', label: 'Notebooks', icon: 'layers' },
   { path: '/tables', label: 'Tables', icon: 'database' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
@@ -37,69 +38,28 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
-const fileName = ref('Untitled')
-const reverting = ref(false)
-
 function isActive(path: string) {
   return route.path === path || (path !== '/' && route.path.startsWith(path))
 }
 
-async function loadFileInfo() {
-  try {
-    fileInfo.value = await window.go.main.App.GetFileInfo()
-    fileName.value = fileInfo.value?.path ? (fileInfo.value.path.split('/').pop() || 'Untitled') : 'Untitled'
-  } catch { /* ignore */ }
-}
+// The agent-trust pill is about the agent only; read-only is explained by the
+// banner, not here (SPEC 07 C).
+const pill = computed(() => {
+  const p = info.value?.policy
+  if (!p) return { text: '', dot: 'ok' }
+  if (info.value?.readOnly || p.sandbox === 'read-only') return { text: 'Agent can only read here', dot: 'ok' }
+  if (p.askBeforeWrites) return { text: 'Agent asks before changes', dot: 'ok' }
+  return { text: 'Agent changes data without asking', dot: 'warn' }
+})
 
-async function save() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    await window.go.main.App.SaveFile()
-  } catch (e: any) {
-    errorMessage.value = 'Save failed: ' + errorText(e)
-  } finally {
-    saving.value = false
-  }
-}
+const folderParts = computed(() => {
+  const root = info.value?.root ?? ''
+  const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'))
+  return cut < 0 ? { dir: '', leaf: root } : { dir: root.slice(0, cut + 1), leaf: root.slice(cut + 1) }
+})
 
-async function revert() {
-  if (reverting.value) return
-  reverting.value = true
-  try {
-    await revertWithPrompt()
-  } catch (e: any) {
-    errorMessage.value = 'Revert failed: ' + errorText(e)
-  } finally {
-    reverting.value = false
-  }
-}
-
-async function closeFile() {
-  try {
-    // Every registered pending-save flush must complete FIRST, while the
-    // container is still open, so a real edit is never silently lost.
-    const { failed } = await flushAll()
-    if (failed.length > 0) {
-      const first = failed[0]
-      const proceed = await askConfirm({
-        title: 'Unsaved notebook',
-        message: `A notebook couldn't be saved: ${first.error}. Close anyway?`,
-        variant: 'destructive',
-      })
-      if (!proceed) return
-    }
-
-    // closeWithPrompt reads IsDirty() fresh (authoritative at click time —
-    // fileDirty may be a beat stale) and only prompts when it's actually
-    // dirty.
-    const closed = await closeWithPrompt(fileName.value)
-    if (!closed) return
-    emit('file-closed')
-  } catch (e: any) {
-    errorMessage.value = 'Close failed: ' + errorText(e)
-  }
-}
+// Only the branch (read from .git/HEAD by the backend): Studio never runs git.
+const gitLine = computed(() => (info.value?.isGit ? info.value.gitBranch || 'detached' : ''))
 
 // Views (e.g. the Query Explorer's "Ask agent" button) open the wizard panel
 // via this window event — the shell owns the panel, so this is the one
@@ -110,16 +70,11 @@ function openAgentFromEvent() {
 
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
-// Global shortcuts: Ctrl/Cmd+S saves the file from anywhere (the sidebar
-// button was the only way); Ctrl/Cmd+J toggles the agent drawer; Escape
-// closes it when nothing else (a modal, an editor) claims the key first.
+// Ctrl/Cmd+J toggles the agent drawer; Escape closes it when nothing else (a
+// modal, an editor) claims the key first. Workspace shortcuts (O, N, Shift+O,
+// F5) live in App.vue so they also work on the launcher.
 function onGlobalKeydown(e: KeyboardEvent) {
   const mod = e.metaKey || e.ctrlKey
-  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
-    e.preventDefault()
-    save()
-    return
-  }
   if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
     e.preventDefault()
     agentOpen.value = !agentOpen.value
@@ -130,52 +85,37 @@ function onGlobalKeydown(e: KeyboardEvent) {
   }
 }
 
-let unsubFileOpened: (() => void) | null = null
+const unsubs: Array<() => void> = []
 
 onMounted(() => {
-  loadFileInfo()
-  startFileDirtyTracking()
   window.addEventListener('vibe:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
-  // The sidebar's "Open file" label was captured once at mount and never
-  // refreshed — stale if the open file changes underneath this
-  // already-mounted shell (e.g. a direct OpenFile/CreateFile/
-  // CreateFromTemplate binding call bypassing UnlockView, which is the same
-  // class of call the file-identity-token fix in NotebookView/SaveNotebook
-  // guards the data path against). Re-reading on every "file:opened" event
-  // keeps it honest regardless of how the switch happened.
-  if (hasWailsRuntime()) unsubFileOpened = EventsOn('file:opened', loadFileInfo)
 })
 
 onUnmounted(() => {
   window.removeEventListener('vibe:open-agent', openAgentFromEvent)
   window.removeEventListener('keydown', onGlobalKeydown)
-  unsubFileOpened?.()
+  unsubs.splice(0).forEach((u) => u())
   if (hasWailsRuntime()) WindowSetTitle('Vibe Studio')
 })
 
 watch(errorMessage, (msg) => {
-  if (msg) setTimeout(() => { errorMessage.value = '' }, 3000)
+  if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
 })
 
-// Window title (#81): an "● " prefix while the file has unsaved table
-// changes, so the OS-level title bar/taskbar entry carries the same signal
-// as the sidebar pill even when the window isn't focused.
-watch([fileName, fileDirty], ([name, dirty]) => {
+watch(() => info.value?.name, (name) => {
   if (!hasWailsRuntime()) return
-  WindowSetTitle(`${dirty ? '● ' : ''}${name} — Vibe Studio`)
+  WindowSetTitle(name ? `${name} — Vibe Studio` : 'Vibe Studio')
 }, { immediate: true })
 </script>
 
 <template>
-  <div class="app">
+  <div class="app has-switcher">
     <div class="topbar" style="height: 64px;">
-      <div class="brand">
-        <span class="mark">V</span>
-        <span class="word">Vibe<span class="last">Studio</span></span>
-      </div>
+      <div class="brand"><span class="mark mark-only" aria-hidden="true">V</span></div>
+      <WorkspaceSwitcher @error="(m: string) => (errorMessage = m)" />
       <div class="topright" style="gap: 10px;">
-        <span class="pill"><span class="dot ok"></span>Local · Encrypted</span>
+        <span v-if="pill.text" class="pill" data-testid="agent-pill"><span class="dot" :class="pill.dot"></span>{{ pill.text }}</span>
         <button
           class="btn btn-inverted agent-toggle"
           data-testid="agent-toggle"
@@ -198,64 +138,44 @@ watch([fileName, fileDirty], ([name, dirty]) => {
       </div>
     </div>
 
-    <!-- Sidebar (builder nav). -->
+    <!-- Sidebar (nav). -->
     <aside class="sidebar" style="display: flex; flex-direction: column;">
-      <div class="side-section">Workspace</div>
-      <router-link
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="side-link"
-        :class="{ active: isActive(item.path) }"
-      >
-        <Icon :name="item.icon" :size="18" />
-        <span>{{ item.label }}</span>
-      </router-link>
+      <nav aria-label="Workspace">
+        <div class="side-section">Workspace</div>
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="side-link"
+          :class="{ active: isActive(item.path) }"
+          :aria-current="isActive(item.path) ? 'page' : undefined"
+          :aria-label="item.label"
+          :title="item.label"
+        >
+          <Icon :name="item.icon" :size="18" />
+          <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
 
       <div style="flex: 1;"></div>
 
-      <div class="nav-pill">
-        <span class="label"><span class="dot" :class="{ warn: fileDirty }"></span>{{ fileDirty ? 'Unsaved changes' : 'Open file' }}</span>
-        <span class="url">{{ fileName }}</span>
-      </div>
-
-      <div style="padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px;">
-        <button
-          @click="save"
-          :disabled="saving"
-          :class="fileDirty ? 'btn btn-primary' : 'btn btn-ghost'"
-          style="width: 100%; justify-content: center;"
-          data-testid="save-file"
-          :data-dirty="fileDirty"
-          :title="saving ? 'Saving…' : (fileDirty ? `Save table changes · ${shortcutLabel('S')}` : `No unsaved changes · ${shortcutLabel('S')}`)"
-        >
-          <Icon :name="fileDirty ? 'save' : 'check'" :size="16" />
-          {{ saving ? 'Saving…' : (fileDirty ? 'Save' : 'Saved') }}
-        </button>
-        <button
-          v-if="fileDirty"
-          @click="revert"
-          :disabled="reverting"
-          class="btn btn-ghost"
-          style="width: 100%; justify-content: center;"
-          data-testid="revert-file"
-          title="Discard table changes since your last save"
-        >
-          <Icon name="undo" :size="16" />
-          {{ reverting ? 'Reverting…' : 'Revert to last save' }}
-        </button>
-        <button @click="closeFile" data-testid="close-file" class="btn btn-ghost" style="width: 100%; justify-content: center;">
-          Close file
-        </button>
+      <div v-if="info" class="nav-pill" style="margin: 10px 12px 12px;" data-testid="folder-pill">
+        <span class="label"><span class="dot"></span>Saved as you go</span>
+        <span class="url" :title="info.root">{{ folderParts.dir }}<span class="acc">{{ folderParts.leaf }}</span></span>
+        <span v-if="gitLine" class="git" data-testid="git-line"><Icon name="gitBranch" :size="12" /> {{ gitLine }}</span>
       </div>
     </aside>
 
     <!-- Main content -->
-    <main style="overflow: hidden; background: var(--sh-paper); min-width: 0;">
-      <router-view />
+    <main style="overflow: hidden; background: var(--sh-paper); min-width: 0; display: flex; flex-direction: column;">
+      <WorkspaceBanner />
+      <div style="flex: 1; min-height: 0; overflow: hidden;">
+        <router-view :key="info?.sessionId ?? 'none'" />
+      </div>
     </main>
 
     <AgentPanel :open="agentOpen" @close="agentOpen = false" />
+    <McpApprovals />
 
     <div v-if="errorMessage" class="error-toast" role="alert">{{ errorMessage }}</div>
   </div>

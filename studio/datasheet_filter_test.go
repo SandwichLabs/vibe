@@ -32,7 +32,7 @@ import (
 // amount column for range operators.
 func seedTicketsTable(t *testing.T, app *App) {
 	t.Helper()
-	ddb := app.container.DuckDBDB()
+	ddb := app.sess.DB()
 	require.NotNil(t, ddb)
 
 	_, err := ddb.Exec(`CREATE TABLE tickets (
@@ -210,7 +210,7 @@ func TestGetTableDataFiltered_RejectsUnknownColumn(t *testing.T) {
 		"error should be a wrapped, column-related error, got: %v", err)
 
 	// The table must be untouched by the rejected, would-be-injected spec.
-	ddb := app.container.DuckDBDB()
+	ddb := app.sess.DB()
 	var count int
 	require.NoError(t, ddb.QueryRow(`SELECT COUNT(*) FROM tickets;`).Scan(&count))
 	assert.Equal(t, 6, count, "rejected spec must not have mutated the table")

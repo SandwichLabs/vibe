@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, computed, onMounted } from 'vue'
+import { ref, nextTick, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useAgentChat } from '../composables/useAgentChat'
 import A2UIPage from '../a2ui/A2UIPage.vue'
 import ToolStepChip from './ToolStepChip.vue'
@@ -16,7 +17,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const route = useRoute()
 const router = useRouter()
-const { messages, sending, pinnedContext, send, pin, unpin, setScrollHandler, renderMarkdown, resolveApproval } = useAgentChat()
+const { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, renderMarkdown, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
   router.push(`/notebooks/${id}`)
@@ -37,7 +38,14 @@ async function scrollToBottom() {
   await nextTick()
   if (streamEl.value) streamEl.value.scrollTop = streamEl.value.scrollHeight
 }
-onMounted(() => setScrollHandler(scrollToBottom))
+// A conversation belongs to the workspace it was held in: a new workspace
+// starts a clean one.
+let unsubOpened: (() => void) | null = null
+onMounted(() => {
+  setScrollHandler(scrollToBottom)
+  if (typeof window !== 'undefined' && (window as any).runtime) unsubOpened = EventsOn('workspace:opened', () => reset())
+})
+onUnmounted(() => unsubOpened?.())
 
 async function submit() {
   const text = draft.value
@@ -90,7 +98,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
             <p v-if="m.verifying" class="agent-text agent-dim" data-testid="agent-verifying">Verifying that answer against the data…</p>
 
             <template v-for="(s, si) in m.steps" :key="si">
-              <ToolStepChip :step="s" :preview-len="48" @resolve="(ok, saveFirst) => resolveApproval(s, ok, saveFirst)" />
+              <ToolStepChip :step="s" :preview-len="48" @resolve="(ok) => resolveApproval(s, ok)" />
               <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
               <button
                 v-if="s.notebookLink"

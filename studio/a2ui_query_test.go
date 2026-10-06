@@ -18,17 +18,17 @@ import (
 // path, without going through guardStudioOnly/Wails plumbing.
 func setAgentSandbox(t *testing.T, app *App, mode string) {
 	t.Helper()
-	require.NoError(t, app.container.SetMeta("agent_sandbox", mode))
+	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: mode, AskBeforeWrites: true}))
 }
 
 // TestRunA2UIQuery_NoFileOpen is the #3 review requirement: RunA2UIQuery
-// must error, not panic, with no container open.
+// must error, not panic, with no workspace open.
 func TestRunA2UIQuery_NoFileOpen(t *testing.T) {
 	app := NewApp(testLogger())
 	app.ctx = context.Background()
 	_, err := app.RunA2UIQuery("SELECT 1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 }
 
 // TestRunA2UIQuery_ReadAllowedInEveryMode proves an ordinary SELECT succeeds
@@ -36,9 +36,9 @@ func TestRunA2UIQuery_NoFileOpen(t *testing.T) {
 // point is that reads always work regardless of sandbox.
 func TestRunA2UIQuery_ReadAllowedInEveryMode(t *testing.T) {
 	app := newOpenApp(t)
-	_, err := app.container.DuckDBDB().Exec("CREATE TABLE t (id INTEGER, name TEXT)")
+	_, err := app.sess.DB().Exec("CREATE TABLE t (id INTEGER, name TEXT)")
 	require.NoError(t, err)
-	_, err = app.container.DuckDBDB().Exec("INSERT INTO t VALUES (1, 'a'), (2, 'b')")
+	_, err = app.sess.DB().Exec("INSERT INTO t VALUES (1, 'a'), (2, 'b')")
 	require.NoError(t, err)
 
 	for _, mode := range []string{"read-only", "read-write", "full"} {
@@ -57,9 +57,9 @@ func TestRunA2UIQuery_ReadAllowedInEveryMode(t *testing.T) {
 // write, even under the full sandbox, since it re-runs on every render.
 func TestRunA2UIQuery_WriteDeniedInFullMode(t *testing.T) {
 	app := newOpenApp(t)
-	_, err := app.container.DuckDBDB().Exec("CREATE TABLE junk (id INTEGER)")
+	_, err := app.sess.DB().Exec("CREATE TABLE junk (id INTEGER)")
 	require.NoError(t, err)
-	_, err = app.container.DuckDBDB().Exec("INSERT INTO junk VALUES (1)")
+	_, err = app.sess.DB().Exec("INSERT INTO junk VALUES (1)")
 	require.NoError(t, err)
 	setAgentSandbox(t, app, "full")
 
@@ -67,7 +67,7 @@ func TestRunA2UIQuery_WriteDeniedInFullMode(t *testing.T) {
 		_, err := app.RunA2UIQuery("DROP TABLE junk")
 		require.Error(t, err)
 		var n int
-		require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
+		require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
 		assert.Equal(t, 1, n, "DROP must not have executed")
 	})
 
@@ -75,7 +75,7 @@ func TestRunA2UIQuery_WriteDeniedInFullMode(t *testing.T) {
 		_, err := app.RunA2UIQuery("INSERT INTO junk VALUES (2)")
 		require.Error(t, err)
 		var n int
-		require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM junk").Scan(&n))
+		require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM junk").Scan(&n))
 		assert.Equal(t, 1, n, "INSERT must not have executed")
 	})
 
@@ -83,7 +83,7 @@ func TestRunA2UIQuery_WriteDeniedInFullMode(t *testing.T) {
 		_, err := app.RunA2UIQuery("SELECT 1; DROP TABLE junk;")
 		require.Error(t, err)
 		var n int
-		require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
+		require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
 		assert.Equal(t, 1, n, "smuggled DROP must not have executed")
 	})
 }
@@ -93,14 +93,14 @@ func TestRunA2UIQuery_WriteDeniedInFullMode(t *testing.T) {
 // deny a write here.
 func TestRunA2UIQuery_WriteDeniedInReadWriteMode(t *testing.T) {
 	app := newOpenApp(t)
-	_, err := app.container.DuckDBDB().Exec("CREATE TABLE junk (id INTEGER)")
+	_, err := app.sess.DB().Exec("CREATE TABLE junk (id INTEGER)")
 	require.NoError(t, err)
 	setAgentSandbox(t, app, "read-write")
 
 	_, err = app.RunA2UIQuery("INSERT INTO junk VALUES (1)")
 	require.Error(t, err)
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM junk").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM junk").Scan(&n))
 	assert.Equal(t, 0, n)
 }
 
@@ -108,7 +108,7 @@ func TestRunA2UIQuery_WriteDeniedInReadWriteMode(t *testing.T) {
 // requirement's read-only case.
 func TestRunA2UIQuery_ReadOnlyDeniesDropAndMultiStatement(t *testing.T) {
 	app := newOpenApp(t)
-	_, err := app.container.DuckDBDB().Exec("CREATE TABLE junk (id INTEGER)")
+	_, err := app.sess.DB().Exec("CREATE TABLE junk (id INTEGER)")
 	require.NoError(t, err)
 	setAgentSandbox(t, app, "read-only")
 
@@ -119,7 +119,7 @@ func TestRunA2UIQuery_ReadOnlyDeniesDropAndMultiStatement(t *testing.T) {
 	require.Error(t, err)
 
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'junk'").Scan(&n))
 	assert.Equal(t, 1, n)
 }
 
@@ -240,7 +240,7 @@ func TestRunA2UIQuery_DeniesDisguisedExternalAccessWrites(t *testing.T) {
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					app := newOpenApp(t)
-					_, err := app.container.DuckDBDB().Exec(`CREATE TABLE victim (n INTEGER); INSERT INTO victim VALUES (1), (2), (3);`)
+					_, err := app.sess.DB().Exec(`CREATE TABLE victim (n INTEGER); INSERT INTO victim VALUES (1), (2), (3);`)
 					require.NoError(t, err)
 					setAgentSandbox(t, app, mode)
 
@@ -249,13 +249,13 @@ func TestRunA2UIQuery_DeniesDisguisedExternalAccessWrites(t *testing.T) {
 					assert.Nil(t, res, "no file content or row data may be returned on denial")
 
 					var n int
-					require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM victim").Scan(&n))
+					require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM victim").Scan(&n))
 					assert.Equal(t, 3, n, "victim row count must be unchanged under %s: %s", mode, tc.sql)
 					// COUNT(*) alone would not catch an UPDATE that rewrote
 					// row VALUES without changing the row count — assert the
 					// data itself (SUM) is untouched too, for every case.
 					var sum int
-					require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT SUM(n) FROM victim").Scan(&sum))
+					require.NoError(t, app.sess.DB().QueryRow("SELECT SUM(n) FROM victim").Scan(&sum))
 					assert.Equal(t, 6, sum, "victim row VALUES must be unchanged under %s: %s", mode, tc.sql)
 				})
 			}

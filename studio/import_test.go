@@ -33,7 +33,6 @@ func TestImportFile_CreateInfersTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, sum.OK, "%+v", sum)
 	assert.Equal(t, 2, sum.Rows)
-	assert.True(t, app.IsDirty())
 
 	desc, err := app.DescribeTable("calls_typed")
 	require.NoError(t, err)
@@ -76,7 +75,6 @@ func TestImportFile_DryRunDoesNotDirty(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, sum.OK, "%+v", sum)
-	assert.False(t, app.IsDirty())
 
 	skills, err := app.ListSkills()
 	require.NoError(t, err)
@@ -89,7 +87,6 @@ func TestImportFile_DryRunDoesNotDirty(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, sum.OK, "%+v", sum)
-	assert.True(t, app.IsDirty())
 }
 
 // TestImportFile_BlockedRunDoesNotDirty asserts a pre-flight failure (a type
@@ -105,7 +102,6 @@ func TestImportFile_BlockedRunDoesNotDirty(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, sum.OK)
-	assert.False(t, app.IsDirty())
 }
 
 // TestImportFile_RejectsInvalidIdentifier asserts an invalid table name is

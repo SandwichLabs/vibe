@@ -1,10 +1,10 @@
 package main
 
-// TDD RED — Phase 6 / unit P6.10 (parity plan §5): the v1.0 acceptance scenario.
+// Phase 6 / unit P6.10 (parity plan §5): the v1.0 acceptance scenario.
 //
 // This is the end-to-end "messy-spreadsheet-to-relational-app" loop that the
 // v1.0 cut must satisfy, composing P6.2-P6.7 against the REAL Wails bindings and
-// a REAL .vibe container (SQLCipher + DuckDB) seeded from the bundled order-entry
+// a REAL workspace (DuckDB hub) seeded from the bundled order-entry
 // template (P6.6):
 //
 //  1. Start from the order-entry template (customers / orders / order_items with
@@ -22,22 +22,18 @@ package main
 //     omits the orphan, which must land cleanly.
 //  5. ExportTableXLSX the result and re-read it via the P6.2 reader (read_xlsx),
 //     asserting the cleaned/typed values round-trip.
-//  6. Save + reopen and assert persistence of the imported rows.
+//  6. close + reopen and assert persistence of the imported rows.
 //
 // No mocks: the real bindings + real DuckDB enforce referential integrity.
 
 import (
 	"archive/zip"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/container"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,36 +145,13 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// reopenAppFromTemplate mirrors reopenApp (relationships_fk_test.go) but is local
-// to keep the acceptance test self-contained: Save → close → reopen, re-wiring
-// the engine + registry so persistence can be asserted.
-func reopenAcceptanceApp(t *testing.T, app *App) {
-	t.Helper()
-
-	path := app.filePath
-	require.NoError(t, app.container.Save())
-	require.NoError(t, app.container.Close())
-
-	c, err := container.Open(path,
-		container.WithPassphrase(testPassphrase),
-		container.WithLogger(app.logger),
-	)
-	require.NoError(t, err)
-
-	app.container = c
-	app.engine = engine.NewManager(c.Session(), engine.WithLogger(app.logger))
-	app.registry = queries.NewRegistry(c.SQLiteDB(), app.logger)
-
-	t.Cleanup(func() { _ = c.Close() })
-}
-
 // TestV1Acceptance_MessySpreadsheetToRelationalApp is the P6.10 v1.0 acceptance
 // scenario end-to-end through the real bindings.
 func TestV1Acceptance_MessySpreadsheetToRelationalApp(t *testing.T) {
 	// 1. Start from the bundled order-entry template (P6.6).
 	app := newAppFromOrderEntryTemplate(t)
 
-	ddb := app.container.DuckDBDB()
+	ddb := app.sess.DB()
 	require.NotNil(t, ddb)
 
 	// Determine a real order id (the template seeds orders) and the
@@ -273,39 +246,31 @@ func TestV1Acceptance_MessySpreadsheetToRelationalApp(t *testing.T) {
 			"export must be xlsx or csv fallback, got %q", exported)
 	}
 
-	// 6. Save + reopen: the imported rows persist across the lifecycle.
-	reopenAcceptanceApp(t, app)
-	ddb2 := app.container.DuckDBDB()
+	// 6. close + reopen: the imported rows persist across the lifecycle.
+	reopenApp(t, app)
+	ddb2 := app.sess.DB()
 	require.NotNil(t, ddb2)
 
 	var itemsPersisted int
 	require.NoError(t, ddb2.QueryRow(`SELECT COUNT(*) FROM order_items`).Scan(&itemsPersisted))
-	assert.Equal(t, itemsAfter, itemsPersisted, "imported rows must persist across Save + reopen")
+	assert.Equal(t, itemsAfter, itemsPersisted, "imported rows must persist across close + reopen")
 
 	var persistedPrice float64
 	require.NoError(t, ddb2.QueryRow(`SELECT price FROM order_items WHERE id = 5001`).Scan(&persistedPrice))
-	assert.InDelta(t, 99.50, persistedPrice, 0.001, "the typed value must survive Save + reopen")
+	assert.InDelta(t, 99.50, persistedPrice, 0.001, "the typed value must survive close + reopen")
 }
 
-// newAppFromOrderEntryTemplate creates a fresh encrypted .vibe seeded from the
-// order-entry template (P6.6) and returns an App with the container, engine, and
-// registry wired — ready for binding-level acceptance assertions.
+// newAppFromOrderEntryTemplate creates a fresh workspace seeded from the
+// order-entry template (P6.6) and returns an App with it open, ready for
+// binding-level acceptance assertions.
 func newAppFromOrderEntryTemplate(t *testing.T) *App {
 	t.Helper()
 
-	app := NewApp(testLogger())
-	app.ctx = context.Background()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "acceptance.vibe")
-
-	require.NoError(t, app.CreateFromTemplate(path, testPassphrase, "order-entry"),
-		"CreateFromTemplate(order-entry) should seed a relational app")
-
-	t.Cleanup(func() {
-		if app.container != nil {
-			_ = app.container.Close()
-		}
+	app := newBareApp(t)
+	res, err := app.CreateWorkspace(CreateWorkspaceRequest{
+		Name: "Acceptance", ParentDir: t.TempDir(), Template: "order-entry",
 	})
+	require.NoError(t, err, "CreateWorkspace(order-entry) should seed a relational app")
+	require.Empty(t, res.Warnings)
 	return app
 }

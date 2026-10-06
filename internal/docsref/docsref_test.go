@@ -4,11 +4,11 @@
 //
 //   - every A2UI component type registered in internal/a2ui must be
 //     documented in docs/reference/notebooks.md
-//   - every bundled starter template registered in internal/container must
+//   - every bundled starter template registered in internal/templates must
 //     be documented in docs/reference/
 //
 // #69 retired the page system (docs/reference/pages.md, the directive
-// registry this test used to scrape out of internal/pages/parser.go, and the
+// registry this test used to scrape out of the page parser, and the
 // stale-directive-token check that went with it) in favor of Notebooks/A2UI
 // (docs/reference/notebooks.md). #68 removed internal/automation (macros)
 // along with docs/reference/macros.md, forms.md, and reports.md, so the
@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +106,7 @@ func TestReferenceDocsDocumentColorEnum(t *testing.T) {
 func TestReferenceDocsDocumentEveryTemplate(t *testing.T) {
 	root := repoRoot(t)
 	docs := readReferenceDocs(t, root)
-	names := container.ListTemplates()
+	names := templates.List()
 	require.NotEmpty(t, names, "expected bundled starter templates from the P6.6 registry")
 	for _, name := range names {
 		assert.Contains(t, docs, strings.ToLower(name),

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
+import { isReadOnly, workspaceInfo } from '../composables/useWorkspace'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { formatCell, cellClass, cellEditText, isNumericType } from '../lib/formatCell'
@@ -24,7 +25,18 @@ const vFocus = {
   },
 }
 
+// Every table across the workspace's attached connections, as qualified names
+// (connection.schema.table) the datasheet bindings accept, plus the groups the
+// list renders (grouped by connection). A connection that is not connected yet is
+// listed without tables and is never dialled from here.
+// Opened read-only (another program owns the database): nothing here can write,
+// and the controls say why instead of failing later.
+const readOnlyReason = computed(() => `Opened read-only: ${workspaceInfo.value?.holder?.text || 'another program'} is using this workspace's database. Take over the workspace to make changes.`)
 const tables = ref<string[]>([])
+const groups = ref<CatalogGroup[]>([])
+// Connections that could not be listed (locked by another program, an error); a
+// plain "not connected yet" is not a problem.
+const unavailable = computed(() => groups.value.filter((g) => g.status !== 'ok' && g.status !== 'not-connected'))
 const selectedTable = ref<string | null>(null)
 const tableInfo = ref<TableInfo | null>(null)
 const tableData = ref<TableData | null>(null)
@@ -143,7 +155,8 @@ const formattedRows = computed(() => {
 async function loadTables() {
   loading.value = true
   try {
-    tables.value = (await window.go.main.App.ListTables()) || []
+    groups.value = (await window.go.main.App.ListCatalogGroups()) || []
+    tables.value = groups.value.flatMap((g) => g.tables.map((t) => t.qualified))
   } catch { /* ignore */ }
   loading.value = false
   applyRouteTable()
@@ -155,7 +168,12 @@ function applyRouteTable() {
   const t = route.query.table
   if (typeof t !== 'string' || !t) return
   if (t === selectedTable.value) return
-  if (tables.value.includes(t)) selectTable(t)
+  // A bare name (e.g. "Open table →" after an import) means the default
+  // connection's table of that name.
+  const qualified = tables.value.includes(t)
+    ? t
+    : groups.value.find((g) => g.default)?.tables.find((x) => x.name === t)?.qualified
+  if (qualified && qualified !== selectedTable.value) selectTable(qualified)
 }
 
 watch(() => route.query.table, applyRouteTable)
@@ -517,32 +535,55 @@ watch(statusMessage, (msg) => {
     <div class="w-56 border-r-2 border-[var(--sh-ink)] bg-[var(--sh-paper-2)] flex flex-col">
       <div class="px-4 py-3 border-b-2 border-[var(--sh-ink)] flex items-center justify-between">
         <h2 class="sh-label" style="margin: 0;">Tables</h2>
-        <button @click="showNewTableModal = true" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> New</button>
+        <button @click="showNewTableModal = true" class="btn btn-primary btn-sm" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : 'Create a table'" data-testid="new-table"><Icon name="plus" :size="14" /> New</button>
       </div>
       <div class="flex-1 overflow-auto">
         <div v-if="loading" class="p-4 sh-mono text-[var(--sh-graphite)]">Loading…</div>
-        <div v-else-if="tables.length === 0" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No tables</div>
-        <div
-          v-for="t in tables"
-          :key="t"
-          @click="selectTable(t)"
-          class="px-4 py-2 cursor-pointer border-b border-line flex items-center justify-between group text-sm font-medium"
-          :class="selectedTable === t ? 'row-selected' : 'hover:bg-[var(--sh-hover)]'"
-        >
-          <span class="truncate flex items-center gap-2"><Icon name="database" :size="14" /> {{ t }}</span>
-          <button @click.stop="dropTable(t)" class="btn btn-ghost btn-sm hover-reveal" style="color: var(--sh-error);" :aria-label="`Drop table ${t}`" :title="`Drop ${t}`"><Icon name="trash" :size="14" /></button>
-        </div>
+        <div v-else-if="tables.length === 0 && groups.every((g) => g.status === 'ok')" class="p-4 sh-mono text-[var(--sh-graphite)] text-center">No tables</div>
+        <template v-else>
+          <section v-for="g in groups" :key="g.connection" :aria-label="`Tables in ${g.connection}`" data-testid="table-group">
+            <div class="side-section" style="padding: 10px 16px 4px; display: flex; align-items: center; gap: 6px;">
+              <span>{{ g.connection }}</span>
+              <Icon v-if="g.readOnly" name="lock" :size="11" aria-label="Read-only" />
+              <span style="margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500;" v-if="g.status !== 'ok'" :title="g.detail || g.status">{{ g.status === 'not-connected' ? 'not connected' : g.status === 'locked-by' ? 'in use' : g.status }}</span>
+            </div>
+            <div v-if="g.status === 'ok' && g.tables.length === 0" class="px-4 py-1 sh-micro" style="color: var(--sh-graphite);">No tables yet</div>
+            <div
+              v-for="t in g.tables"
+              :key="t.qualified"
+              @click="selectTable(t.qualified)"
+              class="px-4 py-2 cursor-pointer border-b border-line flex items-center justify-between group text-sm font-medium"
+              :class="selectedTable === t.qualified ? 'row-selected' : 'hover:bg-[var(--sh-hover)]'"
+              data-testid="table-row"
+              :data-table="t.qualified"
+            >
+              <span class="truncate flex items-center gap-2"><Icon :name="t.kind === 'view' ? 'eye' : 'database'" :size="14" /> {{ t.name }}</span>
+              <button v-if="t.kind !== 'view'" @click.stop="dropTable(t.qualified)" class="btn btn-ghost btn-sm hover-reveal" style="color: var(--sh-error);" :aria-label="`Drop table ${t.name}`" :title="`Drop ${t.name}`"><Icon name="trash" :size="14" /></button>
+            </div>
+          </section>
+        </template>
       </div>
     </div>
 
     <!-- Data area -->
     <div class="flex-1 overflow-auto flex flex-col">
-      <div v-if="!selectedTable && tables.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center gap-4">
+      <div v-if="!selectedTable && tables.length === 0 && !loading && unavailable.length" class="flex-1 flex flex-col items-center justify-center gap-4" data-testid="tables-unavailable">
+        <div class="empty-hero">
+          <div class="glyph"><Icon name="lock" :size="48" /></div>
+          <h2>Can't list these tables yet</h2>
+          <p class="lead">{{ unavailable[0].connection }} is {{ unavailable[0].status === 'locked-by' ? 'in use by another program, so its tables can only be read once it lets go.' : 'not available right now.' }}</p>
+          <details v-if="unavailable[0].detail && unavailable[0].status !== 'locked-by'" class="help" style="max-width: 560px;">
+            <summary style="cursor: pointer; font-weight: 600;">Show details</summary>
+            <div class="details" style="margin-top: 8px; overflow-wrap: anywhere;">{{ unavailable[0].detail }}</div>
+          </details>
+        </div>
+      </div>
+      <div v-else-if="!selectedTable && tables.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center gap-4">
         <div class="empty-hero">
           <div class="glyph"><Icon name="database" :size="48" /></div>
           <h2>No tables yet</h2>
           <p class="lead">Create a table or import a CSV to get started.</p>
-          <button @click="showNewTableModal = true" class="btn btn-primary"><Icon name="plus" :size="16" /> Create table</button>
+          <button @click="showNewTableModal = true" class="btn btn-primary" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : undefined"><Icon name="plus" :size="16" /> Create table</button>
         </div>
       </div>
       <div v-else-if="!selectedTable" class="flex-1 flex items-center justify-center text-[var(--sh-graphite)] sh-mono">Select a table</div>
@@ -554,7 +595,7 @@ watch(statusMessage, (msg) => {
           <button @click="openFbF" class="btn btn-sm"><Icon name="filter" :size="14" /> Filter by Form</button>
           <button v-if="activeFilter" @click="saveFilterAsQuery" class="btn btn-sm"><Icon name="save" :size="14" /> Save as query</button>
           <button v-if="activeFilter" @click="(clearFilter(), loadData())" class="btn btn-ghost btn-sm"><Icon name="x" :size="14" /> Clear filter</button>
-          <button @click="openAddRow" class="btn btn-primary btn-sm"><Icon name="plus" :size="14" /> Add row</button>
+          <button @click="openAddRow" class="btn btn-primary btn-sm" :disabled="isReadOnly" :title="isReadOnly ? readOnlyReason : 'Add a row'" data-testid="add-row"><Icon name="plus" :size="14" /> Add row</button>
         </div>
 
         <!-- Record-count bar -->

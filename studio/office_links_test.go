@@ -38,7 +38,7 @@ import (
 func seedOfficeLinks(t *testing.T, app *App) (queryID string) {
 	t.Helper()
 
-	ddb := app.container.DuckDBDB()
+	ddb := app.sess.DB()
 	require.NotNil(t, ddb)
 
 	_, err := ddb.Exec(`CREATE TABLE orders (
@@ -67,7 +67,7 @@ func seedOfficeLinks(t *testing.T, app *App) (queryID string) {
 // CSV fallback (excel extension unavailable).
 func readXLSXSum(t *testing.T, app *App, path string) (rowCount int, sum float64) {
 	t.Helper()
-	ddb := app.container.DuckDBDB()
+	ddb := app.sess.DB()
 	require.NotNil(t, ddb)
 	require.NoError(t,
 		ddb.QueryRow(`SELECT count(*) FROM read_xlsx(?)`, path).Scan(&rowCount),

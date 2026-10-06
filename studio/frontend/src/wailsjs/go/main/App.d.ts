@@ -4,6 +4,7 @@ import {main} from '../models';
 import {llm} from '../models';
 import {notebooks} from '../models';
 import {crud} from '../models';
+import {hub} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
@@ -27,17 +28,19 @@ export function CancelAgentTask(arg1:string):Promise<void>;
 
 export function CancelQuit():Promise<void>;
 
-export function CloseFile():Promise<void>;
+export function CheckGitAvailable():Promise<boolean>;
 
-export function CloseFileWithoutSaving():Promise<void>;
+export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<main.WorkspaceDirCheck>;
 
-export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function ChooseFolder(arg1:string):Promise<string>;
 
-export function CreateFromTemplate(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function CloseWorkspace():Promise<void>;
 
 export function CreateNotebook(arg1:string):Promise<notebooks.Notebook>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
+
+export function CreateWorkspace(arg1:main.CreateWorkspaceRequest):Promise<main.OpenWorkspaceResult>;
 
 export function DeleteNotebook(arg1:string):Promise<void>;
 
@@ -71,15 +74,13 @@ export function GetAgentConfig():Promise<main.AgentConfig>;
 
 export function GetAgentStatus():Promise<Record<string, any>>;
 
-export function GetAllMeta():Promise<Record<string, string>>;
+export function GetClaudeConfig():Promise<hub.ClaudeConfig>;
 
 export function GetDashboard():Promise<main.DashboardData>;
 
-export function GetFileInfo():Promise<main.FileInfo>;
+export function GetInitialWorkspace():Promise<main.InitialWorkspace>;
 
-export function GetInitialFile():Promise<string>;
-
-export function GetMCPStatus():Promise<Record<string, any>>;
+export function GetMCPStatus():Promise<main.MCPStatus>;
 
 export function GetNotebook(arg1:string):Promise<notebooks.Notebook>;
 
@@ -87,9 +88,13 @@ export function GetPreferences():Promise<prefs.Preferences>;
 
 export function GetQuery(arg1:string):Promise<queries.Query>;
 
+export function GetSessionID():Promise<string>;
+
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
 export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
+
+export function GetWorkspaceInfo():Promise<main.WorkspaceInfo>;
 
 export function ImportFile(arg1:importer.Options):Promise<importer.Summary>;
 
@@ -99,9 +104,9 @@ export function InsertRow(arg1:string,arg2:Record<string, any>):Promise<crud.Wri
 
 export function InspectImport(arg1:importer.Source):Promise<importer.Inspection>;
 
-export function IsDirty():Promise<boolean>;
+export function IsWorkspaceOpen():Promise<boolean>;
 
-export function IsFileOpen():Promise<boolean>;
+export function ListCatalogGroups():Promise<Array<main.CatalogGroup>>;
 
 export function ListCatalogTables(arg1:string):Promise<Array<string>>;
 
@@ -110,6 +115,8 @@ export function ListConnections():Promise<Array<session.Status>>;
 export function ListNotebooks():Promise<Array<notebooks.Summary>>;
 
 export function ListQueries():Promise<Array<main.QuerySummary>>;
+
+export function ListRecentWorkspaces():Promise<Array<main.RecentWorkspace>>;
 
 export function ListSkills():Promise<Array<main.SkillSummary>>;
 
@@ -121,25 +128,33 @@ export function ListTemplates():Promise<Array<main.TemplateInfo>>;
 
 export function ListUserThemes():Promise<main.UserThemesResult>;
 
-export function OpenFile(arg1:string,arg2:string):Promise<void>;
-
 export function OpenThemesDir():Promise<string>;
+
+export function OpenWorkspace(arg1:string):Promise<main.OpenWorkspaceResult>;
+
+export function OpenWorkspaceReadOnly(arg1:string):Promise<main.OpenWorkspaceResult>;
 
 export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
 
 export function Quit():Promise<void>;
 
+export function RegenerateWorkspaceID():Promise<main.WorkspaceInfo>;
+
+export function RelocateRecentWorkspace(arg1:string,arg2:string):Promise<void>;
+
+export function RemoveRecentWorkspace(arg1:string):Promise<main.RecentWorkspace>;
+
 export function RenameNotebook(arg1:string,arg2:string):Promise<void>;
 
 export function ResolveAgentApproval(arg1:string,arg2:boolean):Promise<void>;
 
-export function RevertFile():Promise<void>;
+export function ResolveConflict(arg1:main.ConflictRequest):Promise<main.ConflictResult>;
+
+export function RestoreRecentWorkspace(arg1:main.RecentWorkspace):Promise<void>;
 
 export function RunA2UIQuery(arg1:string):Promise<main.A2UIQueryResult>;
 
 export function RunA2UIQueryIn(arg1:string,arg2:string):Promise<main.A2UIQueryResult>;
-
-export function SaveFile():Promise<void>;
 
 export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
@@ -151,11 +166,9 @@ export function SaveSkill(arg1:string,arg2:string,arg3:string,arg4:string,arg5:s
 
 export function SelectImportFile():Promise<string>;
 
-export function SelectNewVibeFile():Promise<string>;
-
 export function SelectNotebookFile():Promise<string>;
 
-export function SelectVibeFile():Promise<string>;
+export function SelectWorkspaceFolder():Promise<string>;
 
 export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 
@@ -163,12 +176,18 @@ export function SetActiveNotebook(arg1:string):Promise<void>;
 
 export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 
-export function SetMeta(arg1:string,arg2:string):Promise<void>;
-
 export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
 
-export function StartMCPServer():Promise<string>;
+export function SetWorkspaceSettings(arg1:main.WorkspaceSettings):Promise<main.WorkspaceInfo>;
 
-export function StopMCPServer():Promise<void>;
+export function StartMCP():Promise<main.MCPStatus>;
+
+export function StopMCP():Promise<void>;
+
+export function SwitchWorkspace(arg1:main.SwitchRequest):Promise<main.OpenWorkspaceResult>;
+
+export function TakeOverWorkspace():Promise<main.OpenWorkspaceResult>;
+
+export function TrustLocalSettings():Promise<main.WorkspaceInfo>;
 
 export function UpdateRow(arg1:string,arg2:string,arg3:any,arg4:Record<string, any>):Promise<crud.WriteResult>;

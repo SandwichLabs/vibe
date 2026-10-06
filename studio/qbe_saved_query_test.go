@@ -3,7 +3,7 @@ package main
 // TDD RED — Phase 2 / unit P2.6: "Save filter/QBE as named query (queries
 // registry integration)" (parity plan §2.4 — "save it as a named query").
 //
-// This is a REAL integration test: it opens a real encrypted .vibe container,
+// This is a REAL integration test: it opens a real workspace,
 // materializes DuckDB, seeds a typed table, builds a structured FilterSpec
 // (the P2.5 output of Filter-by-Form / the QBE grid), and drives the production
 // Wails-bound persistence path. No mocks; no parallel query store.
@@ -15,7 +15,7 @@ package main
 //     the EXISTING queries.Registry (the same store ListQueries/GetQuery read)
 //   - the saved query, when executed via ExecuteQuery, returns rows equivalent
 //     to the live GetTableDataFiltered call for the same spec
-//   - the persisted SQL round-trips across SaveFile + reopen
+//   - the persisted SQL round-trips across close + reopen
 
 import (
 	"context"
@@ -112,7 +112,7 @@ func TestPreviewFilterSQL_NoSaveSideEffect(t *testing.T) {
 // TestSaveFilterAsQuery_PersistsAndRoundTrips is the core acceptance case:
 // a FilterSpec is saved as a named query via the existing registry, is listed
 // and retrievable, executes to rows equivalent to the live filter, and survives
-// a SaveFile + reopen.
+// a close + reopen.
 func TestSaveFilterAsQuery_PersistsAndRoundTrips(t *testing.T) {
 	app := newOpenApp(t)
 	seedTicketsTable(t, app)
@@ -156,11 +156,11 @@ func TestSaveFilterAsQuery_PersistsAndRoundTrips(t *testing.T) {
 		"saved query rows must equal the equivalent GetTableDataFiltered rows")
 	require.Equal(t, []int64{1, 4, 5, 6}, wantIDs, "sanity: the live filter matches the expected ids")
 
-	// --- persistence across SaveFile + reopen ---
+	// --- persistence across close + reopen ---
 	reopenApp(t, app)
 
 	persisted, err := app.GetQuery(id)
-	require.NoError(t, err, "saved query must survive SaveFile + reopen")
+	require.NoError(t, err, "saved query must survive close + reopen")
 	require.NotNil(t, persisted)
 	assert.Equal(t, stored.SQL, persisted.SQL, "persisted SQL must round-trip unchanged")
 

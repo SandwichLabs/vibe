@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 )
 
 func TestAgentPolicy_FreshFile(t *testing.T) {
@@ -139,8 +138,9 @@ func TestAgentApproval_Chat(t *testing.T) {
 	// promptly — proving enableApprovals actually released a.mu.RLock for
 	// the wait, not just around it.
 	require.Eventually(t, func() bool {
-		return app.SaveFile() == nil
-	}, 2*time.Second, 10*time.Millisecond, "SaveFile must not block behind a pending approval")
+		_, err := app.GetWorkspaceInfo()
+		return err == nil
+	}, 2*time.Second, 10*time.Millisecond, "GetWorkspaceInfo must not block behind a pending approval")
 	require.Eventually(t, func() bool {
 		return app.SetAgentConfig(AgentConfig{Sandbox: "full", AskBeforeWrites: true}) == nil
 	}, 2*time.Second, 10*time.Millisecond, "SetAgentConfig must not block behind a pending approval")
@@ -264,7 +264,7 @@ func TestAgentApproval_CloseWhilePending(t *testing.T) {
 
 	start := time.Now()
 	done := make(chan error, 1)
-	go func() { done <- app.CloseFile() }()
+	go func() { done <- app.CloseWorkspace() }()
 
 	select {
 	case err := <-done:
@@ -342,13 +342,14 @@ func TestAgentApproval_OutcomeFollowsIdentityCheck(t *testing.T) {
 	// Swap the open container out from under the pending card directly
 	// (bypassing CloseFile's CancelAll) — this is exactly the race
 	// enableApprovals' post-wait identity check exists to close.
-	staleContainer := app.container
-	newPath := filepath.Join(t.TempDir(), "swapped.vibe")
-	newC, err := container.Create(newPath, container.WithPassphrase(testPassphrase), container.WithLogger(app.logger))
+	staleWS, staleSess := app.ws, app.sess
+	otherWS, err := workspace.Open(newWorkspaceDir(t, "Other"), workspace.WithLogger(app.logger))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = newC.Close() })
+	otherSess, _, err := workspace.OpenSession(context.Background(), otherWS, app.logger)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = otherSess.Close(); _ = otherWS.Close() })
 	app.mu.Lock()
-	app.container = newC
+	app.ws, app.sess = otherWS, otherSess
 	app.mu.Unlock()
 
 	mu.Lock()
@@ -369,7 +370,7 @@ func TestAgentApproval_OutcomeFollowsIdentityCheck(t *testing.T) {
 
 	// The original (now-stale) container's rows must be untouched.
 	app.mu.Lock()
-	app.container = staleContainer
+	app.ws, app.sess = staleWS, staleSess
 	app.mu.Unlock()
 	assert.Equal(t, 3, orderVoidCount(t, app))
 }
@@ -397,7 +398,7 @@ func TestAgentApproval_CancelRaceWithRegistration(t *testing.T) {
 		respCh := make(chan *agents.Response, 1)
 		go func() { respCh <- handler.Handle(context.Background(), deleteReq) }()
 
-		require.NoError(t, app.CloseFile(), "iteration %d", i)
+		require.NoError(t, app.CloseWorkspace(), "iteration %d", i)
 
 		select {
 		case resp := <-respCh:
@@ -463,24 +464,71 @@ func TestAgentApproval_PolicyTightenedMidWait(t *testing.T) {
 	assert.Equal(t, 3, orderVoidCount(t, app), "the tightened policy must win: rows must be unchanged")
 }
 
-func TestStartMCPServer_WritesRefusedWhenAsk(t *testing.T) {
+// TestStartMCP_WritesGoThroughApprovalCard: Studio's own MCP server asks the
+// person, through the same approval card the chat agent uses (turn "mcp"),
+// instead of refusing. A decline leaves the data alone; an approval runs it.
+func TestStartMCP_WritesGoThroughApprovalCard(t *testing.T) {
 	app := newOpenApp(t)
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "full", AskBeforeWrites: true}))
 	seedVoidOrders(t, app)
+	app.approvalTimeout = 5 * time.Second
 
-	url, err := app.StartMCPServer()
+	var mu sync.Mutex
+	var cards []map[string]any
+	app.emit = func(name string, data ...any) {
+		if name != "agent:approval" || len(data) != 1 {
+			return
+		}
+		if m, ok := data[0].(map[string]any); ok {
+			mu.Lock()
+			cards = append(cards, m)
+			mu.Unlock()
+		}
+	}
+
+	st, err := app.StartMCP()
 	require.NoError(t, err)
-	require.NotEmpty(t, url)
-	t.Cleanup(func() { _ = app.StopMCPServer() })
+	require.True(t, st.Running)
+	require.NotEmpty(t, st.URL)
+	t.Cleanup(func() { _ = app.StopMCP() })
 
-	app.mu.Lock()
-	policy := app.agentPolicy()
-	sandbox := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
-	handler := app.wrapAgentHandler(sandbox, agents.ModeFull)
-	app.mu.Unlock()
+	app.mu.RLock()
+	handler := app.mcpTool
+	app.mu.RUnlock()
+	require.NotNil(t, handler)
 
-	resp := handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: "delete_record", Params: map[string]any{"table": "orders", "where": "status = 'Void'"}})
-	require.NotNil(t, resp.Error)
-	assert.Equal(t, agents.ErrApprovalNeeded, resp.Error.Code)
+	del := func(id int) chan *agents.Response {
+		ch := make(chan *agents.Response, 1)
+		go func() {
+			ch <- handler.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: id, Method: "delete_record", Params: map[string]any{"table": "orders", "where": "status = 'Void'"}})
+		}()
+		return ch
+	}
+	cardID := func(n int) string {
+		var id string
+		require.Eventually(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			if len(cards) < n {
+				return false
+			}
+			assert.Equal(t, "mcp", cards[n-1]["turnId"])
+			req, _ := cards[n-1]["request"].(agents.ApprovalRequest)
+			id = req.ID
+			return id != ""
+		}, 3*time.Second, 10*time.Millisecond)
+		return id
+	}
+
+	declined := del(1)
+	require.NoError(t, app.ResolveAgentApproval(cardID(1), false))
+	resp := <-declined
+	require.NotNil(t, resp.Error, "a declined card must not run the write")
 	assert.Equal(t, 3, orderVoidCount(t, app))
+
+	approved := del(2)
+	require.NoError(t, app.ResolveAgentApproval(cardID(2), true))
+	resp = <-approved
+	require.Nil(t, resp.Error, "%+v", resp.Error)
+	assert.Equal(t, 0, orderVoidCount(t, app))
 }

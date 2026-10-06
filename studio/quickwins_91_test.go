@@ -1,37 +1,16 @@
 package main
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // --- #91 quick wins: studio binding tests ---
-
-// TestOpenFile_WrongPassphrase_FriendlyMessage proves OpenFile turns
-// container.ErrWrongPassphrase into the plan's exact user-facing copy,
-// stripping the "failed to open file: ..." wrap chain.
-func TestOpenFile_WrongPassphrase_FriendlyMessage(t *testing.T) {
-	logger := testLogger()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "wrong.vibe")
-
-	c, err := container.Create(path, container.WithPassphrase(testPassphrase), container.WithLogger(logger))
-	require.NoError(t, err)
-	require.NoError(t, c.Close())
-
-	app := NewApp(logger)
-	app.ctx = context.Background()
-	err = app.OpenFile(path, "totally-wrong-passphrase")
-	require.Error(t, err)
-	assert.Equal(t, "That passphrase didn't work. Check Caps Lock and try again.", err.Error())
-}
 
 // TestSaveQuery_ReturnsID proves SaveQuery("", ...) returns a non-empty id,
 // and calling SaveQuery(id, ...) again updates the same row rather than

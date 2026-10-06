@@ -3,14 +3,16 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import ConflictBanner from '../components/ConflictBanner.vue'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import { register as registerPendingSave } from '../composables/usePendingSaves'
 import { errorText } from '../lib/errors'
 
 // SkillsView (#62): lists built-in + file (user/import) Skills, shows a
 // rendered/raw detail pane, and lets the user author or edit file skills.
-// Built-ins are read-only (they're embedded in the binary, not rows in
-// _vibe_skills) — the UI never offers edit/delete for them.
+// Built-ins are read-only (they're embedded in the binary, not files in
+// skills/) — the UI never offers edit/delete for them.
 const skills = ref<SkillSummary[]>([])
 const loading = ref(true)
 const selectedName = ref<string | null>(null)
@@ -32,6 +34,15 @@ const formInstructions = ref('')
 const formTableName = ref('')
 const formNameError = ref('')
 const saving = ref(false)
+
+// The skill's file changed on disk while the editor had it open (a git pull,
+// another editor, the agent): ConflictBanner offers reload / keep mine / copy.
+const conflict = ref<{ deleted: boolean } | null>(null)
+const conflictBusy = ref(false)
+const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
+// What the editor was opened with, to tell "I edited" from "untouched".
+let openedWith = ''
+const formSnapshot = () => JSON.stringify([formDescription.value, formInstructions.value, formTableName.value])
 
 const showConfirmDelete = ref(false)
 const pendingDeleteName = ref<string | null>(null)
@@ -72,7 +83,9 @@ function openCreate() {
   formInstructions.value = ''
   formTableName.value = ''
   formNameError.value = ''
+  conflict.value = null
   showEditor.value = true
+  openedWith = formSnapshot()
 }
 
 function openEdit(s: SkillSummary) {
@@ -83,7 +96,9 @@ function openEdit(s: SkillSummary) {
   formInstructions.value = s.instructions
   formTableName.value = s.table_name || ''
   formNameError.value = ''
+  conflict.value = null
   showEditor.value = true
+  openedWith = formSnapshot()
 }
 
 async function submitEditor() {
@@ -103,9 +118,99 @@ async function submitEditor() {
     selectedName.value = formName.value
     viewMode.value = 'rendered'
   } catch (e: any) {
-    formNameError.value = errorText(e)
+    if (isConflict(e)) {
+      conflict.value = { deleted: false }
+      formNameError.value = ''
+    } else {
+      formNameError.value = errorText(e)
+    }
   }
   saving.value = false
+}
+
+// flushPending is registered with usePendingSaves so switching workspaces,
+// closing and quitting save an open, edited skill first. A conflict or an
+// unfinished skill makes it fail so the caller can ask.
+async function flushPending() {
+  if (!showEditor.value || formSnapshot() === openedWith) return
+  if (conflict.value) throw new Error('this skill changed on disk and your edit is not saved yet')
+  if (!NAME_PATTERN.test(formName.value) || !formDescription.value.trim() || !formInstructions.value.trim()) {
+    throw new Error('the skill being edited is not finished (it needs a name, description and instructions)')
+  }
+  try {
+    await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
+  } catch (e: any) {
+    if (isConflict(e)) conflict.value = { deleted: false }
+    throw new Error(errorText(e))
+  }
+  await loadSkills()
+  editingRev.value = skills.value.find((x) => x.name === formName.value)?.rev || ''
+  openedWith = formSnapshot()
+}
+let unregisterPending: (() => void) | undefined
+
+// resolveConflict applies the person's choice (see ConflictBanner). "reload"
+// refills the form from the disk version; "overwrite" writes the form over it;
+// "saveCopy" writes the form as <name>-copy and shows the disk version here.
+async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
+  const id = editingOriginalName.value ?? formName.value
+  if (action === 'reload' && conflict.value?.deleted) {
+    // The file is gone: "Close it" just closes the editor.
+    conflict.value = null
+    showEditor.value = false
+    await loadSkills()
+    return
+  }
+  conflictBusy.value = true
+  try {
+    const res = await window.go.main.App.ResolveConflict({
+      kind: 'skill', id, action,
+      data: { description: formDescription.value, instructions: formInstructions.value, tableName: formTableName.value },
+    })
+    conflict.value = null
+    if (action === 'overwrite') {
+      editingRev.value = res.rev
+      showEditor.value = false
+      await loadSkills()
+      selectedName.value = id
+      return
+    }
+    await loadSkills()
+    const disk = skills.value.find((x) => x.name === id)
+    if (disk) {
+      editingRev.value = disk.rev || ''
+      formDescription.value = disk.description
+      formInstructions.value = disk.instructions
+      formTableName.value = disk.table_name || ''
+      openedWith = formSnapshot()
+    } else {
+      showEditor.value = false
+    }
+    if (action === 'saveCopy') errorMessage.value = `Saved your version as "${res.title}".`
+  } catch (e: any) {
+    formNameError.value = errorText(e)
+  } finally {
+    conflictBusy.value = false
+  }
+}
+
+// onDiskChange: another program changed skills/. The open editor refills quietly
+// when the person hasn't touched it, and shows the banner when they have.
+function onDiskChange(p: { kind: string; id: string; op: string }) {
+  if (p?.kind !== 'skill' || !showEditor.value || p.id !== editingOriginalName.value) return
+  if (formSnapshot() === openedWith && p.op !== 'deleted') {
+    void loadSkills().then(() => {
+      const disk = skills.value.find((x) => x.name === p.id)
+      if (!disk) return
+      editingRev.value = disk.rev || ''
+      formDescription.value = disk.description
+      formInstructions.value = disk.instructions
+      formTableName.value = disk.table_name || ''
+      openedWith = formSnapshot()
+    })
+    return
+  }
+  conflict.value = { deleted: p.op === 'deleted' }
 }
 
 function deleteSkill(s: SkillSummary) {
@@ -130,12 +235,17 @@ async function confirmDelete() {
 // Import/app-import writes a workspace-<table> skill; other views (Import,
 // the agent) mutating data should refresh this list without a manual reload.
 let unsubDataChanged: (() => void) | undefined
+let unsubDisk: (() => void) | undefined
 onMounted(() => {
+  unregisterPending = registerPendingSave(() => 'The skill editor', flushPending)
   loadSkills()
   unsubDataChanged = EventsOn('data:changed', loadSkills)
+  unsubDisk = EventsOn('workspace:changed-on-disk', onDiskChange)
 })
 onUnmounted(() => {
+  unregisterPending?.()
   unsubDataChanged?.()
+  unsubDisk?.()
 })
 </script>
 
@@ -205,6 +315,17 @@ onUnmounted(() => {
     <div v-if="showEditor" class="modal-overlay" @click.self="showEditor = false" role="dialog" aria-modal="true" :aria-label="editingOriginalName ? 'Edit skill' : 'New skill'">
       <div ref="editorEl" class="card card-pad" style="width: 100%; max-width: 560px;">
         <h3 class="card-title" style="margin: 0 0 var(--sh-space-4);">{{ editingOriginalName ? 'Edit skill' : 'New skill' }}</h3>
+        <ConflictBanner
+          v-if="conflict"
+          kind="skill"
+          :path="`skills/${editingOriginalName ?? formName}/SKILL.md`"
+          :deleted="conflict.deleted"
+          :busy="conflictBusy"
+          style="margin-bottom: var(--sh-space-3);"
+          @reload="resolveConflict('reload')"
+          @overwrite="resolveConflict('overwrite')"
+          @save-copy="resolveConflict('saveCopy')"
+        />
         <div class="col" style="gap: 4px;">
           <label class="sh-label" style="margin: 0;">Name</label>
           <input v-model="formName" :disabled="!!editingOriginalName" placeholder="e.g. revenue-rules" class="field-input" style="width: 100%;" data-testid="skill-name-input" />
@@ -224,7 +345,7 @@ onUnmounted(() => {
         <p v-if="formNameError" style="font-size: var(--sh-fs-xs); margin-top: var(--sh-space-2); font-weight: 600; color: var(--sh-error);">{{ formNameError }}</p>
         <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-4);">
           <button @click="showEditor = false" class="btn btn-ghost">Cancel</button>
-          <button @click="submitEditor" :disabled="saving" class="btn btn-primary" data-testid="skill-save">{{ saving ? 'Saving…' : 'Save' }}</button>
+          <button @click="submitEditor" :disabled="saving || !!conflict" class="btn btn-primary" data-testid="skill-save">{{ saving ? 'Saving…' : 'Save' }}</button>
         </div>
       </div>
     </div>

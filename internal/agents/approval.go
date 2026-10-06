@@ -140,8 +140,8 @@ func (q *ApprovalQueue) Resolve(id string, approved bool) bool {
 
 // CancelAll ends every request currently waiting via its own derived
 // context (see Wait), so each one returns ErrApprovalCancelled rather than
-// ErrApprovalDeclined/Expired. Used by studio/app.go's CloseFile/OpenFile/
-// CreateFile before taking the file lock, so a pending approval on the file
+// ErrApprovalDeclined/Expired. Used by studio/workspace.go's open/close/switch
+// before taking the workspace lock, so a pending approval on the workspace
 // being replaced ends as "cancelled, nothing changed" rather than blocking
 // the swap.
 func (q *ApprovalQueue) CancelAll() {

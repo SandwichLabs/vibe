@@ -18,7 +18,6 @@ require (
 	github.com/spf13/viper v1.20.0
 	github.com/stretchr/testify v1.11.1
 	github.com/wailsapp/wails/v2 v2.11.0
-	github.com/yuin/goldmark v1.7.16
 	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0

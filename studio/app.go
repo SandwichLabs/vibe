@@ -13,62 +13,73 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/hub"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
 	"github.com/sandwich-labs/vibe-app/internal/llm"
-	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/prefs"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the main application struct bound to the Wails frontend.
+//
+// Studio holds one workspace at a time (#111): the folder (ws), the DuckDB hub
+// built over its connections (sess), the hub lock that makes this process the
+// only writer (hold, nil when opened read-only), and, when switched on, the
+// MCP server others reach the workspace through (wmcp). Notebooks, queries and
+// skills are plain files behind ws; data writes go straight to the source.
 type App struct {
-	ctx         context.Context
-	logger      *slog.Logger
-	mu          sync.RWMutex
-	container   *container.Container
-	engine      *engine.Manager
-	registry    queries.Store
-	filePath    string
-	mcpServer   *vibemcp.Server
-	initialFile string
+	ctx    context.Context
+	logger *slog.Logger
+	mu     sync.RWMutex
 
-	// sessionID identifies the CURRENTLY open container. It is regenerated
-	// on every successful OpenFile/CreateFile/CreateFromTemplate (see
-	// beginFileSession) and cleared on CloseFile. A frontend view that reads
-	// data at open/load time (NotebookView.vue's loadedSessionId) stamps
-	// itself with the value in effect at that moment and sends it back with
-	// every write (SaveNotebook); the backend rejects a write whose token
-	// doesn't match the CURRENT sessionID.
-	//
-	// This closes a real data-corruption bug (reviewer-caught, live-proven):
-	// calling OpenFile/CreateFile/CreateFromTemplate while a NotebookView
-	// for the PREVIOUS file was still mounted let that view's in-flight
-	// debounced save land in the NEW container after the switch — the
-	// container pointer itself was already swapped by the time the old
-	// view's save fired, and nothing on the write path noticed the file
-	// underneath it had changed. The frontend now also flushes pending
-	// saves before every one of these three calls (matching CloseFile's
-	// existing flushAll), but the backend token check is the one that
-	// cannot be bypassed by a caller that skips the frontend's own gating
-	// (e.g. a direct Wails-binding call, or a future call site that forgets
-	// to flush first).
+	ws     workspace.Workspace
+	sess   session.Session
+	engine *engine.Manager
+	hold   *hub.Hold
+	wmcp   *hub.WorkspaceMCP
+	// mcpTool is the wrapped handler wmcp serves (what takes a.mu and shows the
+	// approval cards); nil while MCP is off.
+	mcpTool *agentToolHandler
+	watcher *workspace.Watcher
+	// watchDone is closed by closeWorkspaceLocked to end the watcher forwarder.
+	watchDone chan struct{}
+	// issues are the connections that could not be set up (redacted messages).
+	issues []workspace.SessionIssue
+	// readOnly is true when another process owns the hub: stores stay editable
+	// (they are files), local DuckDB files are not reachable. holder says who.
+	readOnly bool
+	holder   *hub.Holder
+	// duplicateOf lists other known workspace folders that carry this one's id.
+	duplicateOf []string
+
+	// initialPath is the folder passed on the command line, and initialNote a
+	// plain-language problem with it (a .vibe file, a missing folder).
+	initialPath string
+	initialNote string
+
+	// sessionID identifies the CURRENTLY open workspace. It is regenerated on
+	// every successful open and cleared on close. A frontend view that reads
+	// data at load time (NotebookView.vue's loadedSessionId) stamps itself
+	// with the value in effect at that moment and sends it back with every
+	// write (SaveNotebook); the backend rejects a write whose token does not
+	// match the CURRENT sessionID. That closes a real data-corruption bug: a
+	// still-mounted view of the PREVIOUS workspace let an in-flight debounced
+	// save land in the NEW one after a switch. The token check is the one
+	// guard a caller that skips the frontend's own flush cannot bypass.
 	sessionID string
 
 	// activeNotebookID is the id of the notebook currently open in
-	// NotebookView.vue, if any — set via SetActiveNotebook (called on
-	// mount/switch/close). Consulted by add_query_cell/create_dashboard's
-	// "append to the open notebook" fallback (#67 deferred part) via
-	// agents.Handler.SetActiveNotebook, applied per-call in
-	// newAgentToolHandler/wrapAgentHandler.
+	// NotebookView.vue, if any — set via SetActiveNotebook. Consulted by
+	// add_query_cell/create_dashboard's "append to the open notebook" fallback
+	// via agents.Handler.SetActiveNotebook.
 	activeNotebookID string
 
 	// taskCancel holds one context.CancelFunc per in-flight AgentTask call,
@@ -80,57 +91,56 @@ type App struct {
 
 	// emit publishes a frontend event. In production it is nil and emitEvent
 	// falls back to the Wails runtime.EventsEmit (which requires the real Wails
-	// lifecycle context). Tests inject a sink so the open lifecycle — including
-	// the AutoExec "app:autoexec" startup intents — can be asserted without a
-	// live Wails runtime.
+	// lifecycle context). Tests inject a sink so the open lifecycle can be
+	// asserted without a live Wails runtime.
 	emit func(event string, data ...any)
 
-	// prefs stores app-global user preferences (theme, appearance) outside
-	// any .vibe file — see internal/prefs. nil in tests that don't need it.
+	// prefs stores app-global user preferences (theme, appearance, the recent
+	// workspaces list) outside any workspace — see internal/prefs. nil in tests
+	// that don't need it.
 	prefs *prefs.Store
 
 	// llmCfg is the app-global, viper-driven LLM provider/model configuration
 	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
 	llmCfg config.LLMConfig
 
-	// quitConfirmed gates beforeClose (review fix, step 4a round 2 #1): the
-	// FIRST window-close/quit attempt is intercepted (OnBeforeClose returns
-	// true, preventing it) so the frontend gets a chance to flush any
-	// pending debounced saves via the "app:before-close" event; once it has
-	// (or a timeout fires), it calls Quit(), which sets this flag so the
-	// NEXT beforeClose lets the close through.
+	// quitConfirmed gates beforeClose: the FIRST window-close/quit attempt is
+	// intercepted (OnBeforeClose returns true, preventing it) so the frontend
+	// gets a chance to flush any pending debounced saves via the
+	// "app:before-close" event; once it has (or a timeout fires), it calls
+	// Quit(), which sets this flag so the NEXT beforeClose lets the close
+	// through.
 	quitConfirmed atomic.Bool
 
-	// closePending replaces closeWatchdogOnce's sync.Once (#81): a sync.Once
-	// can only ever fire once per App, but CancelQuit (the frontend's "Save
-	// changes?" dialog answered Cancel) must be able to re-arm the SAME
-	// prompt/watchdog dance on the next close attempt. true means a close
-	// attempt is already in flight (the frontend is deciding, or the
-	// watchdog is armed); the next attempt while it's true quits
-	// immediately (see beforeClose).
+	// closePending is true while a close attempt is already in flight (the
+	// frontend is flushing, or the watchdog is armed); a second attempt while
+	// it is true quits immediately (see beforeClose).
 	closePending atomic.Bool
 
 	// closeWatchdog and quitFn are testing seams for beforeClose's timeout
-	// logic (review fix, step 4a round 3 #1: a hung webview — e.g. its
-	// process suspended — never responds to "app:before-close", and
-	// beforeClose returned true forever, making the window impossible to
-	// close). Production leaves both nil and beforeClose lazily defaults
-	// them to a real time.AfterFunc and the real Quit(); tests inject
-	// deterministic stand-ins instead of waiting on a real 5s timer.
-	closeWatchdog func(d time.Duration, f func())
+	// logic: a hung webview never responds to "app:before-close", and the
+	// window must still close. Production leaves both nil and beforeClose
+	// lazily defaults them to a real time.AfterFunc and the real Quit().
+	closeWatchdog func(d time.Duration, f func()) (stop func())
 	quitFn        func()
+	// watchdogStop stops the armed watchdog (HoldQuit, CancelQuit).
+	watchdogMu   sync.Mutex
+	watchdogStop func()
 
 	// approvals is the one process-lifetime registry backing every pending
-	// write-approval card across every open chat turn (#79) — see
-	// agentToolHandler.enableApprovals and ResolveAgentApproval. It outlives
-	// any single file (CloseFile/OpenFile/CreateFile cancel whatever is
-	// pending on it before swapping the container, never replace it).
+	// write-approval card across every open chat turn and the in-Studio MCP
+	// server (#79) — see agentToolHandler.enableApprovals and
+	// ResolveAgentApproval. It outlives any single workspace (a close or switch
+	// cancels whatever is pending on it before the session goes away).
 	approvals *agents.ApprovalQueue
 
+	// locateVibe finds the `vibe` CLI for the Claude config snippets; tests
+	// replace it (nil means hub.LocateVibe).
+	locateVibe func() (string, error)
+
 	// approvalTimeout bounds how long a pending approval card waits for an
-	// answer before the tool call gives up (see enableApprovals). A App
-	// field, not a package constant, so tests can shorten it instead of
-	// waiting out the real 5 minutes.
+	// answer before the tool call gives up. An App field, not a package
+	// constant, so tests can shorten it instead of waiting out 5 minutes.
 	approvalTimeout time.Duration
 }
 
@@ -161,16 +171,8 @@ func NewApp(logger *slog.Logger) *App {
 	return app
 }
 
-// GetInitialFile returns the file path passed as a command-line argument, if any.
-func (a *App) GetInitialFile() string {
-	return a.initialFile
-}
-
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	// Reclaim DuckDB temp dirs left behind by crashed Vibe processes (P6.8
-	// orphan recovery). Best-effort: logs but never blocks startup.
-	container.StartupSweep(a.logger)
 	// In production, route frontend events through the live Wails runtime using
 	// the real lifecycle context. Tests inject their own emit sink and never call
 	// startup, so emitEvent stays runtime-free under test.
@@ -182,8 +184,7 @@ func (a *App) startup(ctx context.Context) {
 }
 
 // emitEvent publishes a frontend event, using the injected emitter (tests) when
-// set and otherwise the Wails runtime. Centralizing emission lets the open
-// lifecycle (and its AutoExec startup intents) be exercised in unit tests.
+// set and otherwise the Wails runtime.
 func (a *App) emitEvent(event string, data ...any) {
 	if a.emit == nil {
 		// No emit sink: either a unit test that did not inject one, or a call
@@ -198,87 +199,59 @@ func (a *App) emitEvent(event string, data ...any) {
 	a.emit(event, data...)
 }
 
+// shutdown runs when the process quits: MCP off, session closed, then the hub
+// lock released last, so the next owner can open the DuckDB files the moment
+// the lock is free.
 func (a *App) shutdown(_ context.Context) {
+	if a.approvals != nil {
+		a.approvals.CancelAll()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.mcpServer != nil {
-		a.mcpServer.Stop() //nolint:errcheck
-		a.mcpServer = nil
-	}
-	if a.container != nil {
-		a.container.Save()  //nolint:errcheck
-		a.container.Close() //nolint:errcheck
-		a.container = nil
-	}
-}
-
-// dirtyForClose reports whether the open container has unsaved table
-// changes, for beforeClose's "app:before-close" payload (#81). It tries the
-// read lock rather than blocking: beforeClose runs on Wails' own event loop,
-// and a long-running import/CRUD call already holding a.mu must never make
-// window-close itself hang. Failing to get the lock fails toward "dirty" —
-// worst case an extra Save/Cancel prompt, never a silently skipped one.
-func (a *App) dirtyForClose() bool {
-	if !a.mu.TryRLock() {
-		return true
-	}
-	defer a.mu.RUnlock()
-	return a.container != nil && a.container.Dirty()
+	a.closeWorkspaceLocked("")
 }
 
 // beforeClose is wired as Wails' OnBeforeClose option (studio/main.go). It
 // intercepts the first window-close/quit attempt and returns true
-// (preventing the close) while emitting "app:before-close" (carrying
-// whether the open file has unsaved table changes, #81) so the frontend can
-// flush any pending debounced saves (e.g. a notebook's autosave) and, if
-// dirty, ask Save/Don't save/Cancel before the container actually closes —
-// review fix, step 4a round 2 #1. The frontend then calls Quit() (Save or
-// Don't save) or CancelQuit() (Cancel); Quit() sets quitConfirmed so THIS
-// same check lets the next close attempt through instead of looping
-// forever, while CancelQuit() clears closePending so the NEXT attempt
-// prompts again from scratch.
+// (preventing the close) while emitting "app:before-close" so the frontend can
+// flush any pending debounced saves (e.g. a notebook's autosave). The
+// frontend then calls Quit(); Quit() sets quitConfirmed so THIS same check
+// lets the next close attempt through instead of looping forever.
 //
-// Round 3 review fix: a clean-close attempt also arms a one-shot watchdog
-// timer (closeWatchdogTimeout) that force-quits if the frontend never
-// responds — a hung or suspended webview process must not be able to make
-// the window impossible to close. When the file is dirty, no watchdog is
-// armed: a prompt asking the person to decide may legitimately stay open
-// indefinitely, and the escape hatch for a hung webview is instead a SECOND
-// close attempt while one is already pending, which lets the close through
-// immediately (and still saves, via shutdown) — on the theory that a person
-// clicking close twice means it, and there is no reason to make them wait
-// out a clean-case watchdog too.
+// A one-shot watchdog timer (closeWatchdogTimeout) force-quits if the
+// frontend never responds — a hung or suspended webview process must not be
+// able to make the window impossible to close. A SECOND close attempt while
+// one is already pending lets the close through immediately.
 func (a *App) beforeClose(_ context.Context) (prevent bool) {
 	if a.quitConfirmed.Load() {
 		return false
 	}
 
 	if a.closePending.CompareAndSwap(false, true) {
-		dirty := a.dirtyForClose()
-		a.emitEvent("app:before-close", map[string]any{"dirty": dirty})
-		if !dirty {
-			watchdog := a.closeWatchdog
-			if watchdog == nil {
-				watchdog = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+		a.emitEvent("app:before-close", map[string]any{})
+		watchdog := a.closeWatchdog
+		if watchdog == nil {
+			watchdog = func(d time.Duration, f func()) func() {
+				t := time.AfterFunc(d, f)
+				return func() { t.Stop() }
 			}
-			watchdog(closeWatchdogTimeout, a.Quit)
 		}
+		stop := watchdog(closeWatchdogTimeout, a.Quit)
+		a.watchdogMu.Lock()
+		a.watchdogStop = stop
+		a.watchdogMu.Unlock()
 		return true
 	}
 
-	// A later attempt while the first is still pending: quit immediately
-	// rather than making a second, deliberate close click wait out a
-	// prompt (or the watchdog) too.
 	a.quitConfirmed.Store(true)
 	return false
 }
 
 // Quit is called by the frontend once it has flushed (or timed out waiting
-// on) every pending save in response to "app:before-close", and either the
-// file was clean or the person chose Save/Don't save — and by beforeClose's
-// own watchdog timer if the frontend never responds at all (clean-close
-// case only). It marks the close as confirmed and asks Wails to quit
-// again, which this time reaches beforeClose with quitConfirmed already set.
+// on) every pending save in response to "app:before-close", and by
+// beforeClose's own watchdog timer if the frontend never responds at all. It
+// marks the close as confirmed and asks Wails to quit again, which this time
+// reaches beforeClose with quitConfirmed already set.
 func (a *App) Quit() {
 	a.quitConfirmed.Store(true)
 	quit := a.quitFn
@@ -288,363 +261,37 @@ func (a *App) Quit() {
 	quit()
 }
 
-// CancelQuit answers a dirty "app:before-close" prompt with Cancel: the
-// close attempt is abandoned and closePending is cleared so the next
-// close/quit attempt starts the whole dance over — a fresh prompt, or a
-// fresh watchdog if the file is clean by then. It never touches
-// quitConfirmed, so an actual quit still requires a later Quit() call.
+// CancelQuit abandons a close attempt (the person chose to stay because a
+// notebook could not be saved); the next close starts the flow again.
 func (a *App) CancelQuit() {
+	a.HoldQuit()
 	a.closePending.Store(false)
 }
 
-// --- File Operations ---
-
-// SelectVibeFile opens a file dialog to select a .vibe file.
-func (a *App) SelectVibeFile() (string, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Open Vibe File",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Vibe Files (*.vibe)", Pattern: "*.vibe"},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to open file dialog: %w", err)
+// HoldQuit stops the hung-webview watchdog. The frontend calls it before it
+// asks "Quit anyway?": a frontend that can show a question is not hung, and the
+// timer must not quit the app while the person is deciding.
+func (a *App) HoldQuit() {
+	a.watchdogMu.Lock()
+	stop := a.watchdogStop
+	a.watchdogStop = nil
+	a.watchdogMu.Unlock()
+	if stop != nil {
+		stop()
 	}
-	return path, nil
 }
 
-// SelectNewVibeFile opens a save dialog to create a new .vibe file.
-func (a *App) SelectNewVibeFile() (string, error) {
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Create Vibe File",
-		DefaultFilename: "untitled.vibe",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Vibe Files (*.vibe)", Pattern: "*.vibe"},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to open save dialog: %w", err)
-	}
-	return path, nil
-}
+// errNoWorkspace is what every binding that needs an open workspace returns
+// when there is none.
+var errNoWorkspace = errors.New("no workspace open")
 
-// closeCurrentContainerLocked saves and closes whatever container is
-// currently open (if any) and clears every field tied to its lifetime,
-// BEFORE the caller attempts to open/create the next one. Must be called
-// with a.mu held.
-//
-// This is the fix for a crash a reviewer reproduced live (SIGSEGV):
-// OpenFile/CreateFile/CreateFromTemplate used to Save+Close the current
-// container inline and then attempt the new open/create — but on a failed
-// open (e.g. a wrong passphrase), the early `return err` left a.container
-// still pointing at the now-CLOSED container. The NEXT OpenFile call then
-// saw a.container != nil, called Save()/Close() on an already-closed
-// container, and the process died. Clearing a.container (and engine/
-// registry/filePath/sessionID) here, unconditionally, right after closing —
-// not only on the success path — means a failed open always leaves the app
-// in a clean "no file open" state instead of a half-torn-down one.
-func (a *App) closeCurrentContainerLocked() {
-	if a.container == nil {
-		return
+// requireWorkspace is the one gate every workspace-bound binding runs first.
+// The caller holds a.mu (read or write).
+func (a *App) requireWorkspace() error {
+	if a.ws == nil {
+		return errNoWorkspace
 	}
-	if a.mcpServer != nil {
-		a.mcpServer.Stop() //nolint:errcheck
-		a.mcpServer = nil
-	}
-	a.container.Save()  //nolint:errcheck
-	a.container.Close() //nolint:errcheck
-	a.container = nil
-	a.engine = nil
-	a.registry = nil
-	a.filePath = ""
-	a.sessionID = ""
-	// So the UI falls back to Unlock/the file picker instead of showing a
-	// stale view of the file that just got closed out from under it.
-	a.emitEvent("file:closed")
-}
-
-// studioInUseMessage renders the Unlock-view error for #80's InUseError:
-// who holds the file (LockHolder.String() — the one place that formats a
-// holder, so the "pid"/empty-host rules never drift between this and the
-// CLI's InUseError.Error()), or a generic fallback when the holder info
-// raced with the other process writing it (still informative — a lock IS
-// held).
-func studioInUseMessage(inUse *container.InUseError) string {
-	who := "another Vibe window or program"
-	if inUse.Holder != nil {
-		who = inUse.Holder.String()
-	}
-	return fmt.Sprintf("This file is already open in %s. Close it there, then try again.", who)
-}
-
-// OpenFile opens an existing .vibe file with the given passphrase.
-func (a *App) OpenFile(path, passphrase string) error {
-	// Cancel any approval pending on the file about to be replaced BEFORE
-	// taking a.mu — not to avoid a deadlock (enableApprovals releases
-	// a.mu.RLock for the whole wait, so Lock() below would proceed either
-	// way), but so a pending card ends right now as "cancelled, nothing
-	// changed" instead of sitting there for up to approvalTimeout after the
-	// file underneath it has already been swapped. CancelAll runs again
-	// once this function holds a.mu.Lock — see its second call below — to
-	// close the narrow window where a Wait() registers after this first
-	// call but before the lock is taken.
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
-
-	a.closeCurrentContainerLocked()
-
-	c, err := container.Open(path,
-		container.WithPassphrase(passphrase),
-		container.WithLogger(a.logger),
-		container.WithLockApp("Vibe Studio"),
-	)
-	if err != nil {
-		if errors.Is(err, container.ErrWrongPassphrase) {
-			a.logger.Info("open failed: wrong passphrase", "path", path, "error", err)
-			return errors.New("That passphrase didn't work. Check Caps Lock and try again.")
-		}
-		var inUse *container.InUseError
-		if errors.As(err, &inUse) {
-			a.logger.Info("open failed: file in use", "path", path, "holder", inUse.Holder)
-			return errors.New(studioInUseMessage(inUse))
-		}
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-
-	a.container = c
-	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
-	a.registry = c.Queries()
-	a.filePath = path
-	a.beginFileSession()
-	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
-	a.emitEvent("file:opened")
 	return nil
-}
-
-// beginFileSession stamps a.sessionID with a fresh id, marking a new
-// "generation" of the open container — see the field's doc comment. Called
-// while a.mu is held, immediately after a.container is swapped in
-// (OpenFile/CreateFile/CreateFromTemplate).
-func (a *App) beginFileSession() {
-	a.sessionID = uuid.New().String()
-}
-
-// CreateFile creates a new .vibe file.
-func (a *App) CreateFile(path, passphrase, title, desc string) error {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
-
-	a.closeCurrentContainerLocked()
-
-	c, err := container.Create(path,
-		container.WithPassphrase(passphrase),
-		container.WithLogger(a.logger),
-		container.WithTitle(title),
-		container.WithDescription(desc),
-		container.WithLockApp("Vibe Studio"),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-
-	a.container = c
-	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
-	a.registry = c.Queries()
-	a.filePath = path
-	a.beginFileSession()
-	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
-	a.emitEvent("file:opened")
-	return nil
-}
-
-// CloseFile saves and closes the current file.
-func (a *App) CloseFile() error {
-	return a.closeFile(true)
-}
-
-// CloseFileWithoutSaving closes the current file WITHOUT saving — the
-// "Don't save" answer to the unsaved-changes prompt (#81). Table changes
-// made since the last Save are discarded; SQLite-side content (notebooks,
-// queries, skills, settings) is write-through and was already persisted, so
-// it is unaffected. Still releases the #80 writer lock via Container.Close.
-func (a *App) CloseFileWithoutSaving() error {
-	return a.closeFile(false)
-}
-
-// closeFile is CloseFile/CloseFileWithoutSaving's shared body.
-func (a *App) closeFile(save bool) error {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
-
-	if a.container == nil {
-		return nil
-	}
-
-	if a.mcpServer != nil {
-		a.mcpServer.Stop() //nolint:errcheck
-		a.mcpServer = nil
-	}
-
-	if save {
-		if err := a.container.Save(); err != nil {
-			return fmt.Errorf("failed to save: %w", err)
-		}
-	}
-	if err := a.container.Close(); err != nil {
-		return fmt.Errorf("failed to close: %w", err)
-	}
-	a.container = nil
-	a.engine = nil
-	a.registry = nil
-	a.filePath = ""
-	a.sessionID = ""
-	a.emitEvent("file:closed")
-	return nil
-}
-
-// SaveFile saves the current file.
-func (a *App) SaveFile() error {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	if err := a.container.Save(); err != nil {
-		return err
-	}
-	// Read Dirty() AFTER Save, not a hard-coded false: SaveFile only holds
-	// RLock, so a write that lands (from an agent, MCP, or another RLock
-	// holder) between the checkpoint finishing and this line can leave the
-	// container dirty again — emitting a constant false would then get
-	// silently swallowed by the concurrent write's own (already-fired)
-	// markDirty edge, leaving the indicator stuck on "Saved" while the file
-	// is actually dirty again.
-	a.emitEvent("file:dirty", a.container.Dirty())
-	return nil
-}
-
-// markDirty marks the open container's DuckDB user data as changed since
-// the last Save and, on the clean->dirty edge, notifies the frontend so the
-// sidebar indicator and window title can flip immediately. Callers must
-// hold at least a.mu.RLock (a container write already needs at least that
-// much). A no-op with no file open.
-func (a *App) markDirty() {
-	if a.container != nil && a.container.MarkDirty() {
-		a.emitEvent("file:dirty", true)
-	}
-}
-
-// IsDirty reports whether the open file has DuckDB table changes since the
-// last Save. false with no file open.
-func (a *App) IsDirty() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.container != nil && a.container.Dirty()
-}
-
-// RevertFile discards table changes since the last Save without closing the
-// file (#98). Keeps the writer lock, the session id (notebooks are
-// write-through and unaffected, so in-flight notebook saves must still
-// land), and a running MCP server (its handler resolves the rebuilt engine
-// per call). Pending approval cards end as cancelled.
-func (a *App) RevertFile() error {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	} // see OpenFile's matching calls for why this runs both before and after a.mu.Lock
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-
-	if err := a.container.Revert(); err != nil {
-		return fmt.Errorf("failed to revert: %w", err)
-	}
-	a.engine = engine.NewManager(a.container.Session(), engine.WithLogger(a.logger))
-
-	a.emitEvent("file:dirty", false)
-	a.emitEvent("data:changed")
-	a.emitEvent("file:reverted")
-	return nil
-}
-
-// IsFileOpen returns whether a file is currently open.
-func (a *App) IsFileOpen() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.container != nil
-}
-
-// FileInfo holds metadata about the open file.
-type FileInfo struct {
-	Path          string `json:"path"`
-	Title         string `json:"title"`
-	Description   string `json:"description"`
-	NotebookCount int    `json:"notebook_count"`
-	TableCount    int    `json:"table_count"`
-	QueryCount    int    `json:"query_count"`
-	FileSize      int64  `json:"file_size"`
-	// SessionID identifies the currently open container (see App.sessionID's
-	// doc comment). A view that reads data at load time should capture this
-	// and send it back with any later write (e.g. SaveNotebook) so the
-	// backend can reject a write from a superseded file session.
-	SessionID string `json:"session_id"`
-}
-
-// GetFileInfo returns metadata about the currently open file.
-func (a *App) GetFileInfo() (*FileInfo, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-
-	info := &FileInfo{Path: a.filePath, SessionID: a.sessionID}
-
-	title, err := a.container.Meta("title")
-	if err == nil {
-		info.Title = title
-	}
-	desc, err := a.container.Meta("description")
-	if err == nil {
-		info.Description = desc
-	}
-
-	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&info.NotebookCount) //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount)      //nolint:errcheck
-
-	info.TableCount = a.countTables()
-
-	if fi, err := os.Stat(a.filePath); err == nil {
-		info.FileSize = fi.Size()
-	}
-
-	return info, nil
 }
 
 // --- Skills (#62) ---
@@ -670,11 +317,11 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
-	entries, err := agents.LoadSkills(a.container.Skills(), a.container.Session(), a.logger)
+	entries, err := agents.LoadSkills(a.ws.Skills(), a.sess, a.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %w", err)
 	}
@@ -699,11 +346,11 @@ func (a *App) SaveSkill(name, description, instructions, tableName, rev string) 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	if _, err := agents.SaveUserSkillAt(a.container.Skills(), a.container.Session(), name, description, instructions, tableName, rev); err != nil {
+	if err := a.requireWorkspace(); err != nil {
 		return err
+	}
+	if _, err := agents.SaveUserSkillAt(a.ws.Skills(), a.sess, name, description, instructions, tableName, rev); err != nil {
+		return conflictErr(err)
 	}
 	a.emitEvent("data:changed")
 	return nil
@@ -715,10 +362,10 @@ func (a *App) DeleteSkill(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
-	if err := agents.DeleteSkill(a.container.Skills(), name); err != nil {
+	if err := agents.DeleteSkill(a.ws.Skills(), name); err != nil {
 		return err
 	}
 	a.emitEvent("data:changed")
@@ -762,10 +409,10 @@ func (a *App) ListNotebooks() ([]notebooks.Summary, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	return a.container.Notebooks().List(context.Background())
+	return a.ws.Notebooks().List(context.Background())
 }
 
 // GetNotebook loads one notebook, rebuilt through notebooks.Coerce.
@@ -773,10 +420,10 @@ func (a *App) GetNotebook(id string) (*notebooks.Notebook, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	nb, warnings, err := a.container.Notebooks().Get(context.Background(), id)
+	nb, warnings, err := a.ws.Notebooks().Get(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -803,10 +450,10 @@ func (a *App) CreateNotebook(title string) (*notebooks.Notebook, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	nb, err := a.container.Notebooks().Create(context.Background(), title)
+	nb, err := a.ws.Notebooks().Create(context.Background(), title)
 	if err != nil {
 		return nil, err
 	}
@@ -829,7 +476,7 @@ type NotebookSaveResult struct {
 // delete/collapse cell operations all mutate its local copy and call this
 // with the whole document, matching the "outputs are never persisted, only
 // source/view/page are" contract (Coerce only ever keeps those fields).
-// sessionID must be the value GetFileInfo().SessionID returned at the time
+// sessionID must be the value GetSessionID() returned at the time
 // the caller LOADED the notebook it is now saving (see App.sessionID's doc
 // comment) — never re-fetched at save time, or this check couldn't catch
 // the bug it exists for (a save that fires after the file underneath it was
@@ -840,15 +487,15 @@ func (a *App) SaveNotebook(raw map[string]any, sessionID string) (*NotebookSaveR
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 	if sessionID != a.sessionID {
-		return nil, fmt.Errorf("stale file session: the open file changed since this notebook was loaded; reopen it and try again")
+		return nil, fmt.Errorf("stale workspace session: the open workspace changed since this notebook was loaded; reopen it and try again")
 	}
-	nb, warnings, err := a.container.Notebooks().Save(context.Background(), raw)
+	nb, warnings, err := a.ws.Notebooks().Save(context.Background(), raw)
 	if err != nil {
-		return nil, err
+		return nil, conflictErr(err)
 	}
 	a.emitNotebooksChanged(nb.ID, nil)
 	return &NotebookSaveResult{Notebook: nb, Warnings: warnings}, nil
@@ -859,10 +506,10 @@ func (a *App) RenameNotebook(id, title string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
-	if err := a.container.Notebooks().Rename(context.Background(), id, title); err != nil {
+	if err := a.ws.Notebooks().Rename(context.Background(), id, title); err != nil {
 		return err
 	}
 	a.emitNotebooksChanged(id, nil)
@@ -874,10 +521,10 @@ func (a *App) DeleteNotebook(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
-	if err := a.container.Notebooks().Delete(context.Background(), id); err != nil {
+	if err := a.ws.Notebooks().Delete(context.Background(), id); err != nil {
 		return err
 	}
 	a.emitNotebooksChanged(id, nil)
@@ -900,11 +547,11 @@ type notebookExportFile struct {
 // ("", nil), matching ExportTableCSV's cancel semantics.
 func (a *App) ExportNotebook(id, dst string) (string, error) {
 	a.mu.RLock()
-	if a.container == nil {
+	if err := a.requireWorkspace(); err != nil {
 		a.mu.RUnlock()
-		return "", fmt.Errorf("no file open")
+		return "", err
 	}
-	nb, warnings, err := a.container.Notebooks().Get(context.Background(), id)
+	nb, warnings, err := a.ws.Notebooks().Get(context.Background(), id)
 	a.mu.RUnlock()
 	if err != nil {
 		return "", err
@@ -974,8 +621,8 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
 	info, err := os.Stat(path)
@@ -1012,7 +659,7 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 		delete(wrapper, "updatedAt")
 	}
 
-	nb, warnings, err := a.container.Notebooks().Save(context.Background(), wrapper)
+	nb, warnings, err := a.ws.Notebooks().Save(context.Background(), wrapper)
 	if err != nil {
 		return nil, err
 	}
@@ -1021,20 +668,6 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 }
 
 // --- Tables ---
-
-// countTables counts the tables and views in the default catalog's default
-// schema. The caller holds a.mu and has checked a.container != nil.
-func (a *App) countTables() int {
-	sess := a.container.Session()
-	if sess == nil {
-		return 0
-	}
-	tabs, err := sess.ListTables(a.ctxOrBackground(), "", "")
-	if err != nil {
-		return 0
-	}
-	return len(tabs)
-}
 
 // ctxOrBackground is a.ctx, or Background before startup / in tests.
 func (a *App) ctxOrBackground() context.Context {
@@ -1052,13 +685,13 @@ func (a *App) ctxOrBackground() context.Context {
 // session, so the SQL built from it never depends on the connection's current
 // catalog or on a same-named temp table shadowing a bare name. An unknown
 // connection ("system", "temp", a typo) is refused. The caller holds a.mu and
-// has checked a.container != nil.
+// has checked a.ws != nil.
 func (a *App) tableRefArg(name string) (session.TableRef, error) {
 	ref, err := engine.ParseTable(name)
 	if err != nil {
 		return ref, fmt.Errorf("invalid table name")
 	}
-	if sess := a.container.Session(); sess != nil {
+	if sess := a.sess; sess != nil {
 		resolved, rerr := sess.Resolve(a.ctxOrBackground(), ref)
 		if rerr != nil {
 			return ref, rerr
@@ -1071,7 +704,7 @@ func (a *App) tableRefArg(name string) (session.TableRef, error) {
 // isDefaultTarget reports whether ref is in the session's default catalog and
 // default schema (where a bare sequence name resolves).
 func (a *App) isDefaultTarget(ref session.TableRef) bool {
-	sess := a.container.Session()
+	sess := a.sess
 	if sess == nil {
 		return false
 	}
@@ -1084,11 +717,11 @@ func (a *App) ListTables() ([]string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
-	sess := a.container.Session()
+	sess := a.sess
 	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1109,10 +742,10 @@ func (a *App) ListConnections() ([]session.Status, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	sess := a.container.Session()
+	sess := a.sess
 	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1127,10 +760,10 @@ func (a *App) ListCatalogTables(connection string) ([]string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	sess := a.container.Session()
+	sess := a.sess
 	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1167,8 +800,8 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
 	tref, err := a.tableRefArg(name)
@@ -1176,7 +809,7 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 		return nil, err
 	}
 
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1213,10 +846,10 @@ func (a *App) ListTableStats() ([]TableStat, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	sess := a.container.Session()
+	sess := a.sess
 	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1245,8 +878,8 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 	if strings.TrimSpace(sqlStr) == "" {
 		return "", fmt.Errorf("no query to export")
@@ -1282,7 +915,7 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 		dst += ext
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
@@ -1313,8 +946,8 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
 	tref, err := a.tableRefArg(name)
@@ -1329,7 +962,7 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		pageSize = 50
 	}
 
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1413,8 +1046,8 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 	tref, err := a.tableRefArg(name)
 	if err != nil {
@@ -1428,7 +1061,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 		pageSize = 50
 	}
 
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -1549,10 +1182,10 @@ func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, er
 }
 
 // InsertRow inserts a row into a table, coercing all-string form inputs to the
-// column's type (via information_schema) and enforcing the Access-style
-// _vibe_field_meta required + validation_rule constraints server-side. On a
-// validation failure it returns a field-keyed *WriteError so the form UI can
-// highlight the offending controls instead of surfacing a raw SQL string.
+// column's type (via information_schema). Constraints (NOT NULL, CHECK, keys)
+// come from the database itself; a violation is returned as a field-keyed
+// *WriteError where it can be attributed, so the UI can highlight the offending
+// controls instead of surfacing a raw SQL string.
 func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1574,7 +1207,6 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit insert: %w", err)
 	}
-	a.markDirty()
 	return res, nil
 }
 
@@ -1606,21 +1238,20 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit update: %w", err)
 	}
-	a.markDirty()
 	return res, nil
 }
 
 // prepareWrite validates the open container + table and loads the column types
-// and field metadata needed by the transactional write helpers.
+// needed by the transactional write helpers.
 func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]crud.FieldMeta, string, error) {
-	if a.container == nil {
-		return nil, nil, nil, "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, nil, nil, "", err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return nil, nil, nil, "", fmt.Errorf("DuckDB not available")
 	}
@@ -1632,11 +1263,9 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	metas, err := fieldMetaMap(crud.NewFieldMetaStore(a.container.SQLiteDB()), tref.Name)
-	if err != nil {
-		return nil, nil, nil, "", err
-	}
-	return ddb, colTypes, metas, resolved, nil
+	// Field metadata (validation, defaults) was an Access-era _vibe_ table that
+	// workspaces do not have: writes are plain type-coerced row edits.
+	return ddb, colTypes, map[string]crud.FieldMeta{}, resolved, nil
 }
 
 // DeleteRow deletes a row from a table by primary key. Consistent with
@@ -1669,7 +1298,6 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit delete: %w", err)
 	}
-	a.markDirty()
 	return res, nil
 }
 
@@ -1680,8 +1308,8 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(name)
 	if err != nil {
@@ -1718,7 +1346,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	}
 
 	query := fmt.Sprintf("CREATE TABLE %s (%s)", tref.SQL(), strings.Join(colDefs, ", "))
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -1731,7 +1359,6 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
-	a.markDirty()
 	a.emitEvent("data:changed")
 	return nil
 }
@@ -1741,15 +1368,15 @@ func (a *App) DropTable(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(name)
 	if err != nil {
 		return err
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -1757,7 +1384,6 @@ func (a *App) DropTable(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
-	a.markDirty()
 	a.emitEvent("data:changed")
 	return nil
 }
@@ -1825,28 +1451,14 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-
-	// Classify BEFORE executing, using the same classifier run_query itself
-	// uses (#81) — a query editor is a broad Studio-only surface (unlike the
-	// agent's sandboxed run_query), so this never blocks anything, only
-	// decides whether to mark the file dirty afterward. PRAGMA/SET/external
-	// reads classify as non-read, which gives a harmless false "dirty".
-	write := !agents.IsReadOnlyStatement(context.Background(), a.container.DuckDBDB(), sqlStr, nil)
 
 	start := time.Now()
 	rs, total, err := a.engine.ExecuteCapped(context.Background(), sqlStr, nil, queryGridRowCap)
 	duration := time.Since(start)
 
-	// Mark dirty only for a successful write: a failed statement is rolled
-	// back, and an unresolvable SELECT classifies as a write. A multi-statement
-	// run that commits then fails is missed here, which only costs the prompt
-	// (Close and quit still save).
-	if err == nil && write {
-		a.markDirty()
-	}
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
@@ -1934,16 +1546,14 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 		}
 	}
 	a.mu.RLock()
-	if a.container == nil {
+	if err := a.requireWorkspace(); err != nil {
 		a.mu.RUnlock()
-		return nil, fmt.Errorf("no file open")
+		return nil, err
 	}
-	policy := a.agentPolicy()
-	sc := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000}
 	// ceiling = ModeFull: RunReadOnlySQL (below) forces read-only regardless
-	// of sc.Mode/ceiling, via its own checkSQLClassReadOnly gate — see this
+	// of the sandbox mode, via its own checkSQLClassReadOnly gate — see this
 	// function's doc comment — so no additional cap is needed here.
-	handler := a.wrapAgentHandler(sc, agents.ModeFull)
+	handler := a.newAgentToolHandler(agents.ModeFull)
 	a.mu.RUnlock()
 
 	// Row cap enforced server side (review fix) and pushed down into the
@@ -1966,7 +1576,7 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	defer cancel()
 	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
 	if err != nil {
-		return nil, err
+		return nil, a.explainReadOnlyDenial(err)
 	}
 
 	out := &A2UIQueryResult{Truncated: truncated}
@@ -1990,11 +1600,11 @@ func (a *App) ListQueries() ([]QuerySummary, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
-	qs, err := a.registry.List(context.Background())
+	qs, err := a.ws.Queries().List(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -2015,11 +1625,11 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
-	return a.registry.Get(context.Background(), id)
+	return a.ws.Queries().Get(context.Background(), id)
 }
 
 // QuerySaveResult is what SaveQuery returns: the query's id and the revision
@@ -2038,8 +1648,8 @@ func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveR
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
 	q := &queries.Query{
@@ -2051,21 +1661,31 @@ func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveR
 		Engine:      "duckdb",
 		Parameters:  []queries.Param{},
 	}
+	// The editor only edits title and SQL: whatever else the file carries (the
+	// connection a CLI or agent chose, parameters, a description) is kept.
+	if id != "" {
+		if base, err := a.ws.Queries().Get(context.Background(), id); err == nil && base != nil {
+			q.Connection, q.Parameters, q.Engine = base.Connection, base.Parameters, base.Engine
+			if description == "" {
+				q.Description = base.Description
+			}
+		}
+	}
 
 	// Update first for an existing query; a new one (or an id the store does
 	// not know) is created. Anything else, a conflict on a file that changed
 	// on disk included, is returned to the caller instead of being retried as
 	// a create.
 	if id != "" {
-		err := a.registry.Update(context.Background(), q)
+		err := a.ws.Queries().Update(context.Background(), q)
 		if err == nil {
 			return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
 		}
 		if !errors.Is(err, queries.ErrNotFound) {
-			return nil, err
+			return nil, conflictErr(err)
 		}
 	}
-	if err := a.registry.Create(context.Background(), q); err != nil {
+	if err := a.ws.Queries().Create(context.Background(), q); err != nil {
 		return nil, err
 	}
 	return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
@@ -2101,7 +1721,7 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := a.registry.Create(context.Background(), q); err != nil {
+	if err := a.ws.Queries().Create(context.Background(), q); err != nil {
 		return "", fmt.Errorf("failed to save filter as query: %w", err)
 	}
 	a.logger.Info("saved filter as named query", "id", q.ID, "table", name, "title", title)
@@ -2115,15 +1735,15 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 // and the optional projection) are validated against the table's real columns —
 // no SQL injection via identifier or value. The caller must hold a.mu.
 func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) (string, error) {
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 	tref, err := a.tableRefArg(name)
 	if err != nil {
 		return "", err
 	}
 
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
@@ -2223,11 +1843,11 @@ func (a *App) DeleteQuery(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 
-	return a.registry.Delete(context.Background(), id)
+	return a.ws.Queries().Delete(context.Background(), id)
 }
 
 // --- Dashboard ---
@@ -2239,45 +1859,48 @@ type DashboardData struct {
 	NotebookCount int    `json:"notebook_count"`
 	TableCount    int    `json:"table_count"`
 	QueryCount    int    `json:"query_count"`
-	FileSize      int64  `json:"file_size"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	SkillCount    int    `json:"skill_count"`
+	// LocalTables are the tables of the workspace's default connection (its own
+	// `local` database unless the workspace says otherwise), as qualified names
+	// the datasheet accepts (design #106 item 8: Home lists them).
+	LocalTables []string `json:"local_tables"`
+	// DefaultConnection names the connection LocalTables belong to.
+	DefaultConnection string `json:"default_connection"`
+	ReadOnly          bool   `json:"read_only"`
 }
 
-// GetDashboard returns dashboard overview data.
+// GetDashboard returns the Home screen's live overview: the workspace's name,
+// its counts and its own tables.
 func (a *App) GetDashboard() (*DashboardData, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
-	d := &DashboardData{}
-
-	if v, err := a.container.Meta("title"); err == nil {
-		d.Title = v
+	d := &DashboardData{
+		Title:             a.ws.Name(),
+		DefaultConnection: a.ws.DefaultConnection(),
+		ReadOnly:          a.readOnly,
+		LocalTables:       []string{},
 	}
-	if v, err := a.container.Meta("description"); err == nil {
-		d.Description = v
+	ctx := a.ctxOrBackground()
+	if nbs, err := a.ws.Notebooks().List(ctx); err == nil {
+		d.NotebookCount = len(nbs)
 	}
-	if v, err := a.container.Meta("created_at"); err == nil {
-		d.CreatedAt = v
+	if qs, err := a.ws.Queries().List(ctx); err == nil {
+		d.QueryCount = len(qs)
 	}
-	if v, err := a.container.Meta("updated_at"); err == nil {
-		d.UpdatedAt = v
+	if sk, err := a.ws.Skills().List(ctx); err == nil {
+		d.SkillCount = len(sk)
 	}
-
-	db := a.container.SQLiteDB()
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&d.NotebookCount) //nolint:errcheck
-	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount)      //nolint:errcheck
-
-	d.TableCount = a.countTables()
-
-	if fi, err := os.Stat(a.filePath); err == nil {
-		d.FileSize = fi.Size()
+	if tabs, err := a.sess.ListTables(ctx, "", ""); err == nil {
+		d.TableCount = len(tabs)
+		for _, t := range tabs {
+			d.LocalTables = append(d.LocalTables, t.Ref().String())
+		}
 	}
-
 	return d, nil
 }
 
@@ -2297,22 +1920,15 @@ func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 
 	// SendAgentQuery runs arbitrary raw SQL (DDL/DML) via a.engine.Execute, so it
 	// is a Studio-only privileged surface exactly like ExecuteQuery and must be
 	// capability-gated in App Mode (P4.4).
 
-	// Classify before executing, same as ExecuteQuery (#81).
-	write := !agents.IsReadOnlyStatement(context.Background(), a.container.DuckDBDB(), query, nil)
-
 	rs, err := a.engine.Execute(context.Background(), query, nil)
-	// Successful writes only — see ExecuteQuery.
-	if err == nil && write {
-		a.markDirty()
-	}
 	if err != nil {
 		return &AgentResult{Error: err.Error()}, nil
 	}
@@ -2334,9 +1950,10 @@ func (a *App) GetAgentStatus() map[string]any {
 
 	policy := a.agentPolicy()
 	status := map[string]any{
-		"available":       a.container != nil,
+		"available":       a.ws != nil,
 		"mode":            string(policy.Mode),
 		"askBeforeWrites": policy.AskBeforeWrites,
+		"readOnly":        a.readOnly,
 		"provider":        a.llmCfg.Provider,
 		"endpoint":        a.llmCfg.Endpoint,
 		"model":           a.llmCfg.Model,
@@ -2344,75 +1961,79 @@ func (a *App) GetAgentStatus() map[string]any {
 	return status
 }
 
-// agentPolicy resolves the open file's agent policy — sandbox mode plus
-// whether a write needs the user's OK first (#79) — the one place every
-// caller in this file reads it, replacing the eight separate
-// metaOr("agent_sandbox","full") fallbacks this used to be. Caller holds at
-// least a.mu.RLock. A closed file (a.container == nil, e.g. GetAgentStatus
-// polled before any file is open) reports the same fail-safe default
-// agents.ReadFilePolicy returns for a file with no stored keys at all.
+// agentPolicy resolves the open workspace's effective agent policy for this
+// person — the committed ceiling and this person's own setting, whichever is
+// stricter (workspace.EffectivePolicy). It is the one place every caller in
+// this file reads it. Caller holds at least a.mu.RLock. With no workspace open
+// it reports the fail-safe default.
 func (a *App) agentPolicy() agents.FilePolicy {
-	if a.container == nil {
+	if a.ws == nil {
 		return agents.FilePolicy{Mode: agents.DefaultSandboxMode, AskBeforeWrites: true}
 	}
-	return agents.PolicyFrom(agents.MetaPolicy(a.container))
+	policy := agents.PolicyFrom(a.ws)
+	if a.readOnly {
+		// A workspace opened without owning the hub cannot change data, whatever
+		// the settings say.
+		policy.Mode = agents.ModeReadOnly
+	}
+	return policy
 }
 
 // AgentConfig surfaces the agent configuration to the UI. Provider/model/endpoint
 // are app-global and viper-driven (read-only here — configured via ~/.vibe.yaml
-// or VIBE_LLM_* env); sandbox and askBeforeWrites are per-.vibe security settings.
+// or VIBE_LLM_* env); the rest is per workspace: Sandbox and AskBeforeWrites are
+// what is in effect for this person (the committed team limit and this
+// person's own choice, whichever is stricter), TeamSandbox and TeamAsk are the
+// committed limit alone.
 type AgentConfig struct {
 	Provider        string `json:"provider"`        // read-only (viper-driven)
 	Model           string `json:"model"`           // read-only (viper-driven)
 	Endpoint        string `json:"endpoint"`        // read-only (viper-driven)
-	Sandbox         string `json:"sandbox"`         // editable per-file
-	AskBeforeWrites bool   `json:"askBeforeWrites"` // editable per-file
+	Sandbox         string `json:"sandbox"`         // effective tier
+	AskBeforeWrites bool   `json:"askBeforeWrites"` // effective gate
+	// TeamSandbox is the highest tier vibe.yaml allows ("" means no limit).
+	TeamSandbox string `json:"teamSandbox"`
+	// TeamAskBeforeWrites is true when vibe.yaml requires the gate for everyone.
+	TeamAskBeforeWrites bool `json:"teamAskBeforeWrites"`
 }
 
 // GetAgentConfig returns the viper-driven provider/model/endpoint plus the
-// per-file sandbox and ask-before-writes setting.
+// workspace's agent settings.
 func (a *App) GetAgentConfig() (*AgentConfig, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
 	policy := a.agentPolicy()
+	cfg := a.ws.Config()
 	return &AgentConfig{
-		Provider:        a.llmCfg.Provider,
-		Model:           a.llmCfg.Model,
-		Endpoint:        a.llmCfg.Endpoint,
-		Sandbox:         string(policy.Mode),
-		AskBeforeWrites: policy.AskBeforeWrites,
+		Provider:            a.llmCfg.Provider,
+		Model:               a.llmCfg.Model,
+		Endpoint:            a.llmCfg.Endpoint,
+		Sandbox:             string(policy.Mode),
+		AskBeforeWrites:     policy.AskBeforeWrites,
+		TeamSandbox:         cfg.Sandbox,
+		TeamAskBeforeWrites: cfg.AskBeforeWrites != nil && *cfg.AskBeforeWrites,
 	}, nil
 }
 
-// SetAgentConfig persists the per-file agent sandbox and ask-before-writes
-// setting. Provider/model/endpoint are app-global viper config and are not
-// settable here. Studio-only. The frontend always sends both fields, so an
-// invalid/empty sandbox value is rejected outright rather than silently
-// falling back — ParseSandboxMode is the same strict parser --sandbox uses.
+// SetAgentConfig saves THIS PERSON's agent settings for the workspace (the
+// "On this computer" layer, kept outside the folder). It can lower the tier
+// freely and raise it only up to the team limit in vibe.yaml, and it cannot turn
+// the gate off when vibe.yaml requires it. Provider/model/endpoint are
+// app-global config and are not settable here. Studio-only.
 func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	mode, err := agents.ParseSandboxMode(cfg.Sandbox)
-	if err != nil {
+	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if err := a.container.SetMeta(agents.MetaKeySandbox, string(mode)); err != nil {
-		return fmt.Errorf("failed to set %s: %w", agents.MetaKeySandbox, err)
+	if err := a.saveLocalAgentLocked(cfg.Sandbox, cfg.AskBeforeWrites); err != nil {
+		return err
 	}
-	askValue := "true"
-	if !cfg.AskBeforeWrites {
-		askValue = "false"
-	}
-	if err := a.container.SetMeta(agents.MetaKeyAskBeforeWrites, askValue); err != nil {
-		return fmt.Errorf("failed to set %s: %w", agents.MetaKeyAskBeforeWrites, err)
-	}
-	a.emitEvent("agent:config", map[string]any{"sandbox": string(mode), "askBeforeWrites": cfg.AskBeforeWrites})
+	policy := a.agentPolicy()
+	a.emitEvent("agent:config", map[string]any{"sandbox": string(policy.Mode), "askBeforeWrites": policy.AskBeforeWrites})
 	return nil
 }
 
@@ -2442,9 +2063,9 @@ type AgentChatResult struct {
 // running the whole multi-step turn unlocked.
 func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error) {
 	a.mu.RLock()
-	if a.container == nil {
+	if err := a.requireWorkspace(); err != nil {
 		a.mu.RUnlock()
-		return nil, fmt.Errorf("no file open")
+		return nil, err
 	}
 	policy := a.agentPolicy()
 	cfg := llm.Config{
@@ -2492,9 +2113,9 @@ type AgentTurn struct {
 // history is the prior transcript for multi-turn memory. Studio-only.
 func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []AgentTurn) (*AgentChatResult, error) {
 	a.mu.RLock()
-	if a.container == nil {
+	if err := a.requireWorkspace(); err != nil {
 		a.mu.RUnlock()
-		return nil, fmt.Errorf("no file open")
+		return nil, err
 	}
 	policy := a.agentPolicy()
 	cfg := llm.Config{
@@ -2591,9 +2212,9 @@ type AgentTaskRequest struct {
 // CancelAgentTask, not anything that could also cancel a chat turn).
 func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 	a.mu.RLock()
-	if a.container == nil {
+	if err := a.requireWorkspace(); err != nil {
 		a.mu.RUnlock()
-		return nil, fmt.Errorf("no file open")
+		return nil, err
 	}
 	cfg := llm.Config{
 		Provider: a.llmCfg.Provider,
@@ -2690,73 +2311,65 @@ func (a *App) CancelAgentTask(taskID string) {
 
 // newAgentToolHandler builds the tool-dispatch Handler that backs a single
 // Studio chat turn (AgentChat/AgentChatStream) or a task turn (AgentTask),
-// gated by BOTH the file's live "agent_sandbox" setting AND the given
-// ceiling — see agentToolHandler.ceiling's doc comment for why a ceiling is
-// needed at all (AgentTask's "always read-only" contract must survive the
-// per-dispatch file-mode refresh). The underlying *agents.Handler is the
-// same type StartMCPServer wires up for external MCP clients
-// (internal/agents.NewHandler + engineAgentAdapter), so every caller
-// dispatches every tool call through one registry with one set of
-// sandbox/approval rules (#63). It is wrapped in agentToolHandler so each
+// gated by BOTH the workspace's live policy AND the given ceiling — see
+// agentToolHandler.ceiling's doc comment for why a ceiling is needed at all
+// (AgentTask's "always read-only" contract must survive the per-dispatch
+// policy refresh). The underlying *agents.Handler is the same one
+// hub.NewAgentHandler builds for `vibe mcp serve` and Studio's own MCP server,
+// so every caller dispatches every tool call through one registry with one set
+// of sandbox/approval rules (#63). It is wrapped in agentToolHandler so each
 // individual tool call — not just this construction — is locked and
-// container-identity-checked (review fix #4). Callers must hold at least
-// a.mu.RLock and have already checked a.container != nil.
+// workspace-identity-checked. Callers must hold at least a.mu.RLock and have
+// already checked a.ws != nil.
 func (a *App) newAgentToolHandler(ceiling agents.SandboxMode) *agentToolHandler {
-	policy := a.agentPolicy()
-	sc := &agents.SandboxConfig{Mode: agents.Tighter(ceiling, policy.Mode), MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
-	return a.wrapAgentHandler(sc, ceiling)
-}
-
-// wrapAgentHandler builds an *agents.Handler for the given sandbox and wraps
-// it in agentToolHandler (see below) with the given ceiling. Shared by
-// newAgentToolHandler (Studio chat/task) and StartMCPServer/RunA2UIQuery
-// (their own callers) so every dispatch path gets the same per-call
-// locking/container-identity check AND the same ceiling-clamped sandbox
-// refresh. Callers must hold at least a.mu.RLock (StartMCPServer holds
-// a.mu.Lock, which also suffices) and have already checked
-// a.container != nil.
-func (a *App) wrapAgentHandler(sc *agents.SandboxConfig, ceiling agents.SandboxMode) *agentToolHandler {
-	inner := agents.NewHandler(a.container, &engineAgentAdapter{app: a}, sc, a.logger)
+	tighten := ""
+	if ceiling != agents.ModeFull {
+		tighten = string(ceiling)
+	}
+	inner, _, err := hub.NewAgentHandler(a.ws, a.sess, tighten, a.logger)
+	if err != nil {
+		// Unreachable: every ceiling is one of the three valid modes. Fail
+		// closed anyway.
+		a.logger.Error("failed to build the agent handler", "error", err)
+		sc := &agents.SandboxConfig{Mode: agents.ModeReadOnly, MaxQueryRows: 10000, RequireApproval: true}
+		inner = agents.NewHandler(workspace.NewAgentAccess(a.ws, a.sess), engine.NewManager(a.sess, engine.WithLogger(a.logger)), sc, a.logger)
+	}
 	inner.SetActiveNotebook(a.activeNotebookID)
-	return &agentToolHandler{app: a, container: a.container, inner: inner, ceiling: ceiling}
+	return &agentToolHandler{app: a, ws: a.ws, sess: a.sess, inner: inner, ceiling: ceiling}
 }
 
-// agentToolHandler wraps an *agents.Handler with App's file-lifecycle lock.
-// internal/agents.Handler methods talk directly to the container's raw
-// *sql.DB (via ContainerAccess/EngineAccess), bypassing every other App
-// method's a.mu locking entirely. Without this wrapper, a chat turn that
-// built its handler once (under a brief RLock) then ran several tool calls
-// unlocked could race a concurrent CloseFile/OpenFile/Save — each of which
-// takes a.mu.Lock() to swap or nil out a.container — and end up querying a
-// closed or already-replaced container mid-turn.
+// agentToolHandler wraps an *agents.Handler with App's workspace-lifecycle
+// lock. internal/agents.Handler methods talk directly to the hub's raw
+// *sql.DB, bypassing every other App method's a.mu locking entirely. Without
+// this wrapper, a chat turn that built its handler once (under a brief RLock)
+// then ran several tool calls unlocked could race a concurrent
+// CloseWorkspace/OpenWorkspace — each of which takes a.mu.Lock() to swap or
+// nil out a.ws — and end up querying a closed or already-replaced session
+// mid-turn.
 //
 // Each dispatch here re-takes a.mu.RLock for exactly the duration of that one
 // tool call (not the whole multi-step turn, so a slow model thinking between
-// tool calls never blocks Save/Close), and rechecks a.container is still the
-// exact *container.Container this handler was built for, erroring instead of
-// silently operating on a stale one if the file was closed or replaced
-// mid-turn. On a successful data/schema/content-category tool call it also
-// notifies the frontend so Dashboard/Tables/etc. refresh instead of going
-// stale (review fixes #4 and #6).
+// tool calls never blocks a close), and rechecks a.ws and a.sess are still the
+// exact ones this handler was built for, erroring instead of silently
+// operating on a stale one if the workspace was closed or replaced mid-turn.
+// On a successful data/schema/content-category tool call it also notifies the
+// frontend so Home/Tables/etc. refresh instead of going stale.
 type agentToolHandler struct {
-	app       *App
-	container *container.Container
-	inner     *agents.Handler
+	app   *App
+	ws    workspace.Workspace
+	sess  session.Session
+	inner *agents.Handler
 	// ceiling is the MOST PERMISSIVE sandbox mode this handler may ever run
-	// at, regardless of what the file's own "agent_sandbox" setting allows.
-	// Every dispatch computes agents.Tighter(ceiling, fileMode) fresh — see
-	// Handle/RunReadOnlySQL — rather than just re-reading fileMode alone.
+	// at, regardless of what the workspace's own policy allows. Every dispatch
+	// computes agents.Tighter(ceiling, policy) fresh — see Handle/RunReadOnlySQL
+	// — rather than just re-reading the policy alone.
 	//
-	// This exists because of a real security regression a reviewer caught:
-	// once dispatch started re-reading the live file sandbox on every call
-	// (to fix MCP running at a hard-coded ModeFull), that SAME refresh
-	// silently OVERWROTE AgentTask's "always read-only, regardless of the
-	// file's setting" contract on its very first tool call — a task turn
-	// against a "full" file could run_query DDL/create_table again, live-
-	// proven with a task that CREATE TABLE'd a helper table. AgentTask sets
-	// ceiling = ModeReadOnly; AgentChat/AgentChatStream/StartMCPServer/
-	// RunA2UIQuery set ceiling = ModeFull (no additional cap beyond
-	// whatever the file itself allows, matching their existing contract).
+	// This exists because of a real security regression a reviewer caught: once
+	// dispatch started re-reading the live policy on every call, that SAME
+	// refresh silently OVERWROTE AgentTask's "always read-only, regardless of
+	// the setting" contract on its very first tool call. AgentTask sets
+	// ceiling = ModeReadOnly; AgentChat/AgentChatStream/StartMCP/RunA2UIQuery
+	// set ceiling = ModeFull (no additional cap beyond what the policy allows).
 	ceiling agents.SandboxMode
 }
 
@@ -2772,53 +2385,36 @@ func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *age
 	h.app.mu.RLock()
 	defer h.app.mu.RUnlock()
 
-	if h.app.container != h.container {
-		return agents.NewErrorResponse(req.ID, agents.ErrInternal, "the file was closed or replaced during this agent turn; reopen it and try again")
+	if h.app.ws != h.ws || h.app.sess != h.sess {
+		return agents.NewErrorResponse(req.ID, agents.ErrInternal, "the workspace was closed or replaced during this agent turn; reopen it and try again")
 	}
 
-	// Re-read the live agent_sandbox setting on every dispatch so a sandbox
-	// change via SetAgentConfig takes effect on this handler's very next
-	// call, not just for handlers built after the change (security fix: MCP
-	// previously ran at a hard-coded agents.ModeFull regardless of the
-	// file's configured sandbox — StartMCPServer builds ONE agentToolHandler
-	// for the server's whole lifetime, so it never re-read the setting).
-	// Clamped through h.ceiling (agents.Tighter) so this refresh can never
-	// grant a handler more than its ceiling allows — see ceiling's doc
-	// comment for the AgentTask regression this closes. SetFilePolicy
-	// swaps an atomic pointer inside h.inner rather than mutating a shared
-	// *SandboxConfig's fields in place, so this is safe under concurrent
-	// MCP calls (go test -race covers it).
+	// Re-read the live policy on every dispatch so a settings change takes
+	// effect on this handler's very next call, not just for handlers built
+	// after the change. Clamped through h.ceiling (agents.Tighter) so this
+	// refresh can never grant a handler more than its ceiling allows. The
+	// policy is swapped atomically inside h.inner, so this is safe under
+	// concurrent MCP calls (go test -race covers it).
 	policy := h.app.agentPolicy()
 	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
 
-	// Re-read the live active notebook on every dispatch, not just at
-	// construction time: StartMCPServer builds ONE agentToolHandler for the
-	// server's whole lifetime (unlike AgentChat/AgentTask, which build a
-	// fresh one per turn), so an MCP client's add_query_cell/create_dashboard
-	// call minutes after the server started must still see whichever
-	// notebook is open in Studio right now, not whichever was open when the
-	// server was started (or none).
+	// Re-read the live active notebook on every dispatch: Studio's MCP server
+	// builds ONE handler for its whole lifetime, so an MCP client's
+	// add_query_cell/create_dashboard call minutes after the server started
+	// must still see whichever notebook is open in Studio right now.
 	h.inner.SetActiveNotebook(h.app.activeNotebookID)
 	resp := h.inner.Handle(ctx, req)
 	if resp.Error == nil {
 		h.app.notifyAgentToolChange(req.Method, resp.Result)
-		// Mark dirty for a tool call that wrote DuckDB user data (#81).
-		// agents.IsWriteCall already means exactly that — "content" tools
-		// (add_query_cell, create_or_update_skill, ...) write SQLite only
-		// and are excluded there, not here, so this is the one place both
-		// Studio and `vibe mcp serve` agree on.
-		if agents.IsWriteCall(ctx, h.container.DuckDBDB(), req) {
-			h.app.markDirty()
-		}
 	}
 	return resp
 }
 
-// RunReadOnlySQL is RunA2UIQuery's dispatch path: the same file-lifecycle
-// lock and container-identity check Handle gives every JSON-RPC tool call,
-// for agents.Handler.RunReadOnlySQL (a data-bound component's "sql", always
-// gated to reads regardless of sandbox mode — see RunA2UIQuery). It never
-// calls notifyAgentToolChange: RunReadOnlySQL can only ever read.
+// RunReadOnlySQL is RunA2UIQuery's dispatch path: the same workspace-lifecycle
+// lock and identity check Handle gives every JSON-RPC tool call, for
+// agents.Handler.RunReadOnlySQL (a data-bound component's "sql", always gated
+// to reads regardless of sandbox mode — see RunA2UIQuery). It never calls
+// notifyAgentToolChange: RunReadOnlySQL can only ever read.
 func (h *agentToolHandler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
 	return h.RunReadOnlySQLIn(ctx, "", sqlStr, params, maxRows)
 }
@@ -2828,8 +2424,8 @@ func (h *agentToolHandler) RunReadOnlySQLIn(ctx context.Context, connection, sql
 	h.app.mu.RLock()
 	defer h.app.mu.RUnlock()
 
-	if h.app.container != h.container {
-		return nil, false, fmt.Errorf("the file was closed or replaced during this agent turn; reopen it and try again")
+	if h.app.ws != h.ws || h.app.sess != h.sess {
+		return nil, false, fmt.Errorf("the workspace was closed or replaced during this agent turn; reopen it and try again")
 	}
 	policy := h.app.agentPolicy()
 	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
@@ -2839,22 +2435,19 @@ func (h *agentToolHandler) RunReadOnlySQLIn(ctx context.Context, connection, sql
 // enableApprovals installs an approver on h that surfaces each pending write
 // as an "agent:approval" event tagged with turnID, and blocks until the
 // frontend answers via ResolveAgentApproval (or the request times out/is
-// cancelled). Only ever called from AgentChatStream, once, before that
-// turn's tool-calling loop starts — see its call site's comment for why
-// (Studio chat is the one surface with a human watching).
+// cancelled). Chat calls it once per turn (turnID = the turn); Studio's own MCP
+// server calls it once with turnID "mcp", whose cards the shell shows.
 //
 // Invariant this whole thing depends on: the returned func is only ever
 // invoked from inside h.Handle (via h.inner's approver, itself only called
 // from agents.Handler.Handle/handleRunQuery), which holds h.app.mu.RLock()
 // for its whole dispatch. Releasing that RLock for the DURATION of the wait
-// — not just around the wait, the actual h.app.mu.RUnlock()/RLock() pair
-// below — is what keeps Save/Close/SetAgentConfig responsive while a card
-// sits pending; without it, every one of those (all a.mu.Lock() callers)
-// would queue behind this one in-flight tool call for up to
-// approvalTimeout. h.app.mu is an RWMutex, so releasing this goroutine's
-// read lock while OTHER concurrent readers may still hold theirs is safe —
-// only a Lock()-holder needs every reader gone, and RUnlock/RLock only
-// drops and reacquires THIS goroutine's own hold.
+// — the h.app.mu.RUnlock()/RLock() pair below — is what keeps close/switch/
+// settings responsive while a card sits pending; without it, every one of
+// those (all a.mu.Lock() callers) would queue behind this one in-flight tool
+// call for up to approvalTimeout. h.app.mu is an RWMutex, so releasing this
+// goroutine's read lock while OTHER concurrent readers may still hold theirs
+// is safe.
 func (h *agentToolHandler) enableApprovals(turnID string) {
 	h.inner.SetApprover(func(ctx context.Context, req agents.ApprovalRequest) error {
 		timeout := h.app.approvalTimeout
@@ -2864,35 +2457,27 @@ func (h *agentToolHandler) enableApprovals(turnID string) {
 		ctx2, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		// db captures the DuckDB handle this write was approved against
-		// (while the lock is still held, below), so the post-wait check can
-		// tell a revert's session swap apart from an unchanged one — see
-		// that check's own comment.
-		db := h.container.DuckDBDB()
+		// sess captures the session this write was approved against (while the
+		// lock is still held, below), so the post-wait check can tell a
+		// swapped session apart from an unchanged one.
+		sess := h.sess
 
-		// The RUnlock happens inside announce, which Wait calls exactly
-		// once, after it registers req and before it blocks. So by the time
-		// CloseFile/OpenFile/CreateFile hold a.mu.Lock, this waiter is
-		// registered and their CancelAll under the lock reaches it; the
-		// CancelAll they run before locking only makes the card end sooner.
+		// The RUnlock happens inside announce, which Wait calls exactly once,
+		// after it registers req and before it blocks. So by the time a close
+		// holds a.mu.Lock, this waiter is registered and its CancelAll under
+		// the lock reaches it.
 		err := h.app.approvals.Wait(ctx2, req, func(r agents.ApprovalRequest) {
 			h.app.mu.RUnlock()
 			h.app.emitEvent("agent:approval", map[string]any{"turnId": turnID, "request": r})
 		})
 		h.app.mu.RLock()
 
-		// Re-check container identity BEFORE deriving the outcome (round 2
-		// review finding 4): the file may have been closed/replaced while
-		// this goroutine had the lock released, and that must win over
-		// whatever Wait itself returned — otherwise a Resolve(true) that
-		// raced the swap would emit "approved" for a change that the
-		// identity check below is about to refuse anyway. The DuckDB handle
-		// check (#98) covers the case where the container wasn't replaced
-		// but its DuckDB session was swapped out from under it (Revert):
-		// Resolve(true) can win the race against RevertFile's own
-		// CancelAll, and without this check the approved write would then
-		// run on the freshly reverted data instead of what was approved.
-		if h.app.container != h.container || h.container.DuckDBDB() != db {
+		// Re-check identity BEFORE deriving the outcome: the workspace may have
+		// been closed or replaced while this goroutine had the lock released,
+		// and that must win over whatever Wait itself returned — otherwise a
+		// Resolve(true) that raced the swap would emit "approved" for a change
+		// that must never run on the new workspace.
+		if h.app.ws != h.ws || h.app.sess != sess {
 			err = agents.ErrApprovalCancelled
 		}
 
@@ -2911,15 +2496,11 @@ func (h *agentToolHandler) enableApprovals(turnID string) {
 			return err
 		}
 
-		// Refresh h.inner's sandbox with the file's CURRENT policy before
-		// reporting "approved" (round 2 review finding 7): the wait can
-		// span minutes with a.mu released, during which Settings -> Agent
-		// may have tightened the file's mode or turned ask back on.
-		// awaitApproval (internal/agents/handler.go) re-checks the write
-		// against h.inner's sandbox the moment this returns nil, so that
-		// re-check needs live policy, not whatever was loaded before the
-		// wait started — a human did approve this exact change, but
-		// "approved" must still mean "still allowed" when it actually runs.
+		// Refresh h.inner's sandbox with the CURRENT policy before reporting
+		// "approved": the wait can span minutes with a.mu released, during
+		// which Settings may have tightened the tier or turned ask back on.
+		// A human did approve this exact change, but "approved" must still
+		// mean "still allowed" when it actually runs.
 		policy := h.app.agentPolicy()
 		h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
 		return nil
@@ -3006,10 +2587,10 @@ func (a *App) InspectImport(src importer.Source) (*importer.Inspection, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -3039,10 +2620,10 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 		defer a.mu.Unlock()
 	}
 
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
 	}
-	db := a.container.DuckDBDB()
+	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
@@ -3056,14 +2637,13 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 		// The write already landed atomically inside importer.Import's own
 		// transaction — there is no "mark dirty as writes begin" window to
 		// worry about here, unlike the old per-row importer.
-		a.markDirty()
 		// summary.Table, not o.Table: for append/upsert/replace into an
 		// existing table, Import resolves and returns the CATALOG's own
 		// spelling (a case-insensitive match, e.g. o.Table="customers"
 		// against a table actually named "Customers") — writing the skill
 		// under the caller's original casing could create a second,
 		// wrong-table skill instead of refreshing the real one's.
-		if err := agents.WriteImportSkill(a.container.Skills(), a.container.Session(), summary.Table); err != nil {
+		if err := agents.WriteImportSkill(a.ws.Skills(), a.sess, summary.Table); err != nil {
 			a.logger.Warn("failed to write import skill", "table", summary.Table, "error", err)
 		}
 		a.emitEvent("data:changed")
@@ -3082,7 +2662,7 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 // did disagree with what the grid itself shows for the same row. Caller
 // owns table-name validation; this only builds and runs the COPY.
 func (a *App) exportTableTo(table, dst, copyOpts string) error {
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -3098,8 +2678,8 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 	if _, err := a.tableRefArg(tableName); err != nil {
 		return "", err
@@ -3130,8 +2710,8 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 	if _, err := a.tableRefArg(tableName); err != nil {
 		return "", err
@@ -3155,138 +2735,6 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 		return "", err
 	}
 	return path, nil
-}
-
-// --- Metadata ---
-
-// GetAllMeta returns all metadata entries.
-func (a *App) GetAllMeta() (map[string]string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.container == nil {
-		return nil, fmt.Errorf("no file open")
-	}
-
-	db := a.container.SQLiteDB()
-	rows, err := db.Query("SELECT key, value FROM _vibe_meta ORDER BY key")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list meta: %w", err)
-	}
-	defer rows.Close()
-
-	result := make(map[string]string)
-	for rows.Next() {
-		var k, v string
-		if err := rows.Scan(&k, &v); err != nil {
-			return nil, fmt.Errorf("failed to scan meta: %w", err)
-		}
-		result[k] = v
-	}
-	return result, rows.Err()
-}
-
-// SetMeta sets a metadata key/value.
-func (a *App) SetMeta(key, value string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.container == nil {
-		return fmt.Errorf("no file open")
-	}
-	return a.container.SetMeta(key, value)
-}
-
-// --- MCP Server ---
-
-// engineAgentAdapter wraps App to satisfy agents.EngineAccess, resolving
-// a.engine at call time rather than capturing it at construction. Callers
-// already hold a.mu.RLock for the duration of the call (agentToolHandler.Handle
-// and RunReadOnlySQL), which is what makes reading a.engine safe. Resolving
-// per call — not once, up front — means a handler built before RevertFile
-// (#98) rebuilds the engine, such as the Studio MCP server's long-lived one,
-// or a chat turn already in flight, still executes against the rebuilt one.
-type engineAgentAdapter struct {
-	app *App
-}
-
-func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error) {
-	return ea.app.engine.Execute(ctx, sql, params)
-}
-
-// ExecuteIn satisfies agents.ConnectionEngine (notebook format v2).
-func (ea *engineAgentAdapter) ExecuteIn(ctx context.Context, connection, sql string, params map[string]any) (*engine.ResultSet, error) {
-	return ea.app.engine.ExecuteIn(ctx, connection, sql, params)
-}
-
-// StartMCPServer starts the MCP server for the currently open file.
-func (a *App) StartMCPServer() (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-	if a.mcpServer != nil {
-		return fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()), nil
-	}
-
-	policy := a.agentPolicy()
-	sandbox := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
-	// ceiling = ModeFull: an external MCP client gets whatever the file's
-	// own agent_sandbox setting allows, no additional cap beyond it — see
-	// agentToolHandler.ceiling's doc comment. No approver is ever attached to
-	// Studio's own SSE MCP server (#79 D5, same as headless `vibe mcp
-	// serve`): a human being present in Studio isn't the same as a human
-	// watching THIS request, so a write needing approval is refused with the
-	// same message cmd/mcp.go uses, deferred to #90 (MCP settings).
-	handler := a.wrapAgentHandler(sandbox, agents.ModeFull)
-
-	srv := vibemcp.New(handler, a.logger)
-	if err := srv.Start("127.0.0.1:0"); err != nil {
-		return "", fmt.Errorf("failed to start MCP server: %w", err)
-	}
-
-	a.mcpServer = srv
-	url := fmt.Sprintf("http://%s/sse", srv.Addr())
-	a.logger.Info("MCP server started", "url", url)
-	return url, nil
-}
-
-// StopMCPServer stops the MCP server.
-func (a *App) StopMCPServer() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.mcpServer == nil {
-		return nil
-	}
-	err := a.mcpServer.Stop()
-	a.mcpServer = nil
-	return err
-}
-
-// GetMCPStatus returns the current MCP server status, including the
-// per-session bearer token (#64/#70) an external MCP client must send as
-// `Authorization: Bearer <token>` (or `?token=` for a transport that can't
-// set headers) — the server rejects every request without it. Shown in
-// SettingsView.vue's MCP panel with a copy button, alongside the URL.
-func (a *App) GetMCPStatus() map[string]any {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.mcpServer != nil {
-		return map[string]any{
-			"running": true,
-			"url":     fmt.Sprintf("http://%s/sse", a.mcpServer.Addr()),
-			"token":   a.mcpServer.Token(),
-		}
-	}
-	return map[string]any{
-		"running": false,
-		"url":     "",
-		"token":   "",
-	}
 }
 
 // --- Helpers ---
@@ -3320,7 +2768,7 @@ func isValidIdentifier(name string) bool {
 // DuckDB excel extension (fetched once on first use). It never falls back to another format: failure is an error.
 // It returns the written .xlsx path. Caller must hold a.mu (R or W).
 func (a *App) copyToXLSX(source, dst string) (string, error) {
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
@@ -3353,8 +2801,8 @@ func (a *App) ExportTableXLSX(tableName, dst string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 	if tableName == "" {
 		return "", fmt.Errorf("table name is required")
@@ -3377,11 +2825,11 @@ func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.container == nil {
-		return "", fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return "", err
 	}
 
-	q, err := a.registry.Get(context.Background(), queryID)
+	q, err := a.ws.Queries().Get(context.Background(), queryID)
 	if err != nil {
 		return "", fmt.Errorf("failed to load query %q: %w", queryID, err)
 	}
@@ -3432,6 +2880,24 @@ func (a *App) SetPreferences(p prefs.Preferences) error {
 	if err != nil {
 		return err
 	}
+	// The frontend round-trips only the fields it knows (theme, appearance);
+	// the recent-workspaces list lives beside them in the same document and must
+	// survive a theme change.
+	recentsMu.Lock()
+	defer recentsMu.Unlock()
+	cur, _ := s.Load()
+	extra := map[string]json.RawMessage{}
+	for k, v := range p.Extra {
+		extra[k] = v
+	}
+	// Recents always come from disk: a stale copy round-tripped by the frontend
+	// must never roll them back.
+	if raw, ok := cur.Extra[prefsRecentKey]; ok {
+		extra[prefsRecentKey] = raw
+	} else {
+		delete(extra, prefsRecentKey)
+	}
+	p.Extra = extra
 	if err := s.Save(p); err != nil {
 		return fmt.Errorf("failed to save preferences: %w", err)
 	}
@@ -3472,4 +2938,24 @@ func (a *App) OpenThemesDir() (string, error) {
 		runtime.BrowserOpenURL(a.ctx, "file://"+dir)
 	}
 	return dir, nil
+}
+
+// explainReadOnlyDenial turns the classifier's generic "live bindings are
+// read-only" refusal into the real reason when this window opened the workspace
+// read-only: its own database is in use by another program, so the tables are
+// simply not reachable yet.
+func (a *App) explainReadOnlyDenial(err error) error {
+	if !strings.Contains(err.Error(), "live bindings are read-only") {
+		return err
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.readOnly || a.ws == nil {
+		return err
+	}
+	who := "another program"
+	if a.holder != nil {
+		who = a.holder.String()
+	}
+	return fmt.Errorf("%s is in use by %s, so this can't run yet. Take over the workspace to read it", a.ws.DefaultConnection(), who)
 }

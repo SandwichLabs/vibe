@@ -38,20 +38,20 @@ export function CancelQuit() {
   return window['go']['main']['App']['CancelQuit']();
 }
 
-export function CloseFile() {
-  return window['go']['main']['App']['CloseFile']();
+export function CheckGitAvailable() {
+  return window['go']['main']['App']['CheckGitAvailable']();
 }
 
-export function CloseFileWithoutSaving() {
-  return window['go']['main']['App']['CloseFileWithoutSaving']();
+export function CheckWorkspaceDir(arg1, arg2) {
+  return window['go']['main']['App']['CheckWorkspaceDir'](arg1, arg2);
 }
 
-export function CreateFile(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['CreateFile'](arg1, arg2, arg3, arg4);
+export function ChooseFolder(arg1) {
+  return window['go']['main']['App']['ChooseFolder'](arg1);
 }
 
-export function CreateFromTemplate(arg1, arg2, arg3) {
-  return window['go']['main']['App']['CreateFromTemplate'](arg1, arg2, arg3);
+export function CloseWorkspace() {
+  return window['go']['main']['App']['CloseWorkspace']();
 }
 
 export function CreateNotebook(arg1) {
@@ -60,6 +60,10 @@ export function CreateNotebook(arg1) {
 
 export function CreateTable(arg1, arg2) {
   return window['go']['main']['App']['CreateTable'](arg1, arg2);
+}
+
+export function CreateWorkspace(arg1) {
+  return window['go']['main']['App']['CreateWorkspace'](arg1);
 }
 
 export function DeleteNotebook(arg1) {
@@ -126,20 +130,16 @@ export function GetAgentStatus() {
   return window['go']['main']['App']['GetAgentStatus']();
 }
 
-export function GetAllMeta() {
-  return window['go']['main']['App']['GetAllMeta']();
+export function GetClaudeConfig() {
+  return window['go']['main']['App']['GetClaudeConfig']();
 }
 
 export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
 }
 
-export function GetFileInfo() {
-  return window['go']['main']['App']['GetFileInfo']();
-}
-
-export function GetInitialFile() {
-  return window['go']['main']['App']['GetInitialFile']();
+export function GetInitialWorkspace() {
+  return window['go']['main']['App']['GetInitialWorkspace']();
 }
 
 export function GetMCPStatus() {
@@ -158,12 +158,20 @@ export function GetQuery(arg1) {
   return window['go']['main']['App']['GetQuery'](arg1);
 }
 
+export function GetSessionID() {
+  return window['go']['main']['App']['GetSessionID']();
+}
+
 export function GetTableData(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetTableData'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetTableDataFiltered(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['GetTableDataFiltered'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function GetWorkspaceInfo() {
+  return window['go']['main']['App']['GetWorkspaceInfo']();
 }
 
 export function ImportFile(arg1) {
@@ -182,12 +190,12 @@ export function InspectImport(arg1) {
   return window['go']['main']['App']['InspectImport'](arg1);
 }
 
-export function IsDirty() {
-  return window['go']['main']['App']['IsDirty']();
+export function IsWorkspaceOpen() {
+  return window['go']['main']['App']['IsWorkspaceOpen']();
 }
 
-export function IsFileOpen() {
-  return window['go']['main']['App']['IsFileOpen']();
+export function ListCatalogGroups() {
+  return window['go']['main']['App']['ListCatalogGroups']();
 }
 
 export function ListCatalogTables(arg1) {
@@ -204,6 +212,10 @@ export function ListNotebooks() {
 
 export function ListQueries() {
   return window['go']['main']['App']['ListQueries']();
+}
+
+export function ListRecentWorkspaces() {
+  return window['go']['main']['App']['ListRecentWorkspaces']();
 }
 
 export function ListSkills() {
@@ -226,12 +238,16 @@ export function ListUserThemes() {
   return window['go']['main']['App']['ListUserThemes']();
 }
 
-export function OpenFile(arg1, arg2) {
-  return window['go']['main']['App']['OpenFile'](arg1, arg2);
-}
-
 export function OpenThemesDir() {
   return window['go']['main']['App']['OpenThemesDir']();
+}
+
+export function OpenWorkspace(arg1) {
+  return window['go']['main']['App']['OpenWorkspace'](arg1);
+}
+
+export function OpenWorkspaceReadOnly(arg1) {
+  return window['go']['main']['App']['OpenWorkspaceReadOnly'](arg1);
 }
 
 export function PreviewFilterSQL(arg1, arg2, arg3) {
@@ -242,6 +258,18 @@ export function Quit() {
   return window['go']['main']['App']['Quit']();
 }
 
+export function RegenerateWorkspaceID() {
+  return window['go']['main']['App']['RegenerateWorkspaceID']();
+}
+
+export function RelocateRecentWorkspace(arg1, arg2) {
+  return window['go']['main']['App']['RelocateRecentWorkspace'](arg1, arg2);
+}
+
+export function RemoveRecentWorkspace(arg1) {
+  return window['go']['main']['App']['RemoveRecentWorkspace'](arg1);
+}
+
 export function RenameNotebook(arg1, arg2) {
   return window['go']['main']['App']['RenameNotebook'](arg1, arg2);
 }
@@ -250,8 +278,12 @@ export function ResolveAgentApproval(arg1, arg2) {
   return window['go']['main']['App']['ResolveAgentApproval'](arg1, arg2);
 }
 
-export function RevertFile() {
-  return window['go']['main']['App']['RevertFile']();
+export function ResolveConflict(arg1) {
+  return window['go']['main']['App']['ResolveConflict'](arg1);
+}
+
+export function RestoreRecentWorkspace(arg1) {
+  return window['go']['main']['App']['RestoreRecentWorkspace'](arg1);
 }
 
 export function RunA2UIQuery(arg1) {
@@ -260,10 +292,6 @@ export function RunA2UIQuery(arg1) {
 
 export function RunA2UIQueryIn(arg1, arg2) {
   return window['go']['main']['App']['RunA2UIQueryIn'](arg1, arg2);
-}
-
-export function SaveFile() {
-  return window['go']['main']['App']['SaveFile']();
 }
 
 export function SaveFilterAsQuery(arg1, arg2, arg3, arg4) {
@@ -286,16 +314,12 @@ export function SelectImportFile() {
   return window['go']['main']['App']['SelectImportFile']();
 }
 
-export function SelectNewVibeFile() {
-  return window['go']['main']['App']['SelectNewVibeFile']();
-}
-
 export function SelectNotebookFile() {
   return window['go']['main']['App']['SelectNotebookFile']();
 }
 
-export function SelectVibeFile() {
-  return window['go']['main']['App']['SelectVibeFile']();
+export function SelectWorkspaceFolder() {
+  return window['go']['main']['App']['SelectWorkspaceFolder']();
 }
 
 export function SendAgentQuery(arg1) {
@@ -310,20 +334,32 @@ export function SetAgentConfig(arg1) {
   return window['go']['main']['App']['SetAgentConfig'](arg1);
 }
 
-export function SetMeta(arg1, arg2) {
-  return window['go']['main']['App']['SetMeta'](arg1, arg2);
-}
-
 export function SetPreferences(arg1) {
   return window['go']['main']['App']['SetPreferences'](arg1);
 }
 
-export function StartMCPServer() {
-  return window['go']['main']['App']['StartMCPServer']();
+export function SetWorkspaceSettings(arg1) {
+  return window['go']['main']['App']['SetWorkspaceSettings'](arg1);
 }
 
-export function StopMCPServer() {
-  return window['go']['main']['App']['StopMCPServer']();
+export function StartMCP() {
+  return window['go']['main']['App']['StartMCP']();
+}
+
+export function StopMCP() {
+  return window['go']['main']['App']['StopMCP']();
+}
+
+export function SwitchWorkspace(arg1) {
+  return window['go']['main']['App']['SwitchWorkspace'](arg1);
+}
+
+export function TakeOverWorkspace() {
+  return window['go']['main']['App']['TakeOverWorkspace']();
+}
+
+export function TrustLocalSettings() {
+  return window['go']['main']['App']['TrustLocalSettings']();
 }
 
 export function UpdateRow(arg1, arg2, arg3, arg4) {

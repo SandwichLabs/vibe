@@ -1,11 +1,11 @@
 # MCP (Model Context Protocol)
 
-> **Changing (epic #105).** The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116). Studio's own MCP switch, and its "Copy Claude config" buttons, arrive with #111; the Go side they call is described below.
+> **Changing (epic #105).** The agent's SQL policy becomes an allow-list, and writes to non-local connections always need approval, so headless MCP refuses them (#116). Studio's own MCP switch and its "Copy Claude config" buttons shipped with #111 (Settings → Workspace → Claude and other tools); the Go side they call is described below.
 
 Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
 
 - **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
-- **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port.
+- **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port (Settings → Workspace → Claude and other tools). A write that needs approval shows the same approval card the chat agent uses, in the Studio window; the card waits for you, and a declined or unanswered card changes nothing.
 
 Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. `.vibe` files are no longer opened directly: pass a workspace folder.
 
@@ -72,7 +72,7 @@ cfg, _ := hub.BuildClaudeConfig(ws.Root(), exe)   // exe from hub.LocateVibe()
 holder, err := hub.ReadHolder(ws.Root())          // who holds it, without the lock
 ```
 
-What #111 has to wire (none of it is in the UI yet):
+How #111 wires it (`studio/workspace.go`):
 
 1. **Opening a workspace:** `AcquireHub` first. On `ErrHubHeld`, read `held.Holder` and show the read-only banner (SPEC 7 C): "Open read-only" opens `workspace.Open` only (stores are files, so notebooks/queries/skills stay editable) and does **not** call `OpenSession` for the local `duckdb` connections, which show `locked-by(pid)`; "Take over" calls `TakeOver`, then continues as the owner. `ErrNotReleasable` or a timeout is shown as the reason, never a hang.
 2. **Releasable owner:** pass `WithReleaseHandler` (one per process; Studio holds one workspace at a time). The handler must ask the person if needed, close the session, stop MCP, `Release()`, and switch the window to the launcher or read-only. A second releasable hold in the process is an error (`ErrOneReleasableHold`).
@@ -118,9 +118,9 @@ The server name is `vibe-<folder>` so two workspaces do not collide. With "Ask b
 
 Both `--transport sse` and Studio's built-in MCP server bind to
 `127.0.0.1` only and require a random bearer token, generated fresh each
-time the server starts and printed to stderr (`--transport sse`) or shown
-in Settings → MCP Server with a copy button (Studio). A request is rejected
-if it:
+time the server starts and printed to stderr (`--transport sse`). Studio never
+shows it: the copied Claude config launches `vibe mcp serve`, which reads it from
+`hub.lock` (same user only). A request is rejected if it:
 
 - carries a browser `Origin` header at all (a legitimate MCP client never
   sets one — only a website running in a browser tab does, via

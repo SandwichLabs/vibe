@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,12 +68,9 @@ func TestImportFile_QuoteInColumnName_ImportsCleanly(t *testing.T) {
 	// (now normalized) column (this is exercised automatically by
 	// ImportFile; confirm the skill exists and describes the table without
 	// erroring).
-	var instructions string
-	err = app.container.SQLiteDB().QueryRow(
-		`SELECT instructions FROM _vibe_skills WHERE name = 'workspace-quoted-col'`,
-	).Scan(&instructions)
+	stored, err := app.ws.Skills().Get(context.Background(), "workspace-quoted-col")
 	require.NoError(t, err)
-	assert.Contains(t, instructions, "## Columns as stored")
+	assert.Contains(t, stored.Instructions, "## Columns as stored")
 }
 
 // TestTableHasRows_MaliciousStoredTableName is the gating-path regression:
@@ -91,12 +89,12 @@ func TestTableHasRows_MaliciousStoredTableName(t *testing.T) {
 	// The attacker creates a real table with this exact (crafted) name —
 	// they authored the .vibe file, so this is within their control.
 	quoted := `"` + escapeDoubleQuotes(evil) + `"`
-	_, err := app.container.DuckDBDB().Exec(`CREATE TABLE ` + quoted + ` (a INT)`)
+	_, err := app.sess.DB().Exec(`CREATE TABLE ` + quoted + ` (a INT)`)
 	require.NoError(t, err)
-	_, err = app.container.DuckDBDB().Exec(`INSERT INTO ` + quoted + ` VALUES (1)`)
+	_, err = app.sess.DB().Exec(`INSERT INTO ` + quoted + ` VALUES (1)`)
 	require.NoError(t, err)
 
-	require.NoError(t, agents.SaveUserSkill(app.container.Skills(), app.container.Session(), "evil", "d", "i", evil))
+	require.NoError(t, agents.SaveUserSkill(app.ws.Skills(), app.sess, "evil", "d", "i", evil))
 
 	_, err = app.ListSkills()
 	require.NoError(t, err)

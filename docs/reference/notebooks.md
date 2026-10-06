@@ -188,4 +188,4 @@ whole cell being rejected.
 See also [`templates.md`](templates.md) for the starter notebooks bundled
 with each starter template, and [`import-office.md`](import-office.md) for
 CSV/XLSX import and table/query export (unrelated to notebook export/import
-above, which moves whole notebooks between `.vibe` files).
+above, which moves whole notebooks between workspaces).

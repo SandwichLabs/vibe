@@ -12,7 +12,7 @@ import { formatToolInput } from '../lib/toolStep'
 import type { ToolStep } from '../composables/useAgentChat'
 
 const props = defineProps<{ step: ToolStep; previewLen: number }>()
-const emit = defineEmits<{ resolve: [approved: boolean, saveFirst?: boolean] }>()
+const emit = defineEmits<{ resolve: [approved: boolean] }>()
 
 const formatted = computed(() => formatToolInput(props.step.input))
 const preview = computed(() => {
@@ -63,7 +63,7 @@ async function copy() {
       v-if="step.approval"
       :approval="step.approval"
       :done="step.status !== 'running'"
-      @resolve="(ok, saveFirst) => emit('resolve', ok, saveFirst)"
+      @resolve="(ok) => emit('resolve', ok)"
     />
   </div>
 </template>

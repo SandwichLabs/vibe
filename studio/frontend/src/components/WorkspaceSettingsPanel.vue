@@ -1,0 +1,175 @@
+<script setup lang="ts">
+// Settings > Workspace (SPEC 09 A): what belongs to the folder and travels with
+// git (name, default connection, the team's agent limit), what is just yours
+// (your own agent choice), and Studio's MCP switch for Claude and other tools.
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import Icon from './Icon.vue'
+import AgentSettings from './AgentSettings.vue'
+import { workspaceInfo, isReadOnly, refreshWorkspaceInfo } from '../composables/useWorkspace'
+import { EventsOn } from '../wailsjs/runtime/runtime'
+import { errorText, settingsError } from '../lib/errors'
+
+const info = computed(() => workspaceInfo.value)
+
+// ---- This workspace ----
+const name = ref('')
+const defaultConnection = ref('')
+const saving = ref(false)
+const message = ref('')
+const stale = ref(false)
+watch(info, (i) => {
+  if (!i) return
+  name.value = i.name
+  defaultConnection.value = i.defaultConnection
+}, { immediate: true })
+
+const changed = computed(() => !!info.value && (name.value.trim() !== info.value.name || defaultConnection.value !== info.value.defaultConnection))
+const defaultChanged = computed(() => !!info.value && defaultConnection.value !== info.value.defaultConnection)
+
+async function save() {
+  const i = info.value
+  if (!i) return
+  saving.value = true
+  message.value = ''
+  stale.value = false
+  try {
+    workspaceInfo.value = await window.go.main.App.SetWorkspaceSettings({
+      name: name.value.trim(),
+      defaultConnection: defaultConnection.value,
+      teamSandbox: i.teamSandboxSet ? i.team.sandbox : '',
+      teamAskBeforeChanges: i.team.askBeforeWrites,
+      sandbox: i.local.sandbox,
+      askBeforeChanges: i.local.askBeforeWrites,
+      loadedTeamSandbox: i.teamSandboxSet ? i.team.sandbox : '',
+      loadedTeamAsk: i.team.askBeforeWrites,
+    })
+    message.value = defaultChanged.value ? 'Settings saved. The default connection applies the next time the workspace opens.' : 'Settings saved'
+    setTimeout(() => { message.value = '' }, 4000)
+  } catch (e: unknown) {
+    const se = settingsError(e)
+    message.value = 'Error: ' + se.text
+    stale.value = se.stale
+  }
+  saving.value = false
+}
+
+// ---- MCP ----
+const mcp = ref<MCPStatus | null>(null)
+const mcpBusy = ref(false)
+const copied = ref('')
+
+async function loadMCP() {
+  try { mcp.value = await window.go.main.App.GetMCPStatus() } catch { mcp.value = null }
+}
+
+async function toggleMCP() {
+  mcpBusy.value = true
+  try {
+    if (mcp.value?.running) await window.go.main.App.StopMCP()
+    else await window.go.main.App.StartMCP()
+    await loadMCP()
+  } catch (e: unknown) {
+    message.value = 'Error: ' + errorText(e)
+    setTimeout(() => { message.value = '' }, 4000)
+  }
+  mcpBusy.value = false
+}
+
+async function copy(text: string, what: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = what
+    setTimeout(() => { if (copied.value === what) copied.value = '' }, 2000)
+  } catch { /* clipboard unavailable */ }
+}
+
+async function copyConfig(kind: 'desktop' | 'code') {
+  try {
+    const cfg = await window.go.main.App.GetClaudeConfig()
+    await copy(kind === 'desktop' ? cfg.desktop : cfg.code, kind)
+  } catch (e: unknown) {
+    message.value = 'Error: ' + errorText(e)
+    setTimeout(() => { message.value = '' }, 4000)
+  }
+}
+
+let unsub: (() => void) | null = null
+onMounted(() => {
+  void loadMCP()
+  if (typeof window !== 'undefined' && (window as any).runtime) unsub = EventsOn('workspace:changed', loadMCP)
+})
+onUnmounted(() => unsub?.())
+</script>
+
+<template>
+  <div v-if="info" id="settings-panel-workspace" role="tabpanel" aria-labelledby="settings-tab-workspace" class="col" style="max-width: 52rem; gap: var(--sh-space-6);">
+    <!-- This workspace -->
+    <div>
+      <div class="sec-title"><h2 style="font-size: 22px;">This workspace</h2><span class="label">Saved in vibe.yaml</span></div>
+      <div class="card card-pad col" style="gap: var(--sh-space-4);">
+        <div>
+          <label class="field-label" for="ws-name">Name</label>
+          <input id="ws-name" v-model="name" class="field-input" data-testid="ws-name-input" />
+        </div>
+        <div>
+          <label class="field-label" for="ws-folder">Folder</label>
+          <input id="ws-folder" class="field-input" :value="info.root" readonly />
+        </div>
+        <div>
+          <label class="field-label" for="ws-default">Default connection</label>
+          <select id="ws-default" v-model="defaultConnection" class="field-input" aria-describedby="ws-default-h" data-testid="ws-default-select">
+            <option v-for="c in info.connections" :key="c.name" :value="c.name">{{ c.name }}</option>
+          </select>
+          <div id="ws-default-h" class="help">Notebook cells and queries with no connection chosen run here. <code>local</code> is the safest default.</div>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" type="button" :disabled="saving || !changed" data-testid="ws-save" @click="save">
+            <Icon name="save" :size="16" /> {{ saving ? 'Saving…' : 'Save settings' }}
+          </button>
+          <span v-if="message" class="sh-body" role="status" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">{{ message }}</span>
+          <button v-if="stale" type="button" class="btn btn-sm" data-testid="reload-settings-ws" @click="refreshWorkspaceInfo().then(() => { message = ''; stale = false })">Reload settings</button>
+        </div>
+      </div>
+    </div>
+
+    <AgentSettings />
+
+    <!-- Claude and other tools (MCP) -->
+    <div>
+      <div class="sec-title"><h2 style="font-size: 22px;">Claude and other tools</h2><span class="label">MCP</span></div>
+      <div class="card card-pad col" style="gap: var(--sh-space-3);" data-testid="mcp-panel">
+        <div class="row" style="gap: var(--sh-space-2);">
+          <span class="status-dot" :class="mcp?.running ? 'ok' : 'off'"></span>
+          <span class="sh-label" style="margin: 0;">{{ mcp?.running ? 'Running, only on this computer' : 'Off' }}</span>
+        </div>
+
+        <div v-if="mcp?.running && mcp.url">
+          <label class="field-label">Address</label>
+          <div class="row" style="gap: var(--sh-space-2);">
+            <code class="break-all" style="flex: 1; user-select: all; padding: 8px 12px;">{{ mcp.url }}</code>
+            <button class="btn btn-sm" type="button" @click="copy(mcp.url, 'url')"><Icon name="copy" :size="14" /> {{ copied === 'url' ? 'Copied' : 'Copy' }}</button>
+          </div>
+        </div>
+
+        <div class="row" style="gap: var(--sh-space-2); flex-wrap: wrap;">
+          <button class="btn" :class="mcp?.running ? 'btn-destructive' : 'btn-primary'" type="button" :disabled="mcpBusy || (!mcp?.running && !mcp?.canStart)" data-testid="mcp-toggle" @click="toggleMCP">
+            {{ mcpBusy ? '…' : (mcp?.running ? 'Stop' : 'Start') }}
+          </button>
+          <button class="btn btn-sm" type="button" data-testid="copy-claude-code" @click="copyConfig('code')"><Icon name="copy" :size="14" /> {{ copied === 'code' ? 'Copied' : 'Copy Claude Code config' }}</button>
+          <button class="btn btn-sm" type="button" data-testid="copy-claude-desktop" @click="copyConfig('desktop')"><Icon name="copy" :size="14" /> {{ copied === 'desktop' ? 'Copied' : 'Copy Claude Desktop config' }}</button>
+        </div>
+        <p v-if="mcp && !mcp.canStart && !mcp.running" class="help" style="margin: 0;">{{ mcp.reason }}</p>
+
+        <div class="note info">
+          <Icon name="info" :size="16" />
+          <span>The copied config starts <code>vibe mcp serve</code> for this folder. It holds no password or token: when Studio has the workspace open, that program reaches Studio on its own.</span>
+        </div>
+        <div class="note warn">
+          <Icon name="alert" :size="16" />
+          <span>With Studio closed, tools using <code>vibe mcp serve</code> can't change anything while "Ask me before it changes data" is on. Turn it off to let them change the workspace's own <code>local</code> database only; other connections always need Studio.</span>
+        </div>
+        <p v-if="isReadOnly" class="help" style="margin: 0;">This window opened the workspace read-only, so it can't serve MCP until you take it over.</p>
+      </div>
+    </div>
+  </div>
+</template>

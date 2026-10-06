@@ -32,6 +32,7 @@ import AiCellDialog from '../components/AiCellDialog.vue'
 import { useAiCellDialog, type EnvelopeCell } from '../composables/useAiCellDialog'
 import { errorText } from '../lib/errors'
 import CellDrawer from '../components/CellDrawer.vue'
+import ConflictBanner from '../components/ConflictBanner.vue'
 import { sqlSummary, cellTitle, cellMeta, CELL_FALLBACK_TITLE } from '../lib/cellSummary'
 
 const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
@@ -87,6 +88,7 @@ interface CellState {
 
 const route = useRoute()
 const router = useRouter()
+const loadedNotebookIdForView = computed(() => String(route.params.id))
 
 const title = ref('')
 const cells = ref<CellState[]>([])
@@ -102,6 +104,14 @@ const infoMessage = ref('')
 // click-to-dismiss shape as infoMessage, plus a 4s auto-dismiss timeout.
 const statusMessage = ref('')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
+// The notebook's file changed on disk (a git pull, another editor, the agent)
+// while this copy had unsaved edits, or a save was refused for that reason.
+// Sticky until resolved; typing is not blocked while it shows (SPEC 07 D).
+const conflict = ref<{ deleted: boolean } | null>(null)
+// The revision on disk when the banner was raised: "Keep mine" only overwrites that one.
+let conflictRev = ''
+const conflictBusy = ref(false)
+const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let suppressAutosave = true // true while loading, so the initial populate doesn't trigger a save
 
@@ -136,7 +146,7 @@ let lastPersisted = ''
 let saveSeq = 0
 
 // loadedSessionId is the file-open session (studio.App.sessionID, surfaced
-// via GetFileInfo().session_id) in effect when THIS component instance
+// via GetSessionID()) in effect when THIS component instance
 // loaded its notebook — captured once, alongside loadedNotebookId, and
 // never re-fetched afterward. Every save sends it back to SaveNotebook,
 // which rejects a save whose token no longer matches the CURRENTLY open
@@ -151,7 +161,7 @@ let saveSeq = 0
 let loadedSessionId = ''
 
 // loadedRev is the store's revision of the notebook this component last loaded
-// or saved (the file's content hash in a workspace; empty for a legacy .vibe).
+// or saved (the file's content hash).
 // Every save sends it back, so a save made from a copy that a git pull, an
 // editor or an agent has since changed is rejected as a conflict instead of
 // overwriting that change.
@@ -231,20 +241,21 @@ async function loadNotebook(id: string) {
 
   loading.value = true
   notFound.value = false
+  conflict.value = null
   suppressAutosave = true
   loadedNotebookId = id
   // A fresh load already reflects current server state once it resolves —
   // anything queued for whatever was loading/loaded before this is moot.
   pendingNotebooksChangedQueue = []
   try {
-    const [nb, fileInfo] = await Promise.all([
+    const [nb, sessionId] = await Promise.all([
       window.go.main.App.GetNotebook(id),
-      typeof window.go.main.App.GetFileInfo === 'function'
-        ? window.go.main.App.GetFileInfo().catch(() => null)
-        : Promise.resolve(null),
+      typeof window.go.main.App.GetSessionID === 'function'
+        ? window.go.main.App.GetSessionID().catch(() => '')
+        : Promise.resolve(''),
     ])
     if (loadedNotebookId !== id) return // superseded by another load before this one resolved
-    loadedSessionId = fileInfo?.session_id ?? ''
+    loadedSessionId = sessionId ?? ''
     loadedRev = (nb as { rev?: string }).rev ?? ''
     title.value = nb.title
     cells.value = (nb.cells || []).map((c: RawCell) => newCellState(c))
@@ -264,6 +275,9 @@ async function loadNotebook(id: string) {
     notFound.value = true
     errorMessage.value = 'Failed to load notebook: ' + errorText(e)
     loading.value = false
+    // Nothing was loaded, so there is nothing to save: a later flush (switching
+    // workspaces, closing) must not try to write an empty notebook back.
+    if (loadedNotebookId === id) loadedNotebookId = ''
   }
   await nextTick()
   if (loadedNotebookId === id) suppressAutosave = false
@@ -639,8 +653,12 @@ async function saveNow() {
     tombstones = pruneConfirmedTombstones(tombstones, new Set(payload.cells.map((c) => c.id)))
     if (seq === saveSeq) lastPersisted = JSON.stringify(payload)
   } catch (e: any) {
-    errorMessage.value = 'Failed to save notebook: ' + errorText(e)
     saveState.value = 'idle'
+    if (isConflict(e)) {
+      raiseConflict(/deleted/.test(errorText(e)))
+      return
+    }
+    errorMessage.value = 'Failed to save notebook: ' + errorText(e)
   }
 }
 
@@ -663,6 +681,9 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
+  // An unresolved conflict means the edits here were NOT written: say so, so a
+  // workspace switch or close can ask before they are lost.
+  if (conflict.value) throw new Error('This notebook changed on disk and your edit is not saved yet')
   const p = payload ?? captureSavePayload()
   if (!p) return
   // #95 carry-over: nothing has changed since the last load/save, so
@@ -678,6 +699,10 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
     tombstones = pruneConfirmedTombstones(tombstones, new Set(p.cells.map((c) => c.id)))
     if (seq === saveSeq) lastPersisted = serialized
   } catch (e: any) {
+    if (isConflict(e)) {
+      raiseConflict(/deleted/.test(errorText(e)))
+      throw new Error('This notebook changed on disk and your edit is not saved yet')
+    }
     const message = 'Failed to save notebook: ' + errorText(e)
     errorMessage.value = message
     throw new Error(message)
@@ -698,7 +723,7 @@ async function flushSave(payload?: ReturnType<typeof buildSavePayload> | null) {
 }
 
 function scheduleSave() {
-  if (suppressAutosave) return
+  if (suppressAutosave || conflict.value) return
   saveState.value = 'idle'
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(saveNow, 800)
@@ -852,7 +877,7 @@ async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
   if (JSON.stringify(remoteBase) === lastPersisted) {
     loadedRev = remote.rev ?? loadedRev
   } else {
-    errorMessage.value = 'This notebook also changed on disk since you opened it. Saving will be refused until you reload, so nothing is overwritten.'
+    raiseConflict(false)
   }
   for (const raw of incoming) cells.value.push(newCellState(raw as RawCell))
   await nextTick()
@@ -864,59 +889,129 @@ async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
   }
 }
 
-function handleFileClosed() {
-  // Now largely redundant with AppShell's closeFile() awaiting flushAll()
-  // BEFORE calling CloseFile (review fix, step 4a round 2 #1) — the happy
-  // path flush already succeeded before the container closed. Kept as a
-  // defensive no-op-in-practice fallback for a close that reaches this view
-  // some other way; loadedNotebookId is cleared so nothing here keeps
-  // trying to save into a file that may already be gone.
+function handleWorkspaceClosed() {
+  // The shell already awaited flushAll() BEFORE the workspace closed (the
+  // switcher, Close, quit), so the happy-path flush succeeded while it was
+  // still open. Kept as a defensive fallback for a close that reaches this view
+  // some other way; loadedNotebookId is cleared so nothing here keeps trying to
+  // save into a workspace that may already be gone.
   flushSave()
   loadedNotebookId = ''
   loadedSessionId = ''
   lastPersisted = ''
 }
 
-// handleFileReverted (#98) reloads the notebook from the reverted container
-// so its SQL cells re-run against the reverted data, matching what happens
-// on open. A pending debounced save is flushed first (best-effort, same as
-// every other internal call site) so a hand edit made just before the
-// revert isn't silently lost by the reload that follows. A running/proposed
-// AI-cell task belongs to the pre-revert data (its previews ran against
-// it), so it's closed the same way the notebook-switch watcher closes one.
-async function handleFileReverted() {
-  await flushSave()
-  // loadNotebook replaces cells.value wholesale but — unlike the
-  // route.params.id watcher's own reload, which is the only other caller —
-  // doesn't tear down the CURRENT cells' CodeMirror editors first, since it
-  // is normally only ever called once per mount. Do that here, matching the
-  // watcher's teardown, so reloading the SAME notebook after a revert
-  // doesn't leak the old editor instances. loadNotebook itself disconnects
-  // cellObserver first thing, so that teardown isn't repeated here.
+// reloadFromDisk replaces the open copy with what is on disk now, so its SQL
+// cells re-run, and drops any local edit. loadNotebook replaces cells.value
+// wholesale but does not tear down the CURRENT cells' CodeMirror editors first
+// (it normally runs once per mount), so do that here. A running or proposed
+// AI-cell task belongs to the old content, so it is closed too.
+async function reloadFromDisk() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   for (const cell of cells.value) cell.editor?.destroy()
   aiCellDialog.close()
-  await loadNotebook(String(route.params.id))
+  await loadNotebook(loadedNotebookId)
+}
+
+// handleChangedOnDisk: something other than this window wrote a file in the
+// workspace. For THIS notebook: with no unsaved edit it is quietly reloaded;
+// with one, the conflict banner shows and nothing is overwritten.
+// editKey is a payload with the auto-chosen view of every unpinned sql cell
+// removed: running a cell picks its view on its own (and autosave persists it a
+// moment later), which is not an edit worth a conflict banner.
+function editKey(p: ReturnType<typeof buildSavePayload>): string {
+  return JSON.stringify({
+    ...p,
+    cells: p.cells.map((c: any) => (c.type === 'sql' && !c.viewPinned ? { ...c, view: undefined } : c)),
+  })
+}
+
+async function handleChangedOnDisk(p: { kind: string; id: string; op: string }) {
+  if (p?.kind !== 'notebook' || !loadedNotebookId || p.id !== loadedNotebookId) return
+  const current = captureSavePayload()
+  const hasEdit = !!current && !!lastPersisted && editKey(current) !== editKey(JSON.parse(lastPersisted))
+  if (p.op === 'deleted') {
+    if (!hasEdit) {
+      statusMessage.value = 'This notebook was deleted on disk.'
+      router.push('/notebooks')
+    } else {
+      raiseConflict(true)
+    }
+    return
+  }
+  if (!hasEdit && !conflict.value) {
+    await reloadFromDisk()
+    infoMessage.value = `"${title.value || 'This notebook'}" changed on disk and was reloaded.`
+    return
+  }
+  raiseConflict(false)
+}
+
+// raiseConflict shows the banner and remembers which revision on disk it is
+// about, so "Keep mine" can refuse when the file changed again meanwhile.
+function raiseConflict(deleted: boolean) {
+  conflict.value = { deleted }
+  conflictRev = ''
+  const id = loadedNotebookId
+  if (deleted || !id) return
+  window.go.main.App.GetNotebook(id).then((nb: any) => { if (conflict.value && loadedNotebookId === id) conflictRev = nb?.rev ?? '' }).catch(() => { /* no rev: falls back to an unconditional keep */ })
+}
+
+async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
+  const id = loadedNotebookId
+  if (!id) return
+  if (action === 'reload') {
+    conflict.value = null
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+    await reloadFromDisk()
+    return
+  }
+  conflictBusy.value = true
+  try {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+    const payload = captureSavePayload()
+    const res = await window.go.main.App.ResolveConflict({ kind: 'notebook', id, action, data: (payload ?? {}) as Record<string, any>, rev: conflictRev })
+    conflict.value = null
+    if (action === 'overwrite') {
+      loadedRev = res.rev
+      if (payload) lastPersisted = JSON.stringify(payload)
+      saveState.value = 'saved'
+      statusMessage.value = 'Kept your version.'
+    } else {
+      await reloadFromDisk()
+      statusMessage.value = `Saved your version as "${res.title}". This is the version on disk.`
+    }
+  } catch (e: any) {
+    if (isConflict(e)) {
+      // The file changed again after the banner was raised: show it afresh.
+      raiseConflict(false)
+      errorMessage.value = 'The file changed on disk again, so nothing was overwritten. Choose again.'
+    } else {
+      errorMessage.value = 'Failed: ' + errorText(e)
+    }
+  } finally {
+    conflictBusy.value = false
+  }
 }
 
 onBeforeRouteLeave(async () => {
   await flushSave()
 })
 
-// unsubFileClosed holds the unsubscribe function EventsOn returns — review
-// fix, step 4a round 2 #2: calling the global EventsOff('file:closed')
-// removes EVERY listener for that event name, including App.vue's own,
-// which is what actually swaps the view back to UnlockView. Storing and
-// calling the specific unsubscribe function this component was given
-// removes only this listener.
-let unsubFileClosed: (() => void) | null = null
-let unsubFileReverted: (() => void) | null = null
+// unsubWorkspaceClosed holds the unsubscribe function EventsOn returns —
+// calling the global EventsOff('workspace:closed') would remove EVERY listener
+// for that event name, including useWorkspace's own. Storing and calling the
+// specific unsubscribe function this component was given removes only this
+// listener.
+let unsubWorkspaceClosed: (() => void) | null = null
+let unsubDisk: (() => void) | null = null
 let unsubNotebooksChanged: (() => void) | null = null
 let unregisterPendingSave: (() => void) | null = null
 
 onMounted(() => {
   loadNotebook(String(route.params.id))
-  if (hasWailsRuntime()) unsubFileClosed = EventsOn('file:closed', handleFileClosed)
-  if (hasWailsRuntime()) unsubFileReverted = EventsOn('file:reverted', handleFileReverted)
+  if (hasWailsRuntime()) unsubWorkspaceClosed = EventsOn('workspace:closed', handleWorkspaceClosed)
+  if (hasWailsRuntime()) unsubDisk = EventsOn('workspace:changed-on-disk', handleChangedOnDisk)
   if (hasWailsRuntime()) unsubNotebooksChanged = EventsOn('notebooks:changed', handleNotebooksChanged)
   // Review fix, step 4a round 2 #1 / round 3 #2: register this view's flush
   // with the shared registry so AppShell's close path (and the app-quit
@@ -936,8 +1031,8 @@ onBeforeUnmount(() => {
   for (const cell of cells.value) cell.editor?.destroy()
   cellObserver?.disconnect()
   loadAbort?.abort()
-  unsubFileClosed?.()
-  unsubFileReverted?.()
+  unsubWorkspaceClosed?.()
+  unsubDisk?.()
   unsubNotebooksChanged?.()
   unregisterPendingSave?.()
   aiCellDialog.close()
@@ -954,13 +1049,14 @@ defineExpose({
   toggleSource, toggleCollapsed, insertCellFromEnvelope, replaceCellFromEnvelope,
   getLoadedNotebookId: () => loadedNotebookId,
   getLoadedSessionId: () => loadedSessionId,
+  conflict, resolveConflict, handleChangedOnDisk, reloadFromDisk,
   // Exposed for NotebookView.spec.ts's queue/replay coverage (coordinator
   // follow-up #3) — driving the real "notebooks:changed" Wails event would
   // require a live hasWailsRuntime()/EventsOn setup these tests don't run
   // under; calling handleNotebooksChanged directly exercises the exact same
   // queue-while-loading / replay-after-load logic loadNotebook itself uses.
   handleNotebooksChanged,
-  handleFileReverted,
+  handleWorkspaceClosed,
   isLoading: () => loading.value,
 })
 </script>
@@ -987,6 +1083,17 @@ defineExpose({
         <button @click="runAll" class="btn btn-ghost btn-sm"><Icon name="play" :size="14" /> Run all</button>
       </div>
     </div>
+
+    <ConflictBanner
+      v-if="conflict"
+      kind="notebook"
+      :path="`notebooks/${loadedNotebookIdForView}.vnb`"
+      :deleted="conflict.deleted"
+      :busy="conflictBusy"
+      @reload="resolveConflict('reload')"
+      @overwrite="resolveConflict('overwrite')"
+      @save-copy="resolveConflict('saveCopy')"
+    />
 
     <div style="flex: 1; overflow: auto; padding: var(--sh-space-6);">
       <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>

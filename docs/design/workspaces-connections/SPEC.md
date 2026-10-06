@@ -29,7 +29,7 @@ The mockups are static HTML built from the real Studio stylesheets (`schoolhouse
 
 **Focus.** Use the existing single `:focus-visible` ring from `theme/bridge.css`. Every dialog uses `composables/useModal.ts` (focus moves in, Escape closes, focus returns to the opener). Menus and the tree add roving focus (below). Nothing sets `outline: none` without the ring.
 
-**Autosave replaces Save.** Notebooks, queries and skills are files and save as you go, and connection data lives in the connection, so the Save / Revert / dirty pill from the container era (#81, #98) is gone from the shell. The sidebar footer shows "Saved as you go", the folder, and the git branch and changed-file count.
+**Autosave replaces Save.** Notebooks, queries and skills are files and save as you go, and connection data lives in the connection, so the Save / Revert / dirty pill from the container era (#81, #98) is gone from the shell. The sidebar footer shows "Saved as you go", the folder, and the git branch. (review #111: the changed-file count is dropped. Studio never runs `git` on open, because a shared folder's `.git/config` — `core.fsmonitor`, filters — can execute commands. The branch is read from `.git/HEAD` in pure Go.)
 
 **Narrow windows (≤ 1000px).** The nav collapses to a 56px icon rail; the Connections tree becomes a drawer opened from the plug icon (05 A at 900px, `shots/05-…-900.png`); the top bar drops the branch chip and the agent pill. This answers the "two fixed rails eat 44% at 1100px" complaint (T9).
 

@@ -57,7 +57,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "list_notebooks",
-		Description: "List every notebook in the container: id, title, cell count, and last-updated time. Includes notebooks migrated from a legacy file's pages/reports.",
+		Description: "List every notebook in the workspace: id, title, cell count, and last-updated time.",
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},

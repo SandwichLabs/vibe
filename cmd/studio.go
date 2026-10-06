@@ -36,18 +36,14 @@ and the workspace has connections other than local DuckDB files, you are
 offered --read-only (reading without ownership). The owner keeps the
 workspace's local .duckdb files locked, so read-only cannot reach those.
 
---gui launches the desktop app instead. It opens workspace folders from #111 on;
-until then it only starts the app, and a folder argument is refused.
+--gui launches the desktop app instead and opens the workspace folder (dir)
+there; without dir it starts at the launcher.
 
 Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
 	Args:         cobra.MaximumNArgs(1),
 	RunE:         runStudio,
 	SilenceUsage: true,
 }
-
-// guiOpensWorkspaces flips to true when Studio can open a workspace folder
-// (#111); it, and the check in runStudio that reads it, can then be deleted.
-const guiOpensWorkspaces = false
 
 func runStudio(cmd *cobra.Command, args []string) error {
 	dir := ""
@@ -58,9 +54,6 @@ func runStudio(cmd *cobra.Command, args []string) error {
 		return errLegacyFileArg
 	}
 	if gui, _ := cmd.Flags().GetBool("gui"); gui {
-		if dir != "" && !guiOpensWorkspaces {
-			return fmt.Errorf("Studio opens workspace folders after #111; use `vibe studio` (the terminal UI) for now")
-		}
 		return launchGUI(dir)
 	}
 	return runTUI(cmd, dir, cmd.InOrStdin(), cmd.OutOrStdout())
@@ -240,8 +233,8 @@ func startAgentListener(addr string, handler *agents.Handler, ctx context.Contex
 }
 
 // launchGUI finds and executes the vibe-studio binary, replacing the current
-// process. dir is passed through as its one argument (Studio learns to open a
-// workspace folder in #111); empty means no argument.
+// process. dir is passed through as its one argument, the workspace folder
+// Studio opens at launch; empty means no argument.
 func launchGUI(dir string) error {
 	const binName = "vibe-studio"
 	argv := []string{binName}

@@ -1,9 +1,9 @@
 # Vibe v1.0 Reference
 
-> **Changing (epic #105).** `workspaces.md` (#109) describes the folder-shaped workspace that replaces the single `.vibe` file; its Go packages, the CLI (`vibe workspace`, `query`, `import`, `export`, `studio`, #113) and MCP (#112) are on it, and Studio switches over in #111. The other references still describe the current single-file build. `connections.md` arrives with #115.
+> **Changing (epic #105).** `workspaces.md` (#109, #111) describes the folder-shaped workspace that replaced the single `.vibe` file; Studio, the CLI (`vibe workspace`, `query`, `import`, `export`, `studio`, #113) and MCP (#112) all work on it, and `.vibe` containers are no longer opened. `connections.md` arrives with #115.
 
 This is the shipped reference documentation for the Vibe application surface —
-a local-first, encrypted, single-file agentic data workspace. It is split by
+a local-first agentic data workspace: a folder of plain files that points at your data. It is split by
 surface so each area is easy to find:
 
 | Reference | Covers |
@@ -22,10 +22,7 @@ workspace schema must appear here.
 > **Direction note (2026-09-23).** Per [`../direction.md`](../direction.md), the page
 > system (`pages.md`, page directives, the web preview server, the Studio page
 > editor/runtime views) was retired in #69 — Notebooks (#66) and A2UI artifacts
-> (#67) are the only authoring surface now. An old `.vibe` file's pages are
-> migrated to notebooks automatically the first time it is opened; the parser
-> that migration depends on survives internally (`internal/pages`, parser-only,
-> no executor/renderer), but there is nothing left to document about pages
-> themselves. Forms, banded reports, macros, the switchboard, and App Mode —
+> (#67) are the only authoring surface now. Old `.vibe` files (and their pages) are no longer
+> opened at all (#111), so there is nothing left to document about pages. Forms, banded reports, macros, the switchboard, and App Mode —
 > the Access application layer — were removed in #68. Do not reintroduce either
 > surface.

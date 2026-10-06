@@ -12,35 +12,46 @@ declare global {
     go: {
       main: {
         App: {
-          SelectVibeFile(): Promise<string>
           GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
           SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
           ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
           OpenThemesDir(): Promise<string>
-          SelectNewVibeFile(): Promise<string>
-          OpenFile(path: string, passphrase: string): Promise<void>
-          CreateFile(path: string, passphrase: string, title: string, desc: string): Promise<void>
+          // Workspaces (#111)
+          GetInitialWorkspace(): Promise<{ path: string; message: string }>
+          ListRecentWorkspaces(): Promise<RecentWorkspace[]>
+          RemoveRecentWorkspace(path: string): Promise<RecentWorkspace | null>
+          RestoreRecentWorkspace(r: RecentWorkspace): Promise<void>
+          RelocateRecentWorkspace(oldPath: string, newPath: string): Promise<void>
+          ChooseFolder(title: string): Promise<string>
+          SelectWorkspaceFolder(): Promise<string>
+          CheckGitAvailable(): Promise<boolean>
+          CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
+          OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
+          OpenWorkspaceReadOnly(path: string): Promise<OpenWorkspaceResult>
+          SwitchWorkspace(req: { path: string }): Promise<OpenWorkspaceResult>
+          CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
+          CloseWorkspace(): Promise<void>
+          TakeOverWorkspace(): Promise<OpenWorkspaceResult>
+          GetWorkspaceInfo(): Promise<WorkspaceInfo>
+          GetSessionID(): Promise<string>
+          IsWorkspaceOpen(): Promise<boolean>
+          SetWorkspaceSettings(s: WorkspaceSettings): Promise<WorkspaceInfo>
+          RegenerateWorkspaceID(): Promise<WorkspaceInfo>
+          TrustLocalSettings(): Promise<WorkspaceInfo>
+          ResolveConflict(req: ConflictRequest): Promise<ConflictResult>
           ListTemplates(): Promise<TemplateInfo[]>
-          CreateFromTemplate(path: string, passphrase: string, template: string): Promise<void>
-          CloseFile(): Promise<void>
-          CloseFileWithoutSaving(): Promise<void>
-          SaveFile(): Promise<void>
-          IsFileOpen(): Promise<boolean>
-          IsDirty(): Promise<boolean>
-          RevertFile(): Promise<void>
+          ListCatalogGroups(): Promise<CatalogGroup[]>
+          ListCatalogTables(connection: string): Promise<string[]>
+          StartMCP(): Promise<MCPStatus>
+          StopMCP(): Promise<void>
+          GetMCPStatus(): Promise<MCPStatus>
+          GetClaudeConfig(): Promise<{ name: string; desktop: string; code: string }>
           CancelQuit(): Promise<void>
+          HoldQuit(): Promise<void>
           Quit(): Promise<void>
-          GetFileInfo(): Promise<FileInfo>
           ListSkills(): Promise<SkillSummary[]>
           SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
           DeleteSkill(name: string): Promise<void>
-          ListPages(): Promise<PageSummary[]>
-          GetPage(id: string): Promise<PageDetail>
-          RenderPageContent(id: string, params: Record<string, string>): Promise<string>
-          CreatePage(title: string, content: string): Promise<string>
-          CreateHTMLPage(title: string, content: string): Promise<string>
-          UpdatePage(id: string, title: string, content: string): Promise<void>
-          DeletePage(id: string): Promise<void>
           ListTables(): Promise<string[]>
           DescribeTable(name: string): Promise<TableInfo>
           GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
@@ -73,11 +84,6 @@ declare global {
           ImportFile(o: ImportOptions): Promise<ImportSummary>
           ExportTableCSV(tableName: string): Promise<string>
           ExportTableJSON(tableName: string): Promise<string>
-          GetAllMeta(): Promise<Record<string, string>>
-          SetMeta(key: string, value: string): Promise<void>
-          StartMCPServer(): Promise<string>
-          StopMCPServer(): Promise<void>
-          GetMCPStatus(): Promise<Record<string, any>>
         }
       }
     }
@@ -98,26 +104,120 @@ interface WriteError {
   fields?: Record<string, string>
 }
 
-// TemplateInfo mirrors studio.TemplateInfo (P6.7): a bundled starter-template
-// descriptor surfaced to the Home/Unlock quick-start template picker cards.
+// TemplateInfo mirrors studio.TemplateInfo: a bundled starter-template
+// descriptor surfaced to the New workspace dialog's "Start from" cards.
 interface TemplateInfo {
   name: string
   description: string
 }
 
-interface FileInfo {
+// --- Workspaces (#111): mirrors studio/workspace.go ---
+
+interface RecentWorkspace {
   path: string
-  title: string
-  description: string
-  page_count: number
-  table_count: number
-  query_count: number
-  file_size: number
-  // session_id identifies the currently open container (studio.App.sessionID).
-  // A view that reads data at load time (NotebookView) should capture this
-  // and send it back with any later write (SaveNotebook) so a write from a
-  // superseded file session is rejected instead of landing in the wrong file.
-  session_id: string
+  id: string
+  name: string
+  lastOpened: string
+  gitBranch: string
+  missing: boolean
+}
+
+interface ConnectionInfo {
+  name: string
+  type: string
+  scope: 'shared' | 'local' | 'user'
+  shadows?: string[]
+  readOnly: boolean
+  default: boolean
+  status: string
+  detail?: string
+  lockedByPid?: number
+}
+
+interface AgentPolicyInfo {
+  sandbox: string
+  askBeforeWrites: boolean
+}
+
+interface HolderInfo {
+  app: string
+  pid: number
+  servesMcp: boolean
+  text: string
+}
+
+interface WorkspaceInfo {
+  root: string
+  id: string
+  name: string
+  sessionId: string
+  gitBranch: string
+  isGit: boolean
+  defaultConnection: string
+  connections: ConnectionInfo[]
+  counts: { notebooks: number; queries: number; skills: number; tables: number }
+  policy: AgentPolicyInfo
+  team: AgentPolicyInfo
+  local: AgentPolicyInfo
+  teamSandboxSet: boolean
+  readOnly: boolean
+  holder?: HolderInfo
+  issues: { connection: string; message: string }[]
+  warnings: string[]
+  duplicateIds: string[]
+  localUntrusted: boolean
+  mcpRunning: boolean
+}
+
+interface OpenWorkspaceResult {
+  status: 'opened' | 'not-workspace'
+  path: string
+  info?: WorkspaceInfo
+  warnings?: string[]
+}
+
+interface CreateWorkspaceRequest {
+  name: string
+  dir: string
+  parentDir: string
+  git: boolean
+  template: string
+  inPlace: boolean
+}
+
+interface WorkspaceDirCheck { dir: string; exists: boolean; notEmpty: boolean }
+
+interface WorkspaceSettings {
+  name: string
+  defaultConnection: string
+  teamSandbox: string
+  teamAskBeforeChanges: boolean
+  sandbox: string
+  askBeforeChanges: boolean
+  loadedTeamSandbox?: string
+  loadedTeamAsk?: boolean
+}
+
+interface ConflictRequest {
+  kind: 'notebook' | 'query' | 'skill'
+  id: string
+  action: 'reload' | 'overwrite' | 'saveCopy'
+  data: Record<string, any>
+  rev?: string
+}
+interface ConflictResult { id: string; rev: string; title: string }
+
+interface MCPStatus { running: boolean; url: string; canStart: boolean; reason: string }
+
+interface CatalogTable { name: string; qualified: string; kind: 'table' | 'view' }
+interface CatalogGroup {
+  connection: string
+  type: string
+  status: string
+  detail?: string
+  readOnly: boolean
+  default: boolean
+  tables: CatalogTable[]
 }
 
 // SkillSummary mirrors studio.SkillSummary (#62): one Skill as the Skills
@@ -201,6 +301,8 @@ interface AgentConfig {
   endpoint: string
   sandbox: string
   askBeforeWrites: boolean
+  teamSandbox?: string
+  teamAskBeforeWrites?: boolean
 }
 
 interface QuerySummary {
@@ -223,12 +325,13 @@ interface QueryDetail {
 interface DashboardData {
   title: string
   description: string
-  page_count: number
+  notebook_count: number
   table_count: number
   query_count: number
-  file_size: number
-  created_at: string
-  updated_at: string
+  skill_count: number
+  local_tables: string[]
+  default_connection: string
+  read_only: boolean
 }
 
 // A2UIQueryResult mirrors studio.A2UIQueryResult — the result of one A2UI

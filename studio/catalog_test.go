@@ -31,9 +31,9 @@ func appWithSecondCatalog(t *testing.T) *App {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	require.NoError(t, app.container.Session().Attach(app.ctx, session.Spec{Name: "other", Path: path}))
+	require.NoError(t, app.sess.Attach(app.ctx, session.Spec{Name: "other", Path: path}))
 	// A same-named table with a different shape in the default catalog.
-	_, err = app.container.DuckDBDB().Exec(`CREATE TABLE items (sku VARCHAR); INSERT INTO items VALUES ('only-here')`)
+	_, err = app.sess.DB().Exec(`CREATE TABLE items (sku VARCHAR); INSERT INTO items VALUES ('only-here')`)
 	require.NoError(t, err)
 	return app
 }
@@ -43,16 +43,19 @@ func TestStudio_SecondCatalog_BrowseAndDescribe(t *testing.T) {
 
 	conns, err := app.ListConnections()
 	require.NoError(t, err)
-	require.Len(t, conns, 2)
-	assert.True(t, conns[0].Default)
-	assert.Equal(t, session.StatusOK, conns[1].Kind)
+	byName := map[string]session.Status{}
+	for _, c := range conns {
+		byName[c.Name] = c
+	}
+	assert.True(t, byName["local"].Default, "the workspace's own database is the default")
+	assert.Equal(t, session.StatusOK, byName["other"].Kind)
 
 	tabs, err := app.ListCatalogTables("other")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"other.main.items"}, tabs)
 	def, err := app.ListCatalogTables("")
 	require.NoError(t, err)
-	assert.Equal(t, []string{app.container.Session().DefaultCatalog() + ".main.items"}, def)
+	assert.Equal(t, []string{app.sess.DefaultCatalog() + ".main.items"}, def)
 
 	// Unqualified ListTables / DescribeTable still mean the open file.
 	names, err := app.ListTables()
@@ -96,15 +99,15 @@ func TestStudio_SecondCatalog_CRUD(t *testing.T) {
 	require.NoError(t, err)
 
 	var name string
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT name FROM other.main.items WHERE id = 3").Scan(&name))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT name FROM other.main.items WHERE id = 3").Scan(&name))
 	assert.Equal(t, "GAMMA", name)
 
 	_, err = app.DeleteRow("other.main.items", "id", "3")
 	require.NoError(t, err)
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM other.main.items").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM other.main.items").Scan(&n))
 	assert.Equal(t, 2, n)
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM items").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM items").Scan(&n))
 	assert.Equal(t, 1, n, "default catalog's items untouched")
 
 	_, err = app.UpdateRow("other.main.items", "id", "99", map[string]any{"name": "x"})
@@ -120,10 +123,10 @@ func TestStudio_SecondCatalog_SchemaChanges(t *testing.T) {
 	_, err := app.InsertRow("other.main.made", map[string]any{"label": "auto"})
 	require.NoError(t, err, "auto-number default works in the other catalog")
 	var id int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT id FROM other.main.made").Scan(&id))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT id FROM other.main.made").Scan(&id))
 	assert.Equal(t, 1, id)
 	var seqs int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_vibe_seq_made_id'").Scan(&seqs))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_vibe_seq_made_id'").Scan(&seqs))
 	assert.Equal(t, 1, seqs)
 
 	require.NoError(t, app.AddColumn("other.main.items", "note", "VARCHAR"))
@@ -151,12 +154,11 @@ func TestStudio_SecondCatalog_Import(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, sum.OK, "%+v", sum)
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM other.main.imported").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM other.main.imported").Scan(&n))
 	assert.Equal(t, 2, n)
 	names, err := app.ListTables()
 	require.NoError(t, err)
 	assert.NotContains(t, names, "imported")
-	assert.True(t, app.container.Dirty(), "a write marks the file dirty")
 }
 
 func TestStudio_RunA2UIQueryIn_UsesConnectionAsDefaultCatalog(t *testing.T) {
@@ -188,7 +190,7 @@ func TestStudio_RunA2UIQueryIn_UsesConnectionAsDefaultCatalog(t *testing.T) {
 	_, err = app.RunA2UIQueryIn("DELETE FROM items", "other")
 	require.Error(t, err)
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT COUNT(*) FROM other.main.items").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM other.main.items").Scan(&n))
 	assert.Equal(t, 2, n)
 
 	// Unknown / malformed connection names are refused, not interpolated.
@@ -203,10 +205,10 @@ func TestStudio_RunA2UIQueryIn_UsesConnectionAsDefaultCatalog(t *testing.T) {
 // shadow the user's table.
 func TestStudio_UseAndTempTableDoNotRedirectDatasheetWrites(t *testing.T) {
 	app := appWithSecondCatalog(t)
-	app.container.DuckDBDB().SetMaxOpenConns(1)
-	_, err := app.container.DuckDBDB().Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name VARCHAR); INSERT INTO people VALUES (1, 'orig')`)
+	app.sess.DB().SetMaxOpenConns(1)
+	_, err := app.sess.DB().Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name VARCHAR); INSERT INTO people VALUES (1, 'orig')`)
 	require.NoError(t, err)
-	_, err = app.container.DuckDBDB().Exec(`CREATE TABLE other.main.people (id INTEGER PRIMARY KEY, name VARCHAR); INSERT INTO other.main.people VALUES (1, 'other')`)
+	_, err = app.sess.DB().Exec(`CREATE TABLE other.main.people (id INTEGER PRIMARY KEY, name VARCHAR); INSERT INTO other.main.people VALUES (1, 'other')`)
 	require.NoError(t, err)
 
 	_, err = app.ExecuteQuery("USE other")
@@ -214,8 +216,8 @@ func TestStudio_UseAndTempTableDoNotRedirectDatasheetWrites(t *testing.T) {
 	_, err = app.UpdateRow("people", "id", "1", map[string]any{"name": "edited"})
 	require.NoError(t, err)
 	var def, oth string
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT name FROM people").Scan(&def))
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT name FROM other.main.people").Scan(&oth))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT name FROM people").Scan(&def))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT name FROM other.main.people").Scan(&oth))
 	assert.Equal(t, "edited", def, "the edit landed in the open file's table")
 	assert.Equal(t, "other", oth)
 
@@ -224,7 +226,7 @@ func TestStudio_UseAndTempTableDoNotRedirectDatasheetWrites(t *testing.T) {
 	_, err = app.InsertRow("people", map[string]any{"id": "2", "name": "real"})
 	require.NoError(t, err)
 	var n int
-	require.NoError(t, app.container.DuckDBDB().QueryRow("SELECT count(*) FROM "+app.container.Session().DefaultCatalog()+".main.people").Scan(&n))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT count(*) FROM "+app.sess.DefaultCatalog()+".main.people").Scan(&n))
 	assert.Equal(t, 2, n, "the insert went to the real table, not the temp shadow")
 }
 
@@ -266,7 +268,7 @@ func TestStudio_OpenTransactionFromEditorDoesNotLoseWork(t *testing.T) {
 
 	require.NoError(t, app.CreateTable("after_begin", []ColumnInfo{{Name: "id", Type: "INTEGER", PK: true}}))
 	require.NoError(t, app.AddColumn("after_begin", "note", "VARCHAR"))
-	require.NoError(t, app.container.Save(), "Save is not blocked by a leaked transaction")
+	require.NoError(t, app.sess.DB().Ping(), "the pool is not blocked by a leaked transaction")
 
 	reopenApp(t, app)
 	d, err := app.DescribeTable("after_begin")

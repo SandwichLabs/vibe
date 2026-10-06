@@ -1,4 +1,4 @@
-// agentSandbox — the agent empty-state copy, keyed by the file's current
+// agentSandbox — the agent empty-state copy, keyed by the workspace's current
 // sandbox mode (#91 M-F6/P-F2: the old copy was a fixed "can create tables"
 // sentence, false whenever the mode was read-only/read-write), plus the one
 // copy source for the Settings → Agent radio group (#79).
@@ -16,7 +16,7 @@ export const SANDBOX_MODES = [
 export function sandboxIntro(mode: string, ask: boolean = true): string {
   switch (mode) {
     case 'read-only':
-      return "Read-only: the agent can read your schema and run read-only SQL. It can't change anything in this file."
+      return "Read-only: the agent can read your schema and run read-only SQL. It can't change anything in this workspace."
     case 'read-write':
       return "Read-write: the agent can read your schema, run SQL, and add, change or delete rows. It can't create or drop tables, or edit notebooks, queries or skills." + writeSuffix(ask)
     case 'full':

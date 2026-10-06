@@ -133,7 +133,7 @@ func runWorkspaceInit(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, "  vibe workspace info                         see connections and counts")
 	fmt.Fprintln(out, `  vibe query "SELECT 42 AS answer"            run SQL against the default connection`)
 	fmt.Fprintln(out, "  vibe import data.csv --into my_table        load a CSV or Excel file")
-	fmt.Fprintln(out, "  vibe studio                                 open the terminal UI (the desktop app will open workspaces in #111)")
+	fmt.Fprintln(out, "  vibe studio                                 open the terminal UI (`--gui` opens the desktop app)")
 	fmt.Fprintln(out, "  vibe mcp serve                              let Claude and other MCP clients use it")
 	return nil
 }

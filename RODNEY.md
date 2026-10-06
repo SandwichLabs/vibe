@@ -239,3 +239,22 @@ rodney ax-node "#submit-btn" --json
 - The `js` command auto-wraps expressions. Don't write `() => { ... }` yourself — just pass the expression directly.
 - `input` selects all existing text before typing, effectively replacing the field content.
 - `download` works with `href` attributes on links and `src` attributes on images. It fetches using the page's JS context so cookies and auth are preserved.
+
+---
+
+## Driving Vibe Studio (workspaces, #111)
+
+Studio has no file to unlock any more: it starts at the **launcher** and opens a workspace *folder*.
+
+- Run `task studio:dev` and drive **`http://localhost:34115`** (Wails-bound, has `window.go.main.App.*`), never `:5173`.
+- Keep QA out of your real preferences: start the dev server with `VIBE_CONFIG_DIR=$(mktemp -d)` (the recent list and your per-workspace settings live there). Put a `vibe` binary on `PATH` if you want "Copy Claude config" to work.
+- Create and open a workspace headlessly (semicolons break `rodney js`, use the comma operator or `.then`):
+
+```bash
+rodney js 'window.go.main.App.CreateWorkspace({name:"QA",dir:"",parentDir:"/tmp/qa",git:false,template:"order-entry",inPlace:false}).then(r => r.status)'
+rodney js 'window.go.main.App.OpenWorkspace("/tmp/qa/qa").then(r => r.status)'   # also: SwitchWorkspace({path}), CloseWorkspace()
+```
+
+- Qualified table names flow to the datasheet: `rodney js 'location.hash = "#/tables?table=local.main.customers"'`.
+- Read-only / Take over: start `sleep 300 | vibe mcp serve --workspace DIR &` first, then `OpenWorkspace(DIR)`; the banner (`[data-testid=readonly-banner]`) offers Take over. Never `pkill -f` for cleanup.
+- A change on disk (conflict banner): edit a `notebooks/*.vnb` file in a shell while the notebook is open; an unsaved edit in the title field shows `[data-testid=conflict-banner]`, no edit reloads quietly.

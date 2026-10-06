@@ -8,7 +8,7 @@
 // once onMounted, so the docked panel (mounted once, kept alive across a
 // Settings visit) went stale after a mode/ask change made elsewhere. It now
 // also listens for "agent:config" (SetAgentConfig's own emit — updates in
-// place with no re-fetch) and "file:opened" (a different file entirely, so
+// place with no re-fetch) and "workspace:opened" (a different workspace entirely, so
 // a fresh fetch is needed).
 import { ref, onMounted, onUnmounted } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
@@ -36,7 +36,7 @@ onMounted(() => {
     unsubConfig = EventsOn('agent:config', (cfg: { sandbox: string; askBeforeWrites: boolean }) => {
       text.value = sandboxIntro(cfg.sandbox, cfg.askBeforeWrites)
     })
-    unsubOpened = EventsOn('file:opened', refresh)
+    unsubOpened = EventsOn('workspace:opened', refresh)
   }
 })
 

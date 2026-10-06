@@ -1,92 +1,53 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { EventsOn } from './wailsjs/runtime/runtime'
-import UnlockView from './views/UnlockView.vue'
+import LauncherView from './views/LauncherView.vue'
 import AppShell from './components/AppShell.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
-import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, confirmAltLabel, confirmAltDestructive, resolveConfirm, resolveConfirmChoice, askConfirm } from './composables/useConfirm'
-import { startFileDirtyTracking, closeWithPrompt } from './composables/useFileDirty'
+import NewWorkspaceDialog from './components/NewWorkspaceDialog.vue'
+import TakeOverDialog from './components/TakeOverDialog.vue'
+import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, confirmAltLabel, confirmAltDestructive, resolveConfirm, resolveConfirmChoice } from './composables/useConfirm'
 import { flushAll } from './composables/usePendingSaves'
-import { errorText } from './lib/errors'
+import { askConfirm } from './composables/useConfirm'
+import {
+  workspaceOpen, workspaceInfo, startWorkspaceTracking, syncWorkspaceState, openWorkspacePath, openFolderDialog,
+  launcherNotice, newWorkspaceOpen, switcherOpen,
+} from './composables/useWorkspace'
 
-const isOpen = ref(false)
-const initialFile = ref('')
-
-async function checkFileOpen() {
-  try {
-    isOpen.value = await window.go.main.App.IsFileOpen()
-  } catch {
-    isOpen.value = false
-  }
-}
-
-async function loadInitialFile() {
-  try {
-    const f = await window.go.main.App.GetInitialFile()
-    if (f && !isOpen.value) {
-      initialFile.value = f
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function handleFileOpened() {
-  isOpen.value = true
-}
-
-async function handleFileClosed() {
-  isOpen.value = false
-}
-
-// beforeCloseTimeoutMs bounds how long the quit flow waits for
-// flushAll() — a hung frontend (a stuck save, a broken promise) must never
-// be able to block the app from quitting forever (review fix, step 4a
-// round 2 #1).
+// beforeCloseTimeoutMs bounds how long the quit flow waits for flushAll() — a
+// hung frontend (a stuck save, a broken promise) must never be able to block
+// the app from quitting forever.
 const BEFORE_CLOSE_TIMEOUT_MS = 3000
 
-// Wails' OnBeforeClose (studio/main.go's app.beforeClose) intercepts the
-// FIRST window-close/quit attempt and emits this event instead of letting
-// the process exit, so every view with a pending debounced save gets a
-// chance to flush before the container (and the process) goes away. Once
-// flushed (or the timeout fires):
-//   - a clean file (payload.dirty false) calls Quit() straight away, as
-//     before, which sets a server-side flag so the NEXT OnBeforeClose lets
-//     the close through;
-//   - a dirty file (#81) goes through the SAME closeWithPrompt AppShell's
-//     Close button uses (useFileDirty.ts, required item 5): Cancel calls
-//     CancelQuit() so the NEXT attempt prompts again from scratch; Save/
-//     Don't save close the container (releasing it BEFORE Quit(), same as
-//     AppShell.closeFile) and then Quit().
-async function handleBeforeClose(payload?: { dirty?: boolean }) {
-  await Promise.race([
+// Wails' OnBeforeClose (studio/main.go's app.beforeClose) intercepts the FIRST
+// window-close/quit attempt and emits this event instead of letting the process
+// exit, so every view with a pending debounced save (an open notebook) gets a
+// chance to flush before the workspace (and the process) goes away. Then Quit()
+// sets a server-side flag so the NEXT close attempt goes through. There is no
+// Save / Don't save prompt any more: data writes go straight to the connection.
+async function handleBeforeClose() {
+  const res = await Promise.race([
     flushAll(),
-    new Promise<void>((resolve) => setTimeout(resolve, BEFORE_CLOSE_TIMEOUT_MS)),
+    new Promise<{ failed: { label: string; error: string }[] }>((resolve) => setTimeout(() => resolve({ failed: [] }), BEFORE_CLOSE_TIMEOUT_MS)),
   ])
-
-  if (payload?.dirty) {
-    let fileName = 'this file'
-    try {
-      const info = await window.go.main.App.GetFileInfo()
-      fileName = info?.path?.split('/').pop() || fileName
-    } catch { /* fall back to the generic name */ }
-
-    try {
-      const closed = await closeWithPrompt(fileName)
-      if (!closed) {
-        try { await window.go.main.App.CancelQuit() } catch { /* nothing left to do */ }
-        return
-      }
-    } catch (e: any) {
-      // The close itself failed (e.g. a save error) — cancel the quit
-      // rather than proceeding to Quit() with the container still open in
-      // an unknown state.
-      await askConfirm({ title: 'Could not close the file', message: errorText(e), confirmLabel: 'OK', variant: 'primary' })
-      try { await window.go.main.App.CancelQuit() } catch { /* nothing left to do */ }
+  if (res.failed.length > 0) {
+    // An edit that could not be written (say, the file changed on disk and the
+    // conflict is unresolved) must not vanish silently with the window.
+    // A frontend that can ask a question is not hung: stop the quit watchdog so
+    // it cannot quit the app while the person is deciding.
+    try { await window.go.main.App.HoldQuit() } catch { /* an older backend */ }
+    const quit = await askConfirm({
+      title: 'Unsaved changes',
+      message: `${res.failed[0].label} couldn't be saved: ${res.failed[0].error}. Quit anyway?`,
+      variant: 'destructive',
+      confirmLabel: 'Quit anyway',
+    })
+    if (!quit) {
+      try { await window.go.main.App.CancelQuit() } catch { /* nothing to undo */ }
       return
     }
   }
-
   try {
     await window.go.main.App.Quit()
   } catch {
@@ -94,35 +55,73 @@ async function handleBeforeClose(payload?: { dirty?: boolean }) {
   }
 }
 
-let unsubFileOpened: (() => void) | null = null
-let unsubFileClosed: (() => void) | null = null
+// Workspace shortcuts work on the launcher too. F5 is intercepted, or the
+// WebView reloads the whole app (and every unsaved edit with it).
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'F5') {
+    e.preventDefault()
+    return
+  }
+  const mod = e.metaKey || e.ctrlKey
+  if (!mod || e.altKey) return
+  const k = e.key.toLowerCase()
+  if (k === 'o' && e.shiftKey) {
+    if (!workspaceOpen.value) return
+    e.preventDefault()
+    switcherOpen.value = !switcherOpen.value
+  } else if (k === 'o' && !e.shiftKey) {
+    e.preventDefault()
+    void openFolderDialog()
+  } else if (k === 'n' && !e.shiftKey) {
+    e.preventDefault()
+    newWorkspaceOpen.value = true
+  }
+}
+
 let unsubBeforeClose: (() => void) | null = null
 
+// A different workspace is a different place: land on Home, not on whatever
+// route (and notebook id) the old one left behind. A reload that merely picks
+// up the open workspace, or a take-over of the same one, keeps its route.
+const router = useRouter()
+watch(() => workspaceInfo.value?.root, (now, before) => {
+  // Different workspace, or closed (so the next open starts at Home too). A
+  // switch never nulls the info in between, so it is the first case.
+  if (before && now !== before) void router.push('/')
+})
+
 onMounted(async () => {
-  await checkFileOpen()
-  await loadInitialFile()
-  startFileDirtyTracking()
-  // Review fix, step 4a round 2 #2: EventsOn returns an unsubscribe
-  // function scoped to THIS listener — the global EventsOff(name) this
-  // used to call removes EVERY listener registered for that event name,
-  // including ones other views (e.g. NotebookView) register for the same
-  // 'file:closed' event, silently breaking their own cleanup.
-  unsubFileOpened = EventsOn('file:opened', handleFileOpened)
-  unsubFileClosed = EventsOn('file:closed', handleFileClosed)
+  startWorkspaceTracking()
+  await syncWorkspaceState()
+  window.addEventListener('keydown', onKeydown)
+  if (!workspaceOpen.value) {
+    // A folder passed on the command line (`vibe studio --gui <dir>`).
+    try {
+      const initial = await window.go.main.App.GetInitialWorkspace()
+      if (initial?.message) launcherNotice.value = initial.message
+      else if (initial?.path) await openWorkspacePath(initial.path)
+    } catch {
+      // ignore
+    }
+  }
+  // EventsOn returns an unsubscribe function scoped to THIS listener; the global
+  // EventsOff(name) would remove every listener for the event name.
   unsubBeforeClose = EventsOn('app:before-close', handleBeforeClose)
 })
 
 onUnmounted(() => {
-  unsubFileOpened?.()
-  unsubFileClosed?.()
+  window.removeEventListener('keydown', onKeydown)
   unsubBeforeClose?.()
 })
 </script>
 
 <template>
   <div class="sh" style="height: 100vh; width: 100vw; background: var(--sh-paper); color: var(--sh-ink);">
-    <UnlockView v-if="!isOpen" :initial-file="initialFile" @file-opened="handleFileOpened" />
-    <AppShell v-else @file-closed="handleFileClosed" />
+    <AppShell v-if="workspaceOpen" />
+    <LauncherView v-else />
+
+    <NewWorkspaceDialog />
+    <TakeOverDialog />
 
     <!-- Shared promise-based confirm (composables/useConfirm.ts) — the ONE
          ConfirmDialog every askConfirm() caller in the app resolves through,

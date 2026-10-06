@@ -3,7 +3,7 @@ package agents_test
 // P2.7 — Agent Query Wizard tool (plan §3, §4.3, mockup #3).
 //
 // This is an INTEGRATION test: it stands up the real agent Handler over a real
-// .vibe container (SQLCipher) + real DuckDB engine, and drives the wizard tool
+// workspace + real DuckDB engine, and drives the wizard tool
 // through the JSON-RPC tool surface (Handler.Handle) — NOT by calling any Go
 // backend method directly.
 //
@@ -21,43 +21,37 @@ package agents_test
 
 import (
 	"context"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver registers "sqlite3"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-const wizTestPassphrase = "test-passphrase-12345"
 
 func wizLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-// newWizardFixture builds a real .vibe container with customers + orders DuckDB
+// newWizardFixture builds a real workspace with customers + orders DuckDB
 // tables and returns an agent Handler wired to a real engine.Manager.
-func newWizardFixture(t *testing.T, mode agents.SandboxMode) (*agents.Handler, *container.Container) {
+func newWizardFixture(t *testing.T, mode agents.SandboxMode) (*agents.Handler, workspace.Workspace) {
 	t.Helper()
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, "wizard.vibe")
-
-	c, err := container.Create(path,
-		container.WithPassphrase(wizTestPassphrase),
-		container.WithLogger(wizLogger()),
-		container.WithTitle("Wizard Tools Test"),
-	)
+	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	res, err := workspace.Init(filepath.Join(t.TempDir(), "wizard"), workspace.WithName("Wizard Tools Test"))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	ws := res.Workspace
+	t.Cleanup(func() { _ = ws.Close() })
+	sess, _, err := workspace.OpenSession(context.Background(), ws, wizLogger())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
 
-	ddb := c.DuckDBDB()
+	ddb := sess.DB()
 	require.NotNil(t, ddb, "DuckDB connection should be available")
 
 	_, err = ddb.Exec(`
@@ -75,14 +69,14 @@ func newWizardFixture(t *testing.T, mode agents.SandboxMode) (*agents.Handler, *
 	`)
 	require.NoError(t, err)
 
-	eng := engine.NewManager(sessiontest.ForTests(ddb), engine.WithLogger(wizLogger()))
+	eng := engine.NewManager(sess, engine.WithLogger(wizLogger()))
 	sandbox := &agents.SandboxConfig{
 		Mode:         mode,
 		MaxQueryRows: 1000,
 	}
-	handler := agents.NewHandler(c, eng, sandbox, wizLogger())
+	handler := agents.NewHandler(workspace.NewAgentAccess(ws, sess), eng, sandbox, wizLogger())
 
-	return handler, c
+	return handler, ws
 }
 
 // buildQueryParams describes a QBE-style query over orders: select rows whose

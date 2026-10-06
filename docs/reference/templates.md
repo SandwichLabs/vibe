@@ -1,8 +1,6 @@
 # Starter Templates
 
-> **Changing (#111).** `vibe workspace init --template` (#113) already seeds a new **workspace**: the notebook as a `notebooks/*.vnb` file, plus the sample tables in its local `data/local.duckdb` connection. Studio's Home picker and the `.vibe` template flow move over in #111.
-
-A **template** seeds a fresh workspace (or, until #111, a `.vibe`) with a complete little relational dataset:
+A **template** seeds a fresh **workspace** (Studio's New workspace dialog, or `vibe workspace init --template`) with a complete little relational dataset, written into the workspace's local `data/local.duckdb` connection and a `notebooks/*.vnb` file:
 DuckDB user tables (with inline foreign keys so referential integrity is
 enforced), sample data, and a starter **notebook** with a cell over each table
 so the workspace is immediately explorable. (#68: forms, the switchboard,
@@ -10,8 +8,8 @@ relationship/field-meta metadata, and macros were dropped from every
 template along with the Access application layer — a template is now just
 tables + seed data + a notebook.)
 
-Pass a template name to the container's `WithTemplate` option when creating a
-file. The registered starter templates are:
+Pick a template in the New workspace dialog ("Start from"), or pass its name to
+`vibe workspace init --template`. The registered starter templates are:
 
 ## contacts
 A contact book: a `contacts` table plus a one-to-many `contact_notes` child.
@@ -35,6 +33,6 @@ and charts registrations per course.
 
 ---
 
-Each template is registered in `internal/container/templates.go`; the
+Each template is registered in `internal/templates/templates.go`; the
 docs-consistency test in `internal/docsref/` fails if a registered template name
-is missing from this list (and `container.ListTemplates()` is the source of truth).
+is missing from this list (and `templates.List()` is the source of truth).

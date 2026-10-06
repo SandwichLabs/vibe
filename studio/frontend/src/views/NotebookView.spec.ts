@@ -140,13 +140,12 @@ describe('NotebookView', () => {
   })
 
   // #68 follow-up (reviewer-caught data corruption): NotebookView must
-  // stamp itself with the file-open session id in effect at LOAD time and
+  // stamp itself with the workspace session id in effect at LOAD time and
   // send it back on every save, so the backend can reject a save whose
-  // token no longer matches the currently open file (e.g. the file was
-  // switched via OpenFile/CreateFile/CreateFromTemplate while this view was
-  // still mounted for the previous one).
-  it('captures the session id from GetFileInfo at load and sends it with every SaveNotebook call', async () => {
-    const app = makeApp({ GetFileInfo: vi.fn(async () => ({ session_id: 'session-abc' })) })
+  // token no longer matches the currently open workspace (e.g. the workspace
+  // was switched while this view was still mounted for the previous one).
+  it('captures the session id from GetSessionID at load and sends it with every SaveNotebook call', async () => {
+    const app = makeApp({ GetSessionID: vi.fn(async () => 'session-abc') })
     const wrapper = mountView()
     await flushPromises()
     await flushPromises()
@@ -161,8 +160,8 @@ describe('NotebookView', () => {
     )
   })
 
-  it('falls back to an empty session id when GetFileInfo is unavailable, without crashing the load', async () => {
-    const app = makeApp() // no GetFileInfo override — makeApp's base app doesn't define one
+  it('falls back to an empty session id when GetSessionID is unavailable, without crashing the load', async () => {
+    const app = makeApp() // no GetSessionID override — makeApp's base app doesn't define one
     const wrapper = mountView()
     await flushPromises()
     await flushPromises()
@@ -431,11 +430,12 @@ describe('NotebookView', () => {
     const vm = wrapper.vm as any
     await vm.handleNotebooksChanged({ notebookId: 'nb1', appendedCellIds: ['new1'] })
     await flushPromises()
-    expect(wrapper.text()).toContain('also changed on disk')
+    expect((wrapper.vm as any).conflict).toEqual({ deleted: false })
+    expect(wrapper.find('[data-testid="conflict-banner"]').exists()).toBe(true)
+    // Saving is held back until the person chooses, so nothing is overwritten.
     await vm.flushSave()
     await flushPromises()
-    const sent = (app.SaveNotebook as any).mock.calls.at(-1)[0]
-    expect(sent.rev).toBe('r1')
+    expect(app.SaveNotebook).not.toHaveBeenCalled()
   })
 
   it('drops a queued append event for a notebook that is no longer loaded (superseded)', async () => {
@@ -739,12 +739,10 @@ describe('NotebookView', () => {
     expect(app.SaveNotebook).toHaveBeenCalledTimes(1)
   })
 
-  // #98: reverting the file discards table changes since the last save, so
-  // an open notebook's sql cells must re-run against the reverted data —
-  // handleFileReverted is called directly here (as handleNotebooksChanged
-  // is above), exercising the same reload path the "file:reverted" Wails
-  // event drives in production.
-  it('reloads the notebook and re-runs its sql cells on file:reverted', async () => {
+  // SPEC 07 D: a file changed on disk while there is NO unsaved edit is reloaded
+  // quietly (the sql cells re-run); with an unsaved edit the banner shows and
+  // nothing is overwritten.
+  it('reloads quietly when the file changes on disk and there is no unsaved edit', async () => {
     const app = makeApp()
     const wrapper = mountView()
     await flushPromises()
@@ -753,12 +751,132 @@ describe('NotebookView', () => {
 
     app.GetNotebook.mockClear()
     app.RunA2UIQuery.mockClear()
-
-    await vm.handleFileReverted()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
     await flushPromises()
     await flushPromises()
 
     expect(app.GetNotebook).toHaveBeenCalledTimes(1)
     expect(app.RunA2UIQuery).toHaveBeenCalled()
+    expect(vm.conflict).toBeNull()
+  })
+
+  it('ignores a change to a different notebook', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    app.GetNotebook.mockClear()
+    await (wrapper.vm as any).handleChangedOnDisk({ kind: 'notebook', id: 'other', op: 'changed' })
+    expect(app.GetNotebook).not.toHaveBeenCalled()
+  })
+
+  it('shows the conflict banner, and does not reload, when the file changes on disk under an unsaved edit', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.title = 'My unsaved rename'
+    await flushPromises()
+    app.GetNotebook.mockClear()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
+    await flushPromises()
+
+    expect(vm.conflict).toEqual({ deleted: false })
+    expect(wrapper.find('[data-testid="conflict-banner"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('This notebook changed on disk')
+    // Only the revision is read (for "Keep mine"); the notebook is not reloaded.
+    expect(app.GetNotebook).toHaveBeenCalledTimes(1)
+    expect(vm.title).toBe('My unsaved rename')
+  })
+
+  it('a save refused as a conflict shows the banner and stops autosaving', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    app.SaveNotebook.mockRejectedValueOnce(new Error('conflict: notebooks/nb1.vnb changed on disk since it was loaded'))
+    vm.title = 'Edited'
+    await flushPromises()
+    await expect(vm.flushSave()).resolves.toBeUndefined()
+    await flushPromises()
+    expect(vm.conflict).toEqual({ deleted: false })
+
+    // While the banner shows, a pending-save flush reports that nothing was written.
+    app.SaveNotebook.mockClear()
+    vm.title = 'Edited again'
+    await flushPromises()
+    expect(app.SaveNotebook).not.toHaveBeenCalled()
+  })
+
+  it('"Keep mine" overwrites through ResolveConflict and adopts the new rev; "Reload" re-reads the file', async () => {
+    const app = makeApp({
+      ResolveConflict: vi.fn(async () => ({ id: 'nb1', rev: 'r9', title: 'x' })),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.title = 'Mine'
+    await flushPromises()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
+    expect(vm.conflict).not.toBeNull()
+    await vm.resolveConflict('overwrite')
+    await flushPromises()
+    expect(app.ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ kind: 'notebook', id: 'nb1', action: 'overwrite', data: expect.objectContaining({ title: 'Mine' }) }))
+    expect(vm.conflict).toBeNull()
+
+    vm.title = 'Mine again'
+    await flushPromises()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
+    app.GetNotebook.mockClear()
+    await vm.resolveConflict('reload')
+    await flushPromises()
+    expect(app.GetNotebook).toHaveBeenCalledTimes(1)
+    expect(vm.conflict).toBeNull()
+  })
+
+  it('save mine as a copy writes the copy and shows the disk version', async () => {
+    const app = makeApp({
+      ResolveConflict: vi.fn(async () => ({ id: 'nb1-copy', rev: 'r1', title: 'My Notebook (copy)' })),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.title = 'Mine'
+    await flushPromises()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
+    app.GetNotebook.mockClear()
+    await vm.resolveConflict('saveCopy')
+    await flushPromises()
+    expect(app.ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ action: 'saveCopy' }))
+    expect(app.GetNotebook).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('My Notebook (copy)')
+  })
+
+  it('"Keep mine" sends the revision the banner was raised against, and re-raises if the file changed again', async () => {
+    let n = 0
+    const app = makeApp({
+      GetNotebook: vi.fn(async () => ({ ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: n++ === 0 ? 'r1' : 'r2' })),
+      ResolveConflict: vi.fn(async () => { throw new Error('conflict: notebooks/nb1.vnb changed on disk since it was loaded') }),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.title = 'Mine'
+    await flushPromises()
+    await vm.handleChangedOnDisk({ kind: 'notebook', id: 'nb1', op: 'changed' })
+    await flushPromises()
+    await vm.resolveConflict('overwrite')
+    await flushPromises()
+    expect(app.ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ action: 'overwrite', rev: 'r2' }))
+    expect(vm.conflict).not.toBeNull() // still raised, nothing was overwritten
+    expect(wrapper.text()).toContain('changed on disk again')
   })
 })

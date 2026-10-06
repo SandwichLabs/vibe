@@ -1,20 +1,21 @@
 <script setup lang="ts">
-// Studio Home / Dashboard. #69 retired the page system (and with it, the
-// `_dashboard` system page + RenderPageContent pipeline this view used to
-// render through) — the home screen is now backed directly by GetDashboard's
-// live table/notebook/query counts, refreshed on "data:changed" the same way
-// the old page-rendered version was.
+// Studio Home. Backed directly by GetDashboard's live counts and the workspace's
+// own tables (the default connection's, design #106 item 8), refreshed on
+// "data:changed". Titled with the workspace's name.
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
 
 const router = useRouter()
-const title = ref('Dashboard')
+const title = ref('Home')
 const description = ref('')
 const tableCount = ref(0)
 const notebookCount = ref(0)
 const queryCount = ref(0)
+const localTables = ref<string[]>([])
+const defaultConnection = ref('')
+const readOnly = ref(false)
 const loading = ref(true)
 const errorMessage = ref('')
 
@@ -27,11 +28,14 @@ async function load() {
   try {
     const d = await window.go.main.App.GetDashboard()
     if (gen !== loadGen) return
-    title.value = d?.title || 'Dashboard'
+    title.value = d?.title || 'Home'
     description.value = d?.description || ''
     tableCount.value = d?.table_count ?? 0
     notebookCount.value = d?.notebook_count ?? 0
     queryCount.value = d?.query_count ?? 0
+    localTables.value = d?.local_tables ?? []
+    defaultConnection.value = d?.default_connection ?? ''
+    readOnly.value = !!d?.read_only
   } catch (e: unknown) {
     if (gen !== loadGen) return
     errorMessage.value = String(e)
@@ -59,7 +63,7 @@ onUnmounted(() => {
   <div style="height: 100%; overflow-y: auto; padding: 32px;">
     <div class="page-head">
       <div>
-        <div class="crumb">Studio <span class="sep">/</span> Home</div>
+        <div class="crumb">{{ title }} <span class="sep">/</span> Home</div>
         <h1>{{ title }}</h1>
       </div>
       <div class="row">
@@ -97,6 +101,31 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <div v-if="!loading" class="sec-title" style="margin-top: 32px;">
+      <h2>Your tables</h2>
+      <span class="label">{{ defaultConnection || 'local' }} · the workspace's own database</span>
+    </div>
+    <div v-if="!loading && localTables.length === 0" class="card" style="padding: 18px 20px;" data-testid="home-no-tables">
+      <div class="sh-body" style="color: var(--sh-graphite);">
+        <template v-if="readOnly">The workspace's database is in use by another program, so its tables can't be listed yet.</template>
+        <template v-else>No tables yet. Import a CSV, or ask the agent to build one.</template>
+      </div>
+    </div>
+    <div v-else-if="!loading" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 8px;" data-testid="home-tables">
+      <button
+        v-for="t in localTables"
+        :key="t"
+        type="button"
+        class="card"
+        style="padding: 12px 14px; box-shadow: var(--sh-shadow-sm); text-align: left; cursor: pointer; color: var(--sh-ink);"
+        data-testid="home-table"
+        @click="router.push({ path: '/tables', query: { table: t } })"
+      >
+        <span class="row" style="gap: 8px;"><Icon name="database" :size="14" /><b style="font-family: var(--sh-font-mono); font-size: 13px; overflow-wrap: anywhere;">{{ t.split('.').pop() }}</b></span>
+        <span class="help">{{ t }}</span>
+      </button>
+    </div>
+
     <div class="sec-title" style="margin-top: 32px;">
       <h2>Quick actions</h2>
       <span class="label">Jump back in</span>
@@ -121,7 +150,7 @@ onUnmounted(() => {
           <Icon name="terminal" :size="22" />
         </div>
         <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Queries</div>
-        <div class="sh-meta" style="margin-top: 4px;">Run SQL on DuckDB</div>
+        <div class="sh-meta" style="margin-top: 4px;">Ask questions with SQL</div>
       </div>
     </div>
   </div>

@@ -32,10 +32,16 @@ vi.mock('vue-router', async () => {
 })
 
 import TableBrowserView from './TableBrowserView.vue'
+import { workspaceInfo, _resetForTests as resetWorkspace } from '../composables/useWorkspace'
 
 // --- Fake backend (window.go.main.App) ------------------------------------
 
 interface Row { [k: string]: any }
+
+const groupsOf = (names: string[]) => [{
+  connection: 'local', type: 'duckdb', status: 'ok', readOnly: false, default: true,
+  tables: names.map((n) => ({ name: n, qualified: n, kind: 'table' })),
+}]
 
 function makeApp(opts: {
   rows?: Row[]
@@ -71,7 +77,7 @@ function makeApp(opts: {
   })
 
   const app = {
-    ListTables: vi.fn(async () => ['people']),
+    ListCatalogGroups: vi.fn(async () => groupsOf(['people'])),
     DescribeTable: vi.fn(async () => ({ name: 'people', columns })),
     ExecuteQuery: vi.fn(async () => ({
       columns: opts.lookupCols ?? [{ name: 'id' }, { name: 'label' }],
@@ -231,7 +237,7 @@ describe('TableBrowserView inline datasheet editing', () => {
       rows: [{ id: 1, name: 'Ada' }],
       updateRow: async () => { throw { message: 'rejected' } },
     })
-    app.ListTables = vi.fn(async () => ['people', 'other'])
+    app.ListCatalogGroups = vi.fn(async () => groupsOf(['people', 'other']))
     const wrapper = mountView()
     await openTable(wrapper)
 
@@ -513,7 +519,7 @@ describe('TableBrowserView "data:changed" live refresh', () => {
     const wrapper = mountView()
     await openTable(wrapper)
 
-    expect(app.ListTables).toHaveBeenCalledTimes(1)
+    expect(app.ListCatalogGroups).toHaveBeenCalledTimes(1)
     expect(app.GetTableData).toHaveBeenCalledTimes(1)
     expect(dataChangedHandler).not.toBeNull()
 
@@ -522,18 +528,18 @@ describe('TableBrowserView "data:changed" live refresh', () => {
     dataChangedHandler!()
     await flushPromises()
 
-    expect(app.ListTables).toHaveBeenCalledTimes(2)
+    expect(app.ListCatalogGroups).toHaveBeenCalledTimes(2)
     expect(app.GetTableData).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('Grace')
   })
 
   it('clears the open table if data:changed reveals it was dropped', async () => {
     const { app } = makeApp({ rows: [{ id: 1, name: 'Ada' }] })
-    app.ListTables.mockImplementationOnce(async () => ['people']) // initial mount
+    app.ListCatalogGroups.mockImplementationOnce(async () => groupsOf(['people'])) // initial mount
     const wrapper = mountView()
     await openTable(wrapper)
 
-    app.ListTables.mockImplementation(async () => []) // the agent dropped it
+    app.ListCatalogGroups.mockImplementation(async () => groupsOf([])) // the agent dropped it
     dataChangedHandler!()
     await flushPromises()
 
@@ -566,5 +572,18 @@ describe('TableBrowserView ?table= pre-select', () => {
 
     expect(app.DescribeTable).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('Ada')
+  })
+
+  it('opened read-only: New and Add row are disabled and say why', async () => {
+    resetWorkspace()
+    workspaceInfo.value = { readOnly: true, holder: { text: 'vibe mcp serve (pid 4182)' } } as unknown as WorkspaceInfo
+    makeApp()
+    const wrapper = mountView()
+    await openTable(wrapper)
+    const nw = wrapper.find('[data-testid="new-table"]')
+    expect((nw.element as HTMLButtonElement).disabled).toBe(true)
+    expect(nw.attributes('title')).toContain('vibe mcp serve (pid 4182)')
+    expect((wrapper.find('[data-testid="add-row"]').element as HTMLButtonElement).disabled).toBe(true)
+    resetWorkspace()
   })
 })

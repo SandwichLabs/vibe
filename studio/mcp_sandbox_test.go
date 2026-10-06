@@ -1,6 +1,6 @@
 package main
 
-// Regression test for a reviewer-caught SECURITY BLOCKER: StartMCPServer used
+// Regression test for a reviewer-caught SECURITY BLOCKER: StartMCP used
 // to hard-code agents.ModeFull for the handler it hands to the MCP server,
 // so an external MCP client could mutate a file whose Settings agent_sandbox
 // was "read-only" — live-proven with create_table succeeding against a
@@ -11,10 +11,10 @@ package main
 // -race coverage of that mechanism), so a SetAgentConfig change takes effect
 // on a long-lived MCP handler's very next call without restarting the server.
 //
-// This test drives the EXACT construction path StartMCPServer uses
+// This test drives the EXACT construction path StartMCP uses
 // (a.wrapAgentHandler, gated by a.agentPolicy()) rather than a full
 // MCP/SSE round trip, since agentToolHandler.Handle is the one dispatch
-// point both StartMCPServer and Studio chat share.
+// point both StartMCP and Studio chat share.
 
 import (
 	"context"
@@ -34,13 +34,11 @@ func TestMCPHandlerSandboxTracksLiveAgentConfig(t *testing.T) {
 	// Start the file read-only, exactly like the reviewer's repro.
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-only"}))
 
-	// Build the handler the same way StartMCPServer does: read the live
+	// Build the handler the same way StartMCP does: read the live
 	// agent_sandbox setting, wrap it.
-	app.mu.Lock()
-	policy := app.agentPolicy()
-	sandbox := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
-	handler := app.wrapAgentHandler(sandbox, agents.ModeFull)
-	app.mu.Unlock()
+	app.mu.RLock()
+	handler := app.newAgentToolHandler(agents.ModeFull)
+	app.mu.RUnlock()
 
 	ctx := context.Background()
 	createReq := func(id int) *agents.Request {
@@ -75,16 +73,16 @@ func TestMCPHandlerSandboxTracksLiveAgentConfig(t *testing.T) {
 	assert.Equal(t, agents.ErrPermission, resp.Error.Code)
 }
 
-// TestStartMCPServerUsesLiveAgentSandbox is a narrower wiring check: it
-// asserts StartMCPServer itself (not a hand-built handler) reads
+// TestStartMCPUsesLiveAgentSandbox is a narrower wiring check: it
+// asserts StartMCP itself (not a hand-built handler) reads
 // agent_sandbox rather than hard-coding agents.ModeFull, by inspecting the
 // sandbox the exact same construction path resolves to.
-func TestStartMCPServerUsesLiveAgentSandbox(t *testing.T) {
+func TestStartMCPUsesLiveAgentSandbox(t *testing.T) {
 	app := newOpenApp(t)
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-only"}))
 
 	app.mu.Lock()
 	got := app.agentPolicy().Mode
 	app.mu.Unlock()
-	assert.Equal(t, agents.ModeReadOnly, got, "StartMCPServer's sandbox := agents.SandboxConfig{Mode: policy.Mode} must resolve to the live setting, not a hard-coded full")
+	assert.Equal(t, agents.ModeReadOnly, got, "StartMCP's sandbox := agents.SandboxConfig{Mode: policy.Mode} must resolve to the live setting, not a hard-coded full")
 }

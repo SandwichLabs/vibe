@@ -89,16 +89,14 @@ func TestChatCeiling_DeniedWhenFileIsReadOnly(t *testing.T) {
 }
 
 // TestMCPCeiling_DeniedWhenFileIsReadOnly is the MCP-path equivalent, built
-// the way StartMCPServer does (wrapAgentHandler + ceiling ModeFull).
+// the way StartMCP does (wrapAgentHandler + ceiling ModeFull).
 func TestMCPCeiling_DeniedWhenFileIsReadOnly(t *testing.T) {
 	app := newOpenApp(t)
 	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-only"}))
 
-	app.mu.Lock()
-	policy := app.agentPolicy()
-	sc := &agents.SandboxConfig{Mode: policy.Mode, MaxQueryRows: 10000, RequireApproval: policy.AskBeforeWrites}
-	handler := app.wrapAgentHandler(sc, agents.ModeFull) // StartMCPServer's exact call
-	app.mu.Unlock()
+	app.mu.RLock()
+	handler := app.newAgentToolHandler(agents.ModeFull) // StartMCP's exact call
+	app.mu.RUnlock()
 
 	resp := handler.Handle(context.Background(), createTableReq(1))
 	require.NotNil(t, resp.Error, "MCP must be denied create_table when the file is read-only")

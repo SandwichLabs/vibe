@@ -1,0 +1,189 @@
+// App.vue: the launcher vs the shell, the workspace shortcuts (they work on the
+// launcher too), the startup folder, and the quit flow. There is no Save / Don't
+// save prompt any more: quitting flushes open notebooks and quits.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { router } from './router/index'
+import { register, _resetForTests as resetSaves } from './composables/usePendingSaves'
+
+const handlers: Record<string, (p?: any) => void> = {}
+vi.mock('./wailsjs/runtime/runtime', () => ({
+  EventsOn: (name: string, cb: (p?: any) => void) => { handlers[name] = cb; return () => { delete handlers[name] } },
+  EventsOff: () => {},
+  WindowSetTitle: () => {},
+}))
+
+import App from './App.vue'
+import { resolveConfirmChoice, confirmVisible } from './composables/useConfirm'
+import { workspaceInfo, newWorkspaceOpen, launcherNotice, switcherOpen, _resetForTests } from './composables/useWorkspace'
+
+function makeApp(over: Record<string, any> = {}) {
+  const app = {
+    IsWorkspaceOpen: vi.fn(async () => false),
+    GetWorkspaceInfo: vi.fn(async () => ({ root: '/w/a', name: 'A', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true } })),
+    GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '' })),
+    ListRecentWorkspaces: vi.fn(async () => []),
+    OpenWorkspace: vi.fn(async (path: string) => ({ status: 'opened', path, info: { root: path, name: 'Opened', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] } })),
+    SelectWorkspaceFolder: vi.fn(async () => ''),
+    CheckGitAvailable: vi.fn(async () => true),
+    ListTemplates: vi.fn(async () => []),
+    ListSkills: vi.fn(async () => []),
+    Quit: vi.fn(async () => {}),
+    ...over,
+  }
+  ;(globalThis as any).window = (globalThis as any).window || {}
+  ;(window as any).go = { main: { App: app } }
+  ;(window as any).runtime = {}
+  return app
+}
+
+let mounted: ReturnType<typeof mount>[] = []
+const mountApp = () => {
+  const w = mount(App, { global: { plugins: [router], stubs: { Icon: true, AgentPanel: true } } })
+  mounted.push(w)
+  return w
+}
+
+describe('App.vue', () => {
+  beforeEach(async () => {
+    vi.useRealTimers()
+    _resetForTests()
+    resetSaves()
+    for (const k of Object.keys(handlers)) delete handlers[k]
+    await router.push('/')
+    await router.isReady()
+  })
+
+  afterEach(() => { mounted.forEach((w) => w.unmount()); mounted = [] })
+
+  it('shows the launcher with no workspace and the shell with one', async () => {
+    makeApp()
+    const w = mountApp()
+    await flushPromises()
+    expect(w.find('[data-testid="launcher"]').exists()).toBe(true)
+    expect(w.find('.topbar').exists()).toBe(false)
+
+    handlers['workspace:opened']({ root: '/w/a', name: 'A', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    expect(w.find('.topbar').exists()).toBe(true)
+    expect(w.find('[data-testid="ws-switch"]').text()).toContain('A')
+    // The container-era chrome is gone.
+    expect(w.find('[data-testid="save-file"]').exists()).toBe(false)
+    expect(w.find('[data-testid="close-file"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('Encrypted')
+  })
+
+  it('picks up a workspace that is already open (a reload mid-session)', async () => {
+    makeApp({ IsWorkspaceOpen: vi.fn(async () => true) })
+    const w = mountApp()
+    await flushPromises()
+    expect(workspaceInfo.value?.name).toBe('A')
+    expect(w.find('.topbar').exists()).toBe(true)
+  })
+
+  it('opens the folder named on the command line, or shows why it could not', async () => {
+    const app = makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '/w/from-cli', message: '' })) })
+    mountApp()
+    await flushPromises()
+    expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/from-cli')
+
+    _resetForTests()
+    makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '.vibe files are no longer opened directly.' })) })
+    mountApp()
+    await flushPromises()
+    expect(launcherNotice.value).toContain('.vibe files are no longer opened')
+  })
+
+  it('Ctrl+N opens New workspace, Ctrl+O opens the folder picker, F5 is intercepted', async () => {
+    const app = makeApp()
+    mountApp()
+    await flushPromises()
+
+    const f5 = new KeyboardEvent('keydown', { key: 'F5', cancelable: true })
+    window.dispatchEvent(f5)
+    expect(f5.defaultPrevented).toBe(true)
+
+    const n = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, cancelable: true })
+    window.dispatchEvent(n)
+    expect(n.defaultPrevented).toBe(true)
+    expect(newWorkspaceOpen.value).toBe(true)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', ctrlKey: true, cancelable: true }))
+    await flushPromises()
+    expect(app.SelectWorkspaceFolder).toHaveBeenCalled()
+  })
+
+  it('Ctrl+Shift+O toggles the switcher only while a workspace is open', async () => {
+    makeApp()
+    mountApp()
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'O', ctrlKey: true, shiftKey: true }))
+    expect(switcherOpen.value).toBe(false)
+
+    workspaceInfo.value = { root: '/w/a', name: 'A', sessionId: 's' } as unknown as WorkspaceInfo
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'O', ctrlKey: true, shiftKey: true }))
+    expect(switcherOpen.value).toBe(true)
+  })
+
+  it('app:before-close flushes pending notebook saves, then quits with no prompt', async () => {
+    const calls: string[] = []
+    const app = makeApp({ Quit: vi.fn(async () => { calls.push('quit') }) })
+    register(() => 'nb', async () => { calls.push('flush') })
+    mountApp()
+    await flushPromises()
+    handlers['app:before-close']()
+    await flushPromises()
+    expect(calls).toEqual(['flush', 'quit'])
+    expect(app.Quit).toHaveBeenCalledTimes(1)
+  })
+
+  it('a different workspace lands on Home, not on the old route; the same one keeps it', async () => {
+    makeApp()
+    mountApp()
+    await flushPromises()
+    handlers['workspace:opened']({ root: '/w/a', name: 'A', sessionId: 's1', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    await router.push('/skills')
+    handlers['workspace:opened']({ root: '/w/a', name: 'A', sessionId: 's2', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/skills')
+    handlers['workspace:opened']({ root: '/w/b', name: 'B', sessionId: 's3', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(switcherOpen.value).toBe(false)
+  })
+
+  it('quitting with an edit that could not be saved asks first; staying cancels the quit', async () => {
+    const app = makeApp({ CancelQuit: vi.fn(async () => {}), HoldQuit: vi.fn(async () => {}) })
+    register(() => 'Weekly revenue', async () => { throw new Error('changed on disk') })
+    mountApp()
+    await flushPromises()
+    handlers['app:before-close']()
+    await vi.waitFor(() => expect(confirmVisible.value).toBe(true))
+    expect(app.HoldQuit).toHaveBeenCalled() // the watchdog is stopped before asking
+    resolveConfirmChoice('cancel')
+    await flushPromises()
+    expect(app.CancelQuit).toHaveBeenCalled()
+    expect(app.Quit).not.toHaveBeenCalled()
+
+    handlers['app:before-close']()
+    await vi.waitFor(() => expect(confirmVisible.value).toBe(true))
+    resolveConfirmChoice('confirm')
+    await flushPromises()
+    expect(app.Quit).toHaveBeenCalledTimes(1)
+  })
+
+  it('closing and opening a different workspace from the launcher starts at Home', async () => {
+    makeApp()
+    mountApp()
+    await flushPromises()
+    handlers['workspace:opened']({ root: '/w/a', name: 'A', sessionId: 's1', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    await router.push('/skills')
+    handlers['workspace:closed']({ reason: 'closed' })
+    await flushPromises()
+    handlers['workspace:opened']({ root: '/w/b', name: 'B', sessionId: 's2', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+  })
+})

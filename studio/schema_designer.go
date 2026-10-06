@@ -17,8 +17,8 @@ func (a *App) AddColumn(table, column, colType string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
@@ -31,7 +31,7 @@ func (a *App) AddColumn(table, column, colType string) error {
 		return fmt.Errorf("invalid column type %q", colType)
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -40,7 +40,6 @@ func (a *App) AddColumn(table, column, colType string) error {
 	if _, err := ddb.Exec(query); err != nil {
 		return fmt.Errorf("failed to add column %q to %q: %w", column, table, err)
 	}
-	a.markDirty()
 	a.logger.Info("added column", "table", table, "column", column, "type", colType)
 	return nil
 }
@@ -51,8 +50,8 @@ func (a *App) AddIndex(table, indexName string, columns []string, unique bool) e
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
@@ -73,7 +72,7 @@ func (a *App) AddIndex(table, indexName string, columns []string, unique bool) e
 		quoted = append(quoted, engine.QuoteIdent(col))
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -86,7 +85,6 @@ func (a *App) AddIndex(table, indexName string, columns []string, unique bool) e
 	if _, err := ddb.Exec(query); err != nil {
 		return fmt.Errorf("failed to create index %q on %q: %w", indexName, table, err)
 	}
-	a.markDirty()
 	a.logger.Info("added index", "table", table, "index", indexName, "columns", columns, "unique", unique)
 	return nil
 }
@@ -96,8 +94,8 @@ func (a *App) DropColumn(table, column string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
@@ -107,7 +105,7 @@ func (a *App) DropColumn(table, column string) error {
 		return fmt.Errorf("invalid column name %q", column)
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -116,7 +114,6 @@ func (a *App) DropColumn(table, column string) error {
 	if err := execWithoutIndexes(ddb, tref.String(), column, query); err != nil {
 		return fmt.Errorf("failed to drop column %q from %q: %w", column, table, err)
 	}
-	a.markDirty()
 	a.logger.Info("dropped column", "table", table, "column", column)
 	return nil
 }
@@ -127,8 +124,8 @@ func (a *App) AlterColumnType(table, column, newType string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.container == nil {
-		return fmt.Errorf("no file open")
+	if err := a.requireWorkspace(); err != nil {
+		return err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
@@ -141,7 +138,7 @@ func (a *App) AlterColumnType(table, column, newType string) error {
 		return fmt.Errorf("invalid column type %q", newType)
 	}
 
-	ddb := a.container.DuckDBDB()
+	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
@@ -150,7 +147,6 @@ func (a *App) AlterColumnType(table, column, newType string) error {
 	if err := execWithoutIndexes(ddb, tref.String(), column, query); err != nil {
 		return fmt.Errorf("failed to alter column %q on %q to %q: %w", column, table, newType, err)
 	}
-	a.markDirty()
 	a.logger.Info("altered column type", "table", table, "column", column, "type", newType)
 	return nil
 }

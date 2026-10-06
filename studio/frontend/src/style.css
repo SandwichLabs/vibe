@@ -13,6 +13,8 @@
 /* Theme bridge: --sh-* → --vibe-* roles set by theme/apply.ts. Must follow
    colors_and_type.css so its :root declarations win. */
 @import "./theme/bridge.css" layer(components);
+/* Workspace shell: launcher, switcher, menus, dialogs, banners (#111). */
+@import "./workspace.css" layer(components);
 
 /* === Tailwind @theme — utility classes wired to the theme roles === */
 @theme {

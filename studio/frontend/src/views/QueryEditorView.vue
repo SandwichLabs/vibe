@@ -11,10 +11,12 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import ConflictBanner from '../components/ConflictBanner.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
 import { errorText } from '../lib/errors'
 import { formatCell, cellClass, isNumericType } from '../lib/formatCell'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import { register as registerPendingSave } from '../composables/usePendingSaves'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
@@ -36,6 +38,22 @@ const statusMessage = ref('')
 const showConfirmDelete = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const hoveredId = ref<string | null>(null)
+
+// The saved query's file changed on disk while there are unsaved edits (a git
+// pull, another editor, the agent): ConflictBanner offers reload / keep mine /
+// save as a copy. Typing is never blocked while it shows.
+const conflict = ref<{ deleted: boolean } | null>(null)
+const conflictBusy = ref(false)
+// The revision on disk when the banner was raised: "Keep mine" only overwrites that one.
+let conflictRev = ''
+function raiseConflict(deleted: boolean) {
+  conflict.value = { deleted }
+  conflictRev = ''
+  const id = selectedId.value
+  if (deleted || !id) return
+  window.go.main.App.GetQuery(id).then((q: any) => { if (conflict.value && selectedId.value === id) conflictRev = q?.rev ?? '' }).catch(() => { /* falls back to an unconditional keep */ })
+}
+const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 
 // Run-status metadata (W5): success/error badge + wall-clock of the last run.
 const lastRunAt = ref('')
@@ -166,10 +184,88 @@ async function saveQuery() {
     savedSQL.value = sqlText.value
     showSaveModal.value = false
     statusMessage.value = `Saved "${saveTitle.value}"`
+    conflict.value = null
     await loadQueries()
   } catch (e: any) {
-    errorMessage.value = 'Save failed: ' + errorText(e)
+    if (isConflict(e)) {
+      showSaveModal.value = false
+      raiseConflict(false)
+    } else {
+      errorMessage.value = 'Save failed: ' + errorText(e)
+    }
   }
+}
+
+async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
+  const id = selectedId.value
+  if (!id) { conflict.value = null; return }
+  if (action === 'reload' && conflict.value?.deleted) {
+    conflict.value = null
+    newQuery()
+    await loadQueries()
+    return
+  }
+  conflictBusy.value = true
+  try {
+    const res = await window.go.main.App.ResolveConflict({
+      kind: 'query', id, action,
+      data: { title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '' },
+      rev: conflictRev,
+    })
+    conflict.value = null
+    if (action === 'overwrite') {
+      selectedRev.value = res.rev
+      savedSQL.value = sqlText.value
+      statusMessage.value = 'Kept your version.'
+    } else {
+      await selectQuery(id)
+      if (action === 'saveCopy') statusMessage.value = `Saved your version as "${res.title}".`
+    }
+    await loadQueries()
+  } catch (e: any) {
+    if (isConflict(e)) {
+      raiseConflict(false)
+      errorMessage.value = 'The file changed on disk again, so nothing was overwritten. Choose again.'
+    } else {
+      errorMessage.value = 'Failed: ' + errorText(e)
+    }
+  } finally {
+    conflictBusy.value = false
+  }
+}
+
+// flushPending is registered with usePendingSaves so switching workspaces,
+// closing and quitting save an edited saved query first. A conflict, or a
+// scratch buffer that was never saved, makes it fail so the caller can ask.
+async function flushPending() {
+  if (conflict.value) throw new Error('this query changed on disk and your edit is not saved yet')
+  if (!dirty.value) return
+  const id = selectedId.value
+  if (!id) throw new Error('this query was never saved (use Save query)')
+  try {
+    const saved = await window.go.main.App.SaveQuery(id, saveTitle.value || currentTitle.value.replace('.sql', ''), sqlText.value, '', selectedRev.value)
+    selectedRev.value = saved.rev ?? ''
+    savedSQL.value = sqlText.value
+  } catch (e: any) {
+    if (isConflict(e)) raiseConflict(false)
+    throw new Error(errorText(e))
+  }
+}
+let unregisterPending: (() => void) | null = null
+
+// onDiskChange: another program changed queries/. With nothing unsaved the
+// editor quietly takes the new version; with unsaved edits the banner shows.
+function onDiskChange(p: { kind: string; id: string; op: string }) {
+  if (p?.kind !== 'query' || p.id !== selectedId.value) return
+  if (p.op === 'deleted') {
+    if (!dirty.value) { newQuery(); statusMessage.value = 'That query was deleted on disk.' } else raiseConflict(true)
+    return
+  }
+  if (!dirty.value) {
+    void selectQuery(p.id).then(() => { statusMessage.value = `"${currentTitle.value}" changed on disk and was reloaded.` })
+    return
+  }
+  raiseConflict(false)
 }
 
 // exportResults re-runs the current SQL server-side through DuckDB COPY and
@@ -241,13 +337,18 @@ async function onDataChanged() {
   await loadSchemaTree()
 }
 let unsubDataChanged: (() => void) | null = null
+let unsubDisk: (() => void) | null = null
 
 onMounted(() => {
+  unregisterPending = registerPendingSave(() => 'The query editor', flushPending)
   loadQueries()
   loadSchemaTree()
-  if (hasWailsRuntime()) unsubDataChanged = EventsOn('data:changed', onDataChanged)
+  if (hasWailsRuntime()) {
+    unsubDataChanged = EventsOn('data:changed', onDataChanged)
+    unsubDisk = EventsOn('workspace:changed-on-disk', onDiskChange)
+  }
 })
-onUnmounted(() => { unsubDataChanged?.() })
+onUnmounted(() => { unsubDataChanged?.(); unsubDisk?.(); unregisterPending?.() })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
@@ -291,6 +392,17 @@ watch(statusMessage, (msg) => {
         <Icon name="play" :size="14" /> {{ running ? 'Running…' : `Run · ${shortcutLabel('Enter')}` }}
       </button>
     </div>
+
+    <ConflictBanner
+      v-if="conflict"
+      kind="query"
+      :path="`queries/${selectedId}.sql`"
+      :deleted="conflict.deleted"
+      :busy="conflictBusy"
+      @reload="resolveConflict('reload')"
+      @overwrite="resolveConflict('overwrite')"
+      @save-copy="resolveConflict('saveCopy')"
+    />
 
     <div class="row" style="flex: 1; gap: 0; align-items: stretch; min-height: 0;">
       <!-- LEFT RAIL — schema tree + saved queries -->

@@ -20,7 +20,8 @@ func main() {
 
 	app := NewApp(logger)
 	if len(os.Args) > 1 {
-		app.initialFile = os.Args[1]
+		// A workspace folder to open at launch (`vibe studio --gui <dir>`).
+		app.setInitialArg(os.Args[1])
 	}
 
 	err := wails.Run(&options.App{

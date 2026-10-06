@@ -17,8 +17,9 @@ and asks before it writes. Credentials stay in your OS keychain.
 
 > **In transition (2026-10-06).** Vibe is moving from a single encrypted `.vibe`
 > file that *holds* your data to a workspace that *points at* your data. The
-> command line and `vibe mcp serve` already work on workspaces; the Studio
-> desktop app still opens `.vibe` containers until #111. Tracked in
+> command line, `vibe mcp serve` and the Studio desktop app all open
+> workspace **folders** now; `.vibe` files are no longer opened directly.
+> Connections and the keychain land next. Tracked in
 > epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105). Why and how:
 > [`docs/direction.md`](docs/direction.md),
 > [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md).
@@ -43,9 +44,9 @@ A desktop data tool in the DataGrip / DBeaver mould, built around an agent.
 - **An agent** — sandboxed, reads freely, and asks before any write. The same
   tools are exposed over **MCP**, so Claude Code, Claude Desktop, Cursor, or
   your own agent can work in the workspace with Studio open or closed.
-- **`.vibe` files** — a portable bundle of notebooks, queries and skills
-  (optionally encrypted) for sharing outside git. Older data-holding `.vibe`
-  files import into a workspace.
+- **`.vibe` files** — planned as a portable bundle of notebooks, queries and
+  skills for sharing outside git (#118). The older data-holding `.vibe`
+  container is not opened any more.
 
 Everything works without AI. SQL and notebooks are first-class by hand.
 
@@ -59,7 +60,7 @@ vibe import customers.csv --into customers              # CSV / TSV / xlsx into 
 vibe query "SELECT count(*) FROM customers"             # [-c conn] [--format table|csv|json] [--limit N]
 vibe export customers -o customers.parquet              # csv, parquet, json or xlsx; or --sql "..."
 vibe studio                                             # terminal UI: SQL REPL, table browser, notebook list
-vibe studio --gui                                       # the desktop app (opens workspace folders from #111)
+vibe studio --gui                                       # the desktop app (add a folder to open it: vibe studio --gui acme)
 vibe mcp serve                                          # let Claude and other MCP clients use the workspace
 ```
 

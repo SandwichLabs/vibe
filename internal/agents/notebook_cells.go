@@ -137,10 +137,8 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 
 // --- list_notebooks / get_notebook (read-only, introspect category) ---
 //
-// These are the read path a chat/task/MCP client uses to see legacy content
-// that has been migrated into notebooks (internal/notebooks.MigrateOnOpen)
-// without going through Studio at all — e.g. `vibe mcp serve` against an old
-// file. Both are introspect-category (chat and MCP visible in every
+// These are the read path a chat/task/MCP client uses to see a workspace's
+// notebooks without going through Studio at all — e.g. `vibe mcp serve`. Both are introspect-category (chat and MCP visible in every
 // sandbox mode, including read-only) and return DATA, never rendered
 // output: a sql/markdown cell's raw source, or a summary for an a2ui cell
 // (there is no HTML/markdown renderer in this package to render it with).

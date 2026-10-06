@@ -47,7 +47,7 @@ A sql or a2ui cell's ` + "`sql`" + ` is always read-only (INSERT/UPDATE/DELETE/D
 - **` + "`create_dashboard`" + `** appends a whole A2UI page (multiple components) as one a2ui cell.
 - **` + "`list_notebooks`" + `** / **` + "`get_notebook`" + `** are the read-only path: list every notebook, or fetch one notebook's cells as data (raw sql/markdown source, or a title/component-count summary for an a2ui cell) — never rendered output.
 
-There is no create_page/update_page/get_page/list_pages tool; those were retired with the page system. A legacy file's old pages/reports are migrated into notebooks automatically the first time it is opened.`,
+There is no create_page/update_page/get_page/list_pages tool; those were retired with the page system.`,
 	},
 	{
 		Topic: "a2ui",

@@ -122,17 +122,17 @@ func TestAppSchemaDesignerNoFileOpen(t *testing.T) {
 
 	err := app.AddColumn("t", "c", "VARCHAR")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 
 	err = app.AddIndex("t", "idx", []string{"c"}, false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 
 	err = app.DropColumn("t", "c")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 
 	err = app.AlterColumnType("t", "c", "INTEGER")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 }

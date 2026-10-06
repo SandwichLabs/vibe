@@ -4,9 +4,9 @@ Vibe Studio's look is a **theme**: a JSON file that assigns colours to a
 fixed set of semantic roles, VS Code style. Four themes ship built in, and
 you can add your own by dropping a file in the themes folder.
 
-Themes are an **app preference**, not part of the `.vibe` file. Your choice
-lives in your user config directory and follows you across every file you
-open; a file you share never carries your colours with it.
+Themes are an **app preference**, not part of a workspace. Your choice
+lives in your user config directory and follows you across every workspace you
+open; a workspace you share never carries your colours with it.
 
 ## Choosing a theme
 

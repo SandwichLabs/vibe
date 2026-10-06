@@ -26,9 +26,7 @@ export interface PendingApproval {
   // — see resolveApproval. Every other state mirrors agent:approval_done's
   // outcome.
   state: 'pending' | 'sending' | 'approved' | 'declined' | 'expired' | 'cancelled' | 'gone'
-  // error holds "Save, then do it"'s own failure (#98): SaveFile rejected,
-  // so the card stays 'pending' — Resolve is never even attempted — and
-  // shows why instead of silently doing nothing.
+  // error is a plain-language reason the card could not be answered.
   error?: string
 }
 
@@ -309,25 +307,10 @@ export function useAgentChat() {
   // already expired or been cancelled server-side, or the backend simply
   // isn't reachable — and 'gone' says exactly that ("no longer waiting")
   // rather than falsely claiming the specific reason was a timeout.
-  // saveFirst is "Save, then do it" (#98): the file has unsaved table
-  // changes, so Revert would otherwise undo those along with whatever the
-  // agent is about to do. Save landing first makes the agent's change the
-  // only thing left to revert. If SaveFile itself fails, the card stays
-  // 'pending' with the error shown — ResolveAgentApproval is never called,
-  // so the write is not silently approved on a save that didn't happen.
-  async function resolveApproval(step: ToolStep, approved: boolean, saveFirst = false) {
+  async function resolveApproval(step: ToolStep, approved: boolean) {
     if (!step.approval) return
     step.approval.state = 'sending'
     step.approval.error = undefined
-    if (saveFirst) {
-      try {
-        await window.go.main.App.SaveFile()
-      } catch (e) {
-        step.approval.state = 'pending'
-        step.approval.error = "Couldn't save: " + errorText(e)
-        return
-      }
-    }
     try {
       await window.go.main.App.ResolveAgentApproval(step.approval.id, approved)
     } catch {

@@ -1,6 +1,6 @@
 // #79: AgentSandboxIntro must update live when the file's agent policy
 // changes — via SetAgentConfig's "agent:config" event (no re-fetch needed)
-// and via "file:opened" (a different file, needs a fresh GetAgentConfig).
+// and via "workspace:opened" (a different workspace, needs a fresh GetAgentConfig).
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -44,13 +44,13 @@ describe('AgentSandboxIntro', () => {
     expect(app.GetAgentConfig).not.toHaveBeenCalled()
   })
 
-  it('re-fetches when "file:opened" fires', async () => {
+  it('re-fetches when "workspace:opened" fires', async () => {
     const app = makeApp('read-write', true)
     const wrapper = mount(AgentSandboxIntro)
     await flushPromises()
 
     app.GetAgentConfig.mockResolvedValueOnce({ sandbox: 'full', askBeforeWrites: false })
-    handlers['file:opened']?.()
+    handlers['workspace:opened']?.()
     await flushPromises()
 
     expect(wrapper.text()).toContain('It makes changes without asking.')

@@ -11,10 +11,7 @@ import AppShell from './AppShell.vue'
 
 function makeApp() {
   const app = {
-    GetFileInfo: vi.fn(async () => ({ path: '/tmp/acme.vibe' })),
     AgentChat: vi.fn(async () => ({ text: 'hi', steps: [] })),
-    SaveFile: vi.fn(async () => {}),
-    CloseFile: vi.fn(async () => {}),
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
   ;(window as any).go = { main: { App: app } }

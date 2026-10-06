@@ -24,10 +24,6 @@ func columnTypes(q rowQuerier, table string) (map[string]string, error) {
 	return crud.ColumnTypes(q, table)
 }
 
-func fieldMetaMap(store *crud.FieldMetaStore, table string) (map[string]crud.FieldMeta, error) {
-	return crud.FieldMetaMap(store, table)
-}
-
 func insertRowTx(tx txExecer, colTypes map[string]string, metas map[string]crud.FieldMeta, table string, values map[string]any) (*WriteResult, error) {
 	return crud.InsertRowTx(tx, colTypes, metas, table, values)
 }

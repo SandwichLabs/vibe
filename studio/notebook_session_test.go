@@ -1,9 +1,8 @@
 package main
 
 // Regression test for a reviewer-caught DATA CORRUPTION bug (pre-existing
-// from #66, fixed alongside #68): calling OpenFile/CreateFile/
-// CreateFromTemplate while a NotebookView was still mounted for the
-// PREVIOUS file let that view's in-flight save land in the NEW container —
+// from #66, fixed alongside #68): calling a workspace switch while a NotebookView was still mounted for the
+// PREVIOUS workspace let that view's in-flight save land in the NEW container —
 // the container pointer was already swapped by the time the old save
 // fired. App.sessionID (see its doc comment) + SaveNotebook's token check
 // close this: a save must carry the session id in effect when its caller
@@ -34,10 +33,10 @@ func TestSaveNotebook_RejectsStaleSession(t *testing.T) {
 	}
 
 	// The file underneath gets switched (a second file open in the SAME
-	// App instance, exactly like OpenFile/CreateFile/CreateFromTemplate
+	// App instance, exactly like a workspace switch
 	// while a stale view is still mounted) — sessionID is regenerated.
-	dir := t.TempDir()
-	require.NoError(t, app.CreateFile(dir+"/second.vibe", testPassphrase, "Second file", ""))
+	_, err = app.SwitchWorkspace(SwitchRequest{Path: newWorkspaceDir(t, "Second")})
+	require.NoError(t, err)
 
 	app.mu.RLock()
 	newSessionID := app.sessionID
@@ -50,7 +49,7 @@ func TestSaveNotebook_RejectsStaleSession(t *testing.T) {
 	// file's NotebookView, in flight when the switch happened.
 	_, err = app.SaveNotebook(raw, staleSessionID)
 	require.Error(t, err, "a save from a superseded file session must be rejected")
-	assert.Contains(t, err.Error(), "stale file session")
+	assert.Contains(t, err.Error(), "stale workspace session")
 
 	// Prove it did NOT land in the new (second) file: no notebook with
 	// nb.ID exists there.
@@ -74,7 +73,7 @@ func TestSaveNotebook_RejectsStaleSession(t *testing.T) {
 
 // TestSaveNotebook_RejectsAfterClose asserts a save attempted after the file
 // was closed (sessionID cleared back to "") is rejected the same way —
-// "no file open" takes priority, but either way the write must not happen.
+// "no workspace open" takes priority, but either way the write must not happen.
 func TestSaveNotebook_RejectsAfterClose(t *testing.T) {
 	app := newOpenApp(t)
 	nb, err := app.CreateNotebook("Doomed notebook")
@@ -84,10 +83,10 @@ func TestSaveNotebook_RejectsAfterClose(t *testing.T) {
 	sessionID := app.sessionID
 	app.mu.RUnlock()
 
-	require.NoError(t, app.CloseFile())
+	require.NoError(t, app.CloseWorkspace())
 
 	raw := map[string]any{"id": nb.ID, "title": "after close", "cells": []any{}}
 	_, err = app.SaveNotebook(raw, sessionID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no file open")
+	assert.Contains(t, err.Error(), "no workspace open")
 }

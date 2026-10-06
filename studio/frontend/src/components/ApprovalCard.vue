@@ -5,14 +5,13 @@
 // agent is asking right next to the ask itself — a modal dialog (useModal)
 // would block that context instead.
 import type { PendingApproval } from '../composables/useAgentChat'
-import { fileDirty } from '../composables/useFileDirty'
 
 // done: true once the matching ToolStep has left 'running' (set by
 // ToolStepChip from step.status), so the state line can say "Approved."
 // once the write has actually finished instead of sitting on "running…"
 // forever.
 const props = defineProps<{ approval: PendingApproval; done?: boolean }>()
-const emit = defineEmits<{ resolve: [approved: boolean, saveFirst?: boolean] }>()
+const emit = defineEmits<{ resolve: [approved: boolean] }>()
 </script>
 
 <template>
@@ -24,10 +23,6 @@ const emit = defineEmits<{ resolve: [approved: boolean, saveFirst?: boolean] }>(
          for run_query, where sql is the full statement, not a paraphrase. -->
     <pre v-if="props.approval.sql" class="approval-card__detail">{{ props.approval.sql }}</pre>
 
-    <p v-if="fileDirty && props.approval.state === 'pending'" class="approval-card__hint">
-      You have unsaved table changes. Save them first to be able to undo just this change with Revert to last save.
-    </p>
-
     <div class="approval-card__actions">
       <button
         type="button"
@@ -37,15 +32,6 @@ const emit = defineEmits<{ resolve: [approved: boolean, saveFirst?: boolean] }>(
         @click="emit('resolve', false)"
       >
         Cancel
-      </button>
-      <button
-        v-if="fileDirty && props.approval.state === 'pending'"
-        type="button"
-        class="btn btn-sm"
-        data-testid="approval-save-do-it"
-        @click="emit('resolve', true, true)"
-      >
-        Save, then do it
       </button>
       <button
         type="button"
@@ -63,7 +49,7 @@ const emit = defineEmits<{ resolve: [approved: boolean, saveFirst?: boolean] }>(
       <template v-if="props.approval.state === 'approved'">{{ props.done ? 'Approved.' : 'Approved, running…' }}</template>
       <template v-else-if="props.approval.state === 'declined'">Cancelled, nothing changed.</template>
       <template v-else-if="props.approval.state === 'expired'">No answer in time, nothing changed.</template>
-      <template v-else-if="props.approval.state === 'cancelled'">The file was closed or reverted, nothing changed.</template>
+      <template v-else-if="props.approval.state === 'cancelled'">The workspace was closed, nothing changed.</template>
       <template v-else-if="props.approval.state === 'gone'">No longer waiting, nothing changed.</template>
       <template v-else-if="props.approval.error">{{ props.approval.error }}</template>
     </p>

@@ -12,6 +12,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }))
 
 import SkillsView from './SkillsView.vue'
+import { flushAll, _resetForTests as resetSaves } from '../composables/usePendingSaves'
 
 const SKILLS = [
   { name: 'data-profiling', description: 'Profile a table before answering.', instructions: '# Data profiling\n\nDo stuff.', source: 'built-in' },
@@ -130,5 +131,37 @@ describe('SkillsView', () => {
     await confirmBtn!.trigger('click')
     await flushPromises()
     expect(app.DeleteSkill).toHaveBeenCalledWith('revenue-rules')
+  })
+
+  describe('pending saves (switch / close / quit flush the open skill editor)', () => {
+    beforeEach(() => resetSaves())
+
+    it('flushAll saves an edited, open skill; an untouched editor is a no-op', async () => {
+      const app = makeApp()
+      const wrapper = await mountView()
+      expect((await flushAll()).failed).toEqual([])
+      expect(app.SaveSkill).not.toHaveBeenCalled()
+
+      const vm = wrapper.vm as any
+      vm.openEdit({ name: 'revenue-rules', description: 'd', instructions: 'old', source: 'user', rev: 'r1' })
+      await flushPromises()
+      vm.formInstructions = 'new text'
+      await flushPromises()
+      expect((await flushAll()).failed).toEqual([])
+      expect(app.SaveSkill).toHaveBeenCalledWith('revenue-rules', 'd', 'new text', '', 'r1')
+    })
+
+    it('a conflicting edit fails the flush so the caller asks', async () => {
+      makeApp({ SaveSkill: vi.fn(async () => { throw new Error('conflict: skills/x changed on disk since it was loaded') }) })
+      const wrapper = await mountView()
+      const vm = wrapper.vm as any
+      vm.openEdit({ name: 'revenue-rules', description: 'd', instructions: 'old', source: 'user', rev: 'r1' })
+      await flushPromises()
+      vm.formInstructions = 'new text'
+      await flushPromises()
+      const res = await flushAll()
+      expect(res.failed).toHaveLength(1)
+      expect(res.failed[0].error).toContain('changed on disk')
+    })
   })
 })

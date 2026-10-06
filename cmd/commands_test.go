@@ -757,12 +757,19 @@ func TestStudioTUI_ReadOnlyMarksTheStatusBarAndSkipsTheLock(t *testing.T) {
 	assert.Contains(t, out, "people", "the table browser lists the default connection's tables")
 }
 
-func TestStudio_GuiRefusesAFolderUntilStudioOpensWorkspaces(t *testing.T) {
+func TestStudio_GuiAcceptsAFolder(t *testing.T) {
 	root := newWS(t)
+	t.Setenv("PATH", t.TempDir()) // no vibe-studio to exec: we only check the folder is accepted
 	_, _, err := runVibe("studio", "--gui", root)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "after #111")
-	assert.Contains(t, err.Error(), "`vibe studio`")
+	assert.Contains(t, err.Error(), "vibe-studio binary not found", "a folder argument is no longer refused")
+	assert.NotContains(t, err.Error(), "#111")
+}
+
+func TestStudio_GuiRefusesAVibeFile(t *testing.T) {
+	_, _, err := runVibe("studio", "--gui", filepath.Join(t.TempDir(), "old.vibe"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errLegacyFileArg)
 }
 
 func TestStudio_TuiFlagStillAccepted(t *testing.T) {

@@ -1,8 +1,8 @@
 package main
 
-// beforeClose/Quit/CancelQuit watchdog tests (review fix, step 4a round 2
-// #1 and round 3 #1; extended #81 for the dirty payload/closePending/
-// CancelQuit). Quit() itself would otherwise call the real Wails
+// beforeClose/Quit watchdog tests (review fix, step 4a round 2
+// #1 and round 3 #1; #111 dropped the dirty payload and CancelQuit). Quit()
+// itself would otherwise call the real Wails
 // runtime.Quit, which needs a live window context these unit tests don't
 // have (the same reason emitEvent guards on a.emit rather than calling
 // runtime.EventsEmit directly under test) — so every test here injects
@@ -11,35 +11,13 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// beforeCloseEvents pulls the "app:before-close" payloads recorded by an
-// app.emit sink, in order.
-func lastBeforeClosePayload(events []map[string]any) map[string]any {
-	if len(events) == 0 {
-		return nil
-	}
-	return events[len(events)-1]
-}
-
-// recordingEmit builds an app.emit sink that appends every "app:before-close"
-// event's payload (as a map) to payloads, and every event name to names.
-func recordingEmit(names *[]string, payloads *[]map[string]any) func(string, ...any) {
-	return func(name string, data ...any) {
-		*names = append(*names, name)
-		if name != "app:before-close" || len(data) == 0 {
-			return
-		}
-		if m, ok := data[0].(map[string]any); ok {
-			*payloads = append(*payloads, m)
-		}
-	}
-}
 
 func TestApp_BeforeClose_Gating(t *testing.T) {
 	var events []string
@@ -51,7 +29,7 @@ func TestApp_BeforeClose_Gating(t *testing.T) {
 	app.quitFn = func() { quitCalls++ }
 	// A watchdog that is armed but never fires on its own — this test
 	// drives the flag through Quit(), not the timeout.
-	app.closeWatchdog = func(time.Duration, func()) {}
+	app.closeWatchdog = func(time.Duration, func()) func() { return func() {} }
 
 	// First attempt: not yet confirmed -> prevents the close and emits the
 	// event the frontend listens for to start its flush.
@@ -78,7 +56,7 @@ func TestApp_BeforeClose_DefaultsToPreventing(t *testing.T) {
 	app := &App{logger: testLogger()}
 	app.emit = func(string, ...any) {}
 	app.quitFn = func() {}
-	app.closeWatchdog = func(time.Duration, func()) {}
+	app.closeWatchdog = func(time.Duration, func()) func() { return func() {} }
 	assert.True(t, app.beforeClose(context.Background()))
 }
 
@@ -94,9 +72,10 @@ func TestApp_BeforeClose_WatchdogQuitsWhenFrontendNeverResponds(t *testing.T) {
 	app := &App{logger: testLogger()}
 	app.emit = func(string, ...any) {}
 	app.quitFn = func() { quitCalls++ }
-	app.closeWatchdog = func(d time.Duration, f func()) {
+	app.closeWatchdog = func(d time.Duration, f func()) func() {
 		gotTimeout = d
 		f() // simulate the timer elapsing — the frontend never called Quit()
+		return func() {}
 	}
 
 	prevent := app.beforeClose(context.Background())
@@ -117,10 +96,11 @@ func TestApp_BeforeClose_SecondAttemptQuitsImmediately(t *testing.T) {
 	app := &App{logger: testLogger()}
 	app.emit = func(string, ...any) {}
 	app.quitFn = func() { quitCalls++ }
-	app.closeWatchdog = func(time.Duration, func()) {
+	app.closeWatchdog = func(time.Duration, func()) func() {
 		watchdogArmed++
 		// Deliberately never invoke the callback — simulates the timer
 		// still pending, not yet elapsed.
+		return func() {}
 	}
 
 	prevent1 := app.beforeClose(context.Background())
@@ -140,94 +120,37 @@ func TestApp_BeforeClose_SecondAttemptQuitsImmediately(t *testing.T) {
 	assert.Equal(t, 0, quitCalls)
 }
 
-// TestApp_BeforeClose_PayloadCarriesDirty (#81): the "app:before-close"
-// payload's "dirty" field reflects the open container's Dirty() at the
-// moment of the attempt — false for a clean app, true once a table write
-// has marked the container dirty.
-func TestApp_BeforeClose_PayloadCarriesDirty(t *testing.T) {
-	var payloads []map[string]any
-	app := newOpenApp(t)
-	app.emit = recordingEmit(new([]string), &payloads)
-	app.quitFn = func() {}
-	app.closeWatchdog = func(time.Duration, func()) {}
+// Choosing "Stay" at the "Quit anyway?" prompt (or merely being asked) must stop
+// the hung-webview watchdog: a real timer elapsing must not quit the app.
+func TestApp_HoldAndCancelQuit_StopTheWatchdog(t *testing.T) {
+	for _, stopper := range []string{"HoldQuit", "CancelQuit"} {
+		t.Run(stopper, func(t *testing.T) {
+			var quitCalls atomic.Int32
+			app := &App{logger: testLogger()}
+			app.emit = func(string, ...any) {}
+			app.quitFn = func() { quitCalls.Add(1) }
+			app.closeWatchdog = func(d time.Duration, f func()) func() {
+				tm := time.AfterFunc(30*time.Millisecond, f) // a short real timer
+				return func() { tm.Stop() }
+			}
+			require.True(t, app.beforeClose(context.Background()))
+			if stopper == "HoldQuit" {
+				app.HoldQuit()
+			} else {
+				app.CancelQuit()
+			}
+			time.Sleep(150 * time.Millisecond)
+			assert.Zero(t, quitCalls.Load(), "the watchdog must not quit after %s", stopper)
 
-	app.beforeClose(context.Background())
-	require.Len(t, payloads, 1)
-	assert.Equal(t, false, lastBeforeClosePayload(payloads)["dirty"])
-
-	app.CancelQuit()
-	require.True(t, app.container.MarkDirty())
-
-	app.beforeClose(context.Background())
-	require.Len(t, payloads, 2)
-	assert.Equal(t, true, lastBeforeClosePayload(payloads)["dirty"])
-}
-
-// TestApp_BeforeClose_DirtyDoesNotArmWatchdog (#81): a hung webview escape
-// hatch (the watchdog) must not fire while a Save/Don't save/Cancel prompt
-// may legitimately be sitting open waiting on the person — the SECOND close
-// attempt is the only escape hatch in that case (asserted separately below).
-func TestApp_BeforeClose_DirtyDoesNotArmWatchdog(t *testing.T) {
-	var watchdogArmed int
-	app := newOpenApp(t)
-	app.emit = func(string, ...any) {}
-	app.quitFn = func() {}
-	app.closeWatchdog = func(time.Duration, func()) { watchdogArmed++ }
-	require.True(t, app.container.MarkDirty())
-
-	prevent := app.beforeClose(context.Background())
-	assert.True(t, prevent)
-	assert.Equal(t, 0, watchdogArmed, "a dirty close must not arm the clean-case watchdog")
-}
-
-// TestApp_CancelQuit_ReattemptPromptsAgain (#81): after Cancel, closePending
-// is cleared so the NEXT close/quit attempt starts the dance over — a fresh
-// "app:before-close" emission — rather than immediately quitting the way a
-// second attempt while one is still pending would.
-func TestApp_CancelQuit_ReattemptPromptsAgain(t *testing.T) {
-	var names []string
-	app := &App{logger: testLogger()}
-	app.emit = func(name string, _ ...any) { names = append(names, name) }
-	app.quitFn = func() {}
-	app.closeWatchdog = func(time.Duration, func()) {}
-
-	prevent1 := app.beforeClose(context.Background())
-	assert.True(t, prevent1)
-	assert.Equal(t, 1, len(names))
-
-	app.CancelQuit()
-	assert.False(t, app.quitConfirmed.Load(), "CancelQuit must never confirm the quit")
-
-	prevent2 := app.beforeClose(context.Background())
-	assert.True(t, prevent2, "a fresh attempt after CancelQuit must prompt again, not quit immediately")
-	assert.Equal(t, 2, len(names), "CancelQuit must let the next attempt re-emit app:before-close")
-}
-
-// TestApp_BeforeClose_TryLockFailureFailsTowardDirty (#81): dirtyForClose
-// must never block the close-attempt path waiting on a.mu — a long-running
-// call already holding the lock makes it fail toward "dirty" (an extra
-// prompt, never a silently skipped one) instead of deadlocking or blocking.
-func TestApp_BeforeClose_TryLockFailureFailsTowardDirty(t *testing.T) {
-	var payloads []map[string]any
-	app := &App{logger: testLogger()}
-	app.emit = recordingEmit(new([]string), &payloads)
-	app.quitFn = func() {}
-	app.closeWatchdog = func(time.Duration, func()) {}
-
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
-	done := make(chan bool, 1)
-	go func() {
-		done <- app.beforeClose(context.Background())
-	}()
-
-	select {
-	case prevent := <-done:
-		assert.True(t, prevent)
-	case <-time.After(2 * time.Second):
-		t.Fatal("beforeClose deadlocked while a.mu was held elsewhere")
+			// Without it the timer does quit (the control).
+			app2 := &App{logger: testLogger()}
+			app2.emit = func(string, ...any) {}
+			var q2 atomic.Int32
+			app2.quitFn = func() { q2.Add(1) }
+			app2.closeWatchdog = app.closeWatchdog
+			require.True(t, app2.beforeClose(context.Background()))
+			time.Sleep(150 * time.Millisecond)
+			assert.Equal(t, int32(1), q2.Load())
+		})
 	}
-	require.Len(t, payloads, 1)
-	assert.Equal(t, true, lastBeforeClosePayload(payloads)["dirty"])
 }
