@@ -1,0 +1,25 @@
+# Vibe workspace. Committed: shared settings and connection definitions only.
+# Never put a password, token or key in this file; Vibe keeps those in your keychain.
+version: 1
+id: 7f3c2a10-5b1e-4c52-9d0e-2a6f1b8c4d90
+name: Acme Analytics
+default_connection: local
+sandbox: read-only
+ask_before_writes: true
+connections:
+  - name: prod_pg
+    type: postgres
+    host: db.internal
+    port: 5432
+    database: analytics
+    credentials: keychain
+    options:
+      sslmode: require
+  - name: lake
+    type: s3
+    region: us-east-1
+    scope: s3://acme-lake/
+  - name: local
+    type: duckdb
+    path: data/local.duckdb
+    read_only: false

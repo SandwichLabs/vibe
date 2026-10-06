@@ -14,10 +14,10 @@ import (
 
 type fakeContainer struct{ db *sql.DB }
 
-func (f *fakeContainer) SQLiteDB() *sql.DB { return f.db }
-func (f *fakeContainer) DuckDBDB() *sql.DB { return f.db }
-func (f *fakeContainer) Save() error       { return nil }
-func (f *fakeContainer) Close() error      { return nil }
+func (f *fakeContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(f.db) }
+func (f *fakeContainer) DuckDBDB() *sql.DB          { return f.db }
+func (f *fakeContainer) Save() error                { return nil }
+func (f *fakeContainer) Close() error               { return nil }
 
 func newNotebookTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -46,7 +46,7 @@ func TestNotebooksModel_LoadAndNavigate(t *testing.T) {
 	db := newNotebookTestDB(t)
 
 	m := NewNotebooksModel()
-	m.LoadNotebooks(db)
+	m.LoadNotebooks(notebooks.NewSQLiteStore(db))
 	require.Len(t, m.items, 1)
 	assert.Equal(t, "Sales", m.items[0].Title)
 	assert.Equal(t, 2, m.items[0].CellCount)
@@ -61,7 +61,7 @@ func TestNotebooksModel_EnterDumpsCells(t *testing.T) {
 
 	m := NewNotebooksModel()
 	m.SetSize(80, 20)
-	m.LoadNotebooks(db)
+	m.LoadNotebooks(notebooks.NewSQLiteStore(db))
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}, container)
 	assert.True(t, m.viewing)

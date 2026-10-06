@@ -18,6 +18,9 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
+// The store's revision of the selected query as loaded: sent back on save so a
+// copy that changed on disk meanwhile is a conflict, not an overwrite.
+const selectedRev = ref('')
 const sqlText = ref('')
 const savedSQL = ref('')
 const result = ref<QueryResult | null>(null)
@@ -128,6 +131,7 @@ async function selectQuery(id: string) {
   selectedId.value = id
   try {
     const q = await window.go.main.App.GetQuery(id)
+    selectedRev.value = q.rev ?? ''
     sqlText.value = q.sql
     savedSQL.value = q.sql
     saveTitle.value = q.title
@@ -155,8 +159,10 @@ async function runQuery() {
 async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
-    const id = await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '')
-    selectedId.value = id
+    const saved = await window.go.main.App.SaveQuery(selectedId.value || '', saveTitle.value, sqlText.value, '', selectedRev.value)
+    selectedId.value = saved.id
+    // The save changed the file: its new revision goes with the next save.
+    selectedRev.value = saved.rev ?? ''
     savedSQL.value = sqlText.value
     showSaveModal.value = false
     statusMessage.value = `Saved "${saveTitle.value}"`

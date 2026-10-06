@@ -111,7 +111,7 @@ func (h *hub) fingerprint(ctx context.Context, catalog string) (string, error) {
 
 func (h *hub) catalogOrDefault(catalog string) string {
 	if catalog == "" {
-		return h.defaultCatalog
+		return h.defCat()
 	}
 	return catalog
 }
@@ -119,7 +119,7 @@ func (h *hub) catalogOrDefault(catalog string) string {
 // requireCatalog accepts only the default catalog and attached connections:
 // DuckDB's own "system" and "temp" catalogs are never valid table qualifiers.
 func (h *hub) requireCatalog(name string) error {
-	if name == h.defaultCatalog {
+	if name == h.defCat() {
 		return nil
 	}
 	h.mu.RLock()
@@ -148,7 +148,7 @@ func (h *hub) ListCatalogs(ctx context.Context) ([]CatalogInfo, error) {
 		if typ != nil {
 			c.Type = *typ
 		}
-		c.Default = c.Name == h.defaultCatalog
+		c.Default = c.Name == h.defCat()
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
@@ -204,7 +204,7 @@ func (h *hub) DefaultSchema(ctx context.Context, catalog string) (string, error)
 	h.schemaMu.Unlock()
 
 	var schema string
-	if catalog == h.defaultCatalog {
+	if catalog == h.defCat() {
 		if err := h.db.QueryRowContext(ctx, "SELECT current_schema()").Scan(&schema); err != nil {
 			return "", fmt.Errorf("failed to read default schema: %w", err)
 		}
@@ -240,7 +240,7 @@ func (h *hub) Resolve(ctx context.Context, ref TableRef) (TableRef, error) {
 		}
 	}
 	if ref.Catalog == "" {
-		ref.Catalog = h.defaultCatalog
+		ref.Catalog = h.defCat()
 	}
 	if err := h.requireCatalog(ref.Catalog); err != nil {
 		return ref, err

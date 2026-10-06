@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
@@ -49,15 +48,13 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("failed to build query: %v", err))
 	}
 
-	registry := queries.NewRegistry(h.container.SQLiteDB(), h.logger)
 	q := &queries.Query{
-		ID:         uuid.New().String(),
 		Title:      name,
 		SQL:        sqlStr,
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := registry.Create(ctx, q); err != nil {
+	if err := h.container.Queries().Create(ctx, q); err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to save query: %v", err))
 	}
 

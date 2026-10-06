@@ -161,6 +161,11 @@ type Notebook struct {
 	Title         string `json:"title"`
 	Cells         []Cell `json:"cells"`
 	UpdatedAt     string `json:"updatedAt"`
+	// Rev is the store's opaque revision of this notebook as loaded (file
+	// stores: the content hash). Hand it back with the notebook on Save and a
+	// write against a stale copy returns ErrConflict. Empty for stores without
+	// compare-and-write (the legacy container) and never persisted.
+	Rev string `json:"rev,omitempty"`
 }
 
 func newID(prefix string) string {
@@ -224,6 +229,13 @@ func decode(raw any) (any, error) {
 			return nil, fmt.Errorf("invalid JSON: %w", err)
 		}
 		return out, nil
+	case Notebook:
+		return decode(notebookToRaw(v))
+	case *Notebook:
+		if v == nil {
+			return nil, fmt.Errorf("not a notebook: nil")
+		}
+		return decode(notebookToRaw(*v))
 	default:
 		return raw, nil
 	}
@@ -403,12 +415,15 @@ func Coerce(raw any) (Notebook, []string, error) {
 		updatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
+	rev, _ := src["rev"].(string)
+
 	return Notebook{
 		SchemaVersion: SchemaVersion,
 		ID:            id,
 		Title:         title,
 		Cells:         cells,
 		UpdatedAt:     updatedAt,
+		Rev:           rev,
 	}, warnings, nil
 }
 

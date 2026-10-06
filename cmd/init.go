@@ -100,7 +100,7 @@ exclusive). Run without any of these for a bare, empty workspace.`,
 				}
 				return fmt.Errorf("failed to import %q: %d value(s) don't fit their column type", importCSV, sum.BadCount)
 			}
-			if err := agents.WriteImportSkill(c.SQLiteDB(), c.DuckDBDB(), tableName); err != nil {
+			if err := agents.WriteImportSkill(c.Skills(), c.Session(), tableName); err != nil {
 				logger.Warn("failed to write import skill", "table", tableName, "error", err)
 			}
 			fmt.Fprintf(out, "Imported %d rows into %q\n", sum.Rows, tableName)

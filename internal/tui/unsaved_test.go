@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"testing"
@@ -21,10 +22,10 @@ type realDuckDBContainer struct {
 	db *sql.DB
 }
 
-func (c *realDuckDBContainer) SQLiteDB() *sql.DB { return nil }
-func (c *realDuckDBContainer) DuckDBDB() *sql.DB { return c.db }
-func (c *realDuckDBContainer) Save() error       { return nil }
-func (c *realDuckDBContainer) Close() error      { return nil }
+func (c *realDuckDBContainer) Notebooks() notebooks.Store { return nil }
+func (c *realDuckDBContainer) DuckDBDB() *sql.DB          { return c.db }
+func (c *realDuckDBContainer) Save() error                { return nil }
+func (c *realDuckDBContainer) Close() error               { return nil }
 
 // realEngine runs a query for real against the same DuckDB connection, via
 // internal/engine.Manager — executeREPLQuery's row results/errors need to

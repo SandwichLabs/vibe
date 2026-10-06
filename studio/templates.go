@@ -13,7 +13,6 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/container"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
 )
 
 // TemplateInfo is the quick-start template descriptor surfaced to the Studio
@@ -60,7 +59,7 @@ func (a *App) CreateFromTemplate(path, passphrase, template string) error {
 
 	a.container = c
 	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
-	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
+	a.registry = c.Queries()
 	a.filePath = path
 	a.beginFileSession()
 	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)

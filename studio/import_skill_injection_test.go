@@ -96,7 +96,7 @@ func TestTableHasRows_MaliciousStoredTableName(t *testing.T) {
 	_, err = app.container.DuckDBDB().Exec(`INSERT INTO ` + quoted + ` VALUES (1)`)
 	require.NoError(t, err)
 
-	require.NoError(t, agents.SaveUserSkill(app.container.SQLiteDB(), app.container.DuckDBDB(), "evil", "d", "i", evil))
+	require.NoError(t, agents.SaveUserSkill(app.container.Skills(), app.container.Session(), "evil", "d", "i", evil))
 
 	_, err = app.ListSkills()
 	require.NoError(t, err)

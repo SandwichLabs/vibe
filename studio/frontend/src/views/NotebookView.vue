@@ -150,6 +150,13 @@ let saveSeq = 0
 // instant the file switched, defeating the whole check.
 let loadedSessionId = ''
 
+// loadedRev is the store's revision of the notebook this component last loaded
+// or saved (the file's content hash in a workspace; empty for a legacy .vibe).
+// Every save sends it back, so a save made from a copy that a git pull, an
+// editor or an agent has since changed is rejected as a conflict instead of
+// overwriting that change.
+let loadedRev = ''
+
 // loadAbort is this component's current "generation" — a fresh
 // AbortController per loadNotebook() call. Aborting it tells every
 // in-flight runLiveQuery call (sql cells' own runs, and every a2ui cell's
@@ -238,6 +245,7 @@ async function loadNotebook(id: string) {
     ])
     if (loadedNotebookId !== id) return // superseded by another load before this one resolved
     loadedSessionId = fileInfo?.session_id ?? ''
+    loadedRev = (nb as { rev?: string }).rev ?? ''
     title.value = nb.title
     cells.value = (nb.cells || []).map((c: RawCell) => newCellState(c))
     lastPersisted = JSON.stringify(buildSavePayload(id, title.value, cells.value))
@@ -622,7 +630,8 @@ async function saveNow() {
   const seq = ++saveSeq
   saveState.value = 'saving'
   try {
-    const result = await window.go.main.App.SaveNotebook(payload, loadedSessionId)
+    const result = await window.go.main.App.SaveNotebook({ ...payload, rev: loadedRev }, loadedSessionId)
+    loadedRev = result?.notebook?.rev ?? loadedRev
     if (result?.warnings?.length) {
       errorMessage.value = `Saved with ${result.warnings.length} warning(s): ${result.warnings[0]}`
     }
@@ -664,7 +673,8 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
   if (serialized === lastPersisted) return
   const seq = ++saveSeq
   try {
-    await window.go.main.App.SaveNotebook(p, loadedSessionId)
+    const saved = await window.go.main.App.SaveNotebook({ ...p, rev: loadedRev }, loadedSessionId)
+    loadedRev = saved?.notebook?.rev ?? loadedRev
     tombstones = pruneConfirmedTombstones(tombstones, new Set(p.cells.map((c) => c.id)))
     if (seq === saveSeq) lastPersisted = serialized
   } catch (e: any) {
@@ -815,7 +825,7 @@ async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
   if (!payload.appendedCellIds || payload.appendedCellIds.length === 0) return
 
   const requestedId = loadedNotebookId
-  let remote: { cells?: RawCell[] } | null = null
+  let remote: { title?: string; cells?: RawCell[]; rev?: string } | null = null
   try {
     remote = await window.go.main.App.GetNotebook(requestedId)
   } catch {
@@ -828,6 +838,22 @@ async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
 
   const incoming = cellsToMerge(cells.value, remote.cells || [], payload.appendedCellIds, tombstones)
   if (incoming.length === 0) return
+  // Adopt the remote revision only when the remote notebook is exactly what
+  // this view last saved or loaded plus the appended cells. If anything else
+  // changed on disk meanwhile (a git pull, an editor), keeping the old
+  // revision makes the next save a conflict instead of silently writing over
+  // that change, and the user is told now.
+  const appended = new Set(payload.appendedCellIds)
+  const remoteBase = buildSavePayload(
+    requestedId,
+    remote.title ?? title.value,
+    (remote.cells || []).filter((c) => !appended.has(c.id)).map((c) => newCellState(c as RawCell)),
+  )
+  if (JSON.stringify(remoteBase) === lastPersisted) {
+    loadedRev = remote.rev ?? loadedRev
+  } else {
+    errorMessage.value = 'This notebook also changed on disk since you opened it. Saving will be refused until you reload, so nothing is overwritten.'
+  }
   for (const raw of incoming) cells.value.push(newCellState(raw as RawCell))
   await nextTick()
   mountEditors()

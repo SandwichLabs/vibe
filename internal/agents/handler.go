@@ -13,17 +13,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // ContainerAccess provides access to the container (interface to avoid circular imports).
 type ContainerAccess interface {
-	SQLiteDB() *sql.DB
 	DuckDBDB() *sql.DB
 	// Session is the catalog-aware DuckDB hub over DuckDBDB. Introspection
 	// goes through it so no tool assumes the default catalog is "main".
 	Session() session.Session
+	// Notebooks, Queries and Skills are the content stores: file-backed in a
+	// workspace, the legacy _vibe_* tables in a .vibe container. The agent
+	// never touches the container's SQLite handle.
+	Notebooks() notebooks.Store
+	Queries() queries.Store
+	Skills() skills.Store
 }
 
 // EngineAccess provides query execution.
@@ -504,23 +511,16 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 }
 
 func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response {
-	db := h.container.SQLiteDB()
-	rows, err := db.QueryContext(ctx, "SELECT title, sql, engine FROM _vibe_queries ORDER BY title")
+	list, err := h.container.Queries().List(ctx)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list queries: %v", err))
 	}
-	defer rows.Close()
-
 	var queries []map[string]any
-	for rows.Next() {
-		var name, sqlText, engine string
-		if err := rows.Scan(&name, &sqlText, &engine); err != nil {
-			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to scan query: %v", err))
-		}
+	for _, q := range list {
 		queries = append(queries, map[string]any{
-			"name":   name,
-			"sql":    sqlText,
-			"engine": engine,
+			"name":   q.Title,
+			"sql":    q.SQL,
+			"engine": q.Engine,
 		})
 	}
 	return NewResponse(req.ID, map[string]any{"queries": queries})
@@ -1265,23 +1265,19 @@ func (h *Handler) handleProposeSchema(_ context.Context, req *Request) *Response
 }
 
 // handleSaveQuery persists a named, already-written SQL string to the
-// _vibe_queries registry (studio's SaveQuery binding does the same thing).
+// query store (queries/*.sql in a workspace, _vibe_queries in a .vibe; studio's SaveQuery binding does the same thing).
 // Unlike build_query it does not render SQL from QBE conditions.
 func (h *Handler) handleSaveQuery(ctx context.Context, req *Request) *Response {
 	title, _ := req.Params["title"].(string)
 	sqlStr, _ := req.Params["sql"].(string)
 
-	db := h.container.SQLiteDB()
-	registry := queries.NewRegistry(db, h.logger)
-
 	q := &queries.Query{
-		ID:         uuid.New().String(),
 		Title:      title,
 		SQL:        sqlStr,
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := registry.Create(ctx, q); err != nil {
+	if err := h.container.Queries().Create(ctx, q); err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to save query: %v", err))
 	}
 	return NewResponse(req.ID, map[string]any{"id": q.ID, "title": title, "saved": true})

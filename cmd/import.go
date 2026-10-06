@@ -96,7 +96,7 @@ Every import is one transaction — all or nothing.`,
 			// catalog's own spelling (a case-insensitive match), which
 			// the skill must be written under — see studio/app.go's
 			// ImportFile for the same fix and its longer comment.
-			if err := agents.WriteImportSkill(c.SQLiteDB(), c.DuckDBDB(), sum.Table); err != nil {
+			if err := agents.WriteImportSkill(c.Skills(), c.Session(), sum.Table); err != nil {
 				logger.Warn("failed to write import skill", "table", sum.Table, "error", err)
 			}
 			if err := c.Save(); err != nil {

@@ -25,6 +25,7 @@ watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { if (errorMessage.value === msg) errorMessage.value = '' }, 4000)
 })
 const editingOriginalName = ref<string | null>(null) // null = creating new
+const editingRev = ref("") // the revision the skill had when the editor opened
 const formName = ref('')
 const formDescription = ref('')
 const formInstructions = ref('')
@@ -65,6 +66,7 @@ function selectSkill(name: string) {
 
 function openCreate() {
   editingOriginalName.value = null
+  editingRev.value = ''
   formName.value = ''
   formDescription.value = ''
   formInstructions.value = ''
@@ -75,6 +77,7 @@ function openCreate() {
 
 function openEdit(s: SkillSummary) {
   editingOriginalName.value = s.name
+  editingRev.value = s.rev || ''
   formName.value = s.name
   formDescription.value = s.description
   formInstructions.value = s.instructions
@@ -94,7 +97,7 @@ async function submitEditor() {
   }
   saving.value = true
   try {
-    await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value)
+    await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
     showEditor.value = false
     await loadSkills()
     selectedName.value = formName.value

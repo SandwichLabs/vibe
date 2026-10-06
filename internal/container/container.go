@@ -11,6 +11,9 @@ import (
 
 	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver
 
+	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
@@ -208,6 +211,28 @@ func Open(path string, opts ...Option) (*Container, error) {
 // SQLiteDB returns the underlying SQLCipher database connection.
 func (c *Container) SQLiteDB() *sql.DB {
 	return c.sqliteDB
+}
+
+// Notebooks returns the notebook store over _vibe_notebooks (the legacy
+// container's implementation of notebooks.Store).
+func (c *Container) Notebooks() notebooks.Store {
+	if c.sqliteDB == nil {
+		return notebooks.NewSQLiteStore(nil)
+	}
+	return notebooks.NewSQLiteStore(c.sqliteDB)
+}
+
+// Queries returns the saved-query store over _vibe_queries.
+func (c *Container) Queries() queries.Store {
+	return queries.NewRegistry(c.sqliteDB, c.logger)
+}
+
+// Skills returns the skill store over _vibe_skills.
+func (c *Container) Skills() skills.Store {
+	if c.sqliteDB == nil {
+		return skills.NewSQLiteStore(nil)
+	}
+	return skills.NewSQLiteStore(c.sqliteDB)
 }
 
 // DuckDBDB returns the underlying DuckDB database connection.

@@ -4,8 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -205,6 +209,12 @@ type mockContainer struct {
 func (m *mockContainer) SQLiteDB() *sql.DB {
 	return m.db
 }
+
+func (m *mockContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(m.db) }
+func (m *mockContainer) Queries() queries.Store {
+	return queries.NewRegistry(m.db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+func (m *mockContainer) Skills() skills.Store { return skills.NewSQLiteStore(m.db) }
 
 func (m *mockContainer) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {

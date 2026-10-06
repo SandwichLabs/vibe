@@ -145,9 +145,9 @@ export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<st
 
 export function SaveNotebook(arg1:Record<string, any>,arg2:string):Promise<main.NotebookSaveResult>;
 
-export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.QuerySaveResult>;
 
-export function SaveSkill(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function SaveSkill(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function SelectImportFile():Promise<string>;
 

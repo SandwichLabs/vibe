@@ -32,7 +32,7 @@ declare global {
           Quit(): Promise<void>
           GetFileInfo(): Promise<FileInfo>
           ListSkills(): Promise<SkillSummary[]>
-          SaveSkill(name: string, description: string, instructions: string, tableName: string): Promise<void>
+          SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
           DeleteSkill(name: string): Promise<void>
           ListPages(): Promise<PageSummary[]>
           GetPage(id: string): Promise<PageDetail>
@@ -60,7 +60,7 @@ declare global {
           AlterColumnType(table: string, column: string, newType: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
-          SaveQuery(id: string, title: string, sql: string, description: string): Promise<string>
+          SaveQuery(id: string, title: string, sql: string, description: string, rev: string): Promise<{ id: string; rev: string }>
           DeleteQuery(id: string): Promise<void>
           GetDashboard(): Promise<DashboardData>
           SendAgentQuery(query: string): Promise<AgentResult>
@@ -128,6 +128,7 @@ interface SkillSummary {
   instructions: string
   table_name?: string
   source: string // 'built-in' | 'user' | 'import'
+  rev?: string // store revision as listed; sent back on save
 }
 
 interface PageSummary {
@@ -216,6 +217,7 @@ interface QueryDetail {
   parameters: any[]
   created_at: string
   updated_at: string
+  rev?: string
 }
 
 interface DashboardData {

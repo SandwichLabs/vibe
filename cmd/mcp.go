@@ -112,7 +112,7 @@ func resolveSandbox(fileMode agents.SandboxMode, flagSandbox string) (agents.San
 // refused outright (#79 D2) rather than hanging. Split out from
 // runMCPServe so a unit test can exercise the exact same production wiring.
 func buildMCPHandler(c *container.Container, eng *engine.Manager, flagSandbox string, logger *slog.Logger) (*agents.Handler, agents.FilePolicy, error) {
-	filePolicy := agents.ReadFilePolicy(c)
+	filePolicy := agents.PolicyFrom(agents.MetaPolicy(c))
 	mode, err := resolveSandbox(filePolicy.Mode, flagSandbox)
 	if err != nil {
 		return nil, agents.FilePolicy{}, err

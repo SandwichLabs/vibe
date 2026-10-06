@@ -3,6 +3,9 @@ package container
 import (
 	"database/sql"
 
+	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
@@ -14,6 +17,12 @@ type Store interface {
 
 	// DuckDBDB returns the underlying DuckDB database connection.
 	DuckDBDB() *sql.DB
+
+	// Notebooks, Queries and Skills are the legacy container's content
+	// stores (the workspace provides file-backed ones, #109).
+	Notebooks() notebooks.Store
+	Queries() queries.Store
+	Skills() skills.Store
 
 	// Session returns the DuckDB session (catalog-aware hub) over DuckDBDB.
 	Session() session.Session

@@ -42,6 +42,15 @@ type Session interface {
 	// restores the default before the connection returns to the pool.
 	Conn(ctx context.Context, opts ...QueryOption) (*Conn, error)
 
+	// SetDefaultCatalog makes an attached connection the catalog unqualified
+	// names resolve against (the workspace's default_connection, #109). Only a
+	// hub that owns its instance (New) can move it; a Wrap'd container hub keeps
+	// the file as its default and returns an error. The catalog fields are
+	// guarded, but connections already pinned or checked out keep the catalog
+	// they started in, so call it right after attaching and before the session
+	// is shared with other goroutines.
+	SetDefaultCatalog(ctx context.Context, name string) error
+
 	// Register declares a connection without dialling (lazy attach); Attach
 	// registers and connects; Connect dials a registered one.
 	Register(spec Spec) error
@@ -76,6 +85,7 @@ type hub struct {
 	tempDir string // removed on Close when ownsTemp
 	ownTemp bool
 
+	defMu          sync.RWMutex // guards defaultCatalog and defSchemaName
 	defaultCatalog string
 
 	adminMu sync.Mutex // serialises ATTACH / DETACH / secret DDL
@@ -206,8 +216,22 @@ func newHub(db *sql.DB, c *config, def, defSchema string, owns bool) *hub {
 	return h
 }
 
-func (h *hub) DefaultCatalog() string { return h.defaultCatalog }
-func (h *hub) DB() *sql.DB            { return h.db }
+func (h *hub) DefaultCatalog() string { return h.defCat() }
+
+// defCat and defSchema read the default catalog and its schema under defMu,
+// which SetDefaultCatalog (the only writer) holds for writing.
+func (h *hub) defCat() string {
+	h.defMu.RLock()
+	defer h.defMu.RUnlock()
+	return h.defaultCatalog
+}
+
+func (h *hub) defSchema() string {
+	h.defMu.RLock()
+	defer h.defMu.RUnlock()
+	return h.defSchemaName
+}
+func (h *hub) DB() *sql.DB { return h.db }
 
 // Close releases the session. A hub that owns its DuckDB instance closes it
 // and removes its temp directory; a wrapped instance is left to its owner.
@@ -235,7 +259,7 @@ func (h *hub) callCfg(opts []QueryOption) callConfig {
 	}
 	catalog := cc.catalog
 	if catalog == "" {
-		catalog = h.defaultCatalog
+		catalog = h.defCat()
 	}
 	h.mu.RLock()
 	e := h.conns[catalog]
@@ -252,7 +276,7 @@ func (h *hub) callCfg(opts []QueryOption) callConfig {
 			cc.rowCap = e.spec.RowCap
 		}
 	}
-	if cc.catalog == h.defaultCatalog {
+	if cc.catalog == h.defCat() {
 		cc.catalog = ""
 	}
 	return cc
@@ -441,8 +465,8 @@ func (c *Conn) Close() error {
 	}
 	var cat, schema string
 	err := c.c.QueryRowContext(ctx, "SELECT current_database(), current_schema()").Scan(&cat, &schema)
-	if err != nil || cat != c.h.defaultCatalog || schema != c.h.defSchemaName {
-		if _, uerr := c.c.ExecContext(ctx, "USE "+QuoteQualified(c.h.defaultCatalog, c.h.defSchemaName)); uerr != nil {
+	if err != nil || cat != c.h.defCat() || schema != c.h.defSchema() {
+		if _, uerr := c.c.ExecContext(ctx, "USE "+QuoteQualified(c.h.defCat(), c.h.defSchema())); uerr != nil {
 			_ = c.c.Raw(func(any) error { return driver.ErrBadConn })
 		}
 	}
@@ -528,6 +552,54 @@ func (h *hub) Connect(ctx context.Context, name string) error {
 	return nil
 }
 
+func (h *hub) SetDefaultCatalog(ctx context.Context, name string) error {
+	if name == h.defCat() {
+		return nil
+	}
+	if !h.ownsDB {
+		return fmt.Errorf("the default catalog of a wrapped session cannot be changed")
+	}
+	h.mu.RLock()
+	e := h.conns[name]
+	h.mu.RUnlock()
+	if e == nil || !e.attach {
+		return fmt.Errorf("connection %q is not attached", name)
+	}
+	n := name
+	h.cfg.initCatalog.Store(&n)
+	// Recycle idle pooled connections so every one re-runs the USE above.
+	h.db.SetMaxIdleConns(0)
+	h.db.SetMaxIdleConns(2)
+
+	conn, err := h.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get connection: %w", err)
+	}
+	defer conn.Close() //nolint:errcheck
+	var cat, schema string
+	if err := conn.QueryRowContext(ctx, "SELECT current_database(), current_schema()").Scan(&cat, &schema); err != nil {
+		return fmt.Errorf("failed to read default catalog: %w", err)
+	}
+	if cat != name {
+		return fmt.Errorf("failed to switch the default catalog to %q", name)
+	}
+	h.mu.Lock()
+	h.defMu.Lock()
+	if old := h.conns[h.defaultCatalog]; old != nil {
+		old.status.Default = false
+	}
+	e.status.Default = true
+	h.defaultCatalog = name
+	h.defSchemaName = schema
+	h.defMu.Unlock()
+	h.mu.Unlock()
+	h.schemaMu.Lock()
+	h.defaultSchema = map[string]string{name: schema}
+	h.schemaMu.Unlock()
+	h.InvalidateSchema("")
+	return nil
+}
+
 func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -537,7 +609,7 @@ func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
 }
 
 func (h *hub) Detach(ctx context.Context, name string) error {
-	if name == h.defaultCatalog {
+	if name == h.defCat() {
 		return fmt.Errorf("cannot detach the default catalog %q", name)
 	}
 	h.mu.RLock()

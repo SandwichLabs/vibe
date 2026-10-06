@@ -3,6 +3,10 @@ package agents
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -25,6 +29,13 @@ type sessionContainer struct {
 func (c *sessionContainer) SQLiteDB() *sql.DB        { return c.sqlite }
 func (c *sessionContainer) DuckDBDB() *sql.DB        { return c.sess.DB() }
 func (c *sessionContainer) Session() session.Session { return c.sess }
+func (c *sessionContainer) Notebooks() notebooks.Store {
+	return notebooks.NewSQLiteStore(c.sqlite)
+}
+func (c *sessionContainer) Queries() queries.Store {
+	return queries.NewRegistry(c.sqlite, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+func (c *sessionContainer) Skills() skills.Store { return skills.NewSQLiteStore(c.sqlite) }
 
 // newCatalogHandler builds a full-sandbox Handler over a hub whose default
 // catalog holds users(id, name) and whose attached catalog "other" holds
@@ -173,12 +184,11 @@ func TestRunReadOnlySQLIn_ConnectionIsDefaultCatalog(t *testing.T) {
 
 func TestSkills_TableBoundOnSecondCatalog(t *testing.T) {
 	_, sess := newCatalogHandler(t)
-	db := sess.DB()
-	assert.True(t, tableHasRows(db, "other.main.orders"))
-	assert.True(t, tableHasRows(db, "users"))
-	assert.False(t, tableHasRows(db, "orders"), "orders only exists in the other catalog")
-	assert.False(t, tableHasRows(db, "other.main.ghost"))
-	assert.False(t, tableHasRows(db, `other.main.orders"; DROP TABLE users; --`))
+	assert.True(t, tableHasRows(sess, "other.main.orders"))
+	assert.True(t, tableHasRows(sess, "users"))
+	assert.False(t, tableHasRows(sess, "orders"), "orders only exists in the other catalog")
+	assert.False(t, tableHasRows(sess, "other.main.ghost"))
+	assert.False(t, tableHasRows(sess, `other.main.orders"; DROP TABLE users; --`))
 
 	sqliteDB, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
@@ -188,7 +198,7 @@ func TestSkills_TableBoundOnSecondCatalog(t *testing.T) {
 		table_name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user',
 		created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
 	require.NoError(t, err)
-	require.NoError(t, WriteImportSkill(sqliteDB, db, "other.main.orders"))
+	require.NoError(t, WriteImportSkill(skills.NewSQLiteStore(sqliteDB), sess, "other.main.orders"))
 	var instr string
 	require.NoError(t, sqliteDB.QueryRow("SELECT instructions FROM _vibe_skills").Scan(&instr))
 	assert.Contains(t, instr, "total", "the skill describes the other catalog's table")

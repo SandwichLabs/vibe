@@ -25,6 +25,9 @@ type Summary struct {
 	Title     string `json:"title"`
 	CellCount int    `json:"cellCount"`
 	UpdatedAt string `json:"updatedAt"`
+	// Error is set by the file store for a notebook file that failed to parse:
+	// it still lists (so it can be found and fixed) with the file stem as title.
+	Error string `json:"error,omitempty"`
 }
 
 // List returns every notebook in the container, newest-updated first.

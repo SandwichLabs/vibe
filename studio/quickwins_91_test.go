@@ -39,13 +39,13 @@ func TestOpenFile_WrongPassphrase_FriendlyMessage(t *testing.T) {
 func TestSaveQuery_ReturnsID(t *testing.T) {
 	app := newOpenApp(t)
 
-	id, err := app.SaveQuery("", "First title", "SELECT 1", "")
+	first, err := app.SaveQuery("", "First title", "SELECT 1", "", "")
 	require.NoError(t, err)
-	require.NotEmpty(t, id)
+	require.NotEmpty(t, first.ID)
 
-	id2, err := app.SaveQuery(id, "Second title", "SELECT 2", "")
+	second, err := app.SaveQuery(first.ID, "Second title", "SELECT 2", "", first.Rev)
 	require.NoError(t, err)
-	assert.Equal(t, id, id2)
+	assert.Equal(t, first.ID, second.ID)
 
 	list, err := app.ListQueries()
 	require.NoError(t, err)

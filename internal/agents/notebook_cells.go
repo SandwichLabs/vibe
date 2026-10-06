@@ -14,7 +14,7 @@ import (
 // --- add_query_cell / create_dashboard (#67 deferred part) ---
 //
 // Unlike write_cell (task mode: propose, dialog shows a preview, user clicks
-// Apply), these persist directly to _vibe_notebooks — the agent panel's
+// Apply), these persist directly to the notebook store — the agent panel's
 // chat/MCP surface has no proposal dialog, so the user's own ask ("add a
 // dashboard of X to my notebook") is the confirmation. Both go through
 // notebooks.Coerce (via notebooks.Save) exactly like every other notebook
@@ -24,13 +24,13 @@ import (
 // given, else the Studio-tracked active notebook (h.resolveActiveNotebook()), else
 // a brand-new notebook titled fallbackTitle. Mirrors the contract
 // add_query_cell/create_dashboard's ToolDef descriptions promise.
-func (h *Handler) resolveTargetNotebook(db notebooks.DB, explicitID, fallbackTitle string) (notebooks.Notebook, error) {
+func (h *Handler) resolveTargetNotebook(ctx context.Context, store notebooks.Store, explicitID, fallbackTitle string) (notebooks.Notebook, error) {
 	id := strings.TrimSpace(explicitID)
 	if id == "" {
 		id = strings.TrimSpace(h.resolveActiveNotebook())
 	}
 	if id != "" {
-		nb, warnings, err := notebooks.Get(db, id)
+		nb, warnings, err := store.Get(ctx, id)
 		if err != nil {
 			return notebooks.Notebook{}, fmt.Errorf("notebook %q not found: %w", id, err)
 		}
@@ -43,19 +43,19 @@ func (h *Handler) resolveTargetNotebook(db notebooks.DB, explicitID, fallbackTit
 	if title == "" {
 		title = "Untitled notebook"
 	}
-	return notebooks.Create(db, title)
+	return store.Create(ctx, title)
 }
 
 // saveWithNewCell appends cell to nb and persists it through
 // notebooks.Save/Coerce (never a direct INSERT), returning the saved
 // notebook and any coercion warnings.
-func saveWithNewCell(db notebooks.DB, nb notebooks.Notebook, cell notebooks.Cell) (notebooks.Notebook, []string, error) {
+func saveWithNewCell(ctx context.Context, store notebooks.Store, nb notebooks.Notebook, cell notebooks.Cell) (notebooks.Notebook, []string, error) {
 	nb.Cells = append(nb.Cells, cell)
 	raw, err := json.Marshal(nb)
 	if err != nil {
 		return notebooks.Notebook{}, nil, fmt.Errorf("failed to marshal notebook: %w", err)
 	}
-	return notebooks.Save(db, raw)
+	return store.Save(ctx, raw)
 }
 
 func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Response {
@@ -74,8 +74,8 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	}
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))
-	db := h.container.SQLiteDB()
-	nb, err := h.resolveTargetNotebook(db, stringParam(req.Params["notebook_id"]), label)
+	store := h.container.Notebooks()
+	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), label)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
@@ -91,7 +91,7 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		cell.ViewPinned = true
 	}
 
-	saved, warnings, err := saveWithNewCell(db, nb, cell)
+	saved, warnings, err := saveWithNewCell(ctx, store, nb, cell)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, err.Error())
 	}
@@ -104,14 +104,14 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	})
 }
 
-func (h *Handler) handleCreateDashboard(_ context.Context, req *Request) *Response {
+func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Response {
 	page, err := a2ui.Validate(req.Params["page"])
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 
-	db := h.container.SQLiteDB()
-	nb, err := h.resolveTargetNotebook(db, stringParam(req.Params["notebook_id"]), page.Title)
+	store := h.container.Notebooks()
+	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), page.Title)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
@@ -122,7 +122,7 @@ func (h *Handler) handleCreateDashboard(_ context.Context, req *Request) *Respon
 	}
 	cell.Page = &page
 
-	saved, warnings, err := saveWithNewCell(db, nb, cell)
+	saved, warnings, err := saveWithNewCell(ctx, store, nb, cell)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, err.Error())
 	}
@@ -153,9 +153,8 @@ func (h *Handler) handleCreateDashboard(_ context.Context, req *Request) *Respon
 // this is a safety cap, not a normal-case truncation.
 const notebookCellSourceBudgetRunes = 4000
 
-func (h *Handler) handleListNotebooks(_ context.Context, req *Request) *Response {
-	db := h.container.SQLiteDB()
-	list, err := notebooks.List(db)
+func (h *Handler) handleListNotebooks(ctx context.Context, req *Request) *Response {
+	list, err := h.container.Notebooks().List(ctx)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list notebooks: %v", err))
 	}
@@ -171,14 +170,13 @@ func (h *Handler) handleListNotebooks(_ context.Context, req *Request) *Response
 	return NewResponse(req.ID, map[string]any{"notebooks": out})
 }
 
-func (h *Handler) handleGetNotebook(_ context.Context, req *Request) *Response {
+func (h *Handler) handleGetNotebook(ctx context.Context, req *Request) *Response {
 	id := strings.TrimSpace(stringParam(req.Params["id"]))
 	if id == "" {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "id is required")
 	}
 
-	db := h.container.SQLiteDB()
-	nb, warnings, err := notebooks.Get(db, id)
+	nb, warnings, err := h.container.Notebooks().Get(ctx, id)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("notebook %q not found: %v", id, err))
 	}

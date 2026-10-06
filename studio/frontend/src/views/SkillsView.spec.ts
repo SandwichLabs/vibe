@@ -102,7 +102,7 @@ describe('SkillsView', () => {
     await wrapper.find('[data-testid="skill-instructions-input"]').setValue('Do the thing.')
     await wrapper.find('[data-testid="skill-save"]').trigger('click')
     await flushPromises()
-    expect(app.SaveSkill).toHaveBeenCalledWith('new-skill', 'A new skill', 'Do the thing.', '')
+    expect(app.SaveSkill).toHaveBeenCalledWith('new-skill', 'A new skill', 'Do the thing.', '', '')
   })
 
   it('rejects an invalid skill name client-side without calling SaveSkill', async () => {

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -155,10 +156,17 @@ type Store struct {
 }
 
 // DefaultDir returns the per-user config directory Vibe uses:
-// $VIBE_CONFIG_DIR if set, else os.UserConfigDir()/vibe.
+// $VIBE_CONFIG_DIR if set to an absolute path (a relative one is ignored with
+// a warning), else os.UserConfigDir()/vibe.
 func DefaultDir() (string, error) {
 	if d := strings.TrimSpace(os.Getenv("VIBE_CONFIG_DIR")); d != "" {
-		return d, nil
+		if filepath.IsAbs(d) {
+			return d, nil
+		}
+		// A relative directory would resolve against whatever the working
+		// directory happens to be, so a different folder per launch (and
+		// inside a cloned repository when run from one): ignore it.
+		slog.Default().Warn("ignoring VIBE_CONFIG_DIR: it must be an absolute path", "value", d)
 	}
 	base, err := os.UserConfigDir()
 	if err != nil {

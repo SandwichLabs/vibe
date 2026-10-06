@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
@@ -44,7 +45,8 @@ func (m mode) String() string {
 
 // ContainerAccess is the minimal container surface the TUI needs.
 type ContainerAccess interface {
-	SQLiteDB() *sql.DB
+	// Notebooks is the notebook store (nil when there is none).
+	Notebooks() notebooks.Store
 	DuckDBDB() *sql.DB
 	Session() session.Session
 	Save() error
@@ -115,7 +117,7 @@ func (a *App) LoadData() {
 		return
 	}
 	a.tables.LoadTables(a.container.Session())
-	a.notebooks.LoadNotebooks(a.container.SQLiteDB())
+	a.notebooks.LoadNotebooks(a.container.Notebooks())
 }
 
 // Init implements tea.Model.

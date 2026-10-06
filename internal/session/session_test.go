@@ -539,3 +539,44 @@ func TestOpenTransactionIsRolledBackOnRelease(t *testing.T) {
 	require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM t WHERE a = 4").Scan(&n))
 	assert.Equal(t, 1, n)
 }
+
+func TestSetDefaultCatalog(t *testing.T) {
+	s := newTestSession(t)
+	ctx := context.Background()
+	path := mkDuckFile(t, "wsdata", "CREATE TABLE t(x INT)", "INSERT INTO t VALUES (7)")
+	require.NoError(t, s.Attach(ctx, Spec{Name: "wsdata", Type: "duckdb", Path: path}))
+	require.NoError(t, s.SetDefaultCatalog(ctx, "wsdata"))
+	assert.Equal(t, "wsdata", s.DefaultCatalog())
+
+	// Every pooled connection, new or recycled, starts in the new default.
+	for i := 0; i < 4; i++ {
+		var cat string
+		require.NoError(t, s.DB().QueryRow("SELECT current_database()").Scan(&cat))
+		assert.Equal(t, "wsdata", cat)
+	}
+	rows, err := s.Query(ctx, "SELECT x FROM t")
+	require.NoError(t, err)
+	assert.True(t, rows.Next())
+	require.NoError(t, rows.Close())
+
+	// A pinned connection returns to the new default.
+	otherPath := mkDuckFile(t, "pinned", "CREATE TABLE p(x INT)")
+	require.NoError(t, s.Attach(ctx, Spec{Name: "pinned", Type: "duckdb", Path: otherPath}))
+	c, err := s.Conn(ctx, WithCatalog("pinned"))
+	require.NoError(t, err)
+	require.NoError(t, c.Close())
+	var cat string
+	require.NoError(t, s.DB().QueryRow("SELECT current_database()").Scan(&cat))
+	assert.Equal(t, "wsdata", cat)
+
+	var defaults int
+	for _, st := range s.Connections() {
+		if st.Default {
+			defaults++
+			assert.Equal(t, "wsdata", st.Name)
+		}
+	}
+	assert.Equal(t, 1, defaults)
+
+	assert.Error(t, s.SetDefaultCatalog(ctx, "nope"))
+}

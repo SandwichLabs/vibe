@@ -2,6 +2,7 @@ package session
 
 import (
 	"log/slog"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +17,10 @@ type config struct {
 	defaultTO     time.Duration // default statement timeout (0 = none)
 	defaultRowCap int           // default row cap (0 = none)
 	skipLock      bool          // tests only: leave lock_configuration off
+
+	// initCatalog, once set by SetDefaultCatalog, is USEd on every new pooled
+	// connection of an owned hub so the pool's default catalog follows it.
+	initCatalog atomic.Pointer[string]
 }
 
 func newConfig(opts []Option) *config {

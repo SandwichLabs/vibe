@@ -92,14 +92,53 @@ func Builtins() []Skill {
 // delimiter returns ok=false. CRLF line endings are normalized first so a
 // file edited on Windows still parses.
 func ParseFrontmatter(raw string) (name, description, body string, ok bool) {
+	doc, ok := ParseDocument(raw)
+	if !ok {
+		return "", "", "", false
+	}
+	return doc.Meta["name"], doc.Meta["description"], doc.Body, true
+}
+
+// Document is a parsed SKILL.md: every simple `key: value` frontmatter pair
+// (not only name and description; the file store keeps table_name and source
+// there too, and other tools such as Claude Code add their own) and the
+// trimmed markdown body.
+type Document struct {
+	Meta map[string]string
+	Body string
+	// Front is the frontmatter exactly as written, one entry per line, and
+	// RawBody the body with only its leading and trailing blank lines removed
+	// (indentation intact). The file store uses them to rewrite a skill
+	// without losing keys it does not know about.
+	Front   []string
+	RawBody string
+}
+
+// TrimBlankLines removes leading and trailing lines that are empty or only
+// whitespace, leaving every other byte, indentation included, untouched.
+func TrimBlankLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ParseDocument parses a SKILL.md as ParseFrontmatter does, but returns every
+// frontmatter key. ok is false for malformed frontmatter or a missing name or
+// description.
+func ParseDocument(raw string) (Document, bool) {
 	raw = strings.ReplaceAll(raw, "\r\n", "\n")
 	if !strings.HasPrefix(raw, "---\n") {
-		return "", "", "", false
+		return Document{}, false
 	}
 	rest := raw[len("---\n"):]
 	end := strings.Index(rest, "\n---")
 	if end < 0 {
-		return "", "", "", false
+		return Document{}, false
 	}
 	frontmatter := rest[:end]
 	after := rest[end+len("\n---"):]
@@ -117,11 +156,8 @@ func ParseFrontmatter(raw string) (name, description, body string, ok bool) {
 		}
 		meta[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
-
-	name = meta["name"]
-	description = meta["description"]
-	if name == "" || description == "" {
-		return "", "", "", false
+	if meta["name"] == "" || meta["description"] == "" {
+		return Document{}, false
 	}
-	return name, description, strings.TrimSpace(after), true
+	return Document{Meta: meta, Body: strings.TrimSpace(after), Front: strings.Split(frontmatter, "\n"), RawBody: TrimBlankLines(after)}, true
 }

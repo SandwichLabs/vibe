@@ -36,7 +36,7 @@ type App struct {
 	mu          sync.RWMutex
 	container   *container.Container
 	engine      *engine.Manager
-	registry    *queries.Registry
+	registry    queries.Store
 	filePath    string
 	mcpServer   *vibemcp.Server
 	initialFile string
@@ -419,7 +419,7 @@ func (a *App) OpenFile(path, passphrase string) error {
 
 	a.container = c
 	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
-	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
+	a.registry = c.Queries()
 	a.filePath = path
 	a.beginFileSession()
 	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
@@ -461,7 +461,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 
 	a.container = c
 	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
-	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
+	a.registry = c.Queries()
 	a.filePath = path
 	a.beginFileSession()
 	notebooks.MigrateOnOpen(a.container.SQLiteDB(), a.container.IsReadOnly(), a.logger)
@@ -656,6 +656,9 @@ type SkillSummary struct {
 	Instructions string `json:"instructions"`
 	TableName    string `json:"table_name,omitempty"`
 	Source       string `json:"source"` // built-in | user | import
+	// Rev is the store's revision as listed; SaveSkill sends it back so a
+	// save from a stale copy is a conflict (file-backed workspaces).
+	Rev string `json:"rev,omitempty"`
 }
 
 // ListSkills returns every skill visible to chat: built-ins plus stored
@@ -671,7 +674,7 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	entries, err := agents.LoadSkills(a.container.SQLiteDB(), a.container.DuckDBDB(), a.logger)
+	entries, err := agents.LoadSkills(a.container.Skills(), a.container.Session(), a.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %w", err)
 	}
@@ -680,7 +683,7 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 	for _, s := range visible {
 		out = append(out, SkillSummary{
 			Name: s.Name, Description: s.Description, Instructions: s.Instructions,
-			TableName: s.TableName, Source: s.Source,
+			TableName: s.TableName, Source: s.Source, Rev: s.Rev,
 		})
 	}
 	return out, nil
@@ -692,14 +695,14 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 // shared by both entry points). Like page/table CRUD elsewhere in this file,
 // this bypasses the agent sandbox gate entirely: it's the user directly
 // authoring content in Studio, not an agent tool call.
-func (a *App) SaveSkill(name, description, instructions, tableName string) error {
+func (a *App) SaveSkill(name, description, instructions, tableName, rev string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if err := agents.SaveUserSkill(a.container.SQLiteDB(), a.container.DuckDBDB(), name, description, instructions, tableName); err != nil {
+	if _, err := agents.SaveUserSkillAt(a.container.Skills(), a.container.Session(), name, description, instructions, tableName, rev); err != nil {
 		return err
 	}
 	a.emitEvent("data:changed")
@@ -715,7 +718,7 @@ func (a *App) DeleteSkill(name string) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if err := agents.DeleteSkill(a.container.SQLiteDB(), name); err != nil {
+	if err := agents.DeleteSkill(a.container.Skills(), name); err != nil {
 		return err
 	}
 	a.emitEvent("data:changed")
@@ -762,7 +765,7 @@ func (a *App) ListNotebooks() ([]notebooks.Summary, error) {
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-	return notebooks.List(a.container.SQLiteDB())
+	return a.container.Notebooks().List(context.Background())
 }
 
 // GetNotebook loads one notebook, rebuilt through notebooks.Coerce.
@@ -773,7 +776,7 @@ func (a *App) GetNotebook(id string) (*notebooks.Notebook, error) {
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-	nb, warnings, err := notebooks.Get(a.container.SQLiteDB(), id)
+	nb, warnings, err := a.container.Notebooks().Get(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -803,7 +806,7 @@ func (a *App) CreateNotebook(title string) (*notebooks.Notebook, error) {
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-	nb, err := notebooks.Create(a.container.SQLiteDB(), title)
+	nb, err := a.container.Notebooks().Create(context.Background(), title)
 	if err != nil {
 		return nil, err
 	}
@@ -843,7 +846,7 @@ func (a *App) SaveNotebook(raw map[string]any, sessionID string) (*NotebookSaveR
 	if sessionID != a.sessionID {
 		return nil, fmt.Errorf("stale file session: the open file changed since this notebook was loaded; reopen it and try again")
 	}
-	nb, warnings, err := notebooks.Save(a.container.SQLiteDB(), raw)
+	nb, warnings, err := a.container.Notebooks().Save(context.Background(), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -859,7 +862,7 @@ func (a *App) RenameNotebook(id, title string) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if err := notebooks.Rename(a.container.SQLiteDB(), id, title); err != nil {
+	if err := a.container.Notebooks().Rename(context.Background(), id, title); err != nil {
 		return err
 	}
 	a.emitNotebooksChanged(id, nil)
@@ -874,7 +877,7 @@ func (a *App) DeleteNotebook(id string) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if err := notebooks.Delete(a.container.SQLiteDB(), id); err != nil {
+	if err := a.container.Notebooks().Delete(context.Background(), id); err != nil {
 		return err
 	}
 	a.emitNotebooksChanged(id, nil)
@@ -901,7 +904,7 @@ func (a *App) ExportNotebook(id, dst string) (string, error) {
 		a.mu.RUnlock()
 		return "", fmt.Errorf("no file open")
 	}
-	nb, warnings, err := notebooks.Get(a.container.SQLiteDB(), id)
+	nb, warnings, err := a.container.Notebooks().Get(context.Background(), id)
 	a.mu.RUnlock()
 	if err != nil {
 		return "", err
@@ -1009,7 +1012,7 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 		delete(wrapper, "updatedAt")
 	}
 
-	nb, warnings, err := notebooks.Save(a.container.SQLiteDB(), wrapper)
+	nb, warnings, err := a.container.Notebooks().Save(context.Background(), wrapper)
 	if err != nil {
 		return nil, err
 	}
@@ -2019,38 +2022,53 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 	return a.registry.Get(context.Background(), id)
 }
 
+// QuerySaveResult is what SaveQuery returns: the query's id and the revision
+// the store now holds for it (empty for a legacy .vibe), which the editor sends
+// back with its next save.
+type QuerySaveResult struct {
+	ID  string `json:"id"`
+	Rev string `json:"rev"`
+}
+
 // SaveQuery creates or updates a saved query, returning its id so the
 // caller (QueryEditorView) can select and highlight it without a second
 // round trip (#91: the id used to be discarded, so a freshly-created query
 // couldn't become "selected").
-func (a *App) SaveQuery(id, title, sqlStr, description string) (string, error) {
+func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.container == nil {
-		return "", fmt.Errorf("no file open")
-	}
-
-	if id == "" {
-		id = uuid.New().String()
+		return nil, fmt.Errorf("no file open")
 	}
 
 	q := &queries.Query{
-		ID:         id,
-		Title:      title,
-		SQL:        sqlStr,
-		Engine:     "duckdb",
-		Parameters: []queries.Param{},
+		ID:          id,  // "" lets the store assign one
+		Rev:         rev, // the revision the editor loaded; a stale one is a conflict
+		Title:       title,
+		Description: description,
+		SQL:         sqlStr,
+		Engine:      "duckdb",
+		Parameters:  []queries.Param{},
 	}
 
-	// Try update first, create if not found.
-	err := a.registry.Update(context.Background(), q)
-	if err != nil {
-		if err := a.registry.Create(context.Background(), q); err != nil {
-			return "", err
+	// Update first for an existing query; a new one (or an id the store does
+	// not know) is created. Anything else, a conflict on a file that changed
+	// on disk included, is returned to the caller instead of being retried as
+	// a create.
+	if id != "" {
+		err := a.registry.Update(context.Background(), q)
+		if err == nil {
+			return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
+		}
+		if !errors.Is(err, queries.ErrNotFound) {
+			return nil, err
 		}
 	}
-	return id, nil
+	if err := a.registry.Create(context.Background(), q); err != nil {
+		return nil, err
+	}
+	return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
 }
 
 // PreviewFilterSQL renders a FilterSpec (plus optional selected columns from the
@@ -2077,9 +2095,7 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 		return "", err
 	}
 
-	id := uuid.New().String()
 	q := &queries.Query{
-		ID:         id,
 		Title:      title,
 		SQL:        sqlStr,
 		Engine:     "duckdb",
@@ -2088,8 +2104,8 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 	if err := a.registry.Create(context.Background(), q); err != nil {
 		return "", fmt.Errorf("failed to save filter as query: %w", err)
 	}
-	a.logger.Info("saved filter as named query", "id", id, "table", name, "title", title)
-	return id, nil
+	a.logger.Info("saved filter as named query", "id", q.ID, "table", name, "title", title)
+	return q.ID, nil
 }
 
 // generateFilterSQL is the single, deterministic FilterSpec → SQL renderer behind
@@ -2339,7 +2355,7 @@ func (a *App) agentPolicy() agents.FilePolicy {
 	if a.container == nil {
 		return agents.FilePolicy{Mode: agents.DefaultSandboxMode, AskBeforeWrites: true}
 	}
-	return agents.ReadFilePolicy(a.container)
+	return agents.PolicyFrom(agents.MetaPolicy(a.container))
 }
 
 // AgentConfig surfaces the agent configuration to the UI. Provider/model/endpoint
@@ -3047,7 +3063,7 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 		// against a table actually named "Customers") — writing the skill
 		// under the caller's original casing could create a second,
 		// wrong-table skill instead of refreshing the real one's.
-		if err := agents.WriteImportSkill(a.container.SQLiteDB(), db, summary.Table); err != nil {
+		if err := agents.WriteImportSkill(a.container.Skills(), a.container.Session(), summary.Table); err != nil {
 			a.logger.Warn("failed to write import skill", "table", summary.Table, "error", err)
 		}
 		a.emitEvent("data:changed")

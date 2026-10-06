@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"database/sql"
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -30,11 +31,11 @@ func NewNotebooksModel() NotebooksModel {
 }
 
 // LoadNotebooks refreshes the notebook list from the container.
-func (m *NotebooksModel) LoadNotebooks(db *sql.DB) {
-	if db == nil {
+func (m *NotebooksModel) LoadNotebooks(store notebooks.Store) {
+	if store == nil {
 		return
 	}
-	list, err := notebooks.List(db)
+	list, err := store.List(context.Background())
 	if err != nil {
 		return
 	}
@@ -91,7 +92,13 @@ func (m NotebooksModel) Update(msg tea.Msg, container ContainerAccess) (Notebook
 			sel := m.items[m.cursor]
 			m.title = sanitizeForTerminal(sel.Title, false)
 			m.err = ""
-			nb, _, err := notebooks.Get(container.SQLiteDB(), sel.ID)
+			var nb notebooks.Notebook
+			var err error
+			if store := container.Notebooks(); store == nil {
+				err = errors.New("no notebook store")
+			} else {
+				nb, _, err = store.Get(context.Background(), sel.ID)
+			}
 			if err != nil {
 				m.err = err.Error()
 			} else {

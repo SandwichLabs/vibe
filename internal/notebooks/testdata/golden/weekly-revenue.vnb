@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 2,
+  "title": "Weekly revenue",
+  "cells": [
+    {
+      "id": "cell_1",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT region, sum(amt) AS total\nFROM orders\nWHERE amt > 10 AND note <> '<b>&</b>'\nGROUP BY 1",
+      "view": "bar",
+      "viewPinned": true,
+      "label": "By region",
+      "connection": "local"
+    },
+    {
+      "id": "cell_2",
+      "type": "markdown",
+      "collapsed": false,
+      "source": "# Notes\n\nRevenue < forecast & rising.\n"
+    },
+    {
+      "id": "cell_3",
+      "type": "a2ui",
+      "collapsed": true,
+      "page": {
+        "title": "Dash",
+        "components": [
+          {
+            "id": "t",
+            "text": "a < b",
+            "type": "text"
+          }
+        ]
+      }
+    }
+  ]
+}

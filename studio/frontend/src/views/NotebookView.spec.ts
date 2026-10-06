@@ -388,6 +388,56 @@ describe('NotebookView', () => {
     expect(vm.cells.map((c: any) => c.id)).toContain('new1')
   })
 
+  // Re-review #109 item 6: the remote revision is adopted after an agent append
+  // only when nothing else changed on disk.
+  it('adopts the remote rev after an append that is the only change, and sends it on the next save', async () => {
+    const base = { ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: 'r1' }
+    const appended = { id: 'new1', type: 'markdown', collapsed: false, source: 'agent cell' }
+    let calls = 0
+    const app = makeApp({
+      GetNotebook: vi.fn(async () => {
+        calls++
+        return calls === 1 ? JSON.parse(JSON.stringify(base)) : { ...JSON.parse(JSON.stringify(base)), cells: [...base.cells, appended], rev: 'r2' }
+      }),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleNotebooksChanged({ notebookId: 'nb1', appendedCellIds: ['new1'] })
+    await flushPromises()
+    expect(vm.cells.map((c: any) => c.id)).toContain('new1')
+    await vm.flushSave()
+    await flushPromises()
+    const sent = (app.SaveNotebook as any).mock.calls.at(-1)[0]
+    expect(sent.rev).toBe('r2')
+  })
+
+  it('keeps the old rev, and says so, when the remote notebook changed in some other way too', async () => {
+    const base = { ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: 'r1' }
+    const appended = { id: 'new1', type: 'markdown', collapsed: false, source: 'agent cell' }
+    let calls = 0
+    const app = makeApp({
+      GetNotebook: vi.fn(async () => {
+        calls++
+        return calls === 1
+          ? JSON.parse(JSON.stringify(base))
+          : { ...JSON.parse(JSON.stringify(base)), title: 'Retitled by a git pull', cells: [...base.cells, appended], rev: 'r2' }
+      }),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleNotebooksChanged({ notebookId: 'nb1', appendedCellIds: ['new1'] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('also changed on disk')
+    await vm.flushSave()
+    await flushPromises()
+    const sent = (app.SaveNotebook as any).mock.calls.at(-1)[0]
+    expect(sent.rev).toBe('r1')
+  })
+
   it('drops a queued append event for a notebook that is no longer loaded (superseded)', async () => {
     let resolveNb2Load: ((v: any) => void) | null = null
     const NB2 = { schemaVersion: 1, id: 'nb2', title: 'NB2', updatedAt: 't', cells: [] as any[] }

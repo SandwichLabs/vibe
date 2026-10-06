@@ -98,6 +98,7 @@ var Tools = []ToolDef{
 			{Name: "description", Type: "string", Required: true, Desc: "One-line description advertised in the system prompt (<= 300 characters)"},
 			{Name: "instructions", Type: "string", Required: true, Desc: "Full markdown instructions, fetched on demand via read_skill"},
 			{Name: "table_name", Type: "string", Required: false, Desc: "Optional: gate this skill so it only loads once this table exists and has at least one row"},
+			{Name: "rev", Type: "string", Required: false, Desc: "Optional: the \"rev\" that list_skills or read_skill returned for this skill. If the skill changed since, the save is refused instead of overwriting the change"},
 		},
 	},
 	{

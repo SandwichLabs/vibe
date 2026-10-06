@@ -20,7 +20,8 @@ import (
 func newNotebookTestHandler(t *testing.T, mode SandboxMode) (*Handler, notebooks.DB) {
 	t.Helper()
 	handler, duckDB := newRealDuckDBHandler(t, mode)
-	sqliteDB := handler.container.SQLiteDB()
+	mc, _ := handler.container.(*mockContainer)
+	sqliteDB := mc.SQLiteDB()
 	_, err := sqliteDB.Exec(`CREATE TABLE _vibe_notebooks (
 		id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cells TEXT NOT NULL DEFAULT '[]',
 		created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
@@ -180,7 +181,7 @@ func TestListNotebooks_ReturnsEveryNotebook(t *testing.T) {
 	cell, err := notebooks.NewCell(notebooks.CellSQL)
 	require.NoError(t, err)
 	cell.Source = "SELECT 1"
-	_, _, err = saveWithNewCell(db, nb, cell)
+	_, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, cell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -203,13 +204,13 @@ func TestGetNotebook_ReturnsCellSourcesAsData(t *testing.T) {
 	require.NoError(t, err)
 	sqlCell.Source = "SELECT 1 AS one"
 	sqlCell.Label = "one"
-	nb, _, err = saveWithNewCell(db, nb, sqlCell)
+	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, sqlCell)
 	require.NoError(t, err)
 
 	mdCell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	mdCell.Source = "# Hello"
-	nb, _, err = saveWithNewCell(db, nb, mdCell)
+	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, mdCell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -246,7 +247,7 @@ func TestGetNotebook_TruncatesLongSource(t *testing.T) {
 	mdCell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	mdCell.Source = strings.Repeat("x", notebookCellSourceBudgetRunes+500)
-	nb, _, err = saveWithNewCell(db, nb, mdCell)
+	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, mdCell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -350,7 +351,7 @@ func TestGetNotebook_NoTruncatedFieldWhenEverythingFits(t *testing.T) {
 	cell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	cell.Source = "hello"
-	saved, _, err := saveWithNewCell(db, nb, cell)
+	saved, _, err := saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, cell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{

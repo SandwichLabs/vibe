@@ -10,6 +10,7 @@ package container
 // seed data + a notebook).
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -79,7 +80,7 @@ func applyTemplate(c *Container, name string) error {
 	if err := seedTemplateTables(c.duckDB.db, tmpl); err != nil {
 		return fmt.Errorf("failed to seed template %q tables: %w", name, err)
 	}
-	if _, _, err := notebooks.Insert(c.sqliteDB, tmpl.Book); err != nil {
+	if _, _, err := c.Notebooks().Insert(context.Background(), tmpl.Book); err != nil {
 		return fmt.Errorf("failed to seed template %q notebook: %w", name, err)
 	}
 	return nil

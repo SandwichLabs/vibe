@@ -697,6 +697,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class QuerySaveResult {
+	    id: string;
+	    rev: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuerySaveResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.rev = source["rev"];
+	    }
+	}
 	export class NotebookSaveResult {
 	    notebook: notebooks.Notebook;
 	    warnings: string[];
@@ -789,6 +803,7 @@ export namespace main {
 	    instructions: string;
 	    table_name?: string;
 	    source: string;
+	    rev?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SkillSummary(source);
@@ -801,6 +816,7 @@ export namespace main {
 	        this.instructions = source["instructions"];
 	        this.table_name = source["table_name"];
 	        this.source = source["source"];
+	        this.rev = source["rev"];
 	    }
 	}
 	export class TableData {
@@ -980,6 +996,7 @@ export namespace notebooks {
 	    title: string;
 	    cells: Cell[];
 	    updatedAt: string;
+	    rev?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Notebook(source);
@@ -992,6 +1009,7 @@ export namespace notebooks {
 	        this.title = source["title"];
 	        this.cells = this.convertValues(source["cells"], Cell);
 	        this.updatedAt = source["updatedAt"];
+	        this.rev = source["rev"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1017,6 +1035,7 @@ export namespace notebooks {
 	    title: string;
 	    cellCount: number;
 	    updatedAt: string;
+	    error?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Summary(source);
@@ -1028,6 +1047,7 @@ export namespace notebooks {
 	        this.title = source["title"];
 	        this.cellCount = source["cellCount"];
 	        this.updatedAt = source["updatedAt"];
+	        this.error = source["error"];
 	    }
 	}
 
@@ -1102,6 +1122,10 @@ export namespace queries {
 	    parameters: Param[];
 	    created_at: string;
 	    updated_at: string;
+	    description?: string;
+	    connection?: string;
+	    rev?: string;
+	    error?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Query(source);
@@ -1116,6 +1140,10 @@ export namespace queries {
 	        this.parameters = this.convertValues(source["parameters"], Param);
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
+	        this.description = source["description"];
+	        this.connection = source["connection"];
+	        this.rev = source["rev"];
+	        this.error = source["error"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

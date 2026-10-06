@@ -12,7 +12,7 @@ function makeApp(opts: { execError?: string; execResult?: any; saveId?: string }
   const app = {
     ListQueries: vi.fn(async () => [{ id: 'q1', title: 'Top customers' }]),
     GetQuery: vi.fn(async () => ({ id: 'q1', title: 'Top customers', sql: 'SELECT 1' })),
-    SaveQuery: vi.fn(async () => opts.saveId ?? 'q9'),
+    SaveQuery: vi.fn(async () => ({ id: opts.saveId ?? 'q9', rev: 'r1' })),
     DeleteQuery: vi.fn(async () => {}),
     ListTableStats: vi.fn(async () => [
       { name: 'customers', rows: 89 },
@@ -224,14 +224,14 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     await modalSaveBtn().trigger('click')
     await flushPromises()
 
-    expect(app.SaveQuery).toHaveBeenNthCalledWith(1, '', 'My query', '', '')
+    expect(app.SaveQuery).toHaveBeenNthCalledWith(1, '', 'My query', '', '', '')
 
     await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 3')
     await saveBtn().trigger('click')
     await modalSaveBtn().trigger('click')
     await flushPromises()
 
-    expect(app.SaveQuery).toHaveBeenNthCalledWith(2, 'q9', 'My query', 'SELECT 3', '')
+    expect(app.SaveQuery).toHaveBeenNthCalledWith(2, 'q9', 'My query', 'SELECT 3', '', 'r1')
     expect(wrapper.find('[data-testid="query-status"]').text()).toContain('My query')
   })
 

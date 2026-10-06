@@ -6,8 +6,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+var _ Store = (*Registry)(nil)
+
+// notFoundError is what the registry's Get/Update/Delete return for an unknown
+// id. It matches both ErrNotFound and, for callers written before the Store
+// interface, sql.ErrNoRows.
+type notFoundError struct{ id string }
+
+func (e *notFoundError) Error() string { return fmt.Sprintf("query %q not found", e.id) }
+func (e *notFoundError) Is(target error) bool {
+	return target == ErrNotFound || target == sql.ErrNoRows
+}
 
 // Query represents a named, reusable query stored in _vibe_queries.
 type Query struct {
@@ -18,6 +33,21 @@ type Query struct {
 	Parameters []Param `json:"parameters"`
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`
+
+	// Description and Connection are workspace (file store) fields: the
+	// legacy container's table has no columns for them and drops them.
+	// Connection names the connection whose catalog is the default for the
+	// query's unqualified table names; "" means the workspace default.
+	Description string `json:"description,omitempty"`
+	Connection  string `json:"connection,omitempty"`
+	// Rev is the file store's revision of the query as loaded; hand it back on
+	// Update and a write against a stale copy returns ErrConflict.
+	Rev string `json:"rev,omitempty"`
+	// Error is set by the file store for a query file that could not be read
+	// (malformed header, too large, unusable name): it still lists, with the
+	// file stem as title, so it can be found and fixed. Such a query cannot be
+	// saved over until the file is fixed.
+	Error string `json:"error,omitempty"`
 }
 
 // Param defines a parameter expected by a query.
@@ -35,7 +65,8 @@ type DB interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// Registry provides CRUD operations for the _vibe_queries table.
+// Registry provides CRUD operations for the _vibe_queries table. It is the
+// legacy container's implementation of Store.
 type Registry struct {
 	db     DB
 	logger *slog.Logger
@@ -67,7 +98,7 @@ func (r *Registry) List(ctx context.Context) ([]Query, error) {
 		if err := rows.Scan(&q.ID, &q.Title, &q.SQL, &q.Engine, &paramsJSON, &q.CreatedAt, &q.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan query row: %w", err)
 		}
-		if err := json.Unmarshal([]byte(paramsJSON), &q.Parameters); err != nil {
+		if q.Parameters, err = decodeParams(paramsJSON); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal parameters for query %q: %w", q.ID, err)
 		}
 		queries = append(queries, q)
@@ -89,12 +120,13 @@ func (r *Registry) Get(ctx context.Context, id string) (*Query, error) {
 	var paramsJSON string
 	if err := row.Scan(&q.ID, &q.Title, &q.SQL, &q.Engine, &paramsJSON, &q.CreatedAt, &q.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("query %q not found: %w", id, err)
+			return nil, &notFoundError{id: id}
 		}
 		return nil, fmt.Errorf("failed to get query %q: %w", id, err)
 	}
-	if err := json.Unmarshal([]byte(paramsJSON), &q.Parameters); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal parameters for query %q: %w", id, err)
+	var perr error
+	if q.Parameters, perr = decodeParams(paramsJSON); perr != nil {
+		return nil, fmt.Errorf("failed to unmarshal parameters for query %q: %w", id, perr)
 	}
 
 	return &q, nil
@@ -103,6 +135,9 @@ func (r *Registry) Get(ctx context.Context, id string) (*Query, error) {
 // Create inserts a new query into the registry.
 // It sets CreatedAt and UpdatedAt to the current time.
 func (r *Registry) Create(ctx context.Context, q *Query) error {
+	if q.ID == "" {
+		q.ID = uuid.New().String()
+	}
 	paramsJSON, err := json.Marshal(q.Parameters)
 	if err != nil {
 		return fmt.Errorf("failed to marshal parameters for query %q: %w", q.ID, err)
@@ -126,7 +161,7 @@ func (r *Registry) Create(ctx context.Context, q *Query) error {
 
 // Update modifies an existing query in the registry.
 // It sets UpdatedAt to the current time.
-func (r *Registry) Update(ctx context.Context, q *Query) error {
+func (r *Registry) Update(ctx context.Context, q *Query, _ ...WriteOption) error {
 	paramsJSON, err := json.Marshal(q.Parameters)
 	if err != nil {
 		return fmt.Errorf("failed to marshal parameters for query %q: %w", q.ID, err)
@@ -148,7 +183,7 @@ func (r *Registry) Update(ctx context.Context, q *Query) error {
 		return fmt.Errorf("failed to check rows affected for query %q: %w", q.ID, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("query %q not found", q.ID)
+		return &notFoundError{id: q.ID}
 	}
 
 	r.logger.Info("query updated", "id", q.ID, "title", q.Title)
@@ -168,9 +203,26 @@ func (r *Registry) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to check rows affected for query %q: %w", id, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("query %q not found", id)
+		return &notFoundError{id: id}
 	}
 
 	r.logger.Info("query deleted", "id", id)
 	return nil
+}
+
+// decodeParams reads the stored parameters column. An empty, "{}" or "null"
+// value (older rows and hand-seeded files) means no parameters.
+func decodeParams(s string) ([]Param, error) {
+	switch strings.TrimSpace(s) {
+	case "", "{}", "null":
+		return []Param{}, nil
+	}
+	var out []Param
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []Param{}
+	}
+	return out, nil
 }

@@ -68,19 +68,28 @@ studio/                    # Wails v2 desktop app
                            #   Removed (#69): PagesView, PageEditorView, PageRuntimeView
 
 internal/
-├── container/             # .vibe lifecycle (open, save, close; SQLCipher + DuckDB blob; temp hardening)
+├── container/             # .vibe lifecycle (open, save, close; SQLCipher + DuckDB blob; temp hardening);
+│                          #   provides the legacy SQLite impls of notebooks/queries/skills Store (#109)
+├── workspace/             # #109: a folder + vibe.yaml. Strict vibe.yaml schema, walk-up Discover, Init, Open,
+│                          #   three connection scopes (user < shared < local; the local file lives in the user config dir, never in the folder) merged with provenance, EffectivePolicy
+│                          #   (committed sandbox/ask = a ceiling that can only tighten), ${ENV} interpolation,
+│                          #   credential Fingerprint, OpenSession (session.New + connections), fsnotify Watcher,
+│                          #   duplicate-id detection. Reference: docs/reference/workspaces.md
+├── filestore/             # #109: safe paths (never outside the root), atomic writes, compare-and-write (hash) -> ErrConflict
 ├── session/               # DuckDB hub (#108): hardened Session (catalog-aware Query/Exec/Conn, Attach/Detach,
                            #   Connections() status, schema cache, quoting helpers). The container's DuckDB is
                            #   wrapped by it (Container.Session()); in-memory New() becomes the workspace hub (#109)
 ├── engine/                # Query layer over a session.Session (Manager); table-ref parsing (ParseTable/ResolveTable/TableSQL)
 ├── crud/                  # Transactional, type-coercing row insert/update/delete (stays)
 ├── importer/              # CSV / xlsx import
-├── queries/               # Named query registry (_vibe_queries)
-├── agents/                # Tool registry (ToolDef), sandbox modes, approval queue, JSON-RPC handler
+├── queries/               # Named query `Store` (Registry over _vibe_queries; `FileStore` -> queries/<id>.sql with a `-- vibe:` header)
+├── agents/                # Tool registry (ToolDef), sandbox modes, approval queue, JSON-RPC handler;
+│                          #   reads content via ContainerAccess.Notebooks/Queries/Skills stores (never the SQLite
+│                          #   handle) and policy via `PolicySource` (container: `MetaPolicy`; workspace: `AgentPolicy()`)
 ├── llm/                   # In-app agent runner on fantasy (consumes agents.Handler tools, #63; task mode, #66)
 ├── mcp/                   # MCP server bridging agents.Handler tools (SSE; stdio via `vibe mcp serve`, #64)
 ├── a2ui/                  # A2UI component schema + validator (#67); Go validates, Vue renders
-├── notebooks/             # Notebook storage + model (#66), plus the page->notebook and report->notebook
+├── notebooks/             # Notebook model (#66) + `Store` (SQLite impl for .vibe, `FileStore` -> notebooks/<id>.vnb), plus the page->notebook and report->notebook
                            #   one-time migrations (internal/notebooks/migrate*.go) run on open
 ├── pages/                 # Legacy page markup PARSER ONLY (#69) — no executor, no renderer, no Studio
                            #   bindings. Survives solely so internal/notebooks can parse an old page's
@@ -116,7 +125,7 @@ created for new files (additive-migrations policy: schema.go never
 special-cases "new" vs "old" files, and an empty `_vibe_pages` costs nothing —
 `internal/notebooks.MigratePages` just finds zero rows to migrate).
 
-New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/llm/skills/` (embedded SKILL.md, #62), notebook storage (#66).
+New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/llm/skills/` (embedded SKILL.md, #62; also the skills `Store`: `FileStore` -> skills/<name>/SKILL.md, SQLite impl for .vibe), notebook storage (#66), `internal/workspace` + `internal/filestore` (#109; Studio/CLI/MCP still open `.vibe` until #110–#113).
 
 ## Conventions (from Sandwich Labs Go projects)
 

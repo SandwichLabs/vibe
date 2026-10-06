@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"testing"
 
@@ -20,8 +21,8 @@ type countingContainer struct {
 	saveErr   error
 }
 
-func (c *countingContainer) SQLiteDB() *sql.DB { return nil }
-func (c *countingContainer) DuckDBDB() *sql.DB { return nil }
+func (c *countingContainer) Notebooks() notebooks.Store { return nil }
+func (c *countingContainer) DuckDBDB() *sql.DB          { return nil }
 func (c *countingContainer) Save() error {
 	c.saveCalls++
 	return c.saveErr

@@ -35,6 +35,11 @@ func (m *Mock) DefaultCatalog() string {
 	return m.Catalog
 }
 
+func (m *Mock) SetDefaultCatalog(_ context.Context, name string) error {
+	m.Catalog = name
+	return nil
+}
+
 func (m *Mock) DefaultSchema(context.Context, string) (string, error) { return "main", nil }
 
 func (m *Mock) Resolve(_ context.Context, ref TableRef) (TableRef, error) {

@@ -42,6 +42,48 @@ type MetaReader interface {
 	Meta(key string) (string, error)
 }
 
+// PolicySource supplies the agent's sandbox mode and ask-before-writes gate.
+// It is the one seam between the agent and wherever the policy lives (#109):
+// the legacy container feeds it from _vibe_meta (MetaPolicy), a workspace
+// feeds it from its effective policy (committed ceiling tightened by this
+// person's local setting; internal/workspace.Workspace.AgentPolicy implements
+// this interface as is). Implementations return plain values so the source
+// never imports this package.
+type PolicySource interface {
+	// AgentPolicy returns the sandbox mode string (read-only, read-write or
+	// full) and whether every agent write needs the user's OK.
+	AgentPolicy() (sandbox string, askBeforeWrites bool)
+}
+
+// MetaPolicy is the PolicySource over a legacy file's _vibe_meta keys. A nil
+// reader yields the defaults.
+func MetaPolicy(m MetaReader) PolicySource { return metaPolicy{m: m} }
+
+type metaPolicy struct{ m MetaReader }
+
+func (p metaPolicy) AgentPolicy() (string, bool) {
+	fp := ReadFilePolicy(p.m)
+	return string(fp.Mode), fp.AskBeforeWrites
+}
+
+// PolicyFrom resolves a FilePolicy from any source, failing closed exactly
+// like ReadFilePolicy: an unrecognised sandbox string becomes read-only, never
+// the default, and a nil source yields the defaults.
+func PolicyFrom(src PolicySource) FilePolicy {
+	policy := FilePolicy{Mode: DefaultSandboxMode, AskBeforeWrites: true}
+	if src == nil {
+		return policy
+	}
+	sandbox, ask := src.AgentPolicy()
+	if mode, err := ParseSandboxMode(sandbox); err == nil {
+		policy.Mode = mode
+	} else {
+		policy.Mode = ModeReadOnly
+	}
+	policy.AskBeforeWrites = ask
+	return policy
+}
+
 // FilePolicy is the resolved, ready-to-use agent policy for one open file:
 // which sandbox mode it runs at, and whether a write needs the user's OK
 // first.

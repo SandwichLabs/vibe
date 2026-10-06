@@ -274,12 +274,12 @@ export function SaveNotebook(arg1, arg2) {
   return window['go']['main']['App']['SaveNotebook'](arg1, arg2);
 }
 
-export function SaveQuery(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4);
+export function SaveQuery(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SaveQuery'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function SaveSkill(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SaveSkill'](arg1, arg2, arg3, arg4);
+export function SaveSkill(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SaveSkill'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SelectImportFile() {

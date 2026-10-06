@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"os"
@@ -52,7 +53,16 @@ func openDB(path string, c *config) (*sql.DB, error) {
 		}
 	}
 	dsn := path + "?" + hardeningDSN(c).Encode()
-	conn, err := duckdb.NewConnector(dsn, nil)
+	conn, err := duckdb.NewConnector(dsn, func(execer driver.ExecerContext) error {
+		// A hub whose default catalog was moved (SetDefaultCatalog) starts
+		// every new pooled connection in that catalog.
+		if p := c.initCatalog.Load(); p != nil {
+			if _, err := execer.ExecContext(context.Background(), "USE "+QuoteIdent(*p), nil); err != nil {
+				return fmt.Errorf("failed to enter default catalog: %w", err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open hardened DuckDB: %w", err)
 	}

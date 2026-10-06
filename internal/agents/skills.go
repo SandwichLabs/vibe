@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -39,12 +40,16 @@ type SkillEntry struct {
 	Instructions string `json:"instructions"`
 	TableName    string `json:"table_name,omitempty"`
 	Source       string `json:"source"` // built-in | user | import
+	// Rev is the store's revision of the skill as listed (file stores: the
+	// content hash). Hand it back to SaveUserSkillAt so a save made from a
+	// stale copy is a conflict, not a clobber.
+	Rev string `json:"rev,omitempty"`
 }
 
 const (
-	SkillSourceBuiltin = "built-in"
-	SkillSourceUser    = "user"
-	SkillSourceImport  = "import"
+	SkillSourceBuiltin = skills.SourceBuiltin
+	SkillSourceUser    = skills.SourceUser
+	SkillSourceImport  = skills.SourceImport
 )
 
 // skillMaxDescriptionLen / skillMaxInstructionsLen bound what
@@ -58,14 +63,26 @@ const (
 	skillMaxInstructionsLen = 32 * 1024
 )
 
+// skillDB returns the session's pooled handle (the transitional surface
+// session.LookupTable and the importer still need), nil when there is no
+// session.
+func skillDB(sess session.Session) *sql.DB {
+	if sess == nil {
+		return nil
+	}
+	return sess.DB()
+}
+
 // skillTableRef resolves a skill's table_name to a table reference. A name
-// that is exactly the name of a table in the connection's default catalog and
+// that is exactly the name of a table in the session's default catalog and
 // schema wins (a stored name may legitimately contain dots: it is data, not a
 // path); otherwise it is read as schema.table / catalog.schema.table.
-func skillTableRef(duckDB *sql.DB, table string) session.TableRef {
+func skillTableRef(sess session.Session, table string) session.TableRef {
 	bare := session.TableRef{Name: table}
-	if _, ok, _ := session.LookupTable(context.Background(), duckDB, bare); ok {
-		return bare
+	if db := skillDB(sess); db != nil {
+		if _, ok, _ := session.LookupTable(context.Background(), db, bare); ok {
+			return bare
+		}
 	}
 	if ref, err := session.ParseTableRef(table); err == nil {
 		return ref
@@ -74,74 +91,85 @@ func skillTableRef(duckDB *sql.DB, table string) session.TableRef {
 }
 
 // catalogTableExists reports whether a table (bare, or catalog-qualified as
-// "catalog.schema.table") exists. A bare name resolves against the connection's
+// "catalog.schema.table") exists. A bare name resolves against the session's
 // default catalog and schema. Only already-attached catalogs can match, so a
 // skill gated on a remote table never dials anything.
-func catalogTableExists(duckDB *sql.DB, table string) (bool, error) {
-	_, ok, err := session.LookupTable(context.Background(), duckDB, skillTableRef(duckDB, table))
+func catalogTableExists(sess session.Session, table string) (bool, error) {
+	db := skillDB(sess)
+	if db == nil {
+		return false, fmt.Errorf("no database session available")
+	}
+	_, ok, err := session.LookupTable(context.Background(), db, skillTableRef(sess, table))
 	if err != nil {
 		return false, fmt.Errorf("failed to look up table %q: %w", table, err)
 	}
 	return ok, nil
 }
 
-// tableHasRows reports whether table exists in the DuckDB catalog and has at
-// least one row. Any error (table genuinely absent, a transient query
-// failure) is treated as "not ready" rather than propagated — a single
-// broken table-gated skill must never break the whole skills listing.
-func tableHasRows(duckDB *sql.DB, table string) bool {
-	if duckDB == nil || table == "" {
+// skillGateTimeout bounds one table-has-rows probe so a slow table can never
+// stall the skills listing (the probe runs on every chat turn).
+const skillGateTimeout = 10 * time.Second
+
+// tableHasRows reports whether table exists in the session's catalogs and has
+// at least one row. The probe runs through the session (cancellable, with a
+// timeout). Any error (table genuinely absent, a transient query failure) is
+// treated as "not ready" rather than propagated — a single broken table-gated
+// skill must never break the whole skills listing.
+func tableHasRows(sess session.Session, table string) bool {
+	if sess == nil || skillDB(sess) == nil || table == "" {
 		return false
 	}
-	exists, err := catalogTableExists(duckDB, table)
+	exists, err := catalogTableExists(sess, table)
 	if err != nil || !exists {
 		return false
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), skillGateTimeout)
+	defer cancel()
+	q := fmt.Sprintf(`SELECT CASE WHEN EXISTS (SELECT 1 FROM %s) THEN 1 ELSE 0 END`, skillTableRef(sess, table).SQL())
+	rows, err := sess.Query(ctx, q)
+	if err != nil {
+		return false
+	}
+	defer rows.Close() //nolint:errcheck
 	var hasRow int
-	q := fmt.Sprintf(`SELECT CASE WHEN EXISTS (SELECT 1 FROM %s) THEN 1 ELSE 0 END`, skillTableRef(duckDB, table).SQL())
-	if err := duckDB.QueryRow(q).Scan(&hasRow); err != nil {
+	if !rows.Next() || rows.Scan(&hasRow) != nil {
 		return false
 	}
 	return hasRow == 1
 }
 
-// loadStoredSkills reads every row from _vibe_skills. Returns an empty slice
-// (not an error) if the table doesn't exist yet (a very old file opened
-// read-only before migrations ran) or is empty.
-func loadStoredSkills(sqliteDB *sql.DB) ([]SkillEntry, error) {
-	if sqliteDB == nil {
+// loadStoredSkills reads every stored skill as merged-view entries. An empty or
+// missing store is an empty slice, not an error.
+func loadStoredSkills(ctx context.Context, store skills.Store) ([]SkillEntry, error) {
+	if store == nil {
 		return nil, nil
 	}
-	rows, err := sqliteDB.Query(
-		`SELECT name, description, instructions, table_name, source FROM _vibe_skills ORDER BY name`)
+	stored, err := store.List(ctx)
 	if err != nil {
-		// Table may not exist on a pre-#62 file that hasn't been migrated
-		// (shouldn't happen post-Open, but don't hard-fail a listing over it).
-		return nil, nil //nolint:nilerr
+		return nil, fmt.Errorf("failed to list stored skills: %w", err)
 	}
-	defer rows.Close()
-
-	var out []SkillEntry
-	for rows.Next() {
-		var e SkillEntry
-		if err := rows.Scan(&e.Name, &e.Description, &e.Instructions, &e.TableName, &e.Source); err != nil {
-			return nil, fmt.Errorf("failed to scan skill row: %w", err)
+	out := make([]SkillEntry, 0, len(stored))
+	for _, s := range stored {
+		if s.Error != "" {
+			slog.Default().Warn("skipping unreadable stored skill", "name", s.Name, "error", s.Error)
+			continue
 		}
-		out = append(out, e)
+		out = append(out, SkillEntry{Name: s.Name, Description: s.Description, Instructions: s.Instructions, TableName: s.TableName, Source: s.Source, Rev: s.Rev})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// LoadSkills merges built-in skills with the file's stored skills
-// (_vibe_skills), applying table gating: an entry with a non-empty
+// LoadSkills merges built-in skills with the stored skills (the workspace's
+// skills/<name>/SKILL.md files, or a legacy .vibe's _vibe_skills), applying
+// table gating through the session: an entry with a non-empty
 // TableName is dropped unless that table exists in the live DuckDB catalog
 // and has at least one row (the import wizard's workspace-<table> skills,
 // and any user skill scoped to a table, use this). Built-ins are never
 // table-gated. The result is NOT yet filtered for task-* — see
 // ChatVisibleSkills for that.
 //
-// _vibe_skills rows are NOT trusted just because they're in the file: a
-// shared .vibe can carry a row a stranger authored (or one restored from an
+// Stored skills are NOT trusted just because they're in the store: a shared
+// workspace or .vibe can carry a skill a stranger authored (or one restored from an
 // old/corrupted export), so every stored row is re-validated against the
 // exact same name rule SaveUserSkill enforces on write — a name that fails
 // SkillNamePattern, or one that collides with a built-in name, is dropped
@@ -150,7 +178,7 @@ func loadStoredSkills(sqliteDB *sql.DB) ([]SkillEntry, error) {
 // to _vibe_skills (a different session, a hand-edited file, a future import
 // path) and having the bad row load anyway. logger may be nil (defaults to
 // slog.Default()).
-func LoadSkills(sqliteDB *sql.DB, duckDB *sql.DB, logger *slog.Logger) ([]SkillEntry, error) {
+func LoadSkills(store skills.Store, sess session.Session, logger *slog.Logger) ([]SkillEntry, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -159,7 +187,7 @@ func LoadSkills(sqliteDB *sql.DB, duckDB *sql.DB, logger *slog.Logger) ([]SkillE
 		out = append(out, SkillEntry{Name: b.Name, Description: b.Description, Instructions: b.Instructions, Source: SkillSourceBuiltin})
 	}
 
-	stored, err := loadStoredSkills(sqliteDB)
+	stored, err := loadStoredSkills(context.Background(), store)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +200,7 @@ func LoadSkills(sqliteDB *sql.DB, duckDB *sql.DB, logger *slog.Logger) ([]SkillE
 			logger.Warn("skipping stored skill that shadows a built-in name", "name", s.Name)
 			continue
 		}
-		if s.TableName != "" && !tableHasRows(duckDB, s.TableName) {
+		if s.TableName != "" && !tableHasRows(sess, s.TableName) {
 			continue // gated out: table missing or empty.
 		}
 		out = append(out, s)
@@ -286,7 +314,7 @@ func sanitizeSkillPromptText(s string) string {
 // --- Tool handlers ---
 
 func (h *Handler) handleListSkills(_ context.Context, req *Request) *Response {
-	entries, err := LoadSkills(h.container.SQLiteDB(), h.container.DuckDBDB(), h.logger)
+	entries, err := LoadSkills(h.container.Skills(), h.container.Session(), h.logger)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list skills: %v", err))
 	}
@@ -305,6 +333,7 @@ func (h *Handler) handleListSkills(_ context.Context, req *Request) *Response {
 			"description": s.Description,
 			"source":      s.Source,
 			"table_name":  s.TableName,
+			"rev":         s.Rev,
 		}
 	}
 	return NewResponse(req.ID, map[string]any{"skills": out})
@@ -320,7 +349,7 @@ func framedInstructions(body string) string {
 
 func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
-	entries, err := LoadSkills(h.container.SQLiteDB(), h.container.DuckDBDB(), h.logger)
+	entries, err := LoadSkills(h.container.Skills(), h.container.Session(), h.logger)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to load skills: %v", err))
 	}
@@ -336,6 +365,7 @@ func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 				"instructions": framedInstructions(s.Instructions),
 				"source":       s.Source,
 				"table_name":   s.TableName,
+				"rev":          s.Rev,
 			})
 		}
 	}
@@ -360,81 +390,81 @@ var builtinNameSet = func() map[string]bool {
 // size caps, no newlines in description, table_name must name a real
 // table). duckDB may be nil only when tableName is empty (some tests/
 // callers have no DuckDB handle and never bind a skill to a table).
-func SaveUserSkill(sqliteDB *sql.DB, duckDB *sql.DB, name, description, instructions, tableName string) error {
+func SaveUserSkill(store skills.Store, sess session.Session, name, description, instructions, tableName string) error {
+	_, err := SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
+	return err
+}
+
+// SaveUserSkillAt is SaveUserSkill for a caller that holds a copy across user
+// time (Studio's editor): expectRev is the revision it loaded, and a skill
+// that changed on disk since (a git pull, an editor) is a conflict error, not
+// a silent clobber. With expectRev empty the store's own last-seen revision
+// applies (the agent's create_or_update_skill, which has just listed or read
+// the skill); a file store refuses to write over an existing skill it has
+// never read.
+func SaveUserSkillAt(store skills.Store, sess session.Session, name, description, instructions, tableName, expectRev string) (string, error) {
 	if !SkillNamePattern.MatchString(name) {
-		return fmt.Errorf("invalid skill name %q: must match %s", name, SkillNamePattern.String())
+		return "", fmt.Errorf("invalid skill name %q: must match %s", name, SkillNamePattern.String())
 	}
 	if strings.HasPrefix(name, SkillTaskPrefix) {
-		return fmt.Errorf("the %q prefix is reserved for built-in task-mode skills", SkillTaskPrefix)
+		return "", fmt.Errorf("the %q prefix is reserved for built-in task-mode skills", SkillTaskPrefix)
 	}
 	if builtinNameSet[name] {
-		return fmt.Errorf("%q is a built-in skill name and cannot be shadowed by a user skill", name)
+		return "", fmt.Errorf("%q is a built-in skill name and cannot be shadowed by a user skill", name)
 	}
 	if strings.TrimSpace(description) == "" {
-		return fmt.Errorf("description is required")
+		return "", fmt.Errorf("description is required")
 	}
 	// A description with a newline could close the <skill> tag's single
 	// line and forge additional prompt structure (see RenderSkillsBlock's
 	// sanitization, which is defense in depth — this is the primary gate:
 	// reject it at write time so it never reaches storage as multi-line).
 	if strings.ContainsAny(description, "\n\r") {
-		return fmt.Errorf("description must be a single line (no newlines)")
+		return "", fmt.Errorf("description must be a single line (no newlines)")
 	}
 	if len([]rune(description)) > skillMaxDescriptionLen {
-		return fmt.Errorf("description must be at most %d characters", skillMaxDescriptionLen)
+		return "", fmt.Errorf("description must be at most %d characters", skillMaxDescriptionLen)
 	}
 	if strings.TrimSpace(instructions) == "" {
-		return fmt.Errorf("instructions is required")
+		return "", fmt.Errorf("instructions is required")
 	}
 	if len(instructions) > skillMaxInstructionsLen {
-		return fmt.Errorf("instructions must be at most %d bytes", skillMaxInstructionsLen)
+		return "", fmt.Errorf("instructions must be at most %d bytes", skillMaxInstructionsLen)
 	}
 	if tableName != "" {
-		if duckDB == nil {
-			return fmt.Errorf("table_name %q given but no database connection available to verify it", tableName)
+		if skillDB(sess) == nil {
+			return "", fmt.Errorf("table_name %q given but no database connection available to verify it", tableName)
 		}
-		exists, err := catalogTableExists(duckDB, tableName)
+		exists, err := catalogTableExists(sess, tableName)
 		if err != nil {
-			return fmt.Errorf("failed to verify table_name %q: %w", tableName, err)
+			return "", fmt.Errorf("failed to verify table_name %q: %w", tableName, err)
 		}
 		if !exists {
-			return fmt.Errorf("table_name %q does not name an existing table", tableName)
+			return "", fmt.Errorf("table_name %q does not name an existing table", tableName)
 		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	// Setting source = 'user' unconditionally on every upsert (including one
-	// that happens to reuse an existing import-generated skill's name) is
-	// deliberate: the caller explicitly authored this content just now, so
-	// it is no longer purely import-generated, regardless of what created
-	// the row originally.
-	_, err := sqliteDB.Exec(
-		`INSERT INTO _vibe_skills (name, description, instructions, table_name, source, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, 'user', ?, ?)
-		 ON CONFLICT(name) DO UPDATE SET
-		   description = excluded.description,
-		   instructions = excluded.instructions,
-		   table_name = excluded.table_name,
-		   source = 'user',
-		   updated_at = excluded.updated_at`,
-		name, description, instructions, tableName, now, now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save skill: %w", err)
+	// Source is set to 'user' unconditionally on every upsert (including one
+	// that happens to reuse an existing import-generated skill's name) on
+	// purpose: the caller explicitly authored this content just now, so it is
+	// no longer purely import-generated, regardless of what created the entry
+	// originally.
+	rec := skills.Stored{Name: name, Description: description, Instructions: instructions, TableName: tableName, Source: skills.SourceUser, Rev: expectRev}
+	if err := store.Put(context.Background(), &rec); err != nil {
+		return "", fmt.Errorf("failed to save skill: %w", err)
 	}
-	return nil
+	return rec.Rev, nil
 }
 
-// DeleteSkill removes a user- or import-authored skill from _vibe_skills.
+// DeleteSkill removes a user- or import-authored skill from the store.
 // Built-ins can't be deleted (they aren't rows); deleting a non-existent
 // name is a no-op, matching delete_page/delete_record semantics elsewhere
 // in this package.
-func DeleteSkill(sqliteDB *sql.DB, name string) error {
+func DeleteSkill(store skills.Store, name string) error {
 	if builtinNameSet[name] {
 		return fmt.Errorf("%q is a built-in skill and cannot be deleted", name)
 	}
-	_, err := sqliteDB.Exec(`DELETE FROM _vibe_skills WHERE name = ?`, name)
-	if err != nil {
+	if err := store.Delete(context.Background(), name); err != nil {
 		return fmt.Errorf("failed to delete skill: %w", err)
 	}
 	return nil
@@ -449,10 +479,17 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 	instructions, _ := req.Params["instructions"].(string)
 	tableName, _ := req.Params["table_name"].(string)
 
-	if err := SaveUserSkill(h.container.SQLiteDB(), h.container.DuckDBDB(), name, description, instructions, tableName); err != nil {
+	// rev is the revision the agent's own list_skills / read_skill result
+	// carried. Passing it back makes a save over a skill that changed since
+	// (a git pull, an edit in Studio) a conflict. Without it the store's
+	// last-seen revision applies.
+	rev, _ := req.Params["rev"].(string)
+
+	newRev, err := SaveUserSkillAt(h.container.Skills(), h.container.Session(), name, description, instructions, tableName, rev)
+	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
-	return NewResponse(req.ID, map[string]any{"name": name, "saved": true})
+	return NewResponse(req.ID, map[string]any{"name": name, "saved": true, "rev": newRev})
 }
 
 // importSkillGenBegin / importSkillGenEnd bracket the machine-generated
@@ -520,13 +557,12 @@ func splitImportSkillBody(body string) (before, after string) {
 // existingImportSkillParts loads and splits the current workspace-<table>
 // skill body (see splitImportSkillBody). found is false when there is no
 // existing row yet, in which case before/after are meaningless.
-func existingImportSkillParts(sqliteDB *sql.DB, name string) (before, after string, found bool) {
-	var body string
-	err := sqliteDB.QueryRow(`SELECT instructions FROM _vibe_skills WHERE name = ?`, name).Scan(&body)
+func existingImportSkillParts(store skills.Store, name string) (before, after string, found bool) {
+	existing, err := store.Get(context.Background(), name)
 	if err != nil {
 		return "", "", false
 	}
-	before, after = splitImportSkillBody(body)
+	before, after = splitImportSkillBody(existing.Instructions)
 	return before, after, true
 }
 
@@ -588,13 +624,12 @@ func cutBytes(s string, n int) string {
 // 8-hex-digit suffix (from sha256(table)) disambiguates it. Re-importing the
 // same table always resolves to the same name, because the suffix is
 // derived from the table name itself, not from insertion order.
-func importSkillName(sqliteDB *sql.DB, table string) string {
+func importSkillName(store skills.Store, table string) string {
 	slug := importSkillSlug(table)
 	base := "workspace-" + cutBytes(slug, 54)
 
-	var owner string
-	err := sqliteDB.QueryRow(`SELECT table_name FROM _vibe_skills WHERE name = ?`, base).Scan(&owner)
-	if err == nil && owner != table {
+	owner, err := store.Get(context.Background(), base)
+	if err == nil && owner.TableName != table {
 		sum := sha256.Sum256([]byte(table))
 		return fmt.Sprintf("workspace-%s-%x", cutBytes(slug, 45), sum[:4])
 	}
@@ -614,12 +649,13 @@ func importSkillName(sqliteDB *sql.DB, table string) string {
 // `%q` here was a SQL-injection / arbitrary-file-write bug (a crafted
 // column or table name could break out of a mis-quoted identifier and run
 // an attacker-chosen statement, including COPY ... TO '<path>').
-func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
-	if sqliteDB == nil || duckDB == nil {
-		return fmt.Errorf("no open container")
+func WriteImportSkill(store skills.Store, sess session.Session, table string) error {
+	duckDB := skillDB(sess)
+	if store == nil || duckDB == nil {
+		return fmt.Errorf("no open workspace")
 	}
-	name := importSkillName(sqliteDB, table)
-	tref := skillTableRef(duckDB, table)
+	name := importSkillName(store, table)
+	tref := skillTableRef(sess, table)
 	quotedTable := tref.SQL()
 
 	var rowCount int
@@ -677,7 +713,7 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 		}
 	}
 
-	before, after, hadExisting := existingImportSkillParts(sqliteDB, name)
+	before, after, hadExisting := existingImportSkillParts(store, name)
 	if !hadExisting {
 		before = defaultImportProse(table)
 	}
@@ -720,23 +756,20 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 		body += "\n\n" + after
 	}
 	description := fmt.Sprintf("Facts about the %q table: row count, column types, and sample values — generated when it was imported.", table)
-	now := time.Now().UTC().Format(time.RFC3339)
-	// Note what the UPDATE branch does NOT touch: description and source.
-	// A brand-new row gets source='import' and the generated description;
-	// re-running against an existing row (regardless of who last edited it,
-	// or whether they changed its source to 'user' via SaveUserSkill) keeps
-	// both exactly as they were — only instructions/table_name/updated_at
-	// change.
-	_, err = sqliteDB.Exec(
-		`INSERT INTO _vibe_skills (name, description, instructions, table_name, source, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, 'import', ?, ?)
-		 ON CONFLICT(name) DO UPDATE SET
-		   instructions = excluded.instructions,
-		   table_name = excluded.table_name,
-		   updated_at = excluded.updated_at`,
-		name, description, body, table, now, now,
-	)
-	if err != nil {
+	// Note what an update does NOT touch: description and source. A brand-new
+	// skill gets source='import' and the generated description; re-running
+	// against an existing one (regardless of who last edited it, or whether
+	// they changed its source to 'user' via SaveUserSkill) keeps both exactly
+	// as they were — only instructions and table_name change.
+	ctx := context.Background()
+	rec := skills.Stored{Name: name, Description: description, Instructions: body, TableName: table, Source: skills.SourceImport}
+	if existing, err := store.Get(ctx, name); err == nil {
+		rec.Description, rec.Source = existing.Description, existing.Source
+		rec.CreatedAt, rec.Rev = existing.CreatedAt, existing.Rev
+	} else if !errors.Is(err, skills.ErrNotFound) {
+		return fmt.Errorf("failed to write import skill for %q: %w", table, err)
+	}
+	if err := store.Put(ctx, &rec); err != nil {
 		return fmt.Errorf("failed to write import skill for %q: %w", table, err)
 	}
 
@@ -751,7 +784,7 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 	legacy := "workspace-" + table
 	if legacy != name && !SkillNamePattern.MatchString(legacy) {
 		//nolint:errcheck // best-effort cleanup; a failed delete just leaves a dead row.
-		sqliteDB.Exec(`DELETE FROM _vibe_skills WHERE name = ?`, legacy)
+		store.Delete(ctx, legacy)
 	}
 	return nil
 }
