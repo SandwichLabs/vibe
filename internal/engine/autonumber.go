@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // IsIntegerType reports whether a DuckDB type name is in the integer family
@@ -56,14 +59,16 @@ type Querier interface {
 // (DuckDB's own quoted-identifier catalog lookup is case-insensitive, but a
 // plain information_schema string compare is not — see Import's own comment
 // on canonicalizing the table name after a case-different match).
-func AutoNumberGap(ctx context.Context, q Querier, table, column string, maxVal int64) (gap int64, ok bool, err error) {
+func AutoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column string, maxVal int64) (gap int64, ok bool, err error) {
+	table := ref.Name
 	var hasDefault bool
 	var def sql.NullString
+	cond, args := session.RefFilter(ref, "table_catalog", "table_schema", "table_name", 1)
 	err = q.QueryRowContext(ctx,
 		`SELECT column_default IS NOT NULL, column_default
 		   FROM information_schema.columns
-		  WHERE table_schema = 'main' AND lower(table_name) = lower($1) AND lower(column_name) = lower($2)`,
-		table, column,
+		  WHERE `+cond+fmt.Sprintf(" AND lower(column_name) = lower($%d)", len(args)+1),
+		append(args, column)...,
 	).Scan(&hasDefault, &def)
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to inspect column %q.%q: %w", table, column, err)
@@ -72,12 +77,15 @@ func AutoNumberGap(ctx context.Context, q Querier, table, column string, maxVal 
 		return 0, false, nil
 	}
 	seq := AutoNumberSequence(table, column)
-	if !strings.Contains(strings.ToLower(def.String), strings.ToLower("'"+seq+"'")) {
+	// The default text is nextval('seq') for a table in the default catalog
+	// and nextval('"catalog"."schema"."seq"') for one created qualified: take
+	// the literal and compare its last name part whole (seq must not match seq2).
+	if !defaultUsesSequence(def.String, seq) {
 		// Default isn't our auto-number sequence (e.g. user-authored default).
 		return 0, false, nil
 	}
 
-	cur, found, err := sequencePosition(ctx, q, seq)
+	cur, found, err := sequencePosition(ctx, q, ref, seq)
 	if err != nil {
 		return 0, false, err
 	}
@@ -97,12 +105,13 @@ func AutoNumberGap(ctx context.Context, q Querier, table, column string, maxVal 
 // only if the sequence doesn't exist at all (it should always exist for an
 // auto-number column; a caller can treat !found the same as "nothing to
 // bump").
-func sequencePosition(ctx context.Context, q Querier, seq string) (pos int64, found bool, err error) {
+func sequencePosition(ctx context.Context, q Querier, ref session.TableRef, seq string) (pos int64, found bool, err error) {
 	var lastVal, startVal sql.NullInt64
+	seqRef := session.TableRef{Catalog: ref.Catalog, Schema: ref.Schema, Name: seq}
+	cond, args := session.RefFilter(seqRef, "database_name", "schema_name", "sequence_name", 1)
 	err = q.QueryRowContext(ctx,
-		`SELECT last_value, start_value FROM duckdb_sequences()
-		  WHERE schema_name = 'main' AND lower(sequence_name) = lower($1)`,
-		seq,
+		`SELECT last_value, start_value FROM duckdb_sequences() WHERE `+cond,
+		args...,
 	).Scan(&lastVal, &startVal)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -142,16 +151,17 @@ func sequencePosition(ctx context.Context, q Querier, seq string) (pos int64, fo
 // the whole write back, but a caller that already knows the gap is too
 // large can give a much earlier, friendlier answer — see the importer's own
 // pre-flight).
-func BumpAutoNumber(ctx context.Context, q Querier, table, column string) error {
+func BumpAutoNumber(ctx context.Context, q Querier, ref session.TableRef, column string) error {
+	table := ref.Name
 	var maxVal sql.NullInt64
-	if err := q.QueryRowContext(ctx, fmt.Sprintf("SELECT MAX(%s) FROM %s", QuoteIdent(column), QuoteIdent(table))).Scan(&maxVal); err != nil {
+	if err := q.QueryRowContext(ctx, fmt.Sprintf("SELECT MAX(%s) FROM %s", QuoteIdent(column), ref.SQL())).Scan(&maxVal); err != nil {
 		return fmt.Errorf("failed to read max %q: %w", column, err)
 	}
 	if !maxVal.Valid {
 		return nil
 	}
 
-	gap, ok, err := AutoNumberGap(ctx, q, table, column, maxVal.Int64)
+	gap, ok, err := AutoNumberGap(ctx, q, ref, column, maxVal.Int64)
 	if err != nil {
 		return err
 	}
@@ -165,17 +175,25 @@ func BumpAutoNumber(ctx context.Context, q Querier, table, column string) error 
 	}
 
 	seq := AutoNumberSequence(table, column)
+	seqRef := session.TableRef{Catalog: ref.Catalog, Schema: ref.Schema, Name: seq}
 	var cur int64
 	if err := q.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT max(nextval(%s)) FROM range(%d)", quoteLiteralIdent(seq), gap),
+		fmt.Sprintf("SELECT max(nextval(%s)) FROM range(%d)", session.QuoteLiteral(seqRef.SQL()), gap),
 	).Scan(&cur); err != nil {
 		return fmt.Errorf("failed to advance sequence %q: %w", seq, err)
 	}
 	return nil
 }
 
-// quoteLiteralIdent quotes a sequence name for nextval('<name>') calls,
-// which take a string literal naming the sequence, not a bare identifier.
-func quoteLiteralIdent(name string) string {
-	return "'" + strings.ReplaceAll(name, "'", "''") + "'"
+var nextvalLiteralRE = regexp.MustCompile(`(?i)nextval\(\s*'((?:[^']|'')*)'`)
+
+// defaultUsesSequence reports whether a column default is nextval of exactly
+// the sequence named seq (any catalog/schema qualification).
+func defaultUsesSequence(def, seq string) bool {
+	m := nextvalLiteralRE.FindStringSubmatch(def)
+	if m == nil {
+		return false
+	}
+	ref, err := session.ParseTableRef(strings.ReplaceAll(m[1], "''", "'"))
+	return err == nil && strings.EqualFold(ref.Name, seq)
 }

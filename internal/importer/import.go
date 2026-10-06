@@ -3,11 +3,13 @@ package importer
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // Mode selects how Import writes into an existing (or new) table.
@@ -107,11 +109,19 @@ type fkInfo struct {
 // every row against the target types/constraints, and — unless DryRun or the
 // pre-flight found a problem — writes everything in a single transaction
 // (all-or-nothing: any failure rolls the whole import back).
+//
+// o.Table may be catalog-qualified ("catalog.schema.table" or "schema.table"):
+// the whole import then runs on one pinned connection with USE pointing at that
+// catalog and schema, so every unqualified statement below (and the table's
+// auto-number sequence) lands there. An unqualified name targets the
+// connection's default catalog, exactly as before. Summary.Table is the
+// canonical name in the same form the caller used.
 func Import(ctx context.Context, db *sql.DB, o Options) (*Summary, error) {
 	if db == nil {
 		return nil, fmt.Errorf("no database available")
 	}
-	if !engine.ValidIdentifier(o.Table) {
+	ref, err := engine.ParseTable(o.Table)
+	if err != nil {
 		return nil, fmt.Errorf("invalid table name %q", o.Table)
 	}
 
@@ -119,9 +129,93 @@ func Import(ctx context.Context, db *sql.DB, o Options) (*Summary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connection: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
+	restore, err := pinTarget(ctx, conn, ref)
+	if err != nil {
+		return nil, err
+	}
+	defer restore()
 	defer dropStage(ctx, conn)
 
+	o.Table = ref.Name
+	sum, err := importOn(ctx, conn, o)
+	if sum != nil && (ref.Catalog != "" || ref.Schema != "") {
+		sum.Table = qualifyLike(ref, sum.Table)
+	}
+	return sum, err
+}
+
+// qualifyLike re-applies the caller's qualification to the canonical table
+// name Import resolved.
+func qualifyLike(ref session.TableRef, name string) string {
+	ref.Name = name
+	return ref.String()
+}
+
+// pinTarget points an already-pinned connection at the target catalog and
+// schema (USE) and returns a restore func. If the restore fails, the
+// connection is discarded rather than returned to the pool.
+func pinTarget(ctx context.Context, conn *sql.Conn, ref session.TableRef) (func(), error) {
+	noop := func() {}
+	if ref.Catalog == "" && ref.Schema == "" {
+		return noop, nil
+	}
+	var origCat, origSchema string
+	if err := conn.QueryRowContext(ctx, "SELECT current_database(), current_schema()").Scan(&origCat, &origSchema); err != nil {
+		return noop, fmt.Errorf("failed to read current catalog: %w", err)
+	}
+	if ref.Catalog == "" && ref.Schema != "" {
+		// "x.t": a schema of the current catalog if it has one called x,
+		// otherwise an attached catalog x (DuckDB resolves it the same way).
+		var isSchema, isCatalog bool
+		if err := conn.QueryRowContext(ctx, `SELECT
+			EXISTS (SELECT 1 FROM duckdb_schemas() WHERE database_name = current_database() AND schema_name = $1),
+			EXISTS (SELECT 1 FROM duckdb_databases() WHERE database_name = $1 AND NOT internal)`, ref.Schema).Scan(&isSchema, &isCatalog); err != nil {
+			return noop, fmt.Errorf("failed to resolve import target %q: %w", ref.String(), err)
+		}
+		if !isSchema && isCatalog {
+			ref.Catalog, ref.Schema = ref.Schema, ""
+		}
+	}
+	cat := ref.Catalog
+	if cat == "" {
+		cat = origCat
+	} else if cat != origCat {
+		// Only a real, attached database is a valid target: never DuckDB's own
+		// "system" or "temp" catalogs.
+		var ok bool
+		if err := conn.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM duckdb_databases() WHERE database_name = $1 AND NOT internal)`, cat).Scan(&ok); err != nil {
+			return noop, fmt.Errorf("failed to resolve import target %q: %w", ref.String(), err)
+		}
+		if !ok {
+			return noop, fmt.Errorf("unknown connection %q", cat)
+		}
+	}
+	target := session.QuoteIdent(cat)
+	if ref.Schema != "" {
+		target += "." + session.QuoteIdent(ref.Schema)
+	}
+	if _, err := conn.ExecContext(ctx, "USE "+target); err != nil {
+		return noop, fmt.Errorf("failed to select import target %q: %w", ref.String(), err)
+	}
+	return func() {
+		if _, err := conn.ExecContext(context.Background(), "USE "+session.QuoteIdent(origCat)+"."+session.QuoteIdent(origSchema)); err != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+	}, nil
+}
+
+// importOn is Import's body, run on a connection whose current catalog and
+// schema are the target (o.Table is the bare table name).
+func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) {
+	// Every statement below names the target table by its resolved
+	// catalog.schema.table, so neither the connection's search path nor a
+	// same-named TEMP table can redirect a write.
+	var tcat, tschema string
+	if err := conn.QueryRowContext(ctx, "SELECT current_database(), current_schema()").Scan(&tcat, &tschema); err != nil {
+		return nil, fmt.Errorf("failed to resolve import target: %w", err)
+	}
+	ctx = context.WithValue(ctx, targetKey{}, session.TableRef{Catalog: tcat, Schema: tschema})
 	sum := &Summary{Table: o.Table, Mode: o.Mode}
 
 	for name, ct := range o.Types {
@@ -282,7 +376,7 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	// here would silently miss "Customers", the dry run would say "create"
 	// (existing==nil), and the real run would hit a raw CREATE TABLE
 	// "already exists" catalog error instead of matching the same table.
-	// engine.QuoteIdent(table) below still resolves correctly regardless
+	// tableSQL(ctx, table) below still resolves correctly regardless
 	// of case (confirmed against DuckDB 1.4.1), so this lower() compare is
 	// the only fix needed to FIND the table — but every step after this
 	// function returns must use the catalog's own spelling (et.tableName),
@@ -292,7 +386,7 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	// comment where it reassigns o.Table from et.tableName.
 	var canonical sql.NullString
 	if err := conn.QueryRowContext(ctx,
-		"SELECT table_name FROM information_schema.tables WHERE table_schema='main' AND lower(table_name)=lower($1) LIMIT 1", table,
+		"SELECT table_name FROM information_schema.tables WHERE table_catalog=current_database() AND table_schema=current_schema() AND lower(table_name)=lower($1) LIMIT 1", table,
 	).Scan(&canonical); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to check for existing table: %w", err)
 	}
@@ -302,14 +396,14 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	table = canonical.String
 
 	et := &existingTable{tableName: table}
-	if err := conn.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(table))).Scan(&et.rowCount); err != nil {
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", tableSQL(ctx, table))).Scan(&et.rowCount); err != nil {
 		return nil, fmt.Errorf("failed to count rows in %q: %w", table, err)
 	}
 
 	rows, err := conn.QueryContext(ctx,
 		`SELECT column_name, data_type, column_default IS NOT NULL
 		   FROM information_schema.columns
-		  WHERE table_schema='main' AND lower(table_name)=lower($1) ORDER BY ordinal_position`, table)
+		  WHERE table_catalog=current_database() AND table_schema=current_schema() AND lower(table_name)=lower($1) ORDER BY ordinal_position`, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe %q: %w", table, err)
 	}
@@ -334,7 +428,7 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	crows, err := conn.QueryContext(ctx,
 		`SELECT constraint_type, constraint_column_names, referenced_table, referenced_column_names, table_name
 		   FROM duckdb_constraints()
-		  WHERE schema_name='main' AND (lower(table_name)=lower($1) OR lower(referenced_table)=lower($1))
+		  WHERE database_name=current_database() AND schema_name=current_schema() AND (lower(table_name)=lower($1) OR lower(referenced_table)=lower($1))
 		    AND constraint_type IN ('PRIMARY KEY','FOREIGN KEY')`, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read constraints for %q: %w", table, err)
@@ -490,4 +584,15 @@ func joinModes(modes []Mode) string {
 		s[i] = string(m)
 	}
 	return strings.Join(s, "|")
+}
+
+type targetKey struct{}
+
+// tableSQL renders table as the resolved, quoted catalog.schema.table the
+// import was pinned to (see importOn); outside an import it is just a quoted
+// identifier.
+func tableSQL(ctx context.Context, table string) string {
+	ref, _ := ctx.Value(targetKey{}).(session.TableRef)
+	ref.Name = table
+	return ref.SQL()
 }

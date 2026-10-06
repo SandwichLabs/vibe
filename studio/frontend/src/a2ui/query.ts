@@ -77,7 +77,8 @@ function releaseSlot(priority: QueryPriority): void {
   pump()
 }
 
-// runLiveQuery executes sql through RunA2UIQuery — the sandbox-gated Wails
+// runLiveQuery executes sql through RunA2UIQuery (RunA2UIQueryIn when a
+// connection is given) — the sandbox-gated Wails
 // binding that re-enters the exact same per-statement SQL classifier
 // run_query uses (internal/agents' checkSQLClass), never a bypass. A denied
 // or failed query resolves with `error` set rather than throwing, so callers
@@ -91,12 +92,17 @@ function releaseSlot(priority: QueryPriority): void {
 // resolves after the caller stopped caring — callers check this instead of
 // applying a stale result to state that has since moved on to different
 // content.
-export async function runLiveQuery(sql: string, signal?: AbortSignal, priority: QueryPriority = 'low'): Promise<LiveQueryResult & { aborted?: boolean }> {
+export async function runLiveQuery(sql: string, signal?: AbortSignal, priority: QueryPriority = 'low', connection?: string): Promise<LiveQueryResult & { aborted?: boolean }> {
   if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
   await acquireSlot(priority)
   try {
     if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
-    const res = await window.go.main.App.RunA2UIQuery(sql)
+    // Notebook format v2: an optional `connection` makes that connection the
+    // default catalog for the statement's unqualified names. Unset keeps the
+    // original binding (the session default).
+    const res = connection
+      ? await window.go.main.App.RunA2UIQueryIn(sql, connection)
+      : await window.go.main.App.RunA2UIQuery(sql)
     if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
     return { columns: res?.columns ?? [], types: res?.types ?? [], rows: res?.rows ?? [] }
   } catch (e: any) {

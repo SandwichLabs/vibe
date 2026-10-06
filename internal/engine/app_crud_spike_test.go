@@ -31,6 +31,7 @@ package engine_test
 
 import (
 	"context"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,7 +73,7 @@ func TestP4AppModeCRUDViabilitySpike(t *testing.T) {
 	require.NotNil(t, c.DuckDBDB(), "DuckDB should be materialized")
 
 	ddb := c.DuckDBDB()
-	_ = engine.NewManager(ddb)
+	_ = engine.NewManager(sessiontest.ForTests(ddb))
 	ctx := context.Background()
 	_ = ctx
 

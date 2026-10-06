@@ -120,9 +120,18 @@ result is a small, focused action next to the data itself:
 | A notebook | `ExportNotebook` | the notebook's own JSON document |
 
 XLSX export uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
-(FORMAT xlsx)`), falling back to CSV automatically if the extension is
-unavailable in a given build. Exports are written to a user-chosen path on
-disk; nothing leaves the machine.
+(FORMAT xlsx)`). Exports are written to a user-chosen path on disk; nothing
+leaves the machine. An xlsx export is an xlsx or an error: there is no
+silent fallback to CSV.
+
+**Excel support needs a one-time download.** Vibe runs DuckDB with
+autoinstall/autoload off and its own private extension directory
+(`<user cache dir>/vibe/duckdb/extensions`), so an Excel extension you
+installed elsewhere (for example `~/.duckdb`) is not used. The first xlsx
+import or export fetches the `excel` extension once (about 2 MB) and needs
+network access; if that fails the action reports "Excel support needs a
+one-time download ... check your network connection" and changes nothing.
+After that it works offline.
 
 Banded reports, and their PDF/Word export, were part of the Access
 application layer removed in #68 — a banded report migrates into a notebook

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,7 +47,7 @@ func newRealDuckDBHandlerForLLM(t *testing.T, withTable bool) *agents.Handler {
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
-	eng := engine.NewManager(duckDB, engine.WithLogger(logger))
+	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return agents.NewHandler(container, eng, sandbox, logger)
 }
 

@@ -14,12 +14,16 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // ContainerAccess provides access to the container (interface to avoid circular imports).
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
 	DuckDBDB() *sql.DB
+	// Session is the catalog-aware DuckDB hub over DuckDBDB. Introspection
+	// goes through it so no tool assumes the default catalog is "main".
+	Session() session.Session
 }
 
 // EngineAccess provides query execution.
@@ -151,6 +155,51 @@ func (h *Handler) duckDB(reqID any) (*sql.DB, *Response) {
 		return nil, NewErrorResponse(reqID, ErrInternal, "DuckDB not available")
 	}
 	return db, nil
+}
+
+// tableSQL renders a tool's table argument as fully resolved, quoted SQL
+// (catalog.schema.table), so a write cannot be redirected by the connection's
+// current catalog or shadowed by a same-named TEMP table. A name that is
+// exactly an existing table of the default catalog and schema wins over
+// dotted-path parsing (a legacy table may legitimately contain dots); a name
+// that cannot be resolved falls back to engine.TableSQL's safe quoting.
+func (h *Handler) tableSQL(ctx context.Context, name string) (string, error) {
+	sess := h.container.Session()
+	if sess == nil || sess.DB() == nil {
+		return engine.TableSQL(name), nil
+	}
+	bare := session.TableRef{Name: name}
+	if _, ok, _ := session.LookupTable(ctx, sess.DB(), bare); ok {
+		if r, err := sess.Resolve(ctx, bare); err == nil {
+			return r.SQL(), nil
+		}
+		return bare.SQL(), nil
+	}
+	ref, err := session.ParseTableRef(name)
+	if err != nil {
+		return engine.QuoteIdent(name), nil
+	}
+	r, err := sess.Resolve(ctx, ref)
+	if err != nil && ref.Catalog == "" && ref.Schema == "" {
+		// Nothing to resolve against (not a DuckDB handle): a bare name can
+		// only mean the connection's own current table.
+		return ref.SQL(), nil
+	}
+	if err != nil {
+		// An unknown connection (or the internal "system"/"temp" catalogs)
+		// is refused rather than passed to DuckDB.
+		return "", err
+	}
+	return r.SQL(), nil
+}
+
+// sess returns the DuckDB session or an error response if unavailable.
+func (h *Handler) sess(reqID any) (session.Session, *Response) {
+	s := h.container.Session()
+	if s == nil {
+		return nil, NewErrorResponse(reqID, ErrInternal, "DuckDB not available")
+	}
+	return s, nil
 }
 
 // NewHandler creates a new request handler.
@@ -392,53 +441,62 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 // --- Introspect handlers ---
 
 func (h *Handler) handleIntrospectSchema(ctx context.Context, req *Request) *Response {
-	db, errResp := h.duckDB(req.ID)
+	sess, errResp := h.sess(req.ID)
 	if errResp != nil {
 		return errResp
 	}
-	rows, err := db.QueryContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
+	// Optional "connection": introspect that catalog instead of the default.
+	// Tables of a non-default catalog come back qualified (catalog.schema.table)
+	// so the agent can use them verbatim in every other tool.
+	connection, _ := req.Params["connection"].(string)
+	catalog := connection
+	if catalog == "" {
+		catalog = sess.DefaultCatalog()
+	}
+	tabs, err := h.listCatalogTables(ctx, sess, catalog)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to query schema: %v", err))
 	}
-	defer rows.Close()
-
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to scan table name: %v", err))
+	tables := make([]string, 0, len(tabs))
+	for _, t := range tabs {
+		if catalog == sess.DefaultCatalog() {
+			tables = append(tables, t.Name)
+		} else {
+			tables = append(tables, t.Ref().String())
 		}
-		tables = append(tables, name)
 	}
 	return NewResponse(req.ID, map[string]any{"tables": tables})
 }
 
+// listCatalogTables lists the tables of catalog's default schema.
+func (h *Handler) listCatalogTables(ctx context.Context, sess session.Session, catalog string) ([]session.TableInfo, error) {
+	return sess.ListTables(ctx, catalog, "")
+}
+
 func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Response {
 	table, _ := req.Params["table"].(string)
-	db, errResp := h.duckDB(req.ID)
+	sess, errResp := h.sess(req.ID)
 	if errResp != nil {
 		return errResp
 	}
 
-	rows, err := db.QueryContext(ctx,
-		"SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END AS not_null FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position",
-		table)
+	// table may be qualified (catalog.schema.table); an unqualified name
+	// resolves against the default catalog.
+	desc, err := sess.DescribeTable(ctx, table)
 	if err != nil {
+		// A missing table was an empty column list before; keep that shape.
+		if strings.Contains(err.Error(), "does not exist") {
+			return NewResponse(req.ID, map[string]any{"table": table, "columns": []map[string]any(nil)})
+		}
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", err))
 	}
-	defer rows.Close()
 
 	var columns []map[string]any
-	for rows.Next() {
-		var name, colType string
-		var notNull bool
-		if err := rows.Scan(&name, &colType, &notNull); err != nil {
-			return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to scan column info: %v", err))
-		}
+	for _, c := range desc.Columns {
 		columns = append(columns, map[string]any{
-			"name":     name,
-			"type":     colType,
-			"not_null": notNull,
+			"name":     c.Name,
+			"type":     c.DataType,
+			"not_null": c.NotNull,
 			"pk":       false,
 		})
 	}
@@ -521,11 +579,50 @@ func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
 // shapes are metadata queries that never return a huge row count anyway,
 // so the fallback's un-limited execution costs nothing in practice.
 func (h *Handler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
+	return h.RunReadOnlySQLIn(ctx, "", sqlStr, params, maxRows)
+}
+
+// ConnectionEngine is the optional engine capability behind a notebook cell's
+// or A2UI binding's "connection" (notebook format v2): run a statement with
+// that connection's catalog as the default for unqualified names.
+type ConnectionEngine interface {
+	ExecuteIn(ctx context.Context, connection, sql string, params map[string]any) (*engine.ResultSet, error)
+}
+
+// RunReadOnlySQLIn is RunReadOnlySQL with connection (a catalog name; "" is
+// the session default) as the default for unqualified table names. The
+// statement is classified on a connection pinned to that catalog, so the
+// classifier resolves names exactly as the run will, and runs the same way.
+func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
 	userDB := h.container.DuckDBDB()
 	if userDB == nil {
 		return nil, false, fmt.Errorf("DuckDB not available")
 	}
-	class, reason := classifySQL(ctx, userDB, sqlStr, params)
+	var classifyOn queryDB = userDB
+	exec := func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
+		return h.engine.Execute(ctx, q, p)
+	}
+	releaseClassifyConn := func() {}
+	if connection != "" {
+		ce, ok := h.engine.(ConnectionEngine)
+		sess := h.container.Session()
+		if !ok || sess == nil {
+			return nil, false, fmt.Errorf("connections are not available here")
+		}
+		pinned, err := sess.Conn(ctx, session.WithCatalog(connection))
+		if err != nil {
+			return nil, false, fmt.Errorf("unknown connection %q: %w", connection, err)
+		}
+		classifyOn = pinned.SQLConn()
+		releaseClassifyConn = func() { _ = pinned.Close() }
+		exec = func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
+			return ce.ExecuteIn(ctx, connection, q, p)
+		}
+	}
+	class, reason := classifySQL(ctx, classifyOn, sqlStr, params)
+	// The classification connection is released before the statement runs, so
+	// a bound statement holds one pooled connection, not two.
+	releaseClassifyConn()
 	if err := h.sandbox.Load().checkSQLClassReadOnly(class, reason); err != nil {
 		// The user/agent-facing error is one fixed, mode-agnostic message
 		// (see errReadOnlyBindingDenied) — it never surfaces classifySQL's
@@ -541,7 +638,7 @@ func (h *Handler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[
 	if maxRows > 0 {
 		trimmed := strings.TrimSuffix(strings.TrimSpace(sqlStr), ";")
 		wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _a2ui_limit LIMIT %d", trimmed, maxRows+1)
-		if rs, err = h.engine.Execute(ctx, wrapped, params); err == nil {
+		if rs, err = exec(ctx, wrapped, params); err == nil {
 			if len(rs.Rows) > maxRows {
 				rs.Rows = rs.Rows[:maxRows]
 				truncated = true
@@ -551,7 +648,7 @@ func (h *Handler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[
 		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "sql", sqlStr, "wrap_error", err)
 	}
 
-	rs, err = h.engine.Execute(ctx, sqlStr, params)
+	rs, err = exec(ctx, sqlStr, params)
 	if err != nil {
 		return nil, false, fmt.Errorf("query execution failed: %w", err)
 	}
@@ -709,7 +806,11 @@ func (h *Handler) handleCreateRecord(ctx context.Context, req *Request) *Respons
 	if errResp != nil {
 		return errResp
 	}
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+	tblSQL, tblErr := h.tableSQL(ctx, table)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tblSQL, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 	if err := h.requireWriteStatement(ctx, db, query, params); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
@@ -750,7 +851,11 @@ func (h *Handler) handleUpdateRecord(ctx context.Context, req *Request) *Respons
 	if errResp != nil {
 		return errResp
 	}
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", engine.QuoteIdent(table), strings.Join(setClauses, ", "), where)
+	tblSQL, tblErr := h.tableSQL(ctx, table)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tblSQL, strings.Join(setClauses, ", "), where)
 	if err := h.requireWriteStatement(ctx, db, query, params); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
@@ -778,7 +883,11 @@ func (h *Handler) handleDeleteRecord(ctx context.Context, req *Request) *Respons
 	if errResp != nil {
 		return errResp
 	}
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s", engine.QuoteIdent(table), where)
+	tblSQL, tblErr := h.tableSQL(ctx, table)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tblSQL, where)
 	if err := h.requireWriteStatement(ctx, db, query, nil); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
@@ -836,12 +945,16 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 		return NewErrorResponse(req.ID, ErrInvalidParams, "row length does not match columns length")
 	}
 	classifyPlaceholders, classifyParams := namedPlaceholders("v", firstRow)
-	classifyQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(table), strings.Join(colNames, ", "), strings.Join(classifyPlaceholders, ", "))
+	tblSQL, tblErr := h.tableSQL(ctx, table)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	classifyQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tblSQL, strings.Join(colNames, ", "), strings.Join(classifyPlaceholders, ", "))
 	if err := h.requireWriteStatement(ctx, db, classifyQuery, classifyParams); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", engine.QuoteIdent(table), strings.Join(colNames, ", "), rowPlaceholder)
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", tblSQL, strings.Join(colNames, ", "), rowPlaceholder)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to begin transaction: %v", err))
@@ -927,7 +1040,11 @@ func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response
 		colDefs = append(colDefs, fmt.Sprintf("%s %s", engine.QuoteIdent(colName), colType))
 	}
 
-	query := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(name), strings.Join(colDefs, ", "))
+	tblSQL, tblErr := h.tableSQL(ctx, name)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("CREATE TABLE %s (%s)", tblSQL, strings.Join(colDefs, ", "))
 	db, errResp := h.duckDB(req.ID)
 	if errResp != nil {
 		return errResp
@@ -947,7 +1064,11 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid column type %q", colType))
 	}
 
-	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", engine.QuoteIdent(table), engine.QuoteIdent(name), colType)
+	tblSQL, tblErr := h.tableSQL(ctx, table)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tblSQL, engine.QuoteIdent(name), colType)
 	db, errResp := h.duckDB(req.ID)
 	if errResp != nil {
 		return errResp
@@ -962,7 +1083,11 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 func (h *Handler) handleDropTable(ctx context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
 
-	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", engine.QuoteIdent(name))
+	tblSQL, tblErr := h.tableSQL(ctx, name)
+	if tblErr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+	}
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", tblSQL)
 	db, errResp := h.duckDB(req.ID)
 	if errResp != nil {
 		return errResp
@@ -1010,7 +1135,11 @@ func (h *Handler) handleImportCSV(ctx context.Context, req *Request) *Response {
 			placeholders[j] = "?"
 			args[j] = strings.TrimSpace(f)
 		}
-		query := fmt.Sprintf("INSERT INTO %s VALUES (%s)", engine.QuoteIdent(table), strings.Join(placeholders, ", "))
+		tblSQL, tblErr := h.tableSQL(ctx, table)
+		if tblErr != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, tblErr.Error())
+		}
+		query := fmt.Sprintf("INSERT INTO %s VALUES (%s)", tblSQL, strings.Join(placeholders, ", "))
 		_, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
 			_ = tx.Rollback()

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -143,3 +144,5 @@ func TestApp_StatusBarShowsUnsavedIndicator(t *testing.T) {
 	app.unsaved = false
 	assert.NotContains(t, app.View(), "[unsaved]")
 }
+
+func (c *countingContainer) Session() session.Session { return nil }

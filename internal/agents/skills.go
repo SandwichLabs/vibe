@@ -14,6 +14,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // Re-exported so callers outside this package (internal/llm's system-prompt
@@ -57,6 +58,33 @@ const (
 	skillMaxInstructionsLen = 32 * 1024
 )
 
+// skillTableRef resolves a skill's table_name to a table reference. A name
+// that is exactly the name of a table in the connection's default catalog and
+// schema wins (a stored name may legitimately contain dots: it is data, not a
+// path); otherwise it is read as schema.table / catalog.schema.table.
+func skillTableRef(duckDB *sql.DB, table string) session.TableRef {
+	bare := session.TableRef{Name: table}
+	if _, ok, _ := session.LookupTable(context.Background(), duckDB, bare); ok {
+		return bare
+	}
+	if ref, err := session.ParseTableRef(table); err == nil {
+		return ref
+	}
+	return bare
+}
+
+// catalogTableExists reports whether a table (bare, or catalog-qualified as
+// "catalog.schema.table") exists. A bare name resolves against the connection's
+// default catalog and schema. Only already-attached catalogs can match, so a
+// skill gated on a remote table never dials anything.
+func catalogTableExists(duckDB *sql.DB, table string) (bool, error) {
+	_, ok, err := session.LookupTable(context.Background(), duckDB, skillTableRef(duckDB, table))
+	if err != nil {
+		return false, fmt.Errorf("failed to look up table %q: %w", table, err)
+	}
+	return ok, nil
+}
+
 // tableHasRows reports whether table exists in the DuckDB catalog and has at
 // least one row. Any error (table genuinely absent, a transient query
 // failure) is treated as "not ready" rather than propagated — a single
@@ -65,15 +93,12 @@ func tableHasRows(duckDB *sql.DB, table string) bool {
 	if duckDB == nil || table == "" {
 		return false
 	}
-	var exists int
-	if err := duckDB.QueryRow(
-		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1",
-		table,
-	).Scan(&exists); err != nil || exists == 0 {
+	exists, err := catalogTableExists(duckDB, table)
+	if err != nil || !exists {
 		return false
 	}
 	var hasRow int
-	q := fmt.Sprintf(`SELECT CASE WHEN EXISTS (SELECT 1 FROM %s) THEN 1 ELSE 0 END`, engine.QuoteIdent(table))
+	q := fmt.Sprintf(`SELECT CASE WHEN EXISTS (SELECT 1 FROM %s) THEN 1 ELSE 0 END`, skillTableRef(duckDB, table).SQL())
 	if err := duckDB.QueryRow(q).Scan(&hasRow); err != nil {
 		return false
 	}
@@ -368,14 +393,11 @@ func SaveUserSkill(sqliteDB *sql.DB, duckDB *sql.DB, name, description, instruct
 		if duckDB == nil {
 			return fmt.Errorf("table_name %q given but no database connection available to verify it", tableName)
 		}
-		var exists int
-		if err := duckDB.QueryRow(
-			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = $1",
-			tableName,
-		).Scan(&exists); err != nil {
+		exists, err := catalogTableExists(duckDB, tableName)
+		if err != nil {
 			return fmt.Errorf("failed to verify table_name %q: %w", tableName, err)
 		}
-		if exists == 0 {
+		if !exists {
 			return fmt.Errorf("table_name %q does not name an existing table", tableName)
 		}
 	}
@@ -597,16 +619,18 @@ func WriteImportSkill(sqliteDB *sql.DB, duckDB *sql.DB, table string) error {
 		return fmt.Errorf("no open container")
 	}
 	name := importSkillName(sqliteDB, table)
-	quotedTable := engine.QuoteIdent(table)
+	tref := skillTableRef(duckDB, table)
+	quotedTable := tref.SQL()
 
 	var rowCount int
 	if err := duckDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&rowCount); err != nil {
 		return fmt.Errorf("failed to count rows in %q: %w", table, err)
 	}
 
+	colCond, colArgs := session.RefFilter(tref, "table_catalog", "table_schema", "table_name", 1)
 	cols, err := duckDB.Query(
 		`SELECT column_name, data_type FROM information_schema.columns
-		 WHERE table_schema = 'main' AND table_name = $1 ORDER BY ordinal_position`, table)
+		 WHERE `+colCond+` ORDER BY ordinal_position`, colArgs...)
 	if err != nil {
 		return fmt.Errorf("failed to describe %q: %w", table, err)
 	}

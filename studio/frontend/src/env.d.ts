@@ -53,6 +53,7 @@ declare global {
           DropTable(name: string): Promise<void>
           ExecuteQuery(sql: string): Promise<QueryResult>
           RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
+          RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
           AddColumn(table: string, column: string, colType: string): Promise<void>
           DropColumn(table: string, column: string): Promise<void>
           AddIndex(table: string, indexName: string, columns: string[], unique: boolean): Promise<void>

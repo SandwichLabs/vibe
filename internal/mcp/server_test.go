@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"testing"
@@ -132,4 +134,11 @@ func TestToolDefToMCPTool_ArraysCarryItems(t *testing.T) {
 			assert.Containsf(t, prop, "items", "%s.%s: array param must declare items (Gemini rejects a bare array schema)", td.Name, p.Name)
 		}
 	}
+}
+
+func (m *mockContainer) Session() session.Session {
+	if m.db != nil {
+		return sessiontest.ForTests(m.db)
+	}
+	return nil
 }

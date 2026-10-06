@@ -7,6 +7,7 @@ import {crud} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
+import {session} from '../models';
 
 export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -102,6 +103,10 @@ export function IsDirty():Promise<boolean>;
 
 export function IsFileOpen():Promise<boolean>;
 
+export function ListCatalogTables(arg1:string):Promise<Array<string>>;
+
+export function ListConnections():Promise<Array<session.Status>>;
+
 export function ListNotebooks():Promise<Array<notebooks.Summary>>;
 
 export function ListQueries():Promise<Array<main.QuerySummary>>;
@@ -131,6 +136,8 @@ export function ResolveAgentApproval(arg1:string,arg2:boolean):Promise<void>;
 export function RevertFile():Promise<void>;
 
 export function RunA2UIQuery(arg1:string):Promise<main.A2UIQueryResult>;
+
+export function RunA2UIQueryIn(arg1:string,arg2:string):Promise<main.A2UIQueryResult>;
 
 export function SaveFile():Promise<void>;
 

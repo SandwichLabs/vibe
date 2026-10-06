@@ -10,6 +10,8 @@ import (
 	"time"
 
 	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // Container represents an open .vibe file with both SQLCipher and DuckDB connections.
@@ -81,7 +83,7 @@ func Create(path string, opts ...Option) (*Container, error) {
 	}
 
 	// Materialize DuckDB (creates empty database for new files).
-	duckState, err := materializeDuckDB(db)
+	duckState, err := materializeDuckDB(db, o.Logger)
 	if err != nil {
 		db.Close() //nolint:errcheck
 		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
@@ -214,6 +216,18 @@ func (c *Container) DuckDBDB() *sql.DB {
 		return nil
 	}
 	return c.duckDB.db
+}
+
+// Session returns the DuckDB session over the container's data: the hub every
+// caller should query and introspect through. Its default catalog is the
+// materialised file (Session.DefaultCatalog()). Like DuckDBDB(), it changes
+// after Revert (the file is re-materialised), so callers must not cache it
+// across a Revert. Returns nil when no DuckDB session is live.
+func (c *Container) Session() session.Session {
+	if c.duckDB == nil {
+		return nil
+	}
+	return c.duckDB.sess
 }
 
 // DuckDBTempDir returns the filesystem path of the temp directory backing the

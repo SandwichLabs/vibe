@@ -185,7 +185,7 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 		flagSandbox = string(agents.ModeReadOnly)
 	}
 
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(logger))
+	eng := engine.NewManager(c.Session(), engine.WithLogger(logger))
 	rpcHandler, policy, err := buildMCPHandler(c, eng, flagSandbox, logger)
 	if err != nil {
 		return err

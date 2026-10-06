@@ -221,7 +221,7 @@ func TestRevertFile_ApprovedRacingRevertIsCancelled(t *testing.T) {
 	// correct product behaviour but makes the test flaky (reviewer-caught).
 	app.mu.Lock()
 	require.NoError(t, app.container.Revert())
-	app.engine = engine.NewManager(app.container.DuckDBDB(), engine.WithLogger(app.logger))
+	app.engine = engine.NewManager(app.container.Session(), engine.WithLogger(app.logger))
 	app.mu.Unlock()
 
 	require.NoError(t, app.ResolveAgentApproval(resolveID, true))

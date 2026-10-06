@@ -40,6 +40,7 @@ type fieldKind int
 
 const (
 	kindString fieldKind = iota
+	kindConnection
 	kindNumber
 	kindBoolean
 	kindStringOrNumber
@@ -58,6 +59,7 @@ type fieldSpec struct {
 
 var (
 	strSpec        = fieldSpec{kind: kindString}
+	connSpec       = fieldSpec{kind: kindConnection}
 	numSpec        = fieldSpec{kind: kindNumber}
 	boolSpec       = fieldSpec{kind: kindBoolean}
 	strOrNumSpec   = fieldSpec{kind: kindStringOrNumber}
@@ -89,11 +91,11 @@ var Components = map[string]componentSpec{
 	"heading":   {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"level": headingLvlSpec}},
 	"text":      {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"muted": boolSpec}},
 	"divider":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
-	"stat":      {req: map[string]fieldSpec{"label": strSpec}, opt: map[string]fieldSpec{"value": strOrNumSpec, "sql": strSpec, "detail": strSpec, "color": colorSpec}},
+	"stat":      {req: map[string]fieldSpec{"label": strSpec}, opt: map[string]fieldSpec{"value": strOrNumSpec, "sql": strSpec, "connection": connSpec, "detail": strSpec, "color": colorSpec}},
 	"statRow":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
-	"table":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "label": strSpec}},
-	"barChart":  {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "sql": strSpec, "label": strSpec, "color": colorSpec}},
-	"lineChart": {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "sql": strSpec, "label": strSpec, "color": colorSpec}},
+	"table":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec}},
+	"barChart":  {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec}},
+	"lineChart": {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec}},
 	"list":      {req: map[string]fieldSpec{"items": strArraySpec}, opt: map[string]fieldSpec{"label": strSpec, "color": colorSpec}},
 	"code":      {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"language": strSpec}},
 	"callout":   {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"icon": strSpec, "color": colorSpec}},
@@ -189,6 +191,13 @@ func jsonQuote(v any) string {
 func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 	switch spec.kind {
 	case kindString:
+		if _, ok := value.(string); !ok {
+			*errs = append(*errs, fmt.Sprintf("%s: expected string, got %s", path, typeName(value)))
+		}
+	case kindConnection:
+		// Only the shape is checked here. A name that is not a known connection
+		// is a run-time error ("unknown connection"), never a reason to drop
+		// the cell or retarget the query silently.
 		if _, ok := value.(string); !ok {
 			*errs = append(*errs, fmt.Sprintf("%s: expected string, got %s", path, typeName(value)))
 		}

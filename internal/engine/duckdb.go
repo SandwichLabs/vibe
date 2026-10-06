@@ -2,19 +2,20 @@ package engine
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
-// DuckDBEngine executes queries against a DuckDB database.
+// DuckDBEngine executes queries against a DuckDB session.
 type DuckDBEngine struct {
-	db *sql.DB
+	sess session.Session
 }
 
-// NewDuckDBEngine creates a new DuckDB engine wrapping the given database connection.
-func NewDuckDBEngine(db *sql.DB) *DuckDBEngine {
+// NewDuckDBEngine creates a DuckDB engine over the given session.
+func NewDuckDBEngine(sess session.Session) *DuckDBEngine {
 	return &DuckDBEngine{
-		db: db,
+		sess: sess,
 	}
 }
 
@@ -37,18 +38,28 @@ func (e *DuckDBEngine) ExecuteCapped(ctx context.Context, query string, params m
 
 // execute is the shared implementation behind Execute and ExecuteCapped.
 func (e *DuckDBEngine) execute(ctx context.Context, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	return e.executeIn(ctx, "", query, params, maxRows)
+}
+
+// executeIn is execute with connection (a catalog name) as the default for
+// unqualified names; "" is the session default.
+func (e *DuckDBEngine) executeIn(ctx context.Context, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
 	boundSQL, args, err := BindParams(query, params)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to bind parameters: %w", err)
 	}
 
-	rows, err := e.db.QueryContext(ctx, boundSQL, args...)
+	var opts []session.QueryOption
+	if connection != "" {
+		opts = append(opts, session.WithCatalog(connection))
+	}
+	rows, err := e.sess.QueryWith(ctx, boundSQL, args, opts...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to execute duckdb query: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
-	return ScanRows(rows, maxRows)
+	return ScanRows(rows.Rows, maxRows)
 }
 
 // Close is a no-op for DuckDBEngine since the db is managed externally.

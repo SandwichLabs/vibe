@@ -936,6 +936,7 @@ export namespace notebooks {
 	    View: string;
 	    ViewPinned: boolean;
 	    Label: string;
+	    Connection: string;
 	    Page?: a2ui.Page;
 	
 	    static createFrom(source: any = {}) {
@@ -951,6 +952,7 @@ export namespace notebooks {
 	        this.View = source["View"];
 	        this.ViewPinned = source["ViewPinned"];
 	        this.Label = source["Label"];
+	        this.Connection = source["Connection"];
 	        this.Page = this.convertValues(source["Page"], a2ui.Page);
 	    }
 	
@@ -1133,6 +1135,35 @@ export namespace queries {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace session {
+	
+	export class Status {
+	    name: string;
+	    type: string;
+	    status: string;
+	    message?: string;
+	    locked_by_pid?: number;
+	    read_only: boolean;
+	    default?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Status(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.locked_by_pid = source["locked_by_pid"];
+	        this.read_only = source["read_only"];
+	        this.default = source["default"];
+	    }
 	}
 
 }

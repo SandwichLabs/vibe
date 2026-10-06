@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"testing"
 
 	_ "github.com/marcboeker/go-duckdb/v2"
@@ -41,7 +42,7 @@ func TestBumpAutoNumber(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (5, 'x'), (99, 'y')")
 	require.NoError(t, err)
 
-	require.NoError(t, BumpAutoNumber(ctx, db, "t", "id"))
+	require.NoError(t, BumpAutoNumber(ctx, db, session.TableRef{Name: "t"}, "id"))
 
 	var next int64
 	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO t (name) VALUES ('z') RETURNING id").Scan(&next))
@@ -53,7 +54,7 @@ func TestBumpAutoNumber_NoDefault(t *testing.T) {
 	db := openTestDuckDB(t)
 	_, err := db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY, name VARCHAR)")
 	require.NoError(t, err)
-	require.NoError(t, BumpAutoNumber(ctx, db, "t", "id"))
+	require.NoError(t, BumpAutoNumber(ctx, db, session.TableRef{Name: "t"}, "id"))
 }
 
 func TestBumpAutoNumber_FKReferenced(t *testing.T) {
@@ -72,7 +73,7 @@ func TestBumpAutoNumber_FKReferenced(t *testing.T) {
 	_, err = db.ExecContext(ctx, "CREATE TABLE child (x BIGINT REFERENCES parent(id))")
 	require.NoError(t, err)
 
-	require.NoError(t, BumpAutoNumber(ctx, db, "parent", "id"))
+	require.NoError(t, BumpAutoNumber(ctx, db, session.TableRef{Name: "parent"}, "id"))
 
 	var next int64
 	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO parent (name) VALUES ('c') RETURNING id").Scan(&next))
@@ -90,7 +91,7 @@ func TestBumpAutoNumber_CapsHugeGap(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (50000000000, 'x')")
 	require.NoError(t, err)
 
-	err = BumpAutoNumber(ctx, db, "t", "id")
+	err = BumpAutoNumber(ctx, db, session.TableRef{Name: "t"}, "id")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "too far behind")
 
@@ -119,7 +120,7 @@ func TestAutoNumberGap_CaseInsensitive(t *testing.T) {
 	_, err = db.ExecContext(ctx, `CREATE TABLE "Customers" (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_Customers_id'), name VARCHAR)`)
 	require.NoError(t, err)
 
-	gap, ok, err := AutoNumberGap(ctx, db, "customers", "id", 50)
+	gap, ok, err := AutoNumberGap(ctx, db, session.TableRef{Name: "customers"}, "id", 50)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Greater(t, gap, int64(0))

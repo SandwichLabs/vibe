@@ -167,6 +167,27 @@ func countStatements(raw string) (int, error) {
 	return int(n), nil
 }
 
+// queryDB is the read surface the classifier needs from the user's database.
+// *sql.DB satisfies it, and so does a pinned *sql.Conn: a statement bound to a
+// connection (notebook format v2) is classified on a connection whose default
+// catalog is that connection, so its unqualified names resolve the way they
+// will when it runs.
+type queryDB interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// nilDB reports whether q is nil or a nil *sql.DB (a typed nil stored in the
+// interface), so the "no database" guards keep working now that the
+// classifier takes an interface.
+func nilDB(q queryDB) bool {
+	if q == nil {
+		return true
+	}
+	d, ok := q.(*sql.DB)
+	return ok && d == nil
+}
+
 // --- Read-path AST connection (json_serialize_sql) -----------------------
 
 var (
@@ -327,9 +348,9 @@ func (c *catalog) resolves(catalogName, schema, table string) bool {
 // default catalog/schema for resolving unqualified references. It always
 // returns a non-nil *catalog; on error the catalog is the zero value, which
 // resolves nothing (fail closed).
-func loadCatalog(ctx context.Context, userDB *sql.DB) (*catalog, error) {
+func loadCatalog(ctx context.Context, userDB queryDB) (*catalog, error) {
 	c := &catalog{entries: map[string]bool{}}
-	if userDB == nil {
+	if nilDB(userDB) {
 		return &catalog{}, fmt.Errorf("no duckdb connection available")
 	}
 	if err := userDB.QueryRowContext(ctx, "SELECT current_database()").Scan(&c.defaultCatalog); err != nil {
@@ -596,8 +617,8 @@ var planScanOperators = map[string]bool{
 // didn't bind parameters before classifying, and a failed-to-bind EXPLAIN
 // was reported back as "requires the full sandbox" — wrong reason,
 // coincidentally correct denial). It reports the real bind error instead.
-func checkPlanExternalAccess(ctx context.Context, userDB *sql.DB, cat *catalog, stmt string, args []any) string {
-	if userDB == nil {
+func checkPlanExternalAccess(ctx context.Context, userDB queryDB, cat *catalog, stmt string, args []any) string {
+	if nilDB(userDB) {
 		return "could not validate query: no database connection available"
 	}
 	rows, err := userDB.QueryContext(ctx, "EXPLAIN (FORMAT JSON) "+stmt, args...)
@@ -862,7 +883,7 @@ var pragmaReadAllowlist = map[string]bool{
 // leftover `$` after binding can ONLY be a dollar-quote delimiter (or a
 // reference to a param that plain doesn't exist, itself a bind error) —
 // exactly the case that must keep failing closed.
-func classifySQL(ctx context.Context, userDB *sql.DB, raw string, params map[string]any) (sqlClass, string) {
+func classifySQL(ctx context.Context, userDB queryDB, raw string, params map[string]any) (sqlClass, string) {
 	boundSQL, args, err := engine.BindParams(raw, params)
 	if err != nil {
 		return sqlClassOther, fmt.Sprintf("could not validate query: %v", err)
@@ -875,7 +896,7 @@ func classifySQL(ctx context.Context, userDB *sql.DB, raw string, params map[str
 // recursive case (below) can reclassify a substring of an already-bound
 // statement without re-running BindParams against text that no longer has
 // any $name placeholders to bind.
-func classifyBound(ctx context.Context, userDB *sql.DB, boundSQL string, args []any) (sqlClass, string) {
+func classifyBound(ctx context.Context, userDB queryDB, boundSQL string, args []any) (sqlClass, string) {
 	trimmed := strings.TrimSpace(boundSQL)
 	if trimmed == "" {
 		return sqlClassOther, ""
@@ -1074,7 +1095,7 @@ func writeStatementSuspiciousText(trimmed string) bool {
 // bypassable via quoted function names, comments splitting a keyword from
 // its file argument, and unquoted replacement-scan table refs the scan
 // never recognized as reaching outside the database at all.
-func classifyFallback(ctx context.Context, userDB *sql.DB, cat *catalog, trimmed string, args []any) (sqlClass, string) {
+func classifyFallback(ctx context.Context, userDB queryDB, cat *catalog, trimmed string, args []any) (sqlClass, string) {
 	if looksObfuscated(trimmed) {
 		return sqlClassOther, ""
 	}

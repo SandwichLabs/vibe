@@ -1,6 +1,10 @@
 package container
 
-import "database/sql"
+import (
+	"database/sql"
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
+)
 
 // Store defines the interface that Container implements, for use in testing
 // and dependency injection by downstream packages.
@@ -10,6 +14,9 @@ type Store interface {
 
 	// DuckDBDB returns the underlying DuckDB database connection.
 	DuckDBDB() *sql.DB
+
+	// Session returns the DuckDB session (catalog-aware hub) over DuckDBDB.
+	Session() session.Session
 
 	// Save checkpoints DuckDB and writes the blob back to SQLCipher.
 	Save() error

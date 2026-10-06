@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // maxBadValues bounds how many pre-flight problems Summary.BadValues carries
@@ -351,7 +352,7 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 		keyExpr, _ := keyCastExpr(keyTarget)
 		var collide int
 		q := fmt.Sprintf("SELECT COUNT(*) FROM %s s WHERE %s IN (SELECT %s FROM %s)",
-			stageTable, keyExpr, engine.QuoteIdent(existing.pkCol), engine.QuoteIdent(sum.Table))
+			stageTable, keyExpr, engine.QuoteIdent(existing.pkCol), tableSQL(ctx, sum.Table))
 		if err := conn.QueryRowContext(ctx, q).Scan(&collide); err != nil {
 			return fmt.Errorf("failed to check existing keys: %w", err)
 		}
@@ -388,7 +389,7 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 				return fmt.Errorf("failed to check the new key range: %w", err)
 			}
 			if maxFileKey.Valid {
-				gap, ok, err := engine.AutoNumberGap(ctx, conn, sum.Table, existing.pkCol, maxFileKey.Int64)
+				gap, ok, err := engine.AutoNumberGap(ctx, conn, session.TableRef{Name: sum.Table}, existing.pkCol, maxFileKey.Int64)
 				if err != nil {
 					return err
 				}
@@ -422,7 +423,7 @@ func exactDupeCount(ctx context.Context, conn *sql.Conn, table string, target []
 	}
 	q := fmt.Sprintf(
 		"SELECT COUNT(*) FROM (SELECT %s FROM %s INTERSECT ALL SELECT %s FROM %s) t",
-		strings.Join(stageCols, ", "), stageTable, strings.Join(tableCols, ", "), engine.QuoteIdent(table))
+		strings.Join(stageCols, ", "), stageTable, strings.Join(tableCols, ", "), tableSQL(ctx, table))
 	var n int
 	if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
 		return 0, fmt.Errorf("failed to check duplicate rows: %w", err)

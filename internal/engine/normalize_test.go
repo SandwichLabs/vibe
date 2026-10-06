@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"math"
 	"math/big"
 	"testing"
@@ -126,7 +127,7 @@ func TestNaNThroughDuckDBExecute(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	eng := NewDuckDBEngine(db)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 
 	for _, tc := range []struct {
 		name string
@@ -164,7 +165,7 @@ func TestNaNNestedInCompositeThroughDuckDBExecute(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	eng := NewDuckDBEngine(db)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 
 	for _, tc := range []struct {
 		name string
@@ -200,7 +201,7 @@ func TestNormalizeColumnValueDate(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	eng := NewDuckDBEngine(db)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 
 	rows, err := db.QueryContext(context.Background(), "SELECT DATE '2025-04-06' AS d, TIMESTAMP '2025-04-06 13:45:00' AS ts, NULL::DATE AS n")
 	require.NoError(t, err)
@@ -229,7 +230,7 @@ func TestDecimalScansAsExactNumber(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	eng := NewDuckDBEngine(db)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 
 	_, err = db.Exec("CREATE TABLE t42 (price DECIMAL(10,2))")
 	require.NoError(t, err)

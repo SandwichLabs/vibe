@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"sync"
@@ -619,4 +621,11 @@ func TestTighter(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, Tighter(c.a, c.b), "Tighter(%q, %q)", c.a, c.b)
 	}
+}
+
+func (m *mockContainer) Session() session.Session {
+	if db := m.DuckDBDB(); db != nil {
+		return sessiontest.ForTests(db)
+	}
+	return nil
 }

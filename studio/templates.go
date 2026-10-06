@@ -59,7 +59,7 @@ func (a *App) CreateFromTemplate(path, passphrase, template string) error {
 	}
 
 	a.container = c
-	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	a.beginFileSession()

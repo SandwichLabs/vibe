@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"path/filepath"
 	"strings"
 )
@@ -113,11 +114,8 @@ func stage(ctx context.Context, conn *sql.Conn, s Source, textCols map[string]bo
 		}
 		expr = csvExpr(s.Path, s.HasHeader, overrides)
 	case "xlsx":
-		if _, err := conn.ExecContext(ctx, "INSTALL excel"); err != nil {
-			return nil, fmt.Errorf("failed to install excel extension: %w", err)
-		}
-		if _, err := conn.ExecContext(ctx, "LOAD excel"); err != nil {
-			return nil, fmt.Errorf("failed to load excel extension: %w", err)
+		if err := session.EnsureExtension(ctx, conn, "excel", "Importing an Excel file"); err != nil {
+			return nil, err
 		}
 		expr = readXLSXExpr(s.Path, s.Sheet, s.HasHeader)
 		xlsxCols, derr := describeColumns(ctx, conn, expr)

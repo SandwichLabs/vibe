@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // handleBuildQuery renders a QBE filter spec into deterministic SQL over the
@@ -34,7 +35,7 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		return errResp
 	}
 
-	cols, err := engine.TableColumns(ddb, table)
+	cols, err := engine.TableColumns(ddb, session.TableRef{Name: table})
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to introspect columns for query: %v", err))
 	}

@@ -35,7 +35,7 @@ const livePoints = ref<Point[]>([])
 onMounted(async () => {
   if (!props.component.sql) return
   loading.value = true
-  const { columns, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal)
+  const { columns, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal, 'low', props.component.connection || undefined)
   if (aborted) return // caller stopped caring (unmounted/reloaded) — never apply a stale result
   loading.value = false
   if (err) {

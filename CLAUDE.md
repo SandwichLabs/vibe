@@ -69,7 +69,10 @@ studio/                    # Wails v2 desktop app
 
 internal/
 ├── container/             # .vibe lifecycle (open, save, close; SQLCipher + DuckDB blob; temp hardening)
-├── engine/                # DuckDB query execution
+├── session/               # DuckDB hub (#108): hardened Session (catalog-aware Query/Exec/Conn, Attach/Detach,
+                           #   Connections() status, schema cache, quoting helpers). The container's DuckDB is
+                           #   wrapped by it (Container.Session()); in-memory New() becomes the workspace hub (#109)
+├── engine/                # Query layer over a session.Session (Manager); table-ref parsing (ParseTable/ResolveTable/TableSQL)
 ├── crud/                  # Transactional, type-coercing row insert/update/delete (stays)
 ├── importer/              # CSV / xlsx import
 ├── queries/               # Named query registry (_vibe_queries)
@@ -128,6 +131,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 - **CGO_ENABLED=1** — required for SQLCipher and DuckDB C bindings
 - **Goreleaser** — use `.goreleaser.yaml` for cross-platform release builds with ldflags for version injection
 - **Additive migrations** (legacy container) — `_vibe_*` tables are only ever added in `internal/container/schema.go`; removals stop creating a table and stop requiring it in `vibe verify`, never drop it from existing files
+- **No hard-coded catalog** — never write `'main'` / `'memory'` / `'analytics'` in code. Ask `Session.DefaultCatalog()`, introspect through `Session.ListTables/DescribeTable` (filtered by `database_name`), and name tables `catalog.schema.table` through `session.QuoteIdent`/`TableRef.SQL()`. Unqualified names resolve against the connection's current catalog (`current_database()`/`current_schema()` in SQL), which is the session default unless a run pinned one with `USE`
 - **One tool surface** — new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`
 - **Model output never reaches a style attribute** — A2UI colors are a closed enum; validators reject unknown fields
 - **No hex in stylesheets** — every colour in `studio/frontend` is a `--vibe-*` role (or a bridged `--sh-*` token); translucent variants use `color-mix()` on a role. Theme files are validated by `theme/schema.ts` (hex only, closed role list). Built-ins must pass the AA contrast spec in `theme/schema.spec.ts`
@@ -140,7 +144,7 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 **File lifecycle:** Open (decrypt SQLCipher, materialize DuckDB blob to a hardened temp file) → Session (queries, CRUD, notebooks, agent) → Save (checkpoint DuckDB, re-serialize blob into SQLCipher) → Close (cleanup, zero temp files). Open takes an exclusive writer lock (`<file>.lock`, flock; #80); read-only opens don't. Studio tracks unsaved table changes (`Container.Dirty`, `file:dirty`) and asks Save / Don't save / Cancel on Close and quit. Everything except an explicit Don't save still saves. Revert to last save re-materializes the DuckDB copy from the saved blob in place (`Container.Revert`), keeping the lock; the last save is also the undo point for agent changes (#98).
 
-**Notebooks (#66):** JSON documents of `sql` / `markdown` / `a2ui` cells. No inter-cell references; outputs are never persisted, every data cell re-runs on open. SQL cells render by synthesizing a one-component A2UI page. The agent authors cells in **task mode**: `preview_query` before a terminal `write_cell` or `need_more_info`; the result is an envelope built from recorded tool calls, never model prose.
+**Notebooks (#66; format v2 #108):** JSON documents of `sql` / `markdown` / `a2ui` cells. v2 adds an optional `connection` on sql cells and a2ui `sql` bindings (the default catalog for that statement's unqualified names, on a pinned connection; unset = session default); v1 loads as v2. No inter-cell references; outputs are never persisted, every data cell re-runs on open. SQL cells render by synthesizing a one-component A2UI page. The agent authors cells in **task mode**: `preview_query` before a terminal `write_cell` or `need_more_info`; the result is an envelope built from recorded tool calls, never model prose.
 
 **Skills (#62):** `SKILL.md` documents (`name`, `description` frontmatter + markdown instructions). The system prompt advertises name and description; the agent fetches bodies with `read_skill`. Built-ins are embedded; user skills live in `_vibe_skills`. Table-bound skills load only when the table has rows.
 

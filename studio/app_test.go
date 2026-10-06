@@ -40,7 +40,7 @@ func newOpenApp(t *testing.T) *App {
 	require.NoError(t, err)
 
 	app.container = c
-	app.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(logger))
+	app.engine = engine.NewManager(c.Session(), engine.WithLogger(logger))
 	app.registry = queries.NewRegistry(c.SQLiteDB(), logger)
 	app.filePath = path
 	app.beginFileSession()
@@ -69,7 +69,7 @@ func reopenApp(t *testing.T, app *App) {
 	require.NoError(t, err)
 
 	app.container = c
-	app.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(app.logger))
+	app.engine = engine.NewManager(c.Session(), engine.WithLogger(app.logger))
 	app.registry = queries.NewRegistry(c.SQLiteDB(), app.logger)
 	app.beginFileSession()
 

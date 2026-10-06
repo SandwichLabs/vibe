@@ -25,6 +25,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/prefs"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -417,7 +418,7 @@ func (a *App) OpenFile(path, passphrase string) error {
 	}
 
 	a.container = c
-	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	a.beginFileSession()
@@ -459,7 +460,7 @@ func (a *App) CreateFile(path, passphrase, title, desc string) error {
 	}
 
 	a.container = c
-	a.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(c.Session(), engine.WithLogger(a.logger))
 	a.registry = queries.NewRegistry(c.SQLiteDB(), a.logger)
 	a.filePath = path
 	a.beginFileSession()
@@ -582,7 +583,7 @@ func (a *App) RevertFile() error {
 	if err := a.container.Revert(); err != nil {
 		return fmt.Errorf("failed to revert: %w", err)
 	}
-	a.engine = engine.NewManager(a.container.DuckDBDB(), engine.WithLogger(a.logger))
+	a.engine = engine.NewManager(a.container.Session(), engine.WithLogger(a.logger))
 
 	a.emitEvent("file:dirty", false)
 	a.emitEvent("data:changed")
@@ -637,9 +638,7 @@ func (a *App) GetFileInfo() (*FileInfo, error) {
 	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&info.NotebookCount) //nolint:errcheck
 	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&info.QueryCount)      //nolint:errcheck
 
-	if duckDB := a.container.DuckDBDB(); duckDB != nil {
-		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&info.TableCount) //nolint:errcheck
-	}
+	info.TableCount = a.countTables()
 
 	if fi, err := os.Stat(a.filePath); err == nil {
 		info.FileSize = fi.Size()
@@ -1020,7 +1019,64 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 
 // --- Tables ---
 
-// ListTables returns all user tables (non _vibe_ tables).
+// countTables counts the tables and views in the default catalog's default
+// schema. The caller holds a.mu and has checked a.container != nil.
+func (a *App) countTables() int {
+	sess := a.container.Session()
+	if sess == nil {
+		return 0
+	}
+	tabs, err := sess.ListTables(a.ctxOrBackground(), "", "")
+	if err != nil {
+		return 0
+	}
+	return len(tabs)
+}
+
+// ctxOrBackground is a.ctx, or Background before startup / in tests.
+func (a *App) ctxOrBackground() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
+}
+
+// tableRefArg validates a table identifier arriving from the frontend: a bare
+// name (default catalog) or schema.table / catalog.schema.table (an attached
+// connection). Every part is validated and quoted when SQL is built.
+//
+// The returned reference is fully resolved (catalog, schema, table) through the
+// session, so the SQL built from it never depends on the connection's current
+// catalog or on a same-named temp table shadowing a bare name. An unknown
+// connection ("system", "temp", a typo) is refused. The caller holds a.mu and
+// has checked a.container != nil.
+func (a *App) tableRefArg(name string) (session.TableRef, error) {
+	ref, err := engine.ParseTable(name)
+	if err != nil {
+		return ref, fmt.Errorf("invalid table name")
+	}
+	if sess := a.container.Session(); sess != nil {
+		resolved, rerr := sess.Resolve(a.ctxOrBackground(), ref)
+		if rerr != nil {
+			return ref, rerr
+		}
+		ref = resolved
+	}
+	return ref, nil
+}
+
+// isDefaultTarget reports whether ref is in the session's default catalog and
+// default schema (where a bare sequence name resolves).
+func (a *App) isDefaultTarget(ref session.TableRef) bool {
+	sess := a.container.Session()
+	if sess == nil {
+		return false
+	}
+	schema, err := sess.DefaultSchema(a.ctxOrBackground(), "")
+	return err == nil && ref.Catalog == sess.DefaultCatalog() && ref.Schema == schema
+}
+
+// ListTables returns all user tables of the default catalog (non _vibe_ tables).
 func (a *App) ListTables() ([]string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -1029,25 +1085,61 @@ func (a *App) ListTables() ([]string, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	db := a.container.DuckDBDB()
-	if db == nil {
+	sess := a.container.Session()
+	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
-	rows, err := db.Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
+	tabs, err := sess.ListTables(a.ctxOrBackground(), "", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tables: %w", err)
 	}
-	defer rows.Close()
-
 	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("failed to scan table: %w", err)
-		}
-		tables = append(tables, name)
+	for _, t := range tabs {
+		tables = append(tables, t.Name)
 	}
-	return tables, rows.Err()
+	return tables, nil
+}
+
+// ListConnections returns every connection of the session with its status
+// (the default catalog first). Status messages are already redacted.
+func (a *App) ListConnections() ([]session.Status, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	sess := a.container.Session()
+	if sess == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+	return sess.Connections(), nil
+}
+
+// ListCatalogTables returns the tables of one connection's default schema,
+// qualified (catalog.schema.table) so each name can be passed straight to
+// DescribeTable / GetTableData / InsertRow / ... A connection of "" means the
+// default catalog.
+func (a *App) ListCatalogTables(connection string) ([]string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.container == nil {
+		return nil, fmt.Errorf("no file open")
+	}
+	sess := a.container.Session()
+	if sess == nil {
+		return nil, fmt.Errorf("DuckDB not available")
+	}
+	tabs, err := sess.ListTables(a.ctxOrBackground(), connection, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tables: %w", err)
+	}
+	out := make([]string, 0, len(tabs))
+	for _, t := range tabs {
+		out = append(out, t.Ref().String())
+	}
+	return out, nil
 }
 
 // ColumnInfo describes a table column.
@@ -1076,8 +1168,9 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 		return nil, fmt.Errorf("no file open")
 	}
 
-	if !isValidIdentifier(name) {
-		return nil, fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return nil, err
 	}
 
 	db := a.container.DuckDBDB()
@@ -1087,7 +1180,7 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 	// Shared introspection (internal/schema): fills real PRIMARY KEY membership
 	// from duckdb_constraints() — the previous inline query always reported
 	// PK=false, leaving the schema tree / ER diagram to guess by column name.
-	cols, err := engine.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, tref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe table: %w", err)
 	}
@@ -1120,36 +1213,22 @@ func (a *App) ListTableStats() ([]TableStat, error) {
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-	db := a.container.DuckDBDB()
-	if db == nil {
+	sess := a.container.Session()
+	if sess == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
-	rows, err := db.Query(
-		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name")
+	tabs, err := sess.ListTables(a.ctxOrBackground(), "", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tables: %w", err)
 	}
-	defer rows.Close() //nolint:errcheck
 
-	var names []string
-	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
-			return nil, fmt.Errorf("failed to scan table name: %w", err)
-		}
-		names = append(names, n)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate tables: %w", err)
-	}
-
-	out := make([]TableStat, 0, len(names))
-	for _, n := range names {
+	out := make([]TableStat, 0, len(tabs))
+	for _, t := range tabs {
 		var count int64
-		if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(n))).Scan(&count); err != nil {
-			return nil, fmt.Errorf("failed to count rows of %q: %w", n, err)
+		if err := sess.DB().QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", t.Ref().SQL())).Scan(&count); err != nil {
+			return nil, fmt.Errorf("failed to count rows of %q: %w", t.Name, err)
 		}
-		out = append(out, TableStat{Name: n, Rows: count})
+		out = append(out, TableStat{Name: t.Name, Rows: count})
 	}
 	return out, nil
 }
@@ -1235,8 +1314,9 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 		return nil, fmt.Errorf("no file open")
 	}
 
-	if !isValidIdentifier(name) {
-		return nil, fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return nil, err
 	}
 
 	if page < 1 {
@@ -1252,7 +1332,7 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}
 
 	var totalRows int
-	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", engine.QuoteIdent(name))).Scan(&totalRows); err != nil {
+	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tref.SQL())).Scan(&totalRows); err != nil {
 		return nil, fmt.Errorf("failed to count rows: %w", err)
 	}
 
@@ -1266,7 +1346,7 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}
 
 	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %s%s LIMIT ? OFFSET ?", engine.QuoteIdent(name), orderClause)
+	query := fmt.Sprintf("SELECT * FROM %s%s LIMIT ? OFFSET ?", tref.SQL(), orderClause)
 	rows, err := db.Query(query, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query table: %w", err)
@@ -1333,8 +1413,9 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	if a.container == nil {
 		return nil, fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(name) {
-		return nil, fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return nil, err
 	}
 
 	if page < 1 {
@@ -1350,7 +1431,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	// Build an allowlist of real columns to validate filter/sort identifiers.
-	cols, err := engine.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, tref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}
@@ -1365,7 +1446,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	var totalRows int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", engine.QuoteIdent(name), whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", tref.SQL(), whereClause)
 	if err := db.QueryRow(countQuery, args...).Scan(&totalRows); err != nil {
 		return nil, fmt.Errorf("failed to count filtered rows: %w", err)
 	}
@@ -1380,7 +1461,7 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %s%s%s LIMIT ? OFFSET ?", engine.QuoteIdent(name), whereClause, orderClause)
+	query := fmt.Sprintf("SELECT * FROM %s%s%s LIMIT ? OFFSET ?", tref.SQL(), whereClause, orderClause)
 	queryArgs := append(append([]any{}, args...), pageSize, offset)
 	rows, err := db.Query(query, queryArgs...)
 	if err != nil {
@@ -1473,7 +1554,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	ddb, colTypes, metas, err := a.prepareWrite(table)
+	ddb, colTypes, metas, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1505,7 +1586,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
-	ddb, colTypes, metas, err := a.prepareWrite(table)
+	ddb, colTypes, metas, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1528,26 +1609,31 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 
 // prepareWrite validates the open container + table and loads the column types
 // and field metadata needed by the transactional write helpers.
-func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]crud.FieldMeta, error) {
+func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]crud.FieldMeta, string, error) {
 	if a.container == nil {
-		return nil, nil, nil, fmt.Errorf("no file open")
+		return nil, nil, nil, "", fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(table) {
-		return nil, nil, nil, fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(table)
+	if err != nil {
+		return nil, nil, nil, "", err
 	}
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
-		return nil, nil, nil, fmt.Errorf("DuckDB not available")
+		return nil, nil, nil, "", fmt.Errorf("DuckDB not available")
 	}
-	colTypes, err := columnTypes(ddb, table)
+	// Writes address the table by its fully resolved name (catalog.schema.table),
+	// so neither the connection's current catalog nor a same-named temp table
+	// can redirect them.
+	resolved := tref.String()
+	colTypes, err := columnTypes(ddb, resolved)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
-	metas, err := fieldMetaMap(crud.NewFieldMetaStore(a.container.SQLiteDB()), table)
+	metas, err := fieldMetaMap(crud.NewFieldMetaStore(a.container.SQLiteDB()), tref.Name)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
-	return ddb, colTypes, metas, nil
+	return ddb, colTypes, metas, resolved, nil
 }
 
 // DeleteRow deletes a row from a table by primary key. Consistent with
@@ -1563,7 +1649,7 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
-	ddb, colTypes, _, err := a.prepareWrite(table)
+	ddb, colTypes, _, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1594,8 +1680,9 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(name) {
-		return fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return err
 	}
 	for _, col := range columns {
 		if !isValidIdentifier(col.Name) {
@@ -1607,9 +1694,16 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	for _, col := range columns {
 		def := fmt.Sprintf("%s %s", engine.QuoteIdent(col.Name), col.Type)
 		if col.PK && engine.IsIntegerType(col.Type) {
-			seq := engine.AutoNumberSequence(name, col.Name)
-			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START 1", engine.QuoteIdent(seq)))
-			def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
+			// The sequence lives next to its table, in the same catalog and
+			// schema. A bare table keeps the legacy nextval('seq') default text.
+			seq := engine.AutoNumberSequence(tref.Name, col.Name)
+			seqRef := session.TableRef{Catalog: tref.Catalog, Schema: tref.Schema, Name: seq}
+			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START 1", seqRef.SQL()))
+			if a.isDefaultTarget(tref) {
+				def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
+			} else {
+				def += fmt.Sprintf(" DEFAULT nextval(%s)", session.QuoteLiteral(seqRef.SQL()))
+			}
 		}
 		if col.PK {
 			def += " PRIMARY KEY"
@@ -1620,7 +1714,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 		colDefs = append(colDefs, def)
 	}
 
-	query := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(name), strings.Join(colDefs, ", "))
+	query := fmt.Sprintf("CREATE TABLE %s (%s)", tref.SQL(), strings.Join(colDefs, ", "))
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
@@ -1630,7 +1724,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 			return fmt.Errorf("failed to create id sequence: %w", err)
 		}
 	}
-	_, err := ddb.Exec(query)
+	_, err = ddb.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -1647,15 +1741,16 @@ func (a *App) DropTable(name string) error {
 	if a.container == nil {
 		return fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(name) {
-		return fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return err
 	}
 
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	_, err := ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", engine.QuoteIdent(name)))
+	_, err = ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tref.SQL()))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -1820,6 +1915,21 @@ type A2UIQueryResult struct {
 // result with checkSQLClassReadOnly: sqlClassRead only, regardless of
 // sandbox mode.
 func (a *App) RunA2UIQuery(sqlStr string) (*A2UIQueryResult, error) {
+	return a.RunA2UIQueryIn(sqlStr, "")
+}
+
+// RunA2UIQueryIn is RunA2UIQuery for a binding (or notebook sql cell) that
+// names a connection (notebook format v2): the statement runs with that
+// connection's catalog as the default for unqualified table names, on a
+// pinned connection. An empty connection is the session default, exactly
+// RunA2UIQuery. Every gate (read-only classification, row cap, timeout)
+// applies identically.
+func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error) {
+	if connection != "" {
+		if err := session.ValidateName(connection); err != nil {
+			return nil, fmt.Errorf("unknown connection %q", connection)
+		}
+	}
 	a.mu.RLock()
 	if a.container == nil {
 		a.mu.RUnlock()
@@ -1851,7 +1961,7 @@ func (a *App) RunA2UIQuery(sqlStr string) (*A2UIQueryResult, error) {
 	// Go-side wait.
 	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
 	defer cancel()
-	rs, truncated, err := handler.RunReadOnlySQL(ctx, sqlStr, nil, a2uiQueryRowCap)
+	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
 	if err != nil {
 		return nil, err
 	}
@@ -1992,8 +2102,9 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(name) {
-		return "", fmt.Errorf("invalid table name")
+	tref, err := a.tableRefArg(name)
+	if err != nil {
+		return "", err
 	}
 
 	db := a.container.DuckDBDB()
@@ -2001,7 +2112,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		return "", fmt.Errorf("DuckDB not available")
 	}
 
-	cols, err := engine.TableColumns(db, name)
+	cols, err := engine.TableColumns(db, tref)
 	if err != nil {
 		return "", fmt.Errorf("failed to introspect columns for filter: %w", err)
 	}
@@ -2028,7 +2139,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		return "", err
 	}
 
-	return fmt.Sprintf("SELECT %s FROM %s%s", projection, engine.QuoteIdent(name), whereClause), nil
+	return fmt.Sprintf("SELECT %s FROM %s%s", projection, tref.SQL(), whereClause), nil
 }
 
 // buildFilterWhereInline mirrors buildFilterWhere but inlines literal values into
@@ -2145,9 +2256,7 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 	db.QueryRow("SELECT COUNT(*) FROM _vibe_notebooks").Scan(&d.NotebookCount) //nolint:errcheck
 	db.QueryRow("SELECT COUNT(*) FROM _vibe_queries").Scan(&d.QueryCount)      //nolint:errcheck
 
-	if duckDB := a.container.DuckDBDB(); duckDB != nil {
-		duckDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main'").Scan(&d.TableCount) //nolint:errcheck
-	}
+	d.TableCount = a.countTables()
 
 	if fi, err := os.Stat(a.filePath); err == nil {
 		d.FileSize = fi.Size()
@@ -2695,6 +2804,11 @@ func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *age
 // gated to reads regardless of sandbox mode — see RunA2UIQuery). It never
 // calls notifyAgentToolChange: RunReadOnlySQL can only ever read.
 func (h *agentToolHandler) RunReadOnlySQL(ctx context.Context, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
+	return h.RunReadOnlySQLIn(ctx, "", sqlStr, params, maxRows)
+}
+
+// RunReadOnlySQLIn is RunReadOnlySQL for a statement bound to a connection.
+func (h *agentToolHandler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
 	h.app.mu.RLock()
 	defer h.app.mu.RUnlock()
 
@@ -2703,7 +2817,7 @@ func (h *agentToolHandler) RunReadOnlySQL(ctx context.Context, sqlStr string, pa
 	}
 	policy := h.app.agentPolicy()
 	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
-	return h.inner.RunReadOnlySQL(ctx, sqlStr, params, maxRows)
+	return h.inner.RunReadOnlySQLIn(ctx, connection, sqlStr, params, maxRows)
 }
 
 // enableApprovals installs an approver on h that surfaces each pending write
@@ -2956,7 +3070,7 @@ func (a *App) exportTableTo(table, dst, copyOpts string) error {
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	copySQL := buildCopySQL(fmt.Sprintf("SELECT * FROM %s", engine.QuoteIdent(table)), dst, copyOpts)
+	copySQL := buildCopySQL(fmt.Sprintf("SELECT * FROM %s", engine.TableSQL(table)), dst, copyOpts)
 	if _, err := ddb.Exec(copySQL); err != nil {
 		return fmt.Errorf("failed to export table: %w", err)
 	}
@@ -2971,8 +3085,8 @@ func (a *App) ExportTableCSV(tableName string) (string, error) {
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(tableName) {
-		return "", fmt.Errorf("invalid table name")
+	if _, err := a.tableRefArg(tableName); err != nil {
+		return "", err
 	}
 
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
@@ -3003,8 +3117,8 @@ func (a *App) ExportTableJSON(tableName string) (string, error) {
 	if a.container == nil {
 		return "", fmt.Errorf("no file open")
 	}
-	if !isValidIdentifier(tableName) {
-		return "", fmt.Errorf("invalid table name")
+	if _, err := a.tableRefArg(tableName); err != nil {
+		return "", err
 	}
 
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
@@ -3082,6 +3196,11 @@ type engineAgentAdapter struct {
 
 func (ea *engineAgentAdapter) Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error) {
 	return ea.app.engine.Execute(ctx, sql, params)
+}
+
+// ExecuteIn satisfies agents.ConnectionEngine (notebook format v2).
+func (ea *engineAgentAdapter) ExecuteIn(ctx context.Context, connection, sql string, params map[string]any) (*engine.ResultSet, error) {
+	return ea.app.engine.ExecuteIn(ctx, connection, sql, params)
 }
 
 // StartMCPServer starts the MCP server for the currently open file.
@@ -3182,17 +3301,21 @@ func isValidIdentifier(name string) bool {
 }
 
 // copyToXLSX writes the result of the given SELECT source to an .xlsx via the
-// DuckDB excel extension, falling back to CSV when the extension is unavailable.
-// It returns the written path (.xlsx or .csv). Caller must hold a.mu (R or W).
+// DuckDB excel extension (fetched once on first use). It never falls back to another format: failure is an error.
+// It returns the written .xlsx path. Caller must hold a.mu (R or W).
 func (a *App) copyToXLSX(source, dst string) (string, error) {
 	ddb := a.container.DuckDBDB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
 
-	// Best-effort load of the excel extension (bundled/autoloadable in this
-	// build). If it is unavailable we fall back to CSV.
-	_, _ = ddb.ExecContext(a.ctx, "LOAD excel")
+	// The excel extension is not autoloaded (the hub runs hardened, with an
+	// app-private extension directory): fetch and load it explicitly. A
+	// failure is returned to the user; the export never silently becomes a
+	// different format.
+	if err := session.EnsureExtension(a.ctx, ddb, "excel", "Exporting to Excel"); err != nil {
+		return "", err
+	}
 
 	// COPY (query) TO 'file.xlsx' WITH (FORMAT xlsx). Escape single quotes in the
 	// destination path to keep the SQL literal well-formed.
@@ -3201,23 +3324,14 @@ func (a *App) copyToXLSX(source, dst string) (string, error) {
 		xlsxPath += ".xlsx"
 	}
 	copyXLSX := buildCopySQL(source, xlsxPath, "FORMAT xlsx, HEADER true")
-	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err == nil {
-		return xlsxPath, nil
-	} else {
-		a.logger.Warn("xlsx export unavailable, falling back to CSV", "error", err)
+	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err != nil {
+		return "", fmt.Errorf("failed to export to Excel: %w", err)
 	}
-
-	// CSV fallback.
-	csvPath := strings.TrimSuffix(dst, ".xlsx") + ".csv"
-	copyCSV := buildCopySQL(source, csvPath, "FORMAT csv, HEADER true")
-	if _, err := ddb.ExecContext(a.ctx, copyCSV); err != nil {
-		return "", err
-	}
-	return csvPath, nil
+	return xlsxPath, nil
 }
 
 // ExportTableXLSX exports an arbitrary table to an .xlsx via the DuckDB excel
-// extension (CSV fallback if unavailable), returning the written path
+// extension (an error if it cannot be fetched), returning the written path
 // (plan §6.2 / P6.5).
 func (a *App) ExportTableXLSX(tableName, dst string) (string, error) {
 	a.mu.RLock()
@@ -3241,7 +3355,7 @@ func (a *App) ExportTableXLSX(tableName, dst string) (string, error) {
 }
 
 // ExportQueryXLSX exports a saved query's result to an .xlsx via the DuckDB excel
-// extension (CSV fallback if unavailable), returning the written path
+// extension (an error if it cannot be fetched), returning the written path
 // (plan §6.2 / P6.5).
 func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
 	a.mu.RLock()

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,7 +22,7 @@ func TestTablesModel_LoadAndNavigate(t *testing.T) {
 	require.NoError(t, err)
 
 	m := NewTablesModel()
-	m.LoadTables(db)
+	m.LoadTables(sessiontest.ForTests(db))
 	require.Len(t, m.items, 2)
 	assert.Equal(t, "gadgets", m.items[0].Name) // alphabetical
 	assert.Equal(t, "widgets", m.items[1].Name)

@@ -21,6 +21,7 @@ package engine_test
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestDuckDBCRUDSpike(t *testing.T) {
 
 	c := openSpikeContainer(t, path)
 	ddb := c.DuckDBDB()
-	mgr := engine.NewManager(ddb)
+	mgr := engine.NewManager(sessiontest.ForTests(ddb))
 	ctx := context.Background()
 
 	// --- DDL: parent + child with a FOREIGN KEY constraint ---

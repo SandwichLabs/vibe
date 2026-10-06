@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -317,7 +318,7 @@ func newRealDuckDBHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	sandbox := &SandboxConfig{Mode: mode, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
-	eng := engine.NewManager(duckDB, engine.WithLogger(logger))
+	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }
 
@@ -729,7 +730,7 @@ func newRound4LeakFixture(t *testing.T) (*Handler, *sql.DB) {
 	sandbox := &SandboxConfig{Mode: ModeReadWrite, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
-	eng := engine.NewManager(duckDB, engine.WithLogger(logger))
+	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }
 

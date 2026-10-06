@@ -417,3 +417,112 @@ func TestCell_MarshalJSON_OmitsIrrelevantFields(t *testing.T) {
 	assert.NotContains(t, string(b), "view")
 	assert.NotContains(t, string(b), "viewPinned")
 }
+
+// --- Notebook format v2 (#108) ---
+
+func TestCoerce_V1LoadsAsV2(t *testing.T) {
+	nb, warnings, err := Coerce(map[string]any{
+		"schemaVersion": 1,
+		"id":            "nb1", "title": "Old",
+		"cells": []any{
+			map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "view": "table"},
+			map[string]any{"id": "c2", "type": "a2ui", "page": map[string]any{"title": "p", "components": []any{
+				map[string]any{"id": "t", "type": "table", "sql": "SELECT 1"},
+			}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, 2, nb.SchemaVersion)
+	assert.Equal(t, "", nb.Cells[0].Connection, "v1 cells have no connection (session default)")
+	assert.NotContains(t, nb.Cells[1].Page.Components[0].Fields, "connection")
+}
+
+func TestCoerce_V2ConnectionRoundTrips(t *testing.T) {
+	in := map[string]any{
+		"schemaVersion": 2, "id": "nb2", "title": "New",
+		"cells": []any{
+			map[string]any{"id": "c1", "type": "sql", "source": "SELECT * FROM orders", "connection": "prod_pg"},
+			map[string]any{"id": "c2", "type": "sql", "source": "SELECT 1"},
+			map[string]any{"id": "c3", "type": "a2ui", "page": map[string]any{"title": "p", "components": []any{
+				map[string]any{"id": "s", "type": "stat", "label": "n", "sql": "SELECT 1", "connection": "lake"},
+			}}},
+		},
+	}
+	nb, warnings, err := Coerce(in)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, "prod_pg", nb.Cells[0].Connection)
+	assert.Equal(t, "", nb.Cells[1].Connection)
+	assert.Equal(t, "lake", nb.Cells[2].Page.Components[0].Fields["connection"])
+
+	// Serialise, coerce again: identical, and unset stays absent (no empty key).
+	b, err := json.Marshal(nb)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"connection":"prod_pg"`)
+	assert.Contains(t, string(b), `"connection":"lake"`)
+	var generic map[string]any
+	require.NoError(t, json.Unmarshal(b, &generic))
+	cells, ok := generic["cells"].([]any)
+	require.True(t, ok)
+	cell1, ok := cells[1].(map[string]any)
+	require.True(t, ok)
+	_, has := cell1["connection"]
+	assert.False(t, has, "an unset connection must not be written")
+
+	nb2, warnings, err := Coerce(generic)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, nb, nb2)
+}
+
+func TestCoerce_UnknownConnectionIsKeptNotDropped(t *testing.T) {
+	// Odd names survive load and save untouched; the run fails clearly.
+	nb, warnings, err := Coerce(map[string]any{
+		"cells": []any{
+			map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "connection": "Prod DB"},
+			map[string]any{"id": "c2", "type": "a2ui", "page": map[string]any{"title": "p", "components": []any{
+				map[string]any{"id": "t", "type": "table", "sql": "SELECT 1", "connection": "gone"},
+			}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	require.Len(t, nb.Cells, 2, "no cell is dropped")
+	assert.Equal(t, "Prod DB", nb.Cells[0].Connection)
+	assert.Equal(t, "gone", nb.Cells[1].Page.Components[0].Fields["connection"])
+}
+
+func TestCoerce_NonStringConnectionIsCleared(t *testing.T) {
+	for _, bad := range []any{12, true, []any{"a"}} {
+		nb, warnings, err := Coerce(map[string]any{
+			"cells": []any{map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "connection": bad}},
+		})
+		require.NoError(t, err)
+		require.Len(t, nb.Cells, 1)
+		assert.Equal(t, "", nb.Cells[0].Connection, "%v", bad)
+		require.Len(t, warnings, 1, "%v", bad)
+		assert.Contains(t, warnings[0], "connection")
+	}
+}
+
+func TestSaveGet_ConnectionPersists(t *testing.T) {
+	db := testDB(t)
+	nb, err := Create(db, "N")
+	require.NoError(t, err)
+	saved, _, err := Save(db, map[string]any{
+		"id": nb.ID, "title": "N",
+		"cells": []any{map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "connection": "other"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "other", saved.Cells[0].Connection)
+	got, _, err := Get(db, nb.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "other", got.Cells[0].Connection)
+	assert.Equal(t, SchemaVersion, got.SchemaVersion)
+}
+
+func TestCoerce_RejectsV3(t *testing.T) {
+	_, _, err := Coerce(map[string]any{"schemaVersion": 3, "cells": []any{}})
+	require.Error(t, err)
+}

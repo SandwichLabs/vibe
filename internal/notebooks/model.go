@@ -28,7 +28,14 @@ import (
 // notebook whose declared schemaVersion is newer — the same "a file from a
 // newer Vibe must not silently corrupt under an older one" rule model.js's
 // coerceNotebook enforces.
-const SchemaVersion = 1
+//
+// Version 2 (#108) adds an optional `connection` on sql cells (and on the
+// `sql`-bound components of a2ui cells, see internal/a2ui): the connection
+// whose catalog is the default for the cell's unqualified table names. Unset
+// means the workspace default. A version-1 notebook is a valid version-2
+// notebook with no connection set: it loads unchanged and is stamped with the
+// current version the next time it is saved.
+const SchemaVersion = 2
 
 // FileKind is the "kind" tag an exported notebook file (ExportNotebook) is
 // stamped with, and the value ImportNotebook checks against — mirrors
@@ -102,6 +109,9 @@ type Cell struct {
 	View       string
 	ViewPinned bool
 	Label      string
+	// Connection (v2) names the connection whose catalog is the default for
+	// this cell's unqualified table names. "" = the workspace default.
+	Connection string
 
 	// a2ui only. Never nil for a CellA2UI cell — Coerce drops any a2ui cell
 	// whose page fails internal/a2ui.Validate rather than storing a partial
@@ -122,7 +132,8 @@ func (c Cell) MarshalJSON() ([]byte, error) {
 			View       string `json:"view"`
 			ViewPinned bool   `json:"viewPinned"`
 			Label      string `json:"label"`
-		}{c.ID, string(c.Type), c.Collapsed, c.Source, c.View, c.ViewPinned, c.Label})
+			Connection string `json:"connection,omitempty"`
+		}{c.ID, string(c.Type), c.Collapsed, c.Source, c.View, c.ViewPinned, c.Label, c.Connection})
 	case CellMarkdown:
 		return json.Marshal(struct {
 			ID        string `json:"id"`
@@ -331,9 +342,23 @@ func Coerce(raw any) (Notebook, []string, error) {
 				label = clamped
 				warnings = append(warnings, fmt.Sprintf("cell %q: label exceeded %d characters, truncated", id, maxLabelRunes))
 			}
+			// The name is kept as written, even if no such connection exists
+			// (a pulled workspace may name one this machine lacks): the cell
+			// fails at run time with "unknown connection", it is never dropped
+			// and never silently retargeted at the default. It only ever
+			// reaches SQL as a quoted identifier.
+			connection := ""
+			if rawConn, present := cellObj["connection"]; present && rawConn != nil {
+				if name, isStr := rawConn.(string); isStr {
+					connection = name
+				} else {
+					warnings = append(warnings, fmt.Sprintf("cell %q: connection was not a string, cleared", id))
+				}
+			}
 			cells = append(cells, Cell{
 				ID: id, Type: CellSQL, Collapsed: collapsed,
 				Source: source, View: view, ViewPinned: viewPinned, Label: label,
+				Connection: connection,
 			})
 		case CellMarkdown:
 			source, truncated, nonString := clampSource(cellObj["source"])

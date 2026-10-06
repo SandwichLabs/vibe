@@ -141,12 +141,12 @@ func explainEmptyResult(ctx context.Context, userDB *sql.DB, sqlText string) str
 		strings.Join(notes, "\n"))
 }
 
-// resolveColumnTable finds which table (in the main schema) has a column
-// with this name, case-insensitively. Returns ok=false when zero or
+// resolveColumnTable finds which table (in the default catalog's default
+// schema) has a column with this name, case-insensitively. Returns ok=false when zero or
 // ambiguous matches are found — better to say nothing than guess wrong.
 func resolveColumnTable(ctx context.Context, db *sql.DB, column string) (string, bool) {
 	rows, err := db.QueryContext(ctx,
-		"SELECT table_name FROM information_schema.columns WHERE table_schema = 'main' AND lower(column_name) = lower($1) LIMIT 2",
+		"SELECT table_name FROM information_schema.columns WHERE table_catalog = current_database() AND table_schema = current_schema() AND lower(column_name) = lower($1) LIMIT 2",
 		column)
 	if err != nil {
 		return "", false

@@ -1,6 +1,28 @@
 # Notebooks & A2UI Reference
 
-> **Changing (#108, #109).** Notebook format v2 adds an optional `connection` to SQL cells and A2UI `sql` bindings; when it's unset, the workspace's default connection is used. Notebooks will be stored one per file (`notebooks/*.vnb`) in a workspace folder rather than in `_vibe_notebooks`. v1 notebooks load unchanged.
+> **Changing (#109).** Notebooks will be stored one per file (`notebooks/*.vnb`) in a workspace folder rather than in `_vibe_notebooks`. The format itself (v2, below) is already in place as of #108.
+
+## Format version 2 (#108)
+
+A notebook carries `schemaVersion: 2`. v2 adds one optional field: a
+**`connection`** on `sql` cells and on the `sql`-bound components of `a2ui`
+cells (`stat`, `table`, `barChart`, `lineChart`). It names a connection (a
+catalog alias matching `^[a-z_][a-z0-9_]{0,62}$`); the cell's `sql` then runs
+with that connection as the **default catalog for unqualified table names**,
+on a pinned connection (`USE <connection>`). Unset means the session default
+(the open file's data today, the workspace's `default_connection` once #109
+lands). Catalog-qualified names (`other.main.orders`) work with or without it.
+
+A v1 notebook is a valid v2 notebook with no `connection` set: it loads
+unchanged and is stamped v2 the next time it is saved. A notebook written by a
+newer Vibe (`schemaVersion` above 2) is refused. A `connection` that names no
+known connection on this machine is **kept as written** (cells are never
+dropped, queries are never silently retargeted at the default): the cell
+fails when it runs with `unknown connection "x"`. A non-string `connection`
+is cleared with a warning. The value only ever reaches SQL as a quoted
+identifier. There is no connection
+selector in the UI yet (#117); the field round-trips, and the agent and
+imported files can set it.
 
 A **Notebook** is a JSON document stored in `_vibe_notebooks`: a title plus
 an ordered list of **cells**. There is no page markup, no directives, and no
@@ -31,6 +53,8 @@ change data"). A sql cell also carries:
   explicitly chosen (by the user or by an authoring tool that names one),
   `viewPinned` becomes true and auto-fit stops re-deciding it.
 - `label` — a short cell title.
+- `connection` (v2, optional) — the connection whose catalog is the default
+  for unqualified table names in `source`.
 
 In Studio the SQL is hidden by default behind a "Show SQL" row, and the
 result shows first. Whether it is open is view state and is never stored. A
@@ -115,11 +139,11 @@ a validation error, not a silently-ignored one.
 | `heading` | `text` | `level` |
 | `text` | `text` | `muted` |
 | `divider` | — | — |
-| `stat` | `label` | `value`, `sql`, `detail`, `color` |
+| `stat` | `label` | `value`, `sql`, `connection`, `detail`, `color` |
 | `statRow` | — | — (a row container for `stat` children) |
-| `table` | — | `columns`, `rows`, `sql`, `label` |
-| `barChart` | — | `bars`, `sql`, `label`, `color` |
-| `lineChart` | — | `points`, `sql`, `label`, `color` |
+| `table` | — | `columns`, `rows`, `sql`, `connection`, `label` |
+| `barChart` | — | `bars`, `sql`, `connection`, `label`, `color` |
+| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color` |
 | `list` | `items` | `label`, `color` |
 | `code` | `text` | `language` |
 | `callout` | `text` | `icon`, `color` |
@@ -138,7 +162,9 @@ component type here goes out of sync with that registry.
 `stat`, `table`, `barChart`, and `lineChart` accept either **inline data**
 (`value`/`rows`/`bars`/`points`) or a live `sql` binding. A `sql`-bound
 component re-runs its query every time the page renders — same read-only,
-sandbox-gated classifier as a notebook sql cell.
+sandbox-gated classifier as a notebook sql cell. An optional `connection`
+(v2) sets the default catalog for the binding's unqualified names, exactly as
+on a sql cell.
 
 ### The closed color enum
 

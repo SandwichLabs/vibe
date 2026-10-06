@@ -41,16 +41,18 @@ var Tools = []ToolDef{
 	// Introspect tools
 	{
 		Name:        "introspect_schema",
-		Description: "List all tables and their columns in the container",
+		Description: "List the tables of a connection (catalog). Omit connection for the default one; tables of any other connection are returned fully qualified (catalog.schema.table) so they can be used as-is in other tools.",
 		Category:    "introspect",
-		Params:      []ParamDef{},
+		Params: []ParamDef{
+			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) name; defaults to the workspace default"},
+		},
 	},
 	{
 		Name:        "describe_table",
 		Description: "Describe the schema of a specific table",
 		Category:    "introspect",
 		Params: []ParamDef{
-			{Name: "table", Type: "string", Required: true, Desc: "Name of the table to describe"},
+			{Name: "table", Type: "string", Required: true, Desc: "Name of the table to describe; catalog.schema.table for a table in another connection"},
 		},
 	},
 	{

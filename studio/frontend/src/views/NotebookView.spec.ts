@@ -175,6 +175,46 @@ describe('NotebookView', () => {
     expect(app.SaveNotebook).toHaveBeenCalledWith(expect.objectContaining({ id: 'nb1' }), '')
   })
 
+  // Notebook format v2 (#108): a sql cell's `connection` runs its query with
+  // that connection as the default catalog and round-trips through save.
+  it('runs a sql cell with its connection and saves the connection back', async () => {
+    const nb = JSON.parse(JSON.stringify(BAR_NOTEBOOK))
+    nb.cells[0].connection = 'prod_pg'
+    const app = makeApp({
+      GetNotebook: vi.fn(async () => nb),
+      RunA2UIQueryIn: vi.fn(async () => ({
+        columns: ['region', 'sum(revenue)'], types: ['VARCHAR', 'BIGINT'], rows: [['North', 100]], truncated: false,
+      })),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+
+    expect(app.RunA2UIQueryIn).toHaveBeenCalledWith(nb.cells[0].source, 'prod_pg')
+    expect(app.RunA2UIQuery).not.toHaveBeenCalled()
+
+    // An edit triggers a save; the connection must ride along in the payload.
+    const vm = wrapper.vm as any
+    vm.cells[0].label = 'renamed'
+    await vm.flushSave()
+    const saved = (app.SaveNotebook as any).mock.calls.at(-1)[0]
+    expect(saved.cells[0].connection).toBe('prod_pg')
+    expect(saved.cells[0].label).toBe('renamed')
+  })
+
+  it('a sql cell without a connection saves no connection key', async () => {
+    const app = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.cells[0].label = 'renamed'
+    await vm.flushSave()
+    const saved = (app.SaveNotebook as any).mock.calls.at(-1)[0]
+    expect(saved.cells[0].label).toBe('renamed')
+    expect('connection' in saved.cells[0]).toBe(false)
+  })
+
   it('marks a cell stale when the source is edited without re-running', async () => {
     makeApp()
     const wrapper = mountView()

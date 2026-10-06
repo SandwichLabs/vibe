@@ -18,7 +18,7 @@ const liveRows = ref<any[][]>([])
 onMounted(async () => {
   if (!props.component.sql) return
   loading.value = true
-  const { columns, types, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal)
+  const { columns, types, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal, 'low', props.component.connection || undefined)
   if (aborted) return // caller stopped caring (unmounted/reloaded) — never apply a stale result
   loading.value = false
   if (err) {

@@ -201,3 +201,41 @@ describe('formatNumber / toPoints / clampGap (smoke coverage)', () => {
     expect(clampGap('not a number')).toBe(0)
   })
 })
+
+// Notebook format v2 (#108): a `connection` routes the statement through
+// RunA2UIQueryIn; without one the original binding is used unchanged.
+describe('runLiveQuery connection', () => {
+  beforeEach(() => {
+    _resetQueryPoolForTests()
+    ;(globalThis as any).window = (globalThis as any).window || {}
+  })
+
+  it('uses RunA2UIQueryIn when a connection is given, RunA2UIQuery otherwise', async () => {
+    const result = { columns: ['a'], types: ['INTEGER'], rows: [[1]], truncated: false }
+    const App = {
+      RunA2UIQuery: vi.fn(async () => result),
+      RunA2UIQueryIn: vi.fn(async () => result),
+    }
+    ;(window as any).go = { main: { App } }
+
+    const plain = await runLiveQuery('SELECT 1')
+    expect(plain.rows).toEqual([[1]])
+    expect(App.RunA2UIQuery).toHaveBeenCalledWith('SELECT 1')
+    expect(App.RunA2UIQueryIn).not.toHaveBeenCalled()
+
+    const bound = await runLiveQuery('SELECT * FROM orders', undefined, 'high', 'prod_pg')
+    expect(bound.rows).toEqual([[1]])
+    expect(App.RunA2UIQueryIn).toHaveBeenCalledWith('SELECT * FROM orders', 'prod_pg')
+    expect(App.RunA2UIQuery).toHaveBeenCalledTimes(1)
+
+    // An empty connection is "unset".
+    await runLiveQuery('SELECT 2', undefined, 'low', '')
+    expect(App.RunA2UIQuery).toHaveBeenCalledTimes(2)
+  })
+
+  it('surfaces a connection error inline instead of throwing', async () => {
+    ;(window as any).go = { main: { App: { RunA2UIQueryIn: vi.fn(async () => { throw new Error('connection "x" is not attached') }) } } }
+    const res = await runLiveQuery('SELECT 1', undefined, 'low', 'x')
+    expect(res.error).toContain('not attached')
+  })
+})

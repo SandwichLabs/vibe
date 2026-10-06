@@ -16,7 +16,22 @@ import (
 	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
+
+// tableRef parses a table argument: a bare name, or "schema.table" /
+// "catalog.schema.table" for a table in an attached connection. Every part is
+// quoted when the SQL is built (engine.TableSQL). A name that does not parse
+// falls back to a single identifier so it can never splice SQL.
+func tableRef(table string) session.TableRef {
+	ref, err := session.ParseTableRef(table)
+	if err != nil {
+		return session.TableRef{Name: table}
+	}
+	return ref
+}
+
+func tableSQL(table string) string { return engine.TableSQL(table) }
 
 // WriteResult reports the outcome of a single CRUD write (rows affected).
 type WriteResult struct {
@@ -56,9 +71,11 @@ type TxExecer interface {
 // placeholders so all-string form inputs are coerced to the column's type
 // before a write (Access-style bound-control coercion).
 func ColumnTypes(q RowQuerier, table string) (map[string]string, error) {
+	// Unqualified parts resolve against the connection's current catalog and
+	// schema (the session default), so no catalog name is assumed.
+	cond, args := session.RefFilter(tableRef(table), "table_catalog", "table_schema", "table_name", 1)
 	rows, err := q.Query(
-		"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'main' AND table_name = $1",
-		table)
+		"SELECT column_name, data_type FROM information_schema.columns WHERE "+cond, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read column types for %q: %w", table, err)
 	}
@@ -267,7 +284,7 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]Field
 	}
 	values = kept
 	if len(values) == 0 {
-		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", engine.QuoteIdent(table)))
+		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", tableSQL(table)))
 		if err != nil {
 			return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
 		}
@@ -285,7 +302,7 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]Field
 		args = append(args, values[c])
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.QuoteIdent(table), strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableSQL(table), strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
@@ -317,7 +334,7 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]Field
 	args = append(args, pkVal)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = CAST(? AS %s)",
-		engine.QuoteIdent(table), strings.Join(setClauses, ", "), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
+		tableSQL(table), strings.Join(setClauses, ", "), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to update %q: %v", table, err)}
@@ -335,7 +352,7 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]Field
 // structured *WriteError rather than a silent no-op.
 func DeleteRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, pkVal any) (*WriteResult, error) {
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = CAST(? AS %s)",
-		engine.QuoteIdent(table), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
+		tableSQL(table), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, pkVal)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to delete from %q: %v", table, err)}

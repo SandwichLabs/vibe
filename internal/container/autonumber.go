@@ -23,7 +23,8 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 	rows, err := ddb.Query(
 		`SELECT table_name, constraint_column_names
 		   FROM duckdb_constraints()
-		  WHERE constraint_type = 'PRIMARY KEY' AND schema_name = 'main'`)
+		  WHERE constraint_type = 'PRIMARY KEY'
+		    AND database_name = current_database() AND schema_name = current_schema()`)
 	if err != nil {
 		logger.Warn("auto-number backfill: failed to list primary keys", "error", err)
 		return
@@ -61,7 +62,8 @@ func backfillAutoNumberPKs(ddb *sql.DB, logger *slog.Logger) {
 		err := ddb.QueryRow(
 			`SELECT data_type, column_default IS NOT NULL
 			   FROM information_schema.columns
-			  WHERE table_schema = 'main' AND table_name = $1 AND column_name = $2`,
+			  WHERE table_catalog = current_database() AND table_schema = current_schema()
+			    AND table_name = $1 AND column_name = $2`,
 			c.table, c.column,
 		).Scan(&dataType, &hasDefault)
 		if err != nil {

@@ -12,7 +12,15 @@ import (
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
+
+// duckDBDataFile is the materialised file's name. DuckDB names the default
+// catalog after the file stem, so every legacy container's data lives in the
+// catalog "analytics" — stable across opens, saves and reverts. Callers must
+// still ask Session.DefaultCatalog() rather than hard-code it.
+const duckDBDataFile = "analytics.duckdb"
 
 // duckDBTempPrefix is the prefix used for all DuckDB session temp directories.
 // Orphan recovery (SweepOrphanedTemp) relies on this prefix plus the embedded
@@ -42,13 +50,27 @@ func StartupSweep(logger *slog.Logger) {
 // duckDBState holds the DuckDB connection and its temporary file path.
 type duckDBState struct {
 	db       *sql.DB
+	sess     session.Session // hardened session wrapping db (see session package doc)
 	tempPath string
 	tempDir  string
 }
 
+// sessionOptions returns the hub hardening for a container's DuckDB: spill
+// files stay inside the 0700 temp dir (so they are removed with it), and
+// extensions/secrets use the app-private directories.
+func sessionOptions(tempDir string, logger *slog.Logger) []session.Option {
+	return []session.Option{
+		session.WithTempDirectory(filepath.Join(tempDir, "spill")),
+		session.WithLogger(logger),
+	}
+}
+
 // materializeDuckDB reads the DuckDB blob from SQLCipher and opens it as a DuckDB database.
 // If no blob exists (new file), it initializes an empty DuckDB database.
-func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
+func materializeDuckDB(sqliteDB *sql.DB, logger *slog.Logger) (*duckDBState, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	// Tag the temp dir name with the owning PID so an orphaned dir (left behind
 	// by a crashed process) can be attributed and reclaimed by SweepOrphanedTemp.
 	pattern := fmt.Sprintf("%s%d-*", duckDBTempPrefix, os.Getpid())
@@ -65,7 +87,7 @@ func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
 		return nil, fmt.Errorf("failed to secure DuckDB temp directory: %w", err)
 	}
 
-	tempPath := filepath.Join(tempDir, "analytics.duckdb")
+	tempPath := filepath.Join(tempDir, duckDBDataFile)
 
 	// Try to read existing blob from SQLCipher.
 	var data []byte
@@ -83,8 +105,11 @@ func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
 		}
 	}
 
-	// Open the DuckDB database (creates new if file doesn't exist).
-	ddb, err := sql.Open("duckdb", tempPath)
+	// Open the DuckDB database (creates new if file doesn't exist) with the
+	// open-time hardening in the connector DSN; Wrap below applies the
+	// SET-only options, locks the configuration and reads everything back.
+	sessOpts := sessionOptions(tempDir, logger)
+	ddb, err := session.OpenDB(tempPath, sessOpts...)
 	if err != nil {
 		os.RemoveAll(tempDir) //nolint:errcheck
 		return nil, fmt.Errorf("failed to open DuckDB: %w", err)
@@ -116,8 +141,16 @@ func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
 		return nil, fmt.Errorf("failed to secure DuckDB temp file: %w", err)
 	}
 
+	sess, err := session.Wrap(ddb, sessOpts...)
+	if err != nil {
+		ddb.Close()           //nolint:errcheck
+		os.RemoveAll(tempDir) //nolint:errcheck
+		return nil, fmt.Errorf("failed to start DuckDB session: %w", err)
+	}
+
 	return &duckDBState{
 		db:       ddb,
+		sess:     sess,
 		tempPath: tempPath,
 		tempDir:  tempDir,
 	}, nil
@@ -128,7 +161,7 @@ func materializeDuckDB(sqliteDB *sql.DB) (*duckDBState, error) {
 // (backfillAutoNumberPKs). Shared by Open and Revert so both start a session
 // the same way.
 func openDuckDBSession(sqliteDB *sql.DB, readOnly bool, logger *slog.Logger) (*duckDBState, error) {
-	duckState, err := materializeDuckDB(sqliteDB)
+	duckState, err := materializeDuckDB(sqliteDB, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to materialize DuckDB: %w", err)
 	}
@@ -259,6 +292,14 @@ func cleanupDuckDB(state *duckDBState) error {
 	}
 
 	var firstErr error
+
+	// The session wraps db without owning it: close it first (nothing else
+	// holds the instance afterwards), then the instance itself.
+	if state.sess != nil {
+		if err := state.sess.Close(); err != nil {
+			firstErr = fmt.Errorf("failed to close DuckDB session: %w", err)
+		}
+	}
 
 	if state.db != nil {
 		if err := state.db.Close(); err != nil {

@@ -81,7 +81,11 @@ Use --json for machine-readable JSON output.`,
 		// how much data the file actually had. Same query GetDashboard
 		// (studio/app.go) uses.
 		var tableCount int
-		c.DuckDBDB().QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='main'").Scan(&tableCount) //nolint:errcheck
+		if sess := c.Session(); sess != nil {
+			if tabs, err := sess.ListTables(cmd.Context(), "", ""); err == nil {
+				tableCount = len(tabs)
+			}
+		}
 
 		// Count queries.
 		var queryCount int

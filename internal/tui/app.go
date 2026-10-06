@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // mode selects which of the three top-level views is active.
@@ -45,6 +46,7 @@ func (m mode) String() string {
 type ContainerAccess interface {
 	SQLiteDB() *sql.DB
 	DuckDBDB() *sql.DB
+	Session() session.Session
 	Save() error
 	Close() error
 }
@@ -112,7 +114,7 @@ func (a *App) LoadData() {
 	if a.container == nil {
 		return
 	}
-	a.tables.LoadTables(a.container.DuckDBDB())
+	a.tables.LoadTables(a.container.Session())
 	a.notebooks.LoadNotebooks(a.container.SQLiteDB())
 }
 

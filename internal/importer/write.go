@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // writeCreate creates a fresh table from target and inserts every staged
@@ -45,7 +46,7 @@ func writeReplace(ctx context.Context, conn *sql.Conn, table string, existing *e
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", engine.QuoteIdent(table))); err != nil {
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", tableSQL(ctx, table))); err != nil {
 		tx.Rollback() //nolint:errcheck
 		return fmt.Errorf("failed to drop %q: %w", table, err)
 	}
@@ -130,13 +131,13 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 		selectExprs = append(selectExprs, value)
 	}
 
-	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", engine.QuoteIdent(table), strings.Join(colDefs, ", "))
+	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", tableSQL(ctx, table), strings.Join(colDefs, ", "))
 	if _, err := tx.ExecContext(ctx, createSQL); err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
 	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s ORDER BY __row",
-		engine.QuoteIdent(table), strings.Join(colNames, ", "), strings.Join(selectExprs, ", "), stageTable)
+		tableSQL(ctx, table), strings.Join(colNames, ", "), strings.Join(selectExprs, ", "), stageTable)
 	if _, err := tx.ExecContext(ctx, insertSQL); err != nil {
 		return fmt.Errorf("failed to insert rows: %w", err)
 	}
@@ -201,7 +202,7 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 	}
 
 	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s ORDER BY __row",
-		engine.QuoteIdent(table), strings.Join(colNames, ", "), strings.Join(selectExprs, ", "), stageTable)
+		tableSQL(ctx, table), strings.Join(colNames, ", "), strings.Join(selectExprs, ", "), stageTable)
 
 	if upsert {
 		var setParts []string
@@ -240,7 +241,7 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 			// already correct — bumping again here would open an
 			// unnecessary gap.
 			if tc.Name == existing.pkCol && tc.HasFriendly && tc.Friendly.Type == TypeInteger && tc.Staged != nil {
-				if err := engine.BumpAutoNumber(ctx, tx, table, existing.pkCol); err != nil {
+				if err := engine.BumpAutoNumber(ctx, tx, session.TableRef{Name: table}, existing.pkCol); err != nil {
 					tx.Rollback() //nolint:errcheck
 					return 0, fmt.Errorf("failed to advance key sequence: %w", err)
 				}
@@ -287,7 +288,7 @@ func countUpsert(ctx context.Context, conn *sql.Conn, table string, existing *ex
 	tableKeyCol := engine.QuoteIdent(existing.pkCol)
 
 	q := fmt.Sprintf("SELECT COUNT(*) FROM %s s WHERE NOT EXISTS (SELECT 1 FROM %s t WHERE t.%s = %s)",
-		stageTable, engine.QuoteIdent(table), tableKeyCol, keyValue)
+		stageTable, tableSQL(ctx, table), tableKeyCol, keyValue)
 	if err := conn.QueryRowContext(ctx, q).Scan(&inserted); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to count new rows: %w", err)
 	}
@@ -295,7 +296,7 @@ func countUpsert(ctx context.Context, conn *sql.Conn, table string, existing *ex
 	if len(nonKey) == 0 {
 		matching := 0
 		q2 := fmt.Sprintf("SELECT COUNT(*) FROM %s s WHERE EXISTS (SELECT 1 FROM %s t WHERE t.%s = %s)",
-			stageTable, engine.QuoteIdent(table), tableKeyCol, keyValue)
+			stageTable, tableSQL(ctx, table), tableKeyCol, keyValue)
 		if err := conn.QueryRowContext(ctx, q2).Scan(&matching); err != nil {
 			return 0, 0, 0, err
 		}
@@ -322,7 +323,7 @@ func countUpsert(ctx context.Context, conn *sql.Conn, table string, existing *ex
 		 FROM %s s JOIN %s t ON t.%s = %s`,
 		strings.Join(oldExprs, ", "), strings.Join(newExprs, ", "),
 		strings.Join(oldExprs, ", "), strings.Join(newExprs, ", "),
-		stageTable, engine.QuoteIdent(table), tableKeyCol, keyValue)
+		stageTable, tableSQL(ctx, table), tableKeyCol, keyValue)
 	if err := conn.QueryRowContext(ctx, q3).Scan(&updated, &unchanged); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to count changed rows: %w", err)
 	}

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"testing"
 
@@ -168,7 +169,7 @@ func TestManager_NilDuckDB(t *testing.T) {
 func TestManager_WithDuckDB(t *testing.T) {
 	// Use in-memory SQLite as a stand-in for DuckDB in tests.
 	duckDB := openTestDB(t)
-	m := NewManager(duckDB)
+	m := NewManager(sessiontest.ForTests(duckDB))
 
 	assert.NotNil(t, m.duckdb)
 }
@@ -214,7 +215,7 @@ func TestManager_ExecuteViaManager(t *testing.T) {
 	db := openTestDB(t)
 	seedTestDB(t, db)
 
-	m := NewManager(db, WithLogger(slog.Default()))
+	m := NewManager(sessiontest.ForTests(db), WithLogger(slog.Default()))
 	ctx := context.Background()
 
 	rs, err := m.Execute(ctx, "SELECT name FROM customers WHERE id = $id", map[string]any{
@@ -231,7 +232,7 @@ func TestDuckDBEngine_ExecuteCapped(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	eng := NewDuckDBEngine(db)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 	ctx := context.Background()
 
 	rs, total, err := eng.ExecuteCapped(ctx, "SELECT * FROM range(10)", nil, 3)
@@ -254,7 +255,7 @@ func TestManager_ExecuteCapped(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	m := NewManager(db, WithLogger(slog.Default()))
+	m := NewManager(sessiontest.ForTests(db), WithLogger(slog.Default()))
 	ctx := context.Background()
 
 	rs, total, err := m.ExecuteCapped(ctx, "SELECT * FROM range(6000)", nil, 5000)

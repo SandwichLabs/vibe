@@ -12,7 +12,15 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
+
+// RowQuerier is the subset of *sql.DB / *sql.Conn-less callers need: a plain
+// Query. (*sql.DB and *sql.Tx satisfy it.)
+type RowQuerier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
 
 // ColumnInfo describes a table column (name, type, nullability, primary-key
 // and foreign-key membership, default expression) in ordinal order.
@@ -31,15 +39,18 @@ type ColumnInfo struct {
 }
 
 // TableColumns introspects a DuckDB table's columns (name, type, nullability,
-// primary-key membership, default expression) in ordinal order. Returns an
-// empty slice if the table does not exist.
-func TableColumns(db *sql.DB, table string) ([]ColumnInfo, error) {
+// primary-key membership, default expression) in ordinal order. ref names the
+// table by catalog.schema.table; parts it leaves empty resolve against the
+// connection's current catalog and schema (the session default), so no
+// catalog name is assumed. Returns an empty slice if the table does not exist.
+func TableColumns(db RowQuerier, ref session.TableRef) ([]ColumnInfo, error) {
+	cond, args := session.RefFilter(ref, "table_catalog", "table_schema", "table_name", 1)
 	rows, err := db.Query(
 		`SELECT column_name, data_type, CASE WHEN is_nullable = 'NO' THEN true ELSE false END,
 		        COALESCE(column_default, '')
 		   FROM information_schema.columns
-		  WHERE table_schema = 'main' AND table_name = $1
-		  ORDER BY ordinal_position`, table)
+		  WHERE `+cond+`
+		  ORDER BY ordinal_position`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query columns: %w", err)
 	}
@@ -57,11 +68,11 @@ func TableColumns(db *sql.DB, table string) ([]ColumnInfo, error) {
 		return nil, fmt.Errorf("failed to iterate columns: %w", err)
 	}
 
-	pk, err := constraintColumns(db, table, "PRIMARY KEY")
+	pk, err := constraintColumns(db, ref, "PRIMARY KEY")
 	if err != nil {
 		return nil, err
 	}
-	fk, err := constraintColumns(db, table, "FOREIGN KEY")
+	fk, err := constraintColumns(db, ref, "FOREIGN KEY")
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +90,11 @@ func TableColumns(db *sql.DB, table string) ([]ColumnInfo, error) {
 // constraintColumns returns the set of column names participating in any
 // constraint of the given type on the table, using DuckDB's duckdb_constraints()
 // table function.
-func constraintColumns(db *sql.DB, table, constraintType string) (map[string]bool, error) {
+func constraintColumns(db RowQuerier, ref session.TableRef, constraintType string) (map[string]bool, error) {
+	cond, args := session.RefFilter(ref, "database_name", "schema_name", "table_name", 2)
 	rows, err := db.Query(
 		`SELECT constraint_column_names FROM duckdb_constraints()
-		  WHERE table_name = $1 AND constraint_type = $2`, table, constraintType)
+		  WHERE constraint_type = $1 AND `+cond, append([]any{constraintType}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query %s constraints: %w", constraintType, err)
 	}

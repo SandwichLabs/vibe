@@ -166,7 +166,7 @@ func reopenAcceptanceApp(t *testing.T, app *App) {
 	require.NoError(t, err)
 
 	app.container = c
-	app.engine = engine.NewManager(c.DuckDBDB(), engine.WithLogger(app.logger))
+	app.engine = engine.NewManager(c.Session(), engine.WithLogger(app.logger))
 	app.registry = queries.NewRegistry(c.SQLiteDB(), app.logger)
 
 	t.Cleanup(func() { _ = c.Close() })

@@ -2,18 +2,22 @@ package tui
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // TableInfo is one entry in the table list.
 type TableInfo struct {
 	Name     string
 	RowCount int
+	// SQL is the quoted catalog.schema.table reference taken from the
+	// session's listing, so a table whose stored name contains dots is not
+	// re-parsed as a path.
+	SQL string
 }
 
 // TablesModel is the read-only table browser (#69): a list of tables, and
@@ -33,24 +37,22 @@ func NewTablesModel() TablesModel {
 	return TablesModel{browser: NewTableBrowserModel()}
 }
 
-// LoadTables refreshes the table list (and row counts) from DuckDB.
-func (m *TablesModel) LoadTables(duckDB *sql.DB) {
-	if duckDB == nil {
+// LoadTables refreshes the table list (and row counts) from the session's
+// default catalog and schema.
+func (m *TablesModel) LoadTables(sess session.Session) {
+	if sess == nil {
 		return
 	}
-	rows, err := duckDB.Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;")
+	ctx := context.Background()
+	tables, err := sess.ListTables(ctx, "", "")
 	if err != nil {
 		return
 	}
-	defer rows.Close()
 
 	var items []TableInfo
-	for rows.Next() {
-		var t TableInfo
-		if err := rows.Scan(&t.Name); err != nil {
-			continue
-		}
-		duckDB.QueryRow("SELECT COUNT(*) FROM " + engine.QuoteIdent(t.Name) + ";").Scan(&t.RowCount) //nolint:errcheck
+	for _, ti := range tables {
+		t := TableInfo{Name: ti.Name, SQL: ti.Ref().SQL()}
+		sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL + ";").Scan(&t.RowCount) //nolint:errcheck
 		items = append(items, t)
 	}
 	m.items = items
@@ -108,20 +110,20 @@ func (m TablesModel) Update(msg tea.Msg, eng EngineAccess) (TablesModel, tea.Cmd
 			m.browsing = true
 			m.browser.SetLoading(sel.Name, sel.RowCount)
 			m.browser.SetFocused(true)
-			return m, m.loadTableData(eng, sel.Name)
+			return m, m.loadTableData(eng, sel.Name, sel.SQL)
 		}
 	}
 	return m, nil
 }
 
 // loadTableData asynchronously loads up to 1000 rows of a table.
-func (m TablesModel) loadTableData(eng EngineAccess, tableName string) tea.Cmd {
+func (m TablesModel) loadTableData(eng EngineAccess, tableName, tableSQL string) tea.Cmd {
 	return func() tea.Msg {
 		if eng == nil {
 			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no engine available")}
 		}
 		ctx := context.Background()
-		query := fmt.Sprintf("SELECT * FROM %s LIMIT 1000", engine.QuoteIdent(tableName))
+		query := fmt.Sprintf("SELECT * FROM %s LIMIT 1000", sqlOrQuoted(tableSQL, tableName))
 		rs, err := eng.Execute(ctx, query, nil)
 		if err != nil {
 			return tableDataMsg{tableName: tableName, err: err}
@@ -188,4 +190,13 @@ func (m TablesModel) View(width, height int) string {
 		out += l + "\n"
 	}
 	return out
+}
+
+// sqlOrQuoted prefers the listing's reference and only falls back to quoting
+// the bare name when none was recorded.
+func sqlOrQuoted(tableSQL, name string) string {
+	if tableSQL != "" {
+		return tableSQL
+	}
+	return engine.QuoteIdent(name)
 }

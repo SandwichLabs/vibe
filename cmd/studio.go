@@ -80,7 +80,7 @@ If the file does not exist, it will be created.`,
 
 		// Create the engine manager (DuckDB-only).
 		eng := engine.NewManager(
-			c.DuckDBDB(),
+			c.Session(),
 			engine.WithLogger(logger),
 		)
 

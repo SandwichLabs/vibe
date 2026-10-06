@@ -377,7 +377,7 @@ func TestMCPServe_FreshFile_WritesRefused(t *testing.T) {
 	c := newTestVibeContainer(t)
 	_, err := c.DuckDBDB().Exec(`CREATE TABLE orders (id INTEGER, status VARCHAR); INSERT INTO orders VALUES (1, 'Void')`)
 	require.NoError(t, err)
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+	eng := engine.NewManager(c.Session(), engine.WithLogger(testCmdLogger()))
 
 	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
 	require.NoError(t, err)
@@ -403,7 +403,7 @@ func TestMCPServe_OwnerOptIn(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
 	require.NoError(t, c.SetMeta(agents.MetaKeyAskBeforeWrites, "false"))
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+	eng := engine.NewManager(c.Session(), engine.WithLogger(testCmdLogger()))
 
 	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
 	require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestMCPServe_FullStoredFile_AskAbsentStillRefused(t *testing.T) {
 	_, err := c.DuckDBDB().Exec(`CREATE TABLE orders (id INTEGER, status VARCHAR); INSERT INTO orders VALUES (1, 'Void')`)
 	require.NoError(t, err)
 	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+	eng := engine.NewManager(c.Session(), engine.WithLogger(testCmdLogger()))
 
 	handler, policy, err := buildMCPHandler(c, eng, "", testCmdLogger())
 	require.NoError(t, err)
@@ -483,7 +483,7 @@ func TestMCPServe_WritingSession_SavesOnExit(t *testing.T) {
 	require.NoError(t, c.SetMeta(agents.MetaKeySandbox, "full"))
 	require.NoError(t, c.SetMeta(agents.MetaKeyAskBeforeWrites, "false"))
 	path := c.Path()
-	eng := engine.NewManager(c.DuckDBDB(), engine.WithLogger(testCmdLogger()))
+	eng := engine.NewManager(c.Session(), engine.WithLogger(testCmdLogger()))
 
 	rpcHandler, _, err := buildMCPHandler(c, eng, "", testCmdLogger())
 	require.NoError(t, err)

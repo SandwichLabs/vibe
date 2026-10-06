@@ -2,9 +2,10 @@ package engine
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // Engine executes queries against a specific database backend.
@@ -13,8 +14,12 @@ type Engine interface {
 	Close() error
 }
 
-// Manager routes queries to DuckDB.
+// Manager is the query layer over a session.Session (the DuckDB hub). Every
+// query runs through the session, so it is cancellable, timeout-bound and
+// catalog-aware: a notebook cell or binding can name the connection whose
+// catalog is the default for its unqualified names.
 type Manager struct {
+	sess   session.Session
 	duckdb *DuckDBEngine
 	logger *slog.Logger
 }
@@ -29,15 +34,16 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-// NewManager creates a new query Manager backed by DuckDB.
-// The duckdbDB parameter may be nil if DuckDB is not available.
-func NewManager(duckdbDB *sql.DB, opts ...Option) *Manager {
+// NewManager creates a new query Manager over a session. sess may be nil if
+// DuckDB is not available.
+func NewManager(sess session.Session, opts ...Option) *Manager {
 	m := &Manager{
 		logger: slog.Default(),
 	}
 
-	if duckdbDB != nil {
-		m.duckdb = NewDuckDBEngine(duckdbDB)
+	if sess != nil {
+		m.sess = sess
+		m.duckdb = NewDuckDBEngine(sess)
 	}
 
 	for _, opt := range opts {
@@ -47,9 +53,20 @@ func NewManager(duckdbDB *sql.DB, opts ...Option) *Manager {
 	return m
 }
 
+// ExecuteIn runs a query with connection (a catalog name; "" = the session
+// default) as the default for unqualified names. It satisfies
+// agents.ConnectionEngine.
+func (m *Manager) ExecuteIn(ctx context.Context, connection, query string, params map[string]any) (*ResultSet, error) {
+	rs, _, err := m.execute(ctx, connection, query, params, 0)
+	return rs, err
+}
+
+// Session returns the session the Manager runs on (nil when unavailable).
+func (m *Manager) Session() session.Session { return m.sess }
+
 // Execute runs a query on DuckDB and returns the result set.
 func (m *Manager) Execute(ctx context.Context, query string, params map[string]any) (*ResultSet, error) {
-	rs, _, err := m.execute(ctx, query, params, 0)
+	rs, _, err := m.execute(ctx, "", query, params, 0)
 	return rs, err
 }
 
@@ -58,13 +75,21 @@ func (m *Manager) Execute(ctx context.Context, query string, params map[string]a
 // returning the true total row count. See DuckDBEngine.ExecuteCapped's doc
 // comment: this bounds the Go/webview copy, not DuckDB's own memory.
 func (m *Manager) ExecuteCapped(ctx context.Context, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
-	return m.execute(ctx, query, params, maxRows)
+	return m.execute(ctx, "", query, params, maxRows)
+}
+
+// ExecuteCappedIn is ExecuteCapped with the named connection (catalog) as the
+// default for unqualified names, on a pinned connection (notebook format v2:
+// a cell's optional "connection"). An empty connection means the session
+// default.
+func (m *Manager) ExecuteCappedIn(ctx context.Context, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	return m.execute(ctx, connection, query, params, maxRows)
 }
 
 // execute is the shared implementation behind Execute and ExecuteCapped: one
 // place for the "duckdb engine is not available" guard, the wrap text, and
 // the debug logging.
-func (m *Manager) execute(ctx context.Context, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+func (m *Manager) execute(ctx context.Context, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
 	if m.duckdb == nil {
 		return nil, 0, fmt.Errorf("duckdb engine is not available")
 	}
@@ -74,7 +99,7 @@ func (m *Manager) execute(ctx context.Context, query string, params map[string]a
 		slog.String("query", query),
 	)
 
-	rs, total, err := m.duckdb.ExecuteCapped(ctx, query, params, maxRows)
+	rs, total, err := m.duckdb.executeIn(ctx, connection, query, params, maxRows)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to execute query on duckdb: %w", err)
 	}

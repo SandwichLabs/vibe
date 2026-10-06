@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"io"
 	"log/slog"
 	"net/http"
@@ -559,4 +561,11 @@ func TestToolInfo_ArrayParamsCarryItems(t *testing.T) {
 			assert.Containsf(t, prop, "items", "%s.%s: array param must declare items", td.Name, p.Name)
 		}
 	}
+}
+
+func (m *mockContainer) Session() session.Session {
+	if db := m.DuckDBDB(); db != nil {
+		return sessiontest.ForTests(db)
+	}
+	return nil
 }

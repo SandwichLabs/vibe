@@ -25,6 +25,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 	"github.com/sandwich-labs/vibe-app/internal/container"
+	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -241,4 +242,31 @@ func TestEntryPointsCrossLinkReference(t *testing.T) {
 		assert.Contains(t, strings.ToLower(string(data)), "docs/reference",
 			"%s should cross-link the reference docs (docs/reference/...)", entry)
 	}
+}
+
+// TestReferenceDocsDocumentNotebookV2 asserts notebook format v2 (#108) is
+// documented: the schema version, the cell-level `connection`, and every
+// A2UI component that accepts a `connection` binding field.
+func TestReferenceDocsDocumentNotebookV2(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "docs", "reference", "notebooks.md"))
+	require.NoError(t, err)
+	doc := string(data)
+	assert.Contains(t, doc, "schemaVersion: 2", "notebooks.md must state the current format version")
+	assert.Equal(t, 2, notebooks.SchemaVersion, "update notebooks.md's format-version section when the schema version changes")
+	assert.Contains(t, doc, "`connection`")
+
+	// Every component row that lists `connection` in the table must be one the
+	// validator really accepts it on, and vice versa.
+	rowRE := regexp.MustCompile("(?m)^\\| `([A-Za-z]+)` \\|.*$")
+	documented := map[string]bool{}
+	for _, m := range rowRE.FindAllStringSubmatch(doc, -1) {
+		if strings.Contains(m[0], "`connection`") {
+			documented[m[1]] = true
+		}
+	}
+	for _, name := range a2ui.DataBound {
+		assert.True(t, documented[name], "data-bound component %q accepts `connection` but notebooks.md's table does not list it", name)
+	}
+	assert.Len(t, documented, len(a2ui.DataBound), "only the data-bound components take `connection`")
 }

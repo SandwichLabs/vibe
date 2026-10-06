@@ -281,3 +281,44 @@ func TestValidate_ContainerLayoutEnum(t *testing.T) {
 	_, err = Validate(`{"title":"x","components":[{"id":"a","type":"container","layout":"grid","gap":8}]}`)
 	assert.NoError(t, err)
 }
+
+// Notebook format v2 (#108): data-bound components take an optional
+// `connection`; nothing else does, and the value must be a connection name.
+func TestValidate_ConnectionOnDataBoundComponents(t *testing.T) {
+	for _, typ := range DataBound {
+		page, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","label":"l","sql":"SELECT 1","connection":"prod_pg"}]}`)
+		require.NoError(t, err, typ)
+		assert.Equal(t, "prod_pg", page.Components[0].Fields["connection"], typ)
+	}
+	// Unset stays valid (workspace default).
+	_, err := Validate(`{"title":"x","components":[{"id":"c","type":"table","sql":"SELECT 1"}]}`)
+	require.NoError(t, err)
+}
+
+func TestValidate_ConnectionRejectedOffDataBound(t *testing.T) {
+	for _, typ := range []string{"heading", "text", "list", "code", "callout", "badge"} {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","text":"t","items":["a"],"connection":"prod"}]}`)
+		require.Error(t, err, typ)
+		assert.Contains(t, err.Error(), "connection", typ)
+	}
+}
+
+func TestValidate_ConnectionMustBeAString(t *testing.T) {
+	for _, bad := range []string{`7`, `["a"]`, `{"a":1}`, `true`} {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"table","sql":"SELECT 1","connection":` + bad + `}]}`)
+		require.Error(t, err, bad)
+		assert.Contains(t, err.Error(), "connection", bad)
+	}
+	// An unknown or odd name still validates: it fails when the cell runs
+	// ("unknown connection"), it is never dropped or retargeted at load.
+	for _, odd := range []string{`"Prod DB"`, `"gone"`, `""`} {
+		page, err := Validate(`{"title":"x","components":[{"id":"c","type":"table","sql":"SELECT 1","connection":` + odd + `}]}`)
+		require.NoError(t, err, odd)
+		assert.NotNil(t, page.Components[0].Fields["connection"])
+	}
+}
+
+func TestPromptBlock_MentionsConnection(t *testing.T) {
+	assert.Contains(t, PromptBlock(), `"connection"`)
+	assert.Contains(t, PromptBlock(), "connection")
+}

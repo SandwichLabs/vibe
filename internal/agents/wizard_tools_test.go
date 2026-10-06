@@ -21,6 +21,7 @@ package agents_test
 
 import (
 	"context"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -74,7 +75,7 @@ func newWizardFixture(t *testing.T, mode agents.SandboxMode) (*agents.Handler, *
 	`)
 	require.NoError(t, err)
 
-	eng := engine.NewManager(ddb, engine.WithLogger(wizLogger()))
+	eng := engine.NewManager(sessiontest.ForTests(ddb), engine.WithLogger(wizLogger()))
 	sandbox := &agents.SandboxConfig{
 		Mode:         mode,
 		MaxQueryRows: 1000,

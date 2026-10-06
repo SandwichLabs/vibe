@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
 	"testing"
 
 	_ "github.com/marcboeker/go-duckdb/v2"
@@ -45,7 +47,7 @@ func newRealDuckDBApp(t *testing.T) (*App, *sql.DB) {
 	require.NoError(t, err)
 
 	c := &realDuckDBContainer{db: db}
-	mgr := engine.NewManager(db)
+	mgr := engine.NewManager(sessiontest.ForTests(db))
 	app := NewApp(c, &realEngine{mgr: mgr}, nil)
 	return app, db
 }
@@ -110,3 +112,5 @@ func TestExecuteREPLQuery_WritesActuallyPersistData(t *testing.T) {
 	assert.NotContains(t, result.output, "-- Error", "the CTE-wrapped INSERT must actually run, not be swallowed by a broken cap-wrap")
 	assert.Equal(t, 1, rowCount(t, db))
 }
+
+func (c *realDuckDBContainer) Session() session.Session { return sessiontest.ForTests(c.db) }

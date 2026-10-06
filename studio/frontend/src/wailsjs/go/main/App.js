@@ -190,6 +190,14 @@ export function IsFileOpen() {
   return window['go']['main']['App']['IsFileOpen']();
 }
 
+export function ListCatalogTables(arg1) {
+  return window['go']['main']['App']['ListCatalogTables'](arg1);
+}
+
+export function ListConnections() {
+  return window['go']['main']['App']['ListConnections']();
+}
+
 export function ListNotebooks() {
   return window['go']['main']['App']['ListNotebooks']();
 }
@@ -248,6 +256,10 @@ export function RevertFile() {
 
 export function RunA2UIQuery(arg1) {
   return window['go']['main']['App']['RunA2UIQuery'](arg1);
+}
+
+export function RunA2UIQueryIn(arg1, arg2) {
+  return window['go']['main']['App']['RunA2UIQueryIn'](arg1, arg2);
 }
 
 export function SaveFile() {

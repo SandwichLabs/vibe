@@ -49,6 +49,9 @@ interface RawCell {
   view?: ViewKind
   viewPinned?: boolean
   label?: string
+  // Notebook format v2: the connection whose catalog is the default for
+  // this cell's unqualified table names. Unset = the session default.
+  connection?: string
   page?: A2UIPageT
 }
 
@@ -60,6 +63,7 @@ interface CellState {
   view: ViewKind
   viewPinned: boolean
   label: string
+  connection: string
   page: A2UIPageT | null
   // Runtime-only (never saved):
   lastRunSource: string | null
@@ -165,6 +169,7 @@ function newCellState(raw: RawCell): CellState {
     view: (raw.view as ViewKind) ?? 'table',
     viewPinned: !!raw.viewPinned,
     label: raw.label ?? '',
+    connection: raw.connection ?? '',
     page: raw.page ?? null,
     lastRunSource: null,
     result: null,
@@ -291,7 +296,7 @@ async function runCell(cell: CellState) {
   // never wait behind a background a2ui component storm's auto-fetches
   // (which stay 'low', the default), which is exactly what "returns in
   // under 1s regardless of how many a2ui components are mounted" requires.
-  const res = await runLiveQuery(cell.source, signal, 'high')
+  const res = await runLiveQuery(cell.source, signal, 'high', cell.connection || undefined)
   if (res.aborted) return // this load was superseded (notebook switch / unmount) — discard
   cell.running = false
   cell.lastRunSource = cell.source.trim()
@@ -596,7 +601,7 @@ function buildSavePayload(id: string, snapshotTitle: string, snapshotCells: Cell
     id,
     title: snapshotTitle,
     cells: snapshotCells.map((c) => {
-      if (c.type === 'sql') return { id: c.id, type: 'sql', collapsed: c.collapsed, source: c.source, view: c.view, viewPinned: c.viewPinned, label: c.label }
+      if (c.type === 'sql') return { id: c.id, type: 'sql', collapsed: c.collapsed, source: c.source, view: c.view, viewPinned: c.viewPinned, label: c.label, ...(c.connection ? { connection: c.connection } : {}) }
       if (c.type === 'markdown') return { id: c.id, type: 'markdown', collapsed: c.collapsed, source: c.source }
       return { id: c.id, type: 'a2ui', collapsed: c.collapsed, page: c.page }
     }),

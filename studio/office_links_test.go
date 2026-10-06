@@ -79,7 +79,7 @@ func readXLSXSum(t *testing.T, app *App, path string) (rowCount int, sum float64
 }
 
 // TestExportTableXLSX asserts an arbitrary table exports to a non-empty xlsx
-// (CSV fallback otherwise) and that the file round-trips via the P6.2 reader.
+// and that the file round-trips via the P6.2 reader.
 func TestExportTableXLSX(t *testing.T) {
 	app := newOpenApp(t)
 	seedOfficeLinks(t, app)
@@ -92,22 +92,16 @@ func TestExportTableXLSX(t *testing.T) {
 	fi, err := os.Stat(path)
 	require.NoError(t, err, "table export must exist on disk")
 
-	switch {
-	case strings.HasSuffix(path, ".xlsx"):
-		require.NotZero(t, fi.Size(), "xlsx export must be non-empty")
-		rows, sum := readXLSXSum(t, app, path)
-		assert.Equal(t, 5, rows, "exported xlsx must contain all 5 order rows")
-		assert.InDelta(t, 725.0, sum, 0.001, "amount column must round-trip")
-	case strings.HasSuffix(path, ".csv"):
-		// CSV fallback acceptable when the excel extension is unavailable.
-		require.NotZero(t, fi.Size(), "csv fallback must be non-empty")
-	default:
-		t.Fatalf("unexpected export extension: %q", path)
-	}
+	// There is no CSV fallback any more: an xlsx export is an xlsx or an error.
+	require.True(t, strings.HasSuffix(path, ".xlsx"), "unexpected export extension: %q", path)
+	require.NotZero(t, fi.Size(), "xlsx export must be non-empty")
+	rows, sum := readXLSXSum(t, app, path)
+	assert.Equal(t, 5, rows, "exported xlsx must contain all 5 order rows")
+	assert.InDelta(t, 725.0, sum, 0.001, "amount column must round-trip")
 }
 
 // TestExportQueryXLSX asserts a saved query exports to a non-empty xlsx
-// (CSV fallback otherwise) and round-trips via the P6.2 reader.
+// and round-trips via the P6.2 reader.
 func TestExportQueryXLSX(t *testing.T) {
 	app := newOpenApp(t)
 	qid := seedOfficeLinks(t, app)
@@ -120,15 +114,27 @@ func TestExportQueryXLSX(t *testing.T) {
 	fi, err := os.Stat(path)
 	require.NoError(t, err, "query export must exist on disk")
 
-	if strings.HasSuffix(path, ".xlsx") {
-		require.NotZero(t, fi.Size(), "xlsx export must be non-empty")
-		rows, sum := readXLSXSum(t, app, path)
-		assert.Equal(t, 5, rows, "exported xlsx must contain all 5 query rows")
-		assert.InDelta(t, 725.0, sum, 0.001, "amount column must round-trip")
-	} else {
-		require.True(t, strings.HasSuffix(path, ".csv"), "expected xlsx or csv fallback, got %q", path)
-		require.NotZero(t, fi.Size(), "csv fallback must be non-empty")
-	}
+	require.True(t, strings.HasSuffix(path, ".xlsx"), "expected an xlsx, got %q", path)
+	require.NotZero(t, fi.Size(), "xlsx export must be non-empty")
+	rows, sum := readXLSXSum(t, app, path)
+	assert.Equal(t, 5, rows, "exported xlsx must contain all 5 query rows")
+	assert.InDelta(t, 725.0, sum, 0.001, "amount column must round-trip")
+}
+
+// A fresh app-private extension directory (autoload/autoinstall are off): the
+// export must fetch and load excel itself, and produce a real .xlsx, never a
+// silent CSV. Needs the network for the one-time download.
+func TestExportTableXLSX_FreshExtensionDirInstallsExcel(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	app := newOpenApp(t)
+	seedOfficeLinks(t, app)
+
+	path, err := app.ExportTableXLSX("orders", filepath.Join(t.TempDir(), "fresh.xlsx"))
+	require.NoError(t, err)
+	require.True(t, strings.HasSuffix(path, ".xlsx"), "got %q", path)
+	rows, _ := readXLSXSum(t, app, path)
+	assert.Equal(t, 5, rows)
 }
 
 // TestAnalyzeQueryInExcel asserts the one-click alias writes a file for a saved

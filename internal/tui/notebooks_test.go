@@ -2,6 +2,7 @@ package tui
 
 import (
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -73,3 +74,5 @@ func TestNotebooksModel_EnterDumpsCells(t *testing.T) {
 	m.Back()
 	assert.False(t, m.viewing)
 }
+
+func (f *fakeContainer) Session() session.Session { return nil }
