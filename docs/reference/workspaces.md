@@ -137,7 +137,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 
 - **Local beats shared beats user.** When two scopes define the same name, the more specific entry replaces the other whole; fields are not merged. The merged list reports the scope each connection came from and which lower scopes it shadows.
 - **A user entry never overrides** a workspace one.
-- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt` or `env:PREFIX` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise the definition's `credentials` suggestion applies, and then `keychain`.
+- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt` or `env:PREFIX` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise `keychain`: the definition's `credentials` value is only a UI hint (review #115, see Credentials).
 - **Status precedence**, when several apply to one connection: `extension-missing`, then `needs-credentials`, then `error`, then `locked-by`, then `not connected`, then `ok`.
 
 <!-- keys:local -->
@@ -146,6 +146,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 | `version` | Schema version, currently `1`. |
 | `connections` | This computer's private connections and overrides, same shape as above. |
 | `sign_in` | Connection name to sign-in method, for this person. |
+| `sign_in_fingerprint` | Connection name to the definition fingerprint the sign-in was chosen for (written by Vibe). |
 | `agent` | This person's agent settings: `sandbox` and `ask_before_writes`. |
 | `mcp_port` | The loopback port Studio's MCP server last used for this workspace, so a client's saved address survives a restart. Not a secret; the bearer token changes on every start. |
 | `nonce` | Written by Vibe. Ties the file to the folder it was made for (see below). |
@@ -157,11 +158,14 @@ Connection definitions come from three files and are merged most-specific-wins.
 | `version` | Schema version, currently `1`. |
 | `connections` | Connections available in every workspace on this computer. |
 | `sign_in` | Connection name to sign-in method, for those connections. |
+| `sign_in_fingerprint` | Connection name to the definition fingerprint the sign-in was chosen for (written by Vibe). |
 <!-- /keys -->
 
 `.vibe-local/state.json` holds `lastNotebook` and `openTabs`; it carries no trust and stays in the folder. It is never a reason for anything to fail: an unreadable file is an empty state.
 
 ## Credentials
+
+**(review #115) A shared `credentials:` value is only a hint.** A `credentials:` line in the committed `vibe.yaml` may pre-select a method in the UI; it is never the effective method, because a pulled commit must not choose how your credentials are fetched (a committed `credentials: env:PG_PROD` plus a host of its choosing would otherwise send your environment password there). The effective method comes only from your own per-person `sign_in`, defaulting to the keychain; an empty keychain is *needs-credentials*. Every `sign_in` entry (env included) is stored with the fingerprint of the definition it was chosen for (`sign_in_fingerprint`, in your `local.yaml` or user `connections.yaml`), and if the definition no longer matches (a pull changed the host), even an environment credential is withheld as "the server changed since you signed in" until you choose it again (`vibe conn credentials set <name> --sign-in env:PREFIX`). A hand-written `sign_in` without a fingerprint is withheld the same way.
 
 A connection's secrets never live in `vibe.yaml`, in `local.yaml`, in a log line, in the agent's context or in a bundle. They are kept per person, by a **sign-in method** you choose per connection (it is stored in your `local.yaml`, or the user `connections.yaml` for user connections, never committed):
 
@@ -192,6 +196,8 @@ There is **no plaintext-file fallback**. With no keychain (SSH, a locked collect
 **Redaction.** Every secret value Vibe resolves is registered with a redactor that scrubs it (also as echoed SQL-quoted, URL-escaped or JSON-escaped), plus credential-shaped text: `password='...'`, `password=...`, prefixed names such as `aws_secret_access_key=`, `motherduck_token=` and `PGPASSWORD=`, the DDL form `PASSWORD '...'`, `"password": "..."`, `scheme://user:pw@host` (the password only) and `Bearer ...`. It scrubs these from connect and query errors and from logs (DuckDB's Postgres errors echo `password='...'` verbatim). Only secret-bearing options (`PASSWORD`, `SECRET`, `*TOKEN`, `ACCOUNT_KEY`, `CONNECTION_STRING`, ...) are registered, never plain ones like `HOST`, `USER`, `DATABASE` or `REGION`, so `user='rosa'` stays readable and ordinary words are never masked. Secret DDL (`CREATE TEMPORARY SECRET`) runs only on the session's dedicated non-logging connection, under the attach lock, with every value quoted; the statement text is never logged or returned, and on failure every quoted literal in DuckDB's error is replaced. The agent's SQL policy refuses `CREATE`/`DROP SECRET`, `duckdb_secrets()`, `which_secret()`, any `ATTACH`/`SET`/`COPY`/... that names a secret, in every sandbox tier including `full`, with no approval path.
 
 The agent's own model key is handled the same way: see [`../llm-config.md`](../llm-config.md).
+
+See [connections.md](connections.md) for each connection type, its fields, what read-only guarantees and the MotherDuck notes.
 
 ## The agent limit
 

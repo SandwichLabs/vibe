@@ -68,9 +68,10 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	if errResp != nil {
 		return errResp
 	}
+	connectErr := h.connectReferenced(ctx, "", sqlStr)
 	class, reason := classifySQL(ctx, userDB, sqlStr, nil)
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
-		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v", err))
+		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v", withConnectError(err, connectErr)))
 	}
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))

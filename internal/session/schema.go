@@ -122,10 +122,8 @@ func (h *hub) requireCatalog(name string) error {
 	if name == h.defCat() {
 		return nil
 	}
-	h.mu.RLock()
-	e := h.conns[name]
-	h.mu.RUnlock()
-	if e == nil || !e.attach {
+	e, eAtt := h.entryOf(name)
+	if e == nil || !eAtt {
 		return fmt.Errorf("unknown connection %q", name)
 	}
 	return nil
@@ -230,17 +228,28 @@ func (h *hub) Resolve(ctx context.Context, ref TableRef) (TableRef, error) {
 	}
 	if ref.Catalog == "" && ref.Schema != "" {
 		// "x.t": x is a catalog when one is attached under that name and
-		// otherwise a schema of the default catalog.
-		h.mu.RLock()
-		e := h.conns[ref.Schema]
-		h.mu.RUnlock()
-		if e != nil && e.attach {
+		// otherwise a schema of the default catalog. A registered but not yet
+		// attached remote connection connects here (lazy attach).
+		e, eAtt := h.entryOf(ref.Schema)
+		if e != nil && !eAtt && !h.catalogless(e) {
+			if err := h.connectImplicit(ctx, ref.Schema); err != nil {
+				return ref, err
+			}
+			_, eAtt = h.entryOf(ref.Schema)
+		}
+		if e != nil && eAtt {
 			// catalog.table: use that catalog's default schema.
 			ref.Catalog, ref.Schema = ref.Schema, ""
 		}
 	}
 	if ref.Catalog == "" {
 		ref.Catalog = h.defCat()
+	}
+	ce, ceAtt := h.entryOf(ref.Catalog)
+	if ce != nil && !ceAtt && ref.Catalog != h.defCat() {
+		if err := h.connectImplicit(ctx, ref.Catalog); err != nil {
+			return ref, err
+		}
 	}
 	if err := h.requireCatalog(ref.Catalog); err != nil {
 		return ref, err

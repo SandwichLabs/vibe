@@ -196,9 +196,10 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 		if errResp != nil {
 			return errResp
 		}
+		connectErr := h.connectReferenced(ctx, "", sqlStr)
 		class, reason := classifySQL(ctx, userDB, sqlStr, nil)
 		if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
-			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("write_cell only accepts read-only sql: %v", err))
+			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("write_cell only accepts read-only sql: %v", withConnectError(err, connectErr)))
 		}
 		// review fix (finding 4): require this EXACT (trimmed) sql to have
 		// been run through preview_query earlier in this same task turn —

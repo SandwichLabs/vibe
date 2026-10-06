@@ -149,5 +149,10 @@ func (m *Mock) CreateTemporarySecret(ctx context.Context, name, secretType strin
 	return nil
 }
 
-func (m *Mock) DropSecret(context.Context, string) error { return nil }
-func (m *Mock) Close() error                             { return nil }
+func (m *Mock) DropSecret(context.Context, string) error                { return nil }
+func (m *Mock) ConnectReferenced(context.Context, string, string) error { return nil }
+func (m *Mock) Preflight(context.Context, string)                       {}
+func (m *Mock) InstallExtension(context.Context, string) error          { return nil }
+func (m *Mock) RefreshCatalog(context.Context, string) error            { return nil }
+func (m *Mock) RelaunchRequired() (bool, string)                        { return false, "" }
+func (m *Mock) Close() error                                            { return nil }

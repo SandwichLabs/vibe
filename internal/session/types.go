@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"regexp"
@@ -68,7 +69,21 @@ type Spec struct {
 	ReadOnly bool          `json:"read_only,omitempty"`
 	Timeout  time.Duration `json:"-"`
 	RowCap   int           `json:"-"`
+
+	// Params are the type-specific, non-secret, already ${ENV}-resolved
+	// fields (host, port, database, region, scope, options). Types read them
+	// by name; they never carry a credential.
+	Params map[string]string `json:"params,omitempty"`
+	// Credential fetches the person's credential when the connection is used
+	// (never at Register). It returns secrets.ErrNeedsCredentials,
+	// *secrets.ErrFingerprintChanged or a keychain-unavailable error when
+	// there is none, which the session reports as needs-credentials. Nil on a
+	// type that needs none.
+	Credential CredentialFunc `json:"-"`
 }
+
+// CredentialFunc resolves a connection's credential on demand.
+type CredentialFunc func(ctx context.Context) (secrets.Credential, error)
 
 var nameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
@@ -136,6 +151,9 @@ func classifyAttachError(err error, redact func(string) string) (StatusKind, str
 	}
 	if strings.Contains(lower, "extension") && (strings.Contains(lower, "not found") || strings.Contains(lower, "not installed") || strings.Contains(lower, "to be loaded")) {
 		return StatusExtensionMissing, msg, 0
+	}
+	if strings.Contains(lower, "password authentication failed") || strings.Contains(lower, "authentication failed") || strings.Contains(lower, "not authenticated") || strings.Contains(lower, "invalid token") {
+		return StatusNeedsCredentials, msg, 0
 	}
 	return StatusError, msg, 0
 }

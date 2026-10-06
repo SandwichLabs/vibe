@@ -622,13 +622,13 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	// Parse and validate the new workspace BEFORE letting go of the current one,
 	// so a broken folder never drops what is open. (workspace.Open takes no hub
 	// lock; the one-releasable-hold rule only bites at AcquireHub below.)
-	ws, err := workspace.Open(root, workspace.WithLogger(a.logger))
+	ws, err := workspace.Open(root, workspace.WithLogger(a.logger), workspace.WithResolver(a.secrets))
 	if errors.Is(err, workspace.ErrMissingID) {
 		// A hand-written vibe.yaml, or a template copied without an id.
 		if _, ierr := workspace.EnsureID(root); ierr != nil {
 			return nil, fmt.Errorf("failed to give this workspace an id: %w", ierr)
 		}
-		ws, err = workspace.Open(root, workspace.WithLogger(a.logger))
+		ws, err = workspace.Open(root, workspace.WithLogger(a.logger), workspace.WithResolver(a.secrets))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't open this workspace: %w", err)

@@ -210,6 +210,31 @@ func (h *Handler) sess(reqID any) (session.Session, *Response) {
 }
 
 // NewHandler creates a new request handler.
+// connectReferenced dials the registered, not yet connected connections the
+// statement names (lazy attach, #115) so the classifier's EXPLAIN can bind
+// them. A failure is returned, not fatal: the caller carries on, and only when
+// the classifier then denies the statement (it names a catalog that is not
+// there) is the connection's own problem reported instead of a misleading
+// "external access" denial (see withConnectError).
+func (h *Handler) connectReferenced(ctx context.Context, catalog, sqlText string) error {
+	if h.container == nil {
+		return nil
+	}
+	if s := h.container.Session(); s != nil {
+		return s.ConnectReferenced(ctx, catalog, sqlText)
+	}
+	return nil
+}
+
+// withConnectError prefers the connection's own failure over a policy denial
+// that it caused.
+func withConnectError(denial, connectErr error) error {
+	if connectErr != nil {
+		return connectErr
+	}
+	return denial
+}
+
 func NewHandler(container ContainerAccess, engine EngineAccess, sandbox *SandboxConfig, logger *slog.Logger) *Handler {
 	h := &Handler{
 		container: container,
@@ -620,11 +645,15 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 			return ce.ExecuteIn(ctx, connection, q, p)
 		}
 	}
+	connectErr := h.connectReferenced(ctx, connection, sqlStr)
 	class, reason := classifySQL(ctx, classifyOn, sqlStr, params)
 	// The classification connection is released before the statement runs, so
 	// a bound statement holds one pooled connection, not two.
 	releaseClassifyConn()
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
+		if connectErr != nil {
+			return nil, false, connectErr
+		}
 		// The user/agent-facing error is one fixed, mode-agnostic message
 		// (see errReadOnlyBindingDenied) — it never surfaces classifySQL's
 		// reason, which named a specific sandbox-mode requirement
@@ -682,10 +711,11 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	if errResp != nil {
 		return errResp
 	}
+	connectErr := h.connectReferenced(ctx, "", sqlStr)
 	sb := h.sandboxFor(ctx)
 	class, reason := classifySQL(ctx, userDB, sqlStr, params)
 	if err := sb.checkSQLClass(class, reason); err != nil {
-		return NewErrorResponse(req.ID, ErrPermission, err.Error())
+		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
 	}
 
 	// Approval gate (#79): run_query asks only when the statement actually

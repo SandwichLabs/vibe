@@ -169,7 +169,7 @@ func NewApp(logger *slog.Logger) *App {
 	logger = slog.New(secrets.NewRedactingHandler(logger.Handler(), red))
 	app := &App{
 		logger:          logger,
-		secrets:         secrets.NewResolver(secrets.WithRedactor(red), secrets.WithResolverLogger(logger)),
+		secrets:         secrets.NewResolver(secrets.WithRedactor(red), secrets.WithResolverLogger(logger), secrets.WithEnv(workspace.SnapshotEnv())),
 		llmCfg:          config.Load().LLM,
 		approvals:       agents.NewApprovalQueue(),
 		approvalTimeout: defaultApprovalTimeout,

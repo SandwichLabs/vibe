@@ -3,6 +3,8 @@ package agents
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // Request is a JSON-RPC 2.0 request.
@@ -62,8 +64,10 @@ func NewErrorResponse(id any, code int, message string) *Response {
 		JSONRPC: "2.0",
 		ID:      id,
 		Error: &Error{
-			Code:    code,
-			Message: message,
+			Code: code,
+			// Agent- and MCP-facing: connection errors echo user='...', which the
+			// agent never needs (the UI shows it to the person, not through here).
+			Message: secrets.RedactIdentity(message),
 		},
 	}
 }

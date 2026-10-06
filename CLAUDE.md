@@ -107,6 +107,9 @@ internal/
 ├── prefs/                 # app preferences and the recent-workspaces list (outside every workspace)
 ├── a2ui/                  # A2UI component schema + validator (#67); Go validates, Vue renders
 ├── notebooks/             # Notebook model (#66) + `Store` (`FileStore` -> notebooks/<id>.vnb; a legacy SQLite impl survives for tests)
+├── connections/           # Connection type registry (#115): postgres, motherduck, sqlite, s3/gcs/r2 on session.ConnectionType;
+                           #   field metadata, secret/attach SQL emitters, Test (throwaway session; MotherDuck in a subprocess).
+                           #   See docs/reference/connections.md. Credentials never in an ATTACH string.
 ├── tui/                   # BubbleTea TUI (#69, on workspaces in #113): SQL REPL on the session, read-only table
                            #   browser across every attached connection, notebook list from the workspace's
                            #   store. No save step (writes land in their connection). No page viewer/editor.

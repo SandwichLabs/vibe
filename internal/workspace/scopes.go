@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 
 	"github.com/sandwich-labs/vibe-app/internal/prefs"
@@ -34,6 +35,10 @@ type UserConfig struct {
 	Version     int               `yaml:"version"`
 	Connections []ConnectionDef   `yaml:"connections,omitempty"`
 	SignIn      map[string]string `yaml:"sign_in,omitempty"`
+	// SignInFingerprint is, per connection, the fingerprint of the definition
+	// the sign-in was chosen for (review #115). A changed definition withholds
+	// even an env: credential until the person signs in again.
+	SignInFingerprint map[string]string `yaml:"sign_in_fingerprint,omitempty"`
 }
 
 // LocalConfig is this person's connections and settings for one workspace on
@@ -50,6 +55,8 @@ type LocalConfig struct {
 	// SignIn is the per-person sign-in method (keychain, prompt or env:PREFIX)
 	// by connection name, for connections from any scope.
 	SignIn map[string]string `yaml:"sign_in,omitempty"`
+	// SignInFingerprint binds each sign-in to the definition it was chosen for.
+	SignInFingerprint map[string]string `yaml:"sign_in_fingerprint,omitempty"`
 	// Agent holds this person's agent loosening; see EffectivePolicy.
 	Agent LocalAgent `yaml:"agent,omitempty"`
 	// MCPPort is the loopback port Studio's MCP server last used for this
@@ -74,6 +81,20 @@ func validateSignInMap(m map[string]string) error {
 	return nil
 }
 
+var fingerprintRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+func validateFingerprintMap(m map[string]string) error {
+	for name, fp := range m {
+		if err := ValidateConnectionName(name); err != nil {
+			return fmt.Errorf("sign_in_fingerprint: %w", err)
+		}
+		if !fingerprintRE.MatchString(fp) {
+			return fmt.Errorf("sign_in_fingerprint %q is not a fingerprint", name)
+		}
+	}
+	return nil
+}
+
 // Validate checks a user-scope document.
 func (u UserConfig) Validate() error {
 	if u.Version > ConfigVersion {
@@ -82,7 +103,10 @@ func (u UserConfig) Validate() error {
 	if err := validateDefs(u.Connections, ScopeUser); err != nil {
 		return err
 	}
-	return validateSignInMap(u.SignIn)
+	if err := validateSignInMap(u.SignIn); err != nil {
+		return err
+	}
+	return validateFingerprintMap(u.SignInFingerprint)
 }
 
 // Validate checks a local-scope document.
@@ -99,7 +123,10 @@ func (l LocalConfig) Validate() error {
 	if l.MCPPort < 0 || l.MCPPort > 65535 {
 		return fmt.Errorf("mcp_port %d is not a valid port", l.MCPPort)
 	}
-	return validateSignInMap(l.SignIn)
+	if err := validateSignInMap(l.SignIn); err != nil {
+		return err
+	}
+	return validateFingerprintMap(l.SignInFingerprint)
 }
 
 // ParseUserConfig parses and validates user-scope bytes.
@@ -218,8 +245,16 @@ type Connection struct {
 	Shadows []Scope `json:"shadows,omitempty"`
 	// SignIn is the per-person sign-in method in effect: this person's
 	// local setting, else (for a user-scope connection) the user-scope
-	// setting, else the definition's suggested credentials, else keychain.
+	// setting, else keychain. A shared definition's `credentials:` is only a
+	// hint (SignInHint) and is never the effective method (review #115: a
+	// pulled commit must not choose how your credentials are fetched).
 	SignIn string `json:"sign_in"`
+	// SignInHint is the definition's suggested method, for the UI to
+	// pre-select. It has no effect.
+	SignInHint string `json:"sign_in_hint,omitempty"`
+	// SignInFingerprint is the definition fingerprint this person's sign-in
+	// was chosen for ("" when never chosen here).
+	SignInFingerprint string `json:"-"`
 	// Default marks the workspace's default connection.
 	Default bool `json:"default,omitempty"`
 	// Fingerprint is Fingerprint(ConnectionDef) of the unresolved definition;
@@ -253,7 +288,8 @@ func Merge(user UserConfig, shared Config, local LocalConfig, defaultName string
 		for _, lo := range cs[1:] {
 			c.Shadows = append(c.Shadows, lo.scope)
 		}
-		c.SignIn = signInFor(win.def, win.scope, user, local)
+		c.SignIn, c.SignInFingerprint = signInFor(win.def, win.scope, user, local)
+		c.SignInHint = win.def.Credentials
 		c.Fingerprint = Fingerprint(win.def)
 		out = append(out, c)
 	}
@@ -261,17 +297,14 @@ func Merge(user UserConfig, shared Config, local LocalConfig, defaultName string
 	return out
 }
 
-func signInFor(d ConnectionDef, scope Scope, user UserConfig, local LocalConfig) string {
+func signInFor(d ConnectionDef, scope Scope, user UserConfig, local LocalConfig) (method, fp string) {
 	if m, ok := local.SignIn[d.Name]; ok {
-		return m
+		return m, local.SignInFingerprint[d.Name]
 	}
 	if scope == ScopeUser {
 		if m, ok := user.SignIn[d.Name]; ok {
-			return m
+			return m, user.SignInFingerprint[d.Name]
 		}
 	}
-	if d.Credentials != "" {
-		return d.Credentials
-	}
-	return "keychain"
+	return "keychain", ""
 }

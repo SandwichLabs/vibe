@@ -13,6 +13,7 @@ surface so each area is easy to find:
 | [`import-office.md`](import-office.md) | **Import** (CSV/XLSX) and table/query **export** (CSV, Parquet, XLSX, JSON) |
 | [`templates.md`](templates.md) | Bundled starter **templates** |
 | [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
+| [`connections.md`](connections.md) | **Connections**: Postgres, MotherDuck, SQLite, S3/GCS/R2 types, fields, credentials, read-only, Test |
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui`, every starter template in

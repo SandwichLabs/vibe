@@ -107,6 +107,9 @@ func applyHardening(ctx context.Context, conn *sql.Conn, c *config) error {
 			return fmt.Errorf("hardening: failed to set secret_directory: %w", err)
 		}
 	}
+	if err := prepareMotherDuck(ctx, conn, c); err != nil {
+		return err
+	}
 	if !c.skipLock {
 		if _, err := conn.ExecContext(ctx, "SET lock_configuration = true"); err != nil {
 			return fmt.Errorf("hardening: failed to lock configuration: %w", err)

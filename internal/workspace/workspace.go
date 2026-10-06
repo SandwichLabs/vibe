@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/prefs"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // Workspace is an open workspace folder: its configuration (committed, local
@@ -60,6 +62,34 @@ type Workspace interface {
 	Queries() queries.Store
 	Skills() skills.Store
 
+	// Resolver is the credential resolver (keychain, env, prompt) this
+	// workspace uses. Never nil.
+	Resolver() *secrets.Resolver
+	// Connection CRUD (#115). Scope is where the definition lives: shared
+	// (vibe.yaml, committed), local (your own file for this workspace) or user
+	// (all your workspaces). Every definition is validated by the scope's rules
+	// and its type's rules; none ever holds a credential.
+	AddConnection(scope Scope, def ConnectionDef) error
+	UpdateConnection(scope Scope, def ConnectionDef) error
+	// RemoveConnection deletes the definition and, when nothing else keeps
+	// using it, its sign-in choice and its saved credentials.
+	RemoveConnection(ctx context.Context, scope Scope, name string) error
+	// MoveConnection changes a definition's scope. The credential stays bound
+	// to the workspace id, name and fingerprint; moving between a workspace
+	// scope and the user scope migrates the keychain entry.
+	MoveConnection(ctx context.Context, name string, from, to Scope) error
+	// SetSignIn chooses this person's sign-in method for a connection
+	// (keychain, prompt or env:PREFIX); it is stored outside the folder.
+	SetSignIn(name, method string) error
+	// SetCredentials saves a credential for a connection under its sign-in
+	// method, bound to the current fingerprint. Empty secret fields keep the
+	// stored ones. Write-only: nothing here reads a secret back.
+	SetCredentials(ctx context.Context, name string, cred secrets.Credential, remember bool) error
+	ClearCredentials(ctx context.Context, name string) error
+	// CredentialStatus describes the credential for the UI. It never carries a
+	// secret.
+	CredentialStatus(ctx context.Context, name string) (secrets.CredentialStatus, error)
+
 	// Reload re-reads vibe.yaml and the local and user files. On error the
 	// previous configuration stays in effect.
 	Reload() error
@@ -95,6 +125,7 @@ type Option func(*options)
 type options struct {
 	logger    *slog.Logger
 	lookup    LookupFunc
+	resolver  *secrets.Resolver
 	user      *UserConfig // tests: replace the user scope instead of reading it
 	configDir string      // "" = $VIBE_CONFIG_DIR or the user config dir
 }
@@ -115,6 +146,11 @@ func WithEnv(f LookupFunc) Option { return func(o *options) { o.lookup = f } }
 // else the OS user config dir + "/vibe"). The user-scope connections.yaml and
 // the per-person workspace settings are read from and written under it.
 func WithConfigDir(dir string) Option { return func(o *options) { o.configDir = dir } }
+
+// WithResolver supplies the credential resolver (Studio shares one so every
+// resolved secret reaches one redactor). The default is a resolver over the OS
+// keychain with an environment snapshot taken at Open.
+func WithResolver(r *secrets.Resolver) Option { return func(o *options) { o.resolver = r } }
 
 // WithUserConfig supplies the user-scope config instead of reading the file in
 // the config dir (tests, and callers that already loaded it).
@@ -140,9 +176,11 @@ type workspace struct {
 	localUntrusted bool
 	ownNonce       string // the nonce this process wrote, if any
 	user           UserConfig
+	userRev        string
 	merged         []Connection
 	warnings       []string
 
+	crudMu   sync.Mutex // serialises connection CRUD in this process
 	wmu      sync.Mutex
 	watchers []*Watcher
 }
@@ -164,6 +202,9 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 		root = abs
 	}
 	w := &workspace{root: root, opts: o, logger: o.logger, configDir: o.configDir}
+	if w.opts.resolver == nil {
+		w.opts.resolver = secrets.NewResolver(secrets.WithEnv(SnapshotEnv()), secrets.WithResolverLogger(o.logger))
+	}
 	if w.configDir == "" {
 		if d, err := prefs.DefaultDir(); err == nil {
 			w.configDir = d
@@ -287,6 +328,7 @@ func (w *workspace) reload() error {
 	w.cfg, w.cfgRev = cfg, st.Rev()
 	w.local, w.localRev, w.localUntrusted = local, localRev, untrusted
 	w.user, w.merged = user, merged
+	w.userRev = w.readUserRev()
 	w.warnings = warnings
 	w.mu.Unlock()
 	return nil

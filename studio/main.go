@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log/slog"
 	"os"
 
+	"github.com/sandwich-labs/vibe-app/internal/connections"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -14,6 +16,17 @@ import (
 var assets embed.FS
 
 func main() {
+	// The MotherDuck connection test re-executes the running binary with this
+	// hidden argument (one MotherDuck token per process, #115). When Studio is
+	// that binary it answers the same way `vibe __conn-test` does, before any
+	// window or app state exists.
+	if len(os.Args) > 1 && os.Args[1] == connections.ChildCommand {
+		if err := connections.RunChild(context.Background(), os.Stdin, os.Stdout); err != nil {
+			os.Exit(2)
+		}
+		return
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))

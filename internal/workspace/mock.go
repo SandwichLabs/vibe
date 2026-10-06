@@ -1,11 +1,14 @@
 package workspace
 
 import (
+	"context"
+	"errors"
 	"sync"
 
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // Mock is a Workspace for tests of packages that depend on one. Set the
@@ -28,6 +31,7 @@ type Mock struct {
 	SaveErr   error
 	Saved     []Config
 
+	res  *secrets.Resolver
 	mu   sync.Mutex
 	st   State
 	init sync.Once
@@ -110,3 +114,36 @@ func (m *Mock) LocalTrusted() bool { return true }
 
 // TrustLocal does nothing in the mock.
 func (m *Mock) TrustLocal() error { return nil }
+
+var errMockNoConn = errors.New("workspace mock: connection management is not supported")
+
+// Resolver returns an in-memory resolver (no keychain).
+func (m *Mock) Resolver() *secrets.Resolver {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.res == nil {
+		m.res = secrets.NewResolver(secrets.WithKeychain(secrets.NewMemoryStore()))
+	}
+	return m.res
+}
+
+// AddConnection appends to the shared config (other scopes are not mocked).
+func (m *Mock) AddConnection(scope Scope, d ConnectionDef) error {
+	if scope != ScopeShared {
+		return errMockNoConn
+	}
+	m.Cfg.Connections = append(m.Cfg.Connections, d)
+	return nil
+}
+
+func (m *Mock) UpdateConnection(Scope, ConnectionDef) error                { return errMockNoConn }
+func (m *Mock) RemoveConnection(context.Context, Scope, string) error      { return errMockNoConn }
+func (m *Mock) MoveConnection(context.Context, string, Scope, Scope) error { return errMockNoConn }
+func (m *Mock) SetSignIn(string, string) error                             { return errMockNoConn }
+func (m *Mock) SetCredentials(context.Context, string, secrets.Credential, bool) error {
+	return errMockNoConn
+}
+func (m *Mock) ClearCredentials(context.Context, string) error { return errMockNoConn }
+func (m *Mock) CredentialStatus(context.Context, string) (secrets.CredentialStatus, error) {
+	return secrets.CredentialStatus{}, errMockNoConn
+}

@@ -19,6 +19,10 @@ type config struct {
 	defaultTO     time.Duration // default statement timeout (0 = none)
 	defaultRowCap int           // default row cap (0 = none)
 	skipLock      bool          // tests only: leave lock_configuration off
+	extraTypes    []ConnectionType
+	mdToken       string // MotherDuck token to SET before the lock ("" = none)
+	mdSet         bool
+	md            *mdOpen // set by applyHardening
 
 	// initCatalog, once set by SetDefaultCatalog, is USEd on every new pooled
 	// connection of an owned hub so the pool's default catalog follows it.
@@ -99,4 +103,22 @@ func WithRedactor(r *secrets.Redactor) Option {
 			c.redactor = r
 		}
 	}
+}
+
+// WithConnectionTypes registers connection types (postgres, motherduck, ...)
+// beside the built-in duckdb file type. internal/connections supplies them.
+func WithConnectionTypes(types ...ConnectionType) Option {
+	return func(c *config) { c.extraTypes = append(c.extraTypes, types...) }
+}
+
+// WithMotherDuckToken gives the hub the MotherDuck token of the workspace's
+// one MotherDuck account. Before the configuration is locked the session
+// removes MOTHERDUCK_TOKEN / motherduck_token from the process environment
+// (an ambient token would otherwise be picked up silently at LOAD, spike
+// finding H), loads the extension when it is installed and SETs the token.
+// The extension is never installed here: without it the token is held back
+// and the first MotherDuck connect reports extension-missing, then a relaunch
+// requirement. Do not pass an empty token; omit the option instead.
+func WithMotherDuckToken(token string) Option {
+	return func(c *config) { c.mdToken, c.mdSet = token, token != "" }
 }

@@ -224,3 +224,17 @@ func (h *redactHandler) attr(a slog.Attr) slog.Attr {
 	}
 	return a
 }
+
+var (
+	identityAssignRE = regexp.MustCompile(`(?i)\b(user(?:name)?\s*=\s*)('[^']*'|"[^"]*"|[^\s'",;)]+)`)
+	identityForRE    = regexp.MustCompile(`(?i)(\bfor user\s+)("[^"]*"|'[^']*')`)
+)
+
+// RedactIdentity also hides the user name in `user='rosa'` and `for user
+// "rosa"` (what DuckDB and Postgres echo). The UI may show it to the person
+// who owns the connection; text that reaches the agent or an MCP client never
+// carries it.
+func RedactIdentity(s string) string {
+	s = identityAssignRE.ReplaceAllString(s, "${1}'"+Mask+"'")
+	return identityForRE.ReplaceAllString(s, "${1}\""+Mask+"\"")
+}

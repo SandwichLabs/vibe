@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
@@ -102,7 +103,21 @@ func (m *Manager) execute(ctx context.Context, connection, query string, params 
 		slog.String("query", query),
 	)
 
+	// Lazy attach: a remote connection the statement names (pg.public.orders)
+	// is dialled now, not when the workspace opened. A failure to connect is
+	// not fatal by itself (the statement may not need that connection); only
+	// when the statement then fails because a catalog or table is missing is
+	// the connection's own, redacted problem reported instead of "catalog not
+	// found".
+	var connectErr error
+	if m.sess != nil {
+		connectErr = m.sess.ConnectReferenced(ctx, connection, query)
+	}
+
 	rs, total, err := m.duckdb.executeIn(ctx, connection, query, params, maxRows)
+	if err != nil && connectErr != nil && looksLikeMissingCatalog(err) {
+		return nil, 0, connectErr
+	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to execute query on duckdb: %w", err)
 	}
@@ -113,4 +128,12 @@ func (m *Manager) execute(ctx context.Context, connection, query string, params 
 	)
 
 	return rs, total, nil
+}
+
+// looksLikeMissingCatalog reports a "no such catalog / table / schema" failure,
+// the shape a statement takes when the connection it names is not attached.
+func looksLikeMissingCatalog(err error) bool {
+	m := strings.ToLower(err.Error())
+	return (strings.Contains(m, "does not exist") && (strings.Contains(m, "catalog") || strings.Contains(m, "table with name") || strings.Contains(m, "schema with name"))) ||
+		strings.Contains(m, "catalog error") || strings.Contains(m, "unknown connection") || strings.Contains(m, "not attached")
 }

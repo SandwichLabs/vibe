@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sandwich-labs/vibe-app/internal/connections"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
@@ -24,9 +26,11 @@ type SessionIssue struct {
 type SessionOption func(*sessionOpts)
 
 type sessionOpts struct {
-	lookup   LookupFunc
-	session  []session.Option
-	readOnly bool
+	skipLocal bool
+	resolver  *secrets.Resolver
+	lookup    LookupFunc
+	session   []session.Option
+	readOnly  bool
 }
 
 // WithForceReadOnly attaches every connection read-only whatever its
@@ -35,6 +39,17 @@ type sessionOpts struct {
 // exist yet is reported as an issue instead of being created, and no folder
 // is created for it.
 func WithForceReadOnly() SessionOption { return func(o *sessionOpts) { o.readOnly = true } }
+
+// WithSkipLocalFiles registers local duckdb and sqlite connections without
+// attaching them (nor creating their files), for a command that only needs the
+// remote ones and does not own the hub (`vibe conn connect`).
+func WithSkipLocalFiles() SessionOption { return func(o *sessionOpts) { o.skipLocal = true } }
+
+// WithSessionResolver replaces the workspace's credential resolver for this
+// session (default: ws.Resolver()).
+func WithSessionResolver(r *secrets.Resolver) SessionOption {
+	return func(o *sessionOpts) { o.resolver = r }
+}
 
 // WithSessionEnv replaces the environment lookup for ${ENV} interpolation.
 func WithSessionEnv(f LookupFunc) SessionOption { return func(o *sessionOpts) { o.lookup = f } }
@@ -47,9 +62,11 @@ func WithSessionOptions(opts ...session.Option) SessionOption {
 // OpenSession builds the workspace's DuckDB hub: session.New() plus every
 // merged connection registered.
 //
-//   - Local `duckdb` file connections are attached eagerly (design #106 item 8:
-//     it is a local file, nothing to dial). Every other type is only
-//     registered; it connects on first use.
+//   - Local `duckdb` and `sqlite` file connections are attached eagerly (design
+//     #106 item 8: a local file, nothing to dial). Every other type is only
+//     registered and preflighted (credential and extension state, no network);
+//     it connects on first use. The one MotherDuck token the hub may hold is
+//     resolved here and handed to session.New, before the configuration locks.
 //   - Relative paths resolve against the workspace root and may not leave it,
 //     lexically or through a symlink. An absolute path is accepted only from
 //     your own scopes (local, user), never from the shared vibe.yaml, and a
@@ -71,9 +88,9 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 	if logger == nil {
 		logger = slog.Default()
 	}
-	sess, err := session.New(append([]session.Option{session.WithLogger(logger)}, o.session...)...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open the workspace session: %w", err)
+	resolver := o.resolver
+	if resolver == nil {
+		resolver = ws.Resolver()
 	}
 
 	conns := ws.Connections()
@@ -83,51 +100,129 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 	})
 
 	var issues []SessionIssue
-	fail := func(name string, err error) {
-		msg := sess.Redact(err.Error())
+	failMsg := func(name, msg string) {
 		logger.Warn("connection not available", "name", name, "reason", msg)
 		issues = append(issues, SessionIssue{Connection: name, Message: msg})
 	}
-	attached := map[string]bool{}
+
+	// Pass 1: resolve every definition (no network, no dialling). The one
+	// MotherDuck token the hub opens with is resolved here, because it must be
+	// SET before the configuration is locked (spike #107).
+	type item struct {
+		rc   ResolvedConnection
+		spec session.Spec
+	}
+	var items []item
+	mdToken, mdOwner := "", ""
 	for _, c := range conns {
-		resolved, err := c.ConnectionDef.Resolve(o.lookup, c.Scope)
+		rc, err := ResolveConnection(ws, c, o.lookup)
 		if err != nil {
-			fail(c.Name, err)
+			failMsg(c.Name, redactBasic(err.Error()))
 			continue
 		}
-		spec := session.Spec{Name: resolved.Name, Type: resolved.Type, ReadOnly: resolved.IsReadOnly() || o.readOnly}
+		resolved := rc.Resolved
+		readOnly := resolved.IsReadOnly() || o.readOnly
+		if resolved.Type == "motherduck" && resolved.ReadOnly != nil && *resolved.ReadOnly {
+			failMsg(c.Name, connections.ErrMotherDuckReadOnly)
+			continue
+		}
+		if resolved.Type == "motherduck" {
+			// Cannot be attached read-only: a read-only command leaves it
+			// registered but unconnectable (status shows why on Connect).
+			readOnly = false
+		}
+		cdef := rc.Def(readOnly)
+		spec := cdef.Spec()
+		if resolved.Type == "motherduck" && o.readOnly {
+			spec.Params["forced_read_only"] = "true"
+		}
 		if resolved.Type == "duckdb" {
-			p, err := ResolveLocalPath(ws.Root(), resolved.Path, c.Scope)
-			if err != nil {
-				fail(c.Name, fmt.Errorf("connection %q: %w", c.Name, err))
+			spec.Path = rc.Path
+			if o.skipLocal {
+				items = append(items, item{rc: rc, spec: spec})
 				continue
 			}
-			spec.Path = p
 			if o.readOnly {
-				if _, err := os.Stat(p); err != nil {
-					fail(c.Name, fmt.Errorf("connection %q has no data file yet; it is created the first time something writes to it", c.Name))
+				if _, err := os.Stat(rc.Path); err != nil {
+					failMsg(c.Name, fmt.Sprintf("connection %q has no data file yet; it is created the first time something writes to it", c.Name))
 					continue
 				}
 			}
 			// Only ever create folders inside the workspace; a path the user
 			// pointed elsewhere must already have its folder.
-			if !spec.ReadOnly && insideRoot(ws.Root(), p) {
-				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-					fail(c.Name, fmt.Errorf("connection %q: failed to create its folder: %w", c.Name, err))
+			if !spec.ReadOnly && insideRoot(ws.Root(), rc.Path) {
+				if err := os.MkdirAll(filepath.Dir(rc.Path), 0o755); err != nil {
+					failMsg(c.Name, fmt.Sprintf("connection %q: failed to create its folder: %v", c.Name, err))
 					continue
 				}
 			}
-		}
-		if err := sess.Register(spec); err != nil {
-			fail(c.Name, err)
-			continue
-		}
-		if resolved.Type == "duckdb" {
-			if err := sess.Connect(ctx, c.Name); err != nil {
-				fail(c.Name, err)
+		} else if resolved.Type != "" {
+			if err := connections.Validate(cdef); err != nil {
+				failMsg(c.Name, redactBasic(err.Error()))
 				continue
 			}
-			attached[c.Name] = true
+		}
+		if connections.NeedsCredential(resolved.Type) {
+			ref := credentialRef(ws.ID(), c.Scope, c.Name)
+			b, method := rc.Binding(), c.SignIn
+			guard := signInGuard(c, rc.Resolved)
+			spec.Credential = func(ctx context.Context) (secrets.Credential, error) {
+				if guard != nil {
+					return secrets.Credential{}, guard
+				}
+				return resolver.Resolve(ctx, ref, method, b)
+			}
+			if resolved.Type == "motherduck" {
+				// Keychain / env read only; a failure is reported by Preflight.
+				if cred, err := spec.Credential(ctx); err == nil && cred.Token != "" {
+					switch {
+					case mdToken == "":
+						mdToken, mdOwner = cred.Token, c.Name
+					case cred.Token != mdToken:
+						failMsg(c.Name, fmt.Sprintf("this workspace already uses the MotherDuck account of %q, and one workspace uses one account; sign this connection in with the same account or remove it", mdOwner))
+						continue
+					}
+				}
+			}
+		}
+		items = append(items, item{rc: rc, spec: spec})
+	}
+
+	sopts := []session.Option{
+		session.WithLogger(logger),
+		session.WithConnectionTypes(connections.Types()...),
+		session.WithRedactor(resolver.Redactor()),
+	}
+	if mdToken != "" {
+		sopts = append(sopts, session.WithMotherDuckToken(mdToken))
+	}
+	sess, err := session.New(append(sopts, o.session...)...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open the workspace session: %w", err)
+	}
+	fail := func(name string, err error) { failMsg(name, sess.Redact(err.Error())) }
+
+	// Pass 2: register everything; attach local files eagerly; leave the rest
+	// to connect on first use (lazy attach).
+	attached := map[string]bool{}
+	for _, it := range items {
+		name := it.rc.Name
+		if err := sess.Register(it.spec); err != nil {
+			fail(name, err)
+			continue
+		}
+		switch it.rc.Resolved.Type {
+		case "duckdb", "sqlite":
+			if o.skipLocal {
+				continue
+			}
+			if err := sess.Connect(ctx, name); err != nil {
+				fail(name, err)
+				continue
+			}
+			attached[name] = true
+		default:
+			sess.Preflight(ctx, name)
 		}
 	}
 
@@ -228,3 +323,7 @@ func isWithin(root, p string) bool {
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
+
+// redactBasic scrubs credential-shaped text from a message produced before a
+// session (and its redactor) exists.
+func redactBasic(s string) string { return secrets.RedactPatterns(s) }

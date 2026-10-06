@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"sort"
+
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 // ConnectionType is the seam #115 extends: each type validates its Spec and
@@ -20,6 +22,52 @@ type ConnectionType interface {
 	// Remote reports whether the catalog's schema can change outside this
 	// process (the schema cache then trusts only explicit invalidation).
 	Remote() bool
+}
+
+// SecretStep is one CREATE TEMPORARY SECRET a type needs before its attach.
+// Name is a secret name (ValidateName), Type DuckDB's secret type.
+type SecretStep struct {
+	Name   string
+	Type   string
+	Params []SecretParam
+}
+
+// CredentialedType is implemented by types that reach a remote service: they
+// need an extension, usually a credential, and emit secret DDL separately from
+// the attach statement so that no credential can ever appear in an ATTACH
+// string (plan §4.2).
+type CredentialedType interface {
+	ConnectionType
+	// Extensions lists the DuckDB extensions the type needs (names as
+	// duckdb_extensions() knows them, or their aliases). The session loads
+	// them when installed and reports extension-missing when not; it never
+	// installs on its own (consent).
+	Extensions() []string
+	// NeedsCredential reports whether Connect must resolve a credential.
+	NeedsCredential(Spec) bool
+	// SecretSteps returns the secret DDL for the resolved credential. The
+	// session runs it on its dedicated non-logging path.
+	SecretSteps(Spec, secrets.Credential) ([]SecretStep, error)
+}
+
+// CataloglessType is implemented by storage connections (s3, gcs, r2): they
+// only create secrets and attach no catalog.
+type CataloglessType interface {
+	ConnectionType
+	Catalogless() bool
+}
+
+// HubTokenType is implemented by MotherDuck: its token is a hub-wide setting
+// that must be in place before the configuration is locked (spike #107).
+type HubTokenType interface {
+	ConnectionType
+	UsesHubToken() bool
+}
+
+// Refresher is implemented by remote types whose catalog caches its own
+// metadata (Postgres: CALL pg_clear_cache()).
+type Refresher interface {
+	RefreshSQL() string
 }
 
 // Registry maps type names to implementations.

@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
@@ -129,11 +130,6 @@ func secretSQLCore(name, secretType string, params []SecretParam) (string, []str
 // scrubbed of the values and replaced when it could still quote the
 // statement.
 func (h *hub) CreateTemporarySecret(ctx context.Context, name, secretType string, params []SecretParam) error {
-	stmt, values, err := secretSQL(name, secretType, params)
-	if err != nil {
-		return err
-	}
-	h.redactor.Add(values...)
 	h.adminMu.Lock()
 	defer h.adminMu.Unlock()
 	conn, err := h.db.Conn(ctx)
@@ -141,6 +137,16 @@ func (h *hub) CreateTemporarySecret(ctx context.Context, name, secretType string
 		return fmt.Errorf("failed to get admin connection: %w", err)
 	}
 	defer conn.Close() //nolint:errcheck
+	return h.createSecretOn(ctx, conn, name, secretType, params)
+}
+
+// createSecretOn runs the secret DDL on conn; the caller holds adminMu.
+func (h *hub) createSecretOn(ctx context.Context, conn *sql.Conn, name, secretType string, params []SecretParam) error {
+	stmt, values, err := secretSQL(name, secretType, params)
+	if err != nil {
+		return err
+	}
+	h.redactor.Add(values...)
 	if _, err := conn.ExecContext(ctx, stmt); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

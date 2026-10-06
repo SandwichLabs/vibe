@@ -11,6 +11,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/hub"
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/spf13/cobra"
@@ -41,6 +42,13 @@ func isVibeTableArg(arg string) bool {
 	}
 	fi, err := os.Stat(arg)
 	return err == nil && fi.Mode().IsRegular()
+}
+
+// cliResolver is the credential resolver of CLI commands: OS keychain,
+// environment as it was when the command started, secrets scrubbed through
+// the CLI redactor.
+func cliResolver() *secrets.Resolver {
+	return secrets.NewResolver(secrets.WithRedactor(cliRedactor), secrets.WithResolverLogger(logger), secrets.WithEnv(workspace.SnapshotEnv()))
 }
 
 // addWorkspaceFlag registers the shared --workspace flag.
@@ -124,6 +132,36 @@ func lockedMessage(root, name string) string {
 	return fmt.Sprintf("a local DuckDB file that %s has open for writing; DuckDB cannot read it while a writer holds it, so close that process first (--read-only only reaches other connections)", who)
 }
 
+// openWorkspaceRemoteOnly opens the workspace without the hub lock and without
+// attaching its local files, for `vibe conn connect` of a connection that
+// cannot be attached read-only (MotherDuck): nothing here writes a file.
+func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*openedWorkspace, error) {
+	if isVibeFile(dir) {
+		return nil, errLegacyFileArg
+	}
+	root, err := hub.ResolveRoot(dir, "")
+	if err != nil {
+		return nil, err
+	}
+	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the workspace: %w", err)
+	}
+	for _, w := range ws.Warnings() {
+		fmt.Fprintln(errW, "warning:", w)
+	}
+	o := &openedWorkspace{WS: ws}
+	sess, issues, err := workspace.OpenSession(ctx, ws, logger, workspace.WithSkipLocalFiles(),
+		workspace.WithSessionOptions(session.WithRedactor(cliRedactor)))
+	if err != nil {
+		o.Close()
+		return nil, err
+	}
+	o.Sess, o.Issues = sess, issues
+	o.Eng = engine.NewManager(sess, engine.WithLogger(logger))
+	return o, nil
+}
+
 // openWorkspace finds the workspace (dir, or the nearest one above the working
 // directory), opens it and its session. Unless readOnly it first takes the hub
 // lock (and says who holds it when it cannot); with readOnly it opens without
@@ -137,7 +175,7 @@ func openWorkspace(ctx context.Context, dir string, readOnly, advise bool, app s
 	if err != nil {
 		return nil, err
 	}
-	ws, err := workspace.Open(root, workspace.WithLogger(logger))
+	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the workspace: %w", err)
 	}

@@ -81,8 +81,16 @@ type ConnectionDef struct {
 }
 
 // IsReadOnly reports the effective read-only flag: true unless explicitly
-// set false (connections default to read-only).
-func (d ConnectionDef) IsReadOnly() bool { return d.ReadOnly == nil || *d.ReadOnly }
+// set false (connections default to read-only). MotherDuck is the exception:
+// it cannot be attached read-only (MotherDuck's ATTACH has no READ_ONLY), so it
+// defaults to false and an explicit true is rejected (review #115 D-2); use a
+// read-scaling token for read-only access.
+func (d ConnectionDef) IsReadOnly() bool {
+	if d.ReadOnly == nil {
+		return d.Type != "motherduck"
+	}
+	return *d.ReadOnly
+}
 
 // Bool returns a pointer to b, for ConnectionDef.ReadOnly literals.
 func Bool(b bool) *bool { return &b }

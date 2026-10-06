@@ -39,6 +39,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	_ = os.Setenv("VIBE_CONFIG_DIR", dir)
+	// Never touch the real keychain item set.
+	_ = os.Setenv("VIBE_KEYRING_SERVICE", "vibe-test-workspace-pkg")
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
@@ -345,7 +347,12 @@ func TestSignInDefaultsAndLocalOverride(t *testing.T) {
 	for _, c := range merged {
 		got[c.Name] = c.SignIn
 	}
-	assert.Equal(t, map[string]string{"a": "env:PG_A", "b": "keychain", "c": "prompt"}, got)
+	assert.Equal(t, map[string]string{"a": "keychain", "b": "keychain", "c": "prompt"}, got, "a shared credentials: value is only a hint")
+	for _, c := range merged {
+		if c.Name == "a" {
+			assert.Equal(t, "env:PG_A", c.SignInHint)
+		}
+	}
 }
 
 func TestOpenReadsAllThreeScopesAndReloads(t *testing.T) {
