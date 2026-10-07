@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockContainer struct {
+type mockAccess struct {
 	db *sql.DB
 
 	nbs notebooks.Mock
@@ -28,10 +28,10 @@ type mockContainer struct {
 	sks skills.Mock
 }
 
-func (m *mockContainer) DuckDBDB() *sql.DB          { return m.db }
-func (m *mockContainer) Notebooks() notebooks.Store { return &m.nbs }
-func (m *mockContainer) Queries() queries.Store     { return &m.qs }
-func (m *mockContainer) Skills() skills.Store       { return &m.sks }
+func (m *mockAccess) DuckDBDB() *sql.DB          { return m.db }
+func (m *mockAccess) Notebooks() notebooks.Store { return &m.nbs }
+func (m *mockAccess) Queries() queries.Store     { return &m.qs }
+func (m *mockAccess) Skills() skills.Store       { return &m.sks }
 
 type mockEngine struct{}
 
@@ -49,7 +49,7 @@ func TestToolRegistration(t *testing.T) {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := agents.NewHandler(&mockContainer{db: db}, &mockEngine{}, sandbox, logger)
+	handler := agents.NewHandler(&mockAccess{db: db}, &mockEngine{}, sandbox, logger)
 
 	srv := New(handler, logger)
 	require.NotNil(t, srv)
@@ -84,7 +84,7 @@ func TestStartAndStop(t *testing.T) {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := agents.NewHandler(&mockContainer{db: db}, &mockEngine{}, sandbox, logger)
+	handler := agents.NewHandler(&mockAccess{db: db}, &mockEngine{}, sandbox, logger)
 
 	srv := New(handler, logger)
 	err = srv.Start("127.0.0.1:0")
@@ -133,7 +133,7 @@ func TestToolDefToMCPTool_ArraysCarryItems(t *testing.T) {
 	}
 }
 
-func (m *mockContainer) Session() session.Session {
+func (m *mockAccess) Session() session.Session {
 	if m.db != nil {
 		return sessiontest.ForTests(m.db)
 	}

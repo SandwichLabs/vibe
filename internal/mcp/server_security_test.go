@@ -27,7 +27,7 @@ func newSecurityTestServer(t *testing.T) *Server {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := agents.NewHandler(&mockContainer{db: db}, &mockEngine{}, sandbox, logger)
+	handler := agents.NewHandler(&mockAccess{db: db}, &mockEngine{}, sandbox, logger)
 
 	srv := New(handler, logger)
 	require.NoError(t, srv.Start("127.0.0.1:0"))
@@ -198,7 +198,7 @@ func TestServeStdio_JSONOnlyOnStdout(t *testing.T) {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := agents.NewHandler(&mockContainer{db: db}, &mockEngine{}, sandbox, logger)
+	handler := agents.NewHandler(&mockAccess{db: db}, &mockEngine{}, sandbox, logger)
 	srv := New(handler, logger)
 
 	in := strings.NewReader(

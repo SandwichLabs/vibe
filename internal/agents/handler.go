@@ -19,8 +19,8 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
-// ContainerAccess provides access to the container (interface to avoid circular imports).
-type ContainerAccess interface {
+// WorkspaceAccess provides access to the open workspace (interface to avoid circular imports).
+type WorkspaceAccess interface {
 	DuckDBDB() *sql.DB
 	// Session is the catalog-aware DuckDB hub over DuckDBDB. Introspection
 	// goes through it so no tool assumes the default catalog is "main".
@@ -33,14 +33,14 @@ type ContainerAccess interface {
 	Skills() skills.Store
 }
 
-// ProtectedPathsProvider is implemented by a ContainerAccess that knows the
+// ProtectedPathsProvider is implemented by a WorkspaceAccess that knows the
 // files and folders of its attached connections (a DuckLake's catalog and data
 // folder, duckdb and sqlite files): COPY ... TO never writes into them.
 type ProtectedPathsProvider interface {
 	ProtectedPaths() []string
 }
 
-// DataDirProvider is implemented by a ContainerAccess that has a workspace:
+// DataDirProvider is implemented by a WorkspaceAccess that has a workspace:
 // the folder (data/) the agent may read files from and COPY ... TO. A legacy
 // container does not implement it, so agent SQL there reads no files at all.
 type DataDirProvider interface {
@@ -54,8 +54,8 @@ type EngineAccess interface {
 
 // Handler dispatches JSON-RPC requests to the appropriate tool handler.
 type Handler struct {
-	container ContainerAccess
-	engine    EngineAccess
+	access WorkspaceAccess
+	engine EngineAccess
 	// sandbox is an atomic.Pointer, not a plain *SandboxConfig field, because
 	// a long-lived Handler (StartMCPServer builds exactly one for the whole
 	// life of the MCP server) can be dispatched to concurrently while
@@ -171,7 +171,7 @@ func (h *Handler) wasPreviewed(connection, sql string) bool {
 
 // duckDB returns the DuckDB connection or an error response if unavailable.
 func (h *Handler) duckDB(reqID any) (*sql.DB, *Response) {
-	db := h.container.DuckDBDB()
+	db := h.access.DuckDBDB()
 	if db == nil {
 		return nil, NewErrorResponse(reqID, ErrInternal, "DuckDB not available")
 	}
@@ -185,7 +185,7 @@ func (h *Handler) duckDB(reqID any) (*sql.DB, *Response) {
 // dotted-path parsing (a legacy table may legitimately contain dots); a name
 // that cannot be resolved falls back to engine.TableSQL's safe quoting.
 func (h *Handler) tableSQL(ctx context.Context, name string) (string, error) {
-	sess := h.container.Session()
+	sess := h.access.Session()
 	if sess == nil || sess.DB() == nil {
 		return engine.TableSQL(name), nil
 	}
@@ -216,7 +216,7 @@ func (h *Handler) tableSQL(ctx context.Context, name string) (string, error) {
 
 // sess returns the DuckDB session or an error response if unavailable.
 func (h *Handler) sess(reqID any) (session.Session, *Response) {
-	s := h.container.Session()
+	s := h.access.Session()
 	if s == nil {
 		return nil, NewErrorResponse(reqID, ErrInternal, "DuckDB not available")
 	}
@@ -231,10 +231,10 @@ func (h *Handler) sess(reqID any) (session.Session, *Response) {
 // there) is the connection's own problem reported instead of a misleading
 // "external access" denial (see withConnectError).
 func (h *Handler) connectReferenced(ctx context.Context, catalog, sqlText string) error {
-	if h.container == nil {
+	if h.access == nil {
 		return nil
 	}
-	if s := h.container.Session(); s != nil {
+	if s := h.access.Session(); s != nil {
 		return s.ConnectReferenced(ctx, catalog, sqlText)
 	}
 	return nil
@@ -249,11 +249,11 @@ func withConnectError(denial, connectErr error) error {
 	return denial
 }
 
-func NewHandler(container ContainerAccess, engine EngineAccess, sandbox *SandboxConfig, logger *slog.Logger) *Handler {
+func NewHandler(access WorkspaceAccess, engine EngineAccess, sandbox *SandboxConfig, logger *slog.Logger) *Handler {
 	h := &Handler{
-		container: container,
-		engine:    engine,
-		logger:    logger,
+		access: access,
+		engine: engine,
+		logger: logger,
 	}
 	h.sandbox.Store(sandbox)
 	return h
@@ -382,7 +382,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 			req.Method, sb.Mode))
 	}
 
-	userDB := h.container.DuckDBDB()
+	userDB := h.access.DuckDBDB()
 	ar := describeWrite(ctx, req, userDB, class)
 	if sqlText != "" {
 		ar.SQL = sqlText
@@ -583,7 +583,7 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 }
 
 func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response {
-	list, err := h.container.Queries().List(ctx)
+	list, err := h.access.Queries().List(ctx)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list queries: %v", err))
 	}
@@ -666,7 +666,7 @@ type ConnectionEngine interface {
 // statement is classified on a connection pinned to that catalog, so the
 // classifier resolves names exactly as the run will, and runs the same way.
 func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any, maxRows int) (rs *engine.ResultSet, truncated bool, err error) {
-	userDB := h.container.DuckDBDB()
+	userDB := h.access.DuckDBDB()
 	if userDB == nil {
 		return nil, false, fmt.Errorf("DuckDB not available")
 	}
@@ -1359,7 +1359,7 @@ func (h *Handler) handleSaveQuery(ctx context.Context, req *Request) *Response {
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := h.container.Queries().Create(ctx, q); err != nil {
+	if err := h.access.Queries().Create(ctx, q); err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to save query: %v", err))
 	}
 	return NewResponse(req.ID, map[string]any{"id": q.ID, "title": title, "saved": true})

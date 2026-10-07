@@ -200,10 +200,10 @@ func TestSandbox_EmptyAllowlistAllowsAll(t *testing.T) {
 
 // --- Mock implementations for handler tests ---
 
-// mockContainer is a ContainerAccess over an in-memory DuckDB handle with
+// mockAccess is a WorkspaceAccess over an in-memory DuckDB handle with
 // in-memory content stores (the notebooks/queries/skills Mocks). Set nbs, qs
 // or sks to swap in another Store (a FileStore, say).
-type mockContainer struct {
+type mockAccess struct {
 	db     *sql.DB
 	duckDB *sql.DB
 
@@ -213,7 +213,7 @@ type mockContainer struct {
 	sks skills.Store
 }
 
-func (m *mockContainer) Notebooks() notebooks.Store {
+func (m *mockAccess) Notebooks() notebooks.Store {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.nbs == nil {
@@ -222,7 +222,7 @@ func (m *mockContainer) Notebooks() notebooks.Store {
 	return m.nbs
 }
 
-func (m *mockContainer) Queries() queries.Store {
+func (m *mockAccess) Queries() queries.Store {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.qs == nil {
@@ -231,7 +231,7 @@ func (m *mockContainer) Queries() queries.Store {
 	return m.qs
 }
 
-func (m *mockContainer) Skills() skills.Store {
+func (m *mockAccess) Skills() skills.Store {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.sks == nil {
@@ -240,7 +240,7 @@ func (m *mockContainer) Skills() skills.Store {
 	return m.sks
 }
 
-func (m *mockContainer) DuckDBDB() *sql.DB {
+func (m *mockAccess) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {
 		return m.duckDB
 	}
@@ -273,7 +273,7 @@ func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 		MaxQueryRows: 100,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: db}
+	container := &mockAccess{db: db}
 	require.NoError(t, container.Queries().Create(context.Background(), &queries.Query{
 		ID: "q1", Title: "all_users", SQL: "SELECT * FROM users", Engine: "duckdb", Parameters: []queries.Param{},
 	}))
@@ -645,7 +645,7 @@ func TestTighter(t *testing.T) {
 	}
 }
 
-func (m *mockContainer) Session() session.Session {
+func (m *mockAccess) Session() session.Session {
 	if db := m.DuckDBDB(); db != nil {
 		return sessiontest.ForTests(db)
 	}

@@ -22,7 +22,7 @@ import (
 // DuckDB connection, optionally with a table "t" (id INTEGER) holding 3
 // rows when withTable is true — grounding recheck tests need actual SQL
 // execution (run_query/introspect_schema), which the plain
-// mockEngine/mockContainer test doubles elsewhere in this package can't
+// mockEngine/mockAccess test doubles elsewhere in this package can't
 // satisfy (see internal/agents' identical caveat). withTable=false gives a
 // real, CONFIRMED-empty DuckDB — hasAnyTables must see a genuine, successful
 // "zero tables" result, not an error from querying information_schema
@@ -42,7 +42,7 @@ func newRealDuckDBHandlerForLLM(t *testing.T, withTable bool) *agents.Handler {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{duckDB: duckDB}
+	container := &mockAccess{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return agents.NewHandler(container, eng, sandbox, logger)
 }

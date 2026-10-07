@@ -186,7 +186,7 @@ func newSkillsTestHandler(t *testing.T, mode SandboxMode) (*Handler, skills.Stor
 	t.Helper()
 	st, duckDB := skillsTestDBs(t)
 	sandbox := &SandboxConfig{Mode: mode, MaxQueryRows: 100}
-	container := &mockContainer{duckDB: duckDB, sks: st}
+	container := &mockAccess{duckDB: duckDB, sks: st}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := NewHandler(container, &mockEngine{}, sandbox, logger)
 	return handler, st, duckDB
@@ -935,7 +935,7 @@ func TestWriteImportSkill_OrderItemsGetsValidName(t *testing.T) {
 	assert.True(t, found, "LoadSkills must return the slugged skill, not silently drop it")
 
 	sandbox := &SandboxConfig{Mode: ModeReadOnly, MaxQueryRows: 100}
-	container := &mockContainer{duckDB: duckDB, sks: st}
+	container := &mockAccess{duckDB: duckDB, sks: st}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := NewHandler(container, &mockEngine{}, sandbox, logger)
 	resp := handler.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "read_skill", Params: map[string]any{"name": "workspace-order-items"}})
@@ -1069,21 +1069,21 @@ func TestWriteImportSkill_SampleValuesRenderAsDuckDBText(t *testing.T) {
 	assert.Contains(t, instructions, `"12.50"`)
 }
 
-// fileSkillContainer is a mockContainer whose skills live in a file store, as
+// fileSkillAccess is a mockAccess whose skills live in a file store, as
 // in a workspace.
-type fileSkillContainer struct {
-	*mockContainer
+type fileSkillAccess struct {
+	*mockAccess
 	store skills.Store
 }
 
-func (c *fileSkillContainer) Skills() skills.Store { return c.store }
+func (c *fileSkillAccess) Skills() skills.Store { return c.store }
 
 // Re-review #109 item 7: the agent can pass the rev its own list_skills /
 // read_skill result carried, and a skill that changed since is a conflict.
 func TestHandler_CreateOrUpdateSkill_RevFromReadSkillGuardsAgainstStaleWrites(t *testing.T) {
 	st, duckDB := skillsTestDBs(t)
 	root := t.TempDir()
-	container := &fileSkillContainer{mockContainer: &mockContainer{duckDB: duckDB, sks: st}, store: skills.NewFileStore(root)}
+	container := &fileSkillAccess{mockAccess: &mockAccess{duckDB: duckDB, sks: st}, store: skills.NewFileStore(root)}
 	handler := NewHandler(container, &mockEngine{}, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 	call := func(method string, params map[string]any) *Response {
 		return handler.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: method, Params: params})

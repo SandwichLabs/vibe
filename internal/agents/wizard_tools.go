@@ -54,7 +54,7 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := h.container.Queries().Create(ctx, q); err != nil {
+	if err := h.access.Queries().Create(ctx, q); err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to save query: %v", err))
 	}
 

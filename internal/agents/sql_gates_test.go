@@ -448,7 +448,7 @@ func TestAgentAuthoredCellsMayNameAConnection(t *testing.T) {
 	resp := fx.call("add_query_cell", map[string]any{"sql": "SELECT * FROM orders", "connection": "other", "label": "Orders"})
 	require.Nil(t, resp.Error, errMsg(resp))
 	id, _ := mapOf(t, resp.Result)["notebook_id"].(string)
-	nb, _, err := fx.h.container.Notebooks().Get(context.Background(), id)
+	nb, _, err := fx.h.access.Notebooks().Get(context.Background(), id)
 	require.NoError(t, err)
 	require.Len(t, nb.Cells, 1)
 	assert.Equal(t, "other", nb.Cells[0].Connection)
@@ -508,7 +508,7 @@ func TestSkills_GateOnQualifiedNamesWithoutDialling(t *testing.T) {
 	require.NoError(t, f.Close())
 	require.NoError(t, fx.sess.Register(session.Spec{Name: "lazy", Type: "duckdb", Path: lazyPath}))
 
-	st := fx.h.container.Skills()
+	st := fx.h.access.Skills()
 	insertSkill(t, st, "orders-skill", "d", "i", "other.main.orders", "user")
 	insertSkill(t, st, "lazy-skill", "d", "i", "lazy.main.tracked", "user")
 	insertSkill(t, st, "missing-skill", "d", "i", "nope.main.x", "user")

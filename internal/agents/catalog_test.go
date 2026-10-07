@@ -16,15 +16,15 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
-// sessionContainer is a ContainerAccess whose Session is a real hub with a
+// sessionAccess is a WorkspaceAccess whose Session is a real hub with a
 // second catalog attached.
-type sessionContainer struct {
-	*mockContainer // the in-memory notebooks/queries/skills stores
-	sess           session.Session
+type sessionAccess struct {
+	*mockAccess // the in-memory notebooks/queries/skills stores
+	sess        session.Session
 }
 
-func (c *sessionContainer) DuckDBDB() *sql.DB        { return c.sess.DB() }
-func (c *sessionContainer) Session() session.Session { return c.sess }
+func (c *sessionAccess) DuckDBDB() *sql.DB        { return c.sess.DB() }
+func (c *sessionAccess) Session() session.Session { return c.sess }
 
 // newCatalogHandler builds a full-sandbox Handler over a hub whose default
 // catalog holds users(id, name) and whose attached catalog "other" holds
@@ -54,7 +54,7 @@ func newCatalogHandler(t *testing.T) (*Handler, session.Session) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	eng := engine.NewManager(sess, engine.WithLogger(logger))
-	h := NewHandler(&sessionContainer{mockContainer: &mockContainer{}, sess: sess}, eng, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, logger)
+	h := NewHandler(&sessionAccess{mockAccess: &mockAccess{}, sess: sess}, eng, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, logger)
 	return h, sess
 }
 

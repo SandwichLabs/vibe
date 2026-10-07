@@ -117,7 +117,7 @@ func newApprovalTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) 
 
 	sandbox := &SandboxConfig{Mode: mode, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{duckDB: duckDB}
+	container := &mockAccess{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }

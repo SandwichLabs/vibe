@@ -85,7 +85,7 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	}
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))
-	store := h.container.Notebooks()
+	store := h.access.Notebooks()
 	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), label)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
@@ -122,7 +122,7 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 
-	store := h.container.Notebooks()
+	store := h.access.Notebooks()
 	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), page.Title)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
@@ -164,7 +164,7 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 const notebookCellSourceBudgetRunes = 4000
 
 func (h *Handler) handleListNotebooks(ctx context.Context, req *Request) *Response {
-	list, err := h.container.Notebooks().List(ctx)
+	list, err := h.access.Notebooks().List(ctx)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list notebooks: %v", err))
 	}
@@ -186,7 +186,7 @@ func (h *Handler) handleGetNotebook(ctx context.Context, req *Request) *Response
 		return NewErrorResponse(req.ID, ErrInvalidParams, "id is required")
 	}
 
-	nb, warnings, err := h.container.Notebooks().Get(ctx, id)
+	nb, warnings, err := h.access.Notebooks().Get(ctx, id)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("notebook %q not found: %v", id, err))
 	}

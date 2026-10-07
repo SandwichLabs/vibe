@@ -13,7 +13,7 @@ import (
 
 // AgentAccess is a workspace as the agent sees it: its DuckDB hub plus its
 // file-backed notebook, query and skill stores. It satisfies
-// agents.ContainerAccess (internal/agents defines the interface; this package
+// agents.WorkspaceAccess (internal/agents defines the interface; this package
 // need not import it), so agents.NewHandler(workspace.NewAgentAccess(ws, sess),
 // engine.NewManager(sess), …) is the workspace-backed agent surface. The
 // policy comes from Workspace.AgentPolicy, which satisfies agents.PolicySource

@@ -32,11 +32,11 @@ import (
 // rather than a mock. This is the same pattern internal/agents/agents_test.go
 // uses for handler tests. ---
 
-// mockContainer's duckDB field is optional: when unset, DuckDBDB() falls
+// mockAccess's duckDB field is optional: when unset, DuckDBDB() falls
 // back to db; grounding_recheck_test.go's newRealDuckDBHandlerForLLM sets it,
-// mirroring internal/agents' identical mockContainer split (see its
+// mirroring internal/agents' identical mockAccess split (see its
 // sql_classify_test.go). The content stores are in-memory Mocks.
-type mockContainer struct {
+type mockAccess struct {
 	db     *sql.DB
 	duckDB *sql.DB
 
@@ -45,11 +45,11 @@ type mockContainer struct {
 	sks skills.Mock
 }
 
-func (m *mockContainer) Notebooks() notebooks.Store { return &m.nbs }
-func (m *mockContainer) Queries() queries.Store     { return &m.qs }
-func (m *mockContainer) Skills() skills.Store       { return &m.sks }
+func (m *mockAccess) Notebooks() notebooks.Store { return &m.nbs }
+func (m *mockAccess) Queries() queries.Store     { return &m.qs }
+func (m *mockAccess) Skills() skills.Store       { return &m.sks }
 
-func (m *mockContainer) DuckDBDB() *sql.DB {
+func (m *mockAccess) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {
 		return m.duckDB
 	}
@@ -74,7 +74,7 @@ func newTestHandler(t *testing.T, mode agents.SandboxMode) *agents.Handler {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	container := &mockContainer{db: db}
+	container := &mockAccess{db: db}
 	require.NoError(t, container.Skills().Put(context.Background(), &skills.Stored{
 		Name: "sales-dashboard", Description: "Sales dashboard", Instructions: "# Sales", Source: skills.SourceUser,
 	}))
@@ -550,7 +550,7 @@ func TestToolInfo_ArrayParamsCarryItems(t *testing.T) {
 	}
 }
 
-func (m *mockContainer) Session() session.Session {
+func (m *mockAccess) Session() session.Session {
 	if db := m.DuckDBDB(); db != nil {
 		return sessiontest.ForTests(db)
 	}

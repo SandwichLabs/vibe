@@ -18,7 +18,7 @@ import (
 func newNotebookTestHandler(t *testing.T, mode SandboxMode) (*Handler, notebooks.Store) {
 	t.Helper()
 	handler, _ := newRealDuckDBHandler(t, mode)
-	return handler, handler.container.Notebooks()
+	return handler, handler.access.Notebooks()
 }
 
 // TestHandler_ConcurrentAddQueryCellDispatch_Race exercises the long-lived

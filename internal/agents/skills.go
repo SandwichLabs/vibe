@@ -300,7 +300,7 @@ func sanitizeSkillPromptText(s string) string {
 // --- Tool handlers ---
 
 func (h *Handler) handleListSkills(_ context.Context, req *Request) *Response {
-	entries, err := LoadSkills(h.container.Skills(), h.container.Session(), h.logger)
+	entries, err := LoadSkills(h.access.Skills(), h.access.Session(), h.logger)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list skills: %v", err))
 	}
@@ -335,7 +335,7 @@ func framedInstructions(body string) string {
 
 func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
-	entries, err := LoadSkills(h.container.Skills(), h.container.Session(), h.logger)
+	entries, err := LoadSkills(h.access.Skills(), h.access.Session(), h.logger)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to load skills: %v", err))
 	}
@@ -466,7 +466,7 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 	// last-seen revision applies.
 	rev, _ := req.Params["rev"].(string)
 
-	newRev, err := SaveUserSkillAt(h.container.Skills(), h.container.Session(), name, description, instructions, tableName, rev)
+	newRev, err := SaveUserSkillAt(h.access.Skills(), h.access.Session(), name, description, instructions, tableName, rev)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}

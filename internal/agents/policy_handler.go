@@ -11,19 +11,19 @@ import (
 // policyEnv describes the workspace to the SQL policy: its data/ folder (when
 // the container is a workspace) and the registered connections.
 func (h *Handler) policyEnv() *sqlEnv {
-	if h.container == nil {
+	if h.access == nil {
 		return newSQLEnv("", nil)
 	}
 	var conns []session.ConnectionInfo
-	if s := h.container.Session(); s != nil {
+	if s := h.access.Session(); s != nil {
 		conns = s.ConnectionInfos()
 	}
 	dir := ""
-	if p, ok := h.container.(DataDirProvider); ok {
+	if p, ok := h.access.(DataDirProvider); ok {
 		dir = p.DataDir()
 	}
 	var protected []string
-	if p, ok := h.container.(ProtectedPathsProvider); ok {
+	if p, ok := h.access.(ProtectedPathsProvider); ok {
 		protected = p.ProtectedPaths()
 	}
 	return newSQLEnv(dir, conns, protected...)
@@ -38,14 +38,14 @@ func (h *Handler) classify(ctx context.Context, db queryDB, raw string, params m
 // session default), so unqualified names resolve exactly as they will when the
 // statement runs. The pinned connection is released before it returns.
 func (h *Handler) classifyIn(ctx context.Context, connection, raw string, params map[string]any) (*sqlVerdict, error) {
-	userDB := h.container.DuckDBDB()
+	userDB := h.access.DuckDBDB()
 	if userDB == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
 	if connection == "" {
 		return h.classify(ctx, userDB, raw, params), nil
 	}
-	sess := h.container.Session()
+	sess := h.access.Session()
 	if sess == nil {
 		return nil, fmt.Errorf("connections are not available here")
 	}
@@ -92,7 +92,7 @@ func (h *Handler) toolTarget(ctx context.Context, req *Request) (sqlTarget, bool
 		return sqlTarget{}, false
 	}
 	name, _ := req.Params[param].(string)
-	sess := h.container.Session()
+	sess := h.access.Session()
 	if sess == nil || strings.TrimSpace(name) == "" {
 		return sqlTarget{}, false
 	}
@@ -174,7 +174,7 @@ func (h *Handler) handleListConnections(_ context.Context, req *Request) *Respon
 		})
 	}
 	res := map[string]any{"connections": out, "default": sess.DefaultCatalog()}
-	if p, ok := h.container.(DataDirProvider); ok && p.DataDir() != "" {
+	if p, ok := h.access.(DataDirProvider); ok && p.DataDir() != "" {
 		res["data_dir"] = p.DataDir()
 	}
 	return NewResponse(req.ID, res)
@@ -187,7 +187,7 @@ func (h *Handler) validConnection(name string) (string, error) {
 	if name == "" {
 		return "", nil
 	}
-	sess := h.container.Session()
+	sess := h.access.Session()
 	if sess == nil {
 		return "", fmt.Errorf("connections are not available here")
 	}

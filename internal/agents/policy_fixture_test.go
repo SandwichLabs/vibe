@@ -37,14 +37,14 @@ func (s *fakeConnSession) ConnectionInfos() []session.ConnectionInfo {
 	return append(infos, s.extra...)
 }
 
-// policyContainer is a workspace-shaped ContainerAccess: a real hub plus a
+// policyAccess is a workspace-shaped WorkspaceAccess: a real hub plus a
 // data/ folder.
-type policyContainer struct {
-	*sessionContainer
+type policyAccess struct {
+	*sessionAccess
 	dataDir string
 }
 
-func (c *policyContainer) DataDir() string { return c.dataDir }
+func (c *policyAccess) DataDir() string { return c.dataDir }
 
 // policyFixture is a handler over a real hub:
 //
@@ -174,7 +174,7 @@ func newPolicyFixture(t *testing.T, mode SandboxMode, opts ...fixtureOpt) *polic
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eng := engine.NewManager(sess, engine.WithLogger(logger))
-	h := NewHandler(&policyContainer{sessionContainer: &sessionContainer{mockContainer: &mockContainer{}, sess: fs}, dataDir: dd}, eng,
+	h := NewHandler(&policyAccess{sessionAccess: &sessionAccess{mockAccess: &mockAccess{}, sess: fs}, dataDir: dd}, eng,
 		&SandboxConfig{Mode: mode, MaxQueryRows: 100, RequireApproval: cfg.ask}, logger)
 	fx := &policyFixture{t: t, dir: dir, dataDir: dataDir, outside: outside, sess: fs, db: sess.DB(), h: h}
 	if cfg.approver {

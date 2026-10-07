@@ -27,7 +27,7 @@ func newRealDuckDBHandlerMaxRows(t *testing.T, maxRows int) *Handler {
 
 	sandbox := &SandboxConfig{Mode: ModeReadOnly, MaxQueryRows: maxRows}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{duckDB: duckDB}
+	container := &mockAccess{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger)
 }

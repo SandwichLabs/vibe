@@ -293,9 +293,9 @@ func TestPolicy_CopyNeverWritesIntoAConnectionsFiles(t *testing.T) {
 		assert.Empty(t, p.vetWrite(fx.p(f)), f)
 	}
 	// Through the whole policy, with the container reporting the paths.
-	pc, ok := fx.h.container.(*policyContainer)
+	pc, ok := fx.h.access.(*policyAccess)
 	require.True(t, ok)
-	fx.h = NewHandler(&protectedContainer{policyContainer: pc, prot: []string{fx.p("meta.bin"), fx.p("lake_files")}}, fx.h.engine,
+	fx.h = NewHandler(&protectedAccess{policyAccess: pc, prot: []string{fx.p("meta.bin"), fx.p("lake_files")}}, fx.h.engine,
 		&SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, fx.h.logger)
 	runPolicyCases(t, fx, []policyCase{
 		{"copy over a lake file", "COPY (SELECT 1) TO '%DATA%/x.ducklake'", sqlClassOther, "database or extension files"},
@@ -305,9 +305,9 @@ func TestPolicy_CopyNeverWritesIntoAConnectionsFiles(t *testing.T) {
 	})
 }
 
-type protectedContainer struct {
-	*policyContainer
+type protectedAccess struct {
+	*policyAccess
 	prot []string
 }
 
-func (c *protectedContainer) ProtectedPaths() []string { return c.prot }
+func (c *protectedAccess) ProtectedPaths() []string { return c.prot }
