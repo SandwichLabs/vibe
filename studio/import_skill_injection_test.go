@@ -94,7 +94,8 @@ func TestTableHasRows_MaliciousStoredTableName(t *testing.T) {
 	_, err = app.sess.DB().Exec(`INSERT INTO ` + quoted + ` VALUES (1)`)
 	require.NoError(t, err)
 
-	require.NoError(t, agents.SaveUserSkill(app.ws.Skills(), app.sess, "evil", "d", "i", evil))
+	_, err = agents.SaveUserSkillAt(app.ws.Skills(), app.sess, "evil", "d", "i", evil, "")
+	require.NoError(t, err)
 
 	_, err = app.ListSkills()
 	require.NoError(t, err)

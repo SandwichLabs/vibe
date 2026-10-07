@@ -16,7 +16,7 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 ## Tech stack
 
 - **Go 1.26+**, `CGO_ENABLED=1` (DuckDB bindings). Cobra + Viper for the CLI and config.
-- **Engine:** `go-duckdb` (embedded DuckDB) is the single query/CRUD engine. `go-sqlcipher` is still in `go.mod` but test-only and being removed (#137, PR 2). Do not use it in new code.
+- **Engine:** `go-duckdb` (embedded DuckDB) is the single query/CRUD engine. There is no SQLite or SQLCipher dependency (removed in #137): tests use DuckDB, FileStores in `t.TempDir()`, or the store `Mock`s.
 - **Desktop GUI:** Wails v2 + **Vue 3** (`studio/`). UI uses SchoolHouse (`studio/frontend/src/schoolhouse/`), themed through `--vibe-*` semantic roles (`docs/reference/themes.md`). Editor is CodeMirror. A2UI charts are hand-drawn CSS/SVG.
 - **Agent:** `internal/llm` on `charmbracelet/fantasy` (providers: `docs/reference/llm-config.md`); tools, sandbox and approvals in `internal/agents`; MCP in `internal/mcp` and `internal/hub` (`docs/reference/mcp.md`).
 - **TUI:** BubbleTea + Lipgloss (`vibe studio` without `--gui`): SQL REPL, read-only table browser, notebook list.

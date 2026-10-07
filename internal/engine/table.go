@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/sandwich-labs/vibe-app/internal/session"
@@ -47,21 +46,6 @@ func ParseTable(name string) (session.TableRef, error) {
 		return session.TableRef{}, fmt.Errorf("invalid schema %q in table name %q", ref.Schema, name)
 	}
 	return ref, nil
-}
-
-// ResolveTable is ParseTable plus defaulting against the session: an
-// unqualified name resolves to DefaultCatalog().<default schema>.name, so
-// legacy callers that pass bare table names keep working while any
-// catalog-qualified name addresses an attached connection.
-func ResolveTable(ctx context.Context, sess session.Session, name string) (session.TableRef, error) {
-	ref, err := ParseTable(name)
-	if err != nil {
-		return session.TableRef{}, err
-	}
-	if sess == nil {
-		return ref, nil
-	}
-	return sess.Resolve(ctx, ref)
 }
 
 // TableSQL renders a table argument as quoted SQL: a bare name is one quoted

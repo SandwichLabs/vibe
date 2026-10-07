@@ -508,18 +508,12 @@ func TestSkills_GateOnQualifiedNamesWithoutDialling(t *testing.T) {
 	require.NoError(t, f.Close())
 	require.NoError(t, fx.sess.Register(session.Spec{Name: "lazy", Type: "duckdb", Path: lazyPath}))
 
-	sqliteDB := fx.h.container.(*policyContainer).sqlite //nolint:errcheck // the fixture always builds a policyContainer
-	_, err = sqliteDB.Exec(`CREATE TABLE _vibe_skills (
-		name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '',
-		instructions TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '',
-		source TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL DEFAULT '',
-		updated_at TEXT NOT NULL DEFAULT '')`)
-	require.NoError(t, err)
-	insertSkill(t, sqliteDB, "orders-skill", "d", "i", "other.main.orders", "user")
-	insertSkill(t, sqliteDB, "lazy-skill", "d", "i", "lazy.main.tracked", "user")
-	insertSkill(t, sqliteDB, "missing-skill", "d", "i", "nope.main.x", "user")
+	st := fx.h.container.Skills()
+	insertSkill(t, st, "orders-skill", "d", "i", "other.main.orders", "user")
+	insertSkill(t, st, "lazy-skill", "d", "i", "lazy.main.tracked", "user")
+	insertSkill(t, st, "missing-skill", "d", "i", "nope.main.x", "user")
 
-	entries, err := LoadSkills(skillStore(sqliteDB), fx.sess, nil)
+	entries, err := LoadSkills(st, fx.sess, nil)
 	require.NoError(t, err)
 	names := map[string]bool{}
 	for _, e := range entries {

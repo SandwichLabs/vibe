@@ -295,16 +295,12 @@ func TestSandboxConfig_CheckSQLClassReadOnly(t *testing.T) {
 // agents_test.go's newTestHandler uses. classifySQL's catalog resolution
 // (round 3) queries duckdb_tables()/duckdb_views()/current_database()/
 // current_schema() against the handler's real DuckDB connection, which a
-// SQLite mock can't satisfy at all — proving the round-2/3 bypass strings
+// bare fixture can't satisfy — proving the round-2/3 bypass strings
 // are actually denied (not just that classifySQL says so in isolation)
 // requires dispatching through the real Handler -> real DuckDB path, the
 // same one Studio chat and MCP use in production.
 func newRealDuckDBHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	t.Helper()
-
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
 
 	duckDB, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
@@ -322,7 +318,7 @@ func newRealDuckDBHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 
 	sandbox := &SandboxConfig{Mode: mode, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	container := &mockContainer{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }
@@ -722,10 +718,6 @@ func newRound4LeakFixture(t *testing.T) (*Handler, *sql.DB) {
 	require.NoError(t, os.Chdir(dir))
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-
 	duckDB, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = duckDB.Close() })
@@ -734,7 +726,7 @@ func newRound4LeakFixture(t *testing.T) (*Handler, *sql.DB) {
 
 	sandbox := &SandboxConfig{Mode: ModeReadWrite, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	container := &mockContainer{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }

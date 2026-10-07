@@ -1,60 +1,10 @@
 package engine
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
 )
-
-// SQLiteEngine executes queries against a SQLite/SQLCipher database.
-type SQLiteEngine struct {
-	db       *sql.DB
-	readOnly bool
-}
-
-// NewSQLiteEngine creates a new SQLite engine wrapping the given database connection.
-func NewSQLiteEngine(db *sql.DB, readOnly bool) *SQLiteEngine {
-	return &SQLiteEngine{
-		db:       db,
-		readOnly: readOnly,
-	}
-}
-
-// Execute runs a SQL query against the SQLite database and returns a ResultSet.
-func (e *SQLiteEngine) Execute(ctx context.Context, query string, params map[string]any) (*ResultSet, error) {
-	boundSQL, args, err := BindParams(query, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to bind parameters: %w", err)
-	}
-
-	if e.readOnly {
-		return e.executeQuery(ctx, boundSQL, args)
-	}
-
-	// Attempt as a query first (SELECT, etc). If it returns columns, it's a query.
-	// Otherwise, fall back to exec for statements like INSERT/UPDATE/DELETE.
-	return e.executeQuery(ctx, boundSQL, args)
-}
-
-// executeQuery runs a SQL query that returns rows.
-func (e *SQLiteEngine) executeQuery(ctx context.Context, query string, args []any) (*ResultSet, error) {
-	rows, err := e.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute sqlite query: %w", err)
-	}
-	defer rows.Close()
-
-	// SQLiteEngine has no caller needing a row cap; 0 means unlimited, and
-	// the total is unused here (kept for ScanRows' shared shape).
-	rs, _, err := ScanRows(rows, 0)
-	return rs, err
-}
-
-// Close is a no-op for SQLiteEngine since the db is managed externally.
-func (e *SQLiteEngine) Close() error {
-	return nil
-}
 
 // ScanRows reads rows from a sql.Rows into a ResultSet. It is the single
 // funnel for ExecuteQuery, GetTableData*, RunA2UIQuery (notebooks and A2UI

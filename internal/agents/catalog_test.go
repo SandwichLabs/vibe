@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,20 +19,12 @@ import (
 // sessionContainer is a ContainerAccess whose Session is a real hub with a
 // second catalog attached.
 type sessionContainer struct {
-	sqlite *sql.DB
-	sess   session.Session
+	*mockContainer // the in-memory notebooks/queries/skills stores
+	sess           session.Session
 }
 
-func (c *sessionContainer) SQLiteDB() *sql.DB        { return c.sqlite }
 func (c *sessionContainer) DuckDBDB() *sql.DB        { return c.sess.DB() }
 func (c *sessionContainer) Session() session.Session { return c.sess }
-func (c *sessionContainer) Notebooks() notebooks.Store {
-	return notebooks.NewSQLiteStore(c.sqlite)
-}
-func (c *sessionContainer) Queries() queries.Store {
-	return queries.NewRegistry(c.sqlite, slog.New(slog.NewTextHandler(io.Discard, nil)))
-}
-func (c *sessionContainer) Skills() skills.Store { return skills.NewSQLiteStore(c.sqlite) }
 
 // newCatalogHandler builds a full-sandbox Handler over a hub whose default
 // catalog holds users(id, name) and whose attached catalog "other" holds
@@ -63,13 +52,9 @@ func newCatalogHandler(t *testing.T) (*Handler, session.Session) {
 	_, err = sess.DB().Exec("CREATE TABLE users (id INTEGER, name VARCHAR); INSERT INTO users VALUES (7, 'seven')")
 	require.NoError(t, err)
 
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	eng := engine.NewManager(sess, engine.WithLogger(logger))
-	h := NewHandler(&sessionContainer{sqlite: sqliteDB, sess: sess}, eng, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, logger)
+	h := NewHandler(&sessionContainer{mockContainer: &mockContainer{}, sess: sess}, eng, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, logger)
 	return h, sess
 }
 
@@ -190,17 +175,12 @@ func TestSkills_TableBoundOnSecondCatalog(t *testing.T) {
 	assert.False(t, tableHasRows(sess, "other.main.ghost"))
 	assert.False(t, tableHasRows(sess, `other.main.orders"; DROP TABLE users; --`))
 
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
+	store := &skills.Mock{}
+	require.NoError(t, WriteImportSkill(store, sess, "other.main.orders"))
+	stored, err := store.List(context.Background())
 	require.NoError(t, err)
-	defer sqliteDB.Close() //nolint:errcheck
-	_, err = sqliteDB.Exec(`CREATE TABLE _vibe_skills (
-		name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '',
-		table_name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user',
-		created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
-	require.NoError(t, err)
-	require.NoError(t, WriteImportSkill(skills.NewSQLiteStore(sqliteDB), sess, "other.main.orders"))
-	var instr string
-	require.NoError(t, sqliteDB.QueryRow("SELECT instructions FROM _vibe_skills").Scan(&instr))
+	require.Len(t, stored, 1)
+	instr := stored[0].Instructions
 	assert.Contains(t, instr, "total", "the skill describes the other catalog's table")
 	assert.NotContains(t, instr, "seven")
 }

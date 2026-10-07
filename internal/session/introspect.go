@@ -89,28 +89,6 @@ func LookupTable(ctx context.Context, q Queryer, ref TableRef) (TableInfo, bool,
 	return t, true, nil
 }
 
-// PrimaryKeyColumns returns the primary-key columns of a table in key order
-// (empty when it has none). ref may be partial (current catalog/schema).
-func PrimaryKeyColumns(ctx context.Context, q Queryer, ref TableRef) ([]string, error) {
-	cond, args := RefFilter(ref, "database_name", "schema_name", "table_name", 1)
-	rows, err := q.QueryContext(ctx, `
-		SELECT unnest(constraint_column_names) FROM duckdb_constraints()
-		 WHERE constraint_type = 'PRIMARY KEY' AND `+cond, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read primary key of %q: %w", ref.String(), err)
-	}
-	defer rows.Close() //nolint:errcheck
-	var out []string
-	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
-			return nil, fmt.Errorf("failed to scan primary key of %q: %w", ref.String(), err)
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
 // AllTables lists the tables and views of every user schema of catalog
 // ("" = the default catalog).
 func AllTables(ctx context.Context, s Session, catalog string) ([]TableInfo, error) {

@@ -9,14 +9,13 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
-	"io"
 	"log/slog"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver registers "sqlite3"
+	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -201,20 +200,45 @@ func TestSandbox_EmptyAllowlistAllowsAll(t *testing.T) {
 
 // --- Mock implementations for handler tests ---
 
+// mockContainer is a ContainerAccess over an in-memory DuckDB handle with
+// in-memory content stores (the notebooks/queries/skills Mocks). Set nbs, qs
+// or sks to swap in another Store (a FileStore, say).
 type mockContainer struct {
 	db     *sql.DB
 	duckDB *sql.DB
+
+	mu  sync.Mutex
+	nbs notebooks.Store
+	qs  queries.Store
+	sks skills.Store
 }
 
-func (m *mockContainer) SQLiteDB() *sql.DB {
-	return m.db
+func (m *mockContainer) Notebooks() notebooks.Store {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.nbs == nil {
+		m.nbs = &notebooks.Mock{}
+	}
+	return m.nbs
 }
 
-func (m *mockContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(m.db) }
 func (m *mockContainer) Queries() queries.Store {
-	return queries.NewRegistry(m.db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.qs == nil {
+		m.qs = &queries.Mock{}
+	}
+	return m.qs
 }
-func (m *mockContainer) Skills() skills.Store { return skills.NewSQLiteStore(m.db) }
+
+func (m *mockContainer) Skills() skills.Store {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sks == nil {
+		m.sks = &skills.Mock{}
+	}
+	return m.sks
+}
 
 func (m *mockContainer) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {
@@ -235,30 +259,12 @@ func (m *mockEngine) Execute(_ context.Context, sqlStr string, params map[string
 func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 
-	// Create internal tables matching the real schema.
 	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (
-			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
-			page_type TEXT NOT NULL DEFAULT 'markdown', sort_order INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}'
-		);
-		CREATE TABLE _vibe_queries (
-			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', sql TEXT NOT NULL DEFAULT '',
-			engine TEXT NOT NULL DEFAULT 'duckdb', parameters TEXT NOT NULL DEFAULT '{}',
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);
-		CREATE TABLE _vibe_skills (
-			name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '',
-			table_name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user',
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);
-		CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
+		CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR, email VARCHAR);
 		INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');
-		INSERT INTO _vibe_pages (id, title, content, created_at, updated_at) VALUES ('p1', 'home', '# Welcome', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
-		INSERT INTO _vibe_queries (id, title, sql, engine, created_at, updated_at) VALUES ('q1', 'all_users', 'SELECT * FROM users', 'sqlite', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 	`)
 	require.NoError(t, err)
 
@@ -268,6 +274,9 @@ func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	container := &mockContainer{db: db}
+	require.NoError(t, container.Queries().Create(context.Background(), &queries.Query{
+		ID: "q1", Title: "all_users", SQL: "SELECT * FROM users", Engine: "duckdb", Parameters: []queries.Param{},
+	}))
 	engine := &mockEngine{}
 
 	handler := NewHandler(container, engine, sandbox, logger)
@@ -282,9 +291,7 @@ func newTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 // --- Handler dispatch tests ---
 
 func TestHandler_DispatchIntrospectSchema(t *testing.T) {
-	// This test uses SQLite mocks; DuckDB information_schema queries won't work.
-	// Testing that the handler dispatches correctly and returns an error
-	// (since SQLite doesn't have information_schema).
+	// Only that the handler dispatches without panicking.
 	handler, _ := newTestHandler(t, ModeFull)
 	ctx := context.Background()
 
@@ -296,13 +303,14 @@ func TestHandler_DispatchIntrospectSchema(t *testing.T) {
 	}
 	resp := handler.Handle(ctx, req)
 
-	// With SQLite mock, information_schema query may error or return empty.
-	// Just verify the handler dispatched without panicking.
-	assert.NotNil(t, resp)
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error, "%+v", resp.Error)
+	out, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "users")
 }
 
 func TestHandler_DispatchDescribeTable(t *testing.T) {
-	// This test uses SQLite mocks; DuckDB information_schema queries won't work.
 	handler, _ := newTestHandler(t, ModeFull)
 	ctx := context.Background()
 
@@ -314,9 +322,11 @@ func TestHandler_DispatchDescribeTable(t *testing.T) {
 	}
 	resp := handler.Handle(ctx, req)
 
-	// With SQLite mock, information_schema query may error.
-	// Just verify the handler dispatched without panicking.
-	assert.NotNil(t, resp)
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error, "%+v", resp.Error)
+	out, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "email")
 }
 
 // --- present_data (#67) ---
@@ -404,8 +414,8 @@ func TestHandler_DispatchListQueries(t *testing.T) {
 }
 
 func TestHandler_DispatchRunQuery(t *testing.T) {
-	// run_query is classified against the live DuckDB catalog (#116), which a
-	// SQLite mock cannot answer, so this one uses a real DuckDB handler.
+	// run_query is classified against the live DuckDB catalog (#116), so this one
+	// uses the real-DuckDB handler.
 	handler, _ := newRealDuckDBHandler(t, ModeFull)
 	ctx := context.Background()
 
@@ -493,7 +503,7 @@ func TestHandler_TableAllowlistEnforced(t *testing.T) {
 
 func TestHandler_CreateAndDeleteRecord(t *testing.T) {
 	// create_record/delete_record now route through the real-DuckDB SQL
-	// classifier (requireWriteStatement) — a SQLite-mocked "DuckDB" can't
+	// classifier (requireWriteStatement) — a bare fixture can't
 	// satisfy classifySQL's EXPLAIN (FORMAT JSON)/catalog queries, so this
 	// needs the real-DuckDB handler, same as the run_query tests.
 	handler, _ := newRealDuckDBHandler(t, ModeFull)

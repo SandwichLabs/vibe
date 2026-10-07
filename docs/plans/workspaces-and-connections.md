@@ -26,7 +26,7 @@ The plan below was written before the work and is kept as the record of the reas
 - MotherDuck verified against a real token (so far only the spike, fakes and the hidden child process).
 - Iceberg REST catalogs. DuckLake with a Postgres or SQLite metadata catalog.
 - Removing a downloaded extension (Studio only installs).
-- Dead code to sweep: `notebooks.NewSQLiteStore` and `skills.NewSQLiteStore` and the `_vibe_*` helpers in `internal/notebooks` survive for tests only.
+- Dead code sweep: done in #137 (the SQLite stores and the `_vibe_*` helpers are deleted).
 - #77: signing and notarisation, CI and release pipeline, bundled-extension decision (D12), the keychain check on signed builds.
 - #73: notebook export to HTML, PDF and xlsx.
 

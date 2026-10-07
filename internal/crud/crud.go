@@ -1,11 +1,9 @@
-// Package crud provides the transactional, type-coercing, validation-enforcing
-// write-back core behind Studio's (Wails) datasheet bindings.
+// Package crud provides the transactional, type-coercing write-back core
+// behind Studio's (Wails) datasheet bindings.
 //
-// All-string inputs (from HTTP forms / the Vue datasheet) are coerced to each
-// column's DuckDB type via CAST(? AS <type>) read from information_schema, and
-// the Access-style _vibe_field_meta required + validation_rule constraints are
-// enforced server-side, returning a field-keyed *WriteError so the UI can
-// highlight the offending controls instead of surfacing a raw SQL string.
+// All-string inputs (from the Vue datasheet) are coerced to each column's
+// DuckDB type via CAST(? AS <type>) read from information_schema. Failures
+// come back as a structured *WriteError rather than a raw SQL error string.
 package crud
 
 import (
@@ -42,8 +40,7 @@ type WriteResult struct {
 // is a fallback for non-field-specific failures. It must be returned instead of
 // a raw SQL error string so the form UI can highlight the offending controls.
 type WriteError struct {
-	Message string            `json:"message"`
-	Fields  map[string]string `json:"fields,omitempty"`
+	Message string `json:"message"`
 }
 
 func (e *WriteError) Error() string {
@@ -97,157 +94,6 @@ func ColumnTypes(q RowQuerier, table string) (map[string]string, error) {
 	return out, nil
 }
 
-// FieldMetaMap loads the Access-style field metadata for a table keyed by
-// column name. It tolerates a missing/empty meta table.
-func FieldMetaMap(store *FieldMetaStore, table string) (map[string]FieldMeta, error) {
-	metas, err := store.GetFieldMeta(table)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]FieldMeta, len(metas))
-	for _, m := range metas {
-		out[m.ColumnName] = m
-	}
-	return out, nil
-}
-
-// isEmptyValue reports whether v is a "missing" value for required-field
-// purposes (nil or an empty/whitespace string).
-func isEmptyValue(v any) bool {
-	if v == nil {
-		return true
-	}
-	if s, ok := v.(string); ok {
-		return strings.TrimSpace(s) == ""
-	}
-	return false
-}
-
-// validateRequired enforces _vibe_field_meta.required server-side, returning a
-// field-keyed *WriteError naming every missing required column. For inserts,
-// required columns absent from values are violations; for updates, only
-// columns present in the payload are checked (partial updates are allowed).
-func validateRequired(metas map[string]FieldMeta, values map[string]any, isInsert bool) *WriteError {
-	we := &WriteError{Fields: map[string]string{}}
-	for col, m := range metas {
-		if !m.Required {
-			continue
-		}
-		v, present := values[col]
-		if isInsert {
-			if !present || isEmptyValue(v) {
-				we.Fields[col] = requiredMessage(m)
-			}
-		} else if present && isEmptyValue(v) {
-			we.Fields[col] = requiredMessage(m)
-		}
-	}
-	if len(we.Fields) == 0 {
-		return nil
-	}
-	we.Message = "validation failed"
-	return we
-}
-
-func requiredMessage(m FieldMeta) string {
-	label := m.Caption
-	if label == "" {
-		label = m.ColumnName
-	}
-	if label == "" {
-		return "This field is required"
-	}
-	return fmt.Sprintf("%s is required", label)
-}
-
-// candidateRow builds a single-row SELECT that casts every supplied value to
-// its column type, exposing each column by name. It is used to evaluate
-// validation_rule expressions against the coerced candidate row inside the
-// transaction, without touching the target table.
-func candidateRow(colTypes map[string]string, values map[string]any) (string, []any) {
-	cols := sortedKeys(values)
-	exprs := make([]string, 0, len(cols))
-	args := make([]any, 0, len(cols))
-	for _, c := range cols {
-		exprs = append(exprs, fmt.Sprintf("CAST(? AS %s) AS %s", castType(colTypes, c), engine.QuoteIdent(c)))
-		args = append(args, values[c])
-	}
-	return "SELECT " + strings.Join(exprs, ", "), args
-}
-
-// validateRules evaluates each column's validation_rule against the candidate
-// row. A rule that evaluates to FALSE (NULL passes, matching SQL CHECK
-// semantics) yields a field-keyed *WriteError.
-func validateRules(exec TxExecer, colTypes map[string]string, metas map[string]FieldMeta, values map[string]any) (*WriteError, error) {
-	we := &WriteError{Fields: map[string]string{}}
-	for _, col := range sortedKeys(metas) {
-		m := metas[col]
-		rule := strings.TrimSpace(m.ValidationRule)
-		if rule == "" {
-			continue
-		}
-		// A column absent from the payload is NULL in the candidate row, and a
-		// NULL rule result passes (SQL CHECK semantics) — but the candidate
-		// SELECT can't even reference it. Skip instead of erroring, so partial
-		// writes don't trip rules on untouched columns. Blank values skip too:
-		// format rules judge entered values, blankness is Required's domain
-		// (Access semantics — a NULL/empty field passes the validation rule).
-		if v, present := values[col]; !present || isEmptyValue(v) {
-			continue
-		}
-		base, args := candidateRow(colTypes, values)
-		// Access-style rules may be column-relative (e.g. LIKE '%@%' or > 0),
-		// in which case the column is the implicit left operand. Full
-		// expressions that already name a column (e.g. qty > 0) are used as-is.
-		expr := normalizeRule(col, rule)
-		// COALESCE so a NULL rule result (unknown) is treated as passing.
-		query := fmt.Sprintf("SELECT COALESCE((%s), TRUE) FROM (%s) AS candidate", expr, base)
-		var ok bool
-		if err := exec.QueryRow(query, args...).Scan(&ok); err != nil {
-			return nil, fmt.Errorf("failed to evaluate validation rule for %q.%q: %w", m.TableName, col, err)
-		}
-		if !ok {
-			we.Fields[col] = validationMessage(m)
-		}
-	}
-	if len(we.Fields) == 0 {
-		return nil, nil
-	}
-	we.Message = "validation failed"
-	return we, nil
-}
-
-// normalizeRule turns an Access-style validation rule into a complete SQL
-// boolean expression. A rule that begins with a comparison/predicate operator
-// (LIKE, IN, BETWEEN, IS, NOT, or a relational operator) is column-relative:
-// the column is its implicit left operand, so we prepend the quoted column
-// reference. A rule that already starts with anything else (e.g. an identifier
-// as in "qty > 0", or a function call) is treated as a full expression.
-func normalizeRule(col, rule string) string {
-	upper := strings.ToUpper(rule)
-	relativePrefixes := []string{"LIKE", "IN ", "IN(", "BETWEEN", "IS ", "NOT ", "NOT(", "<>", "!=", ">=", "<=", "=", "<", ">"}
-	for _, p := range relativePrefixes {
-		if strings.HasPrefix(upper, p) {
-			return fmt.Sprintf("%s %s", engine.QuoteIdent(col), rule)
-		}
-	}
-	return rule
-}
-
-func validationMessage(m FieldMeta) string {
-	if msg := strings.TrimSpace(m.ValidationMsg); msg != "" {
-		return msg
-	}
-	return fmt.Sprintf("%s is invalid", labelFor(m))
-}
-
-func labelFor(m FieldMeta) string {
-	if m.Caption != "" {
-		return m.Caption
-	}
-	return m.ColumnName
-}
-
 // isTextType reports whether a DuckDB type stores text — the only family where
 // an empty string is a meaningful value rather than a blank form control.
 func isTextType(t string) bool {
@@ -256,21 +102,12 @@ func isTextType(t string) bool {
 		strings.HasPrefix(u, "TEXT") || strings.HasPrefix(u, "STRING")
 }
 
-// InsertRowTx coerces, validates and inserts a single row within a transaction.
+// InsertRowTx coerces and inserts a single row within a transaction.
 // Nil values — and empty strings bound for non-text columns (a blank form
 // control) — are omitted from the INSERT so column DEFAULTs apply; in
 // particular an auto-number primary key fills itself in when the form leaves
 // id blank, instead of failing the NOT NULL constraint with an explicit NULL.
-func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]FieldMeta, table string, values map[string]any) (*WriteResult, error) {
-	if we := validateRequired(metas, values, true); we != nil {
-		return nil, we
-	}
-	if we, err := validateRules(tx, colTypes, metas, values); err != nil {
-		return nil, err
-	} else if we != nil {
-		return nil, we
-	}
-
+func InsertRowTx(tx TxExecer, colTypes map[string]string, table string, values map[string]any) (*WriteResult, error) {
 	kept := make(map[string]any, len(values))
 	for c, v := range values {
 		if v == nil {
@@ -310,19 +147,10 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, metas map[string]Field
 	return &WriteResult{Affected: affected}, nil
 }
 
-// UpdateRowTx coerces, validates and updates a single row within a transaction.
+// UpdateRowTx coerces and updates a single row within a transaction.
 // A 0-affected-row outcome (PK mismatch) is surfaced as an error rather than a
 // silent no-op.
-func UpdateRowTx(tx TxExecer, colTypes map[string]string, metas map[string]FieldMeta, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
-	if we := validateRequired(metas, values, false); we != nil {
-		return nil, we
-	}
-	if we, err := validateRules(tx, colTypes, metas, values); err != nil {
-		return nil, err
-	} else if we != nil {
-		return nil, we
-	}
-
+func UpdateRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
 	cols := sortedKeys(values)
 	setClauses := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols)+1)

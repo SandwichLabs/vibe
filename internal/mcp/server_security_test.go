@@ -21,14 +21,9 @@ import (
 
 func newSecurityTestServer(t *testing.T) *Server {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (name TEXT PRIMARY KEY, content TEXT);
-		CREATE TABLE _vibe_queries (name TEXT PRIMARY KEY, sql_text TEXT, engine TEXT);
-	`)
-	require.NoError(t, err)
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -197,14 +192,9 @@ func TestIsLoopbackHost(t *testing.T) {
 // filtering — #64's "assert write_cell/preview_query absent" QA step,
 // proven here at the unit level rather than only live).
 func TestServeStdio_JSONOnlyOnStdout(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	defer db.Close()
-	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (name TEXT PRIMARY KEY, content TEXT);
-		CREATE TABLE _vibe_queries (name TEXT PRIMARY KEY, sql_text TEXT, engine TEXT);
-	`)
-	require.NoError(t, err)
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

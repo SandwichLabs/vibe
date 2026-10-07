@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
@@ -728,13 +727,6 @@ func TestExportSelection(t *testing.T) {
 	require.Error(t, err, "nothing selected")
 	_, err = Export(ctx, ws, ExportOptions{Selection: Selection{LocalConnections: []string{"nope"}}})
 	require.Error(t, err)
-}
-
-func TestMockServiceSatisfiesTheInterface(t *testing.T) {
-	var s Service = &MockService{}
-	_, err := s.Peek(nil)
-	require.NoError(t, err)
-	_ = filestore.ErrConflict
 }
 
 func TestTeamConnectionsCanBePickedByName(t *testing.T) {

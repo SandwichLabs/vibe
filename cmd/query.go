@@ -117,8 +117,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 }
 
 func connectionNames(o *openedWorkspace) string {
-	var names []string
-	for _, c := range o.WS.Connections() {
+	conns := o.WS.Connections()
+	names := make([]string, 0, len(conns))
+	for _, c := range conns {
 		names = append(names, c.Name)
 	}
 	if len(names) == 0 {

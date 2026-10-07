@@ -168,22 +168,13 @@ func newPolicyFixture(t *testing.T, mode SandboxMode, opts ...fixtureOpt) *polic
 	for _, n := range cfg.remote {
 		fs.remote[strings.ToLower(n)] = true
 	}
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-	_, err = sqliteDB.Exec(`CREATE TABLE _vibe_notebooks (
-		id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cells TEXT NOT NULL DEFAULT '[]',
-		created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
-	)`)
-	require.NoError(t, err)
-
 	dd := dataDir
 	if cfg.noDataDir {
 		dd = ""
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eng := engine.NewManager(sess, engine.WithLogger(logger))
-	h := NewHandler(&policyContainer{sessionContainer: &sessionContainer{sqlite: sqliteDB, sess: fs}, dataDir: dd}, eng,
+	h := NewHandler(&policyContainer{sessionContainer: &sessionContainer{mockContainer: &mockContainer{}, sess: fs}, dataDir: dd}, eng,
 		&SandboxConfig{Mode: mode, MaxQueryRows: 100, RequireApproval: cfg.ask}, logger)
 	fx := &policyFixture{t: t, dir: dir, dataDir: dataDir, outside: outside, sess: fs, db: sess.DB(), h: h}
 	if cfg.approver {

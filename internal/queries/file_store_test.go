@@ -240,7 +240,7 @@ func TestFileStore_ObserverSeesWrites(t *testing.T) {
 	assert.Equal(t, q.Rev, hash)
 }
 
-func TestRegistry_NotFoundMatchesBothErrors(t *testing.T) {
+func TestNotFoundError_MatchesErrNotFound(t *testing.T) {
 	err := error(&notFoundError{id: "x"})
 	assert.ErrorIs(t, err, ErrNotFound)
 }

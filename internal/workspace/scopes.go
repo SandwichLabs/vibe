@@ -191,17 +191,6 @@ func MarshalLocalConfig(l LocalConfig) ([]byte, error) {
 	return marshalYAML(l, "# Your own settings for one workspace, on this computer only. No passwords here.\n")
 }
 
-// UserConfigPath is where the user-scope file lives: $VIBE_CONFIG_DIR, else
-// os.UserConfigDir()/vibe, then connections.yaml (the same directory as
-// internal/prefs).
-func UserConfigPath() (string, error) {
-	dir, err := prefs.DefaultDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, UserConfigFile), nil
-}
-
 func readOptional(path string) ([]byte, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

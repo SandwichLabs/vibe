@@ -16,7 +16,6 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/bundle"
 	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/hub"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
@@ -365,7 +364,7 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 
 // SaveSkill creates or updates a user-authored skill. Studio-only; rejects
 // built-in names, the reserved "task-" prefix, and invalid names — the same
-// validation the create_or_update_skill agent tool applies (SaveUserSkill is
+// validation the create_or_update_skill agent tool applies (SaveUserSkillAt is
 // shared by both entry points). Like page/table CRUD elsewhere in this file,
 // this bypasses the agent sandbox gate entirely: it's the user directly
 // authoring content in Studio, not an agent tool call.
@@ -1212,7 +1211,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	ddb, colTypes, metas, table, err := a.prepareWrite(table)
+	ddb, colTypes, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,7 +1220,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	res, err := insertRowTx(tx, colTypes, metas, table, values)
+	res, err := insertRowTx(tx, colTypes, table, values)
 	if err != nil {
 		tx.Rollback() //nolint:errcheck
 		return nil, err
@@ -1243,7 +1242,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
-	ddb, colTypes, metas, table, err := a.prepareWrite(table)
+	ddb, colTypes, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1252,7 +1251,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	res, err := updateRowTx(tx, colTypes, metas, table, pkCol, pkVal, values)
+	res, err := updateRowTx(tx, colTypes, table, pkCol, pkVal, values)
 	if err != nil {
 		tx.Rollback() //nolint:errcheck
 		return nil, err
@@ -1265,17 +1264,17 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 
 // prepareWrite validates the open container + table and loads the column types
 // needed by the transactional write helpers.
-func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string]crud.FieldMeta, string, error) {
+func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, string, error) {
 	if err := a.requireWorkspace(); err != nil {
-		return nil, nil, nil, "", err
+		return nil, nil, "", err
 	}
 	tref, err := a.tableRefArg(table)
 	if err != nil {
-		return nil, nil, nil, "", err
+		return nil, nil, "", err
 	}
 	ddb := a.sess.DB()
 	if ddb == nil {
-		return nil, nil, nil, "", fmt.Errorf("DuckDB not available")
+		return nil, nil, "", fmt.Errorf("DuckDB not available")
 	}
 	// Writes address the table by its fully resolved name (catalog.schema.table),
 	// so neither the connection's current catalog nor a same-named temp table
@@ -1283,11 +1282,9 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, map[string
 	resolved := tref.String()
 	colTypes, err := columnTypes(ddb, resolved)
 	if err != nil {
-		return nil, nil, nil, "", err
+		return nil, nil, "", err
 	}
-	// Field metadata (validation, defaults) was an Access-era _vibe_ table that
-	// workspaces do not have: writes are plain type-coerced row edits.
-	return ddb, colTypes, map[string]crud.FieldMeta{}, resolved, nil
+	return ddb, colTypes, resolved, nil
 }
 
 // DeleteRow deletes a row from a table by primary key. Consistent with
@@ -1303,7 +1300,7 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
-	ddb, colTypes, _, table, err := a.prepareWrite(table)
+	ddb, colTypes, table, err := a.prepareWrite(table)
 	if err != nil {
 		return nil, err
 	}
@@ -1783,7 +1780,7 @@ func (a *App) PreviewFilterSQL(name string, spec FilterSpec, columns []string) (
 }
 
 // SaveFilterAsQuery renders a FilterSpec into deterministic SQL and persists it
-// as a named query via the existing queries.Registry, returning the new query id
+// as a named query via the existing queries store, returning the new query id
 // (plan §2.4, P2.6). It reuses the same rendering path as PreviewFilterSQL so the
 // stored SQL equals the previewed SQL.
 func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, title string) (string, error) {

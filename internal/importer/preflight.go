@@ -230,7 +230,7 @@ func fkOrphans(ctx context.Context, conn *sql.Conn, target []targetCol, fks []fk
 
 // preflightCreate pre-flights create/replace: a fits scan over every column,
 // plus a NULL/duplicate check on the chosen key.
-func preflightCreate(ctx context.Context, conn *sql.Conn, sum *Summary, target []targetCol, key string, staged []stagedCol) error {
+func preflightCreate(ctx context.Context, conn *sql.Conn, sum *Summary, target []targetCol, key string) error {
 	bad, badCount, err := fitsScan(ctx, conn, target)
 	if err != nil {
 		return err

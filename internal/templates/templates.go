@@ -93,12 +93,12 @@ func SeedTables(ctx context.Context, exec func(ctx context.Context, query string
 
 // sqlCell builds an already-populated SQL notebook cell — a template-building
 // convenience wrapping notebooks.NewCell, which cannot itself fail for
-// CellSQL.
-func sqlCell(sql, view, label string, pinned bool) notebooks.Cell {
+// CellSQL. Every template cell pins its view.
+func sqlCell(sql, view, label string) notebooks.Cell {
 	c, _ := notebooks.NewCell(notebooks.CellSQL)
 	c.Source = sql
 	c.View = view
-	c.ViewPinned = pinned
+	c.ViewPinned = true
 	c.Label = label
 	return c
 }
@@ -116,10 +116,10 @@ func contactsTemplate() Template {
 	nb := notebooks.Empty("Contacts")
 	nb.Cells = []notebooks.Cell{
 		markdownCell("# Contacts\n\nA starter workspace: a contacts list plus a running log of notes per contact."),
-		sqlCell(`SELECT * FROM contacts ORDER BY name`, "table", "Contacts", true),
+		sqlCell(`SELECT * FROM contacts ORDER BY name`, "table", "Contacts"),
 		sqlCell(
 			`SELECT c.name AS contact, n.note, n.noted_at FROM contact_notes n JOIN contacts c ON c.id = n.contact_id ORDER BY n.noted_at DESC`,
-			"table", "Recent notes", true,
+			"table", "Recent notes",
 		),
 	}
 
@@ -167,12 +167,12 @@ func inventoryTemplate() Template {
 	nb := notebooks.Empty("Inventory")
 	nb.Cells = []notebooks.Cell{
 		markdownCell("# Inventory\n\nA starter workspace: suppliers and the products they supply, with current stock."),
-		sqlCell(`SELECT * FROM suppliers ORDER BY name`, "table", "Suppliers", true),
+		sqlCell(`SELECT * FROM suppliers ORDER BY name`, "table", "Suppliers"),
 		sqlCell(
 			`SELECT p.name, s.name AS supplier, p.price, p.stock FROM products p JOIN suppliers s ON s.id = p.supplier_id ORDER BY p.name`,
-			"table", "Products", true,
+			"table", "Products",
 		),
-		sqlCell(`SELECT name, stock FROM products ORDER BY stock ASC LIMIT 10`, "bar", "Lowest stock", true),
+		sqlCell(`SELECT name, stock FROM products ORDER BY stock ASC LIMIT 10`, "bar", "Lowest stock"),
 	}
 
 	return Template{
@@ -217,14 +217,14 @@ func orderEntryTemplate() Template {
 	nb := notebooks.Empty("Order Entry")
 	nb.Cells = []notebooks.Cell{
 		markdownCell("# Order Entry\n\nA starter workspace: customers, their orders, and the line items on each order."),
-		sqlCell(`SELECT * FROM customers ORDER BY name`, "table", "Customers", true),
+		sqlCell(`SELECT * FROM customers ORDER BY name`, "table", "Customers"),
 		sqlCell(
 			`SELECT o.id AS order_id, c.name AS customer, o.ordered_at, o.status FROM orders o JOIN customers c ON c.id = o.customer_id ORDER BY o.ordered_at DESC`,
-			"table", "Orders", true,
+			"table", "Orders",
 		),
 		sqlCell(
 			`SELECT o.id AS order_id, i.product, i.quantity, i.price FROM order_items i JOIN orders o ON o.id = i.order_id ORDER BY o.id`,
-			"table", "Order line items", true,
+			"table", "Order line items",
 		),
 	}
 
@@ -284,14 +284,14 @@ func trainingRegistrationsTemplate() Template {
 	nb := notebooks.Empty("Training Registrations")
 	nb.Cells = []notebooks.Cell{
 		markdownCell("# Training Registrations\n\nA starter workspace: courses and who has registered for each."),
-		sqlCell(`SELECT * FROM courses ORDER BY title`, "table", "Courses", true),
+		sqlCell(`SELECT * FROM courses ORDER BY title`, "table", "Courses"),
 		sqlCell(
 			`SELECT c.title AS course, r.attendee, r.registered_at FROM registrations r JOIN courses c ON c.id = r.course_id ORDER BY r.registered_at`,
-			"table", "Registrations", true,
+			"table", "Registrations",
 		),
 		sqlCell(
 			`SELECT c.title, COUNT(r.id) AS registered FROM courses c LEFT JOIN registrations r ON r.course_id = c.id GROUP BY c.title ORDER BY c.title`,
-			"bar", "Registrations per course", true,
+			"bar", "Registrations per course",
 		),
 	}
 

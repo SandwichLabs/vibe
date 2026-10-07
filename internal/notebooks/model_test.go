@@ -1,6 +1,7 @@
 package notebooks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -507,19 +508,21 @@ func TestCoerce_NonStringConnectionIsCleared(t *testing.T) {
 }
 
 func TestSaveGet_ConnectionPersists(t *testing.T) {
-	db := testDB(t)
-	nb, err := Create(db, "N")
-	require.NoError(t, err)
-	saved, _, err := Save(db, map[string]any{
-		"id": nb.ID, "title": "N",
-		"cells": []any{map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "connection": "other"}},
+	storeContract(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		nb, err := s.Create(ctx, "N")
+		require.NoError(t, err)
+		saved, _, err := s.Save(ctx, map[string]any{
+			"id": nb.ID, "title": "N",
+			"cells": []any{map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "connection": "other"}},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "other", saved.Cells[0].Connection)
+		got, _, err := s.Get(ctx, nb.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "other", got.Cells[0].Connection)
+		assert.Equal(t, SchemaVersion, got.SchemaVersion)
 	})
-	require.NoError(t, err)
-	assert.Equal(t, "other", saved.Cells[0].Connection)
-	got, _, err := Get(db, nb.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "other", got.Cells[0].Connection)
-	assert.Equal(t, SchemaVersion, got.SchemaVersion)
 }
 
 func TestCoerce_RejectsV3(t *testing.T) {

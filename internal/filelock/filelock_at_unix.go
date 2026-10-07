@@ -113,6 +113,3 @@ func OpenDirNoFollow(parent *os.File, name string) (*os.File, error) {
 func MkdirAt(parent *os.File, name string) error {
 	return unix.Mkdirat(int(parent.Fd()), name, 0o700)
 }
-
-// UnlinkAt removes name inside dir.
-func UnlinkAt(dir *os.File, name string) error { return unix.Unlinkat(int(dir.Fd()), name, 0) }

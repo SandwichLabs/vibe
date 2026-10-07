@@ -8,7 +8,7 @@ import (
 // UnhardenedForTests wraps a bare *sql.DB (for example sql.Open("duckdb", "")) in a
 // Session WITHOUT the hardening read-back or the configuration lock. It exists
 // so unit tests of dependent packages can seed data through their own handle;
-// production code must use New / Wrap (only package sessiontest may call this), which fail closed.
+// production code must use New (only package sessiontest may call this), which fails closed.
 func UnhardenedForTests(db *sql.DB, opts ...Option) Session {
 	c := newConfig(opts)
 	var def, schema string

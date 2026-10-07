@@ -286,7 +286,7 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 			return sum, nil
 		}
 		target := createTargetColumns(ctx, conn, staged, o.Types)
-		if err := preflightCreate(ctx, conn, sum, target, o.Key, staged); err != nil {
+		if err := preflightCreate(ctx, conn, sum, target, o.Key); err != nil {
 			return nil, err
 		}
 		if sum.OK && !o.DryRun {
@@ -311,7 +311,7 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 	switch o.Mode {
 	case ModeReplace:
 		target := createTargetColumns(ctx, conn, staged, o.Types)
-		if err := preflightCreate(ctx, conn, sum, target, o.Key, staged); err != nil {
+		if err := preflightCreate(ctx, conn, sum, target, o.Key); err != nil {
 			return nil, err
 		}
 		if sum.OK {

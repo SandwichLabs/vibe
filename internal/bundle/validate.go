@@ -17,7 +17,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/workspace"
 )
 
-// Skill limits, the same ones agents.SaveUserSkill applies to a skill the
+// Skill limits, the same ones agents.SaveUserSkillAt applies to a skill the
 // agent or the editor writes.
 const (
 	skillMaxDescriptionRunes = 300

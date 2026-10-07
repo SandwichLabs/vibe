@@ -1,9 +1,7 @@
 package secrets
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -11,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/sandwich-labs/vibe-app/internal/jsonenc"
 )
 
 // Mask replaces a scrubbed value.
@@ -81,11 +81,8 @@ func maskLike(v string) string {
 func variants(v string) []string {
 	out := []string{v, strings.ReplaceAll(v, "'", "''"), strings.ReplaceAll(v, "'", `\'`),
 		url.QueryEscape(v), url.PathEscape(v)}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if enc.Encode(v) == nil {
-		if j := strings.TrimSpace(buf.String()); len(j) >= 2 {
+	if b, err := jsonenc.Encode(v, ""); err == nil {
+		if j := strings.TrimSpace(string(b)); len(j) >= 2 {
 			out = append(out, j[1:len(j)-1])
 		}
 	}

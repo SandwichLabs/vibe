@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
 func TestQuoteIdent(t *testing.T) {
@@ -63,7 +65,7 @@ func TestValidateName(t *testing.T) {
 }
 
 func TestRedact(t *testing.T) {
-	got := Redact("Unable to connect to Postgres at user='rosa' password='WRONGpw_needle' host='h'")
+	got := secrets.RedactPatterns("Unable to connect to Postgres at user='rosa' password='WRONGpw_needle' host='h'")
 	assert.NotContains(t, got, "WRONGpw_needle")
 	assert.Contains(t, got, "user='rosa'")
 }

@@ -225,10 +225,7 @@ func runWorkspaceInfo(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer o.Close()
-	rep, err := buildInfo(ctx, o)
-	if err != nil {
-		return err
-	}
+	rep := buildInfo(ctx, o)
 	out := cmd.OutOrStdout()
 	if asJSON {
 		enc := json.NewEncoder(out)
@@ -239,7 +236,7 @@ func runWorkspaceInfo(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func buildInfo(ctx context.Context, o *openedWorkspace) (*infoReport, error) {
+func buildInfo(ctx context.Context, o *openedWorkspace) *infoReport {
 	ws := o.WS
 	rep := &infoReport{Root: ws.Root(), ID: ws.ID(), Name: ws.Name(), Warnings: ws.Warnings()}
 
@@ -264,7 +261,7 @@ func buildInfo(ctx context.Context, o *openedWorkspace) (*infoReport, error) {
 			ic.Status, ic.Message = "unavailable", i.Message
 			if isLockMessage(i.Message) {
 				ic.Status = string(session.StatusLockedBy)
-				ic.Message = lockedMessage(o.WS.Root(), c.Name)
+				ic.Message = lockedMessage(o.WS.Root())
 			}
 		}
 		rep.Connections = append(rep.Connections, ic)
@@ -293,7 +290,7 @@ func buildInfo(ctx context.Context, o *openedWorkspace) (*infoReport, error) {
 	default:
 		rep.HubHolder = "unknown (its lock file cannot be trusted)"
 	}
-	return rep, nil
+	return rep
 }
 
 // engineInfo reads the DuckDB version and the installed (downloaded)

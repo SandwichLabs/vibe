@@ -12,7 +12,7 @@ package main
 //   - PreviewFilterSQL renders a FilterSpec (+ optional selected columns) to a
 //     deterministic SQL string WITHOUT saving anything to the registry
 //   - SaveFilterAsQuery renders the same deterministic SQL and persists it via
-//     the EXISTING queries.Registry (the same store ListQueries/GetQuery read)
+//     the EXISTING queries store (the same store ListQueries/GetQuery read)
 //   - the saved query, when executed via ExecuteQuery, returns rows equivalent
 //     to the live GetTableDataFiltered call for the same spec
 //   - the persisted SQL round-trips across close + reopen

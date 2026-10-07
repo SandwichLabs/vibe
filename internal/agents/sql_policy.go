@@ -423,7 +423,7 @@ func nameOf(t lexTok) string {
 }
 
 func sortedNames(m map[string]bool) string {
-	var out []string
+	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
 	}

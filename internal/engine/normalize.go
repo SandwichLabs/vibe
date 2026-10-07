@@ -45,7 +45,7 @@ var maxSafeDecimalUnscaled = big.NewInt(1_000_000_000_000_000) // 1e15
 // case below normalizes its own elements/values through NormalizeValue
 // again, so nesting of any depth or combination is covered.
 //
-// This is the one place ScanRows (shared by DuckDBEngine and SQLiteEngine)
+// This is the one place ScanRows (shared by DuckDBEngine and the other result readers)
 // funnels every scanned cell through, so ExecuteQuery, GetTableData,
 // RunA2UIQuery, run_query/preview_query, MCP, and the TUI are all covered
 // by a single fix rather than needing their own guard against a value

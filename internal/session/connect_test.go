@@ -341,9 +341,9 @@ func TestStorageConnectionsComeUpAtPreflightAndFollowCredentialChanges(t *testin
 }
 
 func TestClassifyAuthFailureAsNeedsCredentials(t *testing.T) {
-	k, _, _ := classifyAttachError(errors.New(`FATAL: password authentication failed for user "x"`), Redact)
+	k, _, _ := classifyAttachError(errors.New(`FATAL: password authentication failed for user "x"`), secrets.RedactPatterns)
 	assert.Equal(t, StatusNeedsCredentials, k)
-	k, _, _ = classifyAttachError(errors.New("connection refused"), Redact)
+	k, _, _ = classifyAttachError(errors.New("connection refused"), secrets.RedactPatterns)
 	assert.Equal(t, StatusError, k)
 }
 

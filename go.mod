@@ -13,7 +13,6 @@ require (
 	github.com/marcboeker/go-duckdb/mapping v0.0.21
 	github.com/marcboeker/go-duckdb/v2 v2.4.3
 	github.com/mark3labs/mcp-go v0.44.1
-	github.com/mutecomm/go-sqlcipher/v4 v4.4.2
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.0

@@ -204,21 +204,6 @@ func New(opts ...Option) (Session, error) {
 	return h, nil
 }
 
-// Wrap builds a Session over an existing DuckDB instance opened with OpenDB
-// (the legacy container's materialised file: its default catalog is that
-// file). It applies the SET-only hardening, locks the configuration and reads
-// every option back; it fails closed if the instance was not opened hardened.
-// The caller keeps ownership of db: Close does not close it.
-func Wrap(db *sql.DB, opts ...Option) (Session, error) {
-	c := newConfig(opts)
-	applyDirDefaults(c)
-	h, err := wrap(db, c, false)
-	if err != nil {
-		return nil, err
-	}
-	return h, nil
-}
-
 func applyDirDefaults(c *config) {
 	ext, sec := DefaultDirs()
 	if c.extensionDir == "" {

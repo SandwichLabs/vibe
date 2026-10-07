@@ -64,17 +64,6 @@ func (c *cacheStore) clear() {
 	c.mu.Unlock()
 }
 
-// CacheStats reports schema-cache hits and misses (for tests and diagnostics).
-func CacheStats(s Session) (hits, misses int) {
-	h, ok := s.(*hub)
-	if !ok {
-		return 0, 0
-	}
-	h.cache.mu.Lock()
-	defer h.cache.mu.Unlock()
-	return h.cache.hits, h.cache.misses
-}
-
 func (h *hub) InvalidateSchema(name string) {
 	h.gen.Add(1)
 	h.cache.clear()

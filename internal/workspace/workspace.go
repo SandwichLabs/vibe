@@ -128,7 +128,6 @@ type Option func(*options)
 
 type options struct {
 	logger    *slog.Logger
-	lookup    LookupFunc
 	resolver  *secrets.Resolver
 	user      *UserConfig // tests: replace the user scope instead of reading it
 	configDir string      // "" = $VIBE_CONFIG_DIR or the user config dir
@@ -142,9 +141,6 @@ func WithLogger(l *slog.Logger) Option {
 		}
 	}
 }
-
-// WithEnv replaces the environment lookup used for ${ENV} interpolation.
-func WithEnv(f LookupFunc) Option { return func(o *options) { o.lookup = f } }
 
 // WithConfigDir sets the per-user config directory (default: $VIBE_CONFIG_DIR,
 // else the OS user config dir + "/vibe"). The user-scope connections.yaml and
@@ -504,8 +500,6 @@ func (w *workspace) Close() error {
 	}
 	return first
 }
-
-var errMockNoWatch = errors.New("workspace mock: Watch is not supported")
 
 // localLocation splits the per-person settings path into the directory used as
 // the filestore root and the file name within it.

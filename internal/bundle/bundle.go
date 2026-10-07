@@ -146,30 +146,6 @@ type ExportResult struct {
 	Encrypted bool     `json:"encrypted"`
 }
 
-// Service is what Studio and the CLI use, so they can be tested against a
-// mock. Default is the real thing.
-type Service interface {
-	Export(ctx context.Context, t Target, opts ExportOptions) (*ExportResult, error)
-	Open(data []byte, passphrase string) (*Package, error)
-	Peek(data []byte) (Info, error)
-}
-
-// Default is the production Service.
-type Default struct{}
-
-var _ Service = Default{}
-
-// Export implements Service.
-func (Default) Export(ctx context.Context, t Target, opts ExportOptions) (*ExportResult, error) {
-	return Export(ctx, t, opts)
-}
-
-// Open implements Service.
-func (Default) Open(data []byte, passphrase string) (*Package, error) { return Open(data, passphrase) }
-
-// Peek implements Service.
-func (Default) Peek(data []byte) (Info, error) { return Peek(data) }
-
 // --- entry names ---
 
 // classify maps an entry name to its kind and id, or refuses it. The set of

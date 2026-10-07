@@ -269,13 +269,3 @@ func PolicyCalls() []string { return sortedKeys(allowedCalls) }
 
 // PolicyPragmas lists the PRAGMAs the agent may run.
 func PolicyPragmas() []string { return sortedKeys(allowedPragmas) }
-
-// PolicyDeniedStatements lists the statement kinds refused in every tier.
-func PolicyDeniedStatements() []string {
-	out := make([]string, 0, len(deniedHeads))
-	for k := range deniedHeads {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}

@@ -61,10 +61,10 @@ func TestWriteCore_OnSecondCatalog(t *testing.T) {
 
 	tx, err := db.Begin()
 	require.NoError(t, err)
-	res, err := InsertRowTx(tx, types, nil, tbl, map[string]any{"id": "1", "qty": "5"})
+	res, err := InsertRowTx(tx, types, tbl, map[string]any{"id": "1", "qty": "5"})
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, res.Affected)
-	_, err = UpdateRowTx(tx, types, nil, tbl, "id", "1", map[string]any{"qty": "9"})
+	_, err = UpdateRowTx(tx, types, tbl, "id", "1", map[string]any{"qty": "9"})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 
@@ -86,7 +86,7 @@ func TestWriteCore_OnSecondCatalog(t *testing.T) {
 	// An injection attempt in a table part stays one quoted identifier.
 	tx, err = db.Begin()
 	require.NoError(t, err)
-	_, err = InsertRowTx(tx, types, nil, `other.main."items"; DROP TABLE items; --`, map[string]any{"id": "2"})
+	_, err = InsertRowTx(tx, types, `other.main."items"; DROP TABLE items; --`, map[string]any{"id": "2"})
 	assert.Error(t, err)
 	_ = tx.Rollback()
 	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'items'").Scan(&n))

@@ -171,10 +171,10 @@ func loadStoredSkills(ctx context.Context, store skills.Store) ([]SkillEntry, er
 // Stored skills are NOT trusted just because they're in the store: a shared
 // workspace or .vibe can carry a skill a stranger authored (or one restored from an
 // old/corrupted export), so every stored row is re-validated against the
-// exact same name rule SaveUserSkill enforces on write — a name that fails
+// exact same name rule SaveUserSkillAt enforces on write — a name that fails
 // SkillNamePattern, or one that collides with a built-in name, is dropped
 // with a warning logged rather than trusted. This closes the gap where
-// SaveUserSkill's validation could be bypassed entirely by writing directly
+// SaveUserSkillAt's validation could be bypassed entirely by writing directly
 // to _vibe_skills (a different session, a hand-edited file, a future import
 // path) and having the bad row load anyway. logger may be nil (defaults to
 // slog.Default()).
@@ -243,8 +243,7 @@ type SkillRef struct {
 }
 
 // RenderSkillsBlock is the ONE function that renders the <skills>
-// system-prompt block, called by both SkillsPromptBlock (direct SkillEntry
-// callers) and internal/llm's runner (via the list_skills tool result) — a
+// system-prompt block, called by internal/llm's runner (via the list_skills tool result) — a
 // second, drifted copy of this logic in runner.go was the prompt-injection
 // gap the review found (a stored row's raw name/description reached the
 // prompt unescaped and unfiltered). Every ref is re-validated here even
@@ -280,19 +279,6 @@ func RenderSkillsBlock(refs []SkillRef) string {
 	}
 	b.WriteString("</skills>")
 	return b.String()
-}
-
-// SkillsPromptBlock renders the <skills> system-prompt block for a slice of
-// full SkillEntry values (name + description only — progressive disclosure;
-// instructions load lazily via read_skill). See RenderSkillsBlock for the
-// actual rendering/sanitization logic.
-func SkillsPromptBlock(entries []SkillEntry) string {
-	visible := ChatVisibleSkills(entries)
-	refs := make([]SkillRef, len(visible))
-	for i, s := range visible {
-		refs[i] = SkillRef{Name: s.Name, Description: s.Description}
-	}
-	return RenderSkillsBlock(refs)
 }
 
 // sanitizeSkillPromptText collapses whitespace (a multi-line description
@@ -383,22 +369,17 @@ var builtinNameSet = func() map[string]bool {
 	return m
 }()
 
-// SaveUserSkill validates and upserts a user-authored skill into
-// _vibe_skills with source='user'. Shared by the create_or_update_skill
-// agent tool and Studio's SaveSkill binding, so the two entry points can
-// never drift on validation (name shape, reserved prefix, built-in shadow,
-// size caps, no newlines in description, table_name must name a real
-// table). duckDB may be nil only when tableName is empty (some tests/
-// callers have no DuckDB handle and never bind a skill to a table).
-func SaveUserSkill(store skills.Store, sess session.Session, name, description, instructions, tableName string) error {
-	_, err := SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
-	return err
-}
-
-// SaveUserSkillAt is SaveUserSkill for a caller that holds a copy across user
-// time (Studio's editor): expectRev is the revision it loaded, and a skill
-// that changed on disk since (a git pull, an editor) is a conflict error, not
-// a silent clobber. With expectRev empty the store's own last-seen revision
+// SaveUserSkillAt validates and upserts a user-authored skill with
+// source='user'. Shared by the create_or_update_skill agent tool and Studio's
+// SaveSkill binding, so the two entry points can never drift on validation
+// (name shape, reserved prefix, built-in shadow, size caps, no newlines in
+// description, table_name must name a real table). sess may be nil only when
+// tableName is empty (some tests/callers have no DuckDB handle and never bind
+// a skill to a table).
+//
+// It is for a caller that holds a copy across user time (Studio's editor):
+// expectRev is the revision it loaded, and a skill that changed on disk since
+// (a git pull, an editor) is a conflict error, not a silent clobber. With expectRev empty the store's own last-seen revision
 // applies (the agent's create_or_update_skill, which has just listed or read
 // the skill); a file store refuses to write over an existing skill it has
 // never read.
@@ -759,7 +740,7 @@ func WriteImportSkill(store skills.Store, sess session.Session, table string) er
 	// Note what an update does NOT touch: description and source. A brand-new
 	// skill gets source='import' and the generated description; re-running
 	// against an existing one (regardless of who last edited it, or whether
-	// they changed its source to 'user' via SaveUserSkill) keeps both exactly
+	// they changed its source to 'user' via SaveUserSkillAt) keeps both exactly
 	// as they were — only instructions and table_name change.
 	ctx := context.Background()
 	rec := skills.Stored{Name: name, Description: description, Instructions: body, TableName: table, Source: skills.SourceImport}
@@ -775,7 +756,7 @@ func WriteImportSkill(store skills.Store, sess session.Session, table string) er
 
 	// Clean up the pre-#91 name, "workspace-<table>" verbatim (no slugging),
 	// if it's invalid and therefore could only be a leftover from the old
-	// WriteImportSkill — SaveUserSkill has always rejected an invalid name,
+	// WriteImportSkill — SaveUserSkillAt has always rejected an invalid name,
 	// so a row shaped like that was never visible to LoadSkills/read_skill
 	// and can't hold user prose. A file whose invalid row happens to also be
 	// a valid name (no special characters in the table name) is left alone;

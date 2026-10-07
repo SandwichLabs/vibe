@@ -27,7 +27,6 @@ type SessionOption func(*sessionOpts)
 
 type sessionOpts struct {
 	skipLocal bool
-	resolver  *secrets.Resolver
 	lookup    LookupFunc
 	session   []session.Option
 	readOnly  bool
@@ -44,12 +43,6 @@ func WithForceReadOnly() SessionOption { return func(o *sessionOpts) { o.readOnl
 // attaching them (nor creating their files), for a command that only needs the
 // remote ones and does not own the hub (`vibe conn connect`).
 func WithSkipLocalFiles() SessionOption { return func(o *sessionOpts) { o.skipLocal = true } }
-
-// WithSessionResolver replaces the workspace's credential resolver for this
-// session (default: ws.Resolver()).
-func WithSessionResolver(r *secrets.Resolver) SessionOption {
-	return func(o *sessionOpts) { o.resolver = r }
-}
 
 // WithSessionEnv replaces the environment lookup for ${ENV} interpolation.
 func WithSessionEnv(f LookupFunc) SessionOption { return func(o *sessionOpts) { o.lookup = f } }
@@ -88,10 +81,7 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 	if logger == nil {
 		logger = slog.Default()
 	}
-	resolver := o.resolver
-	if resolver == nil {
-		resolver = ws.Resolver()
-	}
+	resolver := ws.Resolver()
 
 	conns := ws.Connections()
 	def := ws.DefaultConnection()
@@ -117,7 +107,7 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 	for _, c := range conns {
 		rc, err := ResolveConnection(ws, c, o.lookup)
 		if err != nil {
-			failMsg(c.Name, redactBasic(err.Error()))
+			failMsg(c.Name, secrets.RedactPatterns(err.Error()))
 			continue
 		}
 		resolved := rc.Resolved
@@ -158,7 +148,7 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 			}
 		} else if resolved.Type != "" {
 			if err := connections.Validate(cdef); err != nil {
-				failMsg(c.Name, redactBasic(err.Error()))
+				failMsg(c.Name, secrets.RedactPatterns(err.Error()))
 				continue
 			}
 			if resolved.Type == "ducklake" && !spec.ReadOnly {
@@ -338,7 +328,3 @@ func isWithin(root, p string) bool {
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
-
-// redactBasic scrubs credential-shaped text from a message produced before a
-// session (and its redactor) exists.
-func redactBasic(s string) string { return secrets.RedactPatterns(s) }

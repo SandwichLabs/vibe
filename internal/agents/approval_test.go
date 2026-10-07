@@ -16,47 +16,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
-// --- ReadFilePolicy / ParseSandboxMode ---
-
-// fakeMetaReader is a minimal MetaReader test double: keys not present in
-// the map behave exactly like container.Container.Meta on a missing key
-// (an error), never an empty string.
-type fakeMetaReader map[string]string
-
-func (f fakeMetaReader) Meta(key string) (string, error) {
-	if v, ok := f[key]; ok {
-		return v, nil
-	}
-	return "", sql.ErrNoRows
-}
-
-func TestReadFilePolicy(t *testing.T) {
-	cases := []struct {
-		name     string
-		meta     fakeMetaReader
-		wantMode SandboxMode
-		wantAsk  bool
-	}{
-		{"absent everything", fakeMetaReader{}, DefaultSandboxMode, true},
-		{"stored full, ask absent", fakeMetaReader{"agent_sandbox": "full"}, ModeFull, true},
-		{"ask explicitly false", fakeMetaReader{"agent_sandbox": "full", "agent_ask_before_writes": "false"}, ModeFull, false},
-		{"unknown mode string fails closed", fakeMetaReader{"agent_sandbox": "banana"}, ModeReadOnly, true},
-		{"ask anything but false stays on", fakeMetaReader{"agent_ask_before_writes": "nope"}, DefaultSandboxMode, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ReadFilePolicy(tc.meta)
-			assert.Equal(t, tc.wantMode, got.Mode)
-			assert.Equal(t, tc.wantAsk, got.AskBeforeWrites)
-		})
-	}
-
-	t.Run("nil reader", func(t *testing.T) {
-		got := ReadFilePolicy(nil)
-		assert.Equal(t, DefaultSandboxMode, got.Mode)
-		assert.True(t, got.AskBeforeWrites)
-	})
-}
+// --- ParseSandboxMode ---
 
 func TestParseSandboxMode(t *testing.T) {
 	for _, m := range []SandboxMode{ModeReadOnly, ModeReadWrite, ModeFull} {
@@ -145,10 +105,6 @@ func TestApprovalQueue_DoubleResolveDoesNotBlock(t *testing.T) {
 // approval test can assert on.
 func newApprovalTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) {
 	t.Helper()
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-
 	duckDB, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = duckDB.Close() })
@@ -161,7 +117,7 @@ func newApprovalTestHandler(t *testing.T, mode SandboxMode) (*Handler, *sql.DB) 
 
 	sandbox := &SandboxConfig{Mode: mode, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	container := &mockContainer{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger), duckDB
 }

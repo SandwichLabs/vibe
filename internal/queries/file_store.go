@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/sandwich-labs/vibe-app/internal/jsonenc"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
@@ -92,16 +93,14 @@ func Encode(q Query) ([]byte, error) {
 	if len(h.Parameters) == 0 {
 		h.Parameters = nil
 	}
-	var hb bytes.Buffer
-	enc := json.NewEncoder(&hb)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(h); err != nil {
+	hb, err := jsonenc.Encode(h, "")
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode query header: %w", err)
 	}
 	body := strings.TrimRight(strings.ReplaceAll(q.SQL, "\r\n", "\n"), "\n")
 	var out bytes.Buffer
 	out.WriteString(HeaderPrefix + " ")
-	out.Write(bytes.TrimRight(hb.Bytes(), "\n"))
+	out.Write(bytes.TrimRight(hb, "\n"))
 	out.WriteString("\n")
 	out.WriteString(body)
 	out.WriteString("\n")

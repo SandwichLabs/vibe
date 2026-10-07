@@ -181,16 +181,6 @@ func LegacyConfigPath() string {
 	return ""
 }
 
-// MetaKeys defines the required keys in _vibe_meta.
-var MetaKeys = []string{
-	"version",
-	"format_version",
-	"created_at",
-	"updated_at",
-	"title",
-	"description",
-}
-
 // FormatVersion is the current .vibe format version.
 const FormatVersion = "1.0.0"
 

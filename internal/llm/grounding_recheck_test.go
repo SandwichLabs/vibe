@@ -21,20 +21,16 @@ import (
 // newRealDuckDBHandlerForLLM builds a real agents.Handler wired to a REAL
 // DuckDB connection, optionally with a table "t" (id INTEGER) holding 3
 // rows when withTable is true — grounding recheck tests need actual SQL
-// execution (run_query/introspect_schema), which the SQLite-backed
+// execution (run_query/introspect_schema), which the plain
 // mockEngine/mockContainer test doubles elsewhere in this package can't
 // satisfy (see internal/agents' identical caveat). withTable=false gives a
 // real, CONFIRMED-empty DuckDB — hasAnyTables must see a genuine, successful
 // "zero tables" result, not an error from querying information_schema
-// against the wrong engine (which newTestHandler's SQLite-as-DuckDB double
+// against the wrong engine (which newTestHandler's plain double
 // would produce, and which maybeGroundText treats as "uncertain, so check
 // anyway" — the wrong fixture for testing the "no tables" skip specifically).
 func newRealDuckDBHandlerForLLM(t *testing.T, withTable bool) *agents.Handler {
 	t.Helper()
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-
 	duckDB, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = duckDB.Close() })
@@ -46,7 +42,7 @@ func newRealDuckDBHandlerForLLM(t *testing.T, withTable bool) *agents.Handler {
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	container := &mockContainer{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return agents.NewHandler(container, eng, sandbox, logger)
 }
@@ -114,7 +110,7 @@ func newTestHandlerWithTable(t *testing.T) *agents.Handler {
 
 // newTestHandlerNoTables is a real, CONFIRMED-empty DuckDB handler — see
 // newRealDuckDBHandlerForLLM's doc comment for why this must be a real
-// DuckDB with zero tables, not the SQLite-backed newTestHandler.
+// DuckDB with zero tables, not the plain newTestHandler.
 func newTestHandlerNoTables(t *testing.T) *agents.Handler {
 	t.Helper()
 	return newRealDuckDBHandlerForLLM(t, false)

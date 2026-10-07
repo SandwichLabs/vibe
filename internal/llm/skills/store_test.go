@@ -2,14 +2,12 @@ package skills
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -186,43 +184,36 @@ func TestFileStore_SymlinkedSkillDirIsNotFollowedOutside(t *testing.T) {
 	assert.Contains(t, string(data), "secret")
 }
 
-func TestSQLiteStore(t *testing.T) {
-	ctx := context.Background()
-	db, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.Exec(`CREATE TABLE _vibe_skills (
-		name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '',
-		instructions TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '',
-		source TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL DEFAULT '',
-		updated_at TEXT NOT NULL DEFAULT '')`)
-	require.NoError(t, err)
+// TestStore_Contract is the behaviour every Store shares; it once ran against
+// the legacy _vibe_skills store.
+func TestStore_Contract(t *testing.T) {
+	for name, mk := range map[string]func(t *testing.T) Store{
+		"file": func(t *testing.T) Store { return NewFileStore(t.TempDir()) },
+		"mock": func(t *testing.T) Store { return &Mock{} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			s := mk(t)
+			l, err := s.List(ctx)
+			require.NoError(t, err)
+			assert.Empty(t, l, "an empty store lists empty")
 
-	s := NewSQLiteStore(db)
-	require.NoError(t, s.Put(ctx, &Stored{Name: "b", Description: "d", Instructions: "i", TableName: "t", Source: SourceImport}))
-	require.NoError(t, s.Put(ctx, &Stored{Name: "a", Description: "d", Instructions: "i"}))
-	list, err := s.List(ctx)
-	require.NoError(t, err)
-	require.Len(t, list, 2)
-	assert.Equal(t, "a", list[0].Name)
-	got, err := s.Get(ctx, "b")
-	require.NoError(t, err)
-	assert.Equal(t, SourceImport, got.Source)
-	assert.Equal(t, "t", got.TableName)
-	_, err = s.Get(ctx, "zzz")
-	assert.ErrorIs(t, err, ErrNotFound)
-	require.NoError(t, s.Delete(ctx, "a"))
-	require.NoError(t, s.Delete(ctx, "a"))
-
-	// No table (a very old file) and no db at all both list empty.
-	empty, _ := sql.Open("sqlite3", ":memory:")
-	t.Cleanup(func() { _ = empty.Close() })
-	l, err := NewSQLiteStore(empty).List(ctx)
-	require.NoError(t, err)
-	assert.Empty(t, l)
-	l, err = NewSQLiteStore(nil).List(ctx)
-	require.NoError(t, err)
-	assert.Empty(t, l)
+			require.NoError(t, s.Put(ctx, &Stored{Name: "b", Description: "d", Instructions: "i", TableName: "t", Source: SourceImport}))
+			require.NoError(t, s.Put(ctx, &Stored{Name: "a", Description: "d", Instructions: "i"}))
+			list, err := s.List(ctx)
+			require.NoError(t, err)
+			require.Len(t, list, 2)
+			assert.Equal(t, "a", list[0].Name)
+			got, err := s.Get(ctx, "b")
+			require.NoError(t, err)
+			assert.Equal(t, SourceImport, got.Source)
+			assert.Equal(t, "t", got.TableName)
+			_, err = s.Get(ctx, "zzz")
+			assert.ErrorIs(t, err, ErrNotFound)
+			require.NoError(t, s.Delete(ctx, "a"))
+			require.NoError(t, s.Delete(ctx, "a"))
+		})
+	}
 }
 
 func TestFileStore_ClaudeCodeSkillRoundTripsLosslessly(t *testing.T) {

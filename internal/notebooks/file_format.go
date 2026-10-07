@@ -1,9 +1,9 @@
 package notebooks
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
+
+	"github.com/sandwich-labs/vibe-app/internal/jsonenc"
 )
 
 // Extension is the notebook file extension.
@@ -40,14 +40,11 @@ func EncodeFile(nb Notebook) ([]byte, error) {
 // including inside values that marshal themselves (Cell, a2ui.Page) and so
 // were already escaped by encoding/json before the encoder saw them.
 func encodeJSONStable(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
+	b, err := jsonenc.Encode(v, "  ")
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode notebook: %w", err)
 	}
-	return unescapeHTML(buf.Bytes()), nil
+	return unescapeHTML(b), nil
 }
 
 // unescapeHTML rewrites the <, > and & escapes encoding/json

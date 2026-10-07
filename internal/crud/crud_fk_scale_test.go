@@ -103,7 +103,6 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 
 	ordersColTypes, err := crud.ColumnTypes(ddb, "orders")
 	require.NoError(t, err)
-	ordersMetas := map[string]crud.FieldMeta{} // no field metadata in a workspace
 	custColTypes, err := crud.ColumnTypes(ddb, "customers")
 	require.NoError(t, err)
 
@@ -113,7 +112,7 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 	for i := 1; i <= numPerRow; i++ {
 		tx, txErr := ddb.Begin()
 		require.NoError(t, txErr)
-		res, uErr := crud.UpdateRowTx(tx, ordersColTypes, ordersMetas, "orders", "id", i,
+		res, uErr := crud.UpdateRowTx(tx, ordersColTypes, "orders", "id", i,
 			map[string]any{"total": "9.99"})
 		require.NoError(t, uErr)
 		require.NotNil(t, res)

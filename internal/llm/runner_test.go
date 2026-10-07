@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"charm.land/fantasy"
-	_ "github.com/mutecomm/go-sqlcipher/v4" // SQLCipher driver registers "sqlite3"
+	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,27 +27,27 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
-// --- Test fixtures: a real *agents.Handler over an in-memory SQLite db, so
+// --- Test fixtures: a real *agents.Handler over an in-memory DuckDB db, so
 // tool dispatch (including sandbox gating) exercises the real production path
 // rather than a mock. This is the same pattern internal/agents/agents_test.go
 // uses for handler tests. ---
 
 // mockContainer's duckDB field is optional: when unset, DuckDBDB() falls
-// back to db (the existing SQLite-only test double every pre-#70 test in
-// this package relies on); grounding_recheck_test.go's
-// newRealDuckDBHandlerForLLM sets it to a real DuckDB connection, mirroring
-// internal/agents' identical mockContainer split (see its sql_classify_test.go).
+// back to db; grounding_recheck_test.go's newRealDuckDBHandlerForLLM sets it,
+// mirroring internal/agents' identical mockContainer split (see its
+// sql_classify_test.go). The content stores are in-memory Mocks.
 type mockContainer struct {
 	db     *sql.DB
 	duckDB *sql.DB
+
+	nbs notebooks.Mock
+	qs  queries.Mock
+	sks skills.Mock
 }
 
-func (m *mockContainer) SQLiteDB() *sql.DB          { return m.db }
-func (m *mockContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(m.db) }
-func (m *mockContainer) Queries() queries.Store {
-	return queries.NewRegistry(m.db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-}
-func (m *mockContainer) Skills() skills.Store { return skills.NewSQLiteStore(m.db) }
+func (m *mockContainer) Notebooks() notebooks.Store { return &m.nbs }
+func (m *mockContainer) Queries() queries.Store     { return &m.qs }
+func (m *mockContainer) Skills() skills.Store       { return &m.sks }
 
 func (m *mockContainer) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {
@@ -65,45 +65,23 @@ func (m *mockEngine) Execute(_ context.Context, _ string, _ map[string]any) (*en
 	}, nil
 }
 
-// newTestHandler builds a real agents.Handler over a fresh in-memory sqlite db
-// seeded with the internal tables the tools touch, at the given sandbox mode.
+// newTestHandler builds a real agents.Handler over a fresh in-memory DuckDB db
+// with in-memory content stores (and one stored skill), at the given sandbox mode.
 func newTestHandler(t *testing.T, mode agents.SandboxMode) *agents.Handler {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (
-			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
-			page_type TEXT NOT NULL DEFAULT 'markdown', sort_order INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}'
-		);
-		CREATE TABLE _vibe_queries (
-			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', sql TEXT NOT NULL DEFAULT '',
-			engine TEXT NOT NULL DEFAULT 'duckdb', parameters TEXT NOT NULL DEFAULT '{}',
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);
-		CREATE TABLE _vibe_skills (
-			name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '',
-			table_name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user',
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);
-		CREATE TABLE _vibe_notebooks (
-			id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cells TEXT NOT NULL DEFAULT '[]',
-			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
-		);
-		INSERT INTO _vibe_pages (id, title, content, created_at, updated_at)
-			VALUES ('p1', 'Sales dashboard', '# Sales', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
-		INSERT INTO _vibe_skills (name, description, instructions, created_at, updated_at)
-			VALUES ('sales-dashboard', 'Sales dashboard', '# Sales', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
-	`)
-	require.NoError(t, err)
+	container := &mockContainer{db: db}
+	require.NoError(t, container.Skills().Put(context.Background(), &skills.Stored{
+		Name: "sales-dashboard", Description: "Sales dashboard", Instructions: "# Sales", Source: skills.SourceUser,
+	}))
 
 	sandbox := &agents.SandboxConfig{Mode: mode, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return agents.NewHandler(&mockContainer{db: db}, &mockEngine{}, sandbox, logger)
+	return agents.NewHandler(container, &mockEngine{}, sandbox, logger)
 }
 
 // --- Fake OpenAI-compatible LLM server driving the fantasy tool-calling loop ---
@@ -223,9 +201,9 @@ func TestSandboxReadOnly_DeniesWriteTool_IdenticallyAcrossEntryPoints(t *testing
 
 func TestChat_ToolCallingLoop_ListSkills(t *testing.T) {
 	// introspect_schema/describe_table query DuckDB's information_schema,
-	// which the sqlite-backed test double can't satisfy (see
+	// which the plain test double does not seed (see
 	// internal/agents/agents_test.go's identical caveat); list_skills only
-	// touches the SQLite-side _vibe_skills table, so it exercises the full
+	// touches the skills store, so it exercises the full
 	// tool-calling loop end to end.
 	srv := fakeLLMServer(t, "list_skills", "{}", "You have a Sales dashboard skill.")
 	defer srv.Close()

@@ -34,9 +34,6 @@ func Scheme(u string) string {
 	return ""
 }
 
-// IsURL reports whether s looks like a URL at all (has "://").
-func IsURL(s string) bool { return strings.Contains(s, "://") }
-
 // Validate returns an error unless u is a plain storage URL (see the package
 // comment) with something after the scheme.
 func Validate(u string) error { return validate(u, false) }
@@ -145,6 +142,3 @@ func AzureAccount(u string) (string, error) {
 	}
 	return "", fmt.Errorf("%q is not an Azure URL", u)
 }
-
-// ValidAzureAccount reports whether s is a storage account name.
-func ValidAzureAccount(s string) bool { return azAccountRE.MatchString(s) }

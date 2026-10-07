@@ -25,9 +25,9 @@ type ContainerAccess interface {
 	// Session is the catalog-aware DuckDB hub over DuckDBDB. Introspection
 	// goes through it so no tool assumes the default catalog is "main".
 	Session() session.Session
-	// Notebooks, Queries and Skills are the content stores: file-backed in a
-	// workspace, the legacy _vibe_* tables in a .vibe container. The agent
-	// never touches the container's SQLite handle.
+	// Notebooks, Queries and Skills are the content stores: file-backed in the
+	// workspace folder (notebooks/, queries/, skills/). The agent never
+	// touches the files directly.
 	Notebooks() notebooks.Store
 	Queries() queries.Store
 	Skills() skills.Store
@@ -336,9 +336,7 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 	// all depends on classifying the SQL text, not just its "data" category.
 	if isWriteOperation(tool.Category) && req.Method != "run_query" {
 		var nonLocal []string
-		if t, ok, err := h.toolTarget(ctx, req); err != nil {
-			return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
-		} else if ok {
+		if t, ok := h.toolTarget(ctx, req); ok {
 			// Three-gate writes (#116): the tier allowed the tool above; the
 			// target connection must be writable; and anything that is not a
 			// local file is always approved by the person.

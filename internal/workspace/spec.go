@@ -21,10 +21,7 @@ func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec
 	for _, f := range opts {
 		f(&o)
 	}
-	resolver := o.resolver
-	if resolver == nil {
-		resolver = ws.Resolver()
-	}
+	resolver := ws.Resolver()
 	var c Connection
 	found := false
 	for _, x := range ws.Connections() {
@@ -37,7 +34,7 @@ func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec
 	}
 	rc, err := ResolveConnection(ws, c, o.lookup)
 	if err != nil {
-		return session.Spec{}, fmt.Errorf("%s", redactBasic(err.Error()))
+		return session.Spec{}, fmt.Errorf("%s", secrets.RedactPatterns(err.Error()))
 	}
 	resolved := rc.Resolved
 	if resolved.Type == "motherduck" && resolved.ReadOnly != nil && *resolved.ReadOnly {
@@ -56,7 +53,7 @@ func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec
 		spec.Path = rc.Path
 	} else if resolved.Type != "" {
 		if err := connections.Validate(cdef); err != nil {
-			return session.Spec{}, fmt.Errorf("%s", redactBasic(err.Error()))
+			return session.Spec{}, fmt.Errorf("%s", secrets.RedactPatterns(err.Error()))
 		}
 	}
 	if connections.NeedsCredential(resolved.Type) {

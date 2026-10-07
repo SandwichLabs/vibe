@@ -8,12 +8,11 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/queries"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
-	"io"
 	"log/slog"
 	"os"
 	"testing"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4"
+	_ "github.com/marcboeker/go-duckdb/v2"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/llm"
@@ -23,15 +22,16 @@ import (
 
 type mockContainer struct {
 	db *sql.DB
+
+	nbs notebooks.Mock
+	qs  queries.Mock
+	sks skills.Mock
 }
 
-func (m *mockContainer) SQLiteDB() *sql.DB          { return m.db }
 func (m *mockContainer) DuckDBDB() *sql.DB          { return m.db }
-func (m *mockContainer) Notebooks() notebooks.Store { return notebooks.NewSQLiteStore(m.db) }
-func (m *mockContainer) Queries() queries.Store {
-	return queries.NewRegistry(m.db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-}
-func (m *mockContainer) Skills() skills.Store { return skills.NewSQLiteStore(m.db) }
+func (m *mockContainer) Notebooks() notebooks.Store { return &m.nbs }
+func (m *mockContainer) Queries() queries.Store     { return &m.qs }
+func (m *mockContainer) Skills() skills.Store       { return &m.sks }
 
 type mockEngine struct{}
 
@@ -43,15 +43,9 @@ func (m *mockEngine) Execute(_ context.Context, sqlStr string, params map[string
 }
 
 func TestToolRegistration(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	defer db.Close()
-
-	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (name TEXT PRIMARY KEY, content TEXT);
-		CREATE TABLE _vibe_queries (name TEXT PRIMARY KEY, sql_text TEXT, engine TEXT);
-	`)
-	require.NoError(t, err)
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -84,15 +78,9 @@ func TestToolRegistration_SkillsToolsPresent(t *testing.T) {
 }
 
 func TestStartAndStop(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	defer db.Close()
-
-	_, err = db.Exec(`
-		CREATE TABLE _vibe_pages (name TEXT PRIMARY KEY, content TEXT);
-		CREATE TABLE _vibe_queries (name TEXT PRIMARY KEY, sql_text TEXT, engine TEXT);
-	`)
-	require.NoError(t, err)
 
 	sandbox := &agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

@@ -22,7 +22,13 @@ func Fingerprint(d ConnectionDef) string {
 	// path (file connections), region and every option (endpoint, url_style,
 	// hostaddr, sslmode, account, ...). Erring towards inclusion is the safe
 	// side: a spurious change only asks the person to sign in again.
-	parts := []string{
+	keys := make([]string, 0, len(d.Options))
+	for k := range d.Options {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, 8+len(keys))
+	parts = append(parts,
 		"vibe-conn-v2",
 		strings.ToLower(strings.TrimSpace(d.Type)),
 		strings.ToLower(strings.TrimSpace(d.Host)),
@@ -31,12 +37,7 @@ func Fingerprint(d ConnectionDef) string {
 		strings.TrimSpace(d.Scope),
 		strings.TrimSpace(d.Path),
 		strings.ToLower(strings.TrimSpace(d.Region)),
-	}
-	keys := make([]string, 0, len(d.Options))
-	for k := range d.Options {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	)
 	for _, k := range keys {
 		parts = append(parts, "opt:"+strings.ToLower(k)+"="+strings.TrimSpace(d.Options[k]))
 	}

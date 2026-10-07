@@ -81,7 +81,7 @@ func writeGates(targets []sqlTarget) (nonLocal []string, err error) {
 // table or name parameter (qualified catalog.schema.table, or the default
 // connection). ok is false for tools that write no table, and when there is no
 // session to ask (the handler then refuses the unresolvable name itself).
-func (h *Handler) toolTarget(ctx context.Context, req *Request) (sqlTarget, bool, error) {
+func (h *Handler) toolTarget(ctx context.Context, req *Request) (sqlTarget, bool) {
 	param := ""
 	switch req.Method {
 	case "create_record", "update_record", "delete_record", "bulk_insert", "add_column", "import_csv":
@@ -89,22 +89,22 @@ func (h *Handler) toolTarget(ctx context.Context, req *Request) (sqlTarget, bool
 	case "create_table", "drop_table":
 		param = "name"
 	default:
-		return sqlTarget{}, false, nil
+		return sqlTarget{}, false
 	}
 	name, _ := req.Params[param].(string)
 	sess := h.container.Session()
 	if sess == nil || strings.TrimSpace(name) == "" {
-		return sqlTarget{}, false, nil
+		return sqlTarget{}, false
 	}
 	ref, err := session.ParseTableRef(name)
 	if err != nil {
-		return sqlTarget{}, false, nil
+		return sqlTarget{}, false
 	}
 	r, err := sess.Resolve(ctx, ref)
 	if err != nil {
-		return sqlTarget{}, false, nil
+		return sqlTarget{}, false
 	}
-	return h.catalogTarget(ctx, sess, r.Catalog), true, nil
+	return h.catalogTarget(ctx, sess, r.Catalog), true
 }
 
 // catalogTarget builds the write target for an attached catalog.

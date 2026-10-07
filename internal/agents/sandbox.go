@@ -14,43 +14,15 @@ const (
 	ModeFull      SandboxMode = "full"
 )
 
-// Per-file agent policy (#79). The policy's one home is this file — the
-// container package stays policy-free (container -> agents would be a
-// layering inversion), and every caller (cmd/mcp.go, studio/app.go) reads it
-// through ReadFilePolicy instead of re-deriving its own defaults.
-const (
-	// MetaKeySandbox is the _vibe_meta key holding the file's sandbox mode.
-	// Existing files (created before #79) already have this key stored, most
-	// commonly "full" — see ReadFilePolicy's doc comment for why a NEW file
-	// no longer seeds it.
-	MetaKeySandbox = "agent_sandbox"
-	// MetaKeyAskBeforeWrites is the _vibe_meta key holding whether the agent
-	// must get user approval before any write, on every surface (Studio chat
-	// and MCP alike — one tool surface, one gate, no second per-surface
-	// mode). Absent on every file that exists today, which is deliberate:
-	// ReadFilePolicy treats an absent key as "on".
-	MetaKeyAskBeforeWrites = "agent_ask_before_writes"
-	// DefaultSandboxMode is what a file with no stored MetaKeySandbox runs
-	// at. internal/container no longer seeds MetaKeySandbox on Create, so a
-	// brand-new file's mode comes from here, not from a literal duplicated
-	// in the schema.
-	DefaultSandboxMode = ModeReadWrite
-)
-
-// MetaReader is the read side of container.Container's Meta method — kept as
-// its own tiny interface here (rather than importing internal/container, a
-// layering inversion) so ReadFilePolicy can be called with the real
-// container, a test double, or nil.
-type MetaReader interface {
-	Meta(key string) (string, error)
-}
+// DefaultSandboxMode is the sandbox mode of a source that states none (no
+// PolicySource, or an empty one).
+const DefaultSandboxMode = ModeReadWrite
 
 // PolicySource supplies the agent's sandbox mode and ask-before-writes gate.
 // It is the one seam between the agent and wherever the policy lives (#109):
-// the legacy container feeds it from _vibe_meta (MetaPolicy), a workspace
-// feeds it from its effective policy (committed ceiling tightened by this
-// person's local setting; internal/workspace.Workspace.AgentPolicy implements
-// this interface as is). Implementations return plain values so the source
+// a workspace feeds it from its effective policy (committed ceiling tightened
+// by this person's local setting; internal/workspace.Workspace.AgentPolicy
+// implements this interface as is). Implementations return plain values so the source
 // never imports this package.
 type PolicySource interface {
 	// AgentPolicy returns the sandbox mode string (read-only, read-write or
@@ -58,19 +30,8 @@ type PolicySource interface {
 	AgentPolicy() (sandbox string, askBeforeWrites bool)
 }
 
-// MetaPolicy is the PolicySource over a legacy file's _vibe_meta keys. A nil
-// reader yields the defaults.
-func MetaPolicy(m MetaReader) PolicySource { return metaPolicy{m: m} }
-
-type metaPolicy struct{ m MetaReader }
-
-func (p metaPolicy) AgentPolicy() (string, bool) {
-	fp := ReadFilePolicy(p.m)
-	return string(fp.Mode), fp.AskBeforeWrites
-}
-
 // PolicyFrom resolves a FilePolicy from any source, failing closed exactly
-// like ReadFilePolicy: an unrecognised sandbox string becomes read-only, never
+// closed: an unrecognised sandbox string becomes read-only, never
 // the default, and a nil source yields the defaults.
 func PolicyFrom(src PolicySource) FilePolicy {
 	policy := FilePolicy{Mode: DefaultSandboxMode, AskBeforeWrites: true}
@@ -95,43 +56,10 @@ type FilePolicy struct {
 	AskBeforeWrites bool
 }
 
-// ReadFilePolicy resolves a file's agent policy from its stored _vibe_meta
-// keys, failing closed on anything unexpected:
-//   - MetaKeySandbox absent, or the reader errors reading it -> DefaultSandboxMode.
-//   - MetaKeySandbox present but not one of the three known mode strings ->
-//     ModeReadOnly (the most restrictive), NOT DefaultSandboxMode — an
-//     unrecognized value is corruption or a future format, not "unset", and
-//     the Settings UI should show the user the (safe) truth rather than
-//     silently substituting a permissive default.
-//   - MetaKeyAskBeforeWrites absent, errors, or anything other than the
-//     exact string "false" -> true. This is the deliberate part of #79: a
-//     panel-era file that already has agent_sandbox="full" stored keeps
-//     that mode (no migration touches it — additive-migrations policy), but
-//     since it has no agent_ask_before_writes key at all, it now asks
-//     first. That's the only way to make those existing files safe without
-//     silently downgrading their stored mode.
-func ReadFilePolicy(m MetaReader) FilePolicy {
-	policy := FilePolicy{Mode: DefaultSandboxMode, AskBeforeWrites: true}
-	if m == nil {
-		return policy
-	}
-	if raw, err := m.Meta(MetaKeySandbox); err == nil {
-		if mode, perr := ParseSandboxMode(raw); perr == nil {
-			policy.Mode = mode
-		} else {
-			policy.Mode = ModeReadOnly
-		}
-	}
-	if raw, err := m.Meta(MetaKeyAskBeforeWrites); err == nil && raw == "false" {
-		policy.AskBeforeWrites = false
-	}
-	return policy
-}
-
 // ParseSandboxMode strictly parses s as one of the three known sandbox mode
 // strings, for callers that must reject anything else outright (SetAgentConfig,
-// the --sandbox flag) rather than fail closed the way ReadFilePolicy does for
-// an already-stored, possibly-stale value.
+// the --sandbox flag) rather than fail closed the way PolicyFrom does for
+// a possibly-stale value.
 func ParseSandboxMode(s string) (SandboxMode, error) {
 	switch SandboxMode(s) {
 	case ModeReadOnly, ModeReadWrite, ModeFull:
@@ -184,14 +112,6 @@ type SandboxConfig struct {
 	MaxQueryRows      int
 	RequireApproval   bool
 	BlockedOperations []string
-}
-
-// DefaultSandboxConfig returns a sandbox config with read-only defaults.
-func DefaultSandboxConfig() SandboxConfig {
-	return SandboxConfig{
-		Mode:         ModeReadOnly,
-		MaxQueryRows: 1000,
-	}
 }
 
 // categoryPermissions maps sandbox modes to the set of allowed tool categories.

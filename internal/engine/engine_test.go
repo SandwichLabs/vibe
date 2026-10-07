@@ -7,14 +7,13 @@ import (
 	"log/slog"
 	"testing"
 
-	_ "github.com/mutecomm/go-sqlcipher/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { db.Close() })
 	return db
@@ -167,20 +166,20 @@ func TestManager_NilDuckDB(t *testing.T) {
 }
 
 func TestManager_WithDuckDB(t *testing.T) {
-	// Use in-memory SQLite as a stand-in for DuckDB in tests.
+	// An in-memory DuckDB handle.
 	duckDB := openTestDB(t)
 	m := NewManager(sessiontest.ForTests(duckDB))
 
 	assert.NotNil(t, m.duckdb)
 }
 
-// --- SQLite engine integration tests ---
+// --- DuckDB engine integration tests ---
 
-func TestSQLiteEngine_Execute(t *testing.T) {
+func TestDuckDBEngine_Execute(t *testing.T) {
 	db := openTestDB(t)
 	seedTestDB(t, db)
 
-	eng := NewSQLiteEngine(db, false)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 	ctx := context.Background()
 
 	rs, err := eng.Execute(ctx, "SELECT id, name, email FROM customers ORDER BY id", nil)
@@ -191,16 +190,16 @@ func TestSQLiteEngine_Execute(t *testing.T) {
 	assert.Equal(t, "name", rs.Columns[1].Name)
 	assert.Equal(t, "email", rs.Columns[2].Name)
 
-	assert.Equal(t, int64(1), rs.Value(0, 0))
+	assert.Equal(t, int32(1), rs.Value(0, 0)) // DuckDB INTEGER
 	assert.Equal(t, "Alice", rs.Value(0, 1))
 	assert.Equal(t, "alice@example.com", rs.Value(0, 2))
 }
 
-func TestSQLiteEngine_ExecuteWithParams(t *testing.T) {
+func TestDuckDBEngine_ExecuteWithParams(t *testing.T) {
 	db := openTestDB(t)
 	seedTestDB(t, db)
 
-	eng := NewSQLiteEngine(db, false)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 	ctx := context.Background()
 
 	rs, err := eng.Execute(ctx, "SELECT name FROM customers WHERE id = $customer_id", map[string]any{
@@ -264,8 +263,8 @@ func TestManager_ExecuteCapped(t *testing.T) {
 	assert.Equal(t, 6000, total)
 }
 
-func TestSQLiteEngine_Close(t *testing.T) {
+func TestDuckDBEngine_Close(t *testing.T) {
 	db := openTestDB(t)
-	eng := NewSQLiteEngine(db, false)
+	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 	assert.NoError(t, eng.Close())
 }

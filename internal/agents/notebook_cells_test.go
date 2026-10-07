@@ -13,22 +13,12 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 )
 
-// newNotebookTestHandler builds a newRealDuckDBHandler fixture and adds
-// _vibe_notebooks on its SQLite side — sql_classify_test.go's helper seeds
-// _vibe_pages/_vibe_queries but not this table, since no test needed it
-// before #66 part B.
-func newNotebookTestHandler(t *testing.T, mode SandboxMode) (*Handler, notebooks.DB) {
+// newNotebookTestHandler builds a newRealDuckDBHandler fixture and returns the
+// notebooks.Store behind it (the in-memory Mock) alongside the handler.
+func newNotebookTestHandler(t *testing.T, mode SandboxMode) (*Handler, notebooks.Store) {
 	t.Helper()
-	handler, duckDB := newRealDuckDBHandler(t, mode)
-	mc, _ := handler.container.(*mockContainer)
-	sqliteDB := mc.SQLiteDB()
-	_, err := sqliteDB.Exec(`CREATE TABLE _vibe_notebooks (
-		id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cells TEXT NOT NULL DEFAULT '[]',
-		created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
-	)`)
-	require.NoError(t, err)
-	_ = duckDB
-	return handler, sqliteDB
+	handler, _ := newRealDuckDBHandler(t, mode)
+	return handler, handler.container.Notebooks()
 }
 
 // TestHandler_ConcurrentAddQueryCellDispatch_Race exercises the long-lived
@@ -37,8 +27,9 @@ func newNotebookTestHandler(t *testing.T, mode SandboxMode) (*Handler, notebooks
 // concurrently on the SAME Handler — the exact shape of the review's finding
 // 8 data race. Run with -race.
 func TestHandler_ConcurrentAddQueryCellDispatch_Race(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
-	nb, err := notebooks.Create(db, "Target")
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Target")
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -71,7 +62,8 @@ func TestAddQueryCell_RejectsWriteSQL(t *testing.T) {
 }
 
 func TestAddQueryCell_CreatesNewNotebookWhenNoneActive(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
 
 	resp := handler.Handle(context.Background(), &Request{
 		JSONRPC: "2.0", ID: "1", Method: "add_query_cell",
@@ -83,7 +75,7 @@ func TestAddQueryCell_CreatesNewNotebookWhenNoneActive(t *testing.T) {
 	require.NotEmpty(t, nbID)
 	assert.Equal(t, "All rows", result["title"], "a new notebook is titled from the cell label when none is open")
 
-	nb, _, err := notebooks.Get(db, nbID)
+	nb, _, err := nbs.Get(ctx, nbID)
 	require.NoError(t, err)
 	require.Len(t, nb.Cells, 1)
 	assert.Equal(t, notebooks.CellSQL, nb.Cells[0].Type)
@@ -91,15 +83,16 @@ func TestAddQueryCell_CreatesNewNotebookWhenNoneActive(t *testing.T) {
 }
 
 func TestAddQueryCell_AppendsToActiveNotebookWithoutClobberingExistingCells(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
 
-	existing, err := notebooks.Create(db, "My notebook")
+	existing, err := nbs.Create(ctx, "My notebook")
 	require.NoError(t, err)
 	cell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	cell.Source = "# Notes\n\nUnsaved-in-spirit prior content."
 	existing.Cells = append(existing.Cells, cell)
-	saved, _, err := notebooks.Insert(db, existing)
+	saved, _, err := nbs.Insert(ctx, existing)
 	require.NoError(t, err)
 
 	handler.SetActiveNotebook(saved.ID)
@@ -111,7 +104,7 @@ func TestAddQueryCell_AppendsToActiveNotebookWithoutClobberingExistingCells(t *t
 	result, _ := resp.Result.(map[string]any)
 	assert.Equal(t, saved.ID, result["notebook_id"], "must append to the active notebook, not create a new one")
 
-	nb, _, err := notebooks.Get(db, saved.ID)
+	nb, _, err := nbs.Get(ctx, saved.ID)
 	require.NoError(t, err)
 	require.Len(t, nb.Cells, 2, "the pre-existing cell must survive the append")
 	assert.Equal(t, notebooks.CellMarkdown, nb.Cells[0].Type)
@@ -119,13 +112,14 @@ func TestAddQueryCell_AppendsToActiveNotebookWithoutClobberingExistingCells(t *t
 }
 
 func TestAddQueryCell_ExplicitNotebookIDOverridesActive(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
 
-	active, err := notebooks.Create(db, "Active")
+	active, err := nbs.Create(ctx, "Active")
 	require.NoError(t, err)
 	handler.SetActiveNotebook(active.ID)
 
-	other, err := notebooks.Create(db, "Other")
+	other, err := nbs.Create(ctx, "Other")
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -149,7 +143,8 @@ func TestCreateDashboard_RejectsInvalidPage(t *testing.T) {
 }
 
 func TestCreateDashboard_AppendsA2UICell(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
 
 	page := map[string]any{
 		"title": "Revenue overview",
@@ -166,7 +161,7 @@ func TestCreateDashboard_AppendsA2UICell(t *testing.T) {
 	nbID, _ := result["notebook_id"].(string)
 	assert.Equal(t, "Revenue overview", result["title"], "a new notebook is titled from page.title when none is open")
 
-	nb, _, err := notebooks.Get(db, nbID)
+	nb, _, err := nbs.Get(ctx, nbID)
 	require.NoError(t, err)
 	require.Len(t, nb.Cells, 1)
 	assert.Equal(t, notebooks.CellA2UI, nb.Cells[0].Type)
@@ -175,13 +170,14 @@ func TestCreateDashboard_AppendsA2UICell(t *testing.T) {
 }
 
 func TestListNotebooks_ReturnsEveryNotebook(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeReadOnly)
-	nb, err := notebooks.Create(db, "Sales")
+	handler, nbs := newNotebookTestHandler(t, ModeReadOnly)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Sales")
 	require.NoError(t, err)
 	cell, err := notebooks.NewCell(notebooks.CellSQL)
 	require.NoError(t, err)
 	cell.Source = "SELECT 1"
-	_, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, cell)
+	_, _, err = saveWithNewCell(ctx, nbs, nb, cell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -196,21 +192,22 @@ func TestListNotebooks_ReturnsEveryNotebook(t *testing.T) {
 }
 
 func TestGetNotebook_ReturnsCellSourcesAsData(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeReadOnly)
-	nb, err := notebooks.Create(db, "Sales")
+	handler, nbs := newNotebookTestHandler(t, ModeReadOnly)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Sales")
 	require.NoError(t, err)
 
 	sqlCell, err := notebooks.NewCell(notebooks.CellSQL)
 	require.NoError(t, err)
 	sqlCell.Source = "SELECT 1 AS one"
 	sqlCell.Label = "one"
-	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, sqlCell)
+	nb, _, err = saveWithNewCell(ctx, nbs, nb, sqlCell)
 	require.NoError(t, err)
 
 	mdCell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	mdCell.Source = "# Hello"
-	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, mdCell)
+	nb, _, err = saveWithNewCell(ctx, nbs, nb, mdCell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -240,14 +237,15 @@ func TestGetNotebook_UnknownIDIsInvalidParams(t *testing.T) {
 }
 
 func TestGetNotebook_TruncatesLongSource(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeReadOnly)
-	nb, err := notebooks.Create(db, "Big")
+	handler, nbs := newNotebookTestHandler(t, ModeReadOnly)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Big")
 	require.NoError(t, err)
 
 	mdCell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	mdCell.Source = strings.Repeat("x", notebookCellSourceBudgetRunes+500)
-	nb, _, err = saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, mdCell)
+	nb, _, err = saveWithNewCell(ctx, nbs, nb, mdCell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -264,8 +262,9 @@ func TestGetNotebook_TruncatesLongSource(t *testing.T) {
 }
 
 func TestGetNotebook_A2UICellSummarizedNotRendered(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
-	nb, err := notebooks.Create(db, "Dash")
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Dash")
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{
@@ -305,8 +304,9 @@ func TestGetNotebook_A2UICellSummarizedNotRendered(t *testing.T) {
 // to the 500-cell cap) can't blow the same context/UI-event budget a giant
 // run_query result would.
 func TestGetNotebook_CapsTotalOutputAtRowResultBudget(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
-	nb, err := notebooks.Create(db, "Big notebook")
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Big notebook")
 	require.NoError(t, err)
 
 	// 500 markdown cells, each ~200 bytes of source — well over
@@ -321,7 +321,7 @@ func TestGetNotebook_CapsTotalOutputAtRowResultBudget(t *testing.T) {
 	}
 	raw, err := json.Marshal(nb)
 	require.NoError(t, err)
-	saved, _, err := notebooks.Save(db, raw)
+	saved, _, err := nbs.Save(ctx, raw)
 	require.NoError(t, err)
 	require.Len(t, saved.Cells, 500, "all 500 cells must survive Coerce (the cap is exactly 500)")
 
@@ -345,13 +345,14 @@ func TestGetNotebook_CapsTotalOutputAtRowResultBudget(t *testing.T) {
 // TestGetNotebook_NoTruncatedFieldWhenEverythingFits asserts a small
 // notebook (well under the budget) gets no "truncated" field at all.
 func TestGetNotebook_NoTruncatedFieldWhenEverythingFits(t *testing.T) {
-	handler, db := newNotebookTestHandler(t, ModeFull)
-	nb, err := notebooks.Create(db, "Small notebook")
+	handler, nbs := newNotebookTestHandler(t, ModeFull)
+	ctx := context.Background()
+	nb, err := nbs.Create(ctx, "Small notebook")
 	require.NoError(t, err)
 	cell, err := notebooks.NewCell(notebooks.CellMarkdown)
 	require.NoError(t, err)
 	cell.Source = "hello"
-	saved, _, err := saveWithNewCell(context.Background(), notebooks.NewSQLiteStore(db), nb, cell)
+	saved, _, err := saveWithNewCell(ctx, nbs, nb, cell)
 	require.NoError(t, err)
 
 	resp := handler.Handle(context.Background(), &Request{

@@ -124,7 +124,7 @@ func isLockMessage(msg string) bool {
 
 // lockedMessage is the plain-language form of DuckDB's lock error for a local
 // connection: who has it, and what that means.
-func lockedMessage(root, name string) string {
+func lockedMessage(root string) string {
 	who := "another process"
 	if h, err := hub.ReadHolder(root); err == nil && h != nil {
 		who = h.String()
@@ -235,7 +235,7 @@ func (o *openedWorkspace) requireConnection(name string, errW io.Writer) error {
 	}
 	if i, ok := o.issueFor(name); ok {
 		if isLockMessage(i.Message) {
-			return fmt.Errorf("connection %s is %s", name, lockedMessage(o.WS.Root(), name))
+			return fmt.Errorf("connection %s is %s", name, lockedMessage(o.WS.Root()))
 		}
 		return fmt.Errorf("connection %s is not available: %s", name, i.Message)
 	}

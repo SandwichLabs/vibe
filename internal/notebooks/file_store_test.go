@@ -275,24 +275,6 @@ func TestUnescapeHTML(t *testing.T) {
 	assert.Equal(t, `"line\nbreak \"q\""`, string(unescapeHTML([]byte(`"line\nbreak \"q\""`))))
 }
 
-func TestSQLiteStore_ImplementsStore(t *testing.T) {
-	db := testDB(t)
-	var s Store = NewSQLiteStore(db)
-	ctx := context.Background()
-	nb, err := s.Create(ctx, "Legacy")
-	require.NoError(t, err)
-	got, _, err := s.Get(ctx, nb.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "Legacy", got.Title)
-	assert.Empty(t, got.Rev)
-	require.NoError(t, s.Rename(ctx, nb.ID, "Renamed"))
-	list, err := s.List(ctx)
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-	assert.Equal(t, "Renamed", list[0].Title)
-	require.NoError(t, s.Delete(ctx, nb.ID))
-}
-
 func TestFileStore_InvalidNamesAndOversizeFilesListWithError(t *testing.T) {
 	ctx := context.Background()
 	s, root := newFileStore(t)

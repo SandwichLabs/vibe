@@ -1,6 +1,6 @@
 // Package sessiontest builds Sessions for the tests of packages that depend on
-// one. It is for _test.go files only: production code must use session.New or
-// session.Wrap, which harden the instance and fail closed
+// one. It is for _test.go files only: production code must use session.New, which
+// hardens the instance and fails closed
 // (internal/session's TestUnhardenedOnlyUsedByTests enforces this).
 package sessiontest
 

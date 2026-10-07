@@ -61,9 +61,6 @@ func WithExtensionDirectory(dir string) Option { return func(c *config) { c.exte
 // silently ignores it (spike finding J).
 func WithSecretDirectory(dir string) Option { return func(c *config) { c.secretDir = dir } }
 
-// WithDefaultTimeout sets the default per-statement timeout (0 = none).
-func WithDefaultTimeout(d time.Duration) Option { return func(c *config) { c.defaultTO = d } }
-
 // WithDefaultRowCap sets the default Rows cap (0 = none).
 func WithDefaultRowCap(n int) Option { return func(c *config) { c.defaultRowCap = n } }
 

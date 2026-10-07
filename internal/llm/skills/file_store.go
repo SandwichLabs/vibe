@@ -176,18 +176,18 @@ func (s *FileStore) lastSeen(name string) string {
 	return s.seen[name]
 }
 
-func (s *FileStore) load(name string) (Stored, filestore.Stamp, error) {
+func (s *FileStore) load(name string) (Stored, error) {
 	data, st, err := filestore.Read(s.root, rel(name))
 	if err != nil {
-		return Stored{}, st, err
+		return Stored{}, err
 	}
 	sk, err := Decode(name, data)
 	if err != nil {
-		return Stored{}, st, err
+		return Stored{}, err
 	}
 	ts := st.ModTime.UTC().Format(time.RFC3339)
 	sk.CreatedAt, sk.UpdatedAt, sk.Rev = ts, ts, st.Rev()
-	return sk, st, nil
+	return sk, nil
 }
 
 // List implements Store. A skill directory that cannot be read as a skill is
@@ -209,7 +209,7 @@ func (s *FileStore) ListWithSkipped(ctx context.Context) ([]Stored, map[string]s
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		sk, _, err := s.load(d)
+		sk, err := s.load(d)
 		if err != nil {
 			skipped[d] = err.Error()
 			out = append(out, Stored{Name: d, Source: SourceUser, Error: err.Error()})
@@ -227,7 +227,7 @@ func (s *FileStore) Get(_ context.Context, name string) (*Stored, error) {
 	if !NamePattern.MatchString(name) {
 		return nil, fmt.Errorf("skill %q: %w", name, ErrNotFound)
 	}
-	sk, _, err := s.load(name)
+	sk, err := s.load(name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get skill %q: %w", name, err)
 	}
@@ -256,7 +256,7 @@ func (s *FileStore) Put(_ context.Context, st *Stored, opts ...PutOption) error 
 		// the frontmatter keys it does not know about: carry them over from
 		// what is on disk now. If that differs from what the caller saw, the
 		// compare-and-write below refuses the save anyway.
-		if cur, _, err := s.load(st.Name); err == nil {
+		if cur, err := s.load(st.Name); err == nil {
 			st.Front = cur.Front
 		}
 	}

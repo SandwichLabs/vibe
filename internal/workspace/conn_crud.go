@@ -335,7 +335,7 @@ func (w *workspace) migrateCredential(ctx context.Context, def ConnectionDef, fr
 	if kind, _, err := secrets.ParseMethod(method); err != nil || kind == "env" {
 		return nil
 	}
-	resolved, err := def.Resolve(w.opts.lookup, from)
+	resolved, err := def.Resolve(nil, from)
 	if err != nil {
 		return nil //nolint:nilerr // an unresolvable definition has no usable credential to move
 	}
@@ -402,7 +402,7 @@ func (w *workspace) setSignIn(name, method string, confirmed bool) error {
 	if err != nil {
 		return err
 	}
-	resolved, err := c.ConnectionDef.Resolve(w.opts.lookup, c.Scope)
+	resolved, err := c.ConnectionDef.Resolve(nil, c.Scope)
 	if err != nil {
 		return err
 	}
@@ -437,7 +437,7 @@ func (w *workspace) SetCredentials(ctx context.Context, name string, cred secret
 	if !connections.NeedsCredential(c.Type) {
 		return fmt.Errorf("%s connections have no credentials", c.Type)
 	}
-	resolved, err := c.ConnectionDef.Resolve(w.opts.lookup, c.Scope)
+	resolved, err := c.ConnectionDef.Resolve(nil, c.Scope)
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (w *workspace) CredentialStatus(ctx context.Context, name string) (secrets.
 	if err != nil {
 		return secrets.CredentialStatus{}, err
 	}
-	resolved, err := c.ConnectionDef.Resolve(w.opts.lookup, c.Scope)
+	resolved, err := c.ConnectionDef.Resolve(nil, c.Scope)
 	if err != nil {
 		return secrets.CredentialStatus{}, err
 	}

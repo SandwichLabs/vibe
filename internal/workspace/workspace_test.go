@@ -816,13 +816,14 @@ func copyDir(src, dst string) error {
 	})
 }
 
-func TestMockImplementsWorkspace(t *testing.T) {
-	var ws Workspace = &Mock{WSID: "x", Cfg: Config{Sandbox: SandboxReadOnly}}
-	assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox)
-	_, err := ws.Notebooks().Create(context.Background(), "t")
+func TestWorkspaceServesItsStores(t *testing.T) {
+	ws, _ := newWorkspace(t)
+	nb, err := ws.Notebooks().Create(context.Background(), "t")
 	require.NoError(t, err)
-	_, err = ws.Watch()
-	assert.Error(t, err)
+	got, _, err := ws.Notebooks().Get(context.Background(), nb.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "t", got.Title)
+	assert.NotEmpty(t, ws.Policy().Sandbox)
 }
 
 func uuidParse(s string) (string, error) {
@@ -832,10 +833,7 @@ func uuidParse(s string) (string, error) {
 
 // A workspace is an agents.PolicySource as is: #111 hands it to the handler
 // without an adapter.
-var (
-	_ agents.PolicySource = Workspace(nil)
-	_ agents.PolicySource = (*Mock)(nil)
-)
+var _ agents.PolicySource = Workspace(nil)
 
 // Review #109 blocker 3: a skill saved from a stale copy is a conflict, not a
 // silent clobber of whatever a git pull brought in meanwhile.
@@ -843,7 +841,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	ws, root := newWorkspace(t)
 	ctx := context.Background()
 	store := ws.Skills()
-	require.NoError(t, agents.SaveUserSkill(store, nil, "foo", "first", "v1 body", ""))
+	require.NoError(t, saveSkill(store, nil, "foo", "first", "v1 body", ""))
 
 	// Studio lists skills (and so learns each one's revision).
 	entries, err := agents.LoadSkills(store, nil, nil)
@@ -869,7 +867,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 
 	// Saving over an existing skill nothing has read (a fresh process) is also refused.
 	fresh := skills.NewFileStore(root)
-	err = agents.SaveUserSkill(fresh, nil, "foo", "x", "blind", "")
+	err = saveSkill(fresh, nil, "foo", "x", "blind", "")
 	assert.ErrorIs(t, err, skills.ErrConflict)
 
 	// The agent path: it listed the skill, then a pull changed it, then it saves.
@@ -877,19 +875,19 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	require.NoError(t, err)
 	_ = entries
 	require.NoError(t, os.WriteFile(p, []byte(strings.Replace(teammate, "TEAMMATE WORK", "SECOND PULL", 1)), 0o644))
-	err = agents.SaveUserSkill(store, nil, "foo", "agent", "agent body", "")
+	err = saveSkill(store, nil, "foo", "agent", "agent body", "")
 	assert.ErrorIs(t, err, skills.ErrConflict, "the store's last-seen revision is used without a refresh")
 
 	// Reload (list again) and the same save goes through, keeping unknown keys.
 	_, err = agents.LoadSkills(store, nil, nil)
 	require.NoError(t, err)
-	require.NoError(t, agents.SaveUserSkill(store, nil, "foo", "agent", "agent body", ""))
+	require.NoError(t, saveSkill(store, nil, "foo", "agent", "agent body", ""))
 	data, _ = os.ReadFile(p)
 	assert.Contains(t, string(data), "license: MIT", "unknown frontmatter keys survive an agent save")
 	assert.Contains(t, string(data), "agent body")
 
 	// A new skill is just created.
-	require.NoError(t, agents.SaveUserSkill(store, nil, "brand-new", "d", "body", ""))
+	require.NoError(t, saveSkill(store, nil, "brand-new", "d", "body", ""))
 	_, err = store.Get(ctx, "brand-new")
 	assert.NoError(t, err)
 }
@@ -1142,4 +1140,10 @@ func TestOpenNeverRewritesTheNonce(t *testing.T) {
 		assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox, "settings stay in force")
 		require.NoError(t, ws.Close())
 	}
+}
+
+// saveSkill is agents.SaveUserSkillAt with no revision check.
+func saveSkill(store skills.Store, sess session.Session, name, description, instructions, tableName string) error {
+	_, err := agents.SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
+	return err
 }

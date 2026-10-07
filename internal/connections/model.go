@@ -176,17 +176,13 @@ func TypeNames() []string {
 	return out
 }
 
-// Lookup returns a registered type ("duckdb" is not one: the session owns it).
-func Lookup(name string) (Type, bool) {
-	t, ok := registry[name]
-	return t, ok
-}
-
 // ListConnectionTypes returns the metadata of every connection type, duckdb
 // included, in a stable order, for form generation (#117).
 func ListConnectionTypes() []TypeInfo {
-	out := []TypeInfo{duckdbInfo()}
-	for _, n := range TypeNames() {
+	names := TypeNames()
+	out := make([]TypeInfo, 0, 1+len(names))
+	out = append(out, duckdbInfo())
+	for _, n := range names {
 		out = append(out, registry[n].Info())
 	}
 	return out

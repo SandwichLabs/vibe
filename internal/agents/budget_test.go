@@ -21,17 +21,13 @@ import (
 // MaxQueryRows cap first.
 func newRealDuckDBHandlerMaxRows(t *testing.T, maxRows int) *Handler {
 	t.Helper()
-	sqliteDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqliteDB.Close() })
-
 	duckDB, err := sql.Open("duckdb", "")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = duckDB.Close() })
 
 	sandbox := &SandboxConfig{Mode: ModeReadOnly, MaxQueryRows: maxRows}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	container := &mockContainer{db: sqliteDB, duckDB: duckDB}
+	container := &mockContainer{duckDB: duckDB}
 	eng := engine.NewManager(sessiontest.ForTests(duckDB), engine.WithLogger(logger))
 	return NewHandler(container, eng, sandbox, logger)
 }

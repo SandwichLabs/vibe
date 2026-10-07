@@ -151,12 +151,6 @@ type TableDescription struct {
 
 var pidRE = regexp.MustCompile(`\(PID (\d+)\)`)
 
-// Redact strips credential-shaped values from a DuckDB error or message
-// (spike #107: Postgres connect errors echo password='...' verbatim) before it
-// reaches a log, the UI or the agent. It knows patterns only; a Session's own
-// Redact also scrubs the secret values it has seen.
-func Redact(s string) string { return secrets.RedactPatterns(s) }
-
 // classifyAttachError maps a DuckDB ATTACH failure to a status.
 func classifyAttachError(err error, redact func(string) string) (StatusKind, string, int) {
 	msg := redact(err.Error())

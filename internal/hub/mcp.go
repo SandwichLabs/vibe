@@ -18,7 +18,6 @@ type MCPOption func(*mcpOptions)
 
 type mcpOptions struct {
 	logger   *slog.Logger
-	tighten  string
 	wrap     func(vibemcp.Handler) vibemcp.Handler
 	addr     string
 	handler  *agents.Handler
@@ -27,9 +26,6 @@ type mcpOptions struct {
 
 // WithMCPLogger sets the logger.
 func WithMCPLogger(l *slog.Logger) MCPOption { return func(o *mcpOptions) { o.logger = l } }
-
-// WithMCPSandbox tightens the workspace's policy (tighten-only).
-func WithMCPSandbox(mode string) MCPOption { return func(o *mcpOptions) { o.tighten = mode } }
 
 // WithMCPHandlerWrap wraps the tool handler, e.g. so Studio can take its own
 // lock around every call.
@@ -81,7 +77,7 @@ func StartWorkspaceMCP(ws workspace.Workspace, sess session.Session, hold *Hold,
 	h := o.handler
 	if h == nil {
 		var err error
-		h, m.policy, err = NewAgentHandler(ws, sess, o.tighten, o.logger)
+		h, m.policy, err = NewAgentHandler(ws, sess, "", o.logger)
 		if err != nil {
 			return nil, err
 		}
