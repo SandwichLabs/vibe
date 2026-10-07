@@ -35,6 +35,28 @@ export interface PendingApproval {
   error?: string
 }
 
+// errorHint says what to check for a failed agent turn, from the provider that
+// is configured now (read at the moment of the error, so a change in Settings
+// is already reflected). A local server or Ollama is a process that may not be
+// running; a cloud provider usually needs its key or model checked.
+export async function errorHint(): Promise<string> {
+  try {
+    const s = await window.go.main.App.GetLLMSettings()
+    if (s.provider === 'local' || s.provider === 'ollama') return `Is the model server at ${s.endpoint} running?`
+    return 'Check the API key and model in Settings \u2192 App.'
+  } catch {
+    return 'Check the model settings in Settings \u2192 App.'
+  }
+}
+
+// The Go side already prefixes "agent error: "; the panel adds its own.
+function stripPrefix(t: string): string { return String(t ?? '').replace(/^agent error:\s*/i, '') }
+
+async function addHint(msg: { role: string; text: string }) {
+  const hint = await errorHint()
+  if (msg.role === 'error' && !msg.text.includes(hint)) msg.text += ' ' + hint
+}
+
 export interface ToolStep {
   id?: string
   tool: string
@@ -259,7 +281,8 @@ export function useAgentChat() {
           break
         case 'error':
           agentMsg.role = 'error'
-          agentMsg.text = `Agent error: ${p.text}. Is the LLM server reachable?`
+          agentMsg.text = `Agent error: ${stripPrefix(p.text)}.`
+          void addHint(agentMsg)
           agentMsg.verifying = false
           break
         case 'verifying':
@@ -284,7 +307,8 @@ export function useAgentChat() {
     } catch (e: any) {
       const m = errorText(e)
       agentMsg.role = 'error'
-      agentMsg.text = `Agent error: ${m}. Is the LLM server reachable?`
+      agentMsg.text = `Agent error: ${stripPrefix(m)}.`
+      await addHint(agentMsg)
     } finally {
       agentMsg.streaming = false
       // Belt-and-suspenders (review fix, round 2): the "final"/"error" event

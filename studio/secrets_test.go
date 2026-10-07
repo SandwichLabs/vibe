@@ -38,14 +38,14 @@ func secretsApp(t *testing.T, cfgYAML string) (*App, *secrets.Mock, string) {
 func TestLLMKeyBindingsAreWriteOnly(t *testing.T) {
 	a, m, _ := secretsApp(t, "llm:\n  provider: anthropic\n")
 
-	st := a.GetLLMKeyStatus()
+	st := a.GetLLMKeyStatus("")
 	assert.Equal(t, "none", st.Source)
 	assert.False(t, st.Set)
 	assert.True(t, st.KeychainAvailable)
 
 	require.NoError(t, a.SetLLMKey("", studioNeedle))
 	assert.Equal(t, studioNeedle, a.llmAPIKey(), "the model client gets the key")
-	st = a.GetLLMKeyStatus()
+	st = a.GetLLMKeyStatus("")
 	assert.Equal(t, "keychain", st.Source)
 	assert.True(t, st.Set)
 	b, _ := json.Marshal(st)
@@ -55,7 +55,7 @@ func TestLLMKeyBindingsAreWriteOnly(t *testing.T) {
 
 	require.NoError(t, a.ClearLLMKey(""))
 	assert.Equal(t, "", a.llmAPIKey())
-	assert.Equal(t, "none", a.GetLLMKeyStatus().Source)
+	assert.Equal(t, "none", a.GetLLMKeyStatus("").Source)
 	for _, c := range m.Calls {
 		assert.NotContains(t, c, "NEEDLE")
 	}
@@ -70,14 +70,14 @@ func TestLLMKeyEnvWins(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "from-env")
 	a.keyCache.invalidate()
 	assert.Equal(t, "from-env", a.llmAPIKey())
-	assert.Equal(t, "env", a.GetLLMKeyStatus().Source)
+	assert.Equal(t, "env", a.GetLLMKeyStatus("").Source)
 }
 
 func TestLLMKeyMigration(t *testing.T) {
 	yaml := "# keep me\nllm:\n  provider: anthropic\n  api_key: " + studioNeedle + "\n"
 	a, _, cfgPath := secretsApp(t, yaml)
 
-	st := a.GetLLMKeyStatus()
+	st := a.GetLLMKeyStatus("")
 	assert.Equal(t, "file", st.Source)
 	assert.True(t, st.FileKey)
 	assert.True(t, st.CanMigrate)
@@ -87,7 +87,7 @@ func TestLLMKeyMigration(t *testing.T) {
 	assert.NotContains(t, string(got), "NEEDLE")
 	assert.Contains(t, string(got), "# keep me")
 
-	st = a.GetLLMKeyStatus()
+	st = a.GetLLMKeyStatus("")
 	assert.Equal(t, "keychain", st.Source)
 	assert.False(t, st.FileKey)
 	assert.False(t, st.CanMigrate)
@@ -100,7 +100,7 @@ func TestLLMKeyKeychainDown(t *testing.T) {
 	m.GetFn = func(context.Context, secrets.Ref) ([]byte, error) { return nil, secrets.ErrUnavailable }
 	m.SetFn = func(context.Context, secrets.Ref, []byte) error { return secrets.ErrUnavailable }
 
-	st := a.GetLLMKeyStatus()
+	st := a.GetLLMKeyStatus("")
 	assert.False(t, st.KeychainAvailable)
 	assert.False(t, st.CanMigrate, "no migration offer without a keychain")
 	assert.Equal(t, "file", st.Source, "the legacy value keeps working")
@@ -115,7 +115,7 @@ func TestLLMKeyKeychainDown(t *testing.T) {
 func TestMigrationAsksBeforeReplacingAKeychainKey(t *testing.T) {
 	a, _, _ := secretsApp(t, "llm:\n  provider: anthropic\n  api_key: "+studioNeedle+"\n")
 	require.NoError(t, a.SetLLMKey("", "already-in-keychain"))
-	st := a.GetLLMKeyStatus()
+	st := a.GetLLMKeyStatus("")
 	assert.True(t, st.KeychainHasKey)
 	require.Error(t, a.MigrateLLMKeyToKeychain(false))
 	assert.Equal(t, "already-in-keychain", a.llmAPIKey())
@@ -145,7 +145,7 @@ func TestInFlightResolveCannotRepopulateAfterClear(t *testing.T) {
 
 func TestLLMKeyBindings_OpenAI(t *testing.T) {
 	a, m, _ := secretsApp(t, "llm:\n  provider: openai\n")
-	st := a.GetLLMKeyStatus()
+	st := a.GetLLMKeyStatus("")
 	assert.Equal(t, "openai", st.Provider)
 	assert.False(t, st.Set)
 
@@ -156,7 +156,7 @@ func TestLLMKeyBindings_OpenAI(t *testing.T) {
 	assert.Equal(t, studioNeedle, string(got))
 	assert.Equal(t, studioNeedle, a.llmAPIKey())
 
-	st = a.GetLLMKeyStatus()
+	st = a.GetLLMKeyStatus("")
 	assert.True(t, st.Set)
 	assert.Equal(t, "keychain", st.Source)
 	raw, err := json.Marshal(st)
@@ -164,7 +164,7 @@ func TestLLMKeyBindings_OpenAI(t *testing.T) {
 	assert.NotContains(t, string(raw), studioNeedle)
 
 	require.NoError(t, a.ClearLLMKey("openai"))
-	assert.False(t, a.GetLLMKeyStatus().Set)
+	assert.False(t, a.GetLLMKeyStatus("").Set)
 
 	// An unknown provider is rejected, and the error never echoes a key.
 	err = a.SetLLMKey("openia", studioNeedle)
@@ -177,5 +177,5 @@ func TestLLMKeyBindings_OpenAIStandardEnv(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "from-openai-env")
 	a.keyCache.invalidate()
 	assert.Equal(t, "from-openai-env", a.llmAPIKey())
-	assert.Equal(t, "env", a.GetLLMKeyStatus().Source)
+	assert.Equal(t, "env", a.GetLLMKeyStatus("").Source)
 }

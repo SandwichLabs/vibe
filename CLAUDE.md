@@ -38,7 +38,7 @@ go test -v ./internal/workspace/   # one package
 
 Wails tasks pin `GOTOOLCHAIN` via `WAILS_GOTOOLCHAIN` in Taskfile.yml (Wails v2.11 can't load newer Go, #92). Run `wails` through `task`, or prefix `GOTOOLCHAIN=<that value>`.
 
-CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config`, `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
+CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 
 ## Architecture
 

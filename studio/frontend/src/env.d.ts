@@ -99,7 +99,10 @@ declare global {
           GetDashboard(): Promise<DashboardData>
           GetAgentConfig(): Promise<AgentConfig>
           ProbeKeychain(): Promise<KeychainProbe>
-          GetLLMKeyStatus(): Promise<LLMKeyStatus>
+          GetLLMKeyStatus(provider: string): Promise<LLMKeyStatus>
+          GetLLMSettings(): Promise<LLMSettingsView>
+          SetLLMSettings(s: LLMSettingsInput): Promise<void>
+          ListLLMModels(provider: string, endpoint: string): Promise<LLMModelList>
           SetLLMKey(provider: string, key: string): Promise<void>
           ClearLLMKey(provider: string): Promise<void>
           MigrateLLMKeyToKeychain(overwrite: boolean): Promise<void>
@@ -475,6 +478,44 @@ interface LLMKeyStatus {
   keychainAvailable: boolean
   keychainHasKey: boolean
   detail?: string
+}
+
+// Settings → App → "The agent's model" (app-global; no workspace needed).
+interface LLMProviderInfo {
+  id: string
+  label: string
+  description: string
+  needsKey: boolean
+  keyOptional: boolean
+  keyLabel: string
+  keyEnvVars: string[]
+  hasEndpoint: boolean
+  defaultEndpoint?: string
+  hasAccount: boolean
+  defaultModel: string
+  suggestedModels: string[]
+}
+
+interface LLMSettingsInput {
+  provider: string
+  model: string
+  endpoint: string
+  accountId: string
+  gateway: string
+}
+
+interface LLMSettingsView extends LLMSettingsInput {
+  effectiveModel: string
+  defaultModel: string
+  accountIdFromEnv: boolean
+  envOverrides: Record<string, string>
+  providers: LLMProviderInfo[]
+}
+
+interface LLMModelList {
+  models: string[] | null
+  error?: string
+  unreachable?: boolean
 }
 
 interface AgentConfig {

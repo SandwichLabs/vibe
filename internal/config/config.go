@@ -43,15 +43,23 @@ const (
 // VIBE_LLM_* environment variables. Cloud API keys are read from the standard
 // provider env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) when APIKey is unset.
 type LLMConfig struct {
-	Provider string `mapstructure:"provider"` // local | anthropic | openai | gemini
+	Provider string `mapstructure:"provider"` // local | ollama | openai | anthropic | gemini | cloudflare
 	Model    string `mapstructure:"model"`    // model id; empty = per-provider default
-	Endpoint string `mapstructure:"endpoint"` // base URL for the local (OpenAI-compatible) provider
-	APIKey   string `mapstructure:"api_key"`  // legacy: env or ~/.vibe.yaml value; use ResolveLLMKey (keychain aware)
+	Endpoint string `mapstructure:"endpoint"` // base URL for the local and ollama providers
+	// AccountID and Gateway are the Cloudflare AI Gateway account and optional
+	// gateway (cf-aig-gateway-id). Neither is secret.
+	AccountID string `mapstructure:"account_id"`
+	Gateway   string `mapstructure:"gateway"`
+	APIKey    string `mapstructure:"api_key"` // legacy: env or ~/.vibe.yaml value; use ResolveLLMKey (keychain aware)
 
 	// FileAPIKey is the plaintext llm.api_key found in ~/.vibe.yaml (legacy,
 	// read-only; #114 offers to move it into the keychain). Never set from the
 	// environment.
 	FileAPIKey string `mapstructure:"-"`
+
+	// AccountIDFromEnv is true when AccountID came from CLOUDFLARE_ACCOUNT_ID
+	// because llm.account_id is unset.
+	AccountIDFromEnv bool `mapstructure:"-"`
 }
 
 // WebConfig configures the embedded web preview server.
@@ -115,6 +123,8 @@ func Load() Config {
 	v.SetDefault("llm.provider", cfg.LLM.Provider)
 	v.SetDefault("llm.endpoint", cfg.LLM.Endpoint)
 	v.SetDefault("llm.model", cfg.LLM.Model)
+	v.SetDefault("llm.account_id", cfg.LLM.AccountID) // a default is what lets VIBE_LLM_ACCOUNT_ID reach Unmarshal
+	v.SetDefault("llm.gateway", cfg.LLM.Gateway)
 	v.SetDefault("llm.api_key", cfg.LLM.APIKey)
 
 	path := LegacyConfigPath()
@@ -154,21 +164,19 @@ func (l *LLMConfig) resolve() {
 		l.Provider = LLMProviderLocal
 	}
 	if l.APIKey == "" {
-		switch l.Provider {
-		case LLMProviderAnthropic:
-			l.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-		case LLMProviderOpenAI:
-			l.APIKey = os.Getenv("OPENAI_API_KEY")
-		case LLMProviderGemini:
-			if k := os.Getenv("GEMINI_API_KEY"); k != "" {
-				l.APIKey = k
-			} else {
-				l.APIKey = os.Getenv("GOOGLE_API_KEY")
-			}
+		l.APIKey = providerKeyEnv(l.Provider)
+	}
+	if l.AccountID == "" {
+		if id := strings.TrimSpace(os.Getenv("CLOUDFLARE_ACCOUNT_ID")); id != "" {
+			l.AccountID, l.AccountIDFromEnv = id, true
 		}
 	}
 	if l.Endpoint == "" {
 		l.Endpoint = DefaultLLMEndpoint
+	}
+	// llm.endpoint's built-in default is the local server's; Ollama has its own.
+	if l.Provider == LLMProviderOllama && l.Endpoint == DefaultLLMEndpoint {
+		l.Endpoint = DefaultOllamaEndpoint
 	}
 }
 

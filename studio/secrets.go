@@ -109,11 +109,29 @@ type LLMKeyStatus struct {
 	Detail         string `json:"detail,omitempty"`
 }
 
-// GetLLMKeyStatus reports the source of the agent's API key. Write-only
-// contract: set / clear / is-set, never read.
-func (a *App) GetLLMKeyStatus() LLMKeyStatus {
-	provider := a.llmSnapshot().Provider
-	_, src := a.llmKeyAndSource()
+// GetLLMKeyStatus reports the source of the agent's API key for provider ("" =
+// the configured one), so the form can show it for a provider being picked
+// before it is saved. Write-only contract: set / clear / is-set, never read.
+func (a *App) GetLLMKeyStatus(provider string) LLMKeyStatus {
+	snap := a.llmSnapshot()
+	var src config.KeySource
+	p, err := a.llmProviderFor(provider)
+	if err != nil {
+		p = snap.Provider // unknown: report the configured one
+	}
+	if p == snap.Provider {
+		provider = p
+		_, src = a.llmKeyAndSource()
+	} else {
+		// The provider being picked, not saved yet: resolve its key without
+		// touching the cache of the configured one.
+		provider = p
+		snap.Provider = p
+		snap.APIKey = ""
+		ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
+		_, src = config.ResolveLLMKey(ctx, a.secretStore(), snap)
+		cancel()
+	}
 	probe := a.ProbeKeychain()
 	st := LLMKeyStatus{
 		Provider:          provider,
@@ -139,8 +157,7 @@ func (a *App) llmProviderFor(provider string) (string, error) {
 	if provider == "" {
 		provider = a.llmSnapshot().Provider
 	}
-	switch provider {
-	case config.LLMProviderLocal, config.LLMProviderAnthropic, config.LLMProviderOpenAI, config.LLMProviderGemini:
+	if _, ok := config.LLMProvider(provider); ok {
 		return provider, nil
 	}
 	return "", fmt.Errorf("unknown provider %q", provider)

@@ -10,6 +10,7 @@ import {secrets} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
+import {config} from '../models';
 
 export function AgentChatStream(arg1:string,arg2:string,arg3:string,arg4:Array<main.AgentTurn>):Promise<main.AgentChatResult>;
 
@@ -91,7 +92,9 @@ export function GetDashboard():Promise<main.DashboardData>;
 
 export function GetInitialWorkspace():Promise<main.InitialWorkspace>;
 
-export function GetLLMKeyStatus():Promise<main.LLMKeyStatus>;
+export function GetLLMKeyStatus(arg1:string):Promise<main.LLMKeyStatus>;
+
+export function GetLLMSettings():Promise<main.LLMSettingsView>;
 
 export function GetMCPStatus():Promise<main.MCPStatus>;
 
@@ -136,6 +139,8 @@ export function ListConnectionTypes():Promise<Array<main.TypeSpec>>;
 export function ListConnections():Promise<main.ConnectionList>;
 
 export function ListExtensions():Promise<Array<main.ExtensionInfo>>;
+
+export function ListLLMModels(arg1:string,arg2:string):Promise<llm.ModelList>;
 
 export function ListNotebooks():Promise<Array<notebooks.Summary>>;
 
@@ -214,6 +219,8 @@ export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 export function SetConnectionCredentials(arg1:main.SetCredentialsRequest):Promise<main.ConnectionInfo>;
 
 export function SetLLMKey(arg1:string,arg2:string):Promise<void>;
+
+export function SetLLMSettings(arg1:config.LLMSettings):Promise<void>;
 
 export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
 

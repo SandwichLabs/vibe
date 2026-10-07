@@ -162,8 +162,12 @@ export function GetInitialWorkspace() {
   return window['go']['main']['App']['GetInitialWorkspace']();
 }
 
-export function GetLLMKeyStatus() {
-  return window['go']['main']['App']['GetLLMKeyStatus']();
+export function GetLLMKeyStatus(arg1) {
+  return window['go']['main']['App']['GetLLMKeyStatus'](arg1);
+}
+
+export function GetLLMSettings() {
+  return window['go']['main']['App']['GetLLMSettings']();
 }
 
 export function GetMCPStatus() {
@@ -252,6 +256,10 @@ export function ListConnections() {
 
 export function ListExtensions() {
   return window['go']['main']['App']['ListExtensions']();
+}
+
+export function ListLLMModels(arg1, arg2) {
+  return window['go']['main']['App']['ListLLMModels'](arg1, arg2);
 }
 
 export function ListNotebooks() {
@@ -408,6 +416,10 @@ export function SetConnectionCredentials(arg1) {
 
 export function SetLLMKey(arg1, arg2) {
   return window['go']['main']['App']['SetLLMKey'](arg1, arg2);
+}
+
+export function SetLLMSettings(arg1) {
+  return window['go']['main']['App']['SetLLMSettings'](arg1);
 }
 
 export function SetPreferences(arg1) {

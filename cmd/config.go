@@ -35,7 +35,8 @@ var llmKeyCmd = &cobra.Command{
 Where a key is read from, first match wins:
 
   1. VIBE_LLM_API_KEY
-  2. the provider's standard variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY)
+  2. the provider's standard variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+     OLLAMA_API_KEY, CLOUDFLARE_API_TOKEN)
   3. the keychain (item "llm-<provider>")
   4. llm.api_key in ~/.vibe.yaml (legacy, used for whichever provider is configured;
      "vibe config llm-key migrate" moves it)
@@ -45,8 +46,8 @@ Vibe never prints a key back.`,
 }
 
 // validLLMProviders are the values --provider accepts: the same set Studio's
-// key bindings accept.
-var validLLMProviders = []string{config.LLMProviderLocal, config.LLMProviderAnthropic, config.LLMProviderOpenAI, config.LLMProviderGemini}
+// key bindings accept (the provider list in internal/config).
+var validLLMProviders = config.LLMProviderIDs()
 
 // checkLLMKeyProvider rejects an unknown --provider before it can create a
 // keychain item under a misspelt name.
@@ -57,7 +58,10 @@ func checkLLMKeyProvider(*cobra.Command, []string) error {
 	return fmt.Errorf("unknown provider %q (want %s)", llmKeyProvider, strings.Join(validLLMProviders, ", "))
 }
 
-func llmKeyStore() secrets.Store { return secrets.NewKeyringStore() }
+// newLLMKeyStore is a seam so tests never touch the real keychain.
+var newLLMKeyStore = func() secrets.Store { return secrets.NewKeyringStore() }
+
+func llmKeyStore() secrets.Store { return newLLMKeyStore() }
 
 func resolveLLMKeyProvider() string {
 	if llmKeyProvider != "" {
@@ -164,9 +168,9 @@ func readSecretLine(in io.Reader, errW io.Writer, prompt string) (string, error)
 }
 
 func init() {
-	llmKeyCmd.PersistentFlags().StringVar(&llmKeyProvider, "provider", "", "provider (local, anthropic, openai, gemini); default: the configured one")
+	llmKeyCmd.PersistentFlags().StringVar(&llmKeyProvider, "provider", "", "provider ("+strings.Join(validLLMProviders, ", ")+"); default: the configured one")
 	llmKeyMigrateCmd.Flags().BoolVar(&llmKeyForce, "force", false, "replace a different key already in the keychain")
 	llmKeyCmd.AddCommand(llmKeySetCmd, llmKeyClearCmd, llmKeyStatusCmd, llmKeyMigrateCmd)
-	configCmd.AddCommand(llmKeyCmd)
+	configCmd.AddCommand(llmKeyCmd, llmCmd)
 	rootCmd.AddCommand(configCmd)
 }

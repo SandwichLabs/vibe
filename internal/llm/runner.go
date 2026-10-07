@@ -32,6 +32,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/sandwich-labs/vibe-app/internal/config"
 )
 
 // Sandbox modes mirror internal/agents' SandboxMode values exactly (they are
@@ -51,15 +52,23 @@ const (
 	ProviderAnthropic = "anthropic" // Anthropic Claude
 	ProviderOpenAI    = "openai"    // OpenAI (API key, Responses API)
 	ProviderGemini    = "gemini"    // Google Gemini
+	ProviderOllama    = "ollama"    // Ollama (OpenAI-compatible, local or Ollama Cloud)
+	// ProviderCloudflare is Cloudflare AI Gateway's REST API (OpenAI-compatible
+	// chat completions, "provider/model" ids).
+	ProviderCloudflare = "cloudflare"
 )
 
 // Config configures the LLM provider/endpoint and the agent's capability level.
 type Config struct {
-	Provider string // local | anthropic | openai | gemini (default local)
-	Endpoint string // OpenAI-compatible base URL for the local provider
-	Model    string // model id to request; empty = per-provider default
-	APIKey   string // bearer token / cloud API key
-	Sandbox  string // read-only | read-write | full — gates mutating tools
+	Provider string // local | ollama | openai | anthropic | gemini | cloudflare (default local)
+	Endpoint string // OpenAI-compatible base URL for the local and ollama providers
+	// AccountID and Gateway are the Cloudflare account and optional gateway
+	// (sent as cf-aig-gateway-id). Neither is secret.
+	AccountID string
+	Gateway   string
+	Model     string // model id to request; empty = per-provider default
+	APIKey    string // bearer token / cloud API key
+	Sandbox   string // read-only | read-write | full — gates mutating tools
 	// AskBeforeWrites mirrors the file's agents.FilePolicy.AskBeforeWrites
 	// (#79): when true and the sandbox isn't read-only, systemPromptFor adds
 	// a sentence telling the model every change is shown to the user for
@@ -68,21 +77,13 @@ type Config struct {
 	AskBeforeWrites bool
 }
 
-// defaultModelFor returns a sensible default model id for a provider when none
-// is configured. These are overridable via llm.model; cloud ids in particular
-// need refreshing as providers release new models (last checked 2026-10-07).
-func defaultModelFor(provider string) string {
-	switch provider {
-	case ProviderAnthropic:
-		return "claude-sonnet-5-5"
-	case ProviderOpenAI:
-		return "gpt-5.5"
-	case ProviderGemini:
-		return "gemini-3.5-flash"
-	default:
-		return "local"
-	}
-}
+// DefaultModelFor returns the model requested for a provider when none is
+// configured ("" for Ollama: there is no meaningful default). The list lives in
+// internal/config so Settings and the CLI show the same thing; ids need
+// refreshing as providers release models (last checked 2026-10-07).
+func DefaultModelFor(provider string) string { return config.DefaultModelFor(provider) }
+
+func defaultModelFor(provider string) string { return DefaultModelFor(provider) }
 
 // Handler is the narrow request-dispatch surface Runner needs: submit a tool
 // call as a JSON-RPC-style request and get back a response. The production
@@ -125,6 +126,8 @@ type Runner struct {
 	// openAIBaseURL overrides the OpenAI API base URL. Tests point it at an
 	// httptest server; production leaves it empty (api.openai.com).
 	openAIBaseURL string
+	// cloudflareBaseURL overrides the AI Gateway REST base URL in tests.
+	cloudflareBaseURL string
 }
 
 // NewRunner constructs a Runner dispatching tool calls through the given
@@ -315,6 +318,9 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 	if model == "" {
 		model = defaultModelFor(provider)
 	}
+	if model == "" {
+		return nil, fmt.Errorf("%s has no default model: pick a model in Settings → App", provider)
+	}
 
 	var (
 		p   fantasy.Provider
@@ -363,8 +369,48 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 			openaicompat.WithBaseURL(endpoint),
 			openaicompat.WithAPIKey(apiKey),
 		)
+	case ProviderOllama:
+		endpoint := strings.TrimSpace(cfg.Endpoint)
+		if endpoint == "" || endpoint == config.DefaultLLMEndpoint {
+			endpoint = config.DefaultOllamaEndpoint
+		}
+		apiKey := cfg.APIKey
+		if strings.TrimSpace(apiKey) == "" {
+			apiKey = "ollama" // a local Ollama needs none; the SDK rejects an empty one
+		}
+		p, err = openaicompat.New(
+			openaicompat.WithName(ProviderOllama),
+			openaicompat.WithBaseURL(endpoint),
+			openaicompat.WithAPIKey(apiKey),
+		)
+	case ProviderCloudflare:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, fmt.Errorf("cloudflare provider requires a Cloudflare API token (set CLOUDFLARE_API_TOKEN, or save one in Settings → App)")
+		}
+		base := r.cloudflareBaseURL
+		if base == "" {
+			if strings.TrimSpace(cfg.AccountID) == "" {
+				return nil, fmt.Errorf("cloudflare provider requires an account ID (set it in Settings → App, or CLOUDFLARE_ACCOUNT_ID)")
+			}
+			var berr error
+			if base, berr = config.CloudflareBaseURL(strings.TrimSpace(cfg.AccountID)); berr != nil {
+				return nil, fmt.Errorf("invalid Cloudflare account ID: %w", berr)
+			}
+		}
+		opts := []openaicompat.Option{
+			openaicompat.WithName(ProviderCloudflare),
+			openaicompat.WithBaseURL(base),
+			openaicompat.WithAPIKey(cfg.APIKey),
+		}
+		if gw := strings.TrimSpace(cfg.Gateway); gw != "" {
+			if gerr := config.ValidateGatewayID(gw); gerr != nil {
+				return nil, fmt.Errorf("invalid Cloudflare gateway ID: %w", gerr)
+			}
+			opts = append(opts, openaicompat.WithHeaders(map[string]string{"cf-aig-gateway-id": gw}))
+		}
+		p, err = openaicompat.New(opts...)
 	default:
-		return nil, fmt.Errorf("unknown LLM provider %q (want local, anthropic, openai, or gemini)", provider)
+		return nil, fmt.Errorf("unknown LLM provider %q (want %s)", provider, strings.Join(config.LLMProviderIDs(), ", "))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %s provider: %w", provider, err)

@@ -138,6 +138,65 @@ export namespace bundle {
 
 }
 
+export namespace config {
+	
+	export class LLMSettings {
+	    provider: string;
+	    model: string;
+	    endpoint: string;
+	    accountId: string;
+	    gateway: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.model = source["model"];
+	        this.endpoint = source["endpoint"];
+	        this.accountId = source["accountId"];
+	        this.gateway = source["gateway"];
+	    }
+	}
+	export class ProviderInfo {
+	    id: string;
+	    label: string;
+	    description: string;
+	    needsKey: boolean;
+	    keyOptional: boolean;
+	    keyLabel: string;
+	    keyEnvVars: string[];
+	    hasEndpoint: boolean;
+	    defaultEndpoint?: string;
+	    hasAccount: boolean;
+	    defaultModel: string;
+	    suggestedModels: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ProviderInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.needsKey = source["needsKey"];
+	        this.keyOptional = source["keyOptional"];
+	        this.keyLabel = source["keyLabel"];
+	        this.keyEnvVars = source["keyEnvVars"];
+	        this.hasEndpoint = source["hasEndpoint"];
+	        this.defaultEndpoint = source["defaultEndpoint"];
+	        this.hasAccount = source["hasAccount"];
+	        this.defaultModel = source["defaultModel"];
+	        this.suggestedModels = source["suggestedModels"];
+	    }
+	}
+
+}
+
 export namespace connections {
 	
 	export class Capabilities {
@@ -494,6 +553,22 @@ export namespace llm {
 	        this.label = source["label"];
 	        this.markdown = source["markdown"];
 	        this.connection = source["connection"];
+	    }
+	}
+	export class ModelList {
+	    models: string[];
+	    error?: string;
+	    unreachable?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.models = source["models"];
+	        this.error = source["error"];
+	        this.unreachable = source["unreachable"];
 	    }
 	}
 	export class TaskEnvelope {
@@ -1366,6 +1441,7 @@ export namespace main {
 	    action: string;
 	    data: Record<string, any>;
 	    rev: string;
+	    connection?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConflictRequest(source);
@@ -1378,6 +1454,7 @@ export namespace main {
 	        this.action = source["action"];
 	        this.data = source["data"];
 	        this.rev = source["rev"];
+	        this.connection = source["connection"];
 	    }
 	}
 	export class ConflictResult {
@@ -1657,6 +1734,54 @@ export namespace main {
 	        this.keychainHasKey = source["keychainHasKey"];
 	        this.detail = source["detail"];
 	    }
+	}
+	export class LLMSettingsView {
+	    provider: string;
+	    model: string;
+	    effectiveModel: string;
+	    defaultModel: string;
+	    endpoint: string;
+	    accountId: string;
+	    gateway: string;
+	    accountIdFromEnv: boolean;
+	    envOverrides: Record<string, string>;
+	    providers: config.ProviderInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMSettingsView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.model = source["model"];
+	        this.effectiveModel = source["effectiveModel"];
+	        this.defaultModel = source["defaultModel"];
+	        this.endpoint = source["endpoint"];
+	        this.accountId = source["accountId"];
+	        this.gateway = source["gateway"];
+	        this.accountIdFromEnv = source["accountIdFromEnv"];
+	        this.envOverrides = source["envOverrides"];
+	        this.providers = this.convertValues(source["providers"], config.ProviderInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MCPStatus {
 	    running: boolean;

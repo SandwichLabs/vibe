@@ -41,9 +41,9 @@ func (a *App) agentPolicy() agents.FilePolicy {
 // person's own choice, whichever is stricter), TeamSandbox and TeamAsk are the
 // committed limit alone.
 type AgentConfig struct {
-	Provider        string `json:"provider"`        // read-only (viper-driven)
-	Model           string `json:"model"`           // read-only (viper-driven)
-	Endpoint        string `json:"endpoint"`        // read-only (viper-driven)
+	Provider        string `json:"provider"`        // effective (viper-driven); edit via SetLLMSettings
+	Model           string `json:"model"`           // effective (viper-driven); edit via SetLLMSettings
+	Endpoint        string `json:"endpoint"`        // effective (viper-driven); edit via SetLLMSettings
 	Sandbox         string `json:"sandbox"`         // effective tier
 	AskBeforeWrites bool   `json:"askBeforeWrites"` // effective gate
 	// TeamSandbox is the highest tier vibe.yaml allows ("" means no limit).
@@ -64,7 +64,7 @@ func (a *App) GetAgentConfig() (*AgentConfig, error) {
 	cfg := a.ws.Config()
 	return &AgentConfig{
 		Provider:            a.llmCfg.Provider,
-		Model:               a.llmCfg.Model,
+		Model:               a.llmCfg.EffectiveModel(),
 		Endpoint:            a.llmCfg.Endpoint,
 		Sandbox:             string(policy.Mode),
 		AskBeforeWrites:     policy.AskBeforeWrites,
@@ -127,6 +127,8 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 	cfg := llm.Config{
 		Provider:        a.llmCfg.Provider,
 		Endpoint:        a.llmCfg.Endpoint,
+		AccountID:       a.llmCfg.AccountID,
+		Gateway:         a.llmCfg.Gateway,
 		Model:           a.llmCfg.Model,
 		APIKey:          a.llmAPIKey(),
 		Sandbox:         string(policy.Mode),
@@ -240,10 +242,12 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 		return nil, err
 	}
 	cfg := llm.Config{
-		Provider: a.llmCfg.Provider,
-		Endpoint: a.llmCfg.Endpoint,
-		Model:    a.llmCfg.Model,
-		APIKey:   a.llmAPIKey(),
+		Provider:  a.llmCfg.Provider,
+		Endpoint:  a.llmCfg.Endpoint,
+		AccountID: a.llmCfg.AccountID,
+		Gateway:   a.llmCfg.Gateway,
+		Model:     a.llmCfg.Model,
+		APIKey:    a.llmAPIKey(),
 		// Task mode ALWAYS runs read-only, regardless of the file's own
 		// agent_sandbox setting (review fix, CRITICAL: previously this used
 		// the file's sandbox — often "full" — which combined with

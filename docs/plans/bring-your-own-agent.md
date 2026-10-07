@@ -107,8 +107,9 @@ Studio becomes an ACP *client* (`github.com/coder/acp-go-sdk`). When you pick an
 Same process as epic #105: one issue at a time, Sonnet implementer, Opus adversarial review, live rodney QA for Studio steps.
 
 ### Phase A — providers (small)
-- **A1** `openai` provider (API key, Responses API), fantasy bump if needed, default models refreshed, docs.
-- **A2** `ollama` preset: default endpoint, model list, Ollama Cloud key (after the compatibility check), Settings UI, docs.
+- **A1** `openai` provider (API key, Responses API), fantasy bump if needed, default models refreshed, docs. **Done (#147, PR #159).**
+- **A2** `ollama` preset: default endpoint, model list, Ollama Cloud key (after the compatibility check), Settings UI, docs. **Done (#148):** the Settings provider picker, `vibe config llm`, the model list from `/api/tags`, and the chat error hint. Ollama's docs show `https://ollama.com/v1` as an OpenAI-compatible base URL with an API key (checked 2026-10-07; they say the cloud API does not replay custom tool calls, so Chat Completions tool calling is expected to work but was not tried live here).
+- **A3** `cloudflare` provider (#160): Cloudflare AI Gateway REST API (`/ai/v1/chat/completions`), `llm.account_id` / `llm.gateway`, Cloudflare API token. **Done, shipped with #148.** Not run against a live account (no token available).
 
 ### Phase B — agents you run yourself, over MCP (small–medium)
 - **B0 Spike.** No product code; findings go in `docs/plans/spike-byo-agent-findings.md`. For Claude Code, Codex, Gemini CLI and OpenCode, establish:

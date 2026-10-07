@@ -39,18 +39,7 @@ func envKey(provider string) string {
 	if k := os.Getenv("VIBE_LLM_API_KEY"); k != "" {
 		return k
 	}
-	switch provider {
-	case LLMProviderAnthropic:
-		return os.Getenv("ANTHROPIC_API_KEY")
-	case LLMProviderOpenAI:
-		return os.Getenv("OPENAI_API_KEY")
-	case LLMProviderGemini:
-		if k := os.Getenv("GEMINI_API_KEY"); k != "" {
-			return k
-		}
-		return os.Getenv("GOOGLE_API_KEY")
-	}
-	return ""
+	return providerKeyEnv(provider)
 }
 
 // ResolveLLMKey finds the API key for cfg's provider, in this order:

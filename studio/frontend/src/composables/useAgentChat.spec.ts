@@ -13,9 +13,11 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 
 import { useAgentChat, renderMarkdown } from './useAgentChat'
 
+let llmSettings: any = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
+
 function setBinding(impl: (turnId: string, msg: string, pinned: string, history: any[]) => Promise<any>) {
   ;(globalThis as any).window = (globalThis as any).window || {}
-  ;(window as any).go = { main: { App: { AgentChatStream: vi.fn(impl) } } }
+  ;(window as any).go = { main: { App: { AgentChatStream: vi.fn(impl), GetLLMSettings: vi.fn(async () => llmSettings) } } }
   return (window as any).go.main.App.AgentChatStream
 }
 
@@ -98,7 +100,7 @@ describe('useAgentChat (W0.5)', () => {
   })
 
   it('surfaces a graceful error when the binding rejects', async () => {
-    setBinding(async () => { throw new Error('connection refused') })
+    setBinding(async () => { throw new Error('agent error: connection refused') })
     const chat = useAgentChat()
     await chat.send('hi')
     const agent = chat.messages.value[1]
@@ -339,5 +341,34 @@ describe('useAgentChat approvals (#79)', () => {
 
     expect(step.approval.state).toBe('sending')
     expect(resolveBinding).toHaveBeenCalledWith('appr-4', true)
+  })
+
+  it('error hint: local server names its endpoint; cloud points at Settings', async () => {
+    llmSettings = { provider: 'ollama', endpoint: 'http://localhost:11434/v1' }
+    setBinding(async () => { throw new Error('agent error: connection refused') })
+    let chat = useAgentChat()
+    await chat.send('hi')
+    expect(chat.messages.value[1].text).toBe('Agent error: connection refused. Is the model server at http://localhost:11434/v1 running?')
+    expect(chat.messages.value[1].text).not.toContain('LLM server reachable')
+
+    llmSettings = { provider: 'cloudflare', endpoint: '' }
+    setBinding(async () => { throw new Error('401 unauthorized') })
+    chat = useAgentChat()
+    await chat.send('hi')
+    expect(chat.messages.value[1].text).toBe('Agent error: 401 unauthorized. Check the API key and model in Settings \u2192 App.')
+    llmSettings = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
+  })
+
+  it('an error event shows the hint once even when the binding also rejects', async () => {
+    llmSettings = { provider: 'openai', endpoint: '' }
+    setBinding(async (turnId) => {
+      streamHandler!({ turnId, kind: 'error', text: 'bad key' })
+      throw new Error('bad key')
+    })
+    const chat = useAgentChat()
+    await chat.send('hi')
+    const t = chat.messages.value[1].text
+    expect(t.match(/Check the API key/g)).toHaveLength(1)
+    llmSettings = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
   })
 })
