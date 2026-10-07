@@ -143,12 +143,11 @@ go test -v ./internal/workspace/
 | [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md) | The implementation plan for epic #105 (implemented; "as built" summary at the top) |
 | [`CLAUDE.md`](CLAUDE.md) | Architecture, conventions, key concepts (also guidance for AI assistants) |
 | [`docs/reference/`](docs/reference/) | Shipped surface reference: [workspaces](docs/reference/workspaces.md), [connections](docs/reference/connections.md), [agent policy](docs/reference/agent-policy.md), [notebooks and A2UI](docs/reference/notebooks.md), [import and export](docs/reference/import-office.md), [templates](docs/reference/templates.md), [themes](docs/reference/themes.md) |
-| [`docs/mcp.md`](docs/mcp.md) | `vibe mcp serve` (stdio/SSE), Claude Desktop config, SSE auth/security |
-| [`docs/llm-config.md`](docs/llm-config.md) | LLM provider configuration and the API key |
+| [`docs/README.md`](docs/README.md) | Index of all documentation |
+| [`docs/reference/mcp.md`](docs/reference/mcp.md) | `vibe mcp serve` (stdio/SSE), Claude Desktop config, SSE auth/security |
+| [`docs/reference/llm-config.md`](docs/reference/llm-config.md) | LLM provider configuration and the API key |
 | [`docs/packaging.md`](docs/packaging.md) | Packaging and release plan (#77), file association wiring, extensions |
-| [`motherduck-research.md`](motherduck-research.md) | The MotherDuck platform research that informed the direction |
-| [`PROJECT.md`](PROJECT.md), [`PLAN.md`](PLAN.md) | Original MVP spec and build phases (file format, runtime) — historical |
-| [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md) | Superseded Access-parity roadmap — historical |
+| [`docs/archive/`](docs/archive/README.md) | Superseded plans and research (original MVP spec, Access parity, MotherDuck research) — historical |
 
 ## Design principles
 

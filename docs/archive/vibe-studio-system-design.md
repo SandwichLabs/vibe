@@ -1,5 +1,5 @@
 > **SUPERSEDED (2026-09-22).** The Access-successor vision, PWA/DuckDB-Wasm stack and Tailscale mesh in this document are not the plan of record. The multi-user ambition remains deferred.
-> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+> See [`../direction.md`](../direction.md). Kept for history; do not plan new work from it.
 
 # Vibe Studio
 ### System Design Document & Project Overview

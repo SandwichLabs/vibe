@@ -1,5 +1,5 @@
 > **SUPERSEDED (2026-09-22).** The screens this plan remediates (Form Builder, Switchboard, Schema Builder, App Mode) are being removed (#68). §1's Rodney verification protocol is still the QA standard and is referenced from CLAUDE.md.
-> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+> See [`../direction.md`](../direction.md). Kept for history; do not plan new work from it.
 
 # Parity Remediation Plan
 

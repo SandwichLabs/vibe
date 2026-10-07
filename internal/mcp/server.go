@@ -312,7 +312,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 // (Claude Desktop, a Go/Python SDK, curl) issues POSTs with arbitrary
 // headers, so this costs nothing in practice; only a hand-rolled
 // EventSource-based GET needs the fallback at all, and this is documented in
-// docs/mcp.md.
+// docs/reference/mcp.md.
 func (s *Server) checkToken(r *http.Request) bool {
 	if s.token == "" {
 		// Should not happen post-Start, but fail closed rather than open.

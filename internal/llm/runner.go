@@ -120,7 +120,7 @@ type Runner struct {
 }
 
 // NewRunner constructs a Runner dispatching tool calls through the given
-// Handler (in production, an *agents.Handler wired to the open container).
+// Handler (in production, an *agents.Handler wired to the open workspace).
 func NewRunner(handler Handler, logger *slog.Logger) *Runner {
 	if logger == nil {
 		logger = slog.Default()
@@ -128,7 +128,7 @@ func NewRunner(handler Handler, logger *slog.Logger) *Runner {
 	return &Runner{handler: handler, logger: logger}
 }
 
-const baseSystemPrompt = `You are the Vibe wizard — the agent layer of Vibe, a local-first, encrypted application container. You help a small-business builder design and query a relational database stored in a single .vibe file backed by DuckDB.
+const baseSystemPrompt = `You are the Vibe wizard — the agent layer of Vibe, an agentic data workspace. A workspace is a folder holding notebooks, saved queries and skills as plain files, plus the list of connections (local DuckDB files, MotherDuck, Postgres, SQLite, object storage…) where the user's data actually lives; Vibe queries that data in place through one DuckDB hub. You help the user explore and query their data and build notebooks and dashboards from it.
 
 Prefer reading the schema (introspect_schema, describe_table) before writing SQL or making changes. Keep answers concise and practical. When you create or change schema, briefly confirm what you did.`
 

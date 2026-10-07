@@ -1,4 +1,4 @@
-# Vibe v1.0 Reference
+# Vibe reference
 
 This is the shipped reference documentation for the Vibe application surface —
 an agentic data workspace: a folder of plain files that points at your data, which stays in its connections. It is split by
@@ -12,6 +12,8 @@ surface so each area is easy to find:
 | [`templates.md`](templates.md) | Bundled starter **templates** |
 | [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
 | [`connections.md`](connections.md) | **Connections**: every type (DuckDB file, Postgres, MySQL, MotherDuck, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg, Delta), fields, credentials, read-only, Test, extensions |
+| [`mcp.md`](mcp.md) | **MCP**: `vibe mcp serve` (stdio/SSE), client configuration, SSE auth and security |
+| [`llm-config.md`](llm-config.md) | **LLM provider** configuration and the API key |
 | [`agent-policy.md`](agent-policy.md) | **The agent's SQL policy**: what each tier allows, the three-gate rule for writes, file and URL rules, the never-list, `list_connections` |
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component

@@ -1,5 +1,5 @@
 > **SUPERSEDED (2026-09-22).** The mockup set this audit compares against belongs to the Access-parity direction, which is superseded.
-> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+> See [`../direction.md`](../direction.md). Kept for history; do not plan new work from it.
 
 # Screen Parity Discrepancy Catalog
 

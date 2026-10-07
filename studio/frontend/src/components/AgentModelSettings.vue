@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Settings > App > The agent's model. App-global (every workspace): provider,
-// model and endpoint come from ~/.vibe.yaml or VIBE_LLM_* (docs/llm-config.md).
+// model and endpoint come from ~/.vibe.yaml or VIBE_LLM_* (docs/reference/llm-config.md).
 // The API key is write-only (SPEC 09, #114): it is saved to the OS keychain and
 // never shown again. "•••• In your keychain · Replace · Clear". Nothing here can
 // read a key back; the bindings only set, clear and report where it comes from.
@@ -96,7 +96,7 @@ async function migrate() {
         <div class="kv"><span class="k">Endpoint</span><span class="v break-all">{{ cfg.endpoint }}</span></div>
       </div>
       <p class="sh-micro sh-mono" style="color: var(--sh-graphite); margin: 0;">
-        Provider, model and endpoint are set in ~/.vibe.yaml or VIBE_LLM_* (see docs/llm-config.md)
+        Provider, model and endpoint are set in ~/.vibe.yaml or VIBE_LLM_* (see docs/reference/llm-config.md)
       </p>
 
       <div v-if="keyStatus" class="field" data-testid="llm-key">

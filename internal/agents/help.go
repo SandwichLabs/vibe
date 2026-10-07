@@ -29,7 +29,7 @@ var HelpEntries = []HelpEntry{
 		Tags:  []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat"},
 		Content: `# Notebooks
 
-A notebook is a title plus an ordered list of cells, stored in ` + "`_vibe_notebooks`" + `. There is no page markup, no directives, and no inter-cell references — the database is the only shared state.
+A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.vnb`" + ` file in the workspace. There is no page markup, no directives, and no inter-cell references — the connections are the only shared state.
 
 ## Cell types
 
@@ -85,44 +85,45 @@ A Skill is a markdown document — a name, a one-line description, and full inst
 
 ## Using skills
 
-- **` + "`list_skills`" + `** lists every skill visible right now: built-ins plus any user- or import-authored ones stored in the file. Each entry gives a name and a one-line description.
+- **` + "`list_skills`" + `** lists every skill visible right now: built-ins plus any user- or import-authored ones in the workspace. Each entry gives a name and a one-line description.
 - **` + "`read_skill`" + `** fetches one skill's full instructions by name. Call it whenever a task matches a skill's description before proceeding.
 
 ## Authoring skills
 
 **` + "`create_or_update_skill`" + `** upserts a skill by name (cannot use a built-in's name or the reserved ` + "`task-`" + ` prefix). An optional ` + "`table_name`" + ` gates the skill so it only loads once that table exists and has at least one row — useful for a skill that only makes sense once real data has been imported.
 
-Built-in skills are embedded in the binary; user/import skills live in ` + "`_vibe_skills`" + `.`,
+Built-in skills are embedded in the binary; workspace skills live in ` + "`skills/<name>/SKILL.md`" + ` in the workspace folder.`,
 	},
 	{
-		Topic: "vibe-file",
-		Title: ".vibe File Format",
-		Tags:  []string{"vibe", "file", "format", "container", "encrypted", "sqlcipher", "duckdb", "passphrase"},
-		Content: `# .vibe File Format
+		Topic: "workspace",
+		Title: "Workspaces and Connections",
+		Tags:  []string{"workspace", "folder", "connection", "connections", "vibe", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
+		Content: `# Workspaces and Connections
 
-A .vibe file is an encrypted SQLite database (SQLCipher) that bundles data, notebooks, skills, and configuration into a single portable file.
+A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`vibe.yaml`" + ` that lists its connections. The data itself stays where it already lives.
 
-## Key Properties
+## Layout
 
-- **Encrypted by default** — AES-256-CBC with PBKDF2-HMAC-SHA512 key derivation
-- **Self-contained** — no external dependencies; the file is the app
-- **Dual engines** — SQLCipher/SQLite for the container envelope and internal tables, DuckDB (a serialized blob) for user data and analytics
-- **Single-user** — no concurrent access or conflict resolution needed
+- ` + "`notebooks/*.vnb`" + ` — one notebook per file
+- ` + "`queries/*.sql`" + ` — saved queries
+- ` + "`skills/<name>/SKILL.md`" + ` — workspace skills
+- ` + "`data/`" + ` — local files, including the default local DuckDB database
+- ` + "`vibe.yaml`" + ` — workspace id, name, default connection, agent limits and shared connection definitions
 
-## Internal Tables
+## Connections
 
-All system tables use the ` + "`_vibe_`" + ` prefix, including:
+Data lives in named connections: a local DuckDB file, Postgres, MySQL, MotherDuck, SQLite, or object storage (S3, GCS, R2, Azure). Each is attached into one DuckDB hub, and the connection name is the catalog in SQL (e.g. connection.schema.table). Call **list_connections** to see each one's name, type, status, whether it is read-only, and whether it is local or remote. Connections connect on first use.
 
-| Table | Purpose |
-|-------|---------|
-| _vibe_meta | Key-value metadata (title, version, timestamps) |
-| _vibe_notebooks | Notebooks: title + an ordered list of sql/markdown/a2ui cells |
-| _vibe_skills | User- and import-authored Skills |
-| _vibe_queries | Named saved queries |
-| _vibe_assets | Embedded binary files |
-| _vibe_duckdb | Serialized DuckDB database blob (the user's tables) |
+## What you may and may not do
 
-User data tables have no prefix and can be created freely.`,
+- Reads are free within the policy: any attached catalog, plus files only by a literal **absolute** path inside the workspace data/ folder, or a URL inside a storage connection's scope.
+- ATTACH, SET, INSTALL/LOAD, secrets, settings and raw passthroughs (postgres_query, postgres_execute) are refused in every sandbox mode.
+- A write needs three things: the sandbox mode allows it, the connection is writable, and the user approves it. For local files approval applies while "Ask before changes" is on; for a connection that is not a local file it is always required, so headless MCP refuses those writes.
+- Credentials live in the OS keychain or environment variables. You can never read them; do not ask the user to paste one into a query or a notebook.
+
+## Sharing
+
+A .vibe file is an export bundle (notebooks, queries, skills and connection definitions, never data or credentials), not a place where data lives.`,
 	},
 	buildMCPToolsEntry(),
 }
@@ -156,7 +157,7 @@ func buildMCPToolsEntry() HelpEntry {
 
 	var b strings.Builder
 	b.WriteString("# MCP Server & Tools\n\n")
-	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve <file.vibe>` (stdio or SSE) headless, or Settings -> Start MCP Server in Studio (SSE) — for external AI agents to read and modify a .vibe file with the same tool registry and sandbox gating the in-app agent uses.\n")
+	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve --workspace <folder>` (stdio or SSE) headless, or Settings -> Start MCP Server in Studio (SSE) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n")
 
 	tags := []string{"mcp", "server", "tool", "agent", "api"}
 	for _, cat := range mcpToolCategoryOrder {

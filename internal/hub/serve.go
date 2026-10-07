@@ -262,7 +262,7 @@ func serveOwner(ctx context.Context, root string, hold *Hold, opts ServeOptions,
 		err = vibemcp.New(handler, opts.Logger).ServeStdio(ctx, opts.In, opts.Out)
 	case "sse":
 		fmt.Fprintf(opts.Err, "MCP SSE server listening on %s\n", share.URL())
-		fmt.Fprintf(opts.Err, "Auth token (send as `Authorization: Bearer <token>`, see docs/mcp.md): %s\n", share.Token())
+		fmt.Fprintf(opts.Err, "Auth token (send as `Authorization: Bearer <token>`, see docs/reference/mcp.md): %s\n", share.Token())
 		<-ctx.Done()
 	}
 	select {

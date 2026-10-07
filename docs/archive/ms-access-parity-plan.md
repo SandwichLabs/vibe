@@ -1,5 +1,5 @@
 > **SUPERSEDED (2026-09-22).** Vibe is no longer targeting Microsoft Access application parity. Forms, subforms, field meta, relationships UI, switchboard, App Mode and macros are being removed (#68, #69); Pages become Notebooks (#66).
-> See [`../docs/direction.md`](../docs/direction.md). Kept for history; do not plan new work from it.
+> See [`../direction.md`](../direction.md). Kept for history; do not plan new work from it.
 
 # MS Access Parity — Phased Implementation Plan
 

@@ -5,7 +5,7 @@ Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that
 - **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
 - **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port (Settings → Workspace → Claude and other tools). A write that needs approval shows the same approval card the chat agent uses, in the Studio window; the card waits for you, and a declined or unanswered card changes nothing.
 
-Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](reference/agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
+Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
 
 ## `vibe mcp serve`
 
@@ -25,7 +25,7 @@ The workspace is found the way git finds `.git`: `--workspace` (or the current d
 
 ### One owner per workspace: owner mode and proxy mode
 
-DuckDB allows one read-write process or many read-only ones per database file, never a mix, so one process owns a workspace's hub at a time, recorded in `.vibe-local/hub.lock` (see `docs/reference/workspaces.md`). `vibe mcp serve` looks at the lock first:
+DuckDB allows one read-write process or many read-only ones per database file, never a mix, so one process owns a workspace's hub at a time, recorded in `.vibe-local/hub.lock` (see [workspaces.md](workspaces.md)). `vibe mcp serve` looks at the lock first:
 
 | Who holds the hub | What `vibe mcp serve` does |
 |---|---|
@@ -48,13 +48,13 @@ Over stdio, `vibe mcp serve` duplicates stdout to a private handle for the proto
 
 The effective policy is the workspace's: this person's chosen tier (default **read-write**) clamped to the committed `vibe.yaml` ceiling, and "Ask before changes" on unless this person turned it off and the ceiling allows it (`Workspace.AgentPolicy`). `--sandbox` can only make a session **more** restrictive, never less: a launch config, which may be shared in a dotfiles repo, can never grant more than the owner chose.
 
-A write over MCP needs **three gates** (#116): the **tier** allows it (read-write: `INSERT`/`UPDATE`/`DELETE`; full: also DDL and `COPY ... TO` a `data/` file), the **connection is writable** (`read_only: false`), and **the person approves it**. A headless process has no one to show an approval card to, so:
+A write needs three gates (tier, writable connection, the person's approval); [agent-policy.md](agent-policy.md#writes-need-three-gates) owns that rule and its exact messages. What it means over MCP, where there is no one to show an approval card to:
 
 - **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Workspace → The agent**; there is no flag or environment variable that bypasses it from the MCP side.
-- **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**: approval is forced for those connections, and the refusal says "...which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when "Ask before changes" is off), and there is no one to ask over MCP. Nothing was changed."
+- **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**, because approval is forced for those connections. Nothing is changed.
 - To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `vibe mcp serve` proxies to it.
 
-Reads are not gated: the agent can read any attached catalog, including a remote one (`pg.public.orders`), but never `ATTACH`, `SET`, `INSTALL`/`LOAD`, secrets, settings, raw passthroughs such as `postgres_query`/`postgres_execute`, MotherDuck sharing functions or `EXPLAIN ANALYZE`, and a file or URL only by a literal path inside the workspace `data/` folder or a storage connection's scope. Every denial returns its reason as a tool error. The full list is in [reference/agent-policy.md](reference/agent-policy.md); `list_connections` tells a client what is connected.
+Reads are not gated by approval; what the agent may read, and the never-list, are in [agent-policy.md](agent-policy.md). Every denial returns its reason as a tool error, and `list_connections` tells a client what is connected.
 
 ### Take over
 

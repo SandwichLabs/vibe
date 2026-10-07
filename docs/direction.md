@@ -136,7 +136,7 @@ Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #77 
 - `../duck-tape/`: `cmd/database.go` (hub and ATTACH), `docs/PRD-schema-intelligence.md` (project discovery, env interpolation, prepare-based validation, schema cache), `PRODUCTION_READINESS.md` (the secret-handling gaps to avoid).
 - `../schoolwork-workspace/`: notebook, A2UI, skills and task-mode prior art (the 2026-09-22 direction).
 - `docs/reviews/ux-panel-2026-09-26/SYNTHESIS.md`: the trust findings this direction answers.
-- `docs/ms-access-parity-plan.md` and related: the Access-parity roadmap, superseded 2026-09-22.
+- `docs/archive/ms-access-parity-plan.md` and related: the Access-parity roadmap, superseded 2026-09-22.
 
 ## 9. As delivered: what changed from the plan
 

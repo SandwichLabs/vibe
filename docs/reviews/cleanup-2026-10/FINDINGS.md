@@ -110,4 +110,4 @@ Survey findings the review added:
 
 **Dropped:** I3 (moving files in git doesn't shrink the repo) and O8.
 
-**Deferred to follow-up issues:** U2, U5, U8, U3, U4 (atomic export writes), U9, U11, E2, O2, O4, O7, O9, D6 + M1 (typed bindings or `vue-tsc`), and the xlsx export bindings (wire them up or delete them). The xlsx bindings are kept for now, since they are Studio's only xlsx path and `import-office.md` documents them.
+**Deferred to follow-up issues:** U2, U5, U8, U3, U4 (atomic export writes), U9, U11, E2, O2, O4, O7, O9, D6 + M1 (typed bindings or `vue-tsc`), and the xlsx export bindings (wire them up or delete them), and refreshing the landing screenshots (`01-unlock.png`, `03-pages.png` show retired UI and are still referenced by `landing/`) along with the landing page. The xlsx bindings are kept for now, since they are Studio's only xlsx path and `import-office.md` documents them.

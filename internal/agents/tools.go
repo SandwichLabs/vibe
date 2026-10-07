@@ -77,13 +77,13 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "list_queries",
-		Description: "List all named queries in the container",
+		Description: "List all saved queries in the workspace",
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},
 	{
 		Name:        "list_skills",
-		Description: "List the Skills available in this workspace: built-in skills plus any user- or import-authored ones stored in the file. Each entry gives a name and one-line description; call read_skill with a name to fetch its full instructions. Skills bound to a table only appear once that table exists and has rows.",
+		Description: "List the Skills available in this workspace: built-in skills plus any user- or import-authored ones in the workspace (skills/<name>/SKILL.md). Each entry gives a name and one-line description; call read_skill with a name to fetch its full instructions. Skills bound to a table only appear once that table exists and has rows.",
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},
@@ -97,7 +97,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "create_or_update_skill",
-		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the file and loaded on demand by the agent. Upserts by name. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
+		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the workspace (skills/<name>/SKILL.md) and loaded on demand by the agent. Upserts by name. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
 		Category:    "content",
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Lowercase kebab-case name, e.g. \"revenue-rules\" (routing key; must not shadow a built-in or start with \"task-\")"},
@@ -168,7 +168,7 @@ var Tools = []ToolDef{
 	// Schema tools
 	{
 		Name:        "create_table",
-		Description: "Create a new table in the container",
+		Description: "Create a new table in a writable connection (the default connection unless the name is qualified)",
 		Category:    "schema",
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name of the table"},
@@ -190,7 +190,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "drop_table",
-		Description: "Drop a table from the container",
+		Description: "Drop a table from a writable connection (the default connection unless the name is qualified)",
 		Category:    "schema",
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name of the table to drop"},

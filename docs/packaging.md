@@ -6,7 +6,7 @@
 **Status:** Proposed, except §1a (the app-side file-open wiring, built under #105). The pipeline, signing and CI are not built. Tracking: epic #77.
 
 Vibe ships two binaries: `vibe` (CLI, TUI, `vibe mcp serve`) and
-`vibe-studio` (the Wails desktop app). Both are CGO (SQLCipher, DuckDB, and
+`vibe-studio` (the Wails desktop app). Both are CGO (DuckDB, and
 for Studio, WebKit), which decides almost everything below.
 
 ## 1. Where things stand
@@ -15,7 +15,7 @@ for Studio, WebKit), which decides almost everything below.
 |---|---|
 | `.goreleaser.yaml` fails `goreleaser check` (v2.13.3): `before.hooks` with `dir:` is GoReleaser Pro syntax. | No release has ever run from it. |
 | Its `vibe-studio` build is a plain `go build ./studio`, without the `desktop,production` tags `wails build` adds. | The binary would refuse to start, and there is no `.app` bundle, icon, or `.desktop` file. |
-| It cross-compiles CGO for darwin and linux/arm64 from one runner with no cross toolchain. | Can't link SQLCipher/DuckDB for those targets. |
+| It cross-compiles CGO for darwin and linux/arm64 from one runner with no cross toolchain. | Can't link DuckDB for those targets. |
 | ~~`studio/build/` is gitignored wholesale.~~ Fixed in the #105 wrap-up (only `bin/` and Wails-generated defaults are ignored). | `Info.plist` and the Linux files are committed. **No `appicon.png` exists in the repo yet**, so Wails generates a default one; committing the real icon is a #77 item (§5.1). |
 | No `.github/workflows/` at all. | No CI on PRs either. |
 | The repo is private. | Release assets aren't downloadable by Homebrew or the website without a token. |
@@ -161,8 +161,8 @@ the same, so switching later is cheap.
 - Scan the full history for secrets (`gitleaks detect`, `trufflehog git`)
   before flipping visibility. A public repo exposes every past commit, not
   just `main`.
-- Review what's tracked that was written for internal use (`PLAN.md`,
-  `PROJECT.md`, `motherduck-research.md`, `.claude/`, `landing/` with its
+- Review what's tracked that was written for internal use (`docs/archive/`,
+  `.claude/`, `landing/` with its
   Cloudflare account ID) and decide keep, move, or delete.
 - `README.md` install section pointing at Releases and the tap, plus
   `CONTRIBUTING.md` and `SECURITY.md` (the credential-handling claims invite reports;
@@ -256,7 +256,7 @@ tap push.
    else can proceed while Apple verifies; only notarization (and so the cask
    and a public Mac download) waits on it.
 1. **Spike (half a day, local Mac or `macos-15` runner):**
-   - `wails build -platform darwin/universal` links SQLCipher and DuckDB for both slices
+   - `wails build -platform darwin/universal` links DuckDB for both slices
    - hand-sign, notarize, and staple once (after step 0 lands; until then, ad-hoc sign with `codesign -s -` to exercise the hardened runtime and entitlements)
    - confirm `LOAD excel` (and `postgres`, `httpfs`) work under the hardened runtime
    - confirm `OnFileOpen` fires from Finder for a `.vibe` file **and** for a folder dropped on the app or its Dock icon, both cold and while running (§1a)

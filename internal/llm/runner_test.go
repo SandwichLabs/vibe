@@ -490,7 +490,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	// Under the unified agents.SandboxConfig, schema/page categories (e.g.
 	// create_table) require full, not just read-write — a deliberate
 	// tightening from the old runner-only gate so Studio chat and MCP agree.
-	assert.Contains(t, rw, "create_table: Create a new table in the container [NOT PERMITTED")
+	assert.Contains(t, rw, "create_table: Create a new table in a writable connection (the default connection unless the name is qualified) [NOT PERMITTED")
 	// Prompt honesty (review fix): read-write must not claim "FULL WRITE
 	// ACCESS" when schema/page tools are actually denied — it should
 	// describe exactly what it can do (data reads/writes) and can't
@@ -504,7 +504,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 
 	ro := systemPromptFor(SandboxReadOnly, false, "")
 	assert.Contains(t, ro, "READ-ONLY access:")
-	assert.Contains(t, ro, "create_table: Create a new table in the container [NOT PERMITTED")
+	assert.Contains(t, ro, "create_table: Create a new table in a writable connection (the default connection unless the name is qualified) [NOT PERMITTED")
 	assert.NotContains(t, ro, "FULL WRITE ACCESS")
 	assert.NotContains(t, ro, "READ-WRITE access to DATA ONLY")
 

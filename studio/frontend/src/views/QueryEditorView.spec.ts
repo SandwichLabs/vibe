@@ -1,7 +1,7 @@
 // Supplementary component tests for the Query Explorer (parity W5).
 //
 // NOT the acceptance gate — that is Rodney driving :34115 against the real
-// backend (docs/parity-remediation-plan.md §1). These cover the logic that's
+// backend (docs/archive/parity-remediation-plan.md §1). These cover the logic that's
 // awkward to prove via the live DOM: lazy tree expansion with PK/FK badge
 // derivation, run-metadata state, export wiring, and the Ask-agent event.
 import { describe, it, expect, beforeEach, vi } from 'vitest'

@@ -10,8 +10,8 @@
 > notebooks, skills, A2UI artifacts, one agent tool surface over MCP), not an Access
 > successor. The dual-engine design became DuckDB-only; Studio/Viewer and the Studio/App
 > mode split are gone; forms, switchboard, macros and the page-directive model are being
-> removed. See **[`docs/direction.md`](docs/direction.md)** for the plan of record and
-> **[`CLAUDE.md`](CLAUDE.md)** for the current architecture.
+> removed. See **[`docs/direction.md`](../direction.md)** for the plan of record and
+> **[`CLAUDE.md`](../../CLAUDE.md)** for the current architecture.
 
 ---
 

@@ -6,7 +6,7 @@
 
 > **Status (2026-09-22):** Phases 0–6 here are **complete** and this document is historical.
 > The Access-parity arc that followed it is **superseded**. Forward planning lives in
-> **[`docs/direction.md`](docs/direction.md)** (primitive migration, issues #62–#70).
+> **[`docs/direction.md`](../direction.md)** (primitive migration, issues #62–#70).
 
 ---
 
