@@ -1,6 +1,5 @@
 // Package crud provides the transactional, type-coercing, validation-enforcing
-// write-back core shared by the Studio (Wails) bindings and the embedded HTTP
-// server's form-submission pipeline (parity plan §1.1).
+// write-back core behind Studio's (Wails) datasheet bindings.
 //
 // All-string inputs (from HTTP forms / the Vue datasheet) are coerced to each
 // column's DuckDB type via CAST(? AS <type>) read from information_schema, and

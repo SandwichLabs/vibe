@@ -1,8 +1,8 @@
 // Package prefs stores app-global user preferences for Vibe Studio — the
-// settings that belong to the person, not to any one .vibe file (theme,
-// appearance). They live outside the container so that switching files never
-// changes how the app looks, and so a file shared with someone else never
-// carries the author's UI preferences along with the data.
+// settings that belong to the person, not to any one workspace (theme,
+// appearance). They live outside every workspace folder so that switching
+// workspaces never changes how the app looks, and so a repository shared with
+// someone else never carries the author's UI preferences along.
 //
 // Storage is a small JSON document at <config dir>/vibe/settings.json, where
 // <config dir> is os.UserConfigDir() (~/.config on Linux, ~/Library/Application

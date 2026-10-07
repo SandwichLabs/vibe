@@ -16,7 +16,7 @@ This page is the file-level reference, the command line, and how Studio opens, c
 - **No Save.** Notebooks, queries and skills save as you go; table edits go straight to their connection. There is no Save, Revert or unsaved-changes prompt.
 - **Settings.** *Workspace*: name, default connection, the agent's **team limit** (committed, can only tighten), **this computer** (your own choice, up to the team limit), and Studio's MCP switch with **Copy Claude Code config** / **Copy Claude Desktop config**. *App*: theme and the agent's model, including its API key as a write-only field ("In your keychain, Replace, Clear", and a one-time offer to move a plaintext key out of `~/.vibe.yaml`; see [`../llm-config.md`](../llm-config.md)). Neither shows a token.
 
-Studio takes a workspace folder on the command line: `vibe studio --gui <dir>` (or `vibe-studio <dir>`). A `.vibe` file on the command line (the OS opening one with Vibe) opens the **Import .vibe…** dialog instead.
+Studio takes a workspace folder on the command line: `vibe studio --gui <dir>` (or `vibe-studio <dir>`). A `.vibe` file (the OS opening one with Vibe, or `vibe studio --gui x.vibe`) opens the **Import .vibe…** dialog instead, and anything else gets a plain notice. On macOS the Finder hands Studio a folder or `.vibe` file as an Apple Event rather than an argument, and while Studio is already running it is handled the same way. How the OS associations are wired is in [`../packaging.md`](../packaging.md#1a-file-opening-as-built-105-slice-3).
 
 ## Layout
 

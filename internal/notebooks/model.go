@@ -1,6 +1,6 @@
 // Package notebooks implements the Notebook contract (#66 part A): a title
 // plus an ordered list of cells of three types (sql, markdown, a2ui), stored
-// in `_vibe_notebooks`. Ported from schoolwork-workspace's
+// one per file in a workspace (notebooks/<id>.vnb, see file_format.go). Ported from schoolwork-workspace's
 // src/notebook/model.js (emptyNotebook, newCell, coerceNotebook, VIEWS,
 // SCHEMA_VERSION) — same whitelist-rebuild-on-load contract, same rules:
 //

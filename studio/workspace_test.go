@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -764,4 +765,65 @@ func TestQueryKeepMine_RefusesWhenTheFileChangedAgain(t *testing.T) {
 	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix))
 	got, _ := app.GetQuery(q.ID)
 	assert.Contains(t, got.SQL, "SELECT 1", "nothing was overwritten")
+}
+
+func TestLaunchArg_FileURIsAndKinds(t *testing.T) {
+	dir := t.TempDir()
+	spaced := filepath.Join(dir, "my work")
+	require.NoError(t, os.Mkdir(spaced, 0o755))
+	bundle := filepath.Join(dir, "x.VIBE")
+	require.NoError(t, os.WriteFile(bundle, []byte("x"), 0o600))
+	plain := filepath.Join(dir, "notes.txt")
+	require.NoError(t, os.WriteFile(plain, []byte("x"), 0o600))
+
+	// %U from a .desktop entry: file:// URIs, percent-encoded.
+	assert.Equal(t, spaced, classifyLaunchArg("file://"+(&url.URL{Path: spaced}).EscapedPath()).Path)
+	assert.Equal(t, bundle, classifyLaunchArg("file://"+(&url.URL{Path: bundle}).EscapedPath()).BundlePath)
+	// A folder named like a bundle is still a workspace.
+	odd := filepath.Join(dir, "x.vibe")
+	require.NoError(t, os.Mkdir(odd, 0o755))
+	assert.Equal(t, odd, classifyLaunchArg(odd).Path)
+	assert.Empty(t, classifyLaunchArg(odd).BundlePath)
+	// A directory is a workspace, a .vibe is a bundle, anything else is a notice.
+	assert.Equal(t, spaced, classifyLaunchArg(spaced).Path)
+	assert.Equal(t, bundle, classifyLaunchArg(bundle).BundlePath)
+	r := classifyLaunchArg(plain)
+	assert.Empty(t, r.Path)
+	assert.Empty(t, r.BundlePath)
+	assert.Contains(t, r.Message, "is a file, not a folder")
+	assert.Contains(t, classifyLaunchArg(filepath.Join(dir, "gone")).Message, "isn't there")
+	assert.Equal(t, InitialWorkspace{}, classifyLaunchArg("--gui"))
+	assert.Equal(t, InitialWorkspace{}, classifyLaunchArg(""))
+}
+
+func TestHandleOpenPath_QueuesBeforeReadyThenEmits(t *testing.T) {
+	app := newBareApp(t)
+	var events []string
+	var payloads []InitialWorkspace
+	app.emit = func(event string, data ...any) {
+		events = append(events, event)
+		p, ok := data[0].(InitialWorkspace)
+		require.True(t, ok)
+		payloads = append(payloads, p)
+	}
+	dir := t.TempDir()
+	bundle := filepath.Join(t.TempDir(), "b.vibe")
+	require.NoError(t, os.WriteFile(bundle, []byte("x"), 0o600))
+
+	// Before the frontend asks: queued, no event.
+	app.handleOpenPath(dir)
+	assert.Empty(t, events)
+	assert.Equal(t, dir, app.GetInitialWorkspace().Path)
+
+	// After: an event, and the queue is untouched.
+	app.handleOpenPath(bundle)
+	require.Equal(t, []string{"app:open-path"}, events)
+	assert.Equal(t, bundle, payloads[0].BundlePath)
+	assert.Equal(t, dir, app.GetInitialWorkspace().Path)
+
+	// A notice is delivered too, and an empty path is ignored.
+	app.handleOpenPath(filepath.Join(dir, "gone"))
+	app.handleOpenPath("")
+	require.Len(t, events, 2)
+	assert.Contains(t, payloads[1].Message, "isn't there")
 }

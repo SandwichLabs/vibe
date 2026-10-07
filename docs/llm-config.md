@@ -7,7 +7,7 @@ full — and the "Ask before changes" switch (#79, on by default: the
 agent shows every write for approval before it runs) are per-workspace
 settings, since they're a security boundary for that specific workspace; the
 workspace's `vibe.yaml` can cap them for everyone. Both live in Studio's
-Settings → Agent.)
+Settings → Workspace → The agent.)
 
 ## Providers
 

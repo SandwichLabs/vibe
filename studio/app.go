@@ -70,12 +70,13 @@ type App struct {
 	syncMu   sync.Mutex
 	connSigs map[string]string
 
-	// initialPath is the folder passed on the command line, and initialNote a
-	// plain-language problem with it (a .vibe file, a missing folder).
-	initialPath string
-	initialNote string
-	// initialBundle is a .vibe bundle named on the command line.
-	initialBundle string
+	// initial is what was named on the command line (or opened from the OS
+	// before the window was ready): a folder, a .vibe bundle, or a note.
+	// frontendReady flips when the frontend first asks for it; OS open
+	// requests after that are sent as events (HandleOpenPath).
+	launchMu      sync.Mutex
+	initial       InitialWorkspace
+	frontendReady bool
 
 	// sessionID identifies the CURRENTLY open workspace. It is regenerated on
 	// every successful open and cleared on close. A frontend view that reads

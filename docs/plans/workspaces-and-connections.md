@@ -1,7 +1,34 @@
 # Workspaces & Connections — implementation plan
 
-**Status:** ACCEPTED · 2026-10-06 · owner decisions recorded in §7 · v1 adversarially reviewed (Fable), findings in §9 · tracking epic: see §5
-**Supersedes (once accepted):** `docs/direction.md` §1 "file is the app", §3.1 "Container unchanged", §3.2 "in-process data", §6 non-goal "no plaintext container"; CLAUDE.md *Design Principles* "File is the app" and "Encryption by default".
+**Status:** IMPLEMENTED · epic #105 merged (issues #106–#119) · originally accepted 2026-10-06 · owner decisions in §7 · v1 adversarially reviewed (Fable), findings in §9 · see "As built" below first
+**Supersedes:** `docs/direction.md` §1 "file is the app", §3.1 "Container unchanged", §3.2 "in-process data", §6 non-goal "no plaintext container"; CLAUDE.md *Design Principles* "File is the app" and "Encryption by default".
+
+---
+
+## As built (read this first)
+
+The plan below was written before the work and is kept as the record of the reasoning. Where it and the code disagree, the code and the reference docs win. This is what to know.
+
+**Shipped.** A workspace is a folder (`vibe.yaml`, `notebooks/*.vnb`, `queries/*.sql`, `skills/<name>/SKILL.md`, `data/`), opened from a launcher in Studio and by the CLI. `internal/session` is the DuckDB hub; connections attach into it lazily. Credentials live in the OS keychain or env vars (`internal/secrets`). The agent's SQL is an allow-list; `vibe mcp serve` and Studio share one owner per workspace; `.vibe` is a bundle. Reference docs: [workspaces](../reference/workspaces.md), [connections](../reference/connections.md), [agent policy](../reference/agent-policy.md), [notebooks](../reference/notebooks.md). North star: [`../direction.md`](../direction.md) (§9 lists the departures).
+
+**Amendments to the plan** (the sections they replace are annotated "(as built)" or "(impl #N)" inline):
+- **No legacy `.vibe` import (§4.6, D6, #110).** Dropped by owner decision on the epic. `internal/container` and `verify/compact/rekey/dump/passphrase` are gone, not retired later. A v1 or SQLCipher file gets a plain "not supported".
+- **Agent policy (§4.5, D13, #116).** Parse-first, allow-listed readers, three-gate writes, always-approve for non-local connections, `list_connections` instead of `duckdb_databases()`, `SET VARIABLE` refused, relative paths refused. The "separate agent hub with external access off" in D13 was not built (#134).
+- **Metadata-driven formats are own-scope only (#119).** `ducklake`, `iceberg` and `delta` definitions are refused in a committed `vibe.yaml`. Iceberg and Delta readers are not agent readers in any tier. Related rule, **parse before EXPLAIN**: the agent's statement is checked syntactically first, and nothing is sent to `EXPLAIN` (which binds the statement, and for some readers fetches URLs while binding) until that check has passed.
+- **Trust boundary of the folder.** A committed `vibe.yaml` can only tighten the agent, its `credentials:` line is a hint only, `${VAR}` and absolute paths are refused in it, per-person settings live outside the folder keyed by id and real path, and every `sign_in` is bound to the definition's fingerprint so a pulled commit cannot redirect a saved password.
+- **MotherDuck (D10).** Cannot be attached read-only (`READ_ONLY` unsupported on `md:`); the token is set at hub open, and testing a MotherDuck connection runs in a subprocess because one process holds one token.
+- **Bundles (D2, §4.6, #118).** Optional encryption is age (scrypt passphrase), not a hand-rolled envelope. A bundle never carries credentials or data.
+- **Packaging (§5 Slice 3, D12).** The app-side wiring is built: launch arguments, macOS `OnFileOpen`, `Info.plist` document types, Linux `.desktop` and MIME, `vibe workspace info` showing the DuckDB version and extensions ([`../packaging.md`](../packaging.md) §1a). `.desktop` does not claim `inode/directory`.
+
+**Open follow-ups.**
+- #134: a safe agent path for Iceberg and Delta (confined hub, or Go-side validation).
+- #123: auto-number gap off-by-one after reopening a file.
+- MotherDuck verified against a real token (so far only the spike, fakes and the hidden child process).
+- Iceberg REST catalogs. DuckLake with a Postgres or SQLite metadata catalog.
+- Removing a downloaded extension (Studio only installs).
+- Dead code to sweep: `notebooks.NewSQLiteStore` and `skills.NewSQLiteStore` and the `_vibe_*` helpers in `internal/notebooks` survive for tests only.
+- #77: signing and notarisation, CI and release pipeline, bundled-extension decision (D12), the keychain check on signed builds.
+- #73: notebook export to HTML, PDF and xlsx.
 
 ---
 
@@ -11,7 +38,7 @@ Vibe stops being *a file that holds your data* and becomes *a desktop workspace 
 
 Unchanged: one agent tool surface (`internal/agents` ToolDefs → `internal/llm` + `internal/mcp`), notebooks / A2UI / skills, task-mode authoring, guardrails, SchoolHouse theming, DuckDB as the single engine.
 
-## 2. What exists today (the seams)
+## 2. What existed before the work (the seams)
 
 Everything hangs off one `container.Container` (`internal/container/container.go:14`), which owns **both** a SQLCipher metadata DB and a materialised DuckDB blob.
 

@@ -1,6 +1,6 @@
 # The agent's SQL policy
 
-> **Changing (epic #105).** This is the policy of #116 (plan §4.5). It replaced the old deny-list: the agent's SQL is an **allow-list per tier**, and the person's own SQL (the Studio editor, notebook cells you write, `vibe query`) is not covered by it. The same policy applies to Studio's agent chat, to `vibe mcp serve` and to Studio's MCP server; there is one tool surface.
+> This is the policy of #116 (plan §4.5), as built. It replaced the old deny-list: the agent's SQL is an **allow-list per tier**, and the person's own SQL (the Studio editor, notebook cells you write, `vibe query`) is not covered by it. The same policy applies to Studio's agent chat, to `vibe mcp serve` and to Studio's MCP server; there is one tool surface.
 
 The agent (Studio chat or an MCP client) reaches data through `run_query` and the record and schema tools. Every statement goes through four layers, cheapest and least side-effecting first:
 

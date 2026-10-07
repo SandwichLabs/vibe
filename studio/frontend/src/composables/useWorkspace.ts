@@ -20,6 +20,9 @@ export const isReadOnly = computed(() => !!workspaceInfo.value?.readOnly)
 // A plain-language note the launcher shows after the workspace was closed from
 // outside (another program took it over), or a startup argument problem.
 export const launcherNotice = ref('')
+// appNotice is a plain-language note shown over whichever screen is up (a path the
+// OS asked Vibe to open that could not be used while a workspace is already open).
+export const appNotice = ref('')
 
 // Dialog visibility is global so a keyboard shortcut works from any screen.
 export const newWorkspaceOpen = ref(false)

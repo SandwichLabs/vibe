@@ -1,13 +1,11 @@
 # MCP (Model Context Protocol)
 
-> **Changing (epic #105).** The agent's SQL policy is an allow-list per tier (#116, [reference/agent-policy.md](reference/agent-policy.md)), and writes to connections that are not local files always need approval, so headless MCP refuses them. Studio's own MCP switch and its "Copy Claude config" buttons shipped with #111 (Settings → Workspace → Claude and other tools); the Go side they call is described below.
-
 Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
 
 - **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
 - **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port (Settings → Workspace → Claude and other tools). A write that needs approval shows the same approval card the chat agent uses, in the Studio window; the card waits for you, and a declined or unanswered card changes nothing.
 
-Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. `.vibe` files are no longer opened directly: pass a workspace folder.
+Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](reference/agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
 
 ## `vibe mcp serve`
 
@@ -52,7 +50,7 @@ The effective policy is the workspace's: this person's chosen tier (default **re
 
 A write over MCP needs **three gates** (#116): the **tier** allows it (read-write: `INSERT`/`UPDATE`/`DELETE`; full: also DDL and `COPY ... TO` a `data/` file), the **connection is writable** (`read_only: false`), and **the person approves it**. A headless process has no one to show an approval card to, so:
 
-- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Agent**; there is no flag or environment variable that bypasses it from the MCP side.
+- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Workspace → The agent**; there is no flag or environment variable that bypasses it from the MCP side.
 - **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**: approval is forced for those connections, and the refusal says "...which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when "Ask before changes" is off), and there is no one to ask over MCP. Nothing was changed."
 - To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `vibe mcp serve` proxies to it.
 
@@ -82,7 +80,7 @@ How #111 wires it (`studio/workspace.go`):
 
 1. **Opening a workspace:** `AcquireHub` first. On `ErrHubHeld`, read `held.Holder` and show the read-only banner (SPEC 7 C): "Open read-only" opens `workspace.Open` only (stores are files, so notebooks/queries/skills stay editable) and does **not** call `OpenSession` for the local `duckdb` connections, which show `locked-by(pid)`; "Take over" calls `TakeOver`, then continues as the owner. `ErrNotReleasable` or a timeout is shown as the reason, never a hang.
 2. **Releasable owner:** pass `WithReleaseHandler` (one per process; Studio holds one workspace at a time). The handler must ask the person if needed, close the session, stop MCP, `Release()`, and switch the window to the launcher or read-only. A second releasable hold in the process is an error (`ErrOneReleasableHold`).
-3. **MCP switch (Settings → Workspace → MCP):** On = `StartWorkspaceMCP` then `m.Handler.SetApprover(...)` wired to the existing approval card (an approval can take minutes; the proxy waits). Off = `m.Stop()`. Reflect whether a holder advertises MCP with `ReadHolder`. Wrap the handler with `WithMCPHandlerWrap` if Studio needs its own lock around calls.
+3. **MCP switch (Settings → Workspace → Claude and other tools):** On = `StartWorkspaceMCP` then `m.Handler.SetApprover(...)` wired to the existing approval card (an approval can take minutes; the proxy waits). Off = `m.Stop()`. Reflect whether a holder advertises MCP with `ReadHolder`. Wrap the handler with `WithMCPHandlerWrap` if Studio needs its own lock around calls.
 4. **Copy Claude Desktop / Claude Code config:** `hub.BuildClaudeConfig(ws.Root(), exe)` with `exe` from `hub.LocateVibe()`; copy `.Desktop` or `.Code`. Never show or copy the token with these.
 5. **Workspace switcher:** release the old workspace's hold (stop MCP, close the session, `hold.Release()`) **before** acquiring the new one. The release signal is process-wide, so only one releasable hold may exist at a time, and a second `WithReleaseHandler` fails with `ErrOneReleasableHold`.
 6. **Quit/close:** `m.Stop()`, close the session, then `hold.Release()` (the lock goes last).
@@ -115,7 +113,7 @@ The server name is `vibe-<folder>` so two workspaces do not collide. With "Ask b
 ### Security notes
 
 - `hub.lock` is `0600` and holds the endpoint and bearer token of a local server. The trust model is **same user only**: a reader refuses the file unless it is a regular file owned by the current uid with no group or world permission bits, ignores it unless the flock is really held, and accepts only a plain-`http` loopback URL, so a lock file committed to a cloned repository (or left by a crash) can never point a client, or its token, anywhere.
-- The lock file is never written through a link: it is opened with `O_NOFOLLOW`, and must be a regular, single-link file owned by you (a committed `hub.lock -> victim` symlink, a hard link or a FIFO is refused, not truncated or hung on); `.vibe-local` itself must be a real directory owned by you. The `.vibe` writer lock uses the same code.
+- The lock file is never written through a link: it is opened with `O_NOFOLLOW`, and must be a regular, single-link file owned by you (a committed `hub.lock -> victim` symlink, a hard link or a FIFO is refused, not truncated or hung on); `.vibe-local` itself must be a real directory owned by you.
 - The token never appears on a command line, in the Claude config snippets, in the structured logs, or in error messages. It is regenerated each time a server starts. The one place it is printed is `vibe mcp serve --transport sse`, which writes it to stderr once so a network client can be configured; with stdio (what the Claude snippets use) it is never printed. Anything that can read your files as you can read it; that is the same trust as your own keychain-free local config.
 - A proxy sends the token only as an `Authorization: Bearer` header.
 - `SIGUSR1` is only sent to a pid whose lock file says it advertised release control, on this host, with the lock verified held and (Linux) the process pinned by a pidfd. One signal listener exists per process and is never torn down, so a stray signal cannot kill a Vibe process.

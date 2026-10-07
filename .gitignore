@@ -1,7 +1,12 @@
 # Build artifacts
 vibe
 vibe-app
-studio/build/
+# studio/build holds the committed packaging inputs (Info.plist, .desktop, MIME
+# type); only wails' output is ignored.
+studio/build/bin/
+studio/build/appicon.png
+studio/build/darwin/Info.dev.plist
+studio/build/windows/
 studio/studio/
 *.exe
 

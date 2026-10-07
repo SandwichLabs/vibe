@@ -15,6 +15,7 @@ vi.mock('./wailsjs/runtime/runtime', () => ({
 
 import App from './App.vue'
 import { resolveConfirmChoice, confirmVisible } from './composables/useConfirm'
+import { bundleImportRequest } from './composables/useBundle'
 import { workspaceInfo, newWorkspaceOpen, launcherNotice, switcherOpen, _resetForTests } from './composables/useWorkspace'
 
 function makeApp(over: Record<string, any> = {}) {
@@ -92,6 +93,19 @@ describe('App.vue', () => {
     mountApp()
     await flushPromises()
     expect(launcherNotice.value).toContain('.vibe files are no longer opened')
+  })
+
+  it('routes OS open requests: a .vibe opens Import, a note shows, a folder opens', async () => {
+    const app = makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '', bundlePath: '/tmp/x.vibe' })) })
+    mountApp()
+    await flushPromises()
+    expect(bundleImportRequest.value).toEqual({ mode: 'new', path: '/tmp/x.vibe' })
+
+    // A request that arrives after startup comes as an event.
+    expect(handlers['app:open-path']).toBeTruthy()
+    handlers['app:open-path']({ path: '/w/from-finder' })
+    await flushPromises()
+    expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/from-finder')
   })
 
   it('Ctrl+N opens New workspace, Ctrl+O opens the folder picker, F5 is intercepted', async () => {

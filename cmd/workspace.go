@@ -204,8 +204,12 @@ type infoReport struct {
 		Sandbox         string `json:"sandbox"`
 		AskBeforeWrites bool   `json:"ask_before_writes"`
 	} `json:"agent"`
-	HubHolder string   `json:"hub_holder"`
-	Warnings  []string `json:"warnings,omitempty"`
+	// DuckDB is the engine version; Extensions are the downloaded extensions
+	// installed in Vibe's own extension directory (never ~/.duckdb).
+	DuckDB     string   `json:"duckdb,omitempty"`
+	Extensions []string `json:"extensions"`
+	HubHolder  string   `json:"hub_holder"`
+	Warnings   []string `json:"warnings,omitempty"`
 }
 
 func runWorkspaceInfo(cmd *cobra.Command, _ []string) error {
@@ -276,6 +280,8 @@ func buildInfo(ctx context.Context, o *openedWorkspace) (*infoReport, error) {
 		rep.Skills = len(l)
 	}
 
+	rep.DuckDB, rep.Extensions = engineInfo(ctx, o.Sess)
+
 	pol := agents.PolicyFrom(ws)
 	rep.Agent.Sandbox, rep.Agent.AskBeforeWrites = string(pol.Mode), pol.AskBeforeWrites
 
@@ -288,6 +294,29 @@ func buildInfo(ctx context.Context, o *openedWorkspace) (*infoReport, error) {
 		rep.HubHolder = "unknown (its lock file cannot be trusted)"
 	}
 	return rep, nil
+}
+
+// engineInfo reads the DuckDB version and the installed (downloaded)
+// extensions. It is best effort: a failure leaves the fields empty.
+func engineInfo(ctx context.Context, sess session.Session) (string, []string) {
+	version := ""
+	if rows, err := sess.Query(ctx, "SELECT version()"); err == nil {
+		if rows.Next() {
+			_ = rows.Scan(&version)
+		}
+		_ = rows.Close()
+	}
+	exts := []string{}
+	if rows, err := sess.Query(ctx, "SELECT extension_name FROM duckdb_extensions() WHERE installed AND install_mode <> 'STATICALLY_LINKED' ORDER BY 1"); err == nil {
+		for rows.Next() {
+			var n string
+			if rows.Scan(&n) == nil {
+				exts = append(exts, n)
+			}
+		}
+		_ = rows.Close()
+	}
+	return version, exts
 }
 
 // countTables counts the tables and views of every schema of one catalog.
@@ -331,6 +360,13 @@ func printInfo(out io.Writer, r *infoReport) {
 		ask = "off"
 	}
 	fmt.Fprintf(out, "Agent:       sandbox %s, ask before writes %s\n", r.Agent.Sandbox, ask)
+	if r.DuckDB != "" {
+		ext := "none installed (they download on consent)"
+		if len(r.Extensions) > 0 {
+			ext = strings.Join(r.Extensions, ", ")
+		}
+		fmt.Fprintf(out, "DuckDB:      %s; extensions: %s\n", r.DuckDB, ext)
+	}
 	holder := r.HubHolder
 	if holder == "" {
 		holder = "none (nothing has the database open)"

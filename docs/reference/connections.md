@@ -164,6 +164,12 @@ SELECT * FROM iceberg_snapshots('/abs/path/to/workspace/data/orders');
 - Read-only: these extensions are not used to write. Test reads the table's schema (a folder) or, for a URL, only reports that the storage connection reads it.
 - **Not built (follow-up):** an Iceberg REST catalog (`ATTACH ... (TYPE iceberg)` with an OAuth or token secret). It needs its own secret type and endpoint rules. Iceberg has no end-to-end fixture in the test suite (the policy and path rules are tested with unit tests and a real Delta table).
 
+## DuckDB version and extensions
+
+- **The engine is pinned.** Vibe embeds DuckDB through `go-duckdb` (`github.com/marcboeker/go-duckdb/v2`, currently **v2.4.3 = DuckDB 1.4.1**), and that version is chosen to be one MotherDuck supports: a MotherDuck connection needs a client within the server's supported version window, so go-duckdb is only bumped together with a check against MotherDuck. `vibe workspace info` prints the running DuckDB version and the extensions installed.
+- **Extensions download on consent into Vibe's own directory.** Vibe runs DuckDB with autoinstall and autoload off and `extension_directory` set to `<user cache dir>/vibe/duckdb/extensions` (`~/.cache/vibe/duckdb/extensions` on Linux, `~/Library/Caches/vibe/duckdb/extensions` on macOS). Anything in your own `~/.duckdb` is never loaded. A type that needs an extension (`postgres`, `mysql`, `httpfs`, `azure`, `sqlite`, `ducklake`, `iceberg`, `delta`, `motherduck`; `excel` for xlsx) reads `extension-missing` until you agree to the download: **Install** in Studio (*Settings > App > Extensions* or the connection's state) or `vibe conn test|connect --install`. Connecting never installs. Community extensions are off.
+- **Offline use is not solved yet.** Nothing ships inside the app, so the first use of each extension needs network access to `extensions.duckdb.org`. Whether to pre-bundle a fixed offline set (and point `extension_directory` at it, with the signing changes macOS needs) is an open decision in the packaging epic (#77, [packaging.md](../packaging.md)). Until then an air-gapped machine can copy a populated extension directory from another machine running the same Vibe version.
+
 ## In Vibe Studio
 
 Studio shows connections in a **rail** under the nav (it replaces the old Tables item; `#/tables` stays for deep links) and edits them on a **page**, not a modal.

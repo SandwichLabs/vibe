@@ -15,7 +15,7 @@ import { flushAll } from './composables/usePendingSaves'
 import { askConfirm } from './composables/useConfirm'
 import {
   workspaceOpen, workspaceInfo, startWorkspaceTracking, syncWorkspaceState, openWorkspacePath, openFolderDialog,
-  launcherNotice, newWorkspaceOpen, switcherOpen,
+  launcherNotice, appNotice, newWorkspaceOpen, switcherOpen,
 } from './composables/useWorkspace'
 
 // beforeCloseTimeoutMs bounds how long the quit flow waits for flushAll() — a
@@ -81,7 +81,29 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+interface OpenRequest { path?: string; message?: string; bundlePath?: string }
+
+// handleOpenRequest acts on something the OS or command line asked Vibe to open:
+// a folder opens as a workspace, a .vibe file opens the bundle Import dialog,
+// anything else shows the backend's plain-language note.
+async function handleOpenRequest(req: OpenRequest | null | undefined) {
+  if (!req) return
+  if (req.message) {
+    if (workspaceOpen.value) appNotice.value = req.message
+    else launcherNotice.value = req.message
+  } else if (req.path) {
+    const res = await openWorkspacePath(req.path)
+    if (!res.ok && res.error) {
+      if (workspaceOpen.value) appNotice.value = res.error
+      else launcherNotice.value = res.error
+    }
+  } else if (req.bundlePath) {
+    openBundleImport(workspaceOpen.value ? 'here' : 'new', req.bundlePath)
+  }
+}
+
 let unsubBeforeClose: (() => void) | null = null
+let unsubOpenPath: (() => void) | null = null
 
 // A different workspace is a different place: land on Home, not on whatever
 // route (and notebook id) the old one left behind. A reload that merely picks
@@ -97,16 +119,20 @@ onMounted(async () => {
   startWorkspaceTracking()
   await syncWorkspaceState()
   window.addEventListener('keydown', onKeydown)
+  // Listen before asking for the launch state, so a request during a slow
+  // first open is not lost (macOS Finder, or a second launch).
+  unsubOpenPath = EventsOn('app:open-path', (req: OpenRequest) => { void handleOpenRequest(req) })
   if (!workspaceOpen.value) {
-    // A folder passed on the command line (`vibe studio --gui <dir>`).
+    // A folder or .vibe bundle passed on the command line (`vibe studio --gui <dir>`,
+    // or the OS opening one with Vibe before the window was ready).
     try {
-      const initial = await window.go.main.App.GetInitialWorkspace()
-      if (initial?.message) launcherNotice.value = initial.message
-      else if (initial?.path) await openWorkspacePath(initial.path)
-      else if (initial?.bundlePath) openBundleImport(workspaceOpen.value ? 'here' : 'new', initial.bundlePath)
+      await handleOpenRequest(await window.go.main.App.GetInitialWorkspace())
     } catch {
       // ignore
     }
+  } else {
+    // Still tells the backend it can send open requests as events.
+    try { await window.go.main.App.GetInitialWorkspace() } catch { /* ignore */ }
   }
   // EventsOn returns an unsubscribe function scoped to THIS listener; the global
   // EventsOff(name) would remove every listener for the event name.
@@ -116,6 +142,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   unsubBeforeClose?.()
+  unsubOpenPath?.()
 })
 </script>
 
@@ -123,6 +150,11 @@ onUnmounted(() => {
   <div class="sh" style="height: 100vh; width: 100vw; background: var(--sh-paper); color: var(--sh-ink);">
     <AppShell v-if="workspaceOpen" />
     <LauncherView v-else />
+
+    <div v-if="appNotice" class="banner warn app-notice" role="status" data-testid="app-notice">
+      <div class="body"><div class="sub" style="margin: 0;">{{ appNotice }}</div></div>
+      <button class="btn" type="button" @click="appNotice = ''">Dismiss</button>
+    </div>
 
     <NewWorkspaceDialog />
     <TakeOverDialog />
@@ -147,3 +179,17 @@ onUnmounted(() => {
     />
   </div>
 </template>
+
+<style>
+.app-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+</style>

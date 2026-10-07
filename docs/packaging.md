@@ -1,9 +1,9 @@
 # Packaging and release plan: macOS and Linux
 
-> **Changing (epic #105).** Studio will open **workspace folders** (`vibe studio --gui <dir>` once #111 lands, and on macOS a folder via `OnFileOpen`). A `.vibe` file becomes an exchange bundle or a legacy file that is *imported* into a workspace, so the `.vibe` file association should route to Import rather than Open. As of #118 Studio does this itself: a `.vibe` path in `os.Args[1]` (Linux and Windows) opens the **Import .vibe…** dialog, via `GetInitialWorkspace().bundlePath`, and never tries to open it as a workspace. The macOS `OnFileOpen` Apple Event should call the same path (`openBundleImport('new' or 'here', path)` on the frontend); the packaging step wires it. The MIME type, UTI and file-association description should say "Vibe bundle", not "Vibe database". Packaging must also test OS-keychain access from signed and notarised macOS builds (go-keyring shells out to `/usr/bin/security`), and decide whether to pre-bundle DuckDB extensions for offline use. See `docs/plans/workspaces-and-connections.md` (Slice 3, D11, D12).
+> **Slice 3 wiring (epic #105) is done; shipping is not.** The app side of "open a workspace folder, import a `.vibe`" is built and tested (see §1a): launch arguments, macOS `OnFileOpen`, the `Info.plist` document types, the Linux `.desktop` and MIME files. Signing, notarisation, CI, the release pipeline, the extension-bundling decision and the signed-build keychain check are still epic #77 (§5, §8).
 
 **Date:** 2026-09-23
-**Status:** Proposed. Nothing here is built yet. Tracking: epic #77.
+**Status:** Proposed, except §1a (the app-side file-open wiring, built under #105). The pipeline, signing and CI are not built. Tracking: epic #77.
 
 Vibe ships two binaries: `vibe` (CLI, TUI, `vibe mcp serve`) and
 `vibe-studio` (the Wails desktop app). Both are CGO (SQLCipher, DuckDB, and
@@ -16,13 +16,46 @@ for Studio, WebKit), which decides almost everything below.
 | `.goreleaser.yaml` fails `goreleaser check` (v2.13.3): `before.hooks` with `dir:` is GoReleaser Pro syntax. | No release has ever run from it. |
 | Its `vibe-studio` build is a plain `go build ./studio`, without the `desktop,production` tags `wails build` adds. | The binary would refuse to start, and there is no `.app` bundle, icon, or `.desktop` file. |
 | It cross-compiles CGO for darwin and linux/arm64 from one runner with no cross toolchain. | Can't link SQLCipher/DuckDB for those targets. |
-| `studio/build/` is gitignored wholesale. | App icon, `Info.plist`, and entitlements can't be committed. Wails regenerates defaults. |
+| ~~`studio/build/` is gitignored wholesale.~~ Fixed in the #105 wrap-up (only `bin/` and Wails-generated defaults are ignored). | `Info.plist` and the Linux files are committed. **No `appicon.png` exists in the repo yet**, so Wails generates a default one; committing the real icon is a #77 item (§5.1). |
 | No `.github/workflows/` at all. | No CI on PRs either. |
 | The repo is private. | Release assets aren't downloadable by Homebrew or the website without a token. |
-| `studio/main.go` reads the file to open from `os.Args[1]` only. | On macOS, double-clicking a `.vibe` file arrives as an Apple Event (`mac.Options.OnFileOpen`), not argv, so it would do nothing. |
+| ~~`studio/main.go` read the path to open from `os.Args[1]` only.~~ Fixed in #105 wrap-up. | On macOS an opened folder or `.vibe` arrives as an Apple Event (`mac.Options.OnFileOpen`), not argv; Studio now handles both (§1a). |
 | `vibe studio --gui` looks for `vibe-studio` beside the executable, then on `PATH`. | Needs an `open -a "Vibe Studio"` path on macOS, and symlink resolution when `vibe` is a Homebrew link. |
-| xlsx import runs `INSTALL excel`, which downloads from extensions.duckdb.org on first use. | It needs network access the first time (at odds with local-first). On macOS, loading a `.duckdb_extension` dylib under the hardened runtime likely needs `com.apple.security.cs.disable-library-validation`. Verify in the spike. |
+| DuckDB extensions (`excel`, `postgres`, `httpfs`, ...) download from extensions.duckdb.org on first use, after the person agrees, into Vibe's own directory (§8). | The first use of each needs network access. On macOS, loading a `.duckdb_extension` dylib under the hardened runtime likely needs `com.apple.security.cs.disable-library-validation`. Verify in the spike. |
 | Studio has no version ldflags. | The About screen and bug reports can't say which build they came from. |
+
+## 1a. File opening, as built (#105 Slice 3)
+
+What the app does, whichever way the OS hands it a path. All of it is `studio/workspace.go` (`classifyLaunchArg`, `setInitialArg`, `handleOpenPath`, `GetInitialWorkspace`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
+
+| Path is | Studio does |
+|---|---|
+| a directory | opens it as a workspace (asks "Make this folder a workspace?" when it has no `vibe.yaml`; asks before leaving an open workspace) |
+| a `*.vibe` file (any case) | opens the **Import .vibe…** dialog with the file already chosen: into the open workspace, or as a new one from the launcher. The file is read, verified and previewed first; nothing is written until **Import**. A v1 container or any non-bundle gets the plain "not a Vibe bundle" message from the preview |
+| anything else, or a missing path | a plain-language notice (on the launcher, or a dismissible banner when a workspace is open) |
+| a flag (`-psn_...`, `--x`) | ignored |
+
+- **Linux and argv.** `vibe-studio <path>` and `vibe studio --gui <path>` (which execs `vibe-studio` with the absolute path; a `.vibe` is passed through to Import, only the terminal UI refuses one). A desktop entry's `Exec=vibe-studio %U` passes `file://` URIs, which are percent-decoded; only the first path is used.
+- **macOS and Apple Events.** `mac.Options.OnFileOpen` (Wails v2.11) calls the same handler. Finder launches the app with no path in argv, so a path can arrive **before** the frontend is ready (cold launch by double-click) or **after** (the app is running and a folder is dropped on the Dock icon). Before: the path is queued and the frontend collects it with `GetInitialWorkspace()` on mount (the last one wins). After: the backend emits an `app:open-path` event with the same `{path, bundlePath, message}` shape, and the frontend handles it exactly like the startup case. The first `GetInitialWorkspace()` call is the moment the backend switches from queueing to emitting.
+- **Verification.** The classification, the `file://` handling and the queue-then-emit switch are unit-tested (`studio/workspace_test.go`), the frontend routing in `App.spec.ts`. **Not verified on a Mac**: the darwin build needs CGO and a Mac toolchain, so `GOOS=darwin go vet ./studio/...` does not run on Linux, and whether Finder really fires `OnFileOpen` for a folder is one of the spike's questions (§6, step 1). The Wails option is plain Go and compiles on every platform.
+
+### The macOS bundle
+
+`studio/build/darwin/Info.plist` (committed; `studio/build/` is un-ignored except `bin/`) sets `CFBundleIdentifier` `dev.sandwichlabs.vibe-studio` and declares:
+
+- `CFBundleDocumentTypes`, **Viewer** role for both:
+  - **folders** (`public.folder`, `LSHandlerRank` Alternate): Vibe appears in *Open With* for a folder and can be chosen, but never becomes the default handler for folders;
+  - **Vibe bundle** (`dev.sandwichlabs.vibe-bundle`, rank Owner).
+- `UTExportedTypeDeclarations`: `dev.sandwichlabs.vibe-bundle`, conforming to `public.data`, extension `vibe`, MIME `application/x-vibe-bundle`, description "Vibe bundle".
+
+Wails still fills in the product name, version and copyright from `wails.json` (`info`). The description everywhere says "Vibe bundle", not "Vibe database".
+
+### The Linux files
+
+- `studio/build/linux/vibe-studio.desktop`: `Exec=vibe-studio %U`, `MimeType=application/x-vibe-bundle;`, `Icon=vibe-studio`.
+- `studio/build/linux/vibe-mime.xml`: `*.vibe` → `application/x-vibe-bundle`, comment "Vibe bundle".
+- **Decision: the `.desktop` file does not claim `inode/directory`.** That MIME type would add Vibe to *Open With* for every folder on the machine and, on some desktops, compete for the "open folder" default, which is the file manager's job. A workspace folder is opened with `vibe-studio <dir>` or `vibe studio --gui <dir>`, or from Studio's own launcher (Open folder…, recent workspaces). People who want a file-manager entry can add one themselves (a Nautilus script or a Dolphin service menu that runs `vibe-studio "$@"`); this is documented, not shipped. Revisit if testers ask.
+- **Install steps** (for the nfpm package, §5.3, and `install.sh` in the tarball): `/usr/share/applications/vibe-studio.desktop`, `/usr/share/mime/packages/vibe-bundle.xml` (installed under that name), hicolor icons; post-install runs `update-desktop-database` and `update-mime-database /usr/share/mime`. The nfpm config itself is part of the pipeline work in #77.
 
 ## 2. What we ship
 
@@ -32,7 +65,7 @@ and `vibe mcp serve` work without a second download.
 | Platform | Artifact | Contents | Channel |
 |---|---|---|---|
 | macOS (universal: arm64 + x86_64) | `Vibe-Studio-<ver>-macos-universal.dmg`, signed, notarized and stapled | `Vibe Studio.app`, with `vibe` at `Contents/MacOS/vibe` | GitHub Release, plus the Homebrew **cask** `sandwichlabs/tap/vibe-studio` (`binary` stanza links `vibe` onto `PATH`) |
-| Linux amd64 and arm64 | `vibe_<ver>_<arch>.deb`, `vibe-<ver>.<arch>.rpm` | `/usr/bin/vibe`, `/usr/bin/vibe-studio`, `.desktop` file, hicolor icons, MIME type for `.vibe` | GitHub Release |
+| Linux amd64 and arm64 | `vibe_<ver>_<arch>.deb`, `vibe-<ver>.<arch>.rpm` | `/usr/bin/vibe`, `/usr/bin/vibe-studio`, `.desktop` file, hicolor icons, MIME type for `.vibe` bundles | GitHub Release |
 | Linux amd64 and arm64 | `vibe-studio_<ver>_linux_<arch>.tar.gz` | both binaries, `.desktop`, icon, `install.sh` | GitHub Release |
 | Linux amd64 and arm64, CLI only | `vibe_<ver>_linux_<arch>.tar.gz` | `vibe` | GitHub Release, plus the Homebrew **formula** `sandwichlabs/tap/vibe` (Linuxbrew, servers, MCP-only users) |
 | All | `checksums.txt`, plus SBOM and build provenance attestation | | GitHub Release |
@@ -132,7 +165,7 @@ the same, so switching later is cheap.
   `PROJECT.md`, `motherduck-research.md`, `.claude/`, `landing/` with its
   Cloudflare account ID) and decide keep, move, or delete.
 - `README.md` install section pointing at Releases and the tap, plus
-  `CONTRIBUTING.md` and `SECURITY.md` (the encryption claims invite reports;
+  `CONTRIBUTING.md` and `SECURITY.md` (the credential-handling claims invite reports;
   give them a private channel).
 - Branch protection on `main` requiring the §5.2 CI checks.
 
@@ -141,24 +174,19 @@ the same, so switching later is cheap.
 In order. Each step is one small PR.
 
 ### 5.1 Build hygiene
-- Un-ignore `studio/build/` except `studio/build/bin/`. Commit:
-  - `appicon.png` (1024², from the SchoolHouse "V" mark)
-  - `darwin/Info.plist`, with `CFBundleIdentifier` `dev.sandwichlabs.vibe-studio`, plus `CFBundleDocumentTypes` and `UTExportedTypeDeclarations` for `.vibe` → `dev.sandwichlabs.vibe`
-  - `darwin/entitlements.plist` (hardened runtime; `disable-library-validation` only if the spike proves DuckDB extensions need it)
-  - `linux/vibe-studio.desktop`, `linux/vibe-mime.xml`
-- `wails.json`:
-  - `"info"`: product name, version, copyright
-  - `"fileAssociations"` for `.vibe`
-  - rename output to `Vibe Studio` for the bundle
-- `studio/main.go`:
-  - add `Mac: &mac.Options{OnFileOpen: …}`, routed to the same open-file path as argv, and handle it arriving before and after startup
-  - add `version`/`commit`/`date` vars, shown in Settings → About
+Done in #105's wrap-up:
+- `studio/build/` is un-ignored except `studio/build/bin/`, and holds `darwin/Info.plist` (§1a) and `linux/vibe-studio.desktop` and `linux/vibe-mime.xml` (§1a).
+- `wails.json` has `info` (product name, version, copyright, company).
+- `studio/main.go` has `Mac: &mac.Options{OnFileOpen: …}` routed to the same open path as argv, handling it arriving before and after startup.
+- `vibe workspace info` shows the DuckDB version and installed extensions (§8).
+
+Still to do (#77):
+- Commit `appicon.png` (none exists today; Wails generates and the repo ignores a default) (1024², from the SchoolHouse "V" mark) and `darwin/entitlements.plist` (hardened runtime; `disable-library-validation` only if the spike proves DuckDB extensions need it).
+- Rename the output to `Vibe Studio` for the bundle, and add `version`/`commit`/`date` vars to `studio/main.go`, shown in Settings → About.
 - `cmd/studio.go` `launchGUI`:
   - `filepath.EvalSymlinks(os.Executable())` first, so a Homebrew-linked `vibe` finds its sibling inside the `.app`
-  - on darwin, fall back to `open -a "Vibe Studio" --args <file>`
-- DuckDB extensions. Decide between two options:
-  - vendor the `excel` extension per platform into the bundle (`Contents/Resources/duckdb_extensions/…`, `/usr/lib/vibe/…`) and point DuckDB's `extension_directory` at it, which keeps xlsx import offline;
-  - or document that the first xlsx import needs network access.
+  - on darwin, fall back to `open -a "Vibe Studio" --args <path>`
+- The DuckDB extensions decision (§8).
 - Fix `.goreleaser.yaml` (sketch in §7). Replace `task release:*`'s local `goreleaser release` with "push a tag".
 
 ### 5.2 CI: `.github/workflows/ci.yml` (PRs and pushes to `main`)
@@ -230,8 +258,9 @@ tap push.
 1. **Spike (half a day, local Mac or `macos-15` runner):**
    - `wails build -platform darwin/universal` links SQLCipher and DuckDB for both slices
    - hand-sign, notarize, and staple once (after step 0 lands; until then, ad-hoc sign with `codesign -s -` to exercise the hardened runtime and entitlements)
-   - confirm `LOAD excel` works under the hardened runtime
-   - confirm `OnFileOpen` fires from Finder
+   - confirm `LOAD excel` (and `postgres`, `httpfs`) work under the hardened runtime
+   - confirm `OnFileOpen` fires from Finder for a `.vibe` file **and** for a folder dropped on the app or its Dock icon, both cold and while running (§1a)
+   - run the keychain check (§8)
 
    These answer the only open technical risks.
 2. 5.1 build hygiene PR.
@@ -276,7 +305,7 @@ brews:
   - name: vibe
     repository: { owner: SandwichLabs, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
     homepage: https://sandwichlabs.dev/projects/vibe/
-    description: Encrypted single-file data workspace — CLI and MCP server
+    description: Agentic data workspace — CLI and MCP server
     test: system "#{bin}/vibe", "--version"
 changelog:
   use: github
@@ -288,3 +317,25 @@ changelog:
 A cask is macOS-oriented and wouldn't give Linuxbrew users a formula. Keep
 `brews` until that changes, and watch the deprecation notice in
 `goreleaser check`.
+
+## 8. Decisions and checks that stay open in #77
+
+### DuckDB extensions: pinning and bundling
+
+- **Pinned engine.** go-duckdb is pinned to a DuckDB version MotherDuck supports (v2.4.3 = DuckDB 1.4.1 today). Bumping it is a deliberate change, checked against MotherDuck, never a routine `go get -u`. Extension binaries are per DuckDB version and platform, so a bump also changes what has to be downloaded or bundled.
+- **Download on consent, into the app-private directory.** Autoinstall and autoload are off; `extension_directory` is `<user cache dir>/vibe/duckdb/extensions`; a missing extension is a visible `extension-missing` state and the download happens only on the person's yes (Studio's Install, or `--install` on the CLI). The user's own `~/.duckdb` is never loaded. Details: [reference/connections.md](reference/connections.md#duckdb-version-and-extensions). `vibe workspace info` shows the running version and what is installed.
+- **Open decision: bundle an offline set?** Options:
+  - bundle nothing (today): smallest download, needs network the first time each extension is used;
+  - bundle `excel` only (the one a non-technical person meets first, for xlsx import and export);
+  - bundle the full set (`excel`, `httpfs`, `postgres`, `mysql`, `sqlite`, `azure`, `ducklake`, `iceberg`, `delta`, `motherduck`): works air-gapped, adds tens of MB per platform and a per-version rebuild, and every bundled dylib must be signed (macOS) or packaged with its checksum.
+  Whichever is chosen, point `extension_directory` at a read-only bundled directory first and the user cache second, and keep the consent step for anything not bundled. Decide in the spike, with the hardened-runtime result in hand.
+
+### Keychain access from signed builds
+
+go-keyring talks to the macOS Keychain by running `/usr/bin/security`, and to the Secret Service over D-Bus on Linux. Both are exercised in development, but not from a signed, notarised, hardened-runtime `Vibe Studio.app`. Checklist item for #77, before the first public Mac build:
+
+- [ ] On a signed and notarised build: save a connection credential in Studio, quit, relaunch, and read it back (Test the connection). Confirm no unexpected keychain prompt appears on every launch, and that the item is visible to a **re-signed** build of the next version (the keychain item's access list can be tied to the signing identity; if each release re-prompts, the secrets store needs an explicit access policy or the Data Protection keychain).
+- [ ] Same for the LLM API key, and for `vibe` (the CLI inside the bundle) reading a credential Studio saved, since both must see one item.
+- [ ] On Linux: a headless box with no Secret Service. Confirm the "no keychain" message is clear and that `env:` references (the CI path) still work.
+
+If the check fails, the fallback is **not** a plaintext file (see the direction doc's non-goals); it is `env:` references plus a clear message.

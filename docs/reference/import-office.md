@@ -123,7 +123,7 @@ into the old SQLite envelope).
 - A successful import writes or refreshes the `workspace-<table>` skill into
   `skills/`, as Studio's does.
 
-`vibe notebook import/export` is tracked separately in #9.
+Notebooks move between workspaces with `vibe export notebook` / `vibe import notebook`, or in `.vibe` bundles (`vibe export bundle`, `vibe import <file.vibe>`); see [workspaces.md](workspaces.md#sharing-without-git-vibe-bundles). That replaced the `vibe notebook import/export` once planned in #9.
 
 ## Export
 

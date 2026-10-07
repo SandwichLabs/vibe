@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Vibe Studio
+GenericName=Data workspace
+Comment=An agentic workspace for working with data where it lives
+Exec=vibe-studio %U
+Icon=vibe-studio
+Terminal=false
+Categories=Development;Database;
+# Only .vibe bundles are claimed. inode/directory is deliberately not listed:
+# it would put Vibe in "Open With" (and sometimes the default-handler list) for
+# every folder on the machine. A workspace folder opens with
+# `vibe-studio <dir>` or `vibe studio --gui <dir>`; see docs/packaging.md.
+MimeType=application/x-vibe-bundle;
+StartupWMClass=vibe-studio
+Keywords=data;sql;duckdb;notebook;workspace;

@@ -1,7 +1,5 @@
 # Notebooks & A2UI Reference
 
-> **Changing (#109).** Notebooks will be stored one per file (`notebooks/*.vnb`) in a workspace folder rather than in `_vibe_notebooks`. The format itself (v2, below) is already in place as of #108.
-
 ## Format version 2 (#108)
 
 A notebook carries `schemaVersion: 2`. v2 adds one optional field: a
@@ -9,9 +7,7 @@ A notebook carries `schemaVersion: 2`. v2 adds one optional field: a
 cells (`stat`, `table`, `barChart`, `lineChart`). It names a connection (a
 catalog alias matching `^[a-z_][a-z0-9_]{0,62}$`); the cell's `sql` then runs
 with that connection as the **default catalog for unqualified table names**,
-on a pinned connection (`USE <connection>`). Unset means the session default
-(the open file's data today, the workspace's `default_connection` once #109
-lands). Catalog-qualified names (`other.main.orders`) work with or without it.
+on a pinned connection (`USE <connection>`). Unset means the workspace's `default_connection`. Catalog-qualified names (`other.main.orders`) work with or without it.
 
 A v1 notebook is a valid v2 notebook with no `connection` set: it loads
 unchanged and is stamped v2 the next time it is saved. A notebook written by a
@@ -20,12 +16,13 @@ known connection on this machine is **kept as written** (cells are never
 dropped, queries are never silently retargeted at the default): the cell
 fails when it runs with `unknown connection "x"`. A non-string `connection`
 is cleared with a warning. The value only ever reaches SQL as a quoted
-identifier. There is no connection
-selector in the UI yet (#117); the field round-trips, and the agent and
-imported files can set it.
+identifier. Studio's cell header has a **Run on** selector for it (#117), and
+the agent and imported bundles can set it too.
 
-A **Notebook** is a JSON document stored in `_vibe_notebooks`: a title plus
-an ordered list of **cells**. There is no page markup, no directives, and no
+A **Notebook** is a JSON document, one file per notebook at
+`notebooks/<id>.vnb` in the workspace folder (`workspaces.md` has the file
+format, atomic writes and conflict handling): a title plus an ordered list of
+**cells**. There is no page markup, no directives, and no
 inter-cell references — the database is the only shared state. Notebooks
 replace the old page system (#66/#69); this file replaces the retired
 `pages.md`.
@@ -119,10 +116,15 @@ silently hallucinate a result the model never actually ran.
 same wrapper back — a file with a different `kind` (or no `kind` at all) is
 rejected — and re-inserts the notebook through the same whitelist rebuild
 (`Coerce`) every load goes through, so a hand-edited or newer-schema file
-can't smuggle unexpected fields into `_vibe_notebooks`.
+can't smuggle unexpected fields into the workspace's `notebooks/` folder.
 
-Planned: a CLI `vibe notebook import/export` (JSON wrapper + Markdown with
-````sql``` fences) in #9, and HTML/PDF/xlsx snapshot export in #73.
+To move notebooks between workspaces or people, use `vibe export notebook <id>`
+and `vibe import notebook <file.vnb>` (one notebook, which also accepts the
+file Studio's Export writes), or a `.vibe` bundle (`vibe export bundle
+--notebooks a,b`, `vibe import <file.vibe>`, or the workspace menu in Studio);
+see `workspaces.md`, "Sharing without git". Those replaced the CLI
+import/export once planned in #9.
+Still planned: HTML/PDF/xlsx snapshot export (#73).
 
 ## A2UI component reference
 

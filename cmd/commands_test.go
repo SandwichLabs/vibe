@@ -210,12 +210,15 @@ func TestWorkspaceInfo_ShowsEverything(t *testing.T) {
 	assert.Contains(t, out, "Skills:      0")
 	assert.Contains(t, out, "Agent:       sandbox read-write, ask before writes on")
 	assert.Contains(t, out, "Hub owner:   none")
+	assert.Regexp(t, `DuckDB:\s+v\d+\.\d+`, out)
 
 	js, _, err := runVibe("workspace", "info", "--workspace", root, "--json")
 	require.NoError(t, err)
 	var rep infoReport
 	require.NoError(t, json.Unmarshal([]byte(js), &rep))
 	assert.Equal(t, root, rep.Root)
+	assert.Regexp(t, `^v\d+\.\d+`, rep.DuckDB)
+	assert.NotNil(t, rep.Extensions)
 	require.Len(t, rep.Connections, 1)
 	assert.Equal(t, "ok", rep.Connections[0].Status)
 	require.NotNil(t, rep.Connections[0].Tables)
@@ -768,9 +771,15 @@ func TestStudio_GuiAcceptsAFolder(t *testing.T) {
 	assert.NotContains(t, err.Error(), "#111")
 }
 
-func TestStudio_GuiRefusesAVibeFile(t *testing.T) {
-	_, _, err := runVibe("studio", "--gui", filepath.Join(t.TempDir(), "old.vibe"))
+func TestStudio_GuiPassesAVibeBundleToTheApp(t *testing.T) {
+	// The desktop app opens its Import dialog for a .vibe; only the terminal UI
+	// (which has no import flow) refuses one.
+	_, _, err := runVibe("studio", "--gui", filepath.Join(t.TempDir(), "x.vibe"))
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vibe-studio binary not found")
+	assert.NotErrorIs(t, err, errLegacyFileArg)
+
+	_, _, err = runVibe("studio", filepath.Join(t.TempDir(), "x.vibe"))
 	assert.ErrorIs(t, err, errLegacyFileArg)
 }
 

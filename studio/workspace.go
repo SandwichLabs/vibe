@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -282,41 +283,87 @@ type CatalogGroup struct {
 
 // ---- startup argument ----
 
-// setInitialArg records the first command-line argument: a folder to open, or
-// a plain-language note when it cannot be.
-func (a *App) setInitialArg(arg string) {
+// launchArgPath turns what the OS hands a launcher into a plain path. A desktop
+// entry with Exec=vibe-studio %U passes file:// URIs (percent-encoded), and
+// macOS passes plain paths.
+func launchArgPath(arg string) string {
 	arg = strings.TrimSpace(arg)
-	if arg == "" || strings.HasPrefix(arg, "-") {
-		return
-	}
-	if strings.EqualFold(filepath.Ext(arg), ".vibe") {
-		// A bundle (#118). An older container that holds data is told so by
-		// the import preview, not here.
-		if abs, err := filepath.Abs(arg); err == nil {
-			a.initialBundle = abs
+	if strings.HasPrefix(strings.ToLower(arg), "file:") {
+		if u, err := url.Parse(arg); err == nil && u.Path != "" && (u.Host == "" || u.Host == "localhost") {
+			return u.Path
 		}
-		return
+	}
+	return arg
+}
+
+// classifyLaunchArg decides what a path handed to Studio at launch means: a
+// workspace folder (Path), a .vibe bundle to import (BundlePath), or a plain
+// note when it is neither. An empty result means "ignore" (a flag, or nothing).
+func classifyLaunchArg(arg string) InitialWorkspace {
+	arg = launchArgPath(arg)
+	if arg == "" || strings.HasPrefix(arg, "-") {
+		return InitialWorkspace{}
 	}
 	abs, err := filepath.Abs(arg)
 	if err != nil {
-		a.initialNote = "Couldn't read the folder " + arg + "."
-		return
+		return InitialWorkspace{Message: "Couldn't read " + arg + "."}
 	}
 	fi, err := os.Stat(abs)
 	switch {
+	case err == nil && fi.IsDir():
+		// A folder is a workspace whatever its name (even x.vibe).
+		return InitialWorkspace{Path: abs}
+	case strings.EqualFold(filepath.Ext(abs), ".vibe"):
+		// A bundle (#118). A file that is not a v2 bundle is told so by the
+		// import preview, not here.
+		return InitialWorkspace{BundlePath: abs}
 	case err != nil:
-		a.initialNote = "The folder " + abs + " isn't there."
-	case !fi.IsDir():
-		a.initialNote = abs + " is a file, not a folder. Open a workspace folder."
+		return InitialWorkspace{Message: "The folder " + abs + " isn't there."}
 	default:
-		a.initialPath = abs
+		return InitialWorkspace{Message: abs + " is a file, not a folder. Open a workspace folder, or a .vibe bundle to import it."}
 	}
 }
 
-// GetInitialWorkspace returns the folder passed on the command line (empty when
-// none) and a note when the argument could not be used.
+// setInitialArg records the first command-line argument: a folder to open, a
+// bundle to import, or a plain-language note when it cannot be used.
+func (a *App) setInitialArg(arg string) {
+	a.launchMu.Lock()
+	defer a.launchMu.Unlock()
+	if r := classifyLaunchArg(arg); r != (InitialWorkspace{}) {
+		a.initial = r
+	}
+}
+
+// handleOpenPath is the macOS OnFileOpen entry (an Apple Event, not argv): the
+// Finder opened a folder or a .vibe file with Vibe. Before the frontend has
+// asked for its launch state the path is queued (the last one wins, as with
+// argv); afterwards it is sent as an "app:open-path" event carrying the same
+// InitialWorkspace shape GetInitialWorkspace returns.
+func (a *App) handleOpenPath(path string) {
+	r := classifyLaunchArg(path)
+	if r == (InitialWorkspace{}) {
+		return
+	}
+	a.launchMu.Lock()
+	ready := a.frontendReady
+	if !ready {
+		a.initial = r
+	}
+	a.launchMu.Unlock()
+	if ready {
+		a.emitEvent("app:open-path", r)
+	}
+}
+
+// GetInitialWorkspace returns what was named on the command line (or opened
+// from the OS before the window was ready): a folder, a bundle, or a note when
+// the argument could not be used. Calling it marks the frontend ready, so later
+// OS open requests arrive as "app:open-path" events instead.
 func (a *App) GetInitialWorkspace() InitialWorkspace {
-	return InitialWorkspace{Path: a.initialPath, Message: a.initialNote, BundlePath: a.initialBundle}
+	a.launchMu.Lock()
+	defer a.launchMu.Unlock()
+	a.frontendReady = true
+	return a.initial
 }
 
 // ---- recents ----

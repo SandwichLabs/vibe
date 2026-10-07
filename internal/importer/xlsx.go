@@ -1,5 +1,5 @@
 // Package importer provides backend helpers for reading external data files
-// (CSV, Excel) into the DuckDB engine that backs a .vibe container: the
+// (CSV, Excel) into a workspace connection's DuckDB session: the
 // import wizard's inspect/preview and its create/replace/append/upsert
 // write path (#82).
 package importer

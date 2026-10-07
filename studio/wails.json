@@ -10,5 +10,12 @@
   "wailsjsdir": "frontend/src",
   "author": {
     "name": "Sandwich Labs"
+  },
+  "info": {
+    "companyName": "Sandwich Labs",
+    "productName": "Vibe Studio",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright (c) Sandwich Labs",
+    "comments": "An agentic workspace for working with data where it lives"
   }
 }

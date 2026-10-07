@@ -51,6 +51,7 @@ function close() {
 
 watch(bundleImportRequest, async (req) => {
   if (!req) return
+  void discard() // a previous preview's handle, if a new request replaced it
   stage.value = 'picking'
   path.value = req.path
   passphrase.value = ''

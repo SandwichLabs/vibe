@@ -15,13 +15,14 @@ and asks before it writes. Credentials stay in your OS keychain.
 
 ---
 
-> **In transition (2026-10-06).** Vibe is moving from a single encrypted `.vibe`
-> file that *holds* your data to a workspace that *points at* your data. The
-> command line, `vibe mcp serve` and the Studio desktop app all open
-> workspace **folders** now; `.vibe` files are no longer opened directly.
-> Connections and the keychain land next. Tracked in
-> epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105). Why and how:
-> [`docs/direction.md`](docs/direction.md),
+> **Status.** The workspaces-and-connections direction (epic
+> [#105](https://github.com/SandwichLabs/vibe-app/issues/105)) is built:
+> Studio, the command line and `vibe mcp serve` all work on workspace
+> **folders** with connections and keychain credentials. A `.vibe` file is a
+> sharing bundle, not a database. What is left is packaging and signing
+> ([#77](https://github.com/SandwichLabs/vibe-app/issues/77)) and the follow-ups
+> in [`docs/direction.md`](docs/direction.md#9-as-delivered-what-changed-from-the-plan).
+> Why and how: [`docs/direction.md`](docs/direction.md),
 > [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md).
 
 ## What is Vibe?
@@ -47,8 +48,9 @@ A desktop data tool in the DataGrip / DBeaver mould, built around an agent.
 - **`.vibe` files** — a portable bundle of notebooks, queries and skills (and,
   if you choose, connection definitions) for sharing outside git: no data, no
   credentials, optionally locked with a passphrase. `vibe export bundle`,
-  `vibe import <file.vibe>`, or **Import .vibe…** in Studio. The older
-  data-holding `.vibe` container is not opened any more.
+  `vibe import <file.vibe>`, or **Import .vibe…** in Studio (opening a
+  `.vibe` file with Vibe starts it). The older data-holding `.vibe` container
+  is not supported.
 
 Everything works without AI. SQL and notebooks are first-class by hand.
 
@@ -59,12 +61,17 @@ vibe workspace init acme --template order-entry --git   # a folder with vibe.yam
 cd acme
 vibe workspace info                                     # connections, counts, agent policy, who owns the hub
 vibe import customers.csv --into customers              # CSV / TSV / xlsx into a writable connection
+vibe conn add | list | test | connect | rm | move       # connections; credentials go to the keychain
+vibe conn credentials set|clear|status <name>           # write-only: set or clear, never read back
 vibe query "SELECT count(*) FROM customers"             # [-c conn] [--format table|csv|json] [--limit N]
 vibe export customers -o customers.parquet              # csv, parquet, json or xlsx; or --sql "..."
 vibe export bundle -o share.vibe [--encrypt]            # notebooks, queries, skills; no data, no credentials
 vibe import share.vibe [--on-conflict rename|overwrite|skip]
+vibe export notebook <id> -o nb.vnb                     # one notebook; vibe import notebook nb.vnb takes it back
+vibe config llm-key                                     # the agent's API key, kept in the keychain
 vibe studio                                             # terminal UI: SQL REPL, table browser, notebook list
-vibe studio --gui                                       # the desktop app (add a folder to open it: vibe studio --gui acme)
+vibe studio --gui                                       # the desktop app (add a folder to open it: vibe studio --gui acme,
+                                                        #  or a .vibe file to start its import)
 vibe mcp serve                                          # let Claude and other MCP clients use the workspace
 ```
 
@@ -102,16 +109,11 @@ Studio / vibe mcp serve ── DuckDB hub ─┬─ local   (data/local.duckdb)
                      credentials ◄── OS keychain / env
 ```
 
-## Roadmap
+## Status and what is next
 
-Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) — workspaces first, then connections:
+Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) (#106–#119) is merged: the design pass and spike, the session hub, workspaces and file stores, the launcher and switcher, MCP and the CLI on workspaces, the keychain, connection types (Postgres, MySQL, MotherDuck, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg and Delta), the agent's SQL allow-list, the connections UI ([`docs/reference/connections.md`](docs/reference/connections.md#in-vibe-studio)) and `.vibe` bundles.
 
-1. **Design pass** (#106) and **DuckDB spike** (#107).
-2. **Workspace = folder** — session hub (#108), workspace + file stores (#109), launcher/switcher (#111), MCP on workspaces (#112), CLI (#113).
-3. **Connections & credentials** — keychain (#114), connection types (#115), agent SQL policy (#116), connections UI (#117: a Connections rail, a connection editor with write-only credentials, a Run-on selector in queries and notebook cells; see [`docs/reference/connections.md`](docs/reference/connections.md#in-vibe-studio)).
-4. **Exchange & breadth** — `.vibe` bundles (done, #118), more types (#119), packaging (#77).
-
-Multi-user / Tailscale mesh remains deferred.
+Open: macOS and Linux packages, signing and CI ([#77](https://github.com/SandwichLabs/vibe-app/issues/77), [`docs/packaging.md`](docs/packaging.md)); a safe agent read path for Iceberg and Delta (#134); notebook export to HTML/PDF/xlsx (#73). Multi-user / Tailscale mesh remains deferred.
 
 > Full detail: [`docs/direction.md`](docs/direction.md).
 
@@ -137,13 +139,14 @@ go test -v ./internal/workspace/
 
 | Doc | Purpose |
 |---|---|
-| [`docs/direction.md`](docs/direction.md) | **Current** north star: workspaces, connections, primitives, sequencing |
-| [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md) | Implementation plan for epic #105 |
+| [`docs/direction.md`](docs/direction.md) | **Current** north star: workspaces, connections, primitives, and what changed from the plan |
+| [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md) | The implementation plan for epic #105 (implemented; "as built" summary at the top) |
 | [`CLAUDE.md`](CLAUDE.md) | Architecture, conventions, key concepts (also guidance for AI assistants) |
-| [`motherduck-research.md`](motherduck-research.md) | The MotherDuck platform research that informed the direction |
-| [`docs/llm-config.md`](docs/llm-config.md) | LLM provider configuration |
+| [`docs/reference/`](docs/reference/) | Shipped surface reference: [workspaces](docs/reference/workspaces.md), [connections](docs/reference/connections.md), [agent policy](docs/reference/agent-policy.md), [notebooks and A2UI](docs/reference/notebooks.md), [import and export](docs/reference/import-office.md), [templates](docs/reference/templates.md), [themes](docs/reference/themes.md) |
 | [`docs/mcp.md`](docs/mcp.md) | `vibe mcp serve` (stdio/SSE), Claude Desktop config, SSE auth/security |
-| [`docs/reference/`](docs/reference/) | Shipped surface reference (notebooks, A2UI, import, templates) |
+| [`docs/llm-config.md`](docs/llm-config.md) | LLM provider configuration and the API key |
+| [`docs/packaging.md`](docs/packaging.md) | Packaging and release plan (#77), file association wiring, extensions |
+| [`motherduck-research.md`](motherduck-research.md) | The MotherDuck platform research that informed the direction |
 | [`PROJECT.md`](PROJECT.md), [`PLAN.md`](PLAN.md) | Original MVP spec and build phases (file format, runtime) — historical |
 | [`docs/ms-access-parity-plan.md`](docs/ms-access-parity-plan.md) | Superseded Access-parity roadmap — historical |
 

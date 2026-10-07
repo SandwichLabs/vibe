@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -33,7 +34,8 @@ func main() {
 
 	app := NewApp(logger)
 	if len(os.Args) > 1 {
-		// A workspace folder to open at launch (`vibe studio --gui <dir>`).
+		// A workspace folder or .vibe bundle to open at launch (`vibe studio --gui <dir>`;
+		// a desktop entry passes file:// URIs).
 		app.setInitialArg(os.Args[1])
 	}
 
@@ -50,6 +52,13 @@ func main() {
 		// autosave) before the window/process actually closes — see
 		// app.beforeClose's doc comment (review fix, step 4a round 2 #1).
 		OnBeforeClose: app.beforeClose,
+		// macOS delivers "open this with Vibe" (Finder double-click, drop on
+		// the Dock icon, `open -a`) as an Apple Event, not argv. It takes the
+		// same route as a command-line argument: queued until the frontend is
+		// ready, an app:open-path event after.
+		Mac: &mac.Options{
+			OnFileOpen: app.handleOpenPath,
+		},
 		Bind: []interface{}{
 			app,
 		},

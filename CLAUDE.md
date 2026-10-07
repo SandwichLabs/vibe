@@ -8,7 +8,7 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 
 **North star:** `docs/direction.md` (2026-10-06). Read it before planning any feature work. **Plan:** `docs/plans/workspaces-and-connections.md`. **Tracking:** epic #105 (issues #106–#119), workspaces first, then connections.
 
-**Direction change (2026-10-06) — status:** Slice 1 is done. **Studio, the CLI, the TUI and `vibe mcp serve` all open a workspace folder** (`vibe.yaml`, file-backed `notebooks/` `queries/` `skills/`, a DuckDB hub over its connections). The SQLCipher `.vibe` container and `internal/container` are **gone** (#111, with the no-legacy-support decision on #105): nothing opens a `.vibe` file, there is no Save / Revert / dirty tracking, and data writes go straight to the connection. The keychain and connection types (#114–#116) and the **Studio connections UI (#117)** are in; the **`.vibe` bundle** exchange format (#118: `internal/bundle`, `vibe export bundle` / `vibe import`, Studio's Export workspace content… and Import .vibe…) is in; more types (#119: MySQL, Azure, DuckLake, Iceberg/Delta table sources) are in. New work goes behind the interfaces the plan names (`internal/session`, `internal/workspace`, `notebooks.Store`/`queries.Store`/`skills.Store`, `internal/hub`, `internal/secrets`, `internal/connections`). Never store a credential in a config file, a bundle, a log line, or anything the agent can read.
+**Direction change (2026-10-06) — status: delivered.** Epic #105 (#106–#119) is merged and the code matches the direction doc (`docs/direction.md` §9 lists where it departs from the plan; the plan's "as built" summary lists the open follow-ups). **Studio, the CLI, the TUI and `vibe mcp serve` all open a workspace folder** (`vibe.yaml`, file-backed `notebooks/` `queries/` `skills/`, a DuckDB hub over its connections). The SQLCipher `.vibe` container and `internal/container` are **gone** (#111, with the no-legacy-support decision on #105): nothing opens or imports a data-holding `.vibe`, there is no Save / Revert / dirty tracking, and data writes go straight to the connection. Keychain credentials (#114), connection types (#115, #119), the agent SQL allow-list (#116), the Studio connections UI (#117) and the `.vibe` bundle (#118) are in. The app-side packaging wiring (launch arguments, macOS `OnFileOpen`, `Info.plist` document types, Linux `.desktop`/MIME, `studio/build/`) is in; signing, notarisation, CI and the release pipeline are still epic #77 (`docs/packaging.md`). New work goes behind the interfaces the plan names (`internal/session`, `internal/workspace`, `notebooks.Store`/`queries.Store`/`skills.Store`, `internal/hub`, `internal/secrets`, `internal/connections`). Never store a credential in a config file, a bundle, a log line, or anything the agent can read.
 
 **Earlier direction change (2026-09-22):** Vibe was previously aimed at Microsoft Access 97 application parity (bound forms, subforms, switchboard, App Mode, macros). That direction is **superseded**. The Access application layer was removed in #68; datasheet editing stays. The parity docs are kept for history and carry a superseded banner. Do not add forms, macros, nav, field meta, or App Mode.
 
@@ -56,18 +56,25 @@ go test -v ./internal/workspace/
 
 ```
 main.go                    # Entry point — calls cmd.Execute()
-cmd/                       # Cobra commands, all on workspaces (#113): `workspace init|info`, `init` (alias),
-                           #   `query`, `import --into [conn.]table`, `export`, `studio [dir] [--gui]` (TUI is the default),
-                           #   `mcp serve [--workspace DIR]` (owner or proxy to Studio, #64/#112).
+cmd/                       # Cobra commands, all on workspaces (#113): `workspace init|info` (info also shows the DuckDB
+                           #   version and installed extensions), `init` (alias), `conn add|list|test|connect|rm|move|credentials`
+                           #   (#115/#117), `config llm-key`, `query`, `import --into [conn.]table` (+ `import bundle|notebook`),
+                           #   `export` (+ `export bundle|notebook`), `studio [dir] [--gui]` (TUI is the default; --gui passes a dir or a
+                           #   .vibe to vibe-studio), `mcp serve [--workspace DIR]` (owner or proxy to Studio, #64/#112).
                            #   Writers take the hub lock (internal/hub) or say who holds it; `--read-only` skips it.
                            #   wsopen.go is the one place that opens workspace + hub + session for a command.
-                           #   No command opens a `.vibe` any more; info/verify/compact/rekey/dump/passphrase
+                           #   No command opens a `.vibe` as a workspace; info(container)/verify/compact/rekey/dump/passphrase
                            #   survive only as hidden stubs that point to `workspace init`.
 
 studio/                    # Wails v2 desktop app
 ├── app.go                 # Go backend — workspace-bound methods; one a.requireWorkspace() gate
+├── main.go                # Wails entry: launch argument -> setInitialArg; mac.Options.OnFileOpen -> handleOpenPath
 ├── workspace.go           # open/create/switch/close, hub lock, watcher, recents, settings, conflicts,
-│                          #   Studio's MCP switch, Claude config (#111)
+│                          #   Studio's MCP switch, Claude config (#111). Launch paths: classifyLaunchArg (folder = workspace,
+│                          #   .vibe = Import dialog, else a notice; file:// URIs decoded), GetInitialWorkspace (queue until the
+│                          #   frontend asks) and the app:open-path event after (docs/packaging.md §1a)
+├── build/                 # packaging inputs, committed (bin/ is ignored): darwin/Info.plist (document types, UTI
+│                          #   dev.sandwichlabs.vibe-bundle), linux/vibe-studio.desktop + vibe-mime.xml
 ├── jsc_linux.go           # moves WebKit's GC signal off SIGUSR1 so a hub release request can't crash Studio
 └── frontend/              # Vue 3 UI. Views: Launcher (replaced Unlock), Dashboard (Home), Notebooks/Notebook,
                            #   TableBrowser (tables grouped by connection), QueryEditor, Skills, Import,
@@ -84,7 +91,8 @@ internal/
 │                          #   three connection scopes (user < shared < local; the local file lives in the user config dir, never in the folder) merged with provenance, EffectivePolicy
 │                          #   (committed sandbox/ask = a ceiling that can only tighten), ${ENV} interpolation,
 │                          #   credential Fingerprint, OpenSession (session.New + connections), fsnotify Watcher,
-│                          #   duplicate-id detection. Reference: docs/reference/workspaces.md
+│                          #   duplicate-id detection; AgentAccess adapts a workspace + session to agents.ContainerAccess.
+│                          #   Reference: docs/reference/workspaces.md
 ├── bundle/                # #118: `.vibe` bundle v2 (zip: manifest.json + sha256 per entry, notebooks/ queries/ skills/, optional
                            #   connections.yaml; no data, no credentials) with optional age/scrypt passphrase envelope. Hostile-input
                            #   import (closed entry-name set, caps, sha256, per-store validation, stores' compare-and-write, skills
@@ -93,6 +101,9 @@ internal/
 ├── session/               # DuckDB hub (#108): hardened Session (catalog-aware Query/Exec/Conn, Attach/Detach,
                            #   Connections() status, schema cache, quoting helpers); New() is the workspace hub
 ├── engine/                # Query layer over a session.Session (Manager); table-ref parsing (ParseTable/ResolveTable/TableSQL)
+├── usersql/               # Courtesy checks and a tokenizer for SQL a *person* types (CLI/TUI); not the agent policy
+├── storageurl/            # The one place that decides what an object-storage URL is, whether it lies in a scope, and
+                           #   whether an Azure URL names the account's own endpoint (agent reads, workspace checks, scopes)
 ├── crud/                  # Transactional, type-coercing row insert/update/delete (stays)
 ├── importer/              # CSV / xlsx import
 ├── queries/               # Named query `Store` (`FileStore` -> queries/<id>.sql with a `-- vibe:` header; a legacy SQLite Registry survives for tests)
@@ -107,8 +118,6 @@ internal/
 ├── hub/                   # who owns a workspace's DuckDB hub (#112): AcquireHub / ReadHolder / TakeOver on
                            #   .vibe-local/hub.lock, Serve (`vibe mcp serve` owner/proxy), StartWorkspaceMCP,
                            #   NewAgentHandler, BuildClaudeConfig, ProtectStdout. Same-user trust, see docs/mcp.md
-├── workspace/             # workspace folder, scopes, file stores, watcher (#109); AgentAccess adapts a
-                           #   workspace + session to agents.ContainerAccess
 ├── prefs/                 # app preferences and the recent-workspaces list (outside every workspace)
 ├── a2ui/                  # A2UI component schema + validator (#67); Go validates, Vue renders
 ├── notebooks/             # Notebook model (#66) + `Store` (`FileStore` -> notebooks/<id>.vnb; a legacy SQLite impl survives for tests)
@@ -157,7 +166,7 @@ Removed in #111 (the container): `internal/container` (the SQLCipher `.vibe` env
 `workspace:changed-on-disk`). The container-era engine spike tests went with it; FK behaviour is covered by the
 crud and studio tests.
 
-New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/llm/skills/` (embedded SKILL.md, #62; also the skills `Store`: `FileStore` -> skills/<name>/SKILL.md, SQLite impl for .vibe), notebook storage (#66), `internal/workspace` + `internal/filestore` (#109), `internal/hub` (#112).
+New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/llm/skills/` (embedded SKILL.md, #62; also the skills `Store`: `FileStore` -> skills/<name>/SKILL.md, a legacy SQLite impl survives for tests), notebook storage (#66), `internal/workspace` + `internal/filestore` (#109), `internal/hub` (#112).
 
 ## Conventions (from Sandwich Labs Go projects)
 
@@ -170,8 +179,12 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 - **Functional options** — use builder/options pattern for complex object construction
 - **Dependency injection** — create services in `main.go`/`cmd/root.go` and pass them down; no globals
 - **CGO_ENABLED=1** — required for the DuckDB C bindings
+- **Pinned DuckDB, consented extensions** — go-duckdb is pinned to a DuckDB version MotherDuck supports (v2.4.3 = DuckDB 1.4.1); bump it deliberately. Autoinstall/autoload are off and extensions download only on the person's consent into `<user cache dir>/vibe/duckdb/extensions`, never `~/.duckdb`. Whether to bundle an offline set is open (#77, `docs/packaging.md` §8)
 - **Goreleaser** — use `.goreleaser.yaml` for cross-platform release builds with ldflags for version injection
 - **No hard-coded catalog** — never write `'main'` / `'memory'` / `'analytics'` in code. Ask `Session.DefaultCatalog()`, introspect through `Session.ListTables/DescribeTable` (filtered by `database_name`), and name tables `catalog.schema.table` through `session.QuoteIdent`/`TableRef.SQL()`. Unqualified names resolve against the connection's current catalog (`current_database()`/`current_schema()` in SQL), which is the session default unless a run pinned one with `USE`
+- **Never trust repo content for credentials or policy** — a workspace folder arrives with whatever its authors committed. `vibe.yaml` may only *tighten* the agent (`sandbox` / `ask_before_writes` are ceilings); its `credentials:` line is a UI hint, never the effective sign-in method; `${VAR}` and absolute or out-of-folder paths are parse errors in it; per-person settings (looser policy, sign-in, private connections) live outside the folder keyed by workspace id and real path; a saved credential is bound to the definition's fingerprint, so a pulled change of host never receives the old secret. A bundle never carries credentials, sign-in methods or data, and imports connections only into the local scope
+- **Metadata-driven formats are own-scope only** — DuckLake, Iceberg and Delta read whatever files their own metadata names, so `ducklake` / `iceberg` / `delta` connections may only be defined in your own scopes (never `vibe.yaml`, never a bundle), and `iceberg_scan` / `iceberg_*` / `delta_scan` are not agent readers in any tier (#119, #134). Add no agent reader whose files are chosen by the data it reads
+- **Parse before EXPLAIN** — agent SQL is parsed and checked syntactically *before* anything is bound: `EXPLAIN` binds the statement, and binding sniffs files and makes HTTP requests. New agent SQL surface goes through `analyzeSQL` (parse -> AST/token allow-list -> plan allow-list), never a second classifier, and no allow-list loosens without a test that fails when it is wrong
 - **One tool surface** — new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`
 - **Model output never reaches a style attribute** — A2UI colors are a closed enum; validators reject unknown fields
 - **No hex in stylesheets** — every colour in `studio/frontend` is a `--vibe-*` role (or a bridged `--sh-*` token); translucent variants use `color-mix()` on a role. Theme files are validated by `theme/schema.ts` (hex only, closed role list). Built-ins must pass the AA contrast spec in `theme/schema.spec.ts`
@@ -181,6 +194,8 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 ## Key Concepts
 
 **Workspace (#109, #111):** a folder holding `vibe.yaml` (id, name, default connection, the agent's team limit, shared connections) beside `notebooks/*.vnb`, `queries/*.sql`, `skills/<name>/SKILL.md` and `data/`. Per-person settings (agent loosening, sign-in methods, private connections, the MCP port) live in the user config directory, never in the folder, and are ignored for a folder that is not the one they were made for. The committed config can only *tighten* the agent policy. `.vibe` is the bundle exchange format (#118, below); a `.vibe` is never opened as a workspace, and the older data-holding container is refused with a plain message.
+
+**Opening things from the OS (packaging wiring):** Studio's launch argument, and on macOS `mac.Options.OnFileOpen`, go through one classifier: a directory opens as a workspace, a `.vibe` file opens the Import dialog (`GetInitialWorkspace().bundlePath`, never opened as a workspace), anything else is a notice. A path that arrives before the frontend has called `GetInitialWorkspace` is queued; after that it is emitted as `app:open-path`. Linux `.desktop` uses `Exec=vibe-studio %U` (file:// URIs) and claims only `application/x-vibe-bundle`, deliberately not `inode/directory`. Details and the unverified-on-Mac caveat: `docs/packaging.md` §1a.
 
 **Workspace lifecycle (Studio):** Open = `workspace.Open` → `hub.AcquireHub` (held by another process ⇒ open **read-only**: local DuckDB files show as locked, a banner offers Take over) → `workspace.OpenSession` (local `duckdb` connections attach eagerly, the rest lazily) → file watcher. Close = MCP stop → watcher stop → session close → hub release (the lock goes last) → workspace close. Switching flushes pending notebook saves first (frontend `flushAll`), releases the old hold, then opens the next; one releasable hold per process. A folder with no `vibe.yaml` is never initialised silently (the UI asks first, then `CreateWorkspace` with `inPlace`). Another program can ask Studio to let go (SIGUSR1; `studio/jsc_linux.go` moves WebKit's GC signal to SIGUSR2). `App.sessionID` is regenerated on every open and every `SaveNotebook` must carry the one it loaded under.
 
@@ -220,4 +235,4 @@ New packages per the direction doc: `internal/a2ui` (validator, #67), `internal/
 
 ## `.vibe` bundles (#118)
 
-**Bundle v2 (`internal/bundle`):** a zip with `manifest.json` (`kind: vibe/bundle`, `formatVersion: 2`, per-entry sha256), `notebooks/<id>.vnb`, `queries/<id>.sql`, `skills/<name>/SKILL.md` and optionally `connections.yaml` (definitions only: sign-in methods, fingerprints, nonces, absolute/out-of-workspace paths, `${ENV}` and credential-shaped options are stripped, with a manifest warning). **No data**: no `data/`, no `.duckdb`. Unencrypted by default; an optional passphrase wraps the whole zip in one `filippo.io/age` scrypt envelope (the age header is the "encrypted" flag; no bespoke crypto). Import is hostile-input code: a closed set of entry names, sha256 and size per entry, 10 MB per entry / 50 MB total / 2,000 entries, each document parsed by its own store, writes through the stores (overwrite = compare-and-write), a skill can never be `built-in`, and connections are only added when named, into the **local** scope, never `vibe.yaml`, never replacing a team or user connection. formatVersion 1 or a SQLCipher file is refused with "This is an older .vibe file that holds data. Vibe no longer opens these." The bundle is a **user action**: no agent tool, no MCP method; `internal/bundle/isolation_test.go` fails if `agents`, `llm`, `mcp`, `a2ui` or `usersql` import it. Single-notebook `.vnb` import shares `bundle.CheckNotebook`. CLI: `vibe export bundle`, `vibe import bundle|<file.vibe>` (passphrase on a TTY, or `VIBE_BUNDLE_PASSPHRASE`). Studio: `GetBundleContent`, `ExportBundle`, `PreviewBundleImport` (handle, bounded, expiring), `CommitBundleImport`, `ImportBundleIntoNewWorkspace`, `DiscardBundleImport`; `BundleExportDialog.vue` / `BundleImportDialog.vue`. Reference: `docs/reference/workspaces.md` ("Sharing without git").
+**Bundle v2 (`internal/bundle`):** a zip with `manifest.json` (`kind: vibe/bundle`, `formatVersion: 2`, per-entry sha256), `notebooks/<id>.vnb`, `queries/<id>.sql`, `skills/<name>/SKILL.md` and optionally `connections.yaml` (definitions only: sign-in methods, fingerprints, nonces, absolute/out-of-workspace paths, `${ENV}` and credential-shaped options are stripped, with a manifest warning). **No data**: no `data/`, no `.duckdb`. Unencrypted by default; an optional passphrase wraps the whole zip in one `filippo.io/age` scrypt envelope (the age header is the "encrypted" flag; no bespoke crypto). Import is hostile-input code: a closed set of entry names, sha256 and size per entry, 10 MB per entry / 50 MB total / 2,000 entries, each document parsed by its own store, writes through the stores (overwrite = compare-and-write), a skill can never be `built-in`, and connections are only added when named, into the **local** scope, never `vibe.yaml`, never replacing a team or user connection. formatVersion 1 or a SQLCipher file is refused with "This is an older .vibe file that holds data. Vibe no longer opens these." The bundle is a **user action**: no agent tool, no MCP method; `internal/bundle/isolation_test.go` fails if `agents`, `llm`, `mcp`, `a2ui` or `usersql` import it. Single-notebook `.vnb` import shares `bundle.CheckNotebook`. CLI: `vibe export bundle`, `vibe import bundle|<file.vibe>` (passphrase on a TTY, or `VIBE_BUNDLE_PASSPHRASE`). Studio (reached from the workspace menu, the launcher, or a `.vibe` passed at launch): `GetBundleContent`, `ExportBundle`, `PreviewBundleImport` (handle, bounded, expiring), `CommitBundleImport`, `ImportBundleIntoNewWorkspace`, `DiscardBundleImport`; `BundleExportDialog.vue` / `BundleImportDialog.vue`. Reference: `docs/reference/workspaces.md` ("Sharing without git").

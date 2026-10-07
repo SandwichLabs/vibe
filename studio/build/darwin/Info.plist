@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Wails fills the {{.…}} fields from wails.json at `wails build`. Everything
+     else is ours: the identifier and the document types that make Finder offer
+     "Open With > Vibe Studio" for workspace folders and .vibe bundles. Both
+     arrive in the app as an Apple Event (studio/main.go: mac.Options.OnFileOpen),
+     never as argv. -->
+<plist version="1.0">
+  <dict>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleName</key>
+    <string>{{.Info.ProductName}}</string>
+    <key>CFBundleExecutable</key>
+    <string>{{.OutputFilename}}</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.sandwichlabs.vibe-studio</string>
+    <key>CFBundleVersion</key>
+    <string>{{.Info.ProductVersion}}</string>
+    <key>CFBundleGetInfoString</key>
+    <string>{{.Info.Comments}}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>{{.Info.ProductVersion}}</string>
+    <key>CFBundleIconFile</key>
+    <string>iconfile</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <string>true</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>{{.Info.Copyright}}</string>
+
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <!-- A folder opens as a workspace. Viewer, and Alternate rank: Vibe is
+           offered in "Open With" but never becomes the default for folders. -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Vibe workspace folder</string>
+        <key>CFBundleTypeRole</key>
+        <string>Viewer</string>
+        <key>LSHandlerRank</key>
+        <string>Alternate</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>public.folder</string>
+        </array>
+      </dict>
+      <!-- A .vibe file is a bundle to import, not a document to edit. -->
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Vibe bundle</string>
+        <key>CFBundleTypeRole</key>
+        <string>Viewer</string>
+        <key>LSHandlerRank</key>
+        <string>Owner</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>dev.sandwichlabs.vibe-bundle</string>
+        </array>
+      </dict>
+    </array>
+
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+      <dict>
+        <key>UTTypeIdentifier</key>
+        <string>dev.sandwichlabs.vibe-bundle</string>
+        <key>UTTypeDescription</key>
+        <string>Vibe bundle</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.data</string>
+        </array>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>vibe</string>
+          </array>
+          <key>public.mime-type</key>
+          <string>application/x-vibe-bundle</string>
+        </dict>
+      </dict>
+    </array>
+  </dict>
+</plist>

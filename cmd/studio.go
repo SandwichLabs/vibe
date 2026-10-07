@@ -37,7 +37,8 @@ offered --read-only (reading without ownership). The owner keeps the
 workspace's local .duckdb files locked, so read-only cannot reach those.
 
 --gui launches the desktop app instead and opens the workspace folder (dir)
-there; without dir it starts at the launcher.
+there; a .vibe bundle opens its Import dialog; without dir it starts at the
+launcher.
 
 Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
 	Args:         cobra.MaximumNArgs(1),
@@ -50,11 +51,12 @@ func runStudio(cmd *cobra.Command, args []string) error {
 	if len(args) == 1 {
 		dir = args[0]
 	}
-	if isVibeFile(dir) {
-		return errLegacyFileArg
-	}
+	// The desktop app takes a .vibe bundle too: it opens the Import dialog.
 	if gui, _ := cmd.Flags().GetBool("gui"); gui {
 		return launchGUI(dir)
+	}
+	if isVibeFile(dir) {
+		return errLegacyFileArg
 	}
 	return runTUI(cmd, dir, cmd.InOrStdin(), cmd.OutOrStdout())
 }
