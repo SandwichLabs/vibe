@@ -39,12 +39,23 @@ import (
 type sqlEnv struct {
 	dataDir string                   // absolute, symlink-resolved; "" = none
 	conns   []session.ConnectionInfo // registered connections
+	// protected: files and folders of attached connections (symlink-resolved);
+	// COPY ... TO never writes into them.
+	protected []string
 }
 
 // newSQLEnv builds the environment from the workspace's data/ folder (may be
 // "") and its registered connections.
-func newSQLEnv(dataDir string, conns []session.ConnectionInfo) *sqlEnv {
+func newSQLEnv(dataDir string, conns []session.ConnectionInfo, protected ...string) *sqlEnv {
 	e := &sqlEnv{conns: conns}
+	for _, p := range protected {
+		if p == "" {
+			continue
+		}
+		if real, err := realPath(p); err == nil {
+			e.protected = append(e.protected, real)
+		}
+	}
 	if dataDir != "" {
 		if abs, err := filepath.Abs(dataDir); err == nil {
 			if real, err := filepath.EvalSymlinks(abs); err == nil {
@@ -73,8 +84,11 @@ func (e *sqlEnv) pathPolicy() *pathPolicy {
 		return p
 	}
 	p.dataDir = e.dataDir
+	p.protected = e.protected
 	for _, c := range e.conns {
-		if !c.Catalogless || c.Scope == "" {
+		// Only a storage connection widens what is readable (defence in depth:
+		// the session exports a scope for no other type).
+		if !c.Catalogless || c.Scope == "" || !storageConnTypes[c.Type] {
 			continue
 		}
 		// A storage connection is ready when it is connected or can connect;
@@ -733,6 +747,9 @@ func (a *analyzer) targetsFor(parts []string, isSchema, temp bool) ([]sqlTarget,
 			continue
 		}
 		seen[ln] = true
+		if isDuckLakeInternal(ln) {
+			return nil, duckLakeInternalMsg
+		}
 		row, ok := dbs[ln]
 		if !ok {
 			return nil, fmt.Sprintf("there is no connection named %q (see list_connections)", n)
@@ -981,6 +998,23 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 			}
 		}
 	}
+	// Named options can name other files or change how the reader resolves
+	// them (version_name_format, allow_moved_paths, rejects_table ...): only an
+	// explicit list of options that cannot is accepted.
+	depth = 0
+	for j := open + 2; j < closeIdx; j++ {
+		switch {
+		case toks[j].isParen("("), toks[j].isPunct("{"), toks[j].isPunct("["):
+			depth++
+		case toks[j].isParen(")"), toks[j].isPunct("}"), toks[j].isPunct("]"):
+			depth--
+		case depth == 0 && toks[j].isName() && j+1 < closeIdx:
+			eq := toks[j+1].isPunct("=") || (toks[j+1].isPunct(":") && j+2 < closeIdx && toks[j+2].isPunct("="))
+			if eq && !safeReaderParams[strings.ToLower(nameOf(toks[j]))] {
+				return fmt.Sprintf("%s(): the option %q is not on the agent's list of safe reader options (%s)", fn, strings.ToLower(nameOf(toks[j])), safeReaderParamList())
+			}
+		}
+	}
 	r := a.paths.vetRead(first.Text)
 	if r == "" {
 		a.vetted[first.Text] = true
@@ -1151,6 +1185,18 @@ func constString(n any) (string, bool) {
 	return s, ok
 }
 
+// namedParamName is the lower-cased option name of a `name = value` argument.
+func namedParamName(n any) string {
+	m, _ := n.(map[string]any)
+	l, _ := m["left"].(map[string]any)
+	names, _ := l["column_names"].([]any)
+	if len(names) != 1 {
+		return ""
+	}
+	s, _ := names[0].(string)
+	return strings.ToLower(s)
+}
+
 func isNamedParam(n any) bool {
 	m, ok := n.(map[string]any)
 	if !ok || m["type"] != "COMPARE_EQUAL" {
@@ -1256,6 +1302,10 @@ func (a *analyzer) tableFunc(fn map[string]any, st *walkState) {
 		positional := 0
 		for _, c := range children {
 			if isNamedParam(c) {
+				if n := namedParamName(c); !safeReaderParams[n] {
+					st.fail("%s(): the option %q is not on the agent's list of safe reader options (%s)", lname, n, safeReaderParamList())
+					return
+				}
 				continue
 			}
 			positional++
@@ -1370,6 +1420,14 @@ func (a *analyzer) resolveRef(catalogName, schema, table string, st *walkState) 
 		st.fail("SUMMARIZE would copy the whole table out of a remote connection; use SELECT with aggregates or a LIMIT instead")
 		return
 	}
+	if isDuckLakeInternal(catalogName) || isDuckLakeInternal(schema) {
+		st.fail("%s", duckLakeInternalMsg)
+		return
+	}
+	if a.mysqlServerSchema(catalogName, schema) {
+		st.fail("%s", mysqlSystemSchemaMsg)
+		return
+	}
 	full := dotJoin(catalogName, schema, table)
 	fileish := looksLikeFile(full)
 	dbs := a.databases()
@@ -1463,3 +1521,43 @@ func (a *analyzer) isRemote(catalogName, schema string) bool {
 	}
 	return a.remoteCatalog(name)
 }
+
+// duckLakeInternalPrefix names the catalog DuckLake attaches beside every lake
+// (__ducklake_metadata_<name>): the lake's own bookkeeping. Reading it exposes
+// where the data files are; writing it corrupts the lake.
+const duckLakeInternalPrefix = "__ducklake_metadata_"
+
+const duckLakeInternalMsg = "a DuckLake's internal metadata catalog is not available to the agent; query the lake's own tables"
+
+func isDuckLakeInternal(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), duckLakeInternalPrefix)
+}
+
+// mysqlSystemSchemas are the MySQL server's own databases. A MySQL catalog lists
+// them beside the connection's database, and they hold account data
+// (mysql.user: password hashes) and server internals. DuckDB's own
+// information_schema (unqualified, or in a non-MySQL catalog) is unaffected.
+var mysqlSystemSchemas = nameSet("mysql", "performance_schema", "sys", "information_schema")
+
+const mysqlSystemSchemaMsg = "the MySQL server's own schemas (mysql, performance_schema, sys, information_schema) are not available to the agent; query the connection's database"
+
+// mysqlServerSchema reports whether a reference lands in a system schema of a
+// MySQL catalog.
+func (a *analyzer) mysqlServerSchema(catalogName, schema string) bool {
+	if schema == "" {
+		return false
+	}
+	dbs := a.databases()
+	cat := catalogName
+	if cat == "" {
+		if _, isCat := dbs[strings.ToLower(schema)]; isCat {
+			return false // catalog.table: the table is in that catalog's default schema
+		}
+		cat = a.defaultCatalog()
+	}
+	r, ok := dbs[strings.ToLower(cat)]
+	return ok && r.typ == "mysql" && mysqlSystemSchemas[strings.ToLower(schema)]
+}
+
+// storageConnTypes are the connection types whose Scope is a readable URL prefix.
+var storageConnTypes = map[string]bool{"s3": true, "gcs": true, "r2": true, "azure": true}

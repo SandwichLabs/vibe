@@ -48,6 +48,7 @@ describe('connection display helpers (#117)', () => {
 
   it('knows the type tiles and the name rule', () => {
     expect(typeCode('postgres')).toBe('PG')
+    for (const [t, c] of [['mysql', 'MY'], ['azure', 'AZ'], ['ducklake', 'DL'], ['iceberg', 'IC'], ['delta', 'DT']]) expect(typeCode(t)).toBe(c)
     expect(NAME_RE.test('prod_pg')).toBe(true)
     expect(NAME_RE.test('Prod-PG')).toBe(false)
   })

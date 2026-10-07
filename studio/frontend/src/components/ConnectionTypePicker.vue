@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // ConnectionTypePicker — step 1 of the editor (SPEC 06): a grid generated from
-// the type registry. MySQL and DuckLake are shown greyed with a "Coming soon"
-// badge, aria-disabled and not focusable. The grid is a roving group: arrows
-// move, Enter chooses.
+// the type registry. A type the server marks `soon` would be shown greyed with
+// a "Coming soon" badge, aria-disabled and not focusable (none is, since #119).
+// The grid is a roving group: arrows move, Enter chooses.
 import { ref, computed } from 'vue'
 import ConnTypeTile from './ConnTypeTile.vue'
 

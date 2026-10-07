@@ -6,24 +6,27 @@ import { computed } from 'vue'
 import Icon from './Icon.vue'
 import { workspaceInfo } from '../composables/useWorkspace'
 
-const props = defineProps<{ modelValue: ConnScope; name?: string; disabled?: boolean }>()
+const props = defineProps<{ modelValue: ConnScope; name?: string; disabled?: boolean; ownOnly?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [v: ConnScope] }>()
 
 const isGit = computed(() => !!workspaceInfo.value?.isGit)
-const options: { value: ConnScope; title: string; desc: string; file: string }[] = [
+const allOptions: { value: ConnScope; title: string; desc: string; file: string }[] = [
   { value: 'local', title: 'This computer', desc: 'Only you, on this computer, for this workspace. Never committed.', file: 'outside the folder' },
   { value: 'shared', title: 'Team', desc: 'Everyone on this workspace. Saved in vibe.yaml and shared through git.', file: 'vibe.yaml' },
   { value: 'user', title: 'All my workspaces', desc: 'Only you, in every workspace on this computer.', file: '~/.config/vibe/' },
 ]
 
+// A source that trusts its own metadata is never shared with the team.
+const options = computed(() => (props.ownOnly ? allOptions.filter((o) => o.value !== 'shared') : allOptions))
+
 function onKey(e: KeyboardEvent) {
-  const i = options.findIndex((o) => o.value === props.modelValue)
+  const i = options.value.findIndex((o) => o.value === props.modelValue)
   let n = i
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % options.length
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i + options.length - 1) % options.length
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % options.value.length
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i + options.value.length - 1) % options.value.length
   else return
   e.preventDefault()
-  emit('update:modelValue', options[n].value)
+  emit('update:modelValue', options.value[n].value)
   ;(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role=radio]')[n]?.focus()
 }
 </script>

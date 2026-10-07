@@ -2,6 +2,7 @@ package agents
 
 import (
 	"fmt"
+	"github.com/sandwich-labs/vibe-app/internal/storageurl"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 //     is an absolute path, and (after resolving symlinks) lies inside the
 //     workspace's data/ folder.
 //   - A URL is readable only when it lies inside the scope of a ready storage
-//     connection (s3, gcs, r2): a literal prefix match, with no "..", query or
+//     connection (s3, gcs, r2, azure): a literal prefix match, with no "..", query or
 //     fragment, so it cannot wander to another bucket or object.
 //   - COPY ... TO may only write inside data/.
 //
@@ -25,6 +26,10 @@ import (
 type pathPolicy struct {
 	dataDir string   // symlink-resolved absolute path of the workspace data/ folder; "" = no file access
 	scopes  []string // normalised URL prefixes of ready storage connections
+	// protected are files and folders COPY ... TO never writes into: the files
+	// of attached connections (a DuckLake's catalog and its data folder, a duckdb
+	// or sqlite file), symlink-resolved.
+	protected []string
 }
 
 var urlSchemeRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.\-]*:`)
@@ -170,16 +175,19 @@ func (p *pathPolicy) vetGlob(lit string, glob int) string {
 }
 
 func (p *pathPolicy) vetURL(lit string) string {
-	if hasDotDot(lit) || strings.ContainsAny(lit, "?# \t\\") {
-		return fmt.Sprintf("the URL %q has a query, fragment, space or \"..\"; only plain object paths inside a storage connection's scope can be read", lit)
+	// One shared normaliser (internal/storageurl) decides what a plain storage
+	// URL is: known scheme, lower case, no query, fragment, percent-escape,
+	// backslash, "." / ".." / empty segment. Anything else is never readable.
+	if err := storageurl.ValidateRead(lit); err != nil {
+		return fmt.Sprintf("the URL %q is not a plain storage URL (%v); only plain object paths inside a storage connection's scope can be read", lit, err)
 	}
 	for _, s := range p.scopes {
-		if strings.HasPrefix(lit, s) {
+		if storageurl.Within(lit, s) {
 			return ""
 		}
 	}
 	if len(p.scopes) == 0 {
-		return fmt.Sprintf("the URL %q cannot be read: this workspace has no ready storage connection (s3, gcs or r2) whose scope contains it", lit)
+		return fmt.Sprintf("the URL %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it", lit)
 	}
 	return fmt.Sprintf("the URL %q is outside every storage connection's scope (%s)", lit, strings.Join(p.scopes, ", "))
 }
@@ -200,9 +208,17 @@ func (p *pathPolicy) vetWrite(lit string) string {
 	// Never write over a database file (an attached connection's file lives in
 	// data/ and an overwrite would corrupt it) or something loadable.
 	lower := strings.ToLower(clean)
-	for _, ext := range []string{".duckdb", ".db", ".wal", ".sqlite", ".sqlite3", ".duckdb_extension", ".so", ".dylib", ".dll"} {
+	for _, ext := range []string{".duckdb", ".ducklake", ".db", ".wal", ".sqlite", ".sqlite3", ".duckdb_extension", ".so", ".dylib", ".dll"} {
 		if strings.HasSuffix(lower, ext) {
 			return fmt.Sprintf("COPY ... TO %q: the agent does not write database or extension files", lit)
+		}
+	}
+	// Nor a table's own metadata: an Iceberg or Delta table names its data files
+	// in these, so a crafted one would let iceberg_scan / delta_scan read a file
+	// the path rule never saw.
+	for _, seg := range strings.FieldsFunc(lower, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg == "_delta_log" || strings.HasSuffix(seg, ".avro") || strings.HasSuffix(seg, "metadata.json") || seg == "version-hint.text" {
+			return fmt.Sprintf("COPY ... TO %q: the agent does not write the metadata of an Iceberg or Delta table", lit)
 		}
 	}
 	if fi, err := os.Lstat(clean); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
@@ -212,20 +228,27 @@ func (p *pathPolicy) vetWrite(lit string) string {
 	if err != nil || !inside(p.dataDir, parent) {
 		return fmt.Sprintf("COPY ... TO %q: the target must be inside %s", lit, p.dataDir)
 	}
+	// Never into a connection's own files: a DuckLake's catalog or data folder
+	// (whatever the file is called), a duckdb or sqlite file.
+	target := filepath.Join(parent, filepath.Base(clean))
+	for _, prot := range p.protected {
+		if inside(prot, target) {
+			return fmt.Sprintf("COPY ... TO %q: the target is part of a connection's own files; the agent does not write there", lit)
+		}
+	}
 	return ""
 }
 
 // normalizeScope turns a storage connection's scope into the prefix reads are
-// matched against: a bucket-only scope gets a trailing slash, so
-// "s3://bucket" never admits "s3://bucket-evil/...".
+// matched against: a plain storage URL that always ends in a slash, so
+// "s3://bucket" never admits "s3://bucket-evil/..." and "az://events/2024" never
+// admits "az://events/2024-evil/". A scope with any other scheme ("file:///",
+// "http://", "hf://") or that is not a plain URL normalises to "": it widens
+// nothing.
 func normalizeScope(scope string) string {
-	scope = strings.TrimSpace(scope)
-	if scope == "" || !strings.Contains(scope, "://") {
+	sc, err := storageurl.Scope(scope)
+	if err != nil {
 		return ""
 	}
-	rest := scope[strings.Index(scope, "://")+3:]
-	if !strings.Contains(rest, "/") {
-		scope += "/"
-	}
-	return scope
+	return sc
 }

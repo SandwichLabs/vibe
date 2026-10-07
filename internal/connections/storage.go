@@ -7,6 +7,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
 	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/sandwich-labs/vibe-app/internal/storageurl"
 )
 
 // storageType is an object-store connection: s3, gcs or r2. It has no catalog:
@@ -21,6 +22,7 @@ type storageType struct{ kind string }
 func (t storageType) Name() string                      { return t.kind }
 func (t storageType) Remote() bool                      { return true }
 func (t storageType) Catalogless() bool                 { return true }
+func (t storageType) StorageScope() bool                { return true }
 func (t storageType) Extensions() []string              { return []string{"httpfs"} }
 func (t storageType) NeedsCredential(session.Spec) bool { return true }
 
@@ -47,6 +49,9 @@ func (t storageType) allowedOptions() []string {
 }
 
 func (t storageType) Validate(s session.Spec) error {
+	if err := noStrayFields(s, "scope", "region"); err != nil {
+		return err
+	}
 	scope := param(s, "scope")
 	if err := requireField(s, "a scope (a URL prefix such as "+t.schemes()[0]+"bucket/path/)", scope); err != nil {
 		return err
@@ -60,8 +65,8 @@ func (t storageType) Validate(s session.Spec) error {
 	if !ok {
 		return fmt.Errorf("%s connection %q: scope %q must start with %s and name a bucket", t.kind, s.Name, scope, strings.Join(t.schemes(), " or "))
 	}
-	if strings.ContainsAny(scope, " \t*?") {
-		return fmt.Errorf("%s connection %q: scope must be a plain prefix (no spaces or wildcards)", t.kind, s.Name)
+	if err := storageurl.Validate(scope); err != nil {
+		return fmt.Errorf("%s connection %q: scope must be a plain URL prefix: %w", t.kind, s.Name, err)
 	}
 	if r := param(s, "region"); r != "" && !regionRE.MatchString(r) {
 		return fmt.Errorf("%s connection %q: region %q is not a region name", t.kind, s.Name, r)
@@ -136,9 +141,14 @@ func (t storageType) AttachSQL(s session.Spec) ([]string, error) {
 // Probe lists up to 1000 objects under the scope: one listing round trip, which
 // proves the key, the region and the scope.
 func (t storageType) Probe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {
+	return probeScope(ctx, sess, param(s, "scope"))
+}
+
+// probeScope is the storage connections' Test: one listing of the scope.
+func probeScope(ctx context.Context, sess session.Session, scope string) (int, string, error) {
 	var n int
 	err := sess.DB().QueryRowContext(ctx,
-		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(param(s, "scope")+"*")+`) LIMIT 1000)`).Scan(&n)
+		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(scope+"*")+`) LIMIT 1000)`).Scan(&n)
 	if err != nil {
 		return 0, "", fmt.Errorf("could not list the scope: %w", err)
 	}

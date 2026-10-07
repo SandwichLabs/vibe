@@ -31,6 +31,9 @@ func (postgresType) NeedsCredential(session.Spec) bool { return true }
 var sslModes = []string{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
 
 func (postgresType) Validate(s session.Spec) error {
+	if err := noStrayFields(s, "host", "port", "database"); err != nil {
+		return err
+	}
 	if err := requireField(s, "a host", param(s, "host")); err != nil {
 		return err
 	}

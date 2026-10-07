@@ -685,6 +685,15 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 			return fmt.Errorf("failed to attach %q: %s", name, msg)
 		}
 	}
+	if pa, ok := t.(PostAttacher); ok {
+		if perr := pa.PostAttach(ctx, conn, e.spec); perr != nil {
+			_, _ = conn.ExecContext(ctx, "DETACH "+QuoteIdent(name))
+			h.dropSecretsOn(ctx, conn, secretNames)
+			msg := h.redact(perr.Error())
+			h.setStatus(name, StatusError, msg, 0)
+			return fmt.Errorf("failed to attach %q: %s", name, msg)
+		}
+	}
 	h.mu.Lock()
 	e.attach = true
 	e.secrets = secretNames
@@ -1113,7 +1122,9 @@ func (h *hub) ConnectionInfos() []ConnectionInfo {
 			info.Remote = t.Remote()
 			if c, ok := t.(CataloglessType); ok && c.Catalogless() {
 				info.Catalogless = true
-				info.Scope = e.spec.Params["scope"]
+				if ss, ok := t.(StorageScopeType); ok && ss.StorageScope() {
+					info.Scope = e.spec.Params["scope"]
+				}
 			}
 		} else {
 			// An unknown type is never "local".

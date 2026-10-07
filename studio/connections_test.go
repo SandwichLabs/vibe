@@ -77,13 +77,33 @@ func TestListConnectionTypes_GeneratedFromRegistry(t *testing.T) {
 	for _, ty := range types {
 		byID[ty.ID] = ty
 	}
-	for _, id := range []string{"duckdb", "postgres", "motherduck", "sqlite", "s3", "gcs", "r2"} {
-		require.Contains(t, byID, id)
-		assert.False(t, byID[id].Soon)
-		assert.NotEmpty(t, byID[id].SignInMethods)
+	var ids []string
+	for _, ty := range types {
+		ids = append(ids, ty.ID)
 	}
-	assert.True(t, byID["mysql"].Soon)
-	assert.True(t, byID["ducklake"].Soon)
+	assert.Equal(t, []string{"duckdb", "postgres", "mysql", "motherduck", "sqlite", "ducklake", "s3", "gcs", "r2", "azure", "iceberg", "delta"}, ids)
+	for _, id := range ids {
+		assert.False(t, byID[id].Soon, "%s: no type is greyed out any more", id)
+		assert.NotEmpty(t, byID[id].SignInMethods, id)
+		assert.NotEmpty(t, byID[id].Description, id)
+		assert.NotEmpty(t, byID[id].Fields, id)
+	}
+	assert.Equal(t, []string{"mysql"}, byID["mysql"].RequiresExtension)
+	assert.Equal(t, []string{"azure"}, byID["azure"].RequiresExtension)
+	assert.Equal(t, []string{"ducklake"}, byID["ducklake"].RequiresExtension)
+	assert.Equal(t, []string{"iceberg"}, byID["iceberg"].RequiresExtension)
+	assert.Equal(t, []string{"delta"}, byID["delta"].RequiresExtension)
+	var myPw bool
+	for _, f := range byID["mysql"].Credentials {
+		myPw = myPw || (f.Name == "password" && f.Secret)
+	}
+	assert.True(t, myPw, "the MySQL password is declared secret")
+	var azSecret bool
+	for _, f := range byID["azure"].Credentials {
+		azSecret = azSecret || (f.Name == "secret" && f.Secret)
+	}
+	assert.True(t, azSecret, "the Azure secret is declared secret")
+	assert.Empty(t, byID["ducklake"].Credentials)
 	var pwSecret, userReadable bool
 	for _, f := range byID["postgres"].Credentials {
 		if f.Name == "password" && f.Secret {
@@ -385,7 +405,7 @@ func TestListExtensions_AndInstallRefusesUnknown(t *testing.T) {
 		assert.NotNil(t, e.NeededBy)
 		assert.NotEmpty(t, e.Purpose)
 	}
-	assert.ElementsMatch(t, []string{"postgres", "httpfs", "sqlite", "motherduck"}, names)
+	assert.ElementsMatch(t, []string{"postgres", "mysql", "httpfs", "azure", "sqlite", "ducklake", "iceberg", "delta", "motherduck"}, names)
 	require.Error(t, app.InstallExtension(InstallExtensionRequest{Name: "not_a_thing"}))
 }
 

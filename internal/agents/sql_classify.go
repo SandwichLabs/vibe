@@ -486,7 +486,7 @@ type planNode struct {
 	ExtraInfo map[string]any `json:"extra_info"`
 }
 
-var planDeniedFuncRe = regexp.MustCompile(`(?i)(^|[^a-z0-9_])(getenv|current_setting|duckdb_secrets|which_secret|duckdb_settings|duckdb_extensions|postgres_query|postgres_execute|postgres_scan_pushdown|query_table|(md|motherduck)_[a-z0-9_]*)\s*\(`)
+var planDeniedFuncRe = regexp.MustCompile(`(?i)(^|[^a-z0-9_])(getenv|current_setting|duckdb_secrets|which_secret|duckdb_settings|duckdb_extensions|postgres_query|postgres_execute|postgres_scan_pushdown|mysql_query|mysql_execute|mysql_clear_cache|query_table|(md|motherduck)_[a-z0-9_]*)\s*\(`)
 
 // planCheck runs EXPLAIN (FORMAT JSON) for stmt on the user's real connection —
 // ONLY after the syntactic checks have passed, because binding has side effects

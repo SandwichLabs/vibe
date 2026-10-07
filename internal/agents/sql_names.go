@@ -19,8 +19,14 @@ func nameSet(names ...string) map[string]bool {
 // readerFuncs are the table functions that read a file or URL. They are the
 // only ones that take a path, and only a plain string literal path inside
 // data/ (or a storage scope) is accepted. Everything else that reads files
-// (read_xlsx, st_read, iceberg_*, delta_scan, sniff_csv, parquet_bloom_probe,
-// ...) is not listed and therefore refused.
+// (read_xlsx, st_read, sniff_csv, parquet_bloom_probe, ...) is not listed and
+// therefore refused.
+//
+// iceberg_scan, iceberg_metadata, iceberg_snapshots and delta_scan are NOT here
+// (#119 review): an Iceberg or Delta table's own metadata chooses which files
+// are read (a `_delta_log` add.path of "../../x", version_name_format,
+// allow_moved_paths ...), so no check on the literal path can confine them. They
+// are reachable only in the person's own SQL, through a connection they defined.
 var readerFuncs = nameSet(
 	"read_csv", "read_csv_auto",
 	"read_parquet", "parquet_scan", "parquet_metadata", "parquet_schema",
@@ -29,6 +35,25 @@ var readerFuncs = nameSet(
 	"read_json_objects", "read_json_objects_auto", "read_ndjson_objects",
 	"read_text", "read_blob", "glob",
 )
+
+// safeReaderParams are the only named options a reader may be given. They
+// change how a file is parsed, never which other file or URL is read or where
+// anything is written. Everything else (version_name_format, allow_moved_paths,
+// rejects_table, store_rejects, ...) is refused.
+var safeReaderParams = nameSet(
+	"header", "delim", "delimiter", "sep", "quote", "escape", "columns", "union_by_name", "auto_detect",
+	"all_varchar", "skip", "null_padding", "ignore_errors", "sample_size", "dateformat", "timestampformat",
+	"types", "dtypes", "names", "normalize_names", "filename", "hive_partitioning", "hive_types",
+	"hive_types_autocast", "format", "records", "maximum_object_size", "compression", "newline", "comment",
+	"decimal_separator", "encoding", "binary_as_string", "file_row_number", "parallel", "auto_type_candidates",
+	"nullstr", "strict_mode", "max_line_size", "buffer_size", "maximum_depth", "field_appearance_threshold",
+	"map_inference_threshold", "convert_strings_to_integers", "ignore_errors", "thousands",
+)
+
+func safeReaderParamList() string {
+	n := sortedKeys(safeReaderParams)
+	return strings.Join(n, ", ")
+}
 
 // readerPlanOps are the plan operator names a reader appears as in EXPLAIN. A
 // plan may contain no more of them than the statement wrote out and vetted.
@@ -49,6 +74,13 @@ var allowedTableFunctions = nameSet(
 	"duckdb_tables", "duckdb_columns", "duckdb_views", "duckdb_schemas",
 	"duckdb_constraints", "duckdb_indexes", "duckdb_sequences", "duckdb_keywords",
 	"duckdb_functions", "duckdb_types", "pragma_table_info",
+	// DuckLake's read-only metadata functions (#119). Every other ducklake_*
+	// function (ducklake_set_option, _expire_snapshots, _merge_adjacent_files,
+	// _rewrite_data_files, _cleanup_old_files, _delete_orphaned_files,
+	// _add_data_files, _flush_inlined_data, _set_commit_message, _options,
+	// _list_files, _table_insertions/_deletions/_changes and iceberg_to_ducklake)
+	// changes the lake or reveals where its files live, and stays refused.
+	"ducklake_snapshots", "ducklake_current_snapshot", "ducklake_last_committed_snapshot", "ducklake_table_info",
 )
 
 // allowedCalls are the only things the agent may CALL: the catalog metadata
@@ -103,13 +135,15 @@ var allowedPlanOperators = nameSet(
 	"DUCKDB_TABLES", "DUCKDB_COLUMNS", "DUCKDB_VIEWS", "DUCKDB_SCHEMAS",
 	"DUCKDB_CONSTRAINTS", "DUCKDB_INDEXES", "DUCKDB_SEQUENCES", "DUCKDB_KEYWORDS",
 	"DUCKDB_FUNCTIONS", "DUCKDB_TYPES", "PRAGMA_TABLE_INFO",
+	"DUCKLAKE_SNAPSHOTS", "DUCKLAKE_CURRENT_SNAPSHOT", "DUCKLAKE_LAST_COMMITTED_SNAPSHOT", "DUCKLAKE_TABLE_INFO",
 )
 
 // remoteWriteOps matches the plan operators a remote catalog's own DML shows as
-// (PG_INSERT, PG_UPDATE, PG_DELETE, PG_CREATE_TABLE_AS, ...). The statement was
+// (PG_INSERT, PG_UPDATE, PG_DELETE, PG_CREATE_TABLE_AS, MYSQL_INSERT,
+// MYSQL_CREATE_TABLE_AS, DUCKLAKE_INSERT, DUCKLAKE_UPDATE, DUCKLAKE_DELETE, ...). The statement was
 // already refused unless its target is a writable, approved connection.
 func isRemoteWriteOp(name string) bool {
-	for _, prefix := range []string{"PG_", "SQLITE_", "MYSQL_", "MD_", "MOTHERDUCK_"} {
+	for _, prefix := range []string{"PG_", "SQLITE_", "MYSQL_", "DUCKLAKE_", "MD_", "MOTHERDUCK_"} {
 		if strings.HasPrefix(name, prefix) {
 			switch strings.TrimPrefix(name, prefix) {
 			case "INSERT", "UPDATE", "DELETE", "CREATE_TABLE", "CREATE_TABLE_AS", "ALTER", "DROP":

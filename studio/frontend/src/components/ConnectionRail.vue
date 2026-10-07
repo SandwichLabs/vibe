@@ -79,7 +79,10 @@ const rows = computed<Row[]>(() => {
     if ('loading' in top) { out.push(note(ck, c, 2, 'Loading…')); return }
     if ('error' in top) { out.push(note(ck, c, 2, top.error)); return }
     if (c.catalogless) {
-      out.push(note(ck, c, 2, 'Storage connection: read files with read_parquet(’scope/…’). It has no tables.'))
+      const msg = c.type === 'iceberg' ? 'Iceberg table: read it with iceberg_scan(’location’). It has no tables to browse.'
+        : c.type === 'delta' ? 'Delta Lake table: read it with delta_scan(’location’). It has no tables to browse.'
+        : 'Storage connection: read files with read_parquet(’scope/…’). It has no tables.'
+      out.push(note(ck, c, 2, msg))
       return
     }
     if (top.kind === 'tables') {

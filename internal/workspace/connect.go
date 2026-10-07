@@ -11,6 +11,7 @@ import (
 
 	"github.com/sandwich-labs/vibe-app/internal/connections"
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/sandwich-labs/vibe-app/internal/storageurl"
 )
 
 // SnapshotEnv returns an environment lookup over a copy of the process
@@ -50,9 +51,20 @@ func ServerDescription(d ConnectionDef) string {
 		return net.JoinHostPort(d.Host, strconv.Itoa(port)) + "/" + d.Database
 	case "motherduck":
 		return "md:" + d.Database
-	case "s3", "gcs", "r2":
+	case "mysql":
+		port := d.Port
+		if port == 0 {
+			port = 3306
+		}
+		return net.JoinHostPort(d.Host, strconv.Itoa(port)) + "/" + d.Database
+	case "s3", "gcs", "r2", "azure":
 		return d.Scope
-	case "sqlite", "duckdb":
+	case "sqlite", "duckdb", "ducklake":
+		return filepath.Base(d.Path)
+	case "iceberg", "delta":
+		if connections.IsDataURL(d.Path) {
+			return d.Path
+		}
 		return filepath.Base(d.Path)
 	}
 	return d.Type
@@ -106,19 +118,80 @@ func (r ResolvedConnection) Binding() secrets.Binding { return BindingFor(r.Reso
 
 // ResolveConnection expands and path-resolves one connection of ws.
 func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedConnection, error) {
+	if c.Scope == ScopeShared && OwnScopeOnlyType(c.Type) {
+		// Skipped, not fatal: the rest of the workspace opens and this one is
+		// reported as an issue.
+		return ResolvedConnection{}, fmt.Errorf("connection %q: %s. This one is in the team's vibe.yaml: ask the person who committed it to move it to their own connections", c.Name, OwnScopeOnlyMessage(c.Type))
+	}
 	resolved, err := c.ConnectionDef.Resolve(lookup, c.Scope)
 	if err != nil {
 		return ResolvedConnection{}, err
 	}
 	out := ResolvedConnection{Connection: c, Resolved: resolved}
-	if resolved.Type == "duckdb" || resolved.Type == "sqlite" {
+	if usesLocalPath(resolved) {
 		p, err := ResolveLocalPath(ws.Root(), resolved.Path, c.Scope)
 		if err != nil {
 			return ResolvedConnection{}, fmt.Errorf("connection %q: %w", c.Name, err)
 		}
 		out.Path = p
+	} else if resolved.Type == "iceberg" || resolved.Type == "delta" {
+		out.Path = resolved.Path // a storage URL: read with a storage connection's secret
+	}
+	if dp := resolved.Options["data_path"]; resolved.Type == "ducklake" && dp != "" && !connections.IsDataURL(dp) {
+		abs, err := ResolveLocalPath(ws.Root(), dp, c.Scope)
+		if err != nil {
+			return ResolvedConnection{}, fmt.Errorf("connection %q: data path: %w", c.Name, err)
+		}
+		opts := make(map[string]string, len(resolved.Options))
+		for k, v := range resolved.Options {
+			opts[k] = v
+		}
+		opts["data_path"] = abs
+		out.Resolved.Options = opts
+	}
+	if err := checkStorageURLs(ws, out.Resolved, out.Path, lookup); err != nil {
+		return ResolvedConnection{}, fmt.Errorf("connection %q: %w", c.Name, err)
 	}
 	return out, nil
+}
+
+// storageTypes are the connection types that add a scoped storage secret.
+var storageTypes = map[string]bool{"s3": true, "gcs": true, "r2": true, "azure": true}
+
+// checkStorageURLs holds a DuckLake data path and an Iceberg or Delta location
+// that is a URL to the scope of a storage connection of this workspace: the
+// lake or table is read with that connection's secret, and a definition that
+// named any other bucket would either fail or reach data nobody configured.
+// Local paths are held to the workspace by ResolveLocalPath.
+func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupFunc) error {
+	var url, what string
+	switch d.Type {
+	case "ducklake":
+		url, what = d.Options["data_path"], "data path"
+	case "iceberg", "delta":
+		url, what = path, "location"
+	}
+	if url == "" || !connections.IsDataURL(url) {
+		return nil
+	}
+	if err := storageurl.Validate(url); err != nil {
+		return fmt.Errorf("the %s is not a plain storage URL: %w", what, err)
+	}
+	for _, c := range ws.Connections() {
+		if !storageTypes[c.Type] || c.Name == d.Name {
+			continue
+		}
+		sd, err := c.ConnectionDef.Resolve(lookup, c.Scope)
+		if err != nil || sd.Scope == "" {
+			continue
+		}
+		// One normaliser, shared with the agent's URL rule: a literal prefix
+		// match on the scope's folder form.
+		if storageurl.Within(url, sd.Scope) {
+			return nil
+		}
+	}
+	return fmt.Errorf("the %s %q is not inside the scope of any S3, GCS, R2 or Azure connection of this workspace; add one whose scope contains it", what, url)
 }
 
 // ConnectionCredential resolves the person's credential for one connection of
@@ -144,4 +217,18 @@ func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup
 		return cred, rc, err
 	}
 	return secrets.Credential{}, ResolvedConnection{}, fmt.Errorf("unknown connection %q", name)
+}
+
+// usesLocalPath reports whether the definition's path is a file or folder on
+// this computer that must be resolved against the workspace: duckdb, sqlite and
+// ducklake files, and the folder of an iceberg or delta table (a storage URL is
+// left alone).
+func usesLocalPath(d ConnectionDef) bool {
+	switch d.Type {
+	case "duckdb", "sqlite", "ducklake":
+		return true
+	case "iceberg", "delta":
+		return !connections.IsDataURL(d.Path)
+	}
+	return false
 }

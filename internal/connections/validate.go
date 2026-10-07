@@ -76,6 +76,26 @@ func unknownOptions(s session.Spec, allowed ...string) error {
 	return nil
 }
 
+// noStrayFields rejects the definition fields a type does not use. A field a
+// type ignores is a field somebody else may read: a committed `scope: "file:///"`
+// on a table source once widened what the agent could read (#119 review), so a
+// type accepts exactly the top-level fields its Info declares.
+func noStrayFields(s session.Spec, used ...string) error {
+	ok := map[string]bool{}
+	for _, u := range used {
+		ok[u] = true
+	}
+	for _, f := range []string{"host", "port", "database", "region", "scope"} {
+		if param(s, f) != "" && !ok[f] {
+			return fmt.Errorf("%s connection %q: %q is not a setting of this type", s.Type, s.Name, f)
+		}
+	}
+	if s.Path != "" && !ok["path"] {
+		return fmt.Errorf("%s connection %q: \"path\" is not a setting of this type", s.Type, s.Name)
+	}
+	return nil
+}
+
 func oneOf(field, v string, choices ...string) error {
 	if v == "" {
 		return nil

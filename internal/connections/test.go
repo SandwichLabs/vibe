@@ -24,6 +24,14 @@ var (
 	_ session.CataloglessType  = storageType{}
 	_ session.HubTokenType     = motherduckType{}
 	_ session.Refresher        = postgresType{}
+	_ session.CredentialedType = mysqlType{}
+	_ session.Refresher        = mysqlType{}
+	_ session.CredentialedType = azureType{}
+	_ session.CataloglessType  = azureType{}
+	_ session.CredentialedType = ducklakeType{}
+	_ session.PostAttacher     = ducklakeType{}
+	_ session.CredentialedType = tableSourceType{}
+	_ session.CataloglessType  = tableSourceType{}
 )
 
 // TestTimeout bounds one Test (secret, attach and probe).
@@ -95,6 +103,13 @@ func Test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOpt
 	}
 	if err := Validate(def); err != nil {
 		return fail(session.StatusError, err)
+	}
+	if def.Type == "ducklake" && def.Path != "" {
+		// A test never writes, and a lake whose catalog file does not exist yet
+		// can only be attached by creating it.
+		if _, err := os.Stat(def.Path); errors.Is(err, os.ErrNotExist) {
+			return TestResult{OK: true, Status: session.StatusOK, Detail: "a new lake: its catalog file is created the first time something writes to it"}
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
@@ -319,10 +334,12 @@ func duckdbProbe(ctx context.Context, sess session.Session, s session.Spec) (int
 }
 
 // authFailure recognises a rejected key: S3-compatible stores answer 403 with
-// InvalidAccessKeyId, SignatureDoesNotMatch or AccessDenied.
+// InvalidAccessKeyId, SignatureDoesNotMatch or AccessDenied; Azure with
+// AuthenticationFailed, AuthorizationFailure or an AADSTS error; MySQL with
+// "Access denied for user".
 func authFailure(err error) bool {
 	m := strings.ToLower(err.Error())
-	for _, k := range []string{"403", "forbidden", "invalidaccesskeyid", "signaturedoesnotmatch", "accessdenied", "access denied", "not authenticated", "authentication failed"} {
+	for _, k := range []string{"403", "forbidden", "invalidaccesskeyid", "signaturedoesnotmatch", "accessdenied", "access denied", "not authenticated", "authentication failed", "authenticationfailed", "authorizationfailure", "authorizationpermissionmismatch", "aadsts", "invalid_client"} {
 		if strings.Contains(m, k) {
 			return true
 		}

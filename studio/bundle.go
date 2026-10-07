@@ -78,18 +78,17 @@ func (s *bundleStore) get(h string) (*bundle.Package, bool) {
 // take removes and returns a held bundle in one step: of two commits racing for
 // one handle, only one gets it.
 func (s *bundleStore) take(h string) (*bundle.Package, bool) {
-	pkg, ok := s.get(h)
+	// Lookup, expiry, removal and the order trim happen under one lock: with the
+	// steps separate, two commits could both find the handle and both get it.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expireLocked()
+	e, ok := s.held[h]
 	if !ok {
 		return nil, false
 	}
-	s.mu.Lock()
-	_, still := s.held[h]
-	s.mu.Unlock()
-	if !still {
-		return nil, false
-	}
-	s.drop(h)
-	return pkg, true
+	s.dropLocked(h)
+	return e.pkg, true
 }
 
 // clear forgets every held bundle (the workspace they were previewed against
@@ -114,6 +113,10 @@ func (s *bundleStore) restore(h string, pkg *bundle.Package) {
 func (s *bundleStore) drop(h string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.dropLocked(h)
+}
+
+func (s *bundleStore) dropLocked(h string) {
 	delete(s.held, h)
 	for i, o := range s.order {
 		if o == h {

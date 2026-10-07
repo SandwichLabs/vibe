@@ -4,7 +4,7 @@
 
 **An agentic workspace for the data you already have.**
 
-Connect to local DuckDB files, MotherDuck, Postgres, SQLite and object storage;
+Connect to local DuckDB files, MotherDuck, Postgres, MySQL, SQLite, DuckLake, Iceberg and Delta tables and object storage (S3, GCS, R2, Azure);
 explore, join and edit across all of them; write live notebooks and skills that
 live in a folder you can share through git — with an AI agent that reads freely
 and asks before it writes. Credentials stay in your OS keychain.
@@ -85,7 +85,7 @@ Details in [`docs/reference/workspaces.md`](docs/reference/workspaces.md#command
 
 ## Architecture
 
-- **Engine:** embedded **DuckDB** as a hub — local files, MotherDuck, Postgres, SQLite and S3/GCS/R2 attached as catalogs.
+- **Engine:** embedded **DuckDB** as a hub — local files, MotherDuck, Postgres, MySQL, SQLite and DuckLake attached as catalogs, and S3/GCS/R2/Azure storage plus Iceberg and Delta tables read in place.
 - **Workspace:** a folder (`vibe.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`); credentials in the OS keychain.
 - **Desktop app:** Wails v2 (Go backend + Vue 3 frontend, SchoolHouse design system).
 - **AI agent:** `charmbracelet/fantasy` runner over one tool registry; allow-list SQL policy, approval gate for writes; MCP server (SSE in-app, stdio headless).

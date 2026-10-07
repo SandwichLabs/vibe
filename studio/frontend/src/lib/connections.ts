@@ -3,11 +3,12 @@
 // never shows the file-level scope words (shared / local / user).
 
 export const TYPE_CODE: Record<string, string> = {
-  duckdb: 'DK', postgres: 'PG', motherduck: 'MD', sqlite: 'SQ', s3: 'S3', gcs: 'GC', r2: 'R2', mysql: 'MY', ducklake: 'DL',
+  duckdb: 'DK', postgres: 'PG', motherduck: 'MD', sqlite: 'SQ', s3: 'S3', gcs: 'GC', r2: 'R2', mysql: 'MY', ducklake: 'DL', azure: 'AZ', iceberg: 'IC', delta: 'DT',
 }
 export const TYPE_LABEL: Record<string, string> = {
   duckdb: 'DuckDB file', postgres: 'Postgres', motherduck: 'MotherDuck', sqlite: 'SQLite file',
   s3: 'Amazon S3', gcs: 'Google Cloud Storage', r2: 'Cloudflare R2', mysql: 'MySQL', ducklake: 'DuckLake',
+  azure: 'Azure Blob / Data Lake', iceberg: 'Iceberg table', delta: 'Delta Lake table',
 }
 export const typeCode = (t: string) => TYPE_CODE[t] ?? t.slice(0, 2).toUpperCase()
 export const typeLabel = (t: string) => TYPE_LABEL[t] ?? t
@@ -65,6 +66,8 @@ const NEEDS: Record<string, string> = {
   s3: 'access keys',
   gcs: 'access keys',
   r2: 'access keys',
+  mysql: 'a username and password',
+  azure: 'an account key, connection string or service principal',
 }
 
 // detailLine is the text under a row, only when the person can act on it.

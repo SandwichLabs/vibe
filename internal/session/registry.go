@@ -1,6 +1,8 @@
 package session
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"sort"
@@ -55,6 +57,31 @@ type CredentialedType interface {
 type CataloglessType interface {
 	ConnectionType
 	Catalogless() bool
+}
+
+// StorageScopeType is implemented by the storage connections (s3, gcs, r2,
+// azure) whose Scope is the URL prefix agent reads are allowed inside. It is
+// the only way a connection widens what the agent may read: a catalog-less
+// type that does not implement it (an iceberg or delta table) exports no scope
+// whatever its definition says.
+type StorageScopeType interface {
+	ConnectionType
+	StorageScope() bool
+}
+
+// PostAttacher is implemented by types that must vet what they attached before
+// it is usable (DuckLake: its catalog names the files it reads). When the check
+// fails the session detaches the catalog and reports the connection as an error.
+type PostAttacher interface {
+	ConnectionType
+	// PostAttach runs after the ATTACH statements, on the admin connection.
+	PostAttach(ctx context.Context, q Querier, spec Spec) error
+}
+
+// Querier is the read surface PostAttach gets.
+type Querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 // HubTokenType is implemented by MotherDuck: its token is a hub-wide setting

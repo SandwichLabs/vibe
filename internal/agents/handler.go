@@ -33,6 +33,13 @@ type ContainerAccess interface {
 	Skills() skills.Store
 }
 
+// ProtectedPathsProvider is implemented by a ContainerAccess that knows the
+// files and folders of its attached connections (a DuckLake's catalog and data
+// folder, duckdb and sqlite files): COPY ... TO never writes into them.
+type ProtectedPathsProvider interface {
+	ProtectedPaths() []string
+}
+
 // DataDirProvider is implemented by a ContainerAccess that has a workspace:
 // the folder (data/) the agent may read files from and COPY ... TO. A legacy
 // container does not implement it, so agent SQL there reads no files at all.
@@ -700,6 +707,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		trimmed := strings.TrimSuffix(strings.TrimSpace(sqlStr), ";")
 		wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _a2ui_limit LIMIT %d", trimmed, maxRows+1)
 		if rs, err = exec(ctx, wrapped, params); err == nil {
+			rs.Rows = dropDuckLakeInternalRows(rs.Rows)
 			if len(rs.Rows) > maxRows {
 				rs.Rows = rs.Rows[:maxRows]
 				truncated = true
@@ -713,6 +721,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	if err != nil {
 		return nil, false, fmt.Errorf("query execution failed: %w", err)
 	}
+	rs.Rows = dropDuckLakeInternalRows(rs.Rows)
 	if maxRows > 0 && len(rs.Rows) > maxRows {
 		rs.Rows = rs.Rows[:maxRows]
 		truncated = true
@@ -774,8 +783,9 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query execution failed: %v", err))
 	}
 
-	// Enforce max rows.
-	rows := rs.Rows
+	// Enforce max rows. DuckLake's own metadata catalog never shows in what the
+	// agent reads, not even as a name in duckdb_tables() or SHOW ALL TABLES.
+	rows := dropDuckLakeInternalRows(rs.Rows)
 	if sb.MaxQueryRows > 0 && len(rows) > sb.MaxQueryRows {
 		rows = rows[:sb.MaxQueryRows]
 	}
@@ -1401,4 +1411,29 @@ func extractTableParam(params map[string]any) string {
 // isWriteOperation returns true if the category involves modifications.
 func isWriteOperation(category string) bool {
 	return category == "data" || category == "content" || category == "schema"
+}
+
+// dropDuckLakeInternalRows removes the rows that name a DuckLake metadata
+// catalog (__ducklake_metadata_<lake>) in any text column.
+func dropDuckLakeInternalRows(rows [][]any) [][]any {
+	var out [][]any
+	for i, r := range rows {
+		hide := false
+		for _, c := range r {
+			if s, ok := c.(string); ok && isDuckLakeInternal(s) {
+				hide = true
+				break
+			}
+		}
+		if hide && out == nil {
+			out = append(make([][]any, 0, len(rows)), rows[:i]...)
+		}
+		if !hide && out != nil {
+			out = append(out, r)
+		}
+	}
+	if out == nil {
+		return rows
+	}
+	return out
 }

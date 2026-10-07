@@ -30,7 +30,19 @@ const TYPES: ConnTypeSpec[] = [
     credentials: [field({ name: 'token', label: 'Token', required: true, secret: true, perPerson: true })], requiresExtension: ['motherduck'],
     capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true, subprocess: true }, fingerprintFields: [], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
   },
-  { id: 'mysql', label: 'MySQL', description: 'Coming soon.', fields: [], credentials: [], requiresExtension: [], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: false }, fingerprintFields: [], signInMethods: [], soon: true },
+  { id: 'future', label: 'Future', description: 'Coming soon.', fields: [], credentials: [], requiresExtension: [], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: false }, fingerprintFields: [], signInMethods: [], soon: true },
+  {
+    id: 'mysql', label: 'MySQL', description: 'A MySQL server.',
+    fields: [field({ name: 'host', label: 'Host', required: true }), field({ name: 'port', label: 'Port', kind: 'number', default: '3306' }), field({ name: 'database', label: 'Database', required: true }),
+      field({ name: 'ssl_mode', label: 'SSL mode', kind: 'enum', choices: ['disabled', 'required'], option: true })],
+    credentials: [field({ name: 'user', label: 'User name', required: true, perPerson: true }), field({ name: 'password', label: 'Password', secret: true, perPerson: true })],
+    requiresExtension: ['mysql'], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'host', 'port', 'database', 'option:ssl_mode'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+  },
+  {
+    id: 'ducklake', label: 'DuckLake', description: 'A lake.',
+    fields: [field({ name: 'path', label: 'Metadata file', kind: 'path', required: true }), field({ name: 'data_path', label: 'Data folder', required: true, option: true })],
+    credentials: [], requiresExtension: ['ducklake'], capabilities: { catalog: true, writable: true, readOnlyAttach: true, remote: true, test: true }, fingerprintFields: ['type', 'path', 'option:data_path'], signInMethods: [], soon: false,
+  },
 ]
 
 function detail(over: Partial<ConnectionDetail> = {}): ConnectionDetail {
@@ -77,12 +89,14 @@ describe('ConnectionEditorView', () => {
     workspaceInfo.value = { isGit: true, root: '/w', name: 'A', sessionId: 's' } as unknown as WorkspaceInfo
   })
 
-  it('shows a type grid from the registry; MySQL and DuckLake-style cards are aria-disabled and not buttons', async () => {
+  it('shows a type grid from the registry; a card the server marks soon is aria-disabled and not a button, and MySQL is a normal choice', async () => {
     makeApp()
     const w = mountView()
     await flushPromises()
     expect(w.find('[data-testid="type-postgres"]').element.tagName).toBe('BUTTON')
-    const soon = w.find('[data-testid="type-mysql"]')
+    expect(w.find('[data-testid="type-mysql"]').element.tagName).toBe('BUTTON')
+    expect(w.find('[data-testid="type-mysql"]').attributes('aria-disabled')).toBeUndefined()
+    const soon = w.find('[data-testid="type-future"]')
     expect(soon.element.tagName).not.toBe('BUTTON')
     expect(soon.attributes('aria-disabled')).toBe('true')
     expect(soon.text()).toContain('Coming soon')
@@ -103,6 +117,29 @@ describe('ConnectionEditorView', () => {
     // the three sign-in choices, keychain first and selected
     const radios = w.findAll('[role="radiogroup"][aria-label="How you sign in"] [role="radio"]')
     expect(radios.map((r) => r.attributes('aria-checked'))).toEqual(['true', 'false', 'false'])
+  })
+
+  it('DuckLake: the required data folder is a main field with an asterisk, the hint says main, no read-only-user callout, no Team scope, and a trust warning', async () => {
+    makeApp()
+    const w = mountView()
+    await flushPromises()
+    await chooseType(w, 'ducklake')
+    const label = w.find('label[for="f-data_path"]')
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toContain('*')
+    expect(w.find('details').exists()).toBe(false) // nothing left for Advanced
+    expect(w.text()).toContain('.main.orders')
+    expect(w.text()).not.toContain('read-only database user')
+    expect(w.find('[data-testid="scope-shared"]').exists()).toBe(false)
+    expect(w.find('[data-testid="scope-local"]').exists()).toBe(true)
+    expect(w.find('[data-testid="trust-note"]').text()).toContain('Only point this at data you trust')
+    // a relative location is inside the workspace folder: the note says so
+    await w.find('#f-path').setValue('data/lake.ducklake')
+    expect(w.find('[data-testid="trust-note"]').text()).toContain('inside the workspace folder')
+    await w.find('#f-path').setValue('https://nope')
+    await w.find('#f-data_path').setValue('s3://bucket/lake/')
+    await w.find('#f-path').setValue('s3://bucket/x.ducklake')
+    expect(w.find('[data-testid="trust-note"]').text()).not.toContain('inside the workspace folder')
   })
 
   it('defaults the scope to This computer; Team shows the git explainer', async () => {

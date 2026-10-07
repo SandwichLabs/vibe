@@ -371,3 +371,24 @@ func marshalYAML(v any, header string) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// OwnScopeOnlyType reports a connection type that trusts the metadata of what it
+// points at: a DuckLake catalog, an Iceberg or Delta table decides which files
+// are read (a crafted one can name any file on this computer). Only the person
+// adds one, in their own scopes ("This computer" or all their workspaces); the
+// shared vibe.yaml, which a pull can change, and a bundle import refuse them.
+func OwnScopeOnlyType(typ string) bool {
+	switch typ {
+	case "ducklake", "iceberg", "delta":
+		return true
+	}
+	return false
+}
+
+// OwnScopeOnlyMessage is the refusal shown for such a type. It is checked when a
+// definition is added or moved (validateDefFor) and again when the workspace is
+// opened (ResolveConnection), where a definition that arrived in vibe.yaml by a
+// pull is skipped with an issue instead of making the whole file unreadable.
+func OwnScopeOnlyMessage(typ string) string {
+	return typ + " connections trust the metadata of what they point at (it decides which files are read), so only you can add them: choose \"This computer\" or \"All my workspaces\", not the team's vibe.yaml"
+}

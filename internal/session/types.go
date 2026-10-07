@@ -171,7 +171,7 @@ func classifyAttachError(err error, redact func(string) string) (StatusKind, str
 	if strings.Contains(lower, "extension") && (strings.Contains(lower, "not found") || strings.Contains(lower, "not installed") || strings.Contains(lower, "to be loaded")) {
 		return StatusExtensionMissing, msg, 0
 	}
-	if strings.Contains(lower, "password authentication failed") || strings.Contains(lower, "authentication failed") || strings.Contains(lower, "not authenticated") || strings.Contains(lower, "invalid token") {
+	if strings.Contains(lower, "password authentication failed") || strings.Contains(lower, "authentication failed") || strings.Contains(lower, "access denied for user") || strings.Contains(lower, "not authenticated") || strings.Contains(lower, "invalid token") {
 		return StatusNeedsCredentials, msg, 0
 	}
 	return StatusError, msg, 0

@@ -20,6 +20,9 @@ func (sqliteType) Extensions() []string              { return []string{"sqlite"}
 func (sqliteType) NeedsCredential(session.Spec) bool { return false }
 
 func (sqliteType) Validate(s session.Spec) error {
+	if err := noStrayFields(s, "path"); err != nil {
+		return err
+	}
 	if err := requireField(s, "a path", s.Path); err != nil {
 		return err
 	}

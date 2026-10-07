@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"database/sql"
+	"github.com/sandwich-labs/vibe-app/internal/connections"
 	"path/filepath"
 
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
@@ -55,3 +56,23 @@ func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
 
 // AgentPolicy is the workspace's effective policy for this person.
 func (a *AgentAccess) AgentPolicy() (string, bool) { return a.ws.AgentPolicy() }
+
+// ProtectedPaths are the files and folders of this workspace's local
+// connections (a DuckLake's catalog and data folder, duckdb and sqlite files):
+// the agent's COPY ... TO never writes into them, whatever they are called.
+func (a *AgentAccess) ProtectedPaths() []string {
+	var out []string
+	for _, c := range a.ws.Connections() {
+		rc, err := ResolveConnection(a.ws, c, nil)
+		if err != nil {
+			continue
+		}
+		if usesLocalPath(rc.Resolved) && rc.Path != "" {
+			out = append(out, rc.Path)
+		}
+		if dp := rc.Resolved.Options["data_path"]; rc.Resolved.Type == "ducklake" && dp != "" && !connections.IsDataURL(dp) {
+			out = append(out, dp)
+		}
+	}
+	return out
+}

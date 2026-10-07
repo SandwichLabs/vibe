@@ -15,6 +15,7 @@ import TestResult from '../components/TestResult.vue'
 import { askConfirm } from '../composables/useConfirm'
 import { extensionFor, refreshConnections } from '../composables/useConnections'
 import { shortcutLabel } from '../composables/useModal'
+import { workspaceInfo } from '../composables/useWorkspace'
 import { errorText } from '../lib/errors'
 import { NAME_RE, typeLabel, scopeLabel } from '../lib/connections'
 
@@ -58,8 +59,32 @@ const keychainDetail = ref('')
 
 const isMD = computed(() => typeId.value === 'motherduck')
 const remote = computed(() => !!spec.value?.capabilities.remote)
-const mainFields = computed(() => (spec.value?.fields ?? []).filter((x) => !x.option && x.name !== 'port'))
-const advFields = computed(() => (spec.value?.fields ?? []).filter((x) => x.option))
+// A required option (a DuckLake's data folder, R2's account id) is not an
+// advanced setting: it sits with the main fields, with its asterisk.
+const mainFields = computed(() => (spec.value?.fields ?? []).filter((x) => (!x.option || x.required) && x.name !== 'port'))
+const advFields = computed(() => (spec.value?.fields ?? []).filter((x) => x.option && !x.required))
+// These sources trust their own metadata (it decides which files are read), so
+// only the person adds them, in their own scopes.
+const ownScopeOnly = computed(() => ['ducklake', 'iceberg', 'delta'].includes(typeId.value))
+const insideWorkspace = computed(() => {
+  if (!ownScopeOnly.value) return false
+  const root = workspaceInfo.value?.root ?? ''
+  const loc = [f.path, f.options['data_path'] ?? ''].map((x) => x.trim()).filter(Boolean)
+  return loc.some((x) => {
+    if (x.includes('://')) return false
+    if (x.startsWith('/') || x.startsWith('~') || /^[A-Za-z]:[\\/]/.test(x)) return !!root && x.startsWith(root)
+    return true // relative paths resolve inside the workspace folder
+  })
+})
+// What a qualified table name looks like for this type.
+const exampleTail = computed(() => {
+  switch (typeId.value) {
+    case 'postgres': return '.public.orders'
+    case 'mysql': return `.${f.database.trim() || 'database'}.orders`
+    case 'duckdb': case 'sqlite': case 'ducklake': case 'motherduck': return '.main.orders'
+    default: return ''
+  }
+})
 const portField = computed(() => (spec.value?.fields ?? []).find((x) => x.name === 'port'))
 const credFields = computed(() => spec.value?.credentials ?? [])
 const readableCreds = computed(() => credFields.value.filter((c) => !c.secret))
@@ -163,9 +188,13 @@ function chooseType(id: string, from?: ConnectionDef) {
   typeId.value = id
   const t = types.value.find((x) => x.id === id)
   for (const fd of t?.fields ?? []) {
-    if (fd.default && !from && !fd.option) setVal(fd, fd.default)
+    if (fd.default && !from) setVal(fd, fd.default)
   }
+  // Settings the type cannot do without (a DuckLake's data folder, Azure's
+  // sign-in) live under Advanced: show them open on a new connection.
+  if (!from && (t?.fields ?? []).some((fd) => fd.option && (fd.required || fd.default))) advancedOpen.value = true
   if (id === 'motherduck') readOnly.value = false
+  if (['ducklake', 'iceberg', 'delta'].includes(id) && connScope.value === 'shared') connScope.value = 'local'
   envPrefix.value = id === 'motherduck' ? 'MOTHERDUCK' : ''
   initial.value = snapshot()
   void nextTick(() => document.getElementById('f-name')?.focus())
@@ -483,7 +512,7 @@ const title = computed(() => (isNew.value ? 'New connection' : `Edit ${f.name}`)
         <div class="field">
           <label class="field-label" for="f-name">Name</label>
           <input id="f-name" v-model="f.name" class="field-input" :readonly="!isNew" autocomplete="off" spellcheck="false" aria-describedby="f-name-h" data-testid="f-name" />
-          <div id="f-name-h" class="help">How you'll refer to it in SQL: <code>{{ f.name || 'prod_pg' }}<template v-if="spec?.capabilities.catalog">.public.orders</template></code>. <template v-if="isNew">Lowercase letters, numbers and underscores. It can't be changed after you save.</template><template v-else>It can't be changed after saving.</template></div>
+          <div id="f-name-h" class="help">How you'll refer to it in SQL: <code>{{ f.name || 'prod_pg' }}<template v-if="spec?.capabilities.catalog">{{ exampleTail }}</template></code>. <template v-if="isNew">Lowercase letters, numbers and underscores. It can't be changed after you save.</template><template v-else>It can't be changed after saving.</template></div>
         </div>
 
         <div v-for="fd in mainFields" :key="fd.name" :class="fd.name === 'host' && portField ? 'form-grid' : ''">
@@ -588,14 +617,15 @@ const title = computed(() => (isNew.value ? 'New connection' : `Edit ${f.name}`)
               </span>
             </span>
           </div>
-          <div v-if="readOnly && remote" class="note warn"><Icon name="alert" :size="16" /><span><b>For production data, also use a read-only database user.</b> Ask your database admin for a role that can only read. That is the only way to be certain nothing can change.</span></div>
+          <div v-if="readOnly && remote && typeId !== 'ducklake'" class="note warn"><Icon name="alert" :size="16" /><span><b>For production data, also use a read-only database user.</b> Ask your database admin for a role that can only read. That is the only way to be certain nothing can change.</span></div>
         </template>
       </div>
 
       <!-- Scope -->
       <div class="form-sec">
         <h3>Who can use this connection</h3>
-        <ScopePicker v-model="connScope" :name="f.name" />
+        <div v-if="ownScopeOnly" class="note warn" data-testid="trust-note"><Icon name="alert" :size="16" /><span><b>Only point this at data you trust.</b> The metadata of a {{ spec?.label ?? 'lake or table' }} decides which files are read, so a crafted one can read any file on this computer. That is why only you can add it, not the team.<template v-if="insideWorkspace">{{ ' ' }}<b>This location is inside the workspace folder</b>, where files that came with a cloned repository may be crafted tables.</template></span></div>
+        <ScopePicker v-model="connScope" :name="f.name" :own-only="ownScopeOnly" />
       </div>
 
       <!-- Result and actions -->

@@ -149,6 +149,11 @@ func init() {
 	register(storageType{kind: "s3"})
 	register(storageType{kind: "gcs"})
 	register(storageType{kind: "r2"})
+	register(mysqlType{})
+	register(azureType{})
+	register(ducklakeType{})
+	register(tableSourceType{kind: "iceberg"})
+	register(tableSourceType{kind: "delta"})
 }
 
 // Types returns the session types to hand to session.WithConnectionTypes.

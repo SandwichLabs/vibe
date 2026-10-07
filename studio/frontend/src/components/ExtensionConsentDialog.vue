@@ -21,6 +21,11 @@ const what = computed(() => {
     case 'postgres': return 'To read a Postgres database, Vibe’s database engine needs a small add-on called the'
     case 'sqlite': return 'To read SQLite files, Vibe’s database engine needs a small add-on called the'
     case 'motherduck': return 'To connect to MotherDuck, Vibe’s database engine needs a small add-on called the'
+    case 'mysql': return 'To read a MySQL database, Vibe’s database engine needs a small add-on called the'
+    case 'azure': return 'To read files from Azure Blob Storage or Data Lake, Vibe’s database engine needs a small add-on called the'
+    case 'ducklake': return 'To use a DuckLake, Vibe’s database engine needs a small add-on called the'
+    case 'iceberg': return 'To read Iceberg tables, Vibe’s database engine needs a small add-on called the'
+    case 'delta': return 'To read Delta Lake tables, Vibe’s database engine needs a small add-on called the'
   }
   return 'Vibe’s database engine needs a small add-on called the'
 })

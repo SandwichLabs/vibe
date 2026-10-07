@@ -166,6 +166,9 @@ func SanitizeConnection(d workspace.ConnectionDef) (workspace.ConnectionDef, []s
 			d.Options = nil
 		}
 	}
+	if workspace.OwnScopeOnlyType(d.Type) {
+		return d, notes, fmt.Errorf("%s", workspace.OwnScopeOnlyMessage(d.Type))
+	}
 	if err := d.ValidateIn(workspace.ScopeShared); err != nil {
 		return workspace.ConnectionDef{}, notes, err
 	}
@@ -333,6 +336,19 @@ func ConnectionRisks(d workspace.ConnectionDef) []string {
 		}
 		if d.Scope == "" || broadScopeRE.MatchString(d.Scope) {
 			out = append(out, "Its storage scope is a whole bucket or broader: once you sign in, the agent can read anything in it.")
+		}
+	case "azure":
+		if d.Scope == "" || broadScopeRE.MatchString(d.Scope) {
+			out = append(out, "Its storage scope is a whole container or broader: once you sign in, the agent can read anything in it.")
+		}
+	case "mysql":
+		switch strings.ToLower(d.Options["ssl_mode"]) {
+		case "disabled", "preferred":
+			out = append(out, fmt.Sprintf("ssl_mode=%s does not require an encrypted connection.", d.Options["ssl_mode"]))
+		}
+	case "ducklake":
+		if dp := d.Options["data_path"]; strings.Contains(dp, "://") && broadScopeRE.MatchString(dp) {
+			out = append(out, "Its data path is a whole bucket or container: the lake's files are read and written there.")
 		}
 	case "motherduck":
 		out = append(out, "MotherDuck connections can be written to once you sign in; use a read-scaling token for read-only access.")

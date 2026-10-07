@@ -267,7 +267,7 @@ func TestValidateFieldRules(t *testing.T) {
 		"s3 wildcard":        {Name: "l", Type: "s3", Scope: "s3://b/*"},
 		"s3 endpoint scheme": {Name: "l", Type: "s3", Scope: "s3://b/", Options: map[string]string{"endpoint": "https://x"}},
 		"r2 no account":      {Name: "c", Type: "r2", Scope: "r2://b/"},
-		"unknown type":       {Name: "x", Type: "mysql"},
+		"unknown type":       {Name: "x", Type: "oracle"},
 		"bad name":           {Name: "Bad-Name", Type: "sqlite", Path: "p"},
 	}
 	for n, d := range bad {
@@ -281,7 +281,7 @@ func TestListConnectionTypesMetadata(t *testing.T) {
 	for _, i := range infos {
 		names = append(names, i.Name)
 	}
-	assert.Equal(t, []string{"duckdb", "gcs", "motherduck", "postgres", "r2", "s3", "sqlite"}, names)
+	assert.Equal(t, []string{"duckdb", "azure", "delta", "ducklake", "gcs", "iceberg", "motherduck", "mysql", "postgres", "r2", "s3", "sqlite"}, names)
 	for _, i := range infos {
 		assert.NotEmpty(t, i.Label, i.Name)
 		assert.Contains(t, i.FingerprintFields, "type", i.Name)

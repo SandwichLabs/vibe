@@ -22,7 +22,11 @@ func (h *Handler) policyEnv() *sqlEnv {
 	if p, ok := h.container.(DataDirProvider); ok {
 		dir = p.DataDir()
 	}
-	return newSQLEnv(dir, conns)
+	var protected []string
+	if p, ok := h.container.(ProtectedPathsProvider); ok {
+		protected = p.ProtectedPaths()
+	}
+	return newSQLEnv(dir, conns, protected...)
 }
 
 // classify runs the agent SQL policy on raw (with its $name params) against db.

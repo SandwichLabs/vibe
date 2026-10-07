@@ -3,6 +3,7 @@ package bundle
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,15 @@ func TestConnectionPreviewShowsEverythingAndWarns(t *testing.T) {
 	for _, s := range []string{"s3://", "s3://bucket", "s3://bucket/", "gs://b/"} {
 		assert.NotEmpty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "s3", Scope: s}), s)
 	}
+	for _, s := range []string{"az://", "az://container", "az://container/", "azure://container/", "abfss://c@acct.dfs.core.windows.net/", "abfss://c@acct.dfs.core.windows.net"} {
+		assert.Contains(t, strings.Join(ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "azure", Scope: s}), "|"), "whole container", s)
+	}
+	assert.Empty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "azure", Scope: "az://container/events/"}))
+	assert.Empty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "azure", Scope: "abfss://c@acct.dfs.core.windows.net/events/"}))
+	assert.Contains(t, strings.Join(ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "mysql", Options: map[string]string{"ssl_mode": "disabled"}}), "|"), "ssl_mode=disabled")
+	assert.Empty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "mysql", Options: map[string]string{"ssl_mode": "required"}}))
+	assert.Contains(t, strings.Join(ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "ducklake", Path: "data/l.ducklake", Options: map[string]string{"data_path": "s3://bucket/"}}), "|"), "whole bucket")
+	assert.Empty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "ducklake", Path: "data/l.ducklake", Options: map[string]string{"data_path": "s3://bucket/lake/"}}))
 	assert.Empty(t, ConnectionRisks(workspace.ConnectionDef{Name: "x", Type: "s3", Scope: "s3://b/p/", Options: map[string]string{"endpoint": "s3.us-east-1.amazonaws.com"}}))
 }
 
@@ -249,4 +259,47 @@ func TestNotebookPackageSharesTheImportPath(t *testing.T) {
 	require.ErrorIs(t, err, ErrTooLarge)
 	_, err = NotebookPackage("x.vnb", []byte("not json"))
 	require.Error(t, err)
+}
+
+// Sources that trust their own metadata (DuckLake, Iceberg, Delta) are never
+// imported from a bundle: only the person adds them, in their own scopes.
+func TestBundleDropsMetadataTrustingConnections(t *testing.T) {
+	ws, _ := newWS(t)
+	pkg := connBundle(t, `version: 1
+connections:
+  - name: tbl
+    type: delta
+    path: data/sales
+  - name: ice
+    type: iceberg
+    path: data/ice
+  - name: lake
+    type: ducklake
+    path: data/lake.ducklake
+    options:
+      data_path: data/lake_files
+  - name: smuggle
+    type: delta
+    path: data/x
+    scope: "file:///"
+  - name: pg
+    type: postgres
+    host: db.example.com
+    database: prod
+`)
+	w := strings.Join(pkg.Warnings, "|")
+	for _, n := range []string{"tbl", "ice", "lake", "smuggle"} {
+		assert.Contains(t, w, fmt.Sprintf("connection %q was not imported", n))
+	}
+	assert.Contains(t, w, "only you can add them")
+	pv := pkg.Preview(ws)
+	require.Len(t, pv.Connections, 1)
+	assert.Equal(t, "pg", pv.Connections[0].Name)
+	_, err := pkg.Import(context.Background(), ws, ImportOptions{IncludeConnections: []string{"tbl"}})
+	require.Error(t, err, "a dropped connection cannot be asked for by name")
+	_, err = pkg.Import(context.Background(), ws, ImportOptions{IncludeConnections: []string{"pg"}})
+	require.NoError(t, err)
+	for _, c := range ws.Connections() {
+		assert.NotContains(t, []string{"tbl", "ice", "lake", "smuggle"}, c.Name)
+	}
 }

@@ -50,7 +50,8 @@ type TypeSpec struct {
 	Capabilities      connections.Capabilities `json:"capabilities"`
 	FingerprintFields []string                 `json:"fingerprintFields"`
 	SignInMethods     []string                 `json:"signInMethods"`
-	// Soon marks a type that is shown but cannot be chosen yet (#119).
+	// Soon marks a type that is shown but cannot be chosen yet. Every type of
+	// the registry is available since #119; the flag stays for the picker.
 	Soon bool `json:"soon"`
 }
 
@@ -62,6 +63,11 @@ var typeDescriptions = map[string]string{
 	"s3":         "Files in an Amazon S3 bucket.",
 	"gcs":        "Files in a Google Cloud Storage bucket.",
 	"r2":         "Files in a Cloudflare R2 bucket.",
+	"mysql":      "A MySQL or MariaDB server. Read it in place; nothing is copied.",
+	"azure":      "Files in Azure Blob Storage or Data Lake (az://, azure://, abfss://).",
+	"ducklake":   "A DuckLake: tables in Parquet files with their catalog in a DuckDB file.",
+	"iceberg":    "An Iceberg table, read with iceberg_scan('<location>').",
+	"delta":      "A Delta Lake table, read with delta_scan('<location>').",
 }
 
 // ListConnectionTypes returns the connection types, in the order the picker
@@ -71,8 +77,8 @@ func (a *App) ListConnectionTypes() []TypeSpec {
 	for _, i := range connections.ListConnectionTypes() {
 		infos[i.Name] = i
 	}
-	order := []string{"duckdb", "postgres", "motherduck", "sqlite", "s3", "gcs", "r2"}
-	out := make([]TypeSpec, 0, len(order)+2)
+	order := []string{"duckdb", "postgres", "mysql", "motherduck", "sqlite", "ducklake", "s3", "gcs", "r2", "azure", "iceberg", "delta"}
+	out := make([]TypeSpec, 0, len(order))
 	for _, id := range order {
 		i, ok := infos[id]
 		if !ok {
@@ -89,12 +95,6 @@ func (a *App) ListConnectionTypes() []TypeSpec {
 			Capabilities:      i.Capabilities, FingerprintFields: append([]string{}, i.FingerprintFields...),
 			SignInMethods: methods,
 		})
-	}
-	for _, soon := range []TypeSpec{{ID: "mysql", Label: "MySQL"}, {ID: "ducklake", Label: "DuckLake"}} {
-		soon.Description, soon.Soon = "Coming soon.", true
-		soon.Fields, soon.Credentials = []connections.Field{}, []connections.Field{}
-		soon.RequiresExtension, soon.FingerprintFields, soon.SignInMethods = []string{}, []string{}, []string{}
-		out = append(out, soon)
 	}
 	return out
 }
@@ -1195,7 +1195,7 @@ func classifyTestError(res connections.TestResult, def workspace.ConnectionDef) 
 		strings.Contains(low, "invalid token") || strings.Contains(low, "not authenticated") || res.Status == session.StatusNeedsCredentials:
 		e.Code = "bad-signin"
 		e.Message = fmt.Sprintf("The server turned down the username or password. Check them and try again. If you're sure they're right, ask whoever runs the database whether your account can reach %s.", host)
-		if def.Type == "motherduck" || strings.HasPrefix(def.Type, "s3") || def.Type == "gcs" || def.Type == "r2" {
+		if def.Type == "motherduck" || strings.HasPrefix(def.Type, "s3") || def.Type == "gcs" || def.Type == "r2" || def.Type == "azure" {
 			e.Message = "The service turned down these keys or this token. Check them and try again."
 		}
 	case strings.Contains(low, "does not exist") && strings.Contains(low, "database"):
@@ -1237,6 +1237,11 @@ var extensionPurpose = map[string]string{
 	"httpfs":     "Read files from S3, Google Cloud Storage and R2.",
 	"sqlite":     "Read SQLite files.",
 	"motherduck": "Connect to MotherDuck.",
+	"mysql":      "Read MySQL and MariaDB databases.",
+	"azure":      "Read files from Azure Blob Storage and Data Lake.",
+	"ducklake":   "Read and write DuckLake lakehouses.",
+	"iceberg":    "Read Iceberg tables.",
+	"delta":      "Read Delta Lake tables.",
 }
 
 // ListExtensions lists the extensions the connection types need, whether each is

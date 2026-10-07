@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -204,4 +206,34 @@ func TestBundle_HandleLifecycle(t *testing.T) {
 	_, err = app.CommitBundleImport(pv.Handle, BundleDecisions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expired")
+}
+
+// Many commits racing for one handle: exactly one takes it (the lookup, expiry
+// check, removal and order trim are one critical section).
+func TestBundleStore_TakeIsAtomic(t *testing.T) {
+	for round := 0; round < 200; round++ {
+		var s bundleStore
+		h := s.put(&bundle.Package{})
+		other := s.put(&bundle.Package{})
+		const n = 16
+		var won int32
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				if _, ok := s.take(h); ok {
+					atomic.AddInt32(&won, 1)
+				}
+			}()
+		}
+		close(start)
+		wg.Wait()
+		require.EqualValues(t, 1, won, "round %d", round)
+		_, ok := s.get(other)
+		require.True(t, ok, "taking one handle leaves the others")
+		require.Len(t, s.order, 1)
+	}
 }

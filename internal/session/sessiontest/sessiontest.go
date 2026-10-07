@@ -15,3 +15,20 @@ import (
 func ForTests(db *sql.DB, opts ...session.Option) session.Session {
 	return session.UnhardenedForTests(db, opts...)
 }
+
+// ScopeAcceptingType is a catalog-less connection type that accepts any Params
+// (a "scope" among them) and is NOT a storage type: the session must export no
+// scope for it, however its definition is spelled.
+type ScopeAcceptingType struct{ TypeName string }
+
+func (t ScopeAcceptingType) Name() string                             { return t.TypeName }
+func (t ScopeAcceptingType) Remote() bool                             { return true }
+func (t ScopeAcceptingType) Catalogless() bool                        { return true }
+func (t ScopeAcceptingType) Validate(session.Spec) error              { return nil }
+func (t ScopeAcceptingType) AttachSQL(session.Spec) ([]string, error) { return nil, nil }
+
+// StorageScopedType is the same shape but declares itself a storage type, so
+// its scope is exported.
+type StorageScopedType struct{ ScopeAcceptingType }
+
+func (StorageScopedType) StorageScope() bool { return true }

@@ -161,6 +161,21 @@ func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ..
 				failMsg(c.Name, redactBasic(err.Error()))
 				continue
 			}
+			if resolved.Type == "ducklake" && !spec.ReadOnly {
+				// A new lake: its folders are created inside the workspace
+				// only; a path elsewhere must already have its folder.
+				dirs := []string{filepath.Dir(rc.Path)}
+				if dp := cdef.Options["data_path"]; dp != "" && !connections.IsDataURL(dp) {
+					dirs = append(dirs, dp)
+				}
+				for _, d := range dirs {
+					if insideRoot(ws.Root(), d) {
+						if err := os.MkdirAll(d, 0o755); err != nil {
+							failMsg(c.Name, fmt.Sprintf("connection %q: failed to create its folder: %v", c.Name, err))
+						}
+					}
+				}
+			}
 		}
 		if connections.NeedsCredential(resolved.Type) {
 			ref := credentialRef(ws.ID(), c.Scope, c.Name)

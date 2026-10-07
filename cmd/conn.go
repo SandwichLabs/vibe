@@ -26,7 +26,8 @@ var connCmd = &cobra.Command{
 	Use:   "conn",
 	Short: "Add, list, test and remove a workspace's connections",
 	Long: `A connection is a place data lives: a local DuckDB or SQLite file, Postgres,
-MotherDuck, or an S3, Google Cloud Storage or Cloudflare R2 prefix. The
+MySQL, MotherDuck, a DuckLake, an Iceberg or Delta table, or an S3, Google
+Cloud Storage, Cloudflare R2 or Azure prefix. The
 definition (host, database, ...) is a plain setting; the credentials never are:
 they go to your OS keychain, or are read from environment variables you name
 (--sign-in env:PREFIX), and are never printed back.
@@ -80,12 +81,16 @@ var connAddCmd = &cobra.Command{
 	Use:   "add <name> --type <type>",
 	Short: "Add a connection (credentials are prompted for and kept in the keychain)",
 	Long: `Add a connection definition and, on a terminal, prompt for its credentials
-(no echo) and store them in the keychain. Types: ` + "duckdb, sqlite, postgres, motherduck, s3, gcs, r2" + `.
+(no echo) and store them in the keychain. Types: ` + "duckdb, sqlite, postgres, mysql, motherduck, ducklake, s3, gcs, r2, azure, iceberg, delta" + `.
 
   vibe conn add pg --type postgres --host db.internal --database analytics
   vibe conn add lake --type s3 --prefix s3://acme-lake/raw/ --region us-east-1
   vibe conn add md --type motherduck --database my_db --sign-in env:MOTHERDUCK
   vibe conn add legacy --type sqlite --path data/legacy.sqlite
+  vibe conn add shop --type mysql --host db.internal --database shop --option ssl_mode=required
+  vibe conn add events --type azure --prefix az://events/2024/ --option sign_in=account_key --option account_name=acmelake
+  vibe conn add wh --type ducklake --path data/wh.ducklake --option data_path=data/wh_files --read-only=false
+  vibe conn add sales --type delta --path data/sales
 
 Connections are read-only unless --read-only=false. Without a terminal no
 credentials are asked for; use "vibe conn credentials set <name>" (reads
@@ -323,7 +328,7 @@ func runConnList(cmd *cobra.Command, _ []string) error {
 		}
 		if info, err := connections.TypeInfoFor(c.Type); err == nil && r.ReadOnly && !info.Capabilities.ReadOnlyAttach && info.Capabilities.Catalog {
 			r.ReadOnlyNote = "advisory"
-			if c.Type == "postgres" {
+			if c.Type == "postgres" || c.Type == "mysql" {
 				r.ReadOnlyNote = "client-side; use a read-only role"
 			}
 			if c.Type == "motherduck" {
@@ -507,7 +512,14 @@ func runConnConnect(cmd *cobra.Command, args []string) error {
 		return errors.New(msg)
 	}
 	if info, _ := connections.TypeInfoFor(c.Type); !info.Capabilities.Catalog && c.Type != "duckdb" {
-		fmt.Fprintf(out, "%s: connected (storage scope %s; read it with read_parquet('%s...'))\n", name, c.Scope, c.ConnectionDef.Scope)
+		switch c.Type {
+		case "iceberg":
+			fmt.Fprintf(out, "%s: ready (read the table with iceberg_scan('%s'))\n", name, c.ConnectionDef.Path)
+		case "delta":
+			fmt.Fprintf(out, "%s: ready (read the table with delta_scan('%s'))\n", name, c.ConnectionDef.Path)
+		default:
+			fmt.Fprintf(out, "%s: connected (storage scope %s; read it with read_parquet('%s...'))\n", name, c.Scope, c.ConnectionDef.Scope)
+		}
 		return nil
 	}
 	tables, terr := o.Sess.ListTables(cctx, name, "")
@@ -768,13 +780,13 @@ func init() {
 	f := connAddCmd.Flags()
 	f.String("type", "", "connection type: "+strings.Join(connections.AllTypeNames(), ", "))
 	f.String("scope", "local", "where to keep the definition: local (this computer), shared (vibe.yaml) or user (all workspaces)")
-	f.String("path", "", "file path (duckdb, sqlite)")
-	f.String("host", "", "host (postgres)")
-	f.Int("port", 0, "port (postgres; default 5432)")
-	f.String("database", "", "database (postgres, motherduck)")
+	f.String("path", "", "file path (duckdb, sqlite; ducklake: the metadata file; iceberg, delta: the table folder or storage URL)")
+	f.String("host", "", "host (postgres, mysql)")
+	f.Int("port", 0, "port (postgres, mysql; default 5432 / 3306)")
+	f.String("database", "", "database (postgres, mysql, motherduck)")
 	f.String("region", "", "region (s3, gcs, r2)")
-	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2)")
-	f.StringArray("option", nil, "type option key=value (postgres: sslmode; s3: endpoint, url_style; r2: account_id); repeatable")
+	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2, azure)")
+	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path); repeatable")
 	f.Bool("read-only", true, "attach read-only (--read-only=false to allow writes)")
 	f.String("sign-in", "", "how you sign in: keychain (default), prompt or env:PREFIX")
 	addConnWorkspaceFlag(connAddCmd)

@@ -104,7 +104,7 @@ func TestAddValidatesByScopeAndType(t *testing.T) {
 		"s3 wrong scheme":      {ScopeLocal, ConnectionDef{Name: "a", Type: "s3", Scope: "gs://b/"}},
 		"bad name":             {ScopeLocal, ConnectionDef{Name: "Bad", Type: "sqlite", Path: "p"}},
 		"reserved name":        {ScopeLocal, ConnectionDef{Name: "memory", Type: "sqlite", Path: "p"}},
-		"unknown type":         {ScopeLocal, ConnectionDef{Name: "a", Type: "mysql", Host: "h"}},
+		"unknown type":         {ScopeLocal, ConnectionDef{Name: "a", Type: "oracle", Host: "h"}},
 		"unknown scope":        {Scope("team"), pgConn("a")},
 	} {
 		assert.Error(t, ws.AddConnection(c.scope, c.def), name)
@@ -345,6 +345,11 @@ func TestEveryDeclaredFingerprintFieldChangesTheFingerprint(t *testing.T) {
 		"s3":         {Name: "x", Type: "s3", Scope: "s3://b/", Region: "us-east-1", Options: map[string]string{"endpoint": "e", "url_style": "path", "use_ssl": "true"}},
 		"gcs":        {Name: "x", Type: "gcs", Scope: "gs://b/"},
 		"r2":         {Name: "x", Type: "r2", Scope: "r2://b/", Options: map[string]string{"account_id": "a1"}},
+		"mysql":      {Name: "x", Type: "mysql", Host: "h", Port: 3306, Database: "d", Options: map[string]string{"ssl_mode": "required"}},
+		"azure":      {Name: "x", Type: "azure", Scope: "az://c/", Options: map[string]string{"sign_in": "service_principal", "account_name": "acct", "tenant_id": "t1"}},
+		"ducklake":   {Name: "x", Type: "ducklake", Path: "data/x.ducklake", Options: map[string]string{"data_path": "data/files"}},
+		"iceberg":    {Name: "x", Type: "iceberg", Path: "data/ice"},
+		"delta":      {Name: "x", Type: "delta", Path: "data/delta"},
 	}
 	for _, info := range connections.ListConnectionTypes() {
 		d := base[info.Name]

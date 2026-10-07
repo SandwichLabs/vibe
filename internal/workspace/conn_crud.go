@@ -27,6 +27,9 @@ func validateDefFor(scope Scope, d ConnectionDef) error {
 	if err := d.ValidateIn(scope); err != nil {
 		return err
 	}
+	if scope == ScopeShared && OwnScopeOnlyType(d.Type) {
+		return fmt.Errorf("connection %q: %s", d.Name, OwnScopeOnlyMessage(d.Type))
+	}
 	for _, v := range d.stringValues() {
 		if strings.Contains(v, "${") {
 			return nil
@@ -35,8 +38,11 @@ func validateDefFor(scope Scope, d ConnectionDef) error {
 	if err := connections.Validate(toConnDef(d, d.IsReadOnly(), d.Path)); err != nil {
 		return err
 	}
-	if scope == ScopeUser && (d.Type == "duckdb" || d.Type == "sqlite") && !isAbsLike(d.Path) {
+	if scope == ScopeUser && usesLocalPath(d) && !isAbsLike(d.Path) {
 		return fmt.Errorf("connection %q: a user connection belongs to no workspace, so its path must be absolute", d.Name)
+	}
+	if dp := d.Options["data_path"]; scope == ScopeUser && d.Type == "ducklake" && dp != "" && !connections.IsDataURL(dp) && !isAbsLike(dp) {
+		return fmt.Errorf("connection %q: a user connection belongs to no workspace, so its data path must be absolute", d.Name)
 	}
 	return nil
 }

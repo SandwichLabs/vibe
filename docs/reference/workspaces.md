@@ -186,8 +186,8 @@ There is **no plaintext-file fallback**. With no keychain (SSH, a locked collect
 | `PREFIX_USER` | username (readable) |
 | `PREFIX_PASSWORD` | password |
 | `PREFIX_TOKEN` | token |
-| `PREFIX_KEY_ID` | S3/GCS/R2 key id (readable) |
-| `PREFIX_SECRET` | S3/GCS/R2 secret key |
+| `PREFIX_KEY_ID` | S3/GCS/R2 key id, or the Azure service principal client id (readable) |
+| `PREFIX_SECRET` | S3/GCS/R2 secret key, or the Azure account key, connection string or client secret |
 
 `env:MOTHERDUCK` therefore reads `MOTHERDUCK_TOKEN`: MotherDuck's token is only ever used when you choose that source, never picked up from the ambient environment. An env credential has no fingerprint (choosing it is your say-so).
 

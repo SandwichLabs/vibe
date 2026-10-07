@@ -131,7 +131,9 @@ func (h *hub) requireCatalog(name string) error {
 
 func (h *hub) ListCatalogs(ctx context.Context) ([]CatalogInfo, error) {
 	rows, err := h.db.QueryContext(ctx,
-		`SELECT database_name, type, readonly FROM duckdb_databases() WHERE NOT internal ORDER BY database_name`)
+		`SELECT database_name, type, readonly FROM duckdb_databases() WHERE NOT internal
+		   AND database_name NOT LIKE '\_\_ducklake\_metadata\_%' ESCAPE '\'
+		 ORDER BY database_name`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list catalogs: %w", err)
 	}
@@ -172,6 +174,8 @@ func (h *hub) ListSchemas(ctx context.Context, catalog string) ([]string, error)
 		SELECT schema_name FROM duckdb_schemas()
 		 WHERE database_name = $1
 		   AND schema_name NOT IN ('information_schema', 'pg_catalog')
+		   AND NOT (schema_name IN ('mysql', 'performance_schema', 'sys')
+		            AND coalesce((SELECT type FROM duckdb_databases() WHERE database_name = $1), '') = 'mysql')
 		 ORDER BY schema_name`, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas of %q: %w", catalog, err)
