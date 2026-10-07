@@ -1,0 +1,12 @@
+id: go-information-schema-sql
+language: go
+severity: hint
+message: Inline information_schema / duckdb_* catalog SQL. Repeated catalog queries are candidates for one introspection helper (internal/session/introspect.go).
+rule:
+  any:
+    - kind: raw_string_literal
+      regex: '(?i)information_schema\.|duckdb_(tables|columns|databases|schemas|constraints)\(\)'
+    - kind: interpreted_string_literal
+      regex: '(?i)information_schema\.|duckdb_(tables|columns|databases|schemas|constraints)\(\)'
+ignores:
+  - "**/*_test.go"

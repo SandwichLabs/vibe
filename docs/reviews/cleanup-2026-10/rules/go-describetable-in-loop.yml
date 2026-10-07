@@ -1,0 +1,13 @@
+id: go-describetable-in-loop
+language: go
+severity: warning
+message: Per-item catalog call inside a loop (N+1 candidate).
+rule:
+  kind: selector_expression
+  regex: \.(DescribeTable|ListTables|ListSchemas|ListCatalogs|ConnectReferenced|Preflight)$
+  inside:
+    kind: for_statement
+    stopBy:
+      kind: func_literal
+ignores:
+  - "**/*_test.go"

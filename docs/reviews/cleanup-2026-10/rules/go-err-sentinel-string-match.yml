@@ -1,0 +1,8 @@
+id: go-err-sentinel-string-match
+language: go
+severity: hint
+message: Error classification by strings.Contains on err.Error(); candidates for shared classifier (studio classifyTestError vs connections/test.go).
+rule:
+  pattern: strings.Contains($E.Error(), $$$A)
+ignores:
+  - "**/*_test.go"

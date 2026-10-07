@@ -1,0 +1,13 @@
+id: go-regexp-mustcompile-in-func
+language: go
+severity: warning
+message: regexp.MustCompile inside a function body (recompiled per call). Hoist to a package-level var unless the pattern is dynamic.
+rule:
+  pattern: regexp.MustCompile($P)
+  inside:
+    any:
+      - kind: function_declaration
+      - kind: method_declaration
+    stopBy: end
+ignores:
+  - "**/*_test.go"

@@ -1,0 +1,10 @@
+id: go-evalsymlinks-containment
+language: go
+severity: hint
+message: filepath.EvalSymlinks in production code; containment checks (EvalSymlinks + HasPrefix/Rel) exist in several packages and should share one helper.
+rule:
+  # (single-arg call patterns do not match in ast-grep 0.45 Go; match the selector)
+  kind: selector_expression
+  regex: ^filepath\.EvalSymlinks$
+ignores:
+  - "**/*_test.go"

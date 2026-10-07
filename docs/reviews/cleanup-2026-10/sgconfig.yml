@@ -1,0 +1,4 @@
+# Run from the repo root:  ast-grep scan -c docs/reviews/cleanup-2026-10/sgconfig.yml
+# (rules are survey tools, not CI gates: they report candidates, a human decides).
+ruleDirs:
+  - rules

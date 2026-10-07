@@ -1,0 +1,8 @@
+id: go-os-writefile-nonatomic
+language: go
+severity: hint
+message: os.WriteFile in production code; workspace files should go through internal/filestore.WriteAtomic unless this is scratch/secret-free temp output.
+rule:
+  pattern: os.WriteFile($P, $$$A)
+ignores:
+  - "**/*_test.go"

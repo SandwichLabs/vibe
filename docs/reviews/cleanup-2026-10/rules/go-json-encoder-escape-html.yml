@@ -1,0 +1,9 @@
+id: go-json-encoder-escape-html
+language: go
+severity: hint
+message: json.NewEncoder + SetEscapeHTML(false) boilerplate; candidate for one shared marshal helper.
+rule:
+  kind: selector_expression
+  regex: \.SetEscapeHTML$
+ignores:
+  - "**/*_test.go"

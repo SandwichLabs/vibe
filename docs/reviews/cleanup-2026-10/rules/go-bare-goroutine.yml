@@ -1,0 +1,12 @@
+id: go-bare-goroutine
+language: go
+severity: hint
+message: go statement; check it is bounded (loop-spawned) and has a cancellation path.
+rule:
+  kind: go_statement
+  inside:
+    kind: for_statement
+    stopBy:
+      kind: func_literal
+ignores:
+  - "**/*_test.go"

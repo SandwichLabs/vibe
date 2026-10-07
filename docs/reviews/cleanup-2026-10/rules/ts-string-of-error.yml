@@ -1,0 +1,13 @@
+id: ts-string-of-error
+language: typescript
+severity: hint
+message: Raw String(e) / e.message shown to the user; route through lib/errors.errorText (strips Go wrap prefixes). NOTE ast-grep has no Vue parser; run on .ts and on extracted <script> bodies (see FINDINGS.md), or grep .vue.
+rule:
+  any:
+    - pattern: String($E)
+      inside: {kind: catch_clause, stopBy: end}
+    - pattern: $E.message
+      inside: {kind: catch_clause, stopBy: end}
+ignores:
+  - "**/*.spec.ts"
+  - "**/wailsjs/**"

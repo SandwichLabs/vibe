@@ -1,0 +1,8 @@
+id: go-flock-direct
+language: go
+severity: hint
+message: Direct syscall.Flock; locking should go through internal/filelock.
+rule:
+  pattern: syscall.Flock($F, $$$A)
+ignores:
+  - "**/*_test.go"

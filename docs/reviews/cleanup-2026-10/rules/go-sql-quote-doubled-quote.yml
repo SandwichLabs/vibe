@@ -1,0 +1,12 @@
+id: go-sql-quote-doubled-quote
+language: go
+severity: hint
+message: Hand-rolled SQL identifier/literal quoting (doubling quotes). Candidate for one shared helper (engine.QuoteIdent / QuoteLiteral).
+rule:
+  any:
+    - pattern: strings.ReplaceAll($S, "\"", "\"\"")
+    - pattern: strings.ReplaceAll($S, "'", "''")
+    - pattern: strings.Replace($S, "\"", "\"\"", -1)
+    - pattern: strings.Replace($S, "'", "''", -1)
+ignores:
+  - "**/*_test.go"

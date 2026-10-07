@@ -1,0 +1,12 @@
+id: go-string-concat-in-loop
+language: go
+severity: hint
+message: string += inside a loop; use strings.Builder if the string can grow.
+rule:
+  pattern: $S += $X
+  inside:
+    kind: for_statement
+    stopBy:
+      kind: func_literal
+ignores:
+  - "**/*_test.go"

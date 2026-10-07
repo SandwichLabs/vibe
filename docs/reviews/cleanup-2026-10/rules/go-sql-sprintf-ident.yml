@@ -1,0 +1,16 @@
+id: go-sql-sprintf-ident
+language: go
+severity: hint
+message: SQL built with fmt.Sprintf (injection-review candidate; every %s/%v argument must come from a quoting helper such as session.QuoteIdent / TableRef.SQL()). Review list, not a defect list.
+rule:
+  kind: call_expression
+  all:
+    - has: {field: function, regex: '^fmt\.Sprintf$'}
+    - has:
+        field: arguments
+        has:
+          kind: interpreted_string_literal
+          regex: '(?i)^"\s*(select|insert|update|delete|create|drop|alter|attach|detach|copy|pragma|install|load)\b.*%[sqv]'
+          stopBy: neighbor
+ignores:
+  - "**/*_test.go"

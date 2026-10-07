@@ -1,0 +1,12 @@
+id: go-defer-in-loop
+language: go
+severity: warning
+message: defer inside a for loop runs at function exit, not iteration end.
+rule:
+  kind: defer_statement
+  inside:
+    kind: for_statement
+    stopBy:
+      kind: func_literal
+ignores:
+  - "**/*_test.go"
