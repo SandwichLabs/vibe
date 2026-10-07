@@ -35,14 +35,15 @@ const (
 	LLMProviderLocal     = "local"     // OpenAI-compatible server (e.g. local llama-server)
 	LLMProviderAnthropic = "anthropic" // Anthropic Claude
 	LLMProviderGemini    = "gemini"    // Google Gemini
+	LLMProviderOpenAI    = "openai"    // OpenAI (API key, Responses API)
 )
 
 // LLMConfig configures the in-app conversational wizard agent's model provider.
 // It is app-global and viper-driven: set it in ~/.vibe.yaml under `llm:` or via
 // VIBE_LLM_* environment variables. Cloud API keys are read from the standard
-// provider env vars (ANTHROPIC_API_KEY, GEMINI_API_KEY) when APIKey is unset.
+// provider env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) when APIKey is unset.
 type LLMConfig struct {
-	Provider string `mapstructure:"provider"` // local | anthropic | gemini
+	Provider string `mapstructure:"provider"` // local | anthropic | openai | gemini
 	Model    string `mapstructure:"model"`    // model id; empty = per-provider default
 	Endpoint string `mapstructure:"endpoint"` // base URL for the local (OpenAI-compatible) provider
 	APIKey   string `mapstructure:"api_key"`  // legacy: env or ~/.vibe.yaml value; use ResolveLLMKey (keychain aware)
@@ -156,6 +157,8 @@ func (l *LLMConfig) resolve() {
 		switch l.Provider {
 		case LLMProviderAnthropic:
 			l.APIKey = os.Getenv("ANTHROPIC_API_KEY")
+		case LLMProviderOpenAI:
+			l.APIKey = os.Getenv("OPENAI_API_KEY")
 		case LLMProviderGemini:
 			if k := os.Getenv("GEMINI_API_KEY"); k != "" {
 				l.APIKey = k

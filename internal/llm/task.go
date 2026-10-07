@@ -379,13 +379,13 @@ func (r *Runner) Task(ctx context.Context, cfg Config, req TaskRequest, emit Tas
 			return nil
 		},
 		OnError: func(e error) {
-			emit(TaskEvent{Kind: "error", Text: e.Error()})
+			emit(TaskEvent{Kind: "error", Text: scrubKey(e, cfg.APIKey).Error()})
 		},
 	}
 
 	result, err := taskAgent.Stream(ctx, call)
 	if err != nil {
-		return TaskEnvelope{}, fmt.Errorf("task agent error: %w", err)
+		return TaskEnvelope{}, scrubKey(fmt.Errorf("task agent error: %w", err), cfg.APIKey)
 	}
 
 	envelope := buildTaskEnvelope(rec, checked, lastText.String(), result, taskMaxSteps)

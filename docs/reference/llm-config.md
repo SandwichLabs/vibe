@@ -15,6 +15,7 @@ Settings → Workspace → The agent.)
 |-------------|----------------|-------------------------------------------|---------|
 | Local (default) | `local`    | OpenAI-compatible server (`llm.endpoint`) | none (any local server) |
 | Anthropic   | `anthropic`    | Claude                                    | `ANTHROPIC_API_KEY` |
+| OpenAI      | `openai`       | OpenAI API key, Responses API             | `OPENAI_API_KEY` |
 | Gemini      | `gemini`       | Google Gemini                             | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) |
 
 The default is **local**, pointing at `http://localhost:8080/v1` — a local
@@ -24,7 +25,7 @@ llama-server / LM Studio / Ollama OpenAI shim, etc.
 
 ```yaml
 llm:
-  provider: local                      # local | anthropic | gemini
+  provider: local                      # local | anthropic | openai | gemini
   endpoint: http://localhost:8080/v1   # local provider only
   model: ""                            # blank = per-provider default
   # api_key: ""                        # legacy; keep it out of this file, see "API key" below
@@ -32,8 +33,16 @@ llm:
 
 Per-provider default models (overridable via `llm.model`):
 - `local` → `local`
-- `anthropic` → `claude-sonnet-4-5`
-- `gemini` → `gemini-2.5-flash`
+- `anthropic` → `claude-sonnet-5-5` (also `claude-opus-5-5`, `claude-haiku-4-5-20251001`)
+- `openai` → `gpt-5.5`
+- `gemini` → `gemini-3.5-flash`
+
+These defaults were last checked on 2026-10-07 and age as providers release
+models; set `llm.model` (or `VIBE_LLM_MODEL`) to use any other model id. The
+`openai` provider sends every model id to the Responses API, so ids Vibe has
+never heard of (a new release, a fine-tune) work too. For reasoning models
+Vibe asks for medium reasoning effort; if a model rejects that parameter Vibe
+retries the turn once without it.
 
 ## Environment variables
 
@@ -41,8 +50,14 @@ Any key maps to `VIBE_` + the upper-snake-cased path, and overrides the file:
 
 ```bash
 export VIBE_LLM_PROVIDER=anthropic
-export VIBE_LLM_MODEL=claude-sonnet-4-5
+export VIBE_LLM_MODEL=claude-sonnet-5-5
 export ANTHROPIC_API_KEY=sk-ant-...      # cloud key via the standard env var
+```
+
+```bash
+# OpenAI:
+export VIBE_LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-...
 ```
 
 ```bash
@@ -52,7 +67,7 @@ export VIBE_LLM_MODEL=my-local-model
 ```
 
 Cloud API keys are read from the provider's **standard** env var
-(`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`), so secrets stay out of config files.
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`), so secrets stay out of config files.
 An explicit `VIBE_LLM_API_KEY` takes precedence. See "API key" below.
 
 ## API key (#114)
@@ -65,9 +80,16 @@ where it comes from, but nothing shows it back.
 **Where a key is read from**, first match wins:
 
 1. `VIBE_LLM_API_KEY`
-2. the provider's standard variable (`ANTHROPIC_API_KEY`; `GEMINI_API_KEY`, then `GOOGLE_API_KEY`)
-3. the keychain item for the provider (`llm-anthropic`, `llm-gemini`, `llm-local`)
+2. the provider's standard variable (`ANTHROPIC_API_KEY`; `OPENAI_API_KEY`; `GEMINI_API_KEY`, then `GOOGLE_API_KEY`)
+3. the keychain item for the provider (`llm-anthropic`, `llm-openai`, `llm-gemini`, `llm-local`)
 4. `llm.api_key` in `~/.vibe.yaml` (legacy, read-only: Vibe never writes a key there). It is a single value, used for whichever provider is selected, so switching provider while only the file key exists sends that key to the new provider. The keychain and provider variables are per provider.
+
+`--provider` accepts `local`, `anthropic`, `openai` or `gemini`; anything else
+is refused before a keychain item is created. A key never appears in an error
+message, a streamed agent error or a log line: a provider that echoes it back
+in a failure has it replaced with `[redacted]`. (OpenAI's own 401 already shows
+only a masked form ending in the key's last four characters; that text is
+passed through as is.)
 
 **Set it** in Studio under Settings, App, "The agent's model" (paste a key,
 Save to keychain; then "In your keychain, Replace, Clear"), or from a terminal:
@@ -76,7 +98,7 @@ Save to keychain; then "In your keychain, Replace, Clear"), or from a terminal:
 vibe config llm-key set            # prompts without echo; or pipe one line on stdin
 vibe config llm-key status         # where the key comes from (never the key)
 vibe config llm-key clear
-vibe config llm-key set --provider gemini
+vibe config llm-key set --provider openai   # or anthropic, gemini, local
 ```
 
 **No keychain** (an SSH session, a headless box, a locked collection)? Studio

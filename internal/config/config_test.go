@@ -40,6 +40,16 @@ func TestLoad_APIKeyFallsBackToStandardEnv(t *testing.T) {
 		assert.Equal(t, "sk-ant-test", cfg.LLM.APIKey)
 	})
 
+	t.Run("openai", func(t *testing.T) {
+		isolateHome(t)
+		t.Setenv("VIBE_LLM_PROVIDER", "openai")
+		t.Setenv("VIBE_LLM_API_KEY", "")
+		t.Setenv("OPENAI_API_KEY", "sk-oai-test")
+		cfg := Load()
+		assert.Equal(t, LLMProviderOpenAI, cfg.LLM.Provider)
+		assert.Equal(t, "sk-oai-test", cfg.LLM.APIKey)
+	})
+
 	t.Run("gemini", func(t *testing.T) {
 		isolateHome(t)
 		t.Setenv("VIBE_LLM_PROVIDER", "gemini")

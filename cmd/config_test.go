@@ -23,3 +23,15 @@ func TestReadSecretLineFromPipe(t *testing.T) {
 	_, err = readSecretLine(strings.NewReader(""), &errW, "key: ")
 	assert.Error(t, err)
 }
+
+func TestCheckLLMKeyProvider(t *testing.T) {
+	t.Cleanup(func() { llmKeyProvider = "" })
+	for _, p := range []string{"", "local", "anthropic", "openai", "gemini"} {
+		llmKeyProvider = p
+		assert.NoError(t, checkLLMKeyProvider(nil, nil), p)
+	}
+	llmKeyProvider = "opnai"
+	err := checkLLMKeyProvider(nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "openai")
+}

@@ -42,6 +42,8 @@ func envKey(provider string) string {
 	switch provider {
 	case LLMProviderAnthropic:
 		return os.Getenv("ANTHROPIC_API_KEY")
+	case LLMProviderOpenAI:
+		return os.Getenv("OPENAI_API_KEY")
 	case LLMProviderGemini:
 		if k := os.Getenv("GEMINI_API_KEY"); k != "" {
 			return k
@@ -53,7 +55,7 @@ func envKey(provider string) string {
 
 // ResolveLLMKey finds the API key for cfg's provider, in this order:
 // VIBE_LLM_API_KEY, the provider's standard env var (ANTHROPIC_API_KEY,
-// GEMINI_API_KEY), the keychain item {app, llm-<provider>}, then the legacy
+// OPENAI_API_KEY, GEMINI_API_KEY), the keychain item {app, llm-<provider>}, then the legacy
 // plaintext llm.api_key in ~/.vibe.yaml (read-only). An unreachable keychain
 // is skipped, not fatal. The key is for the model client only: it must never
 // cross the Wails bridge, MCP or the agent.

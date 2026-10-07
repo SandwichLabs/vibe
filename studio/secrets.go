@@ -140,7 +140,7 @@ func (a *App) llmProviderFor(provider string) (string, error) {
 		provider = a.llmSnapshot().Provider
 	}
 	switch provider {
-	case config.LLMProviderLocal, config.LLMProviderAnthropic, config.LLMProviderGemini:
+	case config.LLMProviderLocal, config.LLMProviderAnthropic, config.LLMProviderOpenAI, config.LLMProviderGemini:
 		return provider, nil
 	}
 	return "", fmt.Errorf("unknown provider %q", provider)

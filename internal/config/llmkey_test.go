@@ -22,6 +22,7 @@ func cfgFile(t *testing.T, body string) string {
 	t.Setenv("VIBE_CONFIG_FILE", "")
 	t.Setenv("VIBE_LLM_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
 	p := filepath.Join(home, ".vibe.yaml")
@@ -67,6 +68,7 @@ func TestResolveLLMKeyOrder(t *testing.T) {
 
 	t.Setenv("VIBE_LLM_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "")
 	require.NoError(t, ClearLLMKey(ctx, store, "anthropic"))
 	k, src = ResolveLLMKey(ctx, store, cfg.LLM)
 	assert.Equal(t, KeySourceFile, src)
@@ -300,4 +302,52 @@ func TestFileKeyWhitespaceIsTrimmedConsistently(t *testing.T) {
 	require.NoError(t, MigrateFileKey(ctx, store, p, "anthropic", false))
 	raw, _ := store.Get(ctx, LLMKeyRef("anthropic"))
 	assert.Equal(t, needle, string(raw))
+}
+
+func TestResolveLLMKey_OpenAIPrecedence(t *testing.T) {
+	cfgFile(t, "")
+	ctx := context.Background()
+	store := &secrets.Mock{}
+	cfg := LLMConfig{Provider: LLMProviderOpenAI, FileAPIKey: "file-key"}
+
+	// 4. the legacy file key, last.
+	k, src := ResolveLLMKey(ctx, store, cfg)
+	assert.Equal(t, "file-key", k)
+	assert.Equal(t, KeySourceFile, src)
+
+	// 3. the keychain item llm-openai beats the file key.
+	assert.Equal(t, secrets.AppRef("llm-openai"), LLMKeyRef(LLMProviderOpenAI))
+	require.NoError(t, SetLLMKey(ctx, store, LLMProviderOpenAI, "kc-key"))
+	k, src = ResolveLLMKey(ctx, store, cfg)
+	assert.Equal(t, "kc-key", k)
+	assert.Equal(t, KeySourceKeychain, src)
+
+	// 2. OPENAI_API_KEY beats the keychain.
+	t.Setenv("OPENAI_API_KEY", "std-env-key")
+	k, src = ResolveLLMKey(ctx, store, cfg)
+	assert.Equal(t, "std-env-key", k)
+	assert.Equal(t, KeySourceEnv, src)
+
+	// 1. VIBE_LLM_API_KEY beats everything.
+	t.Setenv("VIBE_LLM_API_KEY", "vibe-env-key")
+	k, src = ResolveLLMKey(ctx, store, cfg)
+	assert.Equal(t, "vibe-env-key", k)
+	assert.Equal(t, KeySourceEnv, src)
+}
+
+func TestResolveLLMKey_OpenAIKeysAreNotSharedAcrossProviders(t *testing.T) {
+	cfgFile(t, "")
+	ctx := context.Background()
+	store := &secrets.Mock{}
+	t.Setenv("OPENAI_API_KEY", "oai")
+	require.NoError(t, SetLLMKey(ctx, store, LLMProviderOpenAI, "oai-kc"))
+
+	// OPENAI_API_KEY and llm-openai are for openai only.
+	_, src := ResolveLLMKey(ctx, store, LLMConfig{Provider: LLMProviderAnthropic})
+	assert.Equal(t, KeySourceNone, src)
+	_, src = ResolveLLMKey(ctx, store, LLMConfig{Provider: LLMProviderGemini})
+	assert.Equal(t, KeySourceNone, src)
+
+	require.NoError(t, ClearLLMKey(ctx, store, LLMProviderOpenAI))
+	assert.False(t, KeychainHasKey(ctx, store, LLMProviderOpenAI))
 }

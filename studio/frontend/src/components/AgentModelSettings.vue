@@ -93,7 +93,7 @@ async function migrate() {
       <div v-if="cfg" class="col" style="gap: var(--sh-space-2);">
         <div class="kv"><span class="k">Provider</span><span class="v">{{ cfg.provider }}</span></div>
         <div class="kv"><span class="k">Model</span><span class="v">{{ cfg.model }}</span></div>
-        <div class="kv"><span class="k">Endpoint</span><span class="v break-all">{{ cfg.endpoint }}</span></div>
+        <div v-if="cfg.provider === 'local'" class="kv"><span class="k">Endpoint</span><span class="v break-all">{{ cfg.endpoint }}</span></div>
       </div>
       <p class="sh-micro sh-mono" style="color: var(--sh-graphite); margin: 0;">
         Provider, model and endpoint are set in ~/.vibe.yaml or VIBE_LLM_* (see docs/reference/llm-config.md)

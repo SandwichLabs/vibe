@@ -27,6 +27,7 @@ import (
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
+	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openaicompat"
 
 	"github.com/sandwich-labs/vibe-app/internal/a2ui"
@@ -48,12 +49,13 @@ const maxSteps = 8
 const (
 	ProviderLocal     = "local"     // OpenAI-compatible server (default)
 	ProviderAnthropic = "anthropic" // Anthropic Claude
+	ProviderOpenAI    = "openai"    // OpenAI (API key, Responses API)
 	ProviderGemini    = "gemini"    // Google Gemini
 )
 
 // Config configures the LLM provider/endpoint and the agent's capability level.
 type Config struct {
-	Provider string // local | anthropic | gemini (default local)
+	Provider string // local | anthropic | openai | gemini (default local)
 	Endpoint string // OpenAI-compatible base URL for the local provider
 	Model    string // model id to request; empty = per-provider default
 	APIKey   string // bearer token / cloud API key
@@ -67,14 +69,16 @@ type Config struct {
 }
 
 // defaultModelFor returns a sensible default model id for a provider when none
-// is configured. These are overridable via config; cloud ids in particular may
-// need updating as providers release new models.
+// is configured. These are overridable via llm.model; cloud ids in particular
+// need refreshing as providers release new models (last checked 2026-10-07).
 func defaultModelFor(provider string) string {
 	switch provider {
 	case ProviderAnthropic:
-		return "claude-sonnet-4-5"
+		return "claude-sonnet-5-5"
+	case ProviderOpenAI:
+		return "gpt-5.5"
 	case ProviderGemini:
-		return "gemini-2.5-flash"
+		return "gemini-3.5-flash"
 	default:
 		return "local"
 	}
@@ -117,6 +121,10 @@ type Runner struct {
 	// rejection.
 	reasoningRejectedMu sync.Mutex
 	reasoningRejected   map[string]bool
+
+	// openAIBaseURL overrides the OpenAI API base URL. Tests point it at an
+	// httptest server; production leaves it empty (api.openai.com).
+	openAIBaseURL string
 }
 
 // NewRunner constructs a Runner dispatching tool calls through the given
@@ -296,7 +304,8 @@ func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder, with
 }
 
 // languageModel resolves the configured provider into a fantasy LanguageModel.
-// local -> OpenAI-compatible endpoint; anthropic -> Claude; gemini -> Google.
+// local -> OpenAI-compatible endpoint; anthropic -> Claude; openai -> OpenAI
+// Responses API; gemini -> Google.
 func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.LanguageModel, error) {
 	provider := strings.TrimSpace(cfg.Provider)
 	if provider == "" {
@@ -317,6 +326,23 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 			return nil, fmt.Errorf("anthropic provider requires an API key (set ANTHROPIC_API_KEY, or save a key in Settings > App)")
 		}
 		p, err = anthropic.New(anthropic.WithAPIKey(cfg.APIKey))
+	case ProviderOpenAI:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, fmt.Errorf("openai provider requires an API key (set OPENAI_API_KEY, or save a key in Settings > App)")
+		}
+		opts := []openai.Option{
+			openai.WithAPIKey(cfg.APIKey),
+			// The Responses API for every model: it is OpenAI's current
+			// tool-calling surface, and an id fantasy's built-in list does
+			// not know yet (a new release, a fine-tune) must not silently
+			// fall back to Chat Completions.
+			openai.WithUseResponsesAPI(),
+			openai.WithResponsesAPIFunc(func(string) bool { return true }),
+		}
+		if r.openAIBaseURL != "" {
+			opts = append(opts, openai.WithBaseURL(r.openAIBaseURL))
+		}
+		p, err = openai.New(opts...)
 	case ProviderGemini:
 		if strings.TrimSpace(cfg.APIKey) == "" {
 			return nil, fmt.Errorf("gemini provider requires an API key (set GEMINI_API_KEY, or save a key in Settings > App)")
@@ -338,7 +364,7 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 			openaicompat.WithAPIKey(apiKey),
 		)
 	default:
-		return nil, fmt.Errorf("unknown LLM provider %q (want local, anthropic, or gemini)", provider)
+		return nil, fmt.Errorf("unknown LLM provider %q (want local, anthropic, openai, or gemini)", provider)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %s provider: %w", provider, err)
@@ -410,14 +436,14 @@ func (r *Runner) Chat(ctx context.Context, cfg Config, message, pinnedContext st
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("agent error: %w", err)
+		return nil, scrubKey(fmt.Errorf("agent error: %w", err), cfg.APIKey)
 	}
 
 	text := result.Response.Content.Text()
 	convo := conversationMessages(promptMessages, result)
 	groundedText, groundSteps, groundErr := r.maybeGroundText(ctx, cfg, rec.steps, convo, text, nil)
 	if groundErr != nil {
-		r.logger.Warn("grounding recheck failed, returning ungrounded answer", "error", groundErr)
+		r.logger.Warn("grounding recheck failed, returning ungrounded answer", "error", scrubKey(groundErr, cfg.APIKey))
 	}
 	return &ChatResult{Text: groundedText, Steps: appendSteps(rec.steps, groundSteps)}, nil
 }
@@ -500,8 +526,8 @@ func (r *Runner) ChatStream(ctx context.Context, cfg Config, message, pinnedCont
 		result, streamed, err = streamOnce(false)
 	}
 	if err != nil {
-		emit(StreamEvent{Kind: "error", Text: err.Error()})
-		return nil, fmt.Errorf("agent error: %w", err)
+		emit(StreamEvent{Kind: "error", Text: scrubKey(err, cfg.APIKey).Error()})
+		return nil, scrubKey(fmt.Errorf("agent error: %w", err), cfg.APIKey)
 	}
 
 	text := result.Response.Content.Text()
@@ -512,7 +538,7 @@ func (r *Runner) ChatStream(ctx context.Context, cfg Config, message, pinnedCont
 	convo := conversationMessages(promptMessages, result)
 	groundedText, groundSteps, groundErr := r.maybeGroundText(ctx, cfg, rec.steps, convo, text, emit)
 	if groundErr != nil {
-		r.logger.Warn("grounding recheck failed, returning ungrounded answer", "error", groundErr)
+		r.logger.Warn("grounding recheck failed, returning ungrounded answer", "error", scrubKey(groundErr, cfg.APIKey))
 	}
 
 	emit(StreamEvent{Kind: "final", Text: groundedText})

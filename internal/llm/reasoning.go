@@ -15,7 +15,11 @@ import (
 // OpenAI's `reasoning_effort` field by language_model_hooks.go) — the
 // anthropic and google provider packages this Runner also supports do not
 // have an equivalent option in this fantasy version, so reasoning effort is
-// a no-op for those providers, not a gap in this feature.
+// a no-op for those providers, not a gap in this feature. The openai
+// provider (Responses API) takes it as openai.ResponsesProviderOptions; fantasy
+// only forwards it for models it recognises as reasoning models, so a
+// non-reasoning model id simply ignores it rather than being sent a parameter
+// it would reject.
 const (
 	reasoningModeChat = "chat"
 	reasoningModeTask = "task"
@@ -67,15 +71,20 @@ func (r *Runner) markReasoningRejected(cfg Config) {
 }
 
 // reasoningEffortAgentOptions returns the AgentOptions that set the
-// per-mode reasoning effort for the local OpenAI-compatible provider, or
-// nil for every other provider (or an empty provider, which languageModel
-// treats as ProviderLocal) — see the package doc comment above.
+// per-mode reasoning effort for the local OpenAI-compatible provider and the
+// openai provider, or nil for every other provider (an empty provider is
+// treated as ProviderLocal, as languageModel does) — see the doc comment above.
 func reasoningEffortAgentOptions(cfg Config, mode string) []fantasy.AgentOption {
 	provider := strings.TrimSpace(cfg.Provider)
+	effort := reasoningEffortForMode(mode)
+	if provider == ProviderOpenAI {
+		return []fantasy.AgentOption{fantasy.WithProviderOptions(openai.NewResponsesProviderOptions(
+			&openai.ResponsesProviderOptions{ReasoningEffort: &effort},
+		))}
+	}
 	if provider != "" && provider != ProviderLocal {
 		return nil
 	}
-	effort := reasoningEffortForMode(mode)
 	return []fantasy.AgentOption{fantasy.WithProviderOptions(fantasy.ProviderOptions{
 		openaicompat.Name: &openaicompat.ProviderOptions{ReasoningEffort: &effort},
 	})}

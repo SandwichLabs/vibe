@@ -23,7 +23,7 @@ func secretsApp(t *testing.T, cfgYAML string) (*App, *secrets.Mock, string) {
 	t.Setenv("HOME", home)
 	cfgPath := filepath.Join(home, "vibe-test.yaml")
 	t.Setenv("VIBE_CONFIG_FILE", cfgPath)
-	for _, k := range []string{"VIBE_LLM_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} {
+	for _, k := range []string{"VIBE_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} {
 		t.Setenv(k, "")
 	}
 	if cfgYAML != "" {
@@ -141,4 +141,41 @@ func TestInFlightResolveCannotRepopulateAfterClear(t *testing.T) {
 	close(release)
 	<-done
 	assert.Equal(t, "", a.llmAPIKey(), "the stale in-flight result must not be served after Clear")
+}
+
+func TestLLMKeyBindings_OpenAI(t *testing.T) {
+	a, m, _ := secretsApp(t, "llm:\n  provider: openai\n")
+	st := a.GetLLMKeyStatus()
+	assert.Equal(t, "openai", st.Provider)
+	assert.False(t, st.Set)
+
+	// Explicit provider and configured (empty) provider both land on llm-openai.
+	require.NoError(t, a.SetLLMKey("", studioNeedle))
+	got, err := m.Get(context.Background(), secrets.AppRef("llm-openai"))
+	require.NoError(t, err)
+	assert.Equal(t, studioNeedle, string(got))
+	assert.Equal(t, studioNeedle, a.llmAPIKey())
+
+	st = a.GetLLMKeyStatus()
+	assert.True(t, st.Set)
+	assert.Equal(t, "keychain", st.Source)
+	raw, err := json.Marshal(st)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), studioNeedle)
+
+	require.NoError(t, a.ClearLLMKey("openai"))
+	assert.False(t, a.GetLLMKeyStatus().Set)
+
+	// An unknown provider is rejected, and the error never echoes a key.
+	err = a.SetLLMKey("openia", studioNeedle)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), studioNeedle)
+}
+
+func TestLLMKeyBindings_OpenAIStandardEnv(t *testing.T) {
+	a, _, _ := secretsApp(t, "llm:\n  provider: openai\n")
+	t.Setenv("OPENAI_API_KEY", "from-openai-env")
+	a.keyCache.invalidate()
+	assert.Equal(t, "from-openai-env", a.llmAPIKey())
+	assert.Equal(t, "env", a.GetLLMKeyStatus().Source)
 }
