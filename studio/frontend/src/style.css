@@ -85,7 +85,6 @@
     padding: 6px 12px;
     font-size: 13px;
   }
-  .btn-danger,
   .btn-destructive {
     color: var(--sh-error);
     border-color: var(--sh-error);
@@ -142,7 +141,6 @@
 
   /* Modal + toasts (not provided by the kit) */
   /* Success/status toast — same shape as kit's .error-toast / .info-toast. */
-  .success-toast,
   .status-toast {
     position: fixed; bottom: 24px; right: 24px; z-index: 1100;
     display: flex; align-items: center; gap: 8px;

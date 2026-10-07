@@ -279,7 +279,7 @@ var Tools = []ToolDef{
 
 	// save_query (ported from internal/llm's wizard-only tool, #63). Unlike
 	// build_query (QBE conditions rendered to SQL), this persists an
-	// already-written SQL string as-is, mirroring studio's SaveQuery binding.
+	// already-written SQL string as-is, mirroring studio's SaveQueryOn binding.
 	// No "description" param: queries.Query (the _vibe_queries row type) has
 	// no description column to persist it into (review fix — a param that
 	// silently did nothing was worse than no param).

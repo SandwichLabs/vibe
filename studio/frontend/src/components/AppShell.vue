@@ -17,6 +17,7 @@ import ConnectionDialogs from './ConnectionDialogs.vue'
 import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
 import { workspaceInfo } from '../composables/useWorkspace'
+import { hasWailsRuntime } from '../lib/wails'
 
 const theme = useTheme()
 
@@ -70,7 +71,6 @@ function openAgentFromEvent() {
   agentOpen.value = true
 }
 
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
 // Ctrl/Cmd+J toggles the agent drawer; Escape closes it when nothing else (a
 // modal, an editor) claims the key first. Workspace shortcuts (O, N, Shift+O,

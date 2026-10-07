@@ -16,6 +16,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/agents"
 	"github.com/sandwich-labs/vibe-app/internal/bundle"
 	"github.com/sandwich-labs/vibe-app/internal/config"
+	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/sandwich-labs/vibe-app/internal/engine"
 	"github.com/sandwich-labs/vibe-app/internal/hub"
 	"github.com/sandwich-labs/vibe-app/internal/importer"
@@ -570,7 +571,7 @@ type notebookExportFile struct {
 
 // ExportNotebook writes one notebook to a JSON file. If dst is empty, a save
 // dialog picks the destination; dst == "" and a cancelled dialog both return
-// ("", nil), matching ExportTableCSV's cancel semantics.
+// ("", nil), matching ExportQueryResults's cancel semantics.
 func (a *App) ExportNotebook(id, dst string) (string, error) {
 	a.mu.RLock()
 	if err := a.requireWorkspace(); err != nil {
@@ -773,32 +774,6 @@ func (a *App) ListTables() ([]string, error) {
 	return tables, nil
 }
 
-// ListCatalogTables returns the tables of one connection's default schema,
-// qualified (catalog.schema.table) so each name can be passed straight to
-// DescribeTable / GetTableData / InsertRow / ... A connection of "" means the
-// default catalog.
-func (a *App) ListCatalogTables(connection string) ([]string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return nil, err
-	}
-	sess := a.sess
-	if sess == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-	tabs, err := sess.ListTables(a.ctxOrBackground(), connection, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tables: %w", err)
-	}
-	out := make([]string, 0, len(tabs))
-	for _, t := range tabs {
-		out = append(out, t.Ref().String())
-	}
-	return out, nil
-}
-
 // ColumnInfo describes a table column.
 type ColumnInfo struct {
 	Name    string `json:"name"`
@@ -852,42 +827,6 @@ func (a *App) DescribeTable(name string) (*TableInfo, error) {
 		})
 	}
 	return info, nil
-}
-
-// TableStat is one entry in the Query Explorer's schema tree: a table plus its
-// live row count (W5).
-type TableStat struct {
-	Name string `json:"name"`
-	Rows int64  `json:"rows"`
-}
-
-// ListTableStats returns every user table with its row count, for the Query
-// Explorer schema tree (W5).
-func (a *App) ListTableStats() ([]TableStat, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return nil, err
-	}
-	sess := a.sess
-	if sess == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-	tabs, err := sess.ListTables(a.ctxOrBackground(), "", "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tables: %w", err)
-	}
-
-	out := make([]TableStat, 0, len(tabs))
-	for _, t := range tabs {
-		var count int64
-		if err := sess.DB().QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", t.Ref().SQL())).Scan(&count); err != nil {
-			return nil, fmt.Errorf("failed to count rows of %q: %w", t.Name, err)
-		}
-		out = append(out, TableStat{Name: t.Name, Rows: count})
-	}
-	return out, nil
 }
 
 // ExportQueryResults writes the result of a SQL query to CSV or Parquet via
@@ -994,12 +933,12 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	}
 
 	orderClause := ""
-	if sortCol != "" && isValidIdentifier(sortCol) {
+	if sortCol != "" && engine.ValidIdentifier(sortCol) {
 		dir := "ASC"
 		if strings.ToUpper(sortDir) == "DESC" {
 			dir = "DESC"
 		}
-		orderClause = fmt.Sprintf(" ORDER BY %s %s", engine.QuoteIdent(sortCol), dir)
+		orderClause = fmt.Sprintf(" ORDER BY %s %s", session.QuoteIdent(sortCol), dir)
 	}
 
 	offset := (page - 1) * pageSize
@@ -1036,22 +975,12 @@ func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir str
 	return result, nil
 }
 
-// FilterCondition is one structured datasheet filter clause (plan §2.3). It is
-// the SQL-free unit behind Filter-by-Selection (a single eq) and Filter-by-Form
-// (multiple conditions). Op is one of eq/neq/lt/gt/lte/gte/like/is_null/
-// is_not_null; Value is ignored for the is_null/is_not_null operators.
-type FilterCondition struct {
-	Column string `json:"column"`
-	Op     string `json:"op"`
-	Value  any    `json:"value"`
-}
-
-// FilterSpec is a set of FilterConditions joined by a single combinator
-// ("AND" or "OR"). It is translated to a parameterized WHERE clause.
-type FilterSpec struct {
-	Combinator string            `json:"combinator"`
-	Conditions []FilterCondition `json:"conditions"`
-}
+// FilterCondition and FilterSpec are the structured datasheet / QBE filter
+// shapes (plan §2.3), defined once in internal/queries with the same JSON.
+type (
+	FilterCondition = queries.FilterCondition
+	FilterSpec      = queries.FilterSpec
+)
 
 // GetTableDataFiltered returns paginated, structured-filter-driven table data
 // plus an accurate total-row count for the record-count bar (plan §2.3, P2.5).
@@ -1109,12 +1038,12 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	}
 
 	orderClause := ""
-	if sortCol != "" && isValidIdentifier(sortCol) && known[sortCol] {
+	if sortCol != "" && engine.ValidIdentifier(sortCol) && known[sortCol] {
 		dir := "ASC"
 		if strings.ToUpper(sortDir) == "DESC" {
 			dir = "DESC"
 		}
-		orderClause = fmt.Sprintf(" ORDER BY %s %s", engine.QuoteIdent(sortCol), dir)
+		orderClause = fmt.Sprintf(" ORDER BY %s %s", session.QuoteIdent(sortCol), dir)
 	}
 
 	offset := (page - 1) * pageSize
@@ -1152,18 +1081,6 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	return result, nil
 }
 
-// filterOps maps a FilterCondition.Op to its SQL comparison operator. Value-less
-// operators (is_null/is_not_null) are handled separately.
-var filterOps = map[string]string{
-	"eq":   "=",
-	"neq":  "<>",
-	"lt":   "<",
-	"gt":   ">",
-	"lte":  "<=",
-	"gte":  ">=",
-	"like": "LIKE",
-}
-
 // buildFilterWhere translates a FilterSpec into a parameterized WHERE clause
 // (leading " WHERE ...", or "" when there are no conditions) plus its bound
 // args. Column identifiers are validated against the known-columns allowlist;
@@ -1186,15 +1103,15 @@ func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, er
 		}
 		switch c.Op {
 		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NULL", engine.QuoteIdent(c.Column)))
+			clauses = append(clauses, fmt.Sprintf("%s IS NULL", session.QuoteIdent(c.Column)))
 		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", engine.QuoteIdent(c.Column)))
+			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", session.QuoteIdent(c.Column)))
 		default:
-			sqlOp, ok := filterOps[c.Op]
+			sqlOp, ok := queries.SQLOperator(c.Op)
 			if !ok {
 				return "", nil, fmt.Errorf("unsupported filter operator %q", c.Op)
 			}
-			clauses = append(clauses, fmt.Sprintf("%s %s ?", engine.QuoteIdent(c.Column), sqlOp))
+			clauses = append(clauses, fmt.Sprintf("%s %s ?", session.QuoteIdent(c.Column), sqlOp))
 			args = append(args, c.Value)
 		}
 	}
@@ -1205,9 +1122,9 @@ func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, er
 // InsertRow inserts a row into a table, coercing all-string form inputs to the
 // column's type (via information_schema). Constraints (NOT NULL, CHECK, keys)
 // come from the database itself; a violation is returned as a field-keyed
-// *WriteError where it can be attributed, so the UI can highlight the offending
+// *crud.WriteError where it can be attributed, so the UI can highlight the offending
 // controls instead of surfacing a raw SQL string.
-func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, error) {
+func (a *App) InsertRow(table string, values map[string]any) (*crud.WriteResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1220,7 +1137,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	res, err := insertRowTx(tx, colTypes, table, values)
+	res, err := crud.InsertRowTx(tx, colTypes, table, values)
 	if err != nil {
 		tx.Rollback() //nolint:errcheck
 		return nil, err
@@ -1234,11 +1151,11 @@ func (a *App) InsertRow(table string, values map[string]any) (*WriteResult, erro
 // UpdateRow updates a row in a table by primary key, applying the same coercion
 // and validation as InsertRow. A 0-affected-row outcome (PK mismatch) is
 // surfaced as an error rather than a silent no-op.
-func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (*WriteResult, error) {
+func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (*crud.WriteResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if !isValidIdentifier(pkCol) {
+	if !engine.ValidIdentifier(pkCol) {
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
@@ -1251,7 +1168,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	res, err := updateRowTx(tx, colTypes, table, pkCol, pkVal, values)
+	res, err := crud.UpdateRowTx(tx, colTypes, table, pkCol, pkVal, values)
 	if err != nil {
 		tx.Rollback() //nolint:errcheck
 		return nil, err
@@ -1280,7 +1197,7 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, string, er
 	// so neither the connection's current catalog nor a same-named temp table
 	// can redirect them.
 	resolved := tref.String()
-	colTypes, err := columnTypes(ddb, resolved)
+	colTypes, err := crud.ColumnTypes(ddb, resolved)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -1291,12 +1208,12 @@ func (a *App) prepareWrite(table string) (*sql.DB, map[string]string, string, er
 // InsertRow/UpdateRow, it validates the pk column identifier, runs the DELETE
 // inside a transaction with rollback on error, coerces pkVal to the PK column's
 // type, and surfaces a 0-affected-row outcome (PK mismatch) as a structured
-// *WriteError rather than a raw SQL string.
-func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
+// *crud.WriteError rather than a raw SQL string.
+func (a *App) DeleteRow(table, pkCol string, pkVal any) (*crud.WriteResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if !isValidIdentifier(pkCol) {
+	if !engine.ValidIdentifier(pkCol) {
 		return nil, fmt.Errorf("invalid primary key column")
 	}
 
@@ -1309,7 +1226,7 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*WriteResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	res, err := deleteRowTx(tx, colTypes, table, pkCol, pkVal)
+	res, err := crud.DeleteRowTx(tx, colTypes, table, pkCol, pkVal)
 	if err != nil {
 		tx.Rollback() //nolint:errcheck
 		return nil, err
@@ -1335,14 +1252,14 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 		return err
 	}
 	for _, col := range columns {
-		if !isValidIdentifier(col.Name) {
+		if !engine.ValidIdentifier(col.Name) {
 			return fmt.Errorf("invalid column name %q", col.Name)
 		}
 	}
 
 	var colDefs, seqDDL []string
 	for _, col := range columns {
-		def := fmt.Sprintf("%s %s", engine.QuoteIdent(col.Name), col.Type)
+		def := fmt.Sprintf("%s %s", session.QuoteIdent(col.Name), col.Type)
 		if col.PK && engine.IsIntegerType(col.Type) {
 			// The sequence lives next to its table, in the same catalog and
 			// schema. A bare table keeps the legacy nextval('seq') default text.
@@ -1680,7 +1597,7 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 	return a.ws.Queries().Get(context.Background(), id)
 }
 
-// QuerySaveResult is what SaveQuery returns: the query's id and the revision
+// QuerySaveResult is what SaveQueryOn returns: the query's id and the revision
 // the store now holds for it (empty for a legacy .vibe), which the editor sends
 // back with its next save.
 type QuerySaveResult struct {
@@ -1688,15 +1605,7 @@ type QuerySaveResult struct {
 	Rev string `json:"rev"`
 }
 
-// SaveQuery creates or updates a saved query, returning its id so the
-// caller (QueryEditorView) can select and highlight it without a second
-// round trip (#91: the id used to be discarded, so a freshly-created query
-// couldn't become "selected").
-func (a *App) SaveQuery(id, title, sqlStr, description, rev string) (*QuerySaveResult, error) {
-	return a.saveQuery(id, title, sqlStr, description, rev, nil)
-}
-
-// SaveQueryRequest is SaveQuery with the editor's "Run on" choice (#117): the
+// SaveQueryRequest is a saved-query write with the editor's "Run on" choice (#117): the
 // connection is saved with the query (its front matter) so a teammate runs it
 // on the same connection. An empty Connection clears it (the workspace default).
 type SaveQueryRequest struct {
@@ -1715,10 +1624,10 @@ func (a *App) SaveQueryOn(req SaveQueryRequest) (*QuerySaveResult, error) {
 			return nil, fmt.Errorf("unknown connection %q", req.Connection)
 		}
 	}
-	return a.saveQuery(req.ID, req.Title, req.SQL, req.Description, req.Rev, &req.Connection)
+	return a.saveQuery(req.ID, req.Title, req.SQL, req.Description, req.Rev, req.Connection)
 }
 
-func (a *App) saveQuery(id, title, sqlStr, description, rev string, connection *string) (*QuerySaveResult, error) {
+func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) (*QuerySaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1735,19 +1644,18 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev string, connection *
 		Engine:      "duckdb",
 		Parameters:  []queries.Param{},
 	}
-	// The editor only edits title and SQL: whatever else the file carries (the
-	// connection a CLI or agent chose, parameters, a description) is kept.
+	// The editor edits title, SQL and the "Run on" connection (the request's
+	// connection is authoritative, set below); whatever else the file carries
+	// (parameters, a description) is kept.
 	if id != "" {
 		if base, err := a.ws.Queries().Get(context.Background(), id); err == nil && base != nil {
-			q.Connection, q.Parameters, q.Engine = base.Connection, base.Parameters, base.Engine
+			q.Parameters, q.Engine = base.Parameters, base.Engine
 			if description == "" {
 				q.Description = base.Description
 			}
 		}
 	}
-	if connection != nil {
-		q.Connection = *connection
-	}
+	q.Connection = connection
 
 	// Update first for an existing query; a new one (or an id the store does
 	// not know) is created. Anything else, a conflict on a file that changed
@@ -1768,20 +1676,9 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev string, connection *
 	return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
 }
 
-// PreviewFilterSQL renders a FilterSpec (plus optional selected columns from the
-// QBE grid) into a deterministic SQL string WITHOUT persisting it (plan §2.4,
-// P2.6). The generated SQL is the single rendering path shared with
-// SaveFilterAsQuery, so the preview shown to the builder is byte-for-byte the
-// SQL that gets stored.
-func (a *App) PreviewFilterSQL(name string, spec FilterSpec, columns []string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.generateFilterSQL(name, spec, columns)
-}
-
 // SaveFilterAsQuery renders a FilterSpec into deterministic SQL and persists it
 // as a named query via the existing queries store, returning the new query id
-// (plan §2.4, P2.6). It reuses the same rendering path as PreviewFilterSQL so the
+// (plan §2.4, P2.6). It reuses the same rendering path as generateFilterSQL so the
 // stored SQL equals the previewed SQL.
 func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, title string) (string, error) {
 	a.mu.Lock()
@@ -1806,7 +1703,7 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 }
 
 // generateFilterSQL is the single, deterministic FilterSpec → SQL renderer behind
-// both PreviewFilterSQL and SaveFilterAsQuery. Unlike GetTableDataFiltered (which
+// both generateFilterSQL and SaveFilterAsQuery. Unlike GetTableDataFiltered (which
 // binds parameters at execution time), a saved query is a standalone SQL string,
 // so literal values are safely inlined here. Column identifiers (filter columns
 // and the optional projection) are validated against the table's real columns —
@@ -1834,85 +1731,7 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		known[c.Name] = true
 	}
 
-	// Projection: SELECT * unless the QBE grid selected explicit columns.
-	projection := "*"
-	if len(columns) > 0 {
-		parts := make([]string, 0, len(columns))
-		for _, col := range columns {
-			if !known[col] {
-				return "", fmt.Errorf("unknown selected column %q", col)
-			}
-			parts = append(parts, engine.QuoteIdent(col))
-		}
-		projection = strings.Join(parts, ", ")
-	}
-
-	whereClause, err := buildFilterWhereInline(spec, known)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("SELECT %s FROM %s%s", projection, tref.SQL(), whereClause), nil
-}
-
-// buildFilterWhereInline mirrors buildFilterWhere but inlines literal values into
-// the SQL (for a persistable, standalone query string) instead of binding them as
-// parameters. Identifiers are validated against the allowlist; string literals are
-// single-quote escaped so a value can never break out of the literal.
-func buildFilterWhereInline(spec FilterSpec, known map[string]bool) (string, error) {
-	if len(spec.Conditions) == 0 {
-		return "", nil
-	}
-
-	combinator := strings.ToUpper(strings.TrimSpace(spec.Combinator))
-	if combinator != "OR" {
-		combinator = "AND"
-	}
-
-	var clauses []string
-	for _, c := range spec.Conditions {
-		if !known[c.Column] {
-			return "", fmt.Errorf("unknown filter column %q", c.Column)
-		}
-		switch c.Op {
-		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NULL", engine.QuoteIdent(c.Column)))
-		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", engine.QuoteIdent(c.Column)))
-		default:
-			sqlOp, ok := filterOps[c.Op]
-			if !ok {
-				return "", fmt.Errorf("unsupported filter operator %q", c.Op)
-			}
-			clauses = append(clauses, fmt.Sprintf("%s %s %s", engine.QuoteIdent(c.Column), sqlOp, sqlLiteral(c.Value)))
-		}
-	}
-
-	return " WHERE " + strings.Join(clauses, " "+combinator+" "), nil
-}
-
-// sqlLiteral renders a FilterCondition value as a safe inline SQL literal. Numeric
-// and boolean values render bare; everything else (including string-typed numeric
-// inputs from the all-string form path) renders as a single-quote-escaped string
-// literal, which DuckDB coerces to the column type on comparison.
-func sqlLiteral(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return "NULL"
-	case bool:
-		if t {
-			return "TRUE"
-		}
-		return "FALSE"
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", t)
-	case float32, float64:
-		return fmt.Sprintf("%v", t)
-	case string:
-		return "'" + strings.ReplaceAll(t, "'", "''") + "'"
-	default:
-		return "'" + strings.ReplaceAll(fmt.Sprintf("%v", t), "'", "''") + "'"
-	}
+	return queries.BuildFilterSQLFrom(tref.SQL(), spec, columns, known)
 }
 
 // DeleteQuery deletes a saved query.
@@ -1982,61 +1801,6 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 }
 
 // --- Agent ---
-
-// AgentResult holds the result of an agent query.
-type AgentResult struct {
-	SQL      string   `json:"sql,omitempty"`
-	Columns  []string `json:"columns,omitempty"`
-	Rows     [][]any  `json:"rows,omitempty"`
-	Analysis string   `json:"analysis,omitempty"`
-	Error    string   `json:"error,omitempty"`
-}
-
-// SendAgentQuery executes a SQL query directly (MVP — no NL support yet).
-func (a *App) SendAgentQuery(query string) (*AgentResult, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return nil, err
-	}
-
-	// SendAgentQuery runs arbitrary raw SQL (DDL/DML) via a.engine.Execute, so it
-	// is a Studio-only privileged surface exactly like ExecuteQuery and must be
-	// capability-gated in App Mode (P4.4).
-
-	rs, err := a.engine.Execute(context.Background(), query, nil)
-	if err != nil {
-		return &AgentResult{Error: err.Error()}, nil
-	}
-
-	// NormalizeValue (inside engine.ScanRows, which a.engine.Execute already
-	// ran) owns []byte -> string now, so rs.Rows needs no per-cell cleanup
-	// here — the same fix ExecuteQuery got.
-	result := &AgentResult{SQL: query}
-	result.Columns, _ = rs.NamesAndTypes()
-	result.Rows = rs.Rows
-	return result, nil
-}
-
-// GetAgentStatus returns agent status info, including the configured LLM
-// endpoint so the agent panel can show what it's talking to.
-func (a *App) GetAgentStatus() map[string]any {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	policy := a.agentPolicy()
-	status := map[string]any{
-		"available":       a.ws != nil,
-		"mode":            string(policy.Mode),
-		"askBeforeWrites": policy.AskBeforeWrites,
-		"readOnly":        a.readOnly,
-		"provider":        a.llmCfg.Provider,
-		"endpoint":        a.llmCfg.Endpoint,
-		"model":           a.llmCfg.Model,
-	}
-	return status
-}
 
 // agentPolicy resolves the open workspace's effective agent policy for this
 // person — the committed ceiling and this person's own setting, whichever is
@@ -2126,55 +1890,6 @@ type AgentToolStep struct {
 type AgentChatResult struct {
 	Text  string          `json:"text"`
 	Steps []AgentToolStep `json:"steps"`
-}
-
-// AgentChat runs one turn of the conversational wizard agent against the
-// configured OpenAI-compatible LLM endpoint, driving a real tool-calling loop
-// (internal/llm). pinnedContext is optional context the user pinned in the
-// panel. Studio-only: the agent can run SQL and mutate schema.
-//
-// The config snapshot + capability guard happen under a.mu, which is released
-// before the (slow, network-bound) LLM call so the runner's own tool
-// dispatch loop isn't held up waiting on it. Each individual tool call the
-// agent makes re-takes a.mu itself — see agentToolHandler — instead of
-// running the whole multi-step turn unlocked.
-func (a *App) AgentChat(message, pinnedContext string) (*AgentChatResult, error) {
-	a.mu.RLock()
-	if err := a.requireWorkspace(); err != nil {
-		a.mu.RUnlock()
-		return nil, err
-	}
-	policy := a.agentPolicy()
-	cfg := llm.Config{
-		Provider:        a.llmCfg.Provider,
-		Endpoint:        a.llmCfg.Endpoint,
-		Model:           a.llmCfg.Model,
-		APIKey:          a.llmAPIKey(),
-		Sandbox:         string(policy.Mode),
-		AskBeforeWrites: policy.AskBeforeWrites,
-	}
-	// Chat has no cap of its own beyond whatever the file's agent_sandbox
-	// setting allows — ceiling = ModeFull lets Tighter (in
-	// agentToolHandler.Handle) resolve to the file's live mode on every
-	// dispatch, same as before this fix.
-	//
-	// AgentChat (the non-streaming binding) is unused by the frontend
-	// (AgentPanel/AgentView both call AgentChatStream) and never gets an
-	// approver attached — a write needing approval here is simply refused,
-	// fail-safe, exactly like a headless MCP client (#79 D5).
-	handler := a.newAgentToolHandler(agents.ModeFull)
-	a.mu.RUnlock()
-
-	runner := llm.NewRunner(handler, a.logger)
-	res, err := runner.Chat(a.ctx, cfg, message, pinnedContext)
-	if err != nil {
-		return nil, err
-	}
-	out := &AgentChatResult{Text: res.Text}
-	for _, s := range res.Steps {
-		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output, IsError: s.IsError})
-	}
-	return out, nil
 }
 
 // AgentTurn is one prior message of conversation history passed from the panel
@@ -2702,9 +2417,9 @@ func (a *App) InspectImport(src importer.Source) (*importer.Inspection, error) {
 // workspace-<table> skill, and emits data:changed — a dry run or a
 // pre-flight failure leaves the file exactly as it was.
 func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
-	// No isValidIdentifier check here: importer.Import validates o.Table
-	// itself (engine.ValidIdentifier, the same function isValidIdentifier
-	// wraps) and returns a clean "invalid table name" error — a second
+	// No identifier check here: importer.Import validates o.Table
+	// itself (engine.ValidIdentifier)
+	// and returns a clean "invalid table name" error — a second
 	// check here would just be two call sites that could quietly diverge.
 	if o.DryRun {
 		a.mu.RLock()
@@ -2746,91 +2461,6 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 	return summary, nil
 }
 
-// exportTableTo writes `SELECT * FROM table` to dst via DuckDB COPY with the
-// given WITH-clause options, the same mechanism ExportQueryResults already
-// uses (buildCopySQL). Extracted from ExportTableCSV/ExportTableJSON
-// so the datasheet export is DuckDB-native and testable without a save
-// dialog: the two previously hand-rolled their own scan loops (Go %v with
-// no CSV quoting — a comma in a value broke the file — and a second,
-// slightly different NormalizeValue-based loop for JSON), which could and
-// did disagree with what the grid itself shows for the same row. Caller
-// owns table-name validation; this only builds and runs the COPY.
-func (a *App) exportTableTo(table, dst, copyOpts string) error {
-	ddb := a.sess.DB()
-	if ddb == nil {
-		return fmt.Errorf("DuckDB not available")
-	}
-	copySQL := buildCopySQL(fmt.Sprintf("SELECT * FROM %s", engine.TableSQL(table)), dst, copyOpts)
-	if _, err := ddb.Exec(copySQL); err != nil {
-		return fmt.Errorf("failed to export table: %w", err)
-	}
-	return nil
-}
-
-// ExportTableCSV exports a table as CSV via save dialog.
-func (a *App) ExportTableCSV(tableName string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return "", err
-	}
-	if _, err := a.tableRefArg(tableName); err != nil {
-		return "", err
-	}
-
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Export CSV",
-		DefaultFilename: tableName + ".csv",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "CSV Files (*.csv)", Pattern: "*.csv"},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to open save dialog: %w", err)
-	}
-	if path == "" {
-		return "", nil
-	}
-
-	if err := a.exportTableTo(tableName, path, "FORMAT csv, HEADER true"); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-// ExportTableJSON exports a table as JSON via save dialog.
-func (a *App) ExportTableJSON(tableName string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return "", err
-	}
-	if _, err := a.tableRefArg(tableName); err != nil {
-		return "", err
-	}
-
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Export JSON",
-		DefaultFilename: tableName + ".json",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to open save dialog: %w", err)
-	}
-	if path == "" {
-		return "", nil
-	}
-
-	if err := a.exportTableTo(tableName, path, "FORMAT json, ARRAY true"); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
 // --- Helpers ---
 
 // buildCopySQL wraps a user/saved query in COPY (…) TO '<dst>' WITH
@@ -2848,14 +2478,6 @@ func buildCopySQL(query, dst, opts string) string {
 	query = strings.TrimRight(query, " \t\r\n;")
 	return fmt.Sprintf("COPY (%s\n) TO '%s' WITH (%s)",
 		query, strings.ReplaceAll(dst, "'", "''"), opts)
-}
-
-// isValidIdentifier is engine.ValidIdentifier under Studio's existing name
-// (used throughout this file) — see its doc comment. Kept as a thin
-// wrapper, not a second implementation, so the two can never quietly
-// diverge on what counts as a safe identifier.
-func isValidIdentifier(name string) bool {
-	return engine.ValidIdentifier(name)
 }
 
 // copyToXLSX writes the result of the given SELECT source to an .xlsx via the

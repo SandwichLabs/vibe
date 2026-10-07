@@ -35,7 +35,7 @@ func TestSaveNotebook_RejectsStaleSession(t *testing.T) {
 	// The file underneath gets switched (a second file open in the SAME
 	// App instance, exactly like a workspace switch
 	// while a stale view is still mounted) — sessionID is regenerated.
-	_, err = app.SwitchWorkspace(SwitchRequest{Path: newWorkspaceDir(t, "Second")})
+	_, err = app.OpenWorkspace(newWorkspaceDir(t, "Second"))
 	require.NoError(t, err)
 
 	app.mu.RLock()

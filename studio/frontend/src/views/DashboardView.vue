@@ -6,6 +6,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
+import { errorText } from '../lib/errors'
+import { hasWailsRuntime } from '../lib/wails'
 
 const router = useRouter()
 const title = ref('Home')
@@ -38,12 +40,10 @@ async function load() {
     readOnly.value = !!d?.read_only
   } catch (e: unknown) {
     if (gen !== loadGen) return
-    errorMessage.value = String(e)
+    errorMessage.value = errorText(e)
   }
   loading.value = false
 }
-
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
 let unsubDataChanged: (() => void) | null = null
 

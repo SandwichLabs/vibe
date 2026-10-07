@@ -34,20 +34,6 @@ func seedExplorer(t *testing.T, app *App) {
 	}
 }
 
-func TestListTableStats(t *testing.T) {
-	app := newOpenApp(t)
-	seedExplorer(t, app)
-
-	stats, err := app.ListTableStats()
-	require.NoError(t, err)
-	byName := map[string]int64{}
-	for _, s := range stats {
-		byName[s.Name] = s.Rows
-	}
-	assert.Equal(t, int64(2), byName["customers"])
-	assert.Equal(t, int64(3), byName["service_calls"])
-}
-
 func TestDescribeTableReportsPrimaryKeys(t *testing.T) {
 	app := newOpenApp(t)
 	seedExplorer(t, app)

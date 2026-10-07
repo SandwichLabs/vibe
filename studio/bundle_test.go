@@ -147,7 +147,7 @@ func TestBundle_ConnectionsImportToThisComputerOnly(t *testing.T) {
 	require.Len(t, pv.Connections, 1)
 	_, err = dst.CommitBundleImport(pv.Handle, BundleDecisions{Connections: []string{"wh"}})
 	require.NoError(t, err)
-	var local []string
+	local := make([]string, 0, len(dst.ws.Local().Connections))
 	for _, c := range dst.ws.Local().Connections {
 		local = append(local, c.Name)
 	}
@@ -166,7 +166,7 @@ func TestBundle_HandlesAreBounded(t *testing.T) {
 			first = h
 		}
 	}
-	_, ok := s.get(first)
+	ok := s.has(first)
 	assert.False(t, ok, "the oldest preview was dropped")
 	assert.Len(t, s.held, maxOpenBundles)
 }
@@ -232,7 +232,7 @@ func TestBundleStore_TakeIsAtomic(t *testing.T) {
 		close(start)
 		wg.Wait()
 		require.EqualValues(t, 1, won, "round %d", round)
-		_, ok := s.get(other)
+		ok := s.has(other)
 		require.True(t, ok, "taking one handle leaves the others")
 		require.Len(t, s.order, 1)
 	}

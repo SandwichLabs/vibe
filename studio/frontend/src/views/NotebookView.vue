@@ -36,8 +36,7 @@ import ConnectionSelect from '../components/ConnectionSelect.vue'
 import { defaultConnectionName } from '../composables/useConnections'
 import ConflictBanner from '../components/ConflictBanner.vue'
 import { sqlSummary, cellTitle, cellMeta, CELL_FALLBACK_TITLE } from '../lib/cellSummary'
-
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
+import { hasWailsRuntime } from '../lib/wails'
 
 // Part B seam (see file header): flipped on now that task-mode authoring
 // (add_query_cell/create_dashboard tools + the AgentTask binding, #66 part

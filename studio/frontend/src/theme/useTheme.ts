@@ -101,7 +101,7 @@ function buildListings(): void {
       const resolved = resolveTheme(spec, registry)
       out.push({ id: spec.id, name: spec.name, type: spec.type, description: spec.description, source: spec.source ?? 'builtin', path: spec.path, resolved })
     } catch (e) {
-      out.push({ id: spec.id, name: spec.name, type: spec.type, source: spec.source ?? 'user', path: spec.path, error: brokenErrors.get(spec.id) ?? (e as Error).message })
+      out.push({ id: spec.id, name: spec.name, type: spec.type, source: spec.source ?? 'user', path: spec.path, error: brokenErrors.get(spec.id) ?? errorText(e) })
     }
   }
   // Built-ins first in their declared order, then user themes by name.
@@ -129,7 +129,7 @@ function ingestUserThemes(files: UserThemeFile[], problems: string[]): void {
       }
       registry.set(spec.id, spec)
     } catch (e) {
-      const detail = e instanceof ThemeError && e.path ? e.message.slice(e.path.length + 2) : (e as Error).message
+      const detail = e instanceof ThemeError && e.path ? e.message.slice(e.path.length + 2) : errorText(e)
       errs.push(`${f.path}: ${detail}`)
       brokenErrors.set(id, detail)
       // Keep it visible in the picker as a broken entry so the author sees it.

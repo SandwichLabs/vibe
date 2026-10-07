@@ -12,13 +12,14 @@ package main
 //   - string inputs are coerced to column types via information_schema before write
 //   - UpdateRow surfaces a 0-affected-row PK mismatch as an error
 //   - DeleteRow runs transactionally, coerces the PK, validates the pk column
-//     identifier, and surfaces a 0-affected-row PK mismatch as a *WriteError
+//     identifier, and surfaces a 0-affected-row PK mismatch as a *crud.WriteError
 //   - an orphan child insert is rejected (RESTRICT)
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/sandwich-labs/vibe-app/internal/crud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,11 +40,11 @@ func createOrdersTable(t *testing.T, app *App) {
 
 // asWriteError extracts the structured, field-keyed error from a CRUD failure.
 // It must NOT be a raw SQL string — the UI relies on per-field feedback.
-func asWriteError(t *testing.T, err error) *WriteError {
+func asWriteError(t *testing.T, err error) *crud.WriteError {
 	t.Helper()
 	require.Error(t, err)
-	var we *WriteError
-	require.True(t, errors.As(err, &we), "error must be a *WriteError with per-field feedback, got: %v", err)
+	var we *crud.WriteError
+	require.True(t, errors.As(err, &we), "error must be a *crud.WriteError with per-field feedback, got: %v", err)
 	return we
 }
 
@@ -63,7 +64,7 @@ func TestCRUDCoercion(t *testing.T) {
 
 // TestDeleteRowTransactional verifies DeleteRow is consistent with the
 // Insert/Update contract: it deletes the matching row, surfaces a non-existent
-// PK as a structured *WriteError (not a silent no-op), and rejects an invalid
+// PK as a structured *crud.WriteError (not a silent no-op), and rejects an invalid
 // pk column identifier rather than interpolating it into SQL.
 func TestDeleteRowTransactional(t *testing.T) {
 	app := newOpenApp(t)

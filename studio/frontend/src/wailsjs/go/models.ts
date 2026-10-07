@@ -649,26 +649,6 @@ export namespace main {
 	        this.askBeforeWrites = source["askBeforeWrites"];
 	    }
 	}
-	export class AgentResult {
-	    sql?: string;
-	    columns?: string[];
-	    rows?: any[][];
-	    analysis?: string;
-	    error?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AgentResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.sql = source["sql"];
-	        this.columns = source["columns"];
-	        this.rows = source["rows"];
-	        this.analysis = source["analysis"];
-	        this.error = source["error"];
-	    }
-	}
 	export class TaskTurnArg {
 	    role: string;
 	    text: string;
@@ -1623,54 +1603,6 @@ export namespace main {
 	        this.installed = source["installed"];
 	    }
 	}
-	export class FilterCondition {
-	    column: string;
-	    op: string;
-	    value: any;
-	
-	    static createFrom(source: any = {}) {
-	        return new FilterCondition(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.column = source["column"];
-	        this.op = source["op"];
-	        this.value = source["value"];
-	    }
-	}
-	export class FilterSpec {
-	    combinator: string;
-	    conditions: FilterCondition[];
-	
-	    static createFrom(source: any = {}) {
-	        return new FilterSpec(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.combinator = source["combinator"];
-	        this.conditions = this.convertValues(source["conditions"], FilterCondition);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	export class InitialWorkspace {
 	    path: string;
@@ -2008,18 +1940,6 @@ export namespace main {
 	        this.rev = source["rev"];
 	    }
 	}
-	export class SwitchRequest {
-	    path: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new SwitchRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.path = source["path"];
-	    }
-	}
 	export class TableCapabilities {
 	    connection: string;
 	    editable: boolean;
@@ -2093,20 +2013,6 @@ export namespace main {
 		    }
 		    return a;
 		}
-	}
-	export class TableStat {
-	    name: string;
-	    rows: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new TableStat(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.rows = source["rows"];
-	    }
 	}
 	
 	
@@ -2503,6 +2409,54 @@ export namespace prefs {
 
 export namespace queries {
 	
+	export class FilterCondition {
+	    column: string;
+	    op: string;
+	    value: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilterCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.op = source["op"];
+	        this.value = source["value"];
+	    }
+	}
+	export class FilterSpec {
+	    combinator: string;
+	    conditions: FilterCondition[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FilterSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.combinator = source["combinator"];
+	        this.conditions = this.convertValues(source["conditions"], FilterCondition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Param {
 	    name: string;
 	    type: string;

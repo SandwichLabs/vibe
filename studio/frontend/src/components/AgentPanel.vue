@@ -7,6 +7,7 @@ import { useAgentChat } from '../composables/useAgentChat'
 import A2UIPage from '../a2ui/A2UIPage.vue'
 import ToolStepChip from './ToolStepChip.vue'
 import AgentSandboxIntro from './AgentSandboxIntro.vue'
+import { hasWailsRuntime } from '../lib/wails'
 
 // AgentPanel is the slide-in right-docked wizard chat (W0/W0.5). It drives the
 // streaming AgentChatStream binding via the shared useAgentChat composable: the
@@ -43,7 +44,7 @@ async function scrollToBottom() {
 let unsubOpened: (() => void) | null = null
 onMounted(() => {
   setScrollHandler(scrollToBottom)
-  if (typeof window !== 'undefined' && (window as any).runtime) unsubOpened = EventsOn('workspace:opened', () => reset())
+  if (hasWailsRuntime()) unsubOpened = EventsOn('workspace:opened', () => reset())
 })
 onUnmounted(() => unsubOpened?.())
 

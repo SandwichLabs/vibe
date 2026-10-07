@@ -10,9 +10,7 @@ import { router } from '../router/index'
 import AppShell from './AppShell.vue'
 
 function makeApp() {
-  const app = {
-    AgentChat: vi.fn(async () => ({ text: 'hi', steps: [] })),
-  }
+  const app = {}
   ;(globalThis as any).window = (globalThis as any).window || {}
   ;(window as any).go = { main: { App: app } }
   return { app }

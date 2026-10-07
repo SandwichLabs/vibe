@@ -8,11 +8,11 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import ApprovalCard from './ApprovalCard.vue'
 import type { PendingApproval } from '../composables/useAgentChat'
+import { hasWailsRuntime } from '../lib/wails'
 
 interface Item { approval: PendingApproval; tool: string }
 const items = ref<Item[]>([])
 const unsubs: Array<() => void> = []
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
 onMounted(() => {
   if (!hasWailsRuntime()) return

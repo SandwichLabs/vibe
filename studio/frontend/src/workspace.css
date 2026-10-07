@@ -115,7 +115,6 @@ kbd {
 .dialog .d-body { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
 .dialog .d-foot { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1.5px solid var(--vibe-border); background: var(--sh-paper-2); }
 .dialog .d-foot .left { margin-right: auto; font-size: 13px; color: var(--sh-graphite); }
-.dim-behind { filter: none; }
 
 /* [new] In-form notes (smaller than .banner) */
 .note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-left: 4px solid var(--sh-teal); background: var(--sh-teal-8); font-size: 13px; line-height: 1.5; border-radius: 0 var(--sh-radius-sm) var(--sh-radius-sm) 0; }
@@ -144,18 +143,6 @@ kbd {
 .tabs button { background: none; border: 0; padding: 12px 20px; font-family: var(--sh-font-body); font-weight: 600; font-size: 15px; color: var(--sh-graphite); border-bottom: 4px solid transparent; margin-bottom: -2px; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tabs button .tsub { font-family: var(--sh-font-mono); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tabs button[aria-selected="true"] { color: var(--sh-ink); border-bottom-color: var(--vibe-accent); }
-.themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.themecard { padding: 12px; text-align: left; background: var(--sh-surface); color: var(--sh-ink); }
-.themecard .sw { display: flex; height: 28px; border: 1.5px solid var(--vibe-border); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
-
-/* [new] Import steps */
-.stepper { display: flex; gap: 10px; align-items: center; font-family: var(--sh-font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sh-graphite); }
-.stepper .n { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--sh-graphite); display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
-.stepper .on { color: var(--sh-ink); }
-.stepper .on .n { background: var(--vibe-accent); color: var(--vibe-accent-fg); border-color: var(--vibe-border); }
-.stepper .done .n { background: var(--sh-teal); color: var(--vibe-accent-fg); border-color: var(--sh-teal); }
-.stepper .bar { width: 28px; height: 2px; background: var(--sh-chalk); }
-.tree-plan { font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.9; padding: 14px 16px; background: var(--sh-paper-2); border: 1.5px solid var(--vibe-border); border-radius: var(--sh-radius-sm); }
 
 /* [new] Launcher list row wrapper (row button + remove) */
 .recent-li { display: flex; align-items: center; background: var(--sh-surface); border-bottom: 1.5px solid var(--vibe-border-subtle); }

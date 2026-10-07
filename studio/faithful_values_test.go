@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -144,58 +142,4 @@ func TestUpdateRowDeleteRow_BigIntPKRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Rows, 1)
 	assert.Equal(t, "9007199254740992", res.Rows[0][0], "only the exact targeted row must be deleted")
-}
-
-// TestExportTableTo_MatchesQueryExport proves the datasheet CSV export
-// (exportTableTo, via buildCopySQL) produces byte-identical output to
-// ExportQueryResults for "SELECT * FROM <table>" — the two used to be
-// separate hand-rolled scan loops that could (and did) disagree.
-func TestExportTableTo_MatchesQueryExport(t *testing.T) {
-	app := newOpenApp(t)
-	mustExec(t, app, `CREATE TABLE people (id INTEGER, name VARCHAR)`)
-	mustExec(t, app, `INSERT INTO people VALUES (1, 'Kim, Park'), (2, 'Jones')`)
-
-	dir := t.TempDir()
-	viaTable := dir + "/table.csv"
-	viaQuery := dir + "/query.csv"
-
-	require.NoError(t, app.exportTableTo("people", viaTable, "FORMAT csv, HEADER true"))
-	_, err := app.ExportQueryResults("SELECT * FROM people", "csv", viaQuery)
-	require.NoError(t, err)
-
-	tableBytes := readFile(t, viaTable)
-	queryBytes := readFile(t, viaQuery)
-	assert.Equal(t, queryBytes, tableBytes)
-	assert.Contains(t, tableBytes, `"Kim, Park"`, "a comma in a value must be CSV-quoted")
-}
-
-func readFile(t *testing.T, path string) string {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	require.NoError(t, err)
-	return strings.TrimRight(string(b), "\n")
-}
-
-// TestSendAgentQuery_FaithfulValues proves that SendAgentQuery no longer
-// runs its own dead []byte->string loop, a leftover from before
-// engine.ScanRows/NormalizeValue owned that conversion — this proves
-// the binding is faithful (exact BIGINT string, canonical UUID text, not
-// mojibake) using rs.Rows/rs.NamesAndTypes() directly, with no per-cell
-// cleanup of its own.
-func TestSendAgentQuery_FaithfulValues(t *testing.T) {
-	app := newOpenApp(t)
-	mustExec(t, app, probeTableDDL)
-	mustExec(t, app, `INSERT INTO probe VALUES
-		(9007199254740993, 12.5000, '2025-04-06', '2025-04-06 13:45:00',
-		 '4ac7a9e9-607c-4c8a-84f3-843f0191e3fd', 'hi')`)
-
-	res, err := app.SendAgentQuery("SELECT id, amt, u, note FROM probe")
-	require.NoError(t, err)
-	require.Empty(t, res.Error)
-	require.Equal(t, []string{"id", "amt", "u", "note"}, res.Columns)
-	require.Len(t, res.Rows, 1)
-	assert.Equal(t, "9007199254740993", res.Rows[0][0], "BIGINT past 2^53 must be the exact string, not a rounded float")
-	assert.Equal(t, json.Number("12.5000"), res.Rows[0][1])
-	assert.Equal(t, "4ac7a9e9-607c-4c8a-84f3-843f0191e3fd", res.Rows[0][2], "UUID must be canonical text, not mojibake")
-	assert.Equal(t, "hi", res.Rows[0][3])
 }

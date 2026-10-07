@@ -28,11 +28,9 @@ declare global {
           CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
           OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
           OpenWorkspaceReadOnly(path: string): Promise<OpenWorkspaceResult>
-          SwitchWorkspace(req: { path: string }): Promise<OpenWorkspaceResult>
           CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
           // .vibe bundles (#118)
           GetBundleContent(): Promise<BundleContent>
-          ChooseBundleSaveFile(defaultName: string): Promise<string>
           SelectBundleFile(): Promise<string>
           ExportBundle(req: BundleExportRequest): Promise<BundleExportResult>
           PreviewBundleImport(path: string, passphrase: string): Promise<BundlePreview>
@@ -70,7 +68,6 @@ declare global {
           GetTableCapabilities(table: string): Promise<TableCapabilities>
           InstallExtension(req: { name: string }): Promise<void>
           ListExtensions(): Promise<ExtensionInfo[]>
-          ListCatalogTables(connection: string): Promise<string[]>
           StartMCP(): Promise<MCPStatus>
           StopMCP(): Promise<void>
           GetMCPStatus(): Promise<MCPStatus>
@@ -95,18 +92,11 @@ declare global {
           RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
           RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
           RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
-          AddColumn(table: string, column: string, colType: string): Promise<void>
-          DropColumn(table: string, column: string): Promise<void>
-          AddIndex(table: string, indexName: string, columns: string[], unique: boolean): Promise<void>
-          AlterColumnType(table: string, column: string, newType: string): Promise<void>
           ListQueries(): Promise<QuerySummary[]>
           GetQuery(id: string): Promise<QueryDetail>
           SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
-          SaveQuery(id: string, title: string, sql: string, description: string, rev: string): Promise<{ id: string; rev: string }>
           DeleteQuery(id: string): Promise<void>
           GetDashboard(): Promise<DashboardData>
-          SendAgentQuery(query: string): Promise<AgentResult>
-          GetAgentStatus(): Promise<Record<string, any>>
           GetAgentConfig(): Promise<AgentConfig>
           ProbeKeychain(): Promise<KeychainProbe>
           GetLLMKeyStatus(): Promise<LLMKeyStatus>
@@ -118,12 +108,53 @@ declare global {
           SelectImportFile(): Promise<string>
           InspectImport(src: ImportSource): Promise<ImportInspection>
           ImportFile(o: ImportOptions): Promise<ImportSummary>
-          ExportTableCSV(tableName: string): Promise<string>
-          ExportTableJSON(tableName: string): Promise<string>
+          // Agent chat and task mode (#63, #66)
+          AgentChatStream(turnId: string, message: string, pinnedContext: string, history: { role: string; text: string }[]): Promise<AgentChatResult>
+          AgentTask(req: { taskId: string; mode: string; description: string; cell?: import('./composables/useAiCellDialog').TaskCellArg; followUp?: { role: string; text: string }[]; tables?: string[]; notebookSummary?: string[] }): Promise<import('./composables/useAiCellDialog').TaskEnvelope>
+          CancelAgentTask(taskId: string): Promise<void>
+          // Notebooks (#66)
+          ListNotebooks(): Promise<WailsNotebookSummary[]>
+          GetNotebook(id: string): Promise<WailsNotebook>
+          CreateNotebook(title: string): Promise<WailsNotebook>
+          RenameNotebook(id: string, title: string): Promise<void>
+          DeleteNotebook(id: string): Promise<void>
+          SaveNotebook(nb: Record<string, any>, sessionId: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
+          SelectNotebookFile(): Promise<string>
+          ImportNotebook(path: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
+          ExportNotebook(id: string, dst: string): Promise<string>
+          SetActiveNotebook(id: string): Promise<void>
+          // Exports (xlsx stays, #142)
+          ExportQueryResults(sql: string, format: string, dst: string): Promise<string>
+          ExportTableXLSX(tableName: string, dst: string): Promise<string>
+          ExportQueryXLSX(queryId: string, dst: string): Promise<string>
+          AnalyzeQueryInExcel(queryId: string, dst: string): Promise<string>
         }
       }
     }
   }
+}
+
+// A notebook as the bindings return it: the editor owns the cell shapes, so
+// only the envelope is typed here.
+interface WailsNotebook {
+  id: string
+  title: string
+  rev?: string
+  cells: any[]
+  [key: string]: any
+}
+
+interface WailsNotebookSummary {
+  id: string
+  title: string
+  cellCount: number
+  updatedAt: string
+  error?: string
+}
+
+interface AgentChatResult {
+  text: string
+  steps: { tool: string; input: string; output: string; isError?: boolean }[]
 }
 
 // WriteResult is returned by the transactional CRUD methods
@@ -492,14 +523,6 @@ interface A2UIQueryResult {
   columns: string[]
   types: string[]
   rows: any[][]
-}
-
-interface AgentResult {
-  sql?: string
-  columns?: string[]
-  rows?: any[][]
-  analysis?: string
-  error?: string
 }
 
 // Mirrors internal/importer's Type/ColType/Source/Inspection/Column/Options/

@@ -11,17 +11,9 @@ import {prefs} from '../models';
 import {queries} from '../models';
 import {importer} from '../models';
 
-export function AddColumn(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function AddIndex(arg1:string,arg2:string,arg3:Array<string>,arg4:boolean):Promise<void>;
-
-export function AgentChat(arg1:string,arg2:string):Promise<main.AgentChatResult>;
-
 export function AgentChatStream(arg1:string,arg2:string,arg3:string,arg4:Array<main.AgentTurn>):Promise<main.AgentChatResult>;
 
 export function AgentTask(arg1:main.AgentTaskRequest):Promise<llm.TaskEnvelope>;
-
-export function AlterColumnType(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function AnalyzeQueryInExcel(arg1:string,arg2:string):Promise<string>;
 
@@ -32,8 +24,6 @@ export function CancelQuit():Promise<void>;
 export function CheckGitAvailable():Promise<boolean>;
 
 export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<main.WorkspaceDirCheck>;
-
-export function ChooseBundleSaveFile(arg1:string):Promise<string>;
 
 export function ChooseFolder(arg1:string):Promise<string>;
 
@@ -71,8 +61,6 @@ export function DiscardBundleImport(arg1:string):Promise<void>;
 
 export function DisconnectConnection(arg1:main.ConnectionRef):Promise<main.ConnectionInfo>;
 
-export function DropColumn(arg1:string,arg2:string):Promise<void>;
-
 export function DropTable(arg1:string):Promise<void>;
 
 export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
@@ -85,15 +73,9 @@ export function ExportQueryResults(arg1:string,arg2:string,arg3:string):Promise<
 
 export function ExportQueryXLSX(arg1:string,arg2:string):Promise<string>;
 
-export function ExportTableCSV(arg1:string):Promise<string>;
-
-export function ExportTableJSON(arg1:string):Promise<string>;
-
 export function ExportTableXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function GetAgentConfig():Promise<main.AgentConfig>;
-
-export function GetAgentStatus():Promise<Record<string, any>>;
 
 export function GetBundleContent():Promise<main.BundleContent>;
 
@@ -125,7 +107,7 @@ export function GetTableCapabilities(arg1:string):Promise<main.TableCapabilities
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
-export function GetTableDataFiltered(arg1:string,arg2:main.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
+export function GetTableDataFiltered(arg1:string,arg2:queries.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
 
 export function GetWorkspaceInfo():Promise<main.WorkspaceInfo>;
 
@@ -149,8 +131,6 @@ export function ListCatalog(arg1:main.CatalogRequest):Promise<main.CatalogListin
 
 export function ListCatalogGroups():Promise<Array<main.CatalogGroup>>;
 
-export function ListCatalogTables(arg1:string):Promise<Array<string>>;
-
 export function ListConnectionTypes():Promise<Array<main.TypeSpec>>;
 
 export function ListConnections():Promise<main.ConnectionList>;
@@ -164,8 +144,6 @@ export function ListQueries():Promise<Array<main.QuerySummary>>;
 export function ListRecentWorkspaces():Promise<Array<main.RecentWorkspace>>;
 
 export function ListSkills():Promise<Array<main.SkillSummary>>;
-
-export function ListTableStats():Promise<Array<main.TableStat>>;
 
 export function ListTables():Promise<Array<string>>;
 
@@ -184,8 +162,6 @@ export function OpenWorkspace(arg1:string):Promise<main.OpenWorkspaceResult>;
 export function OpenWorkspaceReadOnly(arg1:string):Promise<main.OpenWorkspaceResult>;
 
 export function PreviewBundleImport(arg1:string,arg2:string):Promise<main.BundlePreview>;
-
-export function PreviewFilterSQL(arg1:string,arg2:main.FilterSpec,arg3:Array<string>):Promise<string>;
 
 export function ProbeKeychain():Promise<secrets.Probe>;
 
@@ -215,11 +191,9 @@ export function RunQuery(arg1:main.RunQueryRequest):Promise<main.QueryResult>;
 
 export function SaveConnection(arg1:main.SaveConnectionRequest):Promise<main.ConnectionDetail>;
 
-export function SaveFilterAsQuery(arg1:string,arg2:main.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
+export function SaveFilterAsQuery(arg1:string,arg2:queries.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SaveNotebook(arg1:Record<string, any>,arg2:string):Promise<main.NotebookSaveResult>;
-
-export function SaveQuery(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.QuerySaveResult>;
 
 export function SaveQueryOn(arg1:main.SaveQueryRequest):Promise<main.QuerySaveResult>;
 
@@ -232,8 +206,6 @@ export function SelectImportFile():Promise<string>;
 export function SelectNotebookFile():Promise<string>;
 
 export function SelectWorkspaceFolder():Promise<string>;
-
-export function SendAgentQuery(arg1:string):Promise<main.AgentResult>;
 
 export function SetActiveNotebook(arg1:string):Promise<void>;
 
@@ -250,8 +222,6 @@ export function SetWorkspaceSettings(arg1:main.WorkspaceSettings):Promise<main.W
 export function StartMCP():Promise<main.MCPStatus>;
 
 export function StopMCP():Promise<void>;
-
-export function SwitchWorkspace(arg1:main.SwitchRequest):Promise<main.OpenWorkspaceResult>;
 
 export function TakeOverWorkspace():Promise<main.OpenWorkspaceResult>;
 

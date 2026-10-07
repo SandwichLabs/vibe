@@ -2,7 +2,7 @@ package queries
 
 // QBE (Query-By-Example) filter → SQL rendering (plan §2.3/§2.4/§2.6). This is
 // the single deterministic FilterSpec → standalone-SQL renderer shared by the
-// Studio backend (studio/app.go PreviewFilterSQL / SaveFilterAsQuery) and the
+// Studio backend (studio/app.go SaveFilterAsQuery) and the
 // agent Query Wizard tool (internal/agents build_query), so the SQL previewed,
 // saved, and run by the agent are byte-for-byte identical.
 //
@@ -47,12 +47,29 @@ var filterOps = map[string]string{
 	"like": "LIKE",
 }
 
+// SQLOperator maps a FilterCondition.Op to its SQL comparison operator. The
+// value-less is_null / is_not_null operators are not in the table; callers
+// render them directly. It is exported so the parameterized WHERE builder in
+// Studio shares the one operator table.
+func SQLOperator(op string) (string, bool) {
+	sqlOp, ok := filterOps[op]
+	return sqlOp, ok
+}
+
 // BuildFilterSQL renders a FilterSpec (plus optional selected projection columns)
 // into a deterministic standalone SQL string over the given table. known is the
 // allowlist of the table's real column names; every filter/projection identifier
 // must be present in it or an error is returned (no SQL injection via identifier
 // or value).
 func BuildFilterSQL(table string, spec FilterSpec, columns []string, known map[string]bool) (string, error) {
+	return BuildFilterSQLFrom(engine.QuoteIdent(table), spec, columns, known)
+}
+
+// BuildFilterSQLFrom is BuildFilterSQL over a pre-rendered FROM target (for
+// example a catalog-qualified table reference), which the caller has already
+// quoted. Everything else (column allowlist, quoting, inlined literals) is the
+// same single rendering path.
+func BuildFilterSQLFrom(from string, spec FilterSpec, columns []string, known map[string]bool) (string, error) {
 	projection := "*"
 	if len(columns) > 0 {
 		parts := make([]string, 0, len(columns))
@@ -70,7 +87,7 @@ func BuildFilterSQL(table string, spec FilterSpec, columns []string, known map[s
 		return "", err
 	}
 
-	return fmt.Sprintf("SELECT %s FROM %s%s", projection, engine.QuoteIdent(table), whereClause), nil
+	return fmt.Sprintf("SELECT %s FROM %s%s", projection, from, whereClause), nil
 }
 
 // buildFilterWhereInline renders a FilterSpec into a SQL WHERE clause (leading

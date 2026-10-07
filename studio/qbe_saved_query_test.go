@@ -9,7 +9,7 @@ package main
 // Wails-bound persistence path. No mocks; no parallel query store.
 //
 // Acceptance behavior asserted end-to-end:
-//   - PreviewFilterSQL renders a FilterSpec (+ optional selected columns) to a
+//   - generateFilterSQL renders a FilterSpec (+ optional selected columns) to a
 //     deterministic SQL string WITHOUT saving anything to the registry
 //   - SaveFilterAsQuery renders the same deterministic SQL and persists it via
 //     the EXISTING queries store (the same store ListQueries/GetQuery read)
@@ -75,9 +75,9 @@ func toInt64s(t *testing.T, rows [][]any, idx int) []int64 {
 	return out
 }
 
-// TestPreviewFilterSQL_NoSaveSideEffect proves the preview path generates SQL
+// TestGenerateFilterSQL_NoSaveSideEffect proves the preview path generates SQL
 // deterministically and does NOT write anything to the queries registry.
-func TestPreviewFilterSQL_NoSaveSideEffect(t *testing.T) {
+func TestGenerateFilterSQL_NoSaveSideEffect(t *testing.T) {
 	app := newOpenApp(t)
 	seedTicketsTable(t, app)
 
@@ -89,12 +89,12 @@ func TestPreviewFilterSQL_NoSaveSideEffect(t *testing.T) {
 		},
 	}
 
-	sqlStr, err := app.PreviewFilterSQL("tickets", spec, nil)
+	sqlStr, err := app.generateFilterSQL("tickets", spec, nil)
 	require.NoError(t, err, "preview must render SQL without error")
 	require.NotEmpty(t, sqlStr, "preview must return a non-empty SQL string")
 
 	// Deterministic: calling preview again yields the identical string.
-	sqlStr2, err := app.PreviewFilterSQL("tickets", spec, nil)
+	sqlStr2, err := app.generateFilterSQL("tickets", spec, nil)
 	require.NoError(t, err)
 	assert.Equal(t, sqlStr, sqlStr2, "generated SQL must be deterministic")
 
@@ -144,7 +144,7 @@ func TestSaveFilterAsQuery_PersistsAndRoundTrips(t *testing.T) {
 
 	// The stored SQL must equal the deterministic preview output (no parallel
 	// rendering path).
-	preview, err := app.PreviewFilterSQL("tickets", spec, nil)
+	preview, err := app.generateFilterSQL("tickets", spec, nil)
 	require.NoError(t, err)
 	assert.Equal(t, preview, stored.SQL,
 		"saved SQL must equal the preview/generate output (single rendering path)")
@@ -180,7 +180,7 @@ func TestSaveFilterAsQuery_SelectedColumns(t *testing.T) {
 		Conditions: []FilterCondition{{Column: "status", Op: "eq", Value: "open"}},
 	}
 
-	sqlStr, err := app.PreviewFilterSQL("tickets", spec, []string{"id", "status"})
+	sqlStr, err := app.generateFilterSQL("tickets", spec, []string{"id", "status"})
 	require.NoError(t, err)
 
 	res, err := app.ExecuteQuery(sqlStr)
@@ -194,7 +194,7 @@ func TestSaveFilterAsQuery_SelectedColumns(t *testing.T) {
 		"selected-columns QBE projection must restrict the result columns")
 
 	// An unknown selected column must be rejected (no SQL injection via ident).
-	_, err = app.PreviewFilterSQL("tickets", spec, []string{"id; DROP TABLE tickets"})
+	_, err = app.generateFilterSQL("tickets", spec, []string{"id; DROP TABLE tickets"})
 	require.Error(t, err, "an unknown/invalid selected column must be rejected")
 }
 
@@ -207,6 +207,41 @@ func TestSaveFilterAsQuery_NoFileOpen(t *testing.T) {
 	_, err := app.SaveFilterAsQuery("tickets", FilterSpec{}, nil, "x")
 	require.Error(t, err, "must error when no file is open")
 
-	_, err = app.PreviewFilterSQL("tickets", FilterSpec{}, nil)
+	_, err = app.generateFilterSQL("tickets", FilterSpec{}, nil)
 	require.Error(t, err, "preview must error when no file is open")
+}
+
+// TestGenerateFilterSQL_TextStable pins the exact SQL text SaveFilterAsQuery
+// stores (U1 moved the renderer into internal/queries; saved queries on disk
+// must not change shape), including a catalog-qualified table.
+func TestGenerateFilterSQL_TextStable(t *testing.T) {
+	app := appWithSecondCatalog(t)
+	const local = `"local"."main"."items"`
+
+	cases := []struct {
+		name    string
+		table   string
+		spec    FilterSpec
+		columns []string
+		want    string
+	}{
+		{"no conditions", "items", FilterSpec{}, nil, "SELECT * FROM " + local},
+		{"string eq, default AND", "items", FilterSpec{Conditions: []FilterCondition{{Column: "sku", Op: "eq", Value: "it's"}}}, nil,
+			"SELECT * FROM " + local + ` WHERE "sku" = 'it''s'`},
+		{"OR with null checks and like", "items", FilterSpec{Combinator: " or ", Conditions: []FilterCondition{
+			{Column: "sku", Op: "is_null"}, {Column: "sku", Op: "is_not_null"}, {Column: "sku", Op: "like", Value: "a%"}}}, nil,
+			"SELECT * FROM " + local + ` WHERE "sku" IS NULL OR "sku" IS NOT NULL OR "sku" LIKE 'a%'`},
+		{"qualified table, projection, typed values", "other.main.items", FilterSpec{Combinator: "AND", Conditions: []FilterCondition{
+			{Column: "id", Op: "gte", Value: float64(1)}, {Column: "name", Op: "neq", Value: nil}}}, []string{"name", "id"},
+			`SELECT "name", "id" FROM "other"."main"."items" WHERE "id" >= 1 AND "name" <> NULL`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := app.generateFilterSQL(c.table, c.spec, c.columns)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
+	_, err := app.generateFilterSQL("other.main.items", FilterSpec{Conditions: []FilterCondition{{Column: "nope", Op: "eq", Value: 1}}}, nil)
+	assert.Error(t, err)
 }

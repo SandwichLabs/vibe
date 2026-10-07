@@ -286,7 +286,7 @@ export function useAiCellDialog(host: DialogHost) {
     const notebookSummary = capPromptList(host.getNotebookSummary ? host.getNotebookSummary() : [])
 
     try {
-      const envelope: TaskEnvelope = await (window as any).go.main.App.AgentTask({
+      const envelope: TaskEnvelope = await window.go.main.App.AgentTask({
         taskId: dispatchTaskId,
         mode: state.mode,
         description,

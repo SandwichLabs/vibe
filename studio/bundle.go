@@ -64,15 +64,13 @@ func (s *bundleStore) put(pkg *bundle.Package) string {
 	return h
 }
 
-func (s *bundleStore) get(h string) (*bundle.Package, bool) {
+// has reports whether h still names a held bundle.
+func (s *bundleStore) has(h string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.expireLocked()
-	e, ok := s.held[h]
-	if !ok {
-		return nil, false
-	}
-	return e.pkg, true
+	_, ok := s.held[h]
+	return ok
 }
 
 // take removes and returns a held bundle in one step: of two commits racing for
@@ -251,8 +249,8 @@ type BundleExportResult struct {
 	Warnings  []string `json:"warnings"`
 }
 
-// ChooseBundleSaveFile asks where to write a bundle.
-func (a *App) ChooseBundleSaveFile(defaultName string) (string, error) {
+// chooseBundleSaveFile asks where to write a bundle.
+func (a *App) chooseBundleSaveFile(defaultName string) (string, error) {
 	if defaultName == "" {
 		defaultName = "workspace"
 	}
@@ -293,7 +291,7 @@ func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error)
 
 	path := req.Path
 	if path == "" {
-		p, err := a.ChooseBundleSaveFile(name)
+		p, err := a.chooseBundleSaveFile(name)
 		if err != nil {
 			return nil, err
 		}

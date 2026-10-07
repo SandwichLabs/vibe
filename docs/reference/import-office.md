@@ -133,7 +133,7 @@ result is a small, focused action next to the data itself:
 | Where | Binding(s) | Formats |
 |---|---|---|
 | Query Explorer result | `ExportQueryResults` | CSV, Parquet |
-| A table (Tables view / agent tooling) | `ExportTableCSV`, `ExportTableJSON`, `ExportTableXLSX` | CSV, JSON, XLSX |
+| A table (Tables view / agent tooling) | `ExportTableXLSX`; for CSV or Parquet export the table with `SELECT *` through `ExportQueryResults` | XLSX |
 | A saved query | `ExportQueryXLSX`, `AnalyzeQueryInExcel` (an XLSX-export alias) | XLSX |
 | A notebook | `ExportNotebook` | the notebook's own JSON document |
 

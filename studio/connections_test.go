@@ -35,7 +35,8 @@ func (s *spySession) Preflight(ctx context.Context, name string) {
 	s.Session.Preflight(ctx, name)
 }
 
-func (s *spySession) count(name string) int {
+func (s *spySession) prodPreflights() int {
+	const name = "prod_pg"
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
@@ -77,7 +78,7 @@ func TestListConnectionTypes_GeneratedFromRegistry(t *testing.T) {
 	for _, ty := range types {
 		byID[ty.ID] = ty
 	}
-	var ids []string
+	ids := make([]string, 0, len(types))
 	for _, ty := range types {
 		ids = append(ids, ty.ID)
 	}
@@ -190,12 +191,12 @@ func TestCredentials_WriteOnlyEverywhere(t *testing.T) {
 
 	_, err := app.SaveConnection(SaveConnectionRequest{Scope: "local", Def: pgDef("db.internal"), IsNew: true, SignIn: "keychain"})
 	require.NoError(t, err)
-	before := spy.count("prod_pg")
+	before := spy.prodPreflights()
 
 	info, err := app.SetConnectionCredentials(SetCredentialsRequest{Name: "prod_pg", CredentialInput: CredentialInput{Username: "rosa", Password: connNeedle}})
 	require.NoError(t, err)
 	assertNoSecret(t, "SetConnectionCredentials", info)
-	assert.Greater(t, spy.count("prod_pg"), before, "Preflight runs after a credential change so the failure cache clears")
+	assert.Greater(t, spy.prodPreflights(), before, "Preflight runs after a credential change so the failure cache clears")
 
 	st, err := app.GetConnectionCredentialStatus("prod_pg")
 	require.NoError(t, err)
@@ -225,13 +226,13 @@ func TestCredentials_WriteOnlyEverywhere(t *testing.T) {
 	assert.Equal(t, "ana", st.Username)
 
 	// Clearing the password leaves the username.
-	before = spy.count("prod_pg")
+	before = spy.prodPreflights()
 	_, err = app.ClearConnectionCredentials(ClearCredentialsRequest{Name: "prod_pg", Field: "password"})
 	require.NoError(t, err)
 	st, _ = app.GetConnectionCredentialStatus("prod_pg")
 	assert.False(t, st.SecretSet)
 	assert.Equal(t, "ana", st.Username)
-	assert.Greater(t, spy.count("prod_pg"), before, "Preflight also runs after a clear")
+	assert.Greater(t, spy.prodPreflights(), before, "Preflight also runs after a clear")
 
 	_, err = app.ClearConnectionCredentials(ClearCredentialsRequest{Name: "prod_pg"})
 	require.NoError(t, err)
@@ -240,10 +241,10 @@ func TestCredentials_WriteOnlyEverywhere(t *testing.T) {
 	assert.Empty(t, st.Username)
 
 	// Changing the sign-in method re-registers and Preflights too.
-	before = spy.count("prod_pg")
+	before = spy.prodPreflights()
 	_, err = app.SetConnectionCredentials(SetCredentialsRequest{Name: "prod_pg", Method: "env:PG_PROD"})
 	require.NoError(t, err)
-	assert.Greater(t, spy.count("prod_pg"), before)
+	assert.Greater(t, spy.prodPreflights(), before)
 	st, _ = app.GetConnectionCredentialStatus("prod_pg")
 	assert.Equal(t, "env:PG_PROD", st.Method)
 	require.NotEmpty(t, st.Env)
@@ -399,7 +400,7 @@ func TestListExtensions_AndInstallRefusesUnknown(t *testing.T) {
 	app, _ := connApp(t)
 	exts, err := app.ListExtensions()
 	require.NoError(t, err)
-	names := []string{}
+	names := make([]string, 0, len(exts))
 	for _, e := range exts {
 		names = append(names, e.Name)
 		assert.NotNil(t, e.NeededBy)
@@ -449,11 +450,7 @@ func TestRunQuery_PinsTheChosenConnection_AndSaveQueryOnKeepsIt(t *testing.T) {
 	q, err := app.GetQuery(saved.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "other", q.Connection)
-	// A plain SaveQuery (the old signature) keeps the connection it finds.
-	_, err = app.SaveQuery(saved.ID, "On other", "SELECT 2", "", saved.Rev)
-	require.NoError(t, err)
 	q, _ = app.GetQuery(saved.ID)
-	assert.Equal(t, "other", q.Connection)
 	_, err = app.SaveQueryOn(SaveQueryRequest{ID: saved.ID, Title: "On other", SQL: "SELECT 2", Connection: "", Rev: q.Rev})
 	require.NoError(t, err)
 	q, _ = app.GetQuery(saved.ID)

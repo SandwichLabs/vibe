@@ -13,9 +13,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { sandboxIntro } from '../lib/agentSandbox'
+import { hasWailsRuntime } from '../lib/wails'
 
 const text = ref(sandboxIntro(''))
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
 async function refresh() {
   try {

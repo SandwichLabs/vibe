@@ -8,6 +8,7 @@ import Icon from './Icon.vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { refreshConnections } from '../composables/useConnections'
+import { hasWailsRuntime } from '../lib/wails'
 
 const rows = ref<ExtensionInfo[]>([])
 const busy = ref('')
@@ -39,7 +40,7 @@ async function install(name: string) {
 
 onMounted(() => {
   void load()
-  if (typeof window !== 'undefined' && (window as any).runtime) {
+  if (hasWailsRuntime()) {
     unsubs.push(EventsOn('extension:progress', () => { void load() }))
   }
 })

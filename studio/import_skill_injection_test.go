@@ -19,7 +19,7 @@ import (
 // arbitrary-file-write primitive triggered just by importing a CSV with a
 // hostile column name. The importer now additionally normalizes every
 // column name to a safe identifier (NormalizeName) before it ever reaches
-// CREATE TABLE, on top of WriteImportSkill's own engine.QuoteIdent
+// CREATE TABLE, on top of WriteImportSkill's own session.QuoteIdent
 // quoting — either alone is enough to block this, and this test proves
 // both together still do.
 //

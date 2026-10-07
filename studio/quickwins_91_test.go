@@ -12,17 +12,17 @@ import (
 
 // --- #91 quick wins: studio binding tests ---
 
-// TestSaveQuery_ReturnsID proves SaveQuery("", ...) returns a non-empty id,
-// and calling SaveQuery(id, ...) again updates the same row rather than
+// TestSaveQueryOn_ReturnsID proves SaveQueryOn(no id) returns a non-empty id,
+// and calling SaveQueryOn(id) again updates the same row rather than
 // creating a second one (#91: the id used to be discarded entirely).
-func TestSaveQuery_ReturnsID(t *testing.T) {
+func TestSaveQueryOn_ReturnsID(t *testing.T) {
 	app := newOpenApp(t)
 
-	first, err := app.SaveQuery("", "First title", "SELECT 1", "", "")
+	first, err := app.SaveQueryOn(SaveQueryRequest{Title: "First title", SQL: "SELECT 1"})
 	require.NoError(t, err)
 	require.NotEmpty(t, first.ID)
 
-	second, err := app.SaveQuery(first.ID, "Second title", "SELECT 2", "", first.Rev)
+	second, err := app.SaveQueryOn(SaveQueryRequest{ID: first.ID, Title: "Second title", SQL: "SELECT 2", Rev: first.Rev})
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, second.ID)
 

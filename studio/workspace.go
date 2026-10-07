@@ -244,6 +244,10 @@ type ConflictRequest struct {
 	// (notebooks and queries). "Keep mine" only overwrites that revision: a file that
 	// changed again meanwhile is a fresh conflict.
 	Rev string `json:"rev"`
+	// Connection (queries) is the editor's current "Run on" choice, which "Keep
+	// mine" and "Save as copy" write. Absent keeps the connection on disk; ""
+	// is the workspace default.
+	Connection *string `json:"connection,omitempty"`
 }
 
 // ConflictResult says where the resolved item lives now.
@@ -635,17 +639,6 @@ func (a *App) OpenWorkspaceReadOnly(path string) (*OpenWorkspaceResult, error) {
 	return a.open(path, openReadOnly)
 }
 
-// SwitchRequest names the workspace to switch to.
-type SwitchRequest struct {
-	Path string `json:"path"`
-}
-
-// SwitchWorkspace closes the open workspace (releasing its hub) and opens
-// another. The frontend flushes its pending notebook saves first.
-func (a *App) SwitchWorkspace(req SwitchRequest) (*OpenWorkspaceResult, error) {
-	return a.open(req.Path, openAuto)
-}
-
 func (a *App) open(path string, mode openMode) (*OpenWorkspaceResult, error) {
 	path = strings.TrimSpace(path)
 	if strings.EqualFold(filepath.Ext(path), ".vibe") {
@@ -1033,7 +1026,7 @@ func (a *App) connectionInfosLocked() []ConnectionInfo {
 	for _, i := range a.sess.ConnectionInfos() {
 		infos[i.Name] = i
 	}
-	out := make([]ConnectionInfo, 0)
+	out := make([]ConnectionInfo, 0, len(a.ws.Connections()))
 	for _, c := range a.ws.Connections() {
 		ci := ConnectionInfo{
 			Name: c.Name, Type: c.Type, Scope: string(c.Scope), ReadOnly: c.IsReadOnly(),
@@ -1505,10 +1498,19 @@ func (a *App) resolveQueryConflict(ctx context.Context, req ConflictRequest) (*C
 		}
 		return &ConflictResult{ID: q.ID, Rev: q.Rev, Title: q.Title}, nil
 	}
-	// Keep what the editor does not edit (connection, parameters, description).
+	// Keep what the editor does not edit (parameters, description); the connection
+	// is the editor's when it sent one.
 	q := &queries.Query{Title: str(req.Data, "title"), SQL: str(req.Data, "sql"), Engine: "duckdb", Parameters: []queries.Param{}}
 	if base, err := store.Get(ctx, req.ID); err == nil && base != nil {
 		q.Connection, q.Description, q.Parameters, q.Engine = base.Connection, base.Description, base.Parameters, base.Engine
+	}
+	if req.Connection != nil {
+		if *req.Connection != "" {
+			if err := session.ValidateName(*req.Connection); err != nil {
+				return nil, fmt.Errorf("unknown connection %q", *req.Connection)
+			}
+		}
+		q.Connection = *req.Connection
 	}
 	if d := str(req.Data, "description"); d != "" {
 		q.Description = d

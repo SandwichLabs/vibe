@@ -1347,7 +1347,7 @@ func (h *Handler) handleProposeSchema(_ context.Context, req *Request) *Response
 }
 
 // handleSaveQuery persists a named, already-written SQL string to the
-// query store (queries/*.sql in a workspace, _vibe_queries in a .vibe; studio's SaveQuery binding does the same thing).
+// query store (queries/*.sql in a workspace, _vibe_queries in a .vibe; studio's SaveQueryOn binding does the same thing).
 // Unlike build_query it does not render SQL from QBE conditions.
 func (h *Handler) handleSaveQuery(ctx context.Context, req *Request) *Response {
 	title, _ := req.Params["title"].(string)

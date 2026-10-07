@@ -12,6 +12,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { flushAll } from './usePendingSaves'
 import { askConfirm } from './useConfirm'
 import { errorText } from '../lib/errors'
+import { hasWailsRuntime } from '../lib/wails'
 
 export const workspaceInfo = ref<WorkspaceInfo | null>(null)
 export const workspaceOpen = computed(() => workspaceInfo.value !== null)
@@ -29,7 +30,6 @@ export const newWorkspaceOpen = ref(false)
 export const takeOverOpen = ref(false)
 export const switcherOpen = ref(false)
 
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 
 let started = false
 const unsubs: Array<() => void> = []

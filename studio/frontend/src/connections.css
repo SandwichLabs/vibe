@@ -192,7 +192,6 @@
 .menu.floating { position: fixed; z-index: 80; min-width: 240px; }
 .type-grid .typecard[aria-disabled="true"] { pointer-events: none; }
 .page-narrow { max-width: 920px; }
-.sdot-sr { position: absolute; left: -9999px; }
 a.btn, a.icon-btn, a.linkbtn { text-decoration: none; }
 p.help { font-size: 13px; line-height: 1.5; color: var(--sh-graphite); }
 .page-subhead { flex-wrap: wrap; row-gap: 8px; }

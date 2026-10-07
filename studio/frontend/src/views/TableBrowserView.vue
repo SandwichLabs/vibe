@@ -9,6 +9,7 @@ import { connect } from '../composables/useConnections'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { formatCell, cellClass, cellEditText, isNumericType } from '../lib/formatCell'
+import { hasWailsRuntime } from '../lib/wails'
 
 // #82: opening /tables?table=orders (e.g. "Open table →" after an import)
 // pre-selects that table once the table list has loaded.
@@ -206,7 +207,6 @@ watch(() => route.query.table, applyRouteTable)
 // import, another tab, etc. Previously this view only ever loaded once on
 // mount, so a table the agent just created stayed invisible until a manual
 // reload (review fix #6, mirroring DashboardView's identical listener).
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 async function onDataChanged() {
   await loadTables()
   if (selectedTable.value) {

@@ -19,6 +19,7 @@ import { errorText } from '../lib/errors'
 import { formatCell, cellClass, isNumericType } from '../lib/formatCell'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from '../composables/usePendingSaves'
+import { hasWailsRuntime } from '../lib/wails'
 
 const queries = ref<QuerySummary[]>([])
 const selectedId = ref<string | null>(null)
@@ -183,6 +184,7 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
       kind: 'query', id, action,
       data: { title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '' },
       rev: conflictRev,
+      connection: conn.value,
     })
     conflict.value = null
     if (action === 'overwrite') {
@@ -306,7 +308,6 @@ function handleKeydown(e: KeyboardEvent) {
 // changes — an agent's save_query tool call, another tab, etc. Mirrors
 // TableBrowserView's identical listener (#91: an agent-saved query used to
 // stay invisible in the rail until a manual reload).
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 async function onDataChanged() {
   await loadQueries()
 }

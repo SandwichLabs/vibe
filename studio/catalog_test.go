@@ -50,10 +50,10 @@ func TestStudio_SecondCatalog_BrowseAndDescribe(t *testing.T) {
 	assert.True(t, byName["local"].Default, "the workspace's own database is the default")
 	assert.Equal(t, "ok", byName["local"].Status)
 
-	tabs, err := app.ListCatalogTables("other")
+	tabs, err := catalogTables(app, "other")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"other.main.items"}, tabs)
-	def, err := app.ListCatalogTables("")
+	def, err := catalogTables(app, "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{app.sess.DefaultCatalog() + ".main.items"}, def)
 
@@ -80,10 +80,6 @@ func TestStudio_SecondCatalog_BrowseAndDescribe(t *testing.T) {
 	fd, err := app.GetTableDataFiltered("other.main.items", FilterSpec{Conditions: []FilterCondition{{Column: "name", Op: "eq", Value: "alpha"}}}, 1, 10, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, fd.TotalRows)
-
-	stats, err := app.ListTableStats()
-	require.NoError(t, err)
-	require.Len(t, stats, 1, "table stats are the default catalog's")
 
 	_, err = app.DescribeTable(`other.main.items"; DROP TABLE x; --`)
 	assert.Error(t, err)
@@ -129,16 +125,12 @@ func TestStudio_SecondCatalog_SchemaChanges(t *testing.T) {
 	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_vibe_seq_made_id'").Scan(&seqs))
 	assert.Equal(t, 1, seqs)
 
-	require.NoError(t, app.AddColumn("other.main.items", "note", "VARCHAR"))
-	require.NoError(t, app.AddIndex("other.main.items", "idx_items_name", []string{"name"}, false))
-	require.NoError(t, app.AlterColumnType("other.main.items", "note", "VARCHAR"))
-	require.NoError(t, app.DropColumn("other.main.items", "note"))
 	d, err := app.DescribeTable("other.main.items")
 	require.NoError(t, err)
 	assert.Len(t, d.Columns, 2)
 
 	require.NoError(t, app.DropTable("other.main.made"))
-	tabs, err := app.ListCatalogTables("other")
+	tabs, err := catalogTables(app, "other")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"other.main.items"}, tabs)
 }
@@ -251,9 +243,6 @@ func TestStudio_UnknownAndInternalConnectionsRefused(t *testing.T) {
 func TestStudio_SchemaChangeOnCatalogDotTable(t *testing.T) {
 	app := appWithSecondCatalog(t)
 	// "other.items": a catalog qualifier with no schema.
-	require.NoError(t, app.AddIndex("other.items", "idx_x", []string{"name"}, false))
-	require.NoError(t, app.AddColumn("other.items", "note", "VARCHAR"))
-	require.NoError(t, app.DropColumn("other.items", "note"))
 	d, err := app.DescribeTable("other.items")
 	require.NoError(t, err)
 	assert.Len(t, d.Columns, 2)
@@ -267,11 +256,26 @@ func TestStudio_OpenTransactionFromEditorDoesNotLoseWork(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, app.CreateTable("after_begin", []ColumnInfo{{Name: "id", Type: "INTEGER", PK: true}}))
-	require.NoError(t, app.AddColumn("after_begin", "note", "VARCHAR"))
+	_, err = app.ExecuteQuery("ALTER TABLE after_begin ADD COLUMN note VARCHAR")
+	require.NoError(t, err)
 	require.NoError(t, app.sess.DB().Ping(), "the pool is not blocked by a leaked transaction")
 
 	reopenApp(t, app)
 	d, err := app.DescribeTable("after_begin")
 	require.NoError(t, err)
 	assert.Len(t, d.Columns, 2, "the table and column persisted across reopen")
+}
+
+// catalogTables lists one connection's default-schema tables, qualified, the
+// way the (removed) ListCatalogTables binding did; "" is the default catalog.
+func catalogTables(app *App, connection string) ([]string, error) {
+	tabs, err := app.sess.ListTables(app.ctxOrBackground(), connection, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(tabs))
+	for _, t := range tabs {
+		out = append(out, t.Ref().String())
+	}
+	return out, nil
 }

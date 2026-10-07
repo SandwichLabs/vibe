@@ -154,7 +154,7 @@ func TestSwitchWorkspace_NoLostEditsAndReleasesHub(t *testing.T) {
 	nb, err := app.CreateNotebook("Alpha notebook")
 	require.NoError(t, err)
 
-	resB, err := app.SwitchWorkspace(SwitchRequest{Path: b})
+	resB, err := app.OpenWorkspace(b)
 	require.NoError(t, err)
 	assert.NotEqual(t, resA.Info.SessionID, resB.Info.SessionID)
 	_, err = hub.ReadHolder(resA.Info.Root)
@@ -169,7 +169,7 @@ func TestSwitchWorkspace_NoLostEditsAndReleasesHub(t *testing.T) {
 	_, err = app.SaveNotebook(map[string]any{"id": nb.ID, "title": "late", "cells": []any{}}, resA.Info.SessionID)
 	require.Error(t, err)
 
-	_, err = app.SwitchWorkspace(SwitchRequest{Path: a})
+	_, err = app.OpenWorkspace(a)
 	require.NoError(t, err)
 	names, err = app.ListTables()
 	require.NoError(t, err)
@@ -301,13 +301,13 @@ func TestConflict_QueryAndSkill(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
 
-	q, err := app.SaveQuery("", "Orders", "SELECT 1", "", "")
+	q, err := app.SaveQueryOn(SaveQueryRequest{Title: "Orders", SQL: "SELECT 1"})
 	require.NoError(t, err)
 	qpath := filepath.Join(info.Root, "queries", q.ID+".sql")
 	body, err := os.ReadFile(qpath)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(qpath, append(body, []byte("\n-- edited elsewhere\n")...), 0o600))
-	_, err = app.SaveQuery(q.ID, "Orders", "SELECT 2", "", q.Rev)
+	_, err = app.SaveQueryOn(SaveQueryRequest{ID: q.ID, Title: "Orders", SQL: "SELECT 2", Rev: q.Rev})
 	require.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix))
 	cp, err := app.ResolveConflict(ConflictRequest{Kind: "query", ID: q.ID, Action: "saveCopy",
@@ -628,7 +628,7 @@ func TestRelease_DoesNotCloseAWorkspaceSwitchedToDuringTheGrace(t *testing.T) {
 	go func() { app.onReleaseRequested(); close(done) }()
 	time.Sleep(50 * time.Millisecond) // inside the grace window
 	second := newWorkspaceDir(t, "Second")
-	_, err = app.SwitchWorkspace(SwitchRequest{Path: second})
+	_, err = app.OpenWorkspace(second)
 	require.NoError(t, err)
 	<-done
 	info, err := app.GetWorkspaceInfo()
@@ -642,7 +642,7 @@ func TestSwitch_ToABrokenFolderKeepsTheCurrentWorkspace(t *testing.T) {
 	require.NoError(t, err)
 	bad := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(bad, workspace.ConfigFile), []byte("version: [not, valid"), 0o600))
-	_, err = app.SwitchWorkspace(SwitchRequest{Path: bad})
+	_, err = app.OpenWorkspace(bad)
 	require.Error(t, err)
 	info, err := app.GetWorkspaceInfo()
 	require.NoError(t, err)
@@ -651,7 +651,7 @@ func TestSwitch_ToABrokenFolderKeepsTheCurrentWorkspace(t *testing.T) {
 	assert.NoError(t, err, "the current workspace still holds its hub")
 }
 
-func TestSaveQuery_KeepsFieldsTheEditorDoesNotEdit(t *testing.T) {
+func TestSaveQueryOn_KeepsParametersAndDescription_ConnectionFollowsEditor(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
 	// A query written by the CLI or the agent, with a connection and a description.
@@ -661,13 +661,26 @@ func TestSaveQuery_KeepsFieldsTheEditorDoesNotEdit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "local", got.Connection)
 
-	_, err = app.SaveQuery("daily", "Daily", "SELECT 2", "", got.Rev)
+	_, err = app.SaveQueryOn(SaveQueryRequest{ID: "daily", Title: "Daily", SQL: "SELECT 2", Rev: got.Rev, Connection: got.Connection})
 	require.NoError(t, err)
 	after, err := app.GetQuery("daily")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 2", after.SQL)
-	assert.Equal(t, "local", after.Connection, "the connection survives a Studio save")
+	assert.Equal(t, "local", after.Connection, "the editor sent the connection it loaded")
 	assert.Equal(t, "by the agent", after.Description)
+
+	// The editor's "Run on" choice is authoritative: a change, and a clear, are saved.
+	_, err = app.SaveQueryOn(SaveQueryRequest{ID: "daily", Title: "Daily", SQL: "SELECT 2", Rev: after.Rev, Connection: "other"})
+	require.NoError(t, err)
+	after, _ = app.GetQuery("daily")
+	assert.Equal(t, "other", after.Connection)
+	assert.Equal(t, "by the agent", after.Description, "the description is kept")
+	_, err = app.SaveQueryOn(SaveQueryRequest{ID: "daily", Title: "Daily", SQL: "SELECT 2", Rev: after.Rev})
+	require.NoError(t, err)
+	after, _ = app.GetQuery("daily")
+	assert.Empty(t, after.Connection)
+	require.NoError(t, os.WriteFile(filepath.Join(info.Root, "queries", "daily.sql"),
+		[]byte("-- vibe: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
 
 	// Keep mine / save as copy keep them too.
 	_, err = app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "overwrite", Data: map[string]any{"title": "Daily", "sql": "SELECT 3"}})
@@ -678,6 +691,25 @@ func TestSaveQuery_KeepsFieldsTheEditorDoesNotEdit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "local", c.Connection)
 	assert.Equal(t, "by the agent", c.Description)
+
+	// Conflict resolution uses the editor's "Run on" choice when it sends one.
+	other := "other"
+	_, err = app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "overwrite", Connection: &other,
+		Data: map[string]any{"title": "Daily", "sql": "SELECT 5"}})
+	require.NoError(t, err)
+	kept, err := app.GetQuery("daily")
+	require.NoError(t, err)
+	assert.Equal(t, "other", kept.Connection, "Keep mine writes the editor's connection, not the one on disk")
+	assert.Equal(t, "SELECT 5", kept.SQL)
+	empty := ""
+	cp2, err := app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "saveCopy", Connection: &empty,
+		Data: map[string]any{"title": "Daily", "sql": "SELECT 6"}})
+	require.NoError(t, err)
+	c2, _ := app.GetQuery(cp2.ID)
+	assert.Empty(t, c2.Connection, "an empty choice is the workspace default")
+	bad := `x"; DROP`
+	_, err = app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "overwrite", Connection: &bad, Data: map[string]any{"title": "Daily", "sql": "SELECT 7"}})
+	require.Error(t, err)
 }
 
 func TestSetPreferences_AlwaysKeepsRecentsFromDisk(t *testing.T) {
@@ -752,7 +784,7 @@ func TestSetWorkspaceSettings_RefusesAStaleTeamForm(t *testing.T) {
 func TestQueryKeepMine_RefusesWhenTheFileChangedAgain(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
-	q, err := app.SaveQuery("", "Orders", "SELECT 1", "", "")
+	q, err := app.SaveQueryOn(SaveQueryRequest{Title: "Orders", SQL: "SELECT 1"})
 	require.NoError(t, err)
 	raised, err := app.GetQuery(q.ID)
 	require.NoError(t, err)

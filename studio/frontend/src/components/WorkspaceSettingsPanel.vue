@@ -8,6 +8,7 @@ import AgentSettings from './AgentSettings.vue'
 import { workspaceInfo, isReadOnly, refreshWorkspaceInfo } from '../composables/useWorkspace'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText, settingsError } from '../lib/errors'
+import { hasWailsRuntime } from '../lib/wails'
 
 const info = computed(() => workspaceInfo.value)
 
@@ -96,7 +97,7 @@ async function copyConfig(kind: 'desktop' | 'code') {
 let unsub: (() => void) | null = null
 onMounted(() => {
   void loadMCP()
-  if (typeof window !== 'undefined' && (window as any).runtime) unsub = EventsOn('workspace:changed', loadMCP)
+  if (hasWailsRuntime()) unsub = EventsOn('workspace:changed', loadMCP)
 })
 onUnmounted(() => unsub?.())
 </script>

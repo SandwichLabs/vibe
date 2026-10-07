@@ -70,8 +70,8 @@ function onApply() {
 function onClose() {
   try {
     const taskId = props.dialog.state.taskId
-    if (taskId && (window as any).go?.main?.App?.CancelAgentTask) {
-      ;(window as any).go.main.App.CancelAgentTask(taskId)
+    if (taskId && window.go?.main?.App?.CancelAgentTask) {
+      window.go.main.App.CancelAgentTask(taskId)
     }
   } catch {
     // best-effort cancel; closing the dialog must never throw

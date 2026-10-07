@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { takeOverOpen } from './useWorkspace'
+import { hasWailsRuntime } from '../lib/wails'
 
 export const connectionList = ref<ConnectionInfo[]>([])
 export const relaunch = ref<{ required: boolean; message: string }>({ required: false, message: '' })
@@ -20,7 +21,6 @@ export const connecting = ref<Set<string>>(new Set())
 export const signInFor = ref<string | null>(null)
 export const extensionFor = ref<{ connection: string; extension: string } | null>(null)
 
-const hasWailsRuntime = () => typeof window !== 'undefined' && !!(window as any).runtime
 let started = false
 const unsubs: Array<() => void> = []
 
