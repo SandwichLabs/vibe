@@ -56,7 +56,7 @@ No new endpoint type and no new IPC. An external agent gets Vibe's tools the way
 
 Exactly one approver answers any request, so there is no race between a card and a prompt. 
 
-**Agent support (checked 2026-10-07):** Claude Code supports MCP elicitation. Codex does not (openai/codex#13405 was closed as not planned 2026-04-02), so Codex in the terminal approves non-local writes only with Studio open. Gemini CLI and OpenCode are B0 items.
+**Agent support (B0 spike, observed 2026-10-08, [findings](spike-byo-agent-findings.md)):** Claude Code and the Codex TUI both declare and show MCP elicitation (form and url); openai/codex#13405 was reopened and Codex now ships it. Non-interactive runs (`claude -p`, `codex exec`) answer an elicitation at once without asking anyone, so the approver must treat that as a decline and keep its own deadline. Gemini CLI and OpenCode do not declare elicitation: with them, non-local writes are approved in Studio or refused.
 
 **Context for the agent.** The MCP server returns a short orientation in the `initialize` response's `instructions` field (mcp-go `server.WithInstructions`), which clients add to the model's context. Every client gets it, whatever launched it. It covers the workspace name, the connection names and what they are, that Vibe's tools are available and `help` explains them, and the workspace's skills by name and description (bodies via `read_skill`, as today). Nothing secret is in it.
 
@@ -112,10 +112,10 @@ Same process as epic #105: one issue at a time, Sonnet implementer, Opus adversa
 - **A3** `cloudflare` provider (#160): Cloudflare AI Gateway REST API (`/ai/v1/chat/completions`), `llm.account_id` / `llm.gateway`, Cloudflare API token. **Done, shipped with #148.** Not run against a live account (no token available).
 
 ### Phase B — agents you run yourself, over MCP (small–medium)
-- **B0 Spike.** No product code; findings go in `docs/plans/spike-byo-agent-findings.md`. For Claude Code, Codex, Gemini CLI and OpenCode, establish:
+- **B0 Spike. Done (#149):** [`spike-byo-agent-findings.md`](spike-byo-agent-findings.md). Corrections it made: Codex supports elicitation; Codex and Gemini scrub the MCP server's environment (keychain access needs variables forwarded by name); the server's cwd is the agent's, so `--workspace` is always needed; Claude Code truncates `instructions` at 2,048 characters; under ACP both adapters ask permission for every Vibe tool call. No product code; findings go in `docs/plans/spike-byo-agent-findings.md`. For Claude Code, Codex, Gemini CLI and OpenCode, establish:
   1. the config snippet or command each uses to register a stdio MCP server;
   2. whether each shows the server's `instructions` to the model;
-  3. elicitation as each actually shows it, end to end against an mcp-go stdio server (Codex is known to lack it);
+  3. elicitation as each actually shows it, end to end against an mcp-go stdio server (Codex was then believed to lack it; the spike found it does);
   4. for Phase C, ahead of time: `claude-agent-acp` and `codex-acp` driven from `acp-go-sdk` (initialize, new session, prompt, stream, cancel); their not-signed-in errors; their `mcpCapabilities`; and the `session/request_permission` shapes;
   5. runtime prerequisites (Node, etc.) to document.
 - **B1** Elicitation approver for the headless stdio owner (`internal/hub` / `internal/mcp`):
@@ -143,7 +143,7 @@ Same process as epic #105: one issue at a time, Sonnet implementer, Opus adversa
 |---|---|
 | Anthropic changes subscription terms again (a credit cap, or ACP excluded). | Vibe holds no Claude credential and never signs in for you, so a change affects your billing, not Vibe's compliance. Keep §2 current, and show the agent's own error when a plan limit is hit. Running Claude Code yourself with Vibe as an MCP server is the most clearly permitted use. |
 | Agents differ in MCP config, elicitation and ACP support, and all of it changes fast. | The B0 spike sets the compatibility list. Per-agent snippets and ACP launch recipes each live in one catalog. Contract tests use fake agents. Docs name the versions tested. |
-| Without elicitation (Codex today), terminal users cannot approve non-local writes. | The Studio card when Studio is open, and a clear refusal message otherwise. Local-file writes follow your "Ask before changes" setting as today. |
+| Without elicitation (Gemini CLI, OpenCode, and any non-interactive run), terminal users cannot approve non-local writes. | The Studio card when Studio is open, and a clear refusal message otherwise. Local-file writes follow your "Ask before changes" setting as today. |
 | A cloned repo makes Vibe run a program. | Commands come only from per-person config. A hostile-`vibe.yaml` test covers it. |
 | Two writers at once (the agent editing a notebook file while you edit it in Studio). | The existing compare-and-write, the watcher reload and the conflict UI. |
 | Grounding is weaker for external agents. | The badge plus "Ask it to verify" in Studio, documented in `external-agents.md` for agents you run yourself. |

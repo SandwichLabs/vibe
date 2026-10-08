@@ -8,8 +8,9 @@ Start with [`direction.md`](direction.md), then the reference for the surface yo
 |---|---|
 | [`direction.md`](direction.md) | The north star: workspaces, connections, the eight primitives, and (§9) what changed from the plan |
 | [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic #105 (delivered; "as built" summary at the top) |
-| [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Proposed: OpenAI and Ollama providers, `vibe agent` (your own Claude Code / Codex / Gemini CLI in the terminal with Vibe wired in), the same agents in Studio over ACP, and the security posture of that mode |
+| [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic #157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
+| [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
 
 ## Reference
 
