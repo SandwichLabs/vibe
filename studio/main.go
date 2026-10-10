@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -16,7 +17,19 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Version info set via ldflags (`task install:studio`).
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Printf("vibe-studio %s (commit: %s, built: %s)\n", version, commit, date)
+		return
+	}
+
 	// The MotherDuck connection test re-executes the running binary with this
 	// hidden argument (one MotherDuck token per process, #115). When Studio is
 	// that binary it answers the same way `vibe __conn-test` does, before any

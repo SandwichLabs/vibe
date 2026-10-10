@@ -9,6 +9,24 @@ vars:
   # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
   # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
   WAILS_GOTOOLCHAIN: go1.26.3
+  # `task install` stamps these into both binaries, as goreleaser does for releases.
+  INSTALL_DIR: '{{.HOME}}/go/bin'
+  VERSION:
+    sh: git describe --tags --always --dirty
+  COMMIT:
+    sh: git rev-parse --short HEAD
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  CLI_LDFLAGS: >-
+    -s -w
+    -X github.com/sandwich-labs/vibe-app/cmd.version={{.VERSION}}
+    -X github.com/sandwich-labs/vibe-app/cmd.commit={{.COMMIT}}
+    -X github.com/sandwich-labs/vibe-app/cmd.date={{.DATE}}
+  STUDIO_LDFLAGS: >-
+    -s -w
+    -X main.version={{.VERSION}}
+    -X main.commit={{.COMMIT}}
+    -X main.date={{.DATE}}
 
 tasks:
   default:
@@ -101,6 +119,31 @@ tasks:
       GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - wails build -tags webkit2_41
+
+  install:
+    desc: Versioned build of the vibe CLI and Vibe Studio into ~/go/bin (Linux)
+    cmds:
+      - task: install:cli
+      - task: install:studio
+
+  install:cli:
+    desc: Versioned build of the vibe CLI into ~/go/bin
+    cmds:
+      - mkdir -p {{.INSTALL_DIR}}
+      - go build -ldflags "{{.CLI_LDFLAGS}}" -o {{.INSTALL_DIR}}/{{.BINARY}} ./
+      - '{{.INSTALL_DIR}}/{{.BINARY}} --version'
+
+  install:studio:
+    desc: Versioned build of Vibe Studio into ~/go/bin (Linux; `vibe studio --gui` finds it beside vibe)
+    platforms: [linux]
+    dir: studio
+    env:
+      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
+    cmds:
+      - wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
+      - mkdir -p {{.INSTALL_DIR}}
+      - install -m 755 build/bin/vibe-studio {{.INSTALL_DIR}}/vibe-studio
+      - '{{.INSTALL_DIR}}/vibe-studio --version'
 
   release:*:
     desc: Tag, build, and publish a release
