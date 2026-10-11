@@ -123,7 +123,7 @@ the same, so switching later is cheap.
 ## 4. Prerequisites (outside the repo)
 
 1. **Where downloads live.** Homebrew and the website need public asset
-   URLs. The likely path is open-sourcing `SandwichLabs/vibe-app`. The
+   URLs. The likely path is open-sourcing `SandwichLabs/vibe`. The
    fallback is publishing releases to a public `SandwichLabs/vibe` repo from
    this one's workflow, using a fine-grained token secret.
 2. **A new Apple Developer Program account.** The existing one is tied to a
