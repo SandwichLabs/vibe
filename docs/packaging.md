@@ -22,6 +22,8 @@ This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.gorel
   - `vibe-studio_<ver>_linux_<arch>.tar.gz`: `bin/vibe`, `bin/vibe-studio`, `share/applications/vibe-studio.desktop`, `share/mime/packages/vibe-bundle.xml`, `share/icons/hicolor/...` (no icon is committed yet, so none ships), `VERSION`.
 - **macOS:** `codesign --force --deep -s -` (no hardened runtime, so downloaded DuckDB extensions still load), then `codesign --verify --deep --strict`. No notarisation.
 - **Release job** (the only one with `contents: write`): `checksums.txt` over all archives, `actions/attest-build-provenance` on every archive, `install.sh` uploaded when it exists in the repo root, notes from the matching `CHANGELOG.md` section or auto-generated. Attestations need GitHub Enterprise on a private repo, so the step runs only when `github.event.repository.private == false` and starts working when the repo goes public.
+- **Deviation from audit §4:** asset names carry the version (`vibe_<ver>_<os>_<arch>.tar.gz`, `x86_64`/`amd64` as `amd64`). `install.sh` resolves the latest tag from the `releases/latest` redirect (#47). The archive contents follow §4.
+- **Safety:** the tag is validated against `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$` before use (also for dispatch input), builds use no caches, and a re-run refuses to touch a release that is already published. Any `-suffix` tag is a prerelease. Archives are reproducible (sorted, root-owned, commit-time mtimes).
 - **Cutting a release:** `git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0`, review the draft, then publish it. `task release` prints this.
 
 ## 1. Where things stand

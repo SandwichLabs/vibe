@@ -9,7 +9,7 @@ vars:
   # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
   # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
   WAILS_GOTOOLCHAIN: go1.26.3
-  # `task install` stamps these into both binaries, (release.yml stamps the same flags from the tag).
+  # `task install` stamps these into both binaries (release.yml stamps the same flags from the tag).
   INSTALL_DIR: '{{.HOME}}/go/bin'
   VERSION:
     sh: git describe --tags --always --dirty

@@ -27,8 +27,24 @@ docs() { # $1 = dir to receive the shared text files
 	return 0
 }
 
+# Reproducible tarballs: sorted entries, fixed owner, mtimes at the tag commit's time, no gzip timestamp.
+epoch="${SOURCE_DATE_EPOCH:-0}"
 pack() { # $1 = stage dir, $2 = archive path
-	(cd "$1" && tar -czf "$2" -- *)
+	(
+		cd "$1"
+		if [ "$(uname -s)" = Darwin ]; then
+			find . -exec touch -t "$(date -u -r "$epoch" +%Y%m%d%H%M.%S)" {} +
+		else
+			find . -exec touch -h -d "@$epoch" {} +
+		fi
+		find . ! -name . | LC_ALL=C sort >../list.txt
+		if tar --version 2>/dev/null | grep -q GNU; then
+			tar --no-recursion --owner=0 --group=0 --numeric-owner --mtime="@$epoch" -cf - -T ../list.txt
+		else
+			tar --no-recursion --uid 0 --gid 0 --uname root --gname wheel -cf - -T ../list.txt
+		fi | gzip -n >"$2"
+		rm -f ../list.txt
+	)
 }
 
 # CLI-only archive: the binary at the root.
