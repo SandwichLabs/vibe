@@ -12,6 +12,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }))
 
 import SkillsView from './SkillsView.vue'
+import { resolveConfirmChoice } from '../composables/useConfirm'
 import { flushAll, _resetForTests as resetSaves } from '../composables/usePendingSaves'
 
 const SKILLS = [
@@ -163,5 +164,59 @@ describe('SkillsView', () => {
       expect(res.failed).toHaveLength(1)
       expect(res.failed[0].error).toContain('changed on disk')
     })
+  })
+
+  it('Keep mine sends the revision on disk when the banner was raised (#57)', async () => {
+    const listed = [{ ...SKILLS[2], rev: 'disk-1' }]
+    const app = makeApp({
+      ListSkills: vi.fn(async () => listed.map((x) => ({ ...x }))),
+      SaveSkill: vi.fn(async () => { throw new Error('conflict: skills/revenue-rules changed on disk since it was loaded') }),
+      ResolveConflict: vi.fn(async () => ({ id: 'revenue-rules', rev: 'disk-2', title: 'revenue-rules' })),
+    })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.openEdit({ ...listed[0], rev: 'stale-0' })
+    await flushPromises()
+    vm.formInstructions = 'mine'
+    await vm.submitEditor()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="conflict-banner"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="conflict-overwrite"]').trigger('click')
+    await flushPromises()
+    resolveConfirmChoice('confirm')
+    await flushPromises()
+    expect((app as any).ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ kind: 'skill', id: 'revenue-rules', action: 'overwrite', rev: 'disk-1' }))
+  })
+
+  it('a refused Keep mine re-fetches the rev; choosing again sends the new one and succeeds', async () => {
+    let diskRev = 'disk-1'
+    const base = SKILLS[2]
+    const app = makeApp({
+      ListSkills: vi.fn(async () => [{ ...base, rev: diskRev }]),
+      SaveSkill: vi.fn(async () => { throw new Error('conflict: skills/revenue-rules changed on disk since it was loaded') }),
+      ResolveConflict: vi.fn()
+        .mockImplementationOnce(async () => { diskRev = 'disk-2'; throw new Error('conflict: skills/revenue-rules changed on disk since it was loaded') })
+        .mockImplementationOnce(async () => ({ id: 'revenue-rules', rev: 'disk-3', title: 'revenue-rules' })),
+    })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.openEdit({ ...base, rev: 'stale-0' })
+    await flushPromises()
+    vm.formInstructions = 'mine'
+    await vm.submitEditor()
+    await flushPromises()
+    const keepMine = async () => {
+      await wrapper.find('[data-testid="conflict-overwrite"]').trigger('click')
+      await flushPromises()
+      resolveConfirmChoice('confirm')
+      await flushPromises()
+    }
+    await keepMine()
+    expect(app.ResolveConflict).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'overwrite', rev: 'disk-1' }))
+    expect(wrapper.find('[data-testid="conflict-banner"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('changed on disk again')
+    await keepMine()
+    expect(app.ResolveConflict).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'overwrite', rev: 'disk-2' }))
+    expect(wrapper.find('[data-testid="conflict-banner"]').exists()).toBe(false)
   })
 })

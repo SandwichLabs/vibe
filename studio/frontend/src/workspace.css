@@ -183,6 +183,9 @@ kbd {
 .field-input[readonly] { background: var(--sh-paper-2); color: var(--sh-graphite); cursor: default; border-style: dashed; }
 .ws-banner { flex-wrap: wrap; }
 .ws-banner .row { flex-wrap: wrap; }
+/* in a narrow container (an edit modal) the text takes a line of its own, the buttons wrap below */
+.ws-banner .bt { flex: 1 1 16rem; }
+.card > .ws-banner { padding: 12px 14px; border: 2px solid var(--vibe-border); border-radius: var(--sh-radius-sm); }
 .toast-undo { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--vibe-code-bg); color: var(--vibe-code-fg); border: 2px solid var(--vibe-border); border-radius: var(--sh-radius-sm); box-shadow: var(--sh-shadow-lg); font-size: 14px; }
 .toast-undo .linkbtn { color: var(--vibe-code-fg); }
 .mcp-approvals { position: fixed; right: 16px; bottom: 16px; z-index: 65; width: min(440px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }

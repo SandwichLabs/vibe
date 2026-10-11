@@ -346,6 +346,61 @@ func TestConflict_QueryAndSkill(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestConflict_SkillKeepMineWithBannerRev(t *testing.T) {
+	app := newOpenApp(t)
+	info, _ := app.GetWorkspaceInfo()
+	require.NoError(t, app.SaveSkill("rules", "desc", "do things", "", ""))
+	diskRev := func() string {
+		all, err := app.ListSkills()
+		require.NoError(t, err)
+		for _, s := range all {
+			if s.Name == "rules" {
+				return s.Rev
+			}
+		}
+		t.Fatal("skill missing")
+		return ""
+	}
+	spath := filepath.Join(info.Root, "skills", "rules", "SKILL.md")
+	edit := func(line string) {
+		b, err := os.ReadFile(spath)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(spath, append(b, []byte(line)...), 0o600))
+	}
+	mine := map[string]any{"description": "desc", "instructions": "mine"}
+
+	edit("\nfirst outside edit\n")
+	bannerRev := diskRev() // what the banner was raised against
+	edit("\nsecond outside edit\n")
+	_, err := app.ResolveConflict(ConflictRequest{Kind: "skill", ID: "rules", Action: "overwrite", Rev: bannerRev, Data: mine})
+	require.Error(t, err, "a second outside edit must not be overwritten")
+	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix))
+	b, err := os.ReadFile(spath)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "second outside edit")
+
+	// The banner's revision still matches: Keep mine goes through.
+	_, err = app.ResolveConflict(ConflictRequest{Kind: "skill", ID: "rules", Action: "overwrite", Rev: diskRev(), Data: mine})
+	require.NoError(t, err)
+	b, err = os.ReadFile(spath)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "mine")
+}
+
+func TestConflict_SkillWriteBackAfterDeleteOnDisk(t *testing.T) {
+	app := newOpenApp(t)
+	info, _ := app.GetWorkspaceInfo()
+	require.NoError(t, app.SaveSkill("gone", "desc", "original", "", ""))
+	spath := filepath.Join(info.Root, "skills", "gone", "SKILL.md")
+	require.NoError(t, os.Remove(spath))
+	_, err := app.ResolveConflict(ConflictRequest{Kind: "skill", ID: "gone", Action: "overwrite",
+		Data: map[string]any{"description": "desc", "instructions": "mine"}})
+	require.NoError(t, err, "Write it back must recreate the deleted skill")
+	b, err := os.ReadFile(spath)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "mine")
+}
+
 func TestWatcher_ExternalEditEmitsChangedOnDisk(t *testing.T) {
 	app := newBareApp(t)
 	var ev eventLog

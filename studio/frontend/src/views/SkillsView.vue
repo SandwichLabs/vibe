@@ -40,6 +40,17 @@ const saving = ref(false)
 const conflict = ref<{ deleted: boolean } | null>(null)
 const conflictBusy = ref(false)
 const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
+// The revision on disk when the banner was raised: "Keep mine" only overwrites that one.
+let conflictRev = ''
+function raiseConflict(deleted: boolean) {
+  conflict.value = { deleted }
+  conflictRev = ''
+  const id = editingOriginalName.value ?? formName.value
+  if (deleted || !id) return
+  window.go.main.App.ListSkills().then((all: SkillSummary[]) => {
+    if (conflict.value && (editingOriginalName.value ?? formName.value) === id) conflictRev = all.find((x) => x.name === id)?.rev ?? ''
+  }).catch(() => { /* falls back to an unconditional keep */ })
+}
 // What the editor was opened with, to tell "I edited" from "untouched".
 let openedWith = ''
 const formSnapshot = () => JSON.stringify([formDescription.value, formInstructions.value, formTableName.value])
@@ -123,7 +134,7 @@ async function submitEditor() {
     viewMode.value = 'rendered'
   } catch (e: any) {
     if (isConflict(e)) {
-      conflict.value = { deleted: false }
+      raiseConflict(false)
       formNameError.value = ''
     } else {
       formNameError.value = errorText(e)
@@ -144,7 +155,7 @@ async function flushPending() {
   try {
     await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
   } catch (e: any) {
-    if (isConflict(e)) conflict.value = { deleted: false }
+    if (isConflict(e)) raiseConflict(false)
     throw new Error(errorText(e))
   }
   await loadSkills()
@@ -168,10 +179,11 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
   conflictBusy.value = true
   try {
     const res = await window.go.main.App.ResolveConflict({
-      kind: 'skill', id, action,
+      kind: 'skill', id, action, rev: conflictRev,
       data: { description: formDescription.value, instructions: formInstructions.value, tableName: formTableName.value },
     })
     conflict.value = null
+    conflictRev = ''
     if (action === 'overwrite') {
       editingRev.value = res.rev
       showEditor.value = false
@@ -192,7 +204,13 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
     }
     if (action === 'saveCopy') errorMessage.value = `Saved your version as "${res.title}".`
   } catch (e: any) {
-    formNameError.value = errorText(e)
+    if (isConflict(e)) {
+      // The file changed again after the banner was raised: show it afresh.
+      raiseConflict(false)
+      formNameError.value = 'The file changed on disk again, so nothing was overwritten. Choose again.'
+    } else {
+      formNameError.value = errorText(e)
+    }
   } finally {
     conflictBusy.value = false
   }
@@ -214,7 +232,7 @@ function onDiskChange(p: { kind: string; id: string; op: string }) {
     })
     return
   }
-  conflict.value = { deleted: p.op === 'deleted' }
+  raiseConflict(p.op === 'deleted')
 }
 
 function deleteSkill(s: SkillSummary) {
