@@ -1,0 +1,165 @@
+name: CI
+
+# Linux runs on every PR. macOS minutes cost 10x on a private repo, so the macOS
+# smoke build runs only on push to main and on manual dispatch.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "1"
+  # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
+  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_VERSION: v2.11.0
+  # Build on 22.04 (glibc 2.35, webkit2gtk-4.1) so the Linux artifacts run on Ubuntu 22.04+, Debian 12+, Fedora 38+.
+  LINUX_TAGS: webkit2_41,duckdb_arrow
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GOFLAGS: -tags=webkit2_41,duckdb_arrow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: studio/frontend/package-lock.json
+
+      - name: Install system packages (CGO DuckDB, WebKitGTK, Xvfb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
+
+      # The Studio embeds frontend/dist, so build the frontend before any Go step that compiles ./studio.
+      - name: Frontend install
+        working-directory: studio/frontend
+        run: npm ci
+
+      - name: Frontend build
+        working-directory: studio/frontend
+        run: npm run build
+
+      - name: Frontend tests (vitest)
+        working-directory: studio/frontend
+        run: npm test
+
+      # Non-blocking until the ~315 known type errors are cleared: see #34 and #35.
+      - name: vue-tsc (non-blocking, #34/#35)
+        continue-on-error: true
+        working-directory: studio/frontend
+        run: npx vue-tsc --noEmit
+
+      - name: go vet
+        run: go vet ./...
+
+      # xvfb-run gives TestStudio_Gui* a display; without one they panic.
+      - name: go test
+        run: xvfb-run -a go test -count=1 ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.13.1
+
+      # Report-only for now: see #41 for making it blocking.
+      - name: govulncheck (report-only, #41)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  build-smoke:
+    name: build-smoke (${{ matrix.name }})
+    # macOS runs only on push to main and manual dispatch.
+    if: matrix.os != 'macos-15' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-amd64, os: ubuntu-22.04 }
+          - { name: linux-arm64, os: ubuntu-22.04-arm }
+          - { name: macos-arm64, os: macos-15 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: studio/frontend/package-lock.json
+
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+
+      - name: Install system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build the CLI
+        run: task build
+
+      - name: CLI round trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="$PWD/vibe"
+          "$bin" --version
+          dir="$(mktemp -d)"
+          cd "$dir"
+          "$bin" workspace init . --name ci-smoke </dev/null
+          test -f vibe.yaml
+          out="$("$bin" query "select 42 as answer" </dev/null)"
+          echo "$out"
+          grep -q 42 <<<"$out"
+
+      - name: Install the Wails CLI
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Build Studio (Linux)
+        if: runner.os == 'Linux'
+        working-directory: studio
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: wails build -tags ${{ env.LINUX_TAGS }}
+
+      - name: Build Studio (macOS)
+        if: runner.os == 'macOS'
+        working-directory: studio
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: wails build -tags duckdb_arrow
+
+      - name: Check the Studio binary exists
+        shell: bash
+        run: ls -l studio/build/bin/
