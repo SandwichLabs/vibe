@@ -116,7 +116,7 @@ fi
 
 # Use concat demuxer with frame duration
 LISTFILE="/tmp/qa_ffmpeg_list.txt"
-> "$LISTFILE"
+: > "$LISTFILE"
 for f in "$OUTDIR"/frame_*.png; do
   echo "file '$(realpath "$f")'" >> "$LISTFILE"
   echo "duration $FRAME_DUR" >> "$LISTFILE"
