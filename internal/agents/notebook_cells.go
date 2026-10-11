@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 )
 
 // --- add_query_cell / create_dashboard (#67 deferred part) ---

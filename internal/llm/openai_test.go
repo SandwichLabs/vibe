@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/agents"
 )
 
 const openAITestKey = "sk-test-NEEDLE-0123456789"

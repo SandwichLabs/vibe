@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sandwich-labs/vibe-app/internal/bundle"
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/bundle"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // bundlePassphraseEnv is the script-friendly way to give a bundle passphrase.

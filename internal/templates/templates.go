@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 )
 
 // Table describes one DuckDB user-data table to create for a template.

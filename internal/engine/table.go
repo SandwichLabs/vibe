@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // validPart reports whether a catalog or schema name is a safe identifier

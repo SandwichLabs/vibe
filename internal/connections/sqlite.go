@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // sqliteType attaches a SQLite file: ATTACH 'path' AS x (TYPE sqlite[, READ_ONLY]).

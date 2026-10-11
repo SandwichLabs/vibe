@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // FilterCondition is one structured QBE filter clause. Op is one of

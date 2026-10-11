@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 )
 
 // NotebooksModel is the read-only notebook list + cell dump view (#69):

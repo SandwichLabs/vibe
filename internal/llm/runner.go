@@ -30,9 +30,9 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openaicompat"
 
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/config"
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/config"
 )
 
 // Sandbox modes mirror internal/agents' SandboxMode values exactly (they are

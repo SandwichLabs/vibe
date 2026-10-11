@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/crud"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/crud"
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // --- Tables ---

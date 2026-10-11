@@ -19,9 +19,9 @@ vars:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   CLI_LDFLAGS: >-
     -s -w
-    -X github.com/sandwich-labs/vibe-app/cmd.version={{.VERSION}}
-    -X github.com/sandwich-labs/vibe-app/cmd.commit={{.COMMIT}}
-    -X github.com/sandwich-labs/vibe-app/cmd.date={{.DATE}}
+    -X github.com/SandwichLabs/vibe/cmd.version={{.VERSION}}
+    -X github.com/SandwichLabs/vibe/cmd.commit={{.COMMIT}}
+    -X github.com/SandwichLabs/vibe/cmd.date={{.DATE}}
   STUDIO_LDFLAGS: >-
     -s -w
     -X main.version={{.VERSION}}
@@ -45,7 +45,7 @@ tasks:
   build:
     desc: Build the vibe binary
     cmds:
-      - go build -o {{.BINARY}} ./
+      - go build -o {{.BINARY}} ./cmd/vibe
 
   test:
     desc: Run all tests (Go + Studio frontend)
@@ -130,7 +130,7 @@ tasks:
     desc: Versioned build of the vibe CLI into ~/go/bin
     cmds:
       - mkdir -p {{.INSTALL_DIR}}
-      - go build -ldflags "{{.CLI_LDFLAGS}}" -o {{.INSTALL_DIR}}/{{.BINARY}} ./
+      - go build -ldflags "{{.CLI_LDFLAGS}}" -o {{.INSTALL_DIR}}/{{.BINARY}} ./cmd/vibe
       - '{{.INSTALL_DIR}}/{{.BINARY}} --version'
 
   install:studio:

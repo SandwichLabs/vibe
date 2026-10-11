@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // ApprovalRequest describes one write operation waiting on the user's OK

@@ -9,7 +9,7 @@ import (
 
 	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver, for the dedicated parser connection below
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // --- the plan check (second layer) ------------------------------------------

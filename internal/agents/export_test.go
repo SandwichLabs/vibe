@@ -1,8 +1,8 @@
 package agents
 
 import (
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // SaveUserSkill is SaveUserSkillAt without a revision check: the shape most

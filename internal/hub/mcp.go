@@ -7,10 +7,10 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/agents"
+	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // MCPOption configures StartWorkspaceMCP.

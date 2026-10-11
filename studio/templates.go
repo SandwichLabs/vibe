@@ -4,7 +4,7 @@ package main
 // internal/templates; CreateWorkspace seeds the chosen one.
 
 import (
-	"github.com/sandwich-labs/vibe-app/internal/templates"
+	"github.com/SandwichLabs/vibe/internal/templates"
 )
 
 // TemplateInfo is a bundled starter template (name + one plain sentence).

@@ -2,8 +2,8 @@ package tui
 
 import (
 	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"

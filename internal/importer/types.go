@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // Type is one of the closed, friendly column types the import wizard offers.

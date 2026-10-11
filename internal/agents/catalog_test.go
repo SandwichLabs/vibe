@@ -3,7 +3,7 @@ package agents
 import (
 	"context"
 	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // sessionAccess is a WorkspaceAccess whose Session is a real hub with a

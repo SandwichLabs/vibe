@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/hub"
-	"github.com/sandwich-labs/vibe-app/internal/prefs"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/prefs"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

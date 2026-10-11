@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/sandwich-labs/vibe-app/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/spf13/cobra"
 )
 

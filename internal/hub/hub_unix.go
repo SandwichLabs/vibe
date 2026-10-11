@@ -11,8 +11,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/sandwich-labs/vibe-app/internal/filelock"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/filelock"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 const releaseSupported = true

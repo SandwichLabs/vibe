@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Lines Init seeds into the ignore files.

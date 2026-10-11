@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // FileStore keeps notebooks as notebooks/<id>.vnb under a workspace root.

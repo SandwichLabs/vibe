@@ -28,7 +28,7 @@ Automation is **Taskfile.yml**, not a Makefile.
 
 ```bash
 task              # default: lint + test + build
-task build        # build the vibe binary
+task build        # build the vibe binary (./cmd/vibe; also `go install github.com/SandwichLabs/vibe/cmd/vibe@latest`)
 task test         # Go + Vitest tests (alias: task t); task test:frontend is Vitest only
 task lint         # golangci-lint (task lint:fix to auto-fix)
 task studio:dev   # Wails dev server (NOT bare `wails dev`: needs -tags webkit2_41,duckdb_arrow)
@@ -43,7 +43,7 @@ CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`conf
 ## Architecture
 
 ```
-main.go, cmd/        Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
+cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
 studio/              Wails app: app.go (bindings), workspace.go, connections.go, secrets.go, bundle.go,
                      templates.go; frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
@@ -81,7 +81,7 @@ docs/                see docs/README.md
 
 ## Conventions
 
-- **`internal/` not `pkg/`**; Cobra + Viper; `log/slog` passed by dependency injection; services created in `main.go`/`cmd/` and passed down, no globals.
+- **`internal/` not `pkg/`**; Cobra + Viper; `log/slog` passed by dependency injection; services created in `cmd/vibe/main.go`/`cmd/` and passed down, no globals.
 - **Wrap errors** with context: `fmt.Errorf("failed to open workspace: %w", err)`.
 - **Interfaces for testability**; a `mock.go` only when a test needs it. Co-located tests with testify. Functional options for complex constructors.
 - **One tool surface**: new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`.

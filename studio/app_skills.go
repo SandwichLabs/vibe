@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/agents"
 )
 
 // --- Skills (#62) ---

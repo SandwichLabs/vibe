@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/storageurl"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 )
 
 // ducklakeType attaches a DuckLake: a lakehouse whose catalog (the metadata)

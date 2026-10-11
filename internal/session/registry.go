@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // ConnectionType is the seam #115 extends: each type validates its Spec and

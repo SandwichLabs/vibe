@@ -17,7 +17,7 @@ import (
 
 	"charm.land/fantasy"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/agents"
 )
 
 // taskMaxSteps is task mode's step budget. Vibe's Config has no

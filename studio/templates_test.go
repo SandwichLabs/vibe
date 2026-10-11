@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/templates"
+	"github.com/SandwichLabs/vibe/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

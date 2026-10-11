@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

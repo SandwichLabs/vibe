@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/bundle"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/bundle"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 

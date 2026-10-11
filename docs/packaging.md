@@ -290,9 +290,9 @@ builds:
         env: [CC=aarch64-linux-gnu-gcc, CXX=aarch64-linux-gnu-g++]
     ldflags:
       - -s -w
-      - -X github.com/sandwich-labs/vibe-app/cmd.version={{.Version}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.commit={{.Commit}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.date={{.Date}}
+      - -X github.com/SandwichLabs/vibe/cmd.version={{.Version}}
+      - -X github.com/SandwichLabs/vibe/cmd.commit={{.Commit}}
+      - -X github.com/SandwichLabs/vibe/cmd.date={{.Date}}
 archives:
   - formats: [tar.gz]
     name_template: "vibe_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

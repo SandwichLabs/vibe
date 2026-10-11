@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Dir is the workspace directory skills live in; File the document name.

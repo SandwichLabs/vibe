@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/stretchr/testify/require"
 )
 

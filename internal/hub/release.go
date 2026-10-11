@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // ErrNotReleasable means the holder cannot be asked to let go (it does not

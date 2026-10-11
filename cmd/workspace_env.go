@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

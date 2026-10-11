@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"log/slog"
 	"sync/atomic"
 	"time"

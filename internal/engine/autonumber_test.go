@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"testing"
 
 	_ "github.com/marcboeker/go-duckdb/v2"

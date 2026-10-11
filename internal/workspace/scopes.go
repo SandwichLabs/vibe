@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/sandwich-labs/vibe-app/internal/prefs"
+	"github.com/SandwichLabs/vibe/internal/prefs"
 )
 
 // Scope says which file a connection definition came from.

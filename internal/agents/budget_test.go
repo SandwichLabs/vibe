@@ -3,14 +3,14 @@ package agents
 import (
 	"database/sql"
 	"encoding/json"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 )
 
 // newNotebookTestHandler builds a newRealDuckDBHandler fixture and returns the
