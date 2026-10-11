@@ -118,3 +118,61 @@ describe('WorkspaceBanner relaunch prompt (#117, D10)', () => {
     relaunch.value = { required: false, message: '' }
   })
 })
+
+describe('WorkspaceBanner (.env, #168)', () => {
+  const undecided: DotEnvStatus = {
+    state: 'undecided', path: '/w/a/.env', names: ['MOTHERDUCK_TOKEN', 'OTHER'], trackedByGit: false, loaded: false,
+    satisfies: [{ connection: 'md', signIn: 'env:MOTHERDUCK', variables: ['MOTHERDUCK_TOKEN'] }],
+  }
+  beforeEach(async () => { _resetForTests(); (await import('../composables/useDotEnv'))._resetDotEnvForTests(); document.body.innerHTML = '' })
+
+  it('lists variable names and the connections they would sign in, never values', async () => {
+    const app = makeApp({ GetDotEnvStatus: vi.fn(async () => undecided) })
+    workspaceInfo.value = base
+    const { dotenv } = await import('../composables/useDotEnv')
+    dotenv.value = undecided
+    const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
+    const b = w.find('[data-testid="dotenv-banner"]')
+    expect(b.exists()).toBe(true)
+    expect(b.find('[data-testid="dotenv-names"]').text()).toContain('MOTHERDUCK_TOKEN')
+    expect(b.find('[data-testid="dotenv-feeds"]').text()).toContain('md')
+    expect(b.find('[data-testid="dotenv-tracked"]').exists()).toBe(false)
+    expect(app.GetDotEnvStatus).toBeDefined()
+  })
+
+  it('warns when git tracks the file, and Not now hides the prompt', async () => {
+    makeApp()
+    workspaceInfo.value = base
+    const { dotenv } = await import('../composables/useDotEnv')
+    dotenv.value = { ...undecided, trackedByGit: true }
+    const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
+    expect(w.find('[data-testid="dotenv-tracked"]').text()).toContain('rotate the credential')
+    await w.find('[data-testid="dotenv-notnow"]').trigger('click')
+    expect(w.find('[data-testid="dotenv-banner"]').exists()).toBe(false)
+  })
+
+  it('Allow calls the binding and the prompt goes away', async () => {
+    const allowed: DotEnvStatus = { ...undecided, state: 'allowed', loaded: true }
+    const app = makeApp({
+      AllowDotEnv: vi.fn(async () => allowed),
+      ListConnections: vi.fn(async () => ({ connections: [], relaunchRequired: false, relaunchMessage: '' })),
+    })
+    workspaceInfo.value = base
+    const { dotenv } = await import('../composables/useDotEnv')
+    dotenv.value = { ...undecided, trackedByGit: false }
+    const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
+    await w.find('[data-testid="dotenv-allow"]').trigger('click')
+    await flushPromises()
+    expect(app.AllowDotEnv).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-testid="dotenv-banner"]').exists()).toBe(false)
+  })
+
+  it('a changed file asks again', async () => {
+    makeApp()
+    workspaceInfo.value = base
+    const { dotenv } = await import('../composables/useDotEnv')
+    dotenv.value = { ...undecided, state: 'changed' }
+    const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
+    expect(w.find('[data-testid="dotenv-banner"]').text()).toContain('changed since you allowed it')
+  })
+})

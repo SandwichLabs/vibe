@@ -9,8 +9,17 @@ import { workspaceInfo, isReadOnly, refreshWorkspaceInfo } from '../composables/
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText, settingsError } from '../lib/errors'
 import { hasWailsRuntime } from '../lib/wails'
+import { dotenv, dotenvBusy, dotenvError, allowDotEnv, denyDotEnv, revokeDotEnv, refreshDotEnv } from '../composables/useDotEnv'
 
 const info = computed(() => workspaceInfo.value)
+
+const dotenvLabel: Record<string, string> = {
+  none: 'No .env file',
+  undecided: 'Not decided yet',
+  allowed: 'Allowed',
+  changed: 'Changed since allowed',
+  denied: 'Denied',
+}
 
 // ---- This workspace ----
 const name = ref('')
@@ -97,6 +106,7 @@ async function copyConfig(kind: 'desktop' | 'code') {
 let unsub: (() => void) | null = null
 onMounted(() => {
   void loadMCP()
+  void refreshDotEnv()
   if (hasWailsRuntime()) unsub = EventsOn('workspace:changed', loadMCP)
 })
 onUnmounted(() => unsub?.())
@@ -130,6 +140,35 @@ onUnmounted(() => unsub?.())
           <span v-if="message" class="sh-body" role="status" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">{{ message }}</span>
           <button v-if="stale" type="button" class="btn btn-sm" data-testid="reload-settings-ws" @click="refreshWorkspaceInfo().then(() => { message = ''; stale = false })">Reload settings</button>
         </div>
+      </div>
+    </div>
+
+    <!-- The workspace's .env (#168) -->
+    <div v-if="dotenv" data-testid="dotenv-section">
+      <div class="sec-title"><h2 style="font-size: 22px;">.env file</h2><span class="label">Only yours, never shared</span></div>
+      <div class="card card-pad col" style="gap: var(--sh-space-3);">
+        <div class="row" style="gap: var(--sh-space-3); flex-wrap: wrap;">
+          <span class="sh-body" style="font-weight: 600;" data-testid="dotenv-state" role="status">{{ dotenvLabel[dotenv.state] }}</span>
+          <span v-if="dotenv.state === 'allowed' && dotenv.loaded" class="help">Loaded for this workspace.</span>
+        </div>
+        <div v-if="dotenv.state === 'none'" class="help">
+          <template v-if="dotenv.ignored">Vibe is ignoring this workspace's .env: {{ dotenv.ignored }}.</template>
+          <template v-else>A <code>.env</code> file in the workspace folder can hold sign-in variables such as <code>MOTHERDUCK_TOKEN</code> for connections that use Environment variables. Vibe asks before it loads one.</template>
+        </div>
+        <template v-else>
+          <div class="help" data-testid="dotenv-settings-names">Variables: <template v-if="dotenv.names.length"><template v-for="(n, i) in dotenv.names" :key="n"><code>{{ n }}</code><template v-if="i < dotenv.names.length - 1">, </template></template></template><template v-else>none</template>. Values are never shown.</div>
+          <div v-for="s in dotenv.satisfies" :key="s.connection" class="help">Signs in <b>{{ s.connection }}</b> through <code>{{ s.signIn }}</code> ({{ s.variables.join(', ') }}).</div>
+          <div v-if="dotenv.state === 'changed'" class="help">The file changed after you allowed it. {{ dotenv.loaded ? 'The values from before the change stay loaded until you allow it again.' : 'Allow it again to load the new content.' }}</div>
+          <div v-if="dotenv.state === 'denied'" class="help">Vibe won't load it, even after edits, until you revoke this.</div>
+          <div v-if="dotenv.trackedByGit" class="help" role="alert" style="color: var(--sh-error); font-weight: 600;">Git tracks this file, so a credential is committed. Remove it from git (<code>git rm --cached .env</code>) and rotate the credential.</div>
+          <div v-for="w in dotenv.warnings ?? []" :key="w" class="help">{{ w }}</div>
+          <div v-if="dotenvError" class="help" role="alert" style="color: var(--sh-error);">{{ dotenvError }}</div>
+          <div class="row" style="gap: var(--sh-space-2); flex-wrap: wrap;">
+            <button v-if="dotenv.state !== 'allowed'" class="btn btn-primary btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-settings-allow" @click="allowDotEnv">Allow</button>
+            <button v-if="dotenv.state !== 'denied'" class="btn btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-settings-deny" @click="denyDotEnv">Deny</button>
+            <button v-if="dotenv.state === 'allowed' || dotenv.state === 'denied' || dotenv.state === 'changed'" class="btn btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-settings-revoke" @click="revokeDotEnv">Revoke</button>
+          </div>
+        </template>
       </div>
     </div>
 

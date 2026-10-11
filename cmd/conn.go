@@ -57,6 +57,9 @@ func openWS(cmd *cobra.Command) (workspace.Workspace, error) {
 	for _, w := range ws.Warnings() {
 		fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w)
 	}
+	if !isEnvCmd(cmd) {
+		maybePromptDotEnv(ws, cmd.ErrOrStderr())
+	}
 	return ws, nil
 }
 
@@ -823,4 +826,14 @@ func init() {
 
 	connCmd.AddCommand(connAddCmd, connListCmd, connTestCmd, connConnectCmd, connRmCmd, connMoveCmd, connCredentialsCmd)
 	rootCmd.AddCommand(connCmd, connChildCmd)
+}
+
+// isEnvCmd is true for `workspace env ...`, which manages the decision itself.
+func isEnvCmd(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c == workspaceEnvCmd {
+			return true
+		}
+	}
+	return false
 }

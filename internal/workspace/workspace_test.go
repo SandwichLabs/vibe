@@ -1147,3 +1147,15 @@ func saveSkill(store skills.Store, sess session.Session, name, description, inst
 	_, err := agents.SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
 	return err
 }
+
+func TestInit_GitignoresDotEnv(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "acme")
+	res, err := Init(dir)
+	require.NoError(t, err)
+	_ = res.Workspace.Close()
+	b, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	for _, l := range []string{".env", ".env.*", "!.env.example"} {
+		assert.Contains(t, strings.Split(string(b), "\n"), l)
+	}
+}

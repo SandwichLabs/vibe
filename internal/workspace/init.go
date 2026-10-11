@@ -19,7 +19,7 @@ import (
 
 // Lines Init seeds into the ignore files.
 var (
-	gitignoreLines = []string{LocalDir + "/", "data/*.duckdb", "data/*.duckdb.wal"}
+	gitignoreLines = []string{LocalDir + "/", "data/*.duckdb", "data/*.duckdb.wal", ".env", ".env.*", "!.env.example"}
 	gitattrsLines  = []string{"*.vnb text eol=lf"}
 	// workspaceDirs are created by Init.
 	workspaceDirs = []string{"notebooks", "queries", "skills", DataDir}

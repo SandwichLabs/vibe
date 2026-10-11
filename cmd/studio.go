@@ -90,7 +90,9 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 	if err != nil && !readOnly && errors.Is(err, hub.ErrHubHeld) && stdinIsTerminal() {
 		// Offer read-only only when it can show something: probe first, since
 		// a locked default database would leave the TUI empty.
+		suppressDotEnvPrompt = true
 		probe, perr := openWorkspace(ctx, dir, true, true, "vibe studio", io.Discard)
+		suppressDotEnvPrompt = false
 		switch {
 		case perr != nil:
 		case defaultIsLocalDuckDB(probe) && probe.hasIssue(probe.WS.DefaultConnection()):

@@ -65,6 +65,18 @@ type Workspace interface {
 	// Resolver is the credential resolver (keychain, env, prompt) this
 	// workspace uses. Never nil.
 	Resolver() *secrets.Resolver
+
+	// DotEnv describes the workspace's .env file: whether this person allowed
+	// it, which variables it sets and which env: sign-ins they would feed.
+	// Names only, never values. Allowed values are consulted by env: sign-ins
+	// through the workspace's own overlay (never os.Setenv).
+	DotEnv() DotEnvStatus
+	// AllowDotEnv approves the .env as it is now and loads it. DenyDotEnv
+	// records a no; RevokeDotEnv forgets either decision. Decisions live in the
+	// user config directory, never in the folder.
+	AllowDotEnv() error
+	DenyDotEnv() error
+	RevokeDotEnv() error
 	// Connection CRUD (#115). Scope is where the definition lives: shared
 	// (vibe.yaml, committed), local (your own file for this workspace) or user
 	// (all your workspaces). Every definition is validated by the scope's rules
@@ -180,6 +192,9 @@ type workspace struct {
 	merged         []Connection
 	warnings       []string
 
+	denv dotenvState
+	res  *secrets.Resolver // opts.resolver with the .env overlay layered on
+
 	crudMu   sync.Mutex // serialises connection CRUD in this process
 	wmu      sync.Mutex
 	watchers []*Watcher
@@ -213,6 +228,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	if err := w.reload(); err != nil {
 		return nil, err
 	}
+	w.initDotEnv(w.cfg.ID)
 	filestore.SweepStaleTemps(root, w.tempDirs(), time.Minute)
 	obs := w.observe
 	w.nb = notebooks.NewFileStore(root, notebooks.WithObserver(obs))

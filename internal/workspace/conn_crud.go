@@ -13,7 +13,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
 )
 
-func (w *workspace) Resolver() *secrets.Resolver { return w.opts.resolver }
+func (w *workspace) Resolver() *secrets.Resolver { return w.res }
 
 // validateDefFor applies the scope's rules (the vibe.yaml rules for shared:
 // no absolute path, no ${}), then the type's rules. A definition that uses

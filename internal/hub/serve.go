@@ -219,6 +219,12 @@ func serveOwner(ctx context.Context, root string, hold *Hold, opts ServeOptions,
 		fmt.Fprintln(opts.Err, "warning:", w)
 	}
 
+	if st := ws.DotEnv(); st.State != "none" && st.State != "allowed" {
+		// Headless: never prompt, use only a saved allow. Names only.
+		opts.Logger.Info("mcp serve: this workspace has a .env that is not allowed, so it is not loaded; run `vibe workspace env allow` to use it",
+			"state", st.State, "variables", st.Names)
+	}
+
 	sess, issues, err := workspace.OpenSession(ctx, ws, opts.Logger)
 	if err != nil {
 		return err

@@ -14,6 +14,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
+	"github.com/sandwich-labs/vibe-app/internal/dotenv"
 	"github.com/sandwich-labs/vibe-app/internal/filestore"
 	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
@@ -32,11 +33,17 @@ const (
 	KindQuery    ChangeKind = "query"
 	KindSkill    ChangeKind = "skill"
 	KindConfig   ChangeKind = "config"
+	// KindDotEnv is the workspace's .env. The change carries no content; ask
+	// Workspace.DotEnv for the new state (an allowed file becomes "changed").
+	KindDotEnv ChangeKind = "dotenv"
 
 	OpCreated ChangeOp = "created"
 	OpChanged ChangeOp = "changed"
 	OpDeleted ChangeOp = "deleted"
 )
+
+// dotenvFile is the workspace's dotenv file name.
+const dotenvFile = dotenv.File
 
 // Change is one debounced, de-duplicated change to a workspace file made by
 // something other than this process's own stores: an editor, a git pull,
@@ -196,6 +203,7 @@ func (w *Watcher) relevant() []string {
 	var out []string
 	add := func(rel string) { out = append(out, filepath.Join(w.root, filepath.FromSlash(rel))) }
 	add(ConfigFile)
+	add(dotenvFile)
 	if names, err := filestore.ListDir(w.root, notebooks.Dir, notebooks.Extension); err == nil {
 		for _, n := range names {
 			add(notebooks.Dir + "/" + n)
@@ -247,6 +255,8 @@ func classify(rel string) (ChangeKind, string, bool) {
 	switch {
 	case rel == ConfigFile:
 		return KindConfig, ConfigFile, true
+	case rel == dotenvFile:
+		return KindDotEnv, dotenvFile, true
 	case len(parts) == 2 && parts[0] == notebooks.Dir && strings.HasSuffix(parts[1], notebooks.Extension) && !filestore.IsTemp(parts[1]):
 		return KindNotebook, strings.TrimSuffix(parts[1], notebooks.Extension), true
 	case len(parts) == 2 && parts[0] == queries.Dir && strings.HasSuffix(parts[1], queries.Extension) && !filestore.IsTemp(parts[1]):

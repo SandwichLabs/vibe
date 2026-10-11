@@ -52,6 +52,7 @@ internal/
   connections/       connection type registry and attach SQL
   session/           the DuckDB hub for a workspace; connection lifecycle and status
   secrets/           keychain + env credential store (write-only across every boundary)
+  dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler
   llm/               in-app agent runner (fantasy), task mode, grounding; llm/skills = SKILL.md loading
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`)
@@ -66,7 +67,7 @@ docs/                see docs/README.md
 
 ## Key concepts
 
-**Workspace and files.** Files are the source of truth; writes are compare-and-write and a watcher picks up outside changes (git, editors, other processes). Notebook outputs are never persisted. A committed `vibe.yaml` can only *tighten* the agent's limits; looser per-person settings live outside the folder.
+**Workspace and files.** Files are the source of truth; writes are compare-and-write and a watcher picks up outside changes (git, editors, other processes). Notebook outputs are never persisted. A committed `vibe.yaml` can only *tighten* the agent's limits; looser per-person settings live outside the folder. A workspace `.env` is loaded only after the person allows it (direnv-style: allow is keyed by path + content hash, deny by path; decisions in the user config dir), into a per-workspace overlay read by `env:` sign-ins, never `os.Setenv`.
 
 **Connections.** Read-only by default, connect on first use, with a visible status. The connection name is the catalog alias in SQL (`prod_pg.public.orders`). Metadata-driven formats (DuckLake, Iceberg, Delta) may only be defined in your own scopes, never in a committed `vibe.yaml`. MotherDuck cannot be attached read-only.
 

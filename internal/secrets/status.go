@@ -53,6 +53,11 @@ func (r *Resolver) Status(ctx context.Context, ref Ref, method string, b Binding
 		}
 		if !st.SecretSet {
 			st.Detail = "None of " + prefix + "_PASSWORD, " + prefix + "_TOKEN or " + prefix + "_SECRET is set."
+			if r.envHint != nil {
+				if h := r.envHint(prefix); h != "" {
+					st.Detail += " " + h
+				}
+			}
 		}
 		return st
 	}

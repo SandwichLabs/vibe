@@ -2861,6 +2861,66 @@ export namespace workspace {
 	        this.options = source["options"];
 	    }
 	}
+	export class DotEnvSatisfies {
+	    connection: string;
+	    signIn: string;
+	    variables: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DotEnvSatisfies(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.connection = source["connection"];
+	        this.signIn = source["signIn"];
+	        this.variables = source["variables"];
+	    }
+	}
+	export class DotEnvStatus {
+	    state: string;
+	    path: string;
+	    names: string[];
+	    warnings?: string[];
+	    ignored?: string;
+	    trackedByGit: boolean;
+	    loaded: boolean;
+	    satisfies: DotEnvSatisfies[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DotEnvStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.path = source["path"];
+	        this.names = source["names"];
+	        this.warnings = source["warnings"];
+	        this.ignored = source["ignored"];
+	        this.trackedByGit = source["trackedByGit"];
+	        this.loaded = source["loaded"];
+	        this.satisfies = this.convertValues(source["satisfies"], DotEnvSatisfies);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SessionIssue {
 	    connection: string;
 	    message: string;

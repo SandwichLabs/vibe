@@ -235,3 +235,10 @@ func RedactIdentity(s string) string {
 	s = identityAssignRE.ReplaceAllString(s, "${1}'"+Mask+"'")
 	return identityForRE.ReplaceAllString(s, "${1}\""+Mask+"\"")
 }
+
+var secretNameRE = regexp.MustCompile(`(?i)^(?:` + secretName + `|\w*_pass|pass|\w*_?url|\w*dsn)$`)
+
+// IsSecretName reports whether an environment-variable or option name looks
+// like it holds a credential: the redactor's own secret-name rule, plus the
+// common PASS, URL and DSN forms (DATABASE_URL often embeds a password).
+func IsSecretName(name string) bool { return secretNameRE.MatchString(name) }

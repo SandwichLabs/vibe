@@ -743,3 +743,25 @@ func TestTeamConnectionsCanBePickedByName(t *testing.T) {
 	_, err = Export(context.Background(), ws, ExportOptions{Selection: Selection{All: true, TeamConnections: []string{"nope"}}})
 	require.Error(t, err)
 }
+
+// A workspace .env (allowed or not) never goes into a bundle (#168).
+func TestBundleNeverHoldsTheDotEnv(t *testing.T) {
+	src, _ := newWS(t)
+	seed(t, src)
+	const secret = "md-test-not-a-real-token"
+	require.NoError(t, os.WriteFile(filepath.Join(src.Root(), ".env"), []byte("MOTHERDUCK_TOKEN="+secret+"\n"), 0o600))
+	for _, allowed := range []bool{false, true} {
+		if allowed {
+			require.NoError(t, src.AllowDotEnv())
+		}
+		res, err := Export(context.Background(), src, ExportOptions{Selection: Selection{All: true, SharedConnections: true}})
+		require.NoError(t, err)
+		zr, err := zip.NewReader(bytes.NewReader(res.Data), int64(len(res.Data)))
+		require.NoError(t, err)
+		for _, f := range zr.File {
+			assert.NotContains(t, f.Name, ".env", "allowed=%v", allowed)
+		}
+		assert.NotContains(t, rawZipText(t, res.Data), secret)
+		assert.NotContains(t, string(res.Data), secret)
+	}
+}

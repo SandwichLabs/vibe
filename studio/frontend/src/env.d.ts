@@ -72,6 +72,11 @@ declare global {
           StartMCP(): Promise<MCPStatus>
           StopMCP(): Promise<void>
           GetMCPStatus(): Promise<MCPStatus>
+          // The workspace's .env (#168): names and state only, never values
+          GetDotEnvStatus(): Promise<DotEnvStatus>
+          AllowDotEnv(): Promise<DotEnvStatus>
+          DenyDotEnv(): Promise<DotEnvStatus>
+          RevokeDotEnv(): Promise<DotEnvStatus>
           GetClaudeConfig(): Promise<{ name: string; desktop: string; code: string }>
           CancelQuit(): Promise<void>
           HoldQuit(): Promise<void>
@@ -376,6 +381,18 @@ interface ConflictRequest {
   connection?: string
 }
 interface ConflictResult { id: string; rev: string; title: string }
+
+interface DotEnvSatisfies { connection: string; signIn: string; variables: string[] }
+interface DotEnvStatus {
+  state: 'none' | 'undecided' | 'allowed' | 'changed' | 'denied'
+  path: string
+  names: string[]
+  warnings?: string[]
+  ignored?: string
+  trackedByGit: boolean
+  loaded: boolean
+  satisfies: DotEnvSatisfies[]
+}
 
 interface MCPStatus { running: boolean; url: string; canStart: boolean; reason: string }
 

@@ -967,6 +967,12 @@ func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 		}
 		a.emitEvent("workspace:changed", map[string]any{"kind": string(ch.Kind)})
 	}
+	if ch.Kind == workspace.KindDotEnv {
+		// The file's state moved (an allowed .env is now "changed"); the
+		// banner and Workspace settings re-read it. Values stay as loaded.
+		a.emitEvent("workspace:changed", map[string]any{"kind": "dotenv"})
+		return
+	}
 	a.emitEvent("workspace:changed-on-disk", map[string]any{
 		"kind": string(ch.Kind), "id": ch.ID, "op": string(ch.Op), "path": ch.Path,
 	})

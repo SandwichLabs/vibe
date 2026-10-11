@@ -150,6 +150,7 @@ func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*
 	for _, w := range ws.Warnings() {
 		fmt.Fprintln(errW, "warning:", w)
 	}
+	maybePromptDotEnv(ws, errW)
 	o := &openedWorkspace{WS: ws}
 	sess, issues, err := workspace.OpenSession(ctx, ws, logger, workspace.WithSkipLocalFiles(),
 		workspace.WithSessionOptions(session.WithRedactor(cliRedactor)))
@@ -191,6 +192,7 @@ func openWorkspace(ctx context.Context, dir string, readOnly, advise bool, app s
 	for _, w := range ws.Warnings() {
 		fmt.Fprintln(errW, "warning:", w)
 	}
+	maybePromptDotEnv(ws, errW)
 	sopts := []workspace.SessionOption{workspace.WithSessionOptions(session.WithRedactor(cliRedactor))}
 	if readOnly {
 		sopts = append(sopts, workspace.WithForceReadOnly())

@@ -10,6 +10,10 @@ export function AgentTask(arg1) {
   return window['go']['main']['App']['AgentTask'](arg1);
 }
 
+export function AllowDotEnv() {
+  return window['go']['main']['App']['AllowDotEnv']();
+}
+
 export function AnalyzeQueryInExcel(arg1, arg2) {
   return window['go']['main']['App']['AnalyzeQueryInExcel'](arg1, arg2);
 }
@@ -90,6 +94,10 @@ export function DeleteSkill(arg1) {
   return window['go']['main']['App']['DeleteSkill'](arg1);
 }
 
+export function DenyDotEnv() {
+  return window['go']['main']['App']['DenyDotEnv']();
+}
+
 export function DescribeTable(arg1) {
   return window['go']['main']['App']['DescribeTable'](arg1);
 }
@@ -156,6 +164,10 @@ export function GetConnectionInScope(arg1) {
 
 export function GetDashboard() {
   return window['go']['main']['App']['GetDashboard']();
+}
+
+export function GetDotEnvStatus() {
+  return window['go']['main']['App']['GetDotEnvStatus']();
 }
 
 export function GetInitialWorkspace() {
@@ -356,6 +368,10 @@ export function ResolveConflict(arg1) {
 
 export function RestoreRecentWorkspace(arg1) {
   return window['go']['main']['App']['RestoreRecentWorkspace'](arg1);
+}
+
+export function RevokeDotEnv() {
+  return window['go']['main']['App']['RevokeDotEnv']();
 }
 
 export function RunA2UIQuery(arg1) {

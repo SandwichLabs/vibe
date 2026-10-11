@@ -2,11 +2,14 @@
 // WorkspaceBanner — SPEC 07 C. Across the top of the main pane while the
 // workspace is open read-only because another program (usually `vibe mcp serve`)
 // owns its database. Read-only is explained here, not in the agent pill.
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import Icon from './Icon.vue'
 import { workspaceInfo, takeOverOpen, openWorkspacePath } from '../composables/useWorkspace'
 import { relaunch, refreshConnections } from '../composables/useConnections'
 import { errorText } from '../lib/errors'
+import { dotenv, dotenvPrompt, dotenvBusy, dotenvError, allowDotEnv, denyDotEnv, dotenvNotNow, startDotEnvTracking } from '../composables/useDotEnv'
+
+onMounted(startDotEnvTracking)
 
 const dismissed = ref('')
 const info = computed(() => workspaceInfo.value)
@@ -50,6 +53,25 @@ async function trust() {
 </script>
 
 <template>
+  <!-- The workspace's .env (#168): ask once, direnv-style. Names only, never values. -->
+  <div v-if="dotenvPrompt && dotenv" class="ws-banner" role="status" data-testid="dotenv-banner">
+    <Icon name="key" :size="20" class="lead-ico" />
+    <div class="bt">
+      <b v-if="dotenv.state === 'changed'">This workspace's .env changed since you allowed it.</b> <template v-if="dotenv.loaded">The previous values stay loaded until you allow it again.</template>
+      <b v-else>This workspace has a .env file. Load it?</b>
+      Loading it lets this workspace's <code>env:</code> sign-ins read the variables below. They are used only here, are never shown, and are not shared with other workspaces or with the agent.
+      <span class="sub" data-testid="dotenv-names">Variables: <template v-if="dotenv.names.length"><template v-for="(n, i) in dotenv.names" :key="n"><code>{{ n }}</code><template v-if="i < dotenv.names.length - 1">, </template></template></template><template v-else>none</template></span>
+      <span v-for="s in dotenv.satisfies" :key="s.connection" class="sub" data-testid="dotenv-feeds">Would sign in <b>{{ s.connection }}</b> with <code>{{ s.signIn }}</code> ({{ s.variables.join(', ') }}).</span>
+      <span v-if="dotenv.trackedByGit" class="sub" role="alert" style="color: var(--sh-error); font-weight: 600;" data-testid="dotenv-tracked">Git tracks this file, so a credential is committed. Remove it from git (<code>git rm --cached .env</code>) and rotate the credential.</span>
+      <span v-for="w in dotenv.warnings ?? []" :key="w" class="sub">{{ w }}</span>
+      <span v-if="dotenvError" class="sub" role="alert" style="color: var(--sh-error);">{{ dotenvError }}</span>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-allow" @click="allowDotEnv">{{ dotenvBusy ? 'Loading…' : 'Allow' }}</button>
+      <button class="btn btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-deny" @click="denyDotEnv">Deny</button>
+      <button class="btn btn-sm" type="button" :disabled="dotenvBusy" data-testid="dotenv-notnow" @click="dotenvNotNow">Not now</button>
+    </div>
+  </div>
   <div v-if="relaunch.required && info" class="ws-banner" role="status" data-testid="relaunch-banner">
     <Icon name="refresh" :size="20" class="lead-ico" />
     <div class="bt">

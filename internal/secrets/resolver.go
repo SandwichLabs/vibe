@@ -73,6 +73,9 @@ type Resolver struct {
 	redactor *Redactor
 	logger   *slog.Logger
 	getenv   func(string) string
+	// envHint adds a sentence to the "not set" message of an env: sign-in
+	// (a workspace .env that is present but not allowed).
+	envHint func(prefix string) string
 }
 
 // ResolverOption configures NewResolver.
@@ -133,6 +136,35 @@ func ParseMethod(m string) (kind, prefix string, err error) {
 	return "", "", fmt.Errorf("invalid sign-in method %q: want keychain, prompt or env:PREFIX", m)
 }
 
+// WithEnvLayer returns a resolver that shares this one's keychain, session
+// memory and redactor but reads env: sign-ins from layer first, then from the
+// environment this resolver already reads. layer reports whether it has the
+// variable. It is how a workspace's allowed .env reaches env:PREFIX without
+// touching the process environment. hint, when non-nil, may add a sentence to
+// the "nothing is set" message for a prefix (it must not include values).
+func (r *Resolver) WithEnvLayer(layer func(string) (string, bool), hint func(prefix string) string) *Resolver {
+	cp := *r
+	base := r.getenv
+	cp.getenv = func(k string) string {
+		if v, ok := layer(k); ok {
+			return v
+		}
+		return base(k)
+	}
+	cp.envHint = hint
+	return &cp
+}
+
+func (r *Resolver) noEnvReason(prefix string) string {
+	reason := "none of " + strings.Join(EnvVarNames(prefix), ", ") + " is set"
+	if r.envHint != nil {
+		if h := r.envHint(prefix); h != "" {
+			reason += ". " + h
+		}
+	}
+	return reason
+}
+
 func (r *Resolver) env(prefix string) *EnvStore { return NewEnvStore(prefix).WithGetenv(r.getenv) }
 
 // Resolve returns the credential for ref by the person's sign-in method, after
@@ -148,7 +180,7 @@ func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Bindin
 	case "env":
 		c, ok := r.env(prefix).Load()
 		if !ok {
-			return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "none of " + strings.Join(EnvVarNames(prefix), ", ") + " is set", Ref: ref, Type: b.Type}
+			return Credential{}, &ErrNeedsCredentials{Method: method, Reason: r.noEnvReason(prefix), Ref: ref, Type: b.Type}
 		}
 		r.redactor.AddCredential(c)
 		return c, nil
