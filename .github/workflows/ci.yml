@@ -90,17 +90,13 @@ jobs:
 
   build-smoke:
     name: build-smoke (${{ matrix.name }})
-    # macOS runs only on push to main and manual dispatch.
-    if: matrix.os != 'macos-15' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { name: linux-amd64, os: ubuntu-22.04 }
-          - { name: linux-arm64, os: ubuntu-22.04-arm }
-          - { name: macos-arm64, os: macos-15 }
+        # macOS runs only on push to main and manual dispatch (10x minutes on a private repo).
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux-amd64","os":"ubuntu-22.04"},{"name":"linux-arm64","os":"ubuntu-22.04-arm"}]' || '[{"name":"linux-amd64","os":"ubuntu-22.04"},{"name":"linux-arm64","os":"ubuntu-22.04-arm"},{"name":"macos-arm64","os":"macos-15"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
