@@ -128,11 +128,12 @@ jobs:
             vibe="$d/vibe"; studio="$d/Vibe Studio.app/Contents/MacOS/vibe-studio"
             codesign --verify --deep --strict "$d/Vibe Studio.app"
           fi
-          "$vibe" --version | tee /dev/stderr | grep -q "$want"
-          "$studio" --version | tee /dev/stderr | grep -q "$want"
+          # Capture first: grep -q closing a pipe early gives the writer SIGPIPE (exit 141) under pipefail.
+          out="$("$vibe" --version)"; echo "$out"; grep -q "$want" <<<"$out"
+          out="$("$studio" --version)"; echo "$out"; grep -q "$want" <<<"$out"
           cd "$(mktemp -d)"
           "$vibe" workspace init . --name smoke </dev/null
-          "$vibe" query "select 42 as answer" </dev/null | grep -q 42
+          out="$("$vibe" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
