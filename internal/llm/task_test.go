@@ -83,16 +83,16 @@ func TestClampPromptList_CapsEntriesAndLength(t *testing.T) {
 	for i := range many {
 		many[i] = "entry"
 	}
-	got := clampPromptList(many, maxPromptListEntries, maxPromptEntryChars)
+	got := clampPromptList(many)
 	assert.Len(t, got, maxPromptListEntries)
 
 	long := []string{strings.Repeat("a", 500)}
-	got = clampPromptList(long, maxPromptListEntries, maxPromptEntryChars)
+	got = clampPromptList(long)
 	require.Len(t, got, 1)
 	assert.LessOrEqual(t, len([]rune(got[0])), maxPromptEntryChars+1)
 
 	multiline := []string{"line one\nline two\r\nline three"}
-	got = clampPromptList(multiline, maxPromptListEntries, maxPromptEntryChars)
+	got = clampPromptList(multiline)
 	require.Len(t, got, 1)
 	assert.NotContains(t, got[0], "\n")
 }
@@ -134,7 +134,7 @@ func TestTaskRecorder_DoubleWriteCellAlsoRejectsSecond(t *testing.T) {
 func TestBuildTaskEnvelope_Cell(t *testing.T) {
 	rec := &taskRecorder{}
 	rec.recordCell(&EnvelopeCell{Type: "sql", SQL: "SELECT 1", View: "stat"}, "explains it")
-	env := buildTaskEnvelope(rec, []string{"introspect_schema", "describe_table:sales"}, "", nil, taskMaxSteps)
+	env := buildTaskEnvelope(rec, []string{"introspect_schema", "describe_table:sales"}, "", nil)
 	assert.Equal(t, "cell", env.Outcome)
 	require.NotNil(t, env.Cell)
 	assert.Equal(t, "SELECT 1", env.Cell.SQL)
@@ -145,7 +145,7 @@ func TestBuildTaskEnvelope_Cell(t *testing.T) {
 func TestBuildTaskEnvelope_NeedsInfo(t *testing.T) {
 	rec := &taskRecorder{}
 	rec.recordNeedsInfo([]string{"which table?"}, []string{"a year column"}, "notes here")
-	env := buildTaskEnvelope(rec, nil, "", nil, taskMaxSteps)
+	env := buildTaskEnvelope(rec, nil, "", nil)
 	assert.Equal(t, "needs_info", env.Outcome)
 	assert.Equal(t, []string{"which table?"}, env.Questions)
 	assert.Equal(t, []string{"a year column"}, env.MissingData)
@@ -154,7 +154,7 @@ func TestBuildTaskEnvelope_NeedsInfo(t *testing.T) {
 
 func TestBuildTaskEnvelope_UnresolvedFallsBackToLastText(t *testing.T) {
 	rec := &taskRecorder{}
-	env := buildTaskEnvelope(rec, []string{"introspect_schema"}, "I got confused.", nil, taskMaxSteps)
+	env := buildTaskEnvelope(rec, []string{"introspect_schema"}, "I got confused.", nil)
 	assert.Equal(t, "unresolved", env.Outcome)
 	assert.Equal(t, "I got confused.", env.Notes)
 	assert.Equal(t, []string{"introspect_schema"}, env.Checked)
@@ -162,7 +162,7 @@ func TestBuildTaskEnvelope_UnresolvedFallsBackToLastText(t *testing.T) {
 
 func TestBuildTaskEnvelope_UnresolvedFallsBackToExhaustionDescription(t *testing.T) {
 	rec := &taskRecorder{}
-	env := buildTaskEnvelope(rec, nil, "", nil, taskMaxSteps)
+	env := buildTaskEnvelope(rec, nil, "", nil)
 	assert.Equal(t, "unresolved", env.Outcome)
 	assert.Contains(t, env.Notes, "never called write_cell or need_more_info")
 }

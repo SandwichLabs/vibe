@@ -27,7 +27,6 @@ declare global {
           CheckGitAvailable(): Promise<boolean>
           CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
           OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
-          OpenWorkspaceReadOnly(path: string): Promise<OpenWorkspaceResult>
           CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
           // .vibe bundles (#118)
           GetBundleContent(): Promise<BundleContent>
@@ -95,7 +94,6 @@ declare global {
           DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
           CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
           DropTable(name: string): Promise<void>
-          ExecuteQuery(sql: string): Promise<QueryResult>
           RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
           RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
           RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
@@ -113,7 +111,6 @@ declare global {
           SetLLMKey(provider: string, key: string): Promise<void>
           ClearLLMKey(provider: string): Promise<void>
           MigrateLLMKeyToKeychain(overwrite: boolean): Promise<void>
-          SetAgentConfig(cfg: AgentConfig): Promise<void>
           ResolveAgentApproval(id: string, approved: boolean): Promise<void>
           SelectImportFile(): Promise<string>
           InspectImport(src: ImportSource): Promise<ImportInspection>
@@ -126,18 +123,14 @@ declare global {
           ListNotebooks(): Promise<WailsNotebookSummary[]>
           GetNotebook(id: string): Promise<WailsNotebook>
           CreateNotebook(title: string): Promise<WailsNotebook>
-          RenameNotebook(id: string, title: string): Promise<void>
           DeleteNotebook(id: string): Promise<void>
           SaveNotebook(nb: Record<string, any>, sessionId: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
           SelectNotebookFile(): Promise<string>
           ImportNotebook(path: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
           ExportNotebook(id: string, dst: string): Promise<string>
           SetActiveNotebook(id: string): Promise<void>
-          // Exports (xlsx stays, #142)
+          // Exports
           ExportQueryResults(sql: string, format: string, dst: string): Promise<string>
-          ExportTableXLSX(tableName: string, dst: string): Promise<string>
-          ExportQueryXLSX(queryId: string, dst: string): Promise<string>
-          AnalyzeQueryInExcel(queryId: string, dst: string): Promise<string>
         }
       }
     }

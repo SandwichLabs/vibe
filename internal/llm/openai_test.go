@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/config"
 )
 
 const openAITestKey = "sk-test-NEEDLE-0123456789"
@@ -130,7 +131,7 @@ func TestOpenAI_Chat_ToolCallRoundTrip(t *testing.T) {
 	for i := range bodies {
 		assert.Equal(t, "Bearer "+openAITestKey, auths[i])
 		assert.Equal(t, "/responses", paths[i], "the Responses API, not chat completions")
-		assert.Equal(t, defaultModelFor(ProviderOpenAI), bodies[i]["model"])
+		assert.Equal(t, config.DefaultModelFor(ProviderOpenAI), bodies[i]["model"])
 	}
 	// gpt-5.5 is a reasoning model: the per-mode effort is forwarded.
 	reasoning, _ := bodies[0]["reasoning"].(map[string]any)
@@ -280,11 +281,11 @@ func TestScrubKey(t *testing.T) {
 }
 
 func TestReasoningEffortAgentOptions_Providers(t *testing.T) {
-	assert.Len(t, reasoningEffortAgentOptions(Config{Provider: ProviderOpenAI}, reasoningModeChat), 1)
-	assert.Len(t, reasoningEffortAgentOptions(Config{Provider: ProviderLocal}, reasoningModeChat), 1)
-	assert.Len(t, reasoningEffortAgentOptions(Config{}, reasoningModeTask), 1)
-	assert.Empty(t, reasoningEffortAgentOptions(Config{Provider: ProviderAnthropic}, reasoningModeChat))
-	assert.Empty(t, reasoningEffortAgentOptions(Config{Provider: ProviderGemini}, reasoningModeChat))
+	assert.Len(t, reasoningEffortAgentOptions(Config{Provider: ProviderOpenAI}), 1)
+	assert.Len(t, reasoningEffortAgentOptions(Config{Provider: ProviderLocal}), 1)
+	assert.Len(t, reasoningEffortAgentOptions(Config{}), 1)
+	assert.Empty(t, reasoningEffortAgentOptions(Config{Provider: ProviderAnthropic}))
+	assert.Empty(t, reasoningEffortAgentOptions(Config{Provider: ProviderGemini}))
 }
 
 func TestOpenAI_ReasoningRejectionRetriesOnce(t *testing.T) {
@@ -333,8 +334,8 @@ func TestOpenAI_ReasoningRejectionRetriesOnce(t *testing.T) {
 }
 
 func TestDefaultModelFor_OpenAIAndRefreshed(t *testing.T) {
-	assert.Equal(t, "claude-sonnet-5-5", defaultModelFor(ProviderAnthropic))
-	assert.Equal(t, "gpt-5.5", defaultModelFor(ProviderOpenAI))
-	assert.Equal(t, "gemini-3.5-flash", defaultModelFor(ProviderGemini))
-	assert.Equal(t, "local", defaultModelFor(ProviderLocal))
+	assert.Equal(t, "claude-sonnet-5-5", config.DefaultModelFor(ProviderAnthropic))
+	assert.Equal(t, "gpt-5.5", config.DefaultModelFor(ProviderOpenAI))
+	assert.Equal(t, "gemini-3.5-flash", config.DefaultModelFor(ProviderGemini))
+	assert.Equal(t, "local", config.DefaultModelFor(ProviderLocal))
 }

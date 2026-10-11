@@ -64,15 +64,6 @@ func (s *bundleStore) put(pkg *bundle.Package) string {
 	return h
 }
 
-// has reports whether h still names a held bundle.
-func (s *bundleStore) has(h string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.expireLocked()
-	_, ok := s.held[h]
-	return ok
-}
-
 // take removes and returns a held bundle in one step: of two commits racing for
 // one handle, only one gets it.
 func (s *bundleStore) take(h string) (*bundle.Package, bool) {

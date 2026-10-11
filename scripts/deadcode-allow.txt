@@ -1,0 +1,16 @@
+# Allow-list for scripts/check-deadcode.sh. One regexp per line, matched against the
+# "path: unreachable func: Name" line deadcode prints. Blank lines and # comments are ignored.
+#
+# Class 1: functional-option seams (With*) are API surface kept for callers and tests.
+: unreachable func: With[A-Za-z]*$
+# Class 2: test doubles (every mock.go in the store/secret packages).
+/mock\.go:[0-9]+:[0-9]+: unreachable func: Mock\.
+# Class 3: at most 5 justified others.
+# Each is called only from a different package's tests (so it cannot move to export_test.go):
+# internal/docsref asserts docs/reference/agent-policy.md against these lists.
+internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyReaderFunctions$
+internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyTableFunctions$
+internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyCalls$
+internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyPragmas$
+# internal/session/sessiontest (a non-test helper package) builds test sessions with it.
+internal/session/testing.go:[0-9]+:[0-9]+: unreachable func: UnhardenedForTests$

@@ -20,24 +20,6 @@ import (
 // only forwards it for models it recognises as reasoning models, so a
 // non-reasoning model id simply ignores it rather than being sent a parameter
 // it would reject.
-const (
-	reasoningModeChat = "chat"
-	reasoningModeTask = "task"
-)
-
-// reasoningEffortForMode returns the effort level for a given agent-surface
-// mode. Chat and task are both "medium" per #70 — there is no "oneshot"
-// mode in this codebase today (only chat and task-mode notebook authoring
-// exist); when one is added it should pass reasoningModeChat/Task's sibling
-// here with openai.ReasoningEffortLow.
-func reasoningEffortForMode(mode string) openai.ReasoningEffort {
-	switch mode {
-	case reasoningModeTask:
-		return openai.ReasoningEffortMedium
-	default:
-		return openai.ReasoningEffortMedium
-	}
-}
 
 // reasoningKey identifies the (provider, endpoint, model) combination a
 // "the endpoint rejected reasoning_effort" finding applies to — Runner
@@ -74,9 +56,9 @@ func (r *Runner) markReasoningRejected(cfg Config) {
 // per-mode reasoning effort for the local OpenAI-compatible provider and the
 // openai provider, or nil for every other provider (an empty provider is
 // treated as ProviderLocal, as languageModel does) — see the doc comment above.
-func reasoningEffortAgentOptions(cfg Config, mode string) []fantasy.AgentOption {
+func reasoningEffortAgentOptions(cfg Config) []fantasy.AgentOption {
 	provider := strings.TrimSpace(cfg.Provider)
-	effort := reasoningEffortForMode(mode)
+	effort := openai.ReasoningEffortMedium // chat and task are both "medium" (#70)
 	if provider == ProviderOpenAI {
 		return []fantasy.AgentOption{fantasy.WithProviderOptions(openai.NewResponsesProviderOptions(
 			&openai.ResponsesProviderOptions{ReasoningEffort: &effort},

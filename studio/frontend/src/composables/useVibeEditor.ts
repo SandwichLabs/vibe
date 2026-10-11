@@ -73,7 +73,7 @@ const vibeHighlightStyle = HighlightStyle.define([
   { tag: tags.meta, color: 'var(--vibe-syntax-meta)' },
 ])
 
-export interface VibeEditorOptions {
+interface VibeEditorOptions {
   /** Initial document content. */
   value?: string
   /** Called whenever the document changes. */

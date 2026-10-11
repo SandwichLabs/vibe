@@ -2,7 +2,7 @@
 // its "Show SQL" summary line (#95). No Vue, no store: every function takes
 // plain data so it's cheap to unit test and cheap to call from a template.
 
-export interface SqlSummary {
+interface SqlSummary {
   lines: number
   firstLine: string
 }
@@ -28,7 +28,7 @@ export function sqlSummary(source: string): SqlSummary {
   return { lines: rawLines.length, firstLine: meaningful.join(' ') }
 }
 
-export interface CellLike {
+interface CellLike {
   type: 'sql' | 'markdown' | 'a2ui'
   label?: string
   source?: string

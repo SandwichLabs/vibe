@@ -43,7 +43,7 @@ export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<H
 }
 
 /** True on Apple platforms — for shortcut hints like ⌘S vs Ctrl+S. */
-export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || (navigator as any).userAgentData?.platform || '')
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || (navigator as any).userAgentData?.platform || '')
 
 /** "⌘S" on Mac, "Ctrl+S" elsewhere. */
 export function shortcutLabel(key: string): string {

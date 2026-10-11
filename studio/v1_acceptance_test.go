@@ -20,9 +20,7 @@ package main
 //     nothing written; #82 replaced the old per-row-skip behavior with
 //     all-or-nothing pre-flighted imports) — then again with a fixture that
 //     omits the orphan, which must land cleanly.
-//  5. ExportTableXLSX the result and re-read it via the P6.2 reader (read_xlsx),
-//     asserting the cleaned/typed values round-trip.
-//  6. close + reopen and assert persistence of the imported rows.
+//  5. close + reopen and assert persistence of the imported rows.
 //
 // No mocks: the real bindings + real DuckDB enforce referential integrity.
 
@@ -30,7 +28,6 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/SandwichLabs/vibe/internal/importer"
@@ -224,29 +221,7 @@ func TestV1Acceptance_MessySpreadsheetToRelationalApp(t *testing.T) {
 	require.NoError(t, ddb.QueryRow(`SELECT price FROM order_items WHERE id = 5001`).Scan(&price))
 	assert.InDelta(t, 99.50, price, 0.001, "the messy string price must be coerced to DOUBLE")
 
-	// 5. Export the order_items table to xlsx and round-trip via the P6.2 reader.
-	dst := filepath.Join(dir, "order_items-export.xlsx")
-	exported, err := app.ExportTableXLSX("order_items", dst)
-	require.NoError(t, err)
-	require.NotEmpty(t, exported)
-
-	fi, err := os.Stat(exported)
-	require.NoError(t, err)
-	require.NotZero(t, fi.Size())
-
-	if strings.HasSuffix(exported, ".xlsx") {
-		var roundTripPrice float64
-		require.NoError(t,
-			ddb.QueryRow(`SELECT price FROM read_xlsx(?) WHERE id = 5001`, exported).Scan(&roundTripPrice),
-			"the exported xlsx must round-trip through read_xlsx")
-		assert.InDelta(t, 99.50, roundTripPrice, 0.001,
-			"the cleaned/typed price must round-trip intact through the Office bridge")
-	} else {
-		require.True(t, strings.HasSuffix(exported, ".csv"),
-			"export must be xlsx or csv fallback, got %q", exported)
-	}
-
-	// 6. close + reopen: the imported rows persist across the lifecycle.
+	// 5. close + reopen: the imported rows persist across the lifecycle.
 	reopenApp(t, app)
 	ddb2 := app.sess.DB()
 	require.NotNil(t, ddb2)

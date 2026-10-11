@@ -1,0 +1,13 @@
+id: go-sql-literal-in-adapter
+language: go
+severity: warning
+message: SQL text written in an adapter (studio/ or cmd/). SQL belongs in internal/ (session, engine, crud, connections) so the CLI, Studio and MCP share it.
+rule:
+  any:
+    - kind: interpreted_string_literal
+    - kind: raw_string_literal
+  regex: '^[`"]\s*(SELECT|INSERT\s+INTO|UPDATE\s|DELETE\s+FROM|CREATE\s|DROP\s|ALTER\s|ATTACH\s|DETACH\s|INSTALL\s|LOAD\s|PRAGMA\s|SET\s|USE\s|DESCRIBE\s|SHOW\s|SUMMARIZE\s|COPY\s|EXPLAIN\s|WITH\s)'
+files:
+  - "studio/*.go"
+  - "cmd/*.go"
+ignores: ["**/*_test.go"]

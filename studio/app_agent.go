@@ -73,25 +73,6 @@ func (a *App) GetAgentConfig() (*AgentConfig, error) {
 	}, nil
 }
 
-// SetAgentConfig saves THIS PERSON's agent settings for the workspace (the
-// "On this computer" layer, kept outside the folder). It can lower the tier
-// freely and raise it only up to the team limit in vibe.yaml, and it cannot turn
-// the gate off when vibe.yaml requires it. Provider/model/endpoint are
-// app-global config and are not settable here. Studio-only.
-func (a *App) SetAgentConfig(cfg AgentConfig) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err := a.requireWorkspace(); err != nil {
-		return err
-	}
-	if err := a.saveLocalAgentLocked(cfg.Sandbox, cfg.AskBeforeWrites); err != nil {
-		return err
-	}
-	policy := a.agentPolicy()
-	a.emitEvent("agent:config", map[string]any{"sandbox": string(policy.Mode), "askBeforeWrites": policy.AskBeforeWrites})
-	return nil
-}
-
 // AgentToolStep is one tool invocation the agent made during a chat turn.
 type AgentToolStep struct {
 	Tool    string `json:"tool"`
@@ -562,7 +543,7 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 	// add_query_cell/create_dashboard (#67 deferred part) write a new cell to
 	// _vibe_notebooks, not the live DuckDB data/schema "data:changed" covers
 	// — an open NotebookView only reloads/merges on "notebooks:changed" (the
-	// same event CreateNotebook/SaveNotebook/RenameNotebook/DeleteNotebook/
+	// same event CreateNotebook/SaveNotebook/DeleteNotebook/
 	// ImportNotebook already emit), so without this an agent-appended cell
 	// never appears in an already-open notebook until the user manually
 	// reopens it. result is the tool's own JSON-RPC result

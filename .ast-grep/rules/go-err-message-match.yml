@@ -1,0 +1,11 @@
+id: go-err-message-match
+language: go
+severity: warning
+message: Error classified by its message text. Use typed errors / sentinels (errors.Is/As) so a reworded driver message can't change behaviour (#137 U8).
+rule:
+  any:
+    - pattern: strings.Contains($E.Error(), $S)
+    - pattern: strings.Contains(strings.ToLower($E.Error()), $S)
+    - pattern: strings.HasPrefix($E.Error(), $S)
+    - pattern: $E.Error() == $S
+ignores: ["**/*_test.go"]

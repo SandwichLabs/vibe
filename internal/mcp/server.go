@@ -1,3 +1,6 @@
+// Package mcp serves a workspace's agent tools to external agents over the
+// Model Context Protocol (SSE and stdio) and proxies to the process that owns
+// the workspace hub.
 package mcp
 
 import (

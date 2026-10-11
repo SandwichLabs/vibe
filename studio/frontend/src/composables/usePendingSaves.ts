@@ -23,8 +23,8 @@
 // whether to proceed anyway instead of silently losing the edit.
 import { errorText } from '../lib/errors'
 
-export type FlushFn = () => Promise<void>
-export type LabelFn = () => string
+type FlushFn = () => Promise<void>
+type LabelFn = () => string
 
 interface Entry {
   label: LabelFn
@@ -47,12 +47,12 @@ export function register(label: LabelFn, fn: FlushFn): () => void {
   }
 }
 
-export interface FlushFailure {
+interface FlushFailure {
   label: string
   error: string
 }
 
-export interface FlushAllResult {
+interface FlushAllResult {
   failed: FlushFailure[]
 }
 

@@ -371,16 +371,6 @@ func (a *App) setLaunchFromEnvironment(args []string) {
 	}
 }
 
-// setInitialArg records the first command-line argument: a folder to open, a
-// bundle to import, or a plain-language note when it cannot be used.
-func (a *App) setInitialArg(arg string) {
-	a.launchMu.Lock()
-	defer a.launchMu.Unlock()
-	if r := classifyLaunchArg(arg); r != (InitialWorkspace{}) {
-		a.initial = r
-	}
-}
-
 // handleOpenPath is the macOS OnFileOpen entry (an Apple Event, not argv): the
 // Finder opened a folder or a .vibe file with Vibe. Before the frontend has
 // asked for its launch state the path is queued (the last one wins, as with
@@ -674,12 +664,6 @@ const (
 // before calling CreateWorkspace in place.
 func (a *App) OpenWorkspace(path string) (*OpenWorkspaceResult, error) {
 	return a.open(path, openAuto)
-}
-
-// OpenWorkspaceReadOnly opens the workspace without taking its database, even
-// when nobody else holds it.
-func (a *App) OpenWorkspaceReadOnly(path string) (*OpenWorkspaceResult, error) {
-	return a.open(path, openReadOnly)
 }
 
 func (a *App) open(path string, mode openMode) (*OpenWorkspaceResult, error) {

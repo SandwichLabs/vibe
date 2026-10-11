@@ -1,0 +1,18 @@
+id: go-context-background-in-request-path
+language: go
+severity: info
+message: context.Background() inside a request path (a Wails binding, MCP/tool handler or exported internal API). Thread the caller's ctx (or the App's ctx) so cancellation and shutdown reach it.
+rule:
+  kind: call_expression
+  has: {field: function, regex: '^context\.Background$'}
+  inside:
+    stopBy: end
+    any:
+      - kind: function_declaration
+      - kind: method_declaration
+    not:
+      has: {field: name, regex: '^(main|init|startup|Execute)$'}
+ignores:
+  - "**/*_test.go"
+  - "cmd/**"
+  - "internal/session/testing.go"

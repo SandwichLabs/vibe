@@ -19,8 +19,6 @@ export function AgentTask(arg1:main.AgentTaskRequest):Promise<llm.TaskEnvelope>;
 
 export function AllowDotEnv():Promise<workspace.DotEnvStatus>;
 
-export function AnalyzeQueryInExcel(arg1:string,arg2:string):Promise<string>;
-
 export function CancelAgentTask(arg1:string):Promise<void>;
 
 export function CancelQuit():Promise<void>;
@@ -71,17 +69,11 @@ export function DisconnectConnection(arg1:main.ConnectionRef):Promise<main.Conne
 
 export function DropTable(arg1:string):Promise<void>;
 
-export function ExecuteQuery(arg1:string):Promise<main.QueryResult>;
-
 export function ExportBundle(arg1:main.BundleExportRequest):Promise<main.BundleExportResult>;
 
 export function ExportNotebook(arg1:string,arg2:string):Promise<string>;
 
 export function ExportQueryResults(arg1:string,arg2:string,arg3:string):Promise<string>;
-
-export function ExportQueryXLSX(arg1:string,arg2:string):Promise<string>;
-
-export function ExportTableXLSX(arg1:string,arg2:string):Promise<string>;
 
 export function GetAgentConfig():Promise<main.AgentConfig>;
 
@@ -175,8 +167,6 @@ export function OpenThemesDir():Promise<string>;
 
 export function OpenWorkspace(arg1:string):Promise<main.OpenWorkspaceResult>;
 
-export function OpenWorkspaceReadOnly(arg1:string):Promise<main.OpenWorkspaceResult>;
-
 export function PreviewBundleImport(arg1:string,arg2:string):Promise<main.BundlePreview>;
 
 export function ProbeKeychain():Promise<secrets.Probe>;
@@ -190,8 +180,6 @@ export function RegenerateWorkspaceID():Promise<main.WorkspaceInfo>;
 export function RelocateRecentWorkspace(arg1:string,arg2:string):Promise<void>;
 
 export function RemoveRecentWorkspace(arg1:string):Promise<main.RecentWorkspace>;
-
-export function RenameNotebook(arg1:string,arg2:string):Promise<void>;
 
 export function ResolveAgentApproval(arg1:string,arg2:boolean):Promise<void>;
 
@@ -226,8 +214,6 @@ export function SelectNotebookFile():Promise<string>;
 export function SelectWorkspaceFolder():Promise<string>;
 
 export function SetActiveNotebook(arg1:string):Promise<void>;
-
-export function SetAgentConfig(arg1:main.AgentConfig):Promise<void>;
 
 export function SetConnectionCredentials(arg1:main.SetCredentialsRequest):Promise<main.ConnectionInfo>;
 

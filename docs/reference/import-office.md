@@ -133,11 +133,9 @@ result is a small, focused action next to the data itself:
 | Where | Binding(s) | Formats |
 |---|---|---|
 | Query Explorer result | `ExportQueryResults` | CSV, Parquet |
-| A table (Tables view / agent tooling) | `ExportTableXLSX`; for CSV or Parquet export the table with `SELECT *` through `ExportQueryResults` | XLSX |
-| A saved query | `ExportQueryXLSX`, `AnalyzeQueryInExcel` (an XLSX-export alias) | XLSX |
 | A notebook | `ExportNotebook` | the notebook's own JSON document |
 
-XLSX export uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
+XLSX export (the CLI `vibe export`; Studio has no xlsx export binding) uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
 (FORMAT xlsx)`). Exports are written to a user-chosen path on disk; nothing
 leaves the machine. An xlsx export is an xlsx or an error: there is no
 silent fallback to CSV.

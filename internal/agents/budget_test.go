@@ -34,13 +34,13 @@ func newRealDuckDBHandlerMaxRows(t *testing.T, maxRows int) *Handler {
 
 func TestBudgetRows_UnderBudgetUnchanged(t *testing.T) {
 	rows := [][]any{{float64(1), "Ada"}, {float64(2), "Bob"}}
-	out, truncated := budgetRows(rows, RowResultBudgetChars)
+	out, truncated := budgetRows(rows)
 	assert.Equal(t, rows, out)
 	assert.Nil(t, truncated)
 }
 
 func TestBudgetRows_EmptyUnchanged(t *testing.T) {
-	out, truncated := budgetRows(nil, RowResultBudgetChars)
+	out, truncated := budgetRows(nil)
 	assert.Nil(t, out)
 	assert.Nil(t, truncated)
 }
@@ -50,7 +50,7 @@ func TestBudgetRows_CutsOnWholeRowBoundary(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		rows = append(rows, []any{float64(i), strings.Repeat("x", 50)})
 	}
-	out, truncated := budgetRows(rows, RowResultBudgetChars)
+	out, truncated := budgetRows(rows)
 	require.NotNil(t, truncated)
 	assert.Less(t, len(out), len(rows))
 	assert.Equal(t, len(out), truncated["shown"])
@@ -71,7 +71,7 @@ func TestBudgetRows_CutsOnWholeRowBoundary(t *testing.T) {
 func TestBudgetRows_SingleOversizedRowIsClippedNotDropped(t *testing.T) {
 	huge := strings.Repeat("y", RowResultBudgetChars*2)
 	rows := [][]any{{float64(1), huge}}
-	out, truncated := budgetRows(rows, RowResultBudgetChars)
+	out, truncated := budgetRows(rows)
 	require.NotNil(t, truncated)
 	require.Len(t, out, 1, "an oversized single row must still be emitted, not dropped")
 	assert.Equal(t, 1, truncated["shown"])
@@ -147,7 +147,7 @@ func TestSafeTruncate_NeverSplitsARune(t *testing.T) {
 func TestClipOversizedRow_MultiByteStringsStayValidUTF8(t *testing.T) {
 	huge := strings.Repeat("héllo wörld 🎉 ", 2000) // multi-byte runes throughout
 	rows := [][]any{{float64(1), huge}}
-	out, truncated := budgetRows(rows, RowResultBudgetChars)
+	out, truncated := budgetRows(rows)
 	require.NotNil(t, truncated)
 	require.Len(t, out, 1)
 

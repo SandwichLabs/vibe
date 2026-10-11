@@ -1,3 +1,5 @@
+// Command studio is the Vibe desktop app: a Wails v2 shell whose bound App
+// exposes the workspace, connections, notebooks and agent to the Vue frontend.
 package main
 
 import (

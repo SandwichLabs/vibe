@@ -93,7 +93,7 @@ export async function flushOrConfirm(action: string): Promise<boolean> {
   })
 }
 
-export interface FlowResult {
+interface FlowResult {
   ok: boolean
   error?: string
   warnings?: string[]
@@ -135,16 +135,6 @@ export async function openWorkspacePath(path: string): Promise<FlowResult> {
     return await finishOpen(await window.go.main.App.OpenWorkspace(path))
   } catch (e: unknown) {
     await syncWorkspaceState() // the old workspace is closed even when the new one failed
-    return { ok: false, error: errorText(e) }
-  }
-}
-
-export async function openWorkspaceReadOnly(path: string): Promise<FlowResult> {
-  try {
-    if (workspaceOpen.value && !(await flushOrConfirm('Switch'))) return { ok: false }
-    return await finishOpen(await window.go.main.App.OpenWorkspaceReadOnly(path))
-  } catch (e: unknown) {
-    await syncWorkspaceState()
     return { ok: false, error: errorText(e) }
   }
 }

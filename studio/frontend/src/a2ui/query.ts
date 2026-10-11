@@ -2,7 +2,7 @@
 // src/a2ui/renderer.js (runLiveQuery/toPoints/formatCell — the latter now
 // lives in lib/formatCell.ts), adapted to the
 // column-array + row-array shape RunA2UIQuery returns (matching every other
-// tabular Wails binding in this app — ExecuteQuery, GetTableData, ...) rather
+// tabular Wails binding in this app — RunQuery, GetTableData, ...) rather
 // than the row-object shape the browser-local DuckDB binding used there.
 //
 // "Live" is the point: a data-bound component's "sql" re-runs every time it
@@ -11,7 +11,7 @@
 // the component.
 import { errorText } from '../lib/errors'
 
-export interface LiveQueryResult {
+interface LiveQueryResult {
   columns: string[]
   types: string[]
   rows: any[][]
@@ -38,7 +38,7 @@ export interface LiveQueryResult {
 // RESERVED_HIGH_SLOTS is always available for 'high' work (a user clicking
 // Run, or Ctrl/Cmd+Enter, on a notebook sql cell) to start immediately —
 // never queued behind a background component backlog.
-export type QueryPriority = 'high' | 'low'
+type QueryPriority = 'high' | 'low'
 
 const MAX_CONCURRENT_QUERIES = 4
 const RESERVED_HIGH_SLOTS = 1

@@ -1,3 +1,6 @@
+// Package agents is the one tool surface for the built-in agent and MCP
+// clients: the ToolDef registry, sandbox tiers, the approval queue, the SQL
+// allow-list policy and the JSON-RPC handler that dispatches tool calls.
 package agents
 
 import (
@@ -819,7 +822,7 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	// a large SELECT never floods the model's (or MCP client's) context.
 	// Applied here at the handler layer so chat, task mode, and MCP all get
 	// it uniformly — see budget.go.
-	if budgeted, truncated := budgetRows(rows, RowResultBudgetChars); truncated != nil {
+	if budgeted, truncated := budgetRows(rows); truncated != nil {
 		result["rows"] = budgeted
 		result["truncated"] = truncated
 	}

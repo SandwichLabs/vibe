@@ -1,0 +1,20 @@
+id: ts-window-go-outside-binding-layer
+language: ts
+severity: warning
+message: Direct Wails binding access (window.go...) outside the binding layer; call through src/lib/bindings.ts so names/types are checked in one place.
+note: |
+  Survey rule for #54. There is no binding layer yet: every hit is a candidate
+  to route through a typed module (lib/bindings.ts, generated or hand-written).
+  .vue files are not parsed by ast-grep; scan extracted <script> blocks too.
+rule:
+  any:
+    - pattern: window.go.main.App.$M
+    - pattern: window.go?.main?.App?.$M
+    - pattern: (window as any).go
+    - pattern: (globalThis as any)?.window?.go
+    - pattern: (globalThis as any).window.go
+ignores:
+  - "**/lib/bindings.ts"
+  - "**/*.spec.ts"
+  - "**/env.d.ts"
+  - "**/wailsjs/**"

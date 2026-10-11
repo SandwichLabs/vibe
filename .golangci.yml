@@ -32,7 +32,6 @@ linters:
       - legacy
       - std-error-handling
     paths:
-      - cmd/vibe-viewer/frontend
       - third_party$
       - builtin$
       - examples$
@@ -45,7 +44,6 @@ formatters:
   exclusions:
     generated: lax
     paths:
-      - cmd/vibe-viewer/frontend
       - third_party$
       - builtin$
       - examples$

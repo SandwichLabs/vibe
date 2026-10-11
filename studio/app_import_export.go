@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/importer"
-	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -181,88 +179,4 @@ func buildCopySQL(query, dst, opts string) string {
 	query = strings.TrimRight(query, " \t\r\n;")
 	return fmt.Sprintf("COPY (%s\n) TO '%s' WITH (%s)",
 		query, strings.ReplaceAll(dst, "'", "''"), opts)
-}
-
-// copyToXLSX writes the result of the given SELECT source to an .xlsx via the
-// DuckDB excel extension (fetched once on first use). It never falls back to another format: failure is an error.
-// It returns the written .xlsx path. Caller must hold a.mu (R or W).
-func (a *App) copyToXLSX(source, dst string) (string, error) {
-	ddb := a.sess.DB()
-	if ddb == nil {
-		return "", fmt.Errorf("DuckDB not available")
-	}
-
-	// The excel extension is not autoloaded (the hub runs hardened, with an
-	// app-private extension directory): fetch and load it explicitly. A
-	// failure is returned to the user; the export never silently becomes a
-	// different format.
-	if err := session.EnsureExtension(a.ctx, ddb, "excel", "Exporting to Excel"); err != nil {
-		return "", err
-	}
-
-	// COPY (query) TO 'file.xlsx' WITH (FORMAT xlsx). Escape single quotes in the
-	// destination path to keep the SQL literal well-formed.
-	xlsxPath := dst
-	if !strings.HasSuffix(strings.ToLower(xlsxPath), ".xlsx") {
-		xlsxPath += ".xlsx"
-	}
-	copyXLSX := buildCopySQL(source, xlsxPath, "FORMAT xlsx, HEADER true")
-	if _, err := ddb.ExecContext(a.ctx, copyXLSX); err != nil {
-		return "", fmt.Errorf("failed to export to Excel: %w", err)
-	}
-	return xlsxPath, nil
-}
-
-// ExportTableXLSX exports an arbitrary table to an .xlsx via the DuckDB excel
-// extension (an error if it cannot be fetched), returning the written path
-// (plan §6.2 / P6.5).
-func (a *App) ExportTableXLSX(tableName, dst string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return "", err
-	}
-	if tableName == "" {
-		return "", fmt.Errorf("table name is required")
-	}
-
-	// Quote the identifier to handle reserved words / case; escape embedded quotes.
-	source := fmt.Sprintf(`SELECT * FROM "%s"`, strings.ReplaceAll(tableName, `"`, `""`))
-	path, err := a.copyToXLSX(source, dst)
-	if err != nil {
-		return "", fmt.Errorf("failed to export table %q to spreadsheet: %w", tableName, err)
-	}
-	a.logger.Info("exported table spreadsheet", "table", tableName, "path", path)
-	return path, nil
-}
-
-// ExportQueryXLSX exports a saved query's result to an .xlsx via the DuckDB excel
-// extension (an error if it cannot be fetched), returning the written path
-// (plan §6.2 / P6.5).
-func (a *App) ExportQueryXLSX(queryID, dst string) (string, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return "", err
-	}
-
-	q, err := a.ws.Queries().Get(context.Background(), queryID)
-	if err != nil {
-		return "", fmt.Errorf("failed to load query %q: %w", queryID, err)
-	}
-
-	path, err := a.copyToXLSX(q.SQL, dst)
-	if err != nil {
-		return "", fmt.Errorf("failed to export query %q to spreadsheet: %w", queryID, err)
-	}
-	a.logger.Info("exported query spreadsheet", "query", queryID, "path", path)
-	return path, nil
-}
-
-// AnalyzeQueryInExcel is the one-click "Analyze in Excel/Sheets" alias for
-// ExportQueryXLSX (plan §6.2 / P6.5).
-func (a *App) AnalyzeQueryInExcel(queryID, dst string) (string, error) {
-	return a.ExportQueryXLSX(queryID, dst)
 }

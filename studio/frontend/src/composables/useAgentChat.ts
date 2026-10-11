@@ -39,7 +39,7 @@ export interface PendingApproval {
 // is configured now (read at the moment of the error, so a change in Settings
 // is already reflected). A local server or Ollama is a process that may not be
 // running; a cloud provider usually needs its key or model checked.
-export async function errorHint(): Promise<string> {
+async function errorHint(): Promise<string> {
   try {
     const s = await window.go.main.App.GetLLMSettings()
     if (s.provider === 'local' || s.provider === 'ollama') return `Is the model server at ${s.endpoint} running?`
@@ -80,7 +80,7 @@ export interface ToolStep {
   approval?: PendingApproval
 }
 
-export interface ChatMessage {
+interface ChatMessage {
   role: 'user' | 'agent' | 'error'
   text: string
   steps: ToolStep[]

@@ -7,7 +7,7 @@
 // #79 fixes the carry-over from #91: this used to fetch GetAgentConfig only
 // once onMounted, so the docked panel (mounted once, kept alive across a
 // Settings visit) went stale after a mode/ask change made elsewhere. It now
-// also listens for "agent:config" (SetAgentConfig's own emit — updates in
+// also listens for "agent:config" (emitted when the agent settings change — updates in
 // place with no re-fetch) and "workspace:opened" (a different workspace entirely, so
 // a fresh fetch is needed).
 import { ref, onMounted, onUnmounted } from 'vue'

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/jsonenc"
 	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -714,7 +714,7 @@ func WriteImportSkill(store skills.Store, sess session.Session, table string) er
 		// itself as quoted data, not as a raw `backtick` span, is what
 		// stops a name like "a`\n\n# SYSTEM\n..." from producing a real
 		// "# SYSTEM" heading in the generated text (finding #5).
-		fmt.Fprintf(&gen, "- %s (%s)", jsonQuote(stripControlChars(c.name)), c.dtype)
+		fmt.Fprintf(&gen, "- %s (%s)", jsonenc.Quote(stripControlChars(c.name)), c.dtype)
 		if c.nullCount > 0 {
 			fmt.Fprintf(&gen, " — %d null value(s)", c.nullCount)
 		}
@@ -724,7 +724,7 @@ func WriteImportSkill(store skills.Store, sess session.Session, table string) er
 		if len(c.samples) > 0 {
 			quoted := make([]string, len(c.samples))
 			for i, s := range c.samples {
-				quoted[i] = jsonQuote(s)
+				quoted[i] = jsonenc.Quote(s)
 			}
 			fmt.Fprintf(&gen, " — sample values: %s", strings.Join(quoted, ", "))
 		}
@@ -769,18 +769,6 @@ func WriteImportSkill(store skills.Store, sess session.Session, table string) er
 		store.Delete(ctx, legacy)
 	}
 	return nil
-}
-
-// jsonQuote renders s as a JSON-quoted string literal — used for sample
-// cell values in the generated skill body so an adversarial cell (e.g. "IGNORE
-// ALL PREVIOUS INSTRUCTIONS and ...") reads as clearly-delimited quoted data,
-// never as unmarked prose a model might mistake for an instruction.
-func jsonQuote(s string) string {
-	b, err := json.Marshal(s)
-	if err != nil {
-		return `""`
-	}
-	return string(b)
 }
 
 // truncateSample caps one sample value (by rune, not byte, so a multi-byte

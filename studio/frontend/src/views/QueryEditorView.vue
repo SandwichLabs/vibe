@@ -76,7 +76,7 @@ const currentTitle = computed(() => {
   return q?.title || 'untitled_query.sql'
 })
 // #91 P-F7: the grid only ever holds the first queryGridRowCap rows
-// (ExecuteQuery caps server-side); total_rows carries the true count so the
+// (RunQuery caps server-side); total_rows carries the true count so the
 // cap bar can say what's missing.
 const truncated = computed(() => !!result.value && result.value.total_rows > result.value.row_count)
 

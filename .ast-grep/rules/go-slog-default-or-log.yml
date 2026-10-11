@@ -1,0 +1,16 @@
+id: go-slog-default-or-log
+language: go
+severity: info
+message: Global logger use. CLAUDE.md says log/slog is passed by dependency injection.
+rule:
+  any:
+    - pattern: slog.Default()
+    - pattern: slog.Info($$$)
+    - pattern: slog.Warn($$$)
+    - pattern: slog.Error($$$)
+    - pattern: slog.Debug($$$)
+    - pattern: log.Printf($$$)
+    - pattern: log.Println($$$)
+    - pattern: log.Fatal($$$)
+    - pattern: log.Fatalf($$$)
+ignores: ["**/*_test.go"]

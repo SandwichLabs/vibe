@@ -237,15 +237,6 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	return w, nil
 }
 
-// OpenFrom discovers the workspace containing start and opens it.
-func OpenFrom(start string, opts ...Option) (Workspace, error) {
-	root, err := Discover(start)
-	if err != nil {
-		return nil, err
-	}
-	return Open(root, opts...)
-}
-
 // observe forwards a store's own write to every live watcher.
 func (w *workspace) observe(path, hash string) {
 	w.wmu.Lock()
