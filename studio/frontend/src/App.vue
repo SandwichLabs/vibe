@@ -15,7 +15,7 @@ import { flushAll } from './composables/usePendingSaves'
 import { askConfirm } from './composables/useConfirm'
 import {
   workspaceOpen, workspaceInfo, startWorkspaceTracking, syncWorkspaceState, openWorkspacePath, openFolderDialog,
-  launcherNotice, appNotice, newWorkspaceOpen, switcherOpen,
+  launching, launcherNotice, appNotice, newWorkspaceOpen, switcherOpen,
 } from './composables/useWorkspace'
 
 // beforeCloseTimeoutMs bounds how long the quit flow waits for flushAll() — a
@@ -116,27 +116,36 @@ watch(() => workspaceInfo.value?.root, (now, before) => {
 })
 
 onMounted(async () => {
-  startWorkspaceTracking()
-  await syncWorkspaceState()
-  window.addEventListener('keydown', onKeydown)
-  // Listen before asking for the launch state, so a request during a slow
-  // first open is not lost (macOS Finder, or a second launch).
-  unsubOpenPath = EventsOn('app:open-path', (req: OpenRequest) => { void handleOpenRequest(req) })
-  if (!workspaceOpen.value) {
-    // A folder or .vibe bundle passed on the command line (`vibe studio --gui <dir>`,
-    // or the OS opening one with Vibe before the window was ready).
-    try {
-      await handleOpenRequest(await window.go.main.App.GetInitialWorkspace())
-    } catch {
-      // ignore
+  try {
+    startWorkspaceTracking()
+    await syncWorkspaceState()
+    window.addEventListener('keydown', onKeydown)
+    // Listen before asking for the launch state, so a request during a slow
+    // first open is not lost (macOS Finder, or a second launch).
+    unsubOpenPath = EventsOn('app:open-path', (req: OpenRequest) => { void handleOpenRequest(req) })
+    if (!workspaceOpen.value) {
+      // A folder or .vibe bundle passed on the command line (`vibe studio --gui <dir>`,
+      // or the OS opening one with Vibe before the window was ready).
+      try {
+        await handleOpenRequest(await window.go.main.App.GetInitialWorkspace())
+      } catch {
+        // ignore
+      }
+    } else {
+      launching.value = false
+      // Still tells the backend it can send open requests as events.
+      try { await window.go.main.App.GetInitialWorkspace() } catch { /* ignore */ }
     }
-  } else {
-    // Still tells the backend it can send open requests as events.
-    try { await window.go.main.App.GetInitialWorkspace() } catch { /* ignore */ }
+    // EventsOn returns an unsubscribe function scoped to THIS listener; the global
+    // EventsOff(name) would remove every listener for the event name.
+    unsubBeforeClose = EventsOn('app:before-close', handleBeforeClose)
+  } catch (e) {
+    // No Wails runtime (or a failed first sync): the Launcher still has to show.
+    console.warn('startup', e)
+  } finally {
+    // Whatever failed above, never leave the page on the blank placeholder.
+    launching.value = false
   }
-  // EventsOn returns an unsubscribe function scoped to THIS listener; the global
-  // EventsOff(name) would remove every listener for the event name.
-  unsubBeforeClose = EventsOn('app:before-close', handleBeforeClose)
 })
 
 onUnmounted(() => {
@@ -149,7 +158,8 @@ onUnmounted(() => {
 <template>
   <div class="sh" style="height: 100vh; width: 100vw; background: var(--sh-paper); color: var(--sh-ink);">
     <AppShell v-if="workspaceOpen" />
-    <LauncherView v-else />
+    <LauncherView v-else-if="!launching" />
+    <div v-else data-testid="launching" aria-busy="true" />
 
     <div v-if="appNotice" class="banner warn app-notice" role="status" data-testid="app-notice">
       <div class="body"><div class="sub" style="margin: 0;">{{ appNotice }}</div></div>

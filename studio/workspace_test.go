@@ -859,3 +859,65 @@ func TestHandleOpenPath_QueuesBeforeReadyThenEmits(t *testing.T) {
 	require.Len(t, events, 2)
 	assert.Contains(t, payloads[1].Message, "isn't there")
 }
+
+func TestResolveLaunch(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	home := filepath.Join(base, "home")
+	ws := newWorkspaceDirAt(t, filepath.Join(home, "proj"))
+	sub := filepath.Join(ws, "notebooks")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	plain := filepath.Join(home, "plain")
+	require.NoError(t, os.MkdirAll(plain, 0o755))
+
+	t.Run("cwd is home: launcher", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, home, home))
+	})
+	t.Run("cwd is /: launcher", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, string(filepath.Separator), home))
+	})
+	t.Run("cwd empty: launcher", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, "", home))
+	})
+	t.Run("stray vibe.yaml in home: launcher", func(t *testing.T) {
+		h2 := filepath.Join(base, "home2")
+		newWorkspaceDirAt(t, h2)
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, h2, h2))
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, filepath.Join(h2, "x"), h2))
+	})
+	t.Run("cwd inside a workspace", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{Path: ws}, resolveLaunch(nil, ws, home))
+		assert.Equal(t, InitialWorkspace{Path: ws}, resolveLaunch(nil, sub, home))
+	})
+	t.Run("cwd in a non-workspace folder: launcher", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, plain, home))
+	})
+	t.Run("explicit workspace path beats cwd", func(t *testing.T) {
+		other := newWorkspaceDirAt(t, filepath.Join(home, "other"))
+		assert.Equal(t, InitialWorkspace{Path: other}, resolveLaunch([]string{other}, ws, home))
+	})
+	t.Run("explicit path inside a workspace resolves to its root", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{Path: ws}, resolveLaunch([]string{sub}, home, home))
+	})
+	t.Run("explicit non-workspace folder passes through", func(t *testing.T) {
+		assert.Equal(t, InitialWorkspace{Path: plain}, resolveLaunch([]string{plain}, ws, home))
+	})
+	t.Run("explicit bundle, missing path, flag", func(t *testing.T) {
+		b := filepath.Join(home, "x.vibe")
+		require.NoError(t, os.WriteFile(b, []byte("z"), 0o644))
+		assert.Equal(t, InitialWorkspace{BundlePath: b}, resolveLaunch([]string{b}, ws, home))
+		r := resolveLaunch([]string{filepath.Join(home, "gone")}, ws, home)
+		assert.Contains(t, r.Message, "isn't there")
+		assert.Equal(t, InitialWorkspace{Path: ws}, resolveLaunch([]string{"--flag"}, ws, home))
+		assert.Equal(t, InitialWorkspace{Path: ws}, resolveLaunch([]string{"--flag", plain}, ws, home), "only the first argument counts")
+	})
+}
+
+// newWorkspaceDirAt makes dir look like a workspace (a vibe.yaml is all
+// discovery looks for).
+func newWorkspaceDirAt(t *testing.T, dir string) string {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, workspace.ConfigFile), []byte("id: x\nname: x\n"), 0o644))
+	return dir
+}

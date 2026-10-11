@@ -912,3 +912,22 @@ func TestHeldWorkspace_AdviceIsAccurate(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "has open for writing")
 }
+
+func TestGuiTarget(t *testing.T) {
+	root, err := filepath.EvalSymlinks(newWS(t))
+	require.NoError(t, err)
+	sub := filepath.Join(root, "notebooks")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	plain := t.TempDir()
+
+	assert.Equal(t, root, guiTarget(sub), "a folder inside a workspace opens its root")
+	assert.Equal(t, root, guiTarget(root))
+	assert.Equal(t, plain, guiTarget(plain), "a plain folder passes through")
+	b := filepath.Join(plain, "x.vibe")
+	assert.Equal(t, b, guiTarget(b), "a bundle passes through")
+
+	t.Chdir(sub)
+	assert.Equal(t, root, guiTarget(""), "no dir uses the workspace around cwd")
+	t.Chdir(plain)
+	assert.Equal(t, "", guiTarget(""), "outside any workspace: launcher")
+}

@@ -46,11 +46,10 @@ func main() {
 	}))
 
 	app := NewApp(logger)
-	if len(os.Args) > 1 {
-		// A workspace folder or .vibe bundle to open at launch (`vibe studio --gui <dir>`;
-		// a desktop entry passes file:// URIs).
-		app.setInitialArg(os.Args[1])
-	}
+	// A workspace folder or .vibe bundle to open at launch (`vibe studio --gui
+	// <dir>`; a desktop entry passes file:// URIs), else the workspace around
+	// the working directory when started from a terminal (#164).
+	app.setLaunchFromEnvironment(os.Args[1:])
 
 	err := wails.Run(&options.App{
 		Title:  "Vibe Studio",

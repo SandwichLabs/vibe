@@ -18,6 +18,7 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/notebooks"
 	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/tui"
+	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -36,9 +37,12 @@ and the workspace has connections other than local DuckDB files, you are
 offered --read-only (reading without ownership). The owner keeps the
 workspace's local .duckdb files locked, so read-only cannot reach those.
 
---gui launches the desktop app instead and opens the workspace folder (dir)
-there; a .vibe bundle opens its Import dialog; without dir it starts at the
-launcher.
+--gui launches the desktop app instead and opens the workspace there: dir (or
+--workspace), else the nearest folder above the current directory that holds a
+vibe.yaml. A .vibe bundle opens its Import dialog. Outside any workspace it
+starts at the launcher; a vibe.yaml in your home folder, above it, or in / is
+never opened automatically. Run from a terminal, the desktop app (vibe-studio)
+does the same with its own path argument or working directory.
 
 Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
 	Args:         cobra.MaximumNArgs(1),
@@ -47,13 +51,16 @@ Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
 }
 
 func runStudio(cmd *cobra.Command, args []string) error {
-	dir := ""
+	dir := flagString(cmd, "workspace")
 	if len(args) == 1 {
+		if dir != "" {
+			return fmt.Errorf("give the workspace as dir or --workspace, not both")
+		}
 		dir = args[0]
 	}
 	// The desktop app takes a .vibe bundle too: it opens the Import dialog.
 	if gui, _ := cmd.Flags().GetBool("gui"); gui {
-		return launchGUI(dir)
+		return launchGUI(guiTarget(dir))
 	}
 	if isVibeFile(dir) {
 		return errLegacyFileArg
@@ -234,6 +241,34 @@ func startAgentListener(addr string, handler *agents.Handler, ctx context.Contex
 	return srv, nil
 }
 
+// guiTarget is the argument handed to the desktop app. An explicit dir that is
+// a folder inside a workspace becomes that workspace's root, and with no dir
+// the workspace around the current directory is used (never the home folder, an
+// ancestor of it, or /); the app repeats the same discovery from its own
+// working directory, so an empty result still lands on the launcher. A .vibe
+// bundle or anything unresolvable is passed through for the app to explain.
+func guiTarget(dir string) string {
+	home, _ := os.UserHomeDir()
+	start := dir
+	if dir == "" {
+		start, _ = os.Getwd()
+	} else if isVibeFile(dir) {
+		return dir
+	}
+	if start == "" {
+		return dir
+	}
+	if root, err := workspace.DiscoverForLaunch(start, home); err == nil {
+		if dir == "" {
+			return root
+		}
+		if fi, serr := os.Stat(dir); serr == nil && fi.IsDir() {
+			return root
+		}
+	}
+	return dir
+}
+
 // launchGUI finds and executes the vibe-studio binary, replacing the current
 // process. dir is passed through as its one argument, the workspace folder
 // Studio opens at launch; empty means no argument.
@@ -266,6 +301,7 @@ func launchGUI(dir string) error {
 }
 
 func init() {
+	addWorkspaceFlag(studioCmd)
 	studioCmd.Flags().Bool("gui", false, "launch the desktop app instead of the terminal UI")
 	studioCmd.Flags().Bool("tui", false, "the terminal UI (the default; accepted for older scripts)")
 	_ = studioCmd.Flags().MarkHidden("tui")

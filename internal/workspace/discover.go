@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Discover walks up from start to the nearest directory holding a vibe.yaml,
@@ -47,4 +48,38 @@ func Discover(start string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// DiscoverForLaunch is Discover for something that opens a workspace without
+// being asked to (Studio started from a terminal): it walks up from start the
+// same way, but ignores a vibe.yaml that is home itself, any ancestor of home,
+// or the filesystem root. Those are where a stray file turns every desktop
+// launch into "open that workspace". A workspace strictly below home, or in a
+// tree that does not contain home at all (/srv/x), is found normally. An empty
+// home applies only the filesystem-root rule. ErrNotWorkspace when none counts.
+func DiscoverForLaunch(start, home string) (string, error) {
+	root, err := Discover(start)
+	if err != nil {
+		return "", err
+	}
+	if filepath.Dir(root) == root {
+		return "", fmt.Errorf("%w from %s", ErrNotWorkspace, start)
+	}
+	if home != "" {
+		// Both spellings of home count: the one given (cleaned) and its
+		// symlink-resolved form, so a vibe.yaml above either is ignored.
+		homes := []string{home}
+		if abs, err := filepath.Abs(home); err == nil {
+			homes = []string{abs}
+		}
+		if real, err := filepath.EvalSymlinks(homes[0]); err == nil && real != homes[0] {
+			homes = append(homes, real)
+		}
+		for _, h := range homes {
+			if rel, err := filepath.Rel(root, h); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("%w from %s", ErrNotWorkspace, start)
+			}
+		}
+	}
+	return root, nil
 }

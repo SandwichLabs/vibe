@@ -7,14 +7,15 @@ import { router } from './router/index'
 import { register, _resetForTests as resetSaves } from './composables/usePendingSaves'
 
 const handlers: Record<string, (p?: any) => void> = {}
+let eventsBroken = false
 vi.mock('./wailsjs/runtime/runtime', () => ({
-  EventsOn: (name: string, cb: (p?: any) => void) => { handlers[name] = cb; return () => { delete handlers[name] } },
+  EventsOn: (name: string, cb: (p?: any) => void) => { if (eventsBroken) throw new Error('no runtime'); handlers[name] = cb; return () => { delete handlers[name] } },
   EventsOff: () => {},
   WindowSetTitle: () => {},
 }))
 
 import App from './App.vue'
-import { resolveConfirmChoice, confirmVisible } from './composables/useConfirm'
+import { resolveConfirm, resolveConfirmChoice, confirmVisible } from './composables/useConfirm'
 import { bundleImportRequest } from './composables/useBundle'
 import { workspaceInfo, newWorkspaceOpen, launcherNotice, switcherOpen, _resetForTests } from './composables/useWorkspace'
 
@@ -93,6 +94,43 @@ describe('App.vue', () => {
     mountApp()
     await flushPromises()
     expect(launcherNotice.value).toContain('.vibe files are no longer opened')
+  })
+
+  it('does not flash the launcher while a launch workspace is opening', async () => {
+    let release: (v: { path: string; message: string }) => void = () => {}
+    makeApp({ GetInitialWorkspace: vi.fn(() => new Promise<{ path: string; message: string }>((r) => { release = r })) })
+    const w = mountApp()
+    await flushPromises()
+    expect(w.find('[data-testid="launcher"]').exists()).toBe(false)
+    release({ path: '/w/from-cwd', message: '' })
+    await flushPromises()
+    expect(w.find('[data-testid="launcher"]').exists()).toBe(false)
+    expect(w.find('.topbar').exists()).toBe(true)
+  })
+
+  it('falls back to the launcher when the runtime events are unavailable', async () => {
+    eventsBroken = true
+    try {
+      makeApp()
+      const w = mountApp()
+      await flushPromises()
+      expect(w.find('[data-testid="launcher"]').exists()).toBe(true)
+    } finally {
+      eventsBroken = false
+    }
+  })
+
+  it('shows the launcher behind the "make this a workspace" question', async () => {
+    makeApp({
+      GetInitialWorkspace: vi.fn(async () => ({ path: '/w/plain', message: '' })),
+      OpenWorkspace: vi.fn(async (path: string) => ({ status: 'not-workspace', path })),
+    })
+    const w = mountApp()
+    await flushPromises()
+    expect(w.find('[data-testid="launcher"]').exists()).toBe(true)
+    expect(confirmVisible.value).toBe(true)
+    resolveConfirm(false)
+    await flushPromises()
   })
 
   it('routes OS open requests: a .vibe opens Import, a note shows, a folder opens', async () => {

@@ -328,6 +328,49 @@ func classifyLaunchArg(arg string) InitialWorkspace {
 	}
 }
 
+// resolveLaunch decides what Studio opens at startup. args are os.Args[1:].
+//
+//   - The first argument, if a path, wins. A folder holding a vibe.yaml is that workspace; a
+//     folder inside a workspace opens the enclosing workspace; any other
+//     folder is passed through unchanged (the open flow offers to make it one).
+//     A .vibe file, a missing path or a file gets classifyLaunchArg's answer.
+//   - With no usable argument, a terminal start opens the workspace found by
+//     walking up from cwd (workspace.DiscoverForLaunch, which never selects
+//     home, an ancestor of home or /). A desktop-launcher start (cwd is home
+//     or /) finds none and yields the zero value: the Launcher, as before.
+func resolveLaunch(args []string, cwd, home string) InitialWorkspace {
+	// Only the first argument counts (as before); a flag there means "none".
+	if len(args) > 0 {
+		if r := classifyLaunchArg(args[0]); r != (InitialWorkspace{}) {
+			if r.Path != "" && !hasWorkspaceFile(r.Path) {
+				if root, err := workspace.DiscoverForLaunch(r.Path, home); err == nil {
+					r.Path = root
+				}
+			}
+			return r
+		}
+	}
+	if cwd == "" {
+		return InitialWorkspace{}
+	}
+	if root, err := workspace.DiscoverForLaunch(cwd, home); err == nil {
+		return InitialWorkspace{Path: root}
+	}
+	return InitialWorkspace{}
+}
+
+// setLaunchFromEnvironment records what to open from the command line and the
+// working directory.
+func (a *App) setLaunchFromEnvironment(args []string) {
+	cwd, _ := os.Getwd()
+	home, _ := os.UserHomeDir()
+	if r := resolveLaunch(args, cwd, home); r != (InitialWorkspace{}) {
+		a.launchMu.Lock()
+		a.initial = r
+		a.launchMu.Unlock()
+	}
+}
+
 // setInitialArg records the first command-line argument: a folder to open, a
 // bundle to import, or a plain-language note when it cannot be used.
 func (a *App) setInitialArg(arg string) {

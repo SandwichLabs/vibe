@@ -99,10 +99,17 @@ export interface FlowResult {
   warnings?: string[]
 }
 
+// launching is true from startup until the launch request (a folder named on
+// the command line, or the working directory's workspace) has been acted on, so
+// a start that opens a workspace never flashes the Launcher (#164).
+export const launching = ref(true)
+
 // finishOpen turns an OpenWorkspaceResult into the shared state, asking
 // "Make this folder a workspace?" when the folder has no vibe.yaml.
 async function finishOpen(res: OpenWorkspaceResult): Promise<FlowResult> {
   if (res.status === 'not-workspace') {
+    // The question belongs over the Launcher, not over the blank startup page.
+    launching.value = false
     const yes = await askConfirm({
       title: 'Make this folder a workspace?',
       message: `${res.path}\n\nThis folder doesn't have a vibe.yaml yet. Vibe will add one, plus notebooks/, queries/, skills/ and data/. Your other files are left alone and nothing is moved.`,
@@ -225,6 +232,7 @@ export function slugify(name: string): string {
 export function _resetForTests(): void {
   unsubs.splice(0).forEach((u) => u())
   started = false
+  launching.value = true
   workspaceInfo.value = null
   launcherNotice.value = ''
   newWorkspaceOpen.value = false
