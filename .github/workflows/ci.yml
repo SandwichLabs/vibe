@@ -86,6 +86,9 @@ jobs:
           "$RUNNER_TEMP/vibe" conn test pg --install </dev/null || true
           find "$HOME/.cache/vibe/duckdb/extensions" -name 'postgres*.duckdb_extension' | grep .
 
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck --severity=warning
+
       - name: go vet
         run: go vet ./...
 
