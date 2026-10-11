@@ -53,6 +53,7 @@ declare global {
           ListConnections(): Promise<ConnectionList>
           GetConnection(name: string): Promise<ConnectionDetail>
           GetConnectionInScope(ref: ConnectionRef): Promise<ConnectionDetail>
+          ConnectionFingerprint(def: ConnectionDef): Promise<string>
           SaveConnection(req: SaveConnectionRequest): Promise<ConnectionDetail>
           MoveConnection(req: { name: string; to: ConnScope }): Promise<ConnectionDetail>
           DeleteConnection(ref: ConnectionRef): Promise<void>
@@ -278,6 +279,7 @@ interface ConnectionDetail {
   name: string
   scope: ConnScope
   def: ConnectionDef
+  fingerprint: string
   shadows: string[]
   shadowedBy?: string
   signIn: string

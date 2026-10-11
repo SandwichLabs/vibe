@@ -43,6 +43,8 @@ export function ConnectConnection(arg1:main.ConnectionRef):Promise<main.Connecti
 
 export function ConnectWithCredentials(arg1:main.ConnectWithCredentialsRequest):Promise<main.ConnectionInfo>;
 
+export function ConnectionFingerprint(arg1:workspace.ConnectionDef):Promise<string>;
+
 export function CreateNotebook(arg1:string):Promise<notebooks.Notebook>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;

@@ -62,6 +62,10 @@ export function ConnectWithCredentials(arg1) {
   return window['go']['main']['App']['ConnectWithCredentials'](arg1);
 }
 
+export function ConnectionFingerprint(arg1) {
+  return window['go']['main']['App']['ConnectionFingerprint'](arg1);
+}
+
 export function CreateNotebook(arg1) {
   return window['go']['main']['App']['CreateNotebook'](arg1);
 }

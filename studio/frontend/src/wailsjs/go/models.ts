@@ -1501,6 +1501,7 @@ export namespace main {
 	    name: string;
 	    scope: string;
 	    def: workspace.ConnectionDef;
+	    fingerprint: string;
 	    shadows: string[];
 	    shadowedBy?: string;
 	    signIn: string;
@@ -1517,6 +1518,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.scope = source["scope"];
 	        this.def = this.convertValues(source["def"], workspace.ConnectionDef);
+	        this.fingerprint = source["fingerprint"];
 	        this.shadows = source["shadows"];
 	        this.shadowedBy = source["shadowedBy"];
 	        this.signIn = source["signIn"];

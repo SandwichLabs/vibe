@@ -152,6 +152,11 @@ type ConnectionDetail struct {
 	Name  string                  `json:"name"`
 	Scope string                  `json:"scope"`
 	Def   workspace.ConnectionDef `json:"def"`
+	// Fingerprint is workspace.Fingerprint(Def): what a saved sign-in is bound
+	// to. The editor compares it with ConnectionFingerprint(draft); the
+	// comparison is Go's, so every field that counts is counted. A one-way hash
+	// of non-secret values.
+	Fingerprint string `json:"fingerprint"`
 	// Shadows are the lower scopes that also define this name.
 	Shadows []string `json:"shadows"`
 	// ShadowedBy is set when this is not the winning definition: the scope that
@@ -241,6 +246,7 @@ func (a *App) GetConnectionInScope(ref ConnectionRef) (*ConnectionDetail, error)
 		d.Scope, d.Def, d.ShadowedBy = ref.Scope, def, string(win.Scope)
 		d.Shadows = []string{}
 	}
+	d.Fingerprint = workspace.Fingerprint(d.Def)
 	a.mu.RLock()
 	for _, ci := range a.connectionInfosLocked() {
 		if ci.Name == ref.Name {
@@ -256,6 +262,14 @@ func (a *App) GetConnectionInScope(ref ConnectionRef) (*ConnectionDetail, error)
 	}
 	d.Credential = st
 	return d, nil
+}
+
+// ConnectionFingerprint is the fingerprint of a draft definition from the
+// editor form, to compare with ConnectionDetail.Fingerprint: when they differ,
+// Save re-binds the saved sign-in. It reads only the definition (never a
+// credential) and returns only the hash.
+func (a *App) ConnectionFingerprint(def workspace.ConnectionDef) string {
+	return workspace.Fingerprint(def)
 }
 
 func scopeWord(s string) string {

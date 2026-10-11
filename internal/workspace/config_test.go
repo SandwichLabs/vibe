@@ -224,3 +224,9 @@ func TestFingerprint(t *testing.T) {
 		assert.NotEqual(t, fp, Fingerprint(d), "%s changes the fingerprint", name)
 	}
 }
+
+func TestFingerprint_EmptyOptionIsNoOption(t *testing.T) {
+	base := ConnectionDef{Type: "s3", Scope: "s3://b", Options: map[string]string{"endpoint": "e"}}
+	withEmpty := ConnectionDef{Type: "s3", Scope: "s3://b", Options: map[string]string{"endpoint": "e", "url_style": " "}}
+	assert.Equal(t, Fingerprint(base), Fingerprint(withEmpty))
+}
