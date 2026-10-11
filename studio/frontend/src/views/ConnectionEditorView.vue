@@ -126,7 +126,7 @@ function buildDef(): ConnectionDef {
     else set(fd.name as keyof ConnectionDef, v)
   }
   const opts: Record<string, string> = {}
-  for (const fd of advFields.value) {
+  for (const fd of (spec.value?.fields ?? []).filter((x) => x.option)) { // required options too
     const v = (f.options[fd.name] ?? '').trim()
     if (v) opts[fd.name] = v
   }
@@ -135,25 +135,25 @@ function buildDef(): ConnectionDef {
   return d
 }
 
-// fingerprintOf is what a saved sign-in is bound to: the type and the fields the
-// registry lists as fingerprint fields (host, port, database, path, scope, region
-// and option:<name>). When it differs from the loaded definition, the saved
-// secret will not be used for this server.
-function fingerprintOf(d: ConnectionDef | undefined, fields: string[]): string {
-  if (!d) return ''
-  const get = (f: string): string => {
-    if (f === 'type') return d.type ?? ''
-    if (f.startsWith('option:')) return (d.options ?? {})[f.slice(7)] ?? ''
-    const v = (d as unknown as Record<string, unknown>)[f]
-    return v === undefined || v === null ? '' : String(v).trim()
+// What a saved sign-in is bound to is Go's call (workspace.Fingerprint: type,
+// host, port, database, scope, path, region and every option). The loaded
+// definition's fingerprint arrives with the detail; the draft's comes from the
+// ConnectionFingerprint binding, which sees no credential. When they differ,
+// the saved secret will not be used for this server.
+const draftFingerprint = ref('')
+let fpSeq = 0
+async function refreshDraftFingerprint(): Promise<void> {
+  const seq = ++fpSeq
+  if (isNew.value || !detail.value || !typeId.value) { draftFingerprint.value = ''; return }
+  try {
+    const fp = await window.go.main.App.ConnectionFingerprint(buildDef())
+    if (seq === fpSeq) draftFingerprint.value = fp
+  } catch {
+    if (seq === fpSeq) draftFingerprint.value = ''
   }
-  return fields.map((f) => `${f}=${get(f)}`).join('|')
 }
-const fingerprintChanged = computed(() => {
-  if (isNew.value || !detail.value || !spec.value) return false
-  const fp = spec.value.fingerprintFields.length ? spec.value.fingerprintFields : ['type', 'host', 'port', 'database', 'path', 'scope', 'region']
-  return fingerprintOf(buildDef(), fp) !== fingerprintOf(detail.value.def, fp)
-})
+watch(() => [isNew.value, detail.value?.fingerprint, JSON.stringify(buildDef())], () => { void refreshDraftFingerprint() }, { immediate: true })
+const fingerprintChanged = computed(() => !isNew.value && !!detail.value && draftFingerprint.value !== '' && draftFingerprint.value !== detail.value.fingerprint)
 
 // bindingChanged: the saved sign-in is not bound to this definition any more,
 // because a pull changed it (the binding says so) or because it is edited here.
@@ -341,7 +341,7 @@ function validate(): string {
   for (const fd of spec.value.fields) {
     if (fd.required && !fd.option && val(fd).trim() === '') return `${fd.label} is needed.`
   }
-  for (const fd of advFields.value) {
+  for (const fd of (spec.value.fields ?? []).filter((x) => x.option)) {
     if (fd.required && !(f.options[fd.name] ?? '').trim()) return `${fd.label} is needed.`
   }
   return ''
@@ -370,6 +370,7 @@ async function save() {
   // An environment sign-in is bound to the server it was chosen for. Saving a
   // changed server re-binds it, so the variables would go to the new one: ask.
   let confirmRebind = false
+  await refreshDraftFingerprint() // Save must not read a stale answer
   if (!isNew.value && method.value === 'env' && bindingChanged.value) {
     if (!(await askRebind(name))) return
     confirmRebind = true

@@ -410,6 +410,37 @@ func TestListExtensions_AndInstallRefusesUnknown(t *testing.T) {
 	require.Error(t, app.InstallExtension(InstallExtensionRequest{Name: "not_a_thing"}))
 }
 
+// The TS side of the comparison (the editor's prompt) is covered by the Vitest
+// cases in ConnectionEditorView.spec.ts.
+func TestConnectionFingerprint_CountsRegionAndEveryOption(t *testing.T) {
+	app, _ := connApp(t)
+	saved := workspace.ConnectionDef{Name: "lake", Type: "s3", Scope: "s3://bkt", Region: "us-east-1",
+		Options: map[string]string{"endpoint": "s3.example", "use_ssl": "true"}}
+	_, err := app.SaveConnection(SaveConnectionRequest{Scope: "shared", Def: saved, IsNew: true, SignIn: "keychain"})
+	require.NoError(t, err)
+	detail, err := app.GetConnection("lake")
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.Fingerprint)
+
+	changed := func(mut func(d *workspace.ConnectionDef)) bool {
+		d := saved
+		d.Options = map[string]string{}
+		for k, v := range saved.Options {
+			d.Options[k] = v
+		}
+		mut(&d)
+		return app.ConnectionFingerprint(d) != detail.Fingerprint
+	}
+	assert.False(t, changed(func(*workspace.ConnectionDef) {}), "an unchanged draft reports no change")
+	assert.False(t, changed(func(d *workspace.ConnectionDef) { d.Name = "renamed" }), "the name is not server identity")
+	assert.True(t, changed(func(d *workspace.ConnectionDef) { d.Region = "eu-west-1" }), "region")
+	assert.True(t, changed(func(d *workspace.ConnectionDef) { d.Options["endpoint"] = "other.example" }), "a non-sslmode option")
+	assert.True(t, changed(func(d *workspace.ConnectionDef) { d.Options["use_ssl"] = "false" }), "a second option")
+	assert.True(t, changed(func(d *workspace.ConnectionDef) { d.Options["url_style"] = "path" }), "a new option")
+	assert.True(t, changed(func(d *workspace.ConnectionDef) { d.Scope = "other" }), "scope")
+	assert.Equal(t, workspace.Fingerprint(saved), detail.Fingerprint)
+}
+
 func TestConnectionBindings_NoWorkspace(t *testing.T) {
 	app := newBareApp(t)
 	_, err := app.ListConnections()

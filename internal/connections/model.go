@@ -121,7 +121,8 @@ type TypeInfo struct {
 	Extensions   []string     `json:"extensions,omitempty"`
 	Capabilities Capabilities `json:"capabilities"`
 	// FingerprintFields name the definition fields whose change makes a saved
-	// credential stop applying (workspace.Fingerprint covers at least these).
+	// credential stop applying (workspace.Fingerprint covers at least these). A UI
+	// hint for the help text only: the editor compares workspace.Fingerprint values.
 	// Option fields are written "option:<name>".
 	FingerprintFields []string `json:"fingerprintFields"`
 	// SignInMethods the type supports (all three, today).

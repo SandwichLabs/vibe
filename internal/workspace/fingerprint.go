@@ -23,7 +23,10 @@ func Fingerprint(d ConnectionDef) string {
 	// hostaddr, sslmode, account, ...). Erring towards inclusion is the safe
 	// side: a spurious change only asks the person to sign in again.
 	keys := make([]string, 0, len(d.Options))
-	for k := range d.Options {
+	for k, v := range d.Options {
+		if strings.TrimSpace(v) == "" {
+			continue // an empty option is the same as none: never prompts
+		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

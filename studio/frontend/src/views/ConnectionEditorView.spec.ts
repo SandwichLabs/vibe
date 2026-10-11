@@ -30,6 +30,18 @@ const TYPES: ConnTypeSpec[] = [
     credentials: [field({ name: 'token', label: 'Token', required: true, secret: true, perPerson: true })], requiresExtension: ['motherduck'],
     capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true, subprocess: true }, fingerprintFields: [], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
   },
+  {
+    id: 'httpfs', label: 'S3 bucket', description: 's3',
+    fields: [field({ name: 'scope', label: 'Bucket', required: true }), field({ name: 'region', label: 'Region' }), field({ name: 'endpoint', label: 'Endpoint', option: true })],
+    credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
+    requiresExtension: ['httpfs'], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+  },
+  {
+    id: 'r2', label: 'Cloudflare R2', description: 'r2',
+    fields: [field({ name: 'scope', label: 'Bucket', required: true }), field({ name: 'account_id', label: 'Account id', required: true, option: true })],
+    credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
+    requiresExtension: ['httpfs'], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+  },
   { id: 'future', label: 'Future', description: 'Coming soon.', fields: [], credentials: [], requiresExtension: [], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: false }, fingerprintFields: [], signInMethods: [], soon: true },
   {
     id: 'mysql', label: 'MySQL', description: 'A MySQL server.',
@@ -45,9 +57,14 @@ const TYPES: ConnTypeSpec[] = [
   },
 ]
 
+// Stand-in for workspace.Fingerprint: every field but the name counts. The real
+// comparison is Go's (TestConnectionFingerprint_CountsRegionAndEveryOption).
+const fakeFingerprint = (d: ConnectionDef) => JSON.stringify([d.type, d.host ?? '', d.port ?? 0, d.database ?? '', d.scope ?? '', d.path ?? '', d.region ?? '', d.options ?? {}])
+
 function detail(over: Partial<ConnectionDetail> = {}): ConnectionDetail {
+  const def = over.def ?? { name: 'prod_pg', type: 'postgres', host: 'db.internal', port: 5432, database: 'app' }
   return {
-    name: 'prod_pg', scope: 'shared', def: { name: 'prod_pg', type: 'postgres', host: 'db.internal', port: 5432, database: 'app' }, shadows: [], signIn: 'keychain',
+    name: 'prod_pg', scope: 'shared', def, fingerprint: fakeFingerprint(def), shadows: [], signIn: 'keychain',
     credential: { method: 'keychain', username: 'rosa', secretSet: true, fingerprintMatches: true, available: true },
     info: { name: 'prod_pg', type: 'postgres', scope: 'shared', readOnly: true, default: false, status: 'ok', remote: true }, ...over,
   }
@@ -57,6 +74,7 @@ function makeApp(over: Record<string, any> = {}) {
   const app: Record<string, any> = {
     ListConnectionTypes: vi.fn(async () => TYPES),
     ListConnections: vi.fn(async () => ({ connections: [], relaunchRequired: false })),
+    ConnectionFingerprint: vi.fn(async (d: ConnectionDef) => fakeFingerprint(d)),
     GetConnection: vi.fn(async () => detail()),
     GetConnectionInScope: vi.fn(async () => detail()),
     SaveConnection: vi.fn(async (r: any) => detail({ name: r.def.name, scope: r.scope })),
@@ -428,6 +446,65 @@ describe('ConnectionEditorView', () => {
       resolveConfirmChoice('confirm')
       await flushPromises()
       expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ confirmRebind: true, signIn: 'env:PGPROD' }))
+    })
+
+    it.each([
+      ['region', 'f-region', 's3-region-2'],
+      ['a non-fingerprintFields option', 'f-endpoint', 'https://other.example'],
+    ])('an environment sign-in asks before Save when %s changes (Go decides what counts)', async (_what, testid, value) => {
+      const def = { name: 'lake', type: 'httpfs', scope: 'bkt', region: 'us-east-1', options: { endpoint: 'https://s3.example' } }
+      const app = makeApp({
+        GetConnectionInScope: vi.fn(async () => detail({ name: 'lake', def, signIn: 'env:LAKE', info: { ...detail().info, name: 'lake', type: 'httpfs' } })),
+      })
+      const w = mountView()
+      await flushPromises()
+      expect(w.find('[data-testid="env-server-changed"]').exists()).toBe(false)
+      await w.find(`[data-testid="${testid}"]`).setValue(value)
+      await flushPromises()
+      expect(app.ConnectionFingerprint).toHaveBeenCalled()
+      expect(w.find('[data-testid="env-server-changed"]').exists()).toBe(true)
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(confirmVisible.value).toBe(true)
+      expect(app.SaveConnection).not.toHaveBeenCalled()
+      resolveConfirmChoice('confirm')
+      await flushPromises()
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ confirmRebind: true }))
+    })
+
+    it('an untouched R2 connection (required option account_id) shows no warning, and Save sends the option', async () => {
+      const def = { name: 'cf', type: 'r2', scope: 'r2://bkt/', options: { account_id: 'abc123' } }
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => detail({ name: 'cf', def, signIn: 'env:CF', info: { ...detail().info, name: 'cf', type: 'r2' } })) })
+      const w = mountView()
+      await flushPromises()
+      expect(w.find('[data-testid="env-server-changed"]').exists()).toBe(false)
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(confirmVisible.value).toBe(false)
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ confirmRebind: false, def: expect.objectContaining({ options: { account_id: 'abc123' } }) }))
+    })
+
+    it('an untouched DuckLake connection (required option data_path) matches its fingerprint, and Save sends the option', async () => {
+      const def = { name: 'dl', type: 'ducklake', path: 'meta.ducklake', options: { data_path: 'data/' } }
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => detail({ name: 'dl', def, signIn: '', info: { ...detail().info, name: 'dl', type: 'ducklake' } })) })
+      const w = mountView()
+      await flushPromises()
+      expect(await app.ConnectionFingerprint.mock.results.at(-1)!.value).toBe(fakeFingerprint(def))
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ def: expect.objectContaining({ options: { data_path: 'data/' } }) }))
+    })
+
+    it('an unchanged definition does not ask', async () => {
+      const def = { name: 'lake', type: 'httpfs', scope: 'bkt', region: 'us-east-1' }
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => detail({ name: 'lake', def, signIn: 'env:LAKE', info: { ...detail().info, name: 'lake', type: 'httpfs' } })) })
+      const w = mountView()
+      await flushPromises()
+      expect(w.find('[data-testid="env-server-changed"]').exists()).toBe(false)
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(confirmVisible.value).toBe(false)
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ confirmRebind: false }))
     })
 
     it('if the backend refuses a re-bind the screen did not foresee, it asks and sends the confirmation', async () => {
