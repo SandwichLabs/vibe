@@ -104,6 +104,7 @@ type Target interface {
 	Config() workspace.Config
 	Local() workspace.LocalConfig
 	Connections() []workspace.Connection
+	Connection(name string) (workspace.Connection, bool)
 	Notebooks() notebooks.Store
 	Queries() queries.Store
 	Skills() skills.Store

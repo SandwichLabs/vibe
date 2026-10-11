@@ -20,7 +20,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -1143,15 +1142,9 @@ func (a *App) ListCatalogGroups() ([]CatalogGroup, error) {
 
 // ---- create ----
 
-var slugRE = regexp.MustCompile(`[^a-z0-9]+`)
-
 // workspaceSlug is the folder name for a workspace name.
 func workspaceSlug(name string) string {
-	s := strings.Trim(slugRE.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-"), "-")
-	if s == "" {
-		return "workspace"
-	}
-	return s
+	return filestore.SlugOr(strings.TrimSpace(name), "workspace", 0)
 }
 
 func resolveNewDir(req CreateWorkspaceRequest) (string, error) {
@@ -1362,13 +1355,7 @@ func (a *App) SetWorkspaceSettings(s WorkspaceSettings) (*WorkspaceInfo, error) 
 		return nil, err
 	}
 	if s.DefaultConnection != "" {
-		found := false
-		for _, c := range a.ws.Connections() {
-			if c.Name == s.DefaultConnection {
-				found = true
-			}
-		}
-		if !found {
+		if _, found := a.ws.Connection(s.DefaultConnection); !found {
 			return nil, fmt.Errorf("There's no connection called %q.", s.DefaultConnection)
 		}
 	}

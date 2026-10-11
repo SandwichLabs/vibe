@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/jsonenc"
 	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -566,24 +566,13 @@ func stripControlChars(s string) string {
 	}, s)
 }
 
-// nonSlugChars matches any run of characters that isn't a lowercase letter
-// or digit — collapsed to a single "-" by importSkillSlug.
-var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
-
 // importSkillSlug turns a table name into a kebab-case slug fit for
 // SkillNamePattern: lowercase, every run of non [a-z0-9] characters (spaces,
 // punctuation, non-ASCII) becomes one "-", and leading/trailing "-" is
 // trimmed. A table name that has no [a-z0-9] characters at all (all-Unicode,
 // e.g. "日本語") would otherwise slug to "", so that case falls back to the
 // literal word "table".
-func importSkillSlug(table string) string {
-	slug := nonSlugChars.ReplaceAllString(strings.ToLower(table), "-")
-	slug = strings.Trim(slug, "-")
-	if slug == "" {
-		return "table"
-	}
-	return slug
-}
+func importSkillSlug(table string) string { return filestore.SlugOr(table, "table", 0) }
 
 // cutBytes truncates s to at most n bytes (the slug is pure ASCII, so a byte
 // cut can't split a UTF-8 codepoint) and re-trims a trailing "-" a cut can

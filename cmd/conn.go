@@ -70,12 +70,13 @@ func cmdCtx(cmd *cobra.Command) context.Context {
 	return context.Background()
 }
 
-func parseScope(s string) (workspace.Scope, error) {
-	switch workspace.Scope(s) {
-	case workspace.ScopeUser, workspace.ScopeShared, workspace.ScopeLocal:
-		return workspace.Scope(s), nil
+// scopeFlag reads a --scope style flag value; the wording is the CLI's.
+func scopeFlag(s string) (workspace.Scope, error) {
+	sc, ok := workspace.ParseScope(s)
+	if !ok {
+		return "", fmt.Errorf("unknown scope %q (want user, shared or local)", s)
 	}
-	return "", fmt.Errorf("unknown scope %q (want user, shared or local)", s)
+	return sc, nil
 }
 
 // --- add ---
@@ -108,7 +109,7 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	f := cmd.Flags()
 	typ, _ := f.GetString("type")
 	scopeS, _ := f.GetString("scope")
-	scope, err := parseScope(scopeS)
+	scope, err := scopeFlag(scopeS)
 	if err != nil {
 		return err
 	}
@@ -195,12 +196,7 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 }
 
 func findConn(ws workspace.Workspace, name string) (workspace.Connection, bool) {
-	for _, c := range ws.Connections() {
-		if c.Name == name {
-			return c, true
-		}
-	}
-	return workspace.Connection{}, false
+	return ws.Connection(name)
 }
 
 // --- credential prompting ---
@@ -563,12 +559,8 @@ func isMotherDuck(cmd *cobra.Command, name string) bool {
 }
 
 func connStatus(s session.Session, name string) session.Status {
-	for _, st := range s.Connections() {
-		if st.Name == name {
-			return st
-		}
-	}
-	return session.Status{}
+	st, _ := s.Status(name)
+	return st
 }
 
 // --- rm / move ---
@@ -596,7 +588,7 @@ func runConnRm(cmd *cobra.Command, args []string) error {
 	}
 	scope := c.Scope
 	if s := flagString(cmd, "scope"); s != "" {
-		if scope, err = parseScope(s); err != nil {
+		if scope, err = scopeFlag(s); err != nil {
 			return err
 		}
 	}
@@ -620,7 +612,7 @@ ${ENV}).`,
 }
 
 func runConnMove(cmd *cobra.Command, args []string) error {
-	to, err := parseScope(flagString(cmd, "to"))
+	to, err := scopeFlag(flagString(cmd, "to"))
 	if err != nil {
 		return err
 	}
@@ -635,7 +627,7 @@ func runConnMove(cmd *cobra.Command, args []string) error {
 	}
 	from := c.Scope
 	if s := flagString(cmd, "from"); s != "" {
-		if from, err = parseScope(s); err != nil {
+		if from, err = scopeFlag(s); err != nil {
 			return err
 		}
 	}

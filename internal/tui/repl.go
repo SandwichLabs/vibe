@@ -287,9 +287,6 @@ func formatResultSet(rs *engine.ResultSet) string {
 // sanitizeForTerminal so an embedded control/escape character in a string
 // column can't corrupt the terminal.
 func formatCellValue(v any) string {
-	if v == nil {
-		return "NULL"
-	}
 	switch n := v.(type) {
 	case float64:
 		if math.IsNaN(n) {
@@ -304,7 +301,7 @@ func formatCellValue(v any) string {
 	case float32:
 		return formatCellValue(float64(n))
 	}
-	return sanitizeForTerminal(fmt.Sprintf("%v", v), false)
+	return sanitizeForTerminal(engine.CellText(v, "NULL"), false)
 }
 
 // padRight pads s with spaces to width n (no-op if s is already >= n runes).

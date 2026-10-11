@@ -199,10 +199,7 @@ func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupF
 // is never bound across the Wails bridge, MCP or the agent (write-only). The
 // result is registered with the resolver's redactor.
 func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup LookupFunc) (secrets.Credential, ResolvedConnection, error) {
-	for _, c := range ws.Connections() {
-		if c.Name != name {
-			continue
-		}
+	if c, ok := ws.Connection(name); ok {
 		rc, err := ResolveConnection(ws, c, lookup)
 		if err != nil {
 			return secrets.Credential{}, ResolvedConnection{}, err

@@ -357,11 +357,18 @@ func (w *workspace) signInFor(scope Scope, d ConnectionDef) string {
 	return m
 }
 
-func (w *workspace) findConnection(name string) (Connection, error) {
+func (w *workspace) Connection(name string) (Connection, bool) {
 	for _, c := range w.Connections() {
 		if c.Name == name {
-			return c, nil
+			return c, true
 		}
+	}
+	return Connection{}, false
+}
+
+func (w *workspace) findConnection(name string) (Connection, error) {
+	if c, ok := w.Connection(name); ok {
+		return c, nil
 	}
 	return Connection{}, fmt.Errorf("unknown connection %q", name)
 }

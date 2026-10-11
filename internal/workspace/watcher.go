@@ -268,8 +268,11 @@ func classify(rel string) (ChangeKind, string, bool) {
 }
 
 func (w *Watcher) rel(abs string) (string, bool) {
+	if !filestore.Within(w.root, abs) {
+		return "", false
+	}
 	r, err := filepath.Rel(w.root, abs)
-	if err != nil || r == "." || strings.HasPrefix(r, "..") {
+	if err != nil || r == "." {
 		return "", false
 	}
 	return filepath.ToSlash(r), true

@@ -2,12 +2,14 @@ package agents
 
 import (
 	"fmt"
-	"github.com/SandwichLabs/vibe/internal/storageurl"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 )
 
 // pathPolicy decides which files and URLs agent SQL may read or write (#116).
@@ -76,14 +78,6 @@ func hasDotDot(s string) bool {
 	return false
 }
 
-func inside(root, p string) bool {
-	rel, err := filepath.Rel(root, p)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
-}
-
 // realPath resolves symlinks as far as the path exists, re-attaching the part
 // that does not.
 func realPath(p string) (string, error) {
@@ -127,7 +121,7 @@ func (p *pathPolicy) vetRead(lit string) string {
 		return p.vetGlob(lit, glob)
 	}
 	real, err := realPath(lit)
-	if err != nil || !inside(p.dataDir, real) {
+	if err != nil || !filestore.Within(p.dataDir, real) {
 		return fmt.Sprintf("%q is outside the workspace's data/ folder (%s)", lit, p.dataDir)
 	}
 	return ""
@@ -142,7 +136,7 @@ func (p *pathPolicy) vetGlob(lit string, glob int) string {
 		prefix = prefix[:i+1]
 	}
 	real, err := realPath(prefix)
-	if err != nil || !inside(p.dataDir, real) {
+	if err != nil || !filestore.Within(p.dataDir, real) {
 		return fmt.Sprintf("%q is outside the workspace's data/ folder (%s)", lit, p.dataDir)
 	}
 	const maxEntries = 20000
@@ -157,7 +151,7 @@ func (p *pathPolicy) vetGlob(lit string, glob int) string {
 			return fs.SkipAll
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			if target, err := filepath.EvalSymlinks(path); err != nil || !inside(p.dataDir, target) {
+			if target, err := filepath.EvalSymlinks(path); err != nil || !filestore.Within(p.dataDir, target) {
 				escaped = true
 				return fs.SkipAll
 			}
@@ -225,14 +219,14 @@ func (p *pathPolicy) vetWrite(lit string) string {
 		return fmt.Sprintf("COPY ... TO %q: the target is a symlink", lit)
 	}
 	parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
-	if err != nil || !inside(p.dataDir, parent) {
+	if err != nil || !filestore.Within(p.dataDir, parent) {
 		return fmt.Sprintf("COPY ... TO %q: the target must be inside %s", lit, p.dataDir)
 	}
 	// Never into a connection's own files: a DuckLake's catalog or data folder
 	// (whatever the file is called), a duckdb or sqlite file.
 	target := filepath.Join(parent, filepath.Base(clean))
 	for _, prot := range p.protected {
-		if inside(prot, target) {
+		if filestore.Within(prot, target) {
 			return fmt.Sprintf("COPY ... TO %q: the target is part of a connection's own files; the agent does not write there", lit)
 		}
 	}

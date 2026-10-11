@@ -214,15 +214,7 @@ func writeResult(out io.Writer, rs *engine.ResultSet, format string) error {
 	}
 }
 
-func cellText(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", v)
-}
+func cellText(v any) string { return engine.CellText(v, "") }
 
 func writeTable(out io.Writer, rs *engine.ResultSet) error {
 	if len(rs.Columns) == 0 {
@@ -279,13 +271,5 @@ func plural(n int) string {
 // cleanCell keeps a value on one line and strips terminal control characters
 // so data in a table cannot move the cursor or recolor the screen.
 func cleanCell(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\n' || r == '\r' || r == '\t':
-			return ' '
-		case r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0):
-			return -1
-		}
-		return r
-	}, s)
+	return engine.TerminalText(s, engine.TerminalOpts{StripC1: true})
 }

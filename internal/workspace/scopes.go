@@ -26,6 +26,16 @@ const (
 	ScopeLocal  Scope = "local"
 )
 
+// ParseScope maps a scope's file-level name ("user", "shared", "local") to its
+// Scope. Each adapter words its own error for ok == false.
+func ParseScope(s string) (Scope, bool) {
+	switch sc := Scope(s); sc {
+	case ScopeUser, ScopeShared, ScopeLocal:
+		return sc, true
+	}
+	return "", false
+}
+
 // scopeRank: higher wins.
 var scopeRank = map[Scope]int{ScopeUser: 0, ScopeShared: 1, ScopeLocal: 2}
 

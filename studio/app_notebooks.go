@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/bundle"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -210,7 +211,7 @@ func (a *App) ExportNotebook(id, dst string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal notebook: %w", err)
 	}
-	if err := os.WriteFile(path, b, 0644); err != nil {
+	if err := filestore.WriteFileAtomic(path, b, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write notebook file: %w", err)
 	}
 	return path, nil

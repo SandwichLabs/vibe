@@ -46,6 +46,8 @@ type Workspace interface {
 	TrustLocal() error
 	// Connections are the merged definitions, sorted by name, with provenance.
 	Connections() []Connection
+	// Connection is the merged definition called name.
+	Connection(name string) (Connection, bool)
 	// DefaultConnection is default_connection from vibe.yaml ("" if unset).
 	DefaultConnection() string
 	// Policy is the agent policy in effect for this person:

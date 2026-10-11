@@ -1,0 +1,31 @@
+id: go-find-connection-by-name-loop
+language: go
+severity: error
+message: Look a connection up with Workspace.Connection(name) (or Session.Status(name)), not by ranging over Connections() and comparing .Name.
+rule:
+  kind: for_statement
+  all:
+    - has:
+        kind: range_clause
+        any:
+          - regex: 'Connections\(\)'
+          - has: {field: right, kind: identifier, regex: '(?i)conn'}
+    - has:
+        stopBy: end
+        any:
+          - kind: if_statement
+            has:
+              field: condition
+              kind: binary_expression
+              regex: '^\w+\.Name\s*(==|!=)\s*[\w.]+$'
+          - kind: expression_switch_statement
+            has: {field: value, regex: '^\w+\.Name$'}
+  not:
+    inside:
+      stopBy: end
+      any:
+        - kind: function_declaration
+        - kind: method_declaration
+      has: {field: name, regex: '^Connection$'}
+ignores: ["**/*_test.go"]
+files: ["cmd/**/*.go", "studio/*.go", "internal/**/*.go"]

@@ -1,10 +1,15 @@
 id: go-path-containment-clone
 language: go
-severity: warning
-message: Hand-rolled "is p inside root" check (filepath.Rel + ".." prefix). One owner (a pathsafe/filestore helper) should do containment; clones drift (see #137 U5).
+severity: error
+message: Hand-rolled "is p inside root" check (filepath.Rel + ".." prefix). Use filestore.Within; clones drift (see #137 U5).
 rule:
-  kind: function_declaration
+  any:
+    - kind: function_declaration
+    - kind: method_declaration
+    - kind: func_literal
   all:
     - has: {stopBy: end, kind: call_expression, has: {field: function, regex: '^filepath\.Rel$'}}
-    - has: {stopBy: end, kind: interpreted_string_literal, regex: '^"\.\."$'}
+    - has: {stopBy: end, kind: interpreted_string_literal, regex: '^"\.\./?"$'}
+  not:
+    has: {field: name, regex: '^Within$'}
 ignores: ["**/*_test.go"]

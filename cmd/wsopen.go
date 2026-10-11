@@ -247,12 +247,7 @@ func (o *openedWorkspace) requireConnection(name string, errW io.Writer) error {
 // knownConnection reports whether name is one of the workspace's merged
 // connections.
 func (o *openedWorkspace) knownConnection(name string) (workspace.Connection, bool) {
-	for _, c := range o.WS.Connections() {
-		if c.Name == name {
-			return c, true
-		}
-	}
-	return workspace.Connection{}, false
+	return o.WS.Connection(name)
 }
 
 // resolveTarget parses "table", "schema.table", "conn.table" or

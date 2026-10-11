@@ -107,6 +107,14 @@ jobs:
       - name: Wails binding usage
         run: scripts/check-bindings.sh
 
+      # Blocking: the root sgconfig.yml rules at severity "error" (the ones already at zero:
+      # one ParseScope, one path-containment helper, no find-connection-by-name loops). The
+      # other rules are report-only until their slice lands.
+      - name: ast-grep rules
+        run: |
+          npm install --global @ast-grep/cli@0.45.3
+          ast-grep scan cmd internal studio
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
