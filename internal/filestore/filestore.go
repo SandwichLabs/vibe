@@ -160,7 +160,7 @@ func Resolve(root, rel string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve %q: %w", rel, err)
 	}
-	if !within(realRoot, resolved) {
+	if !Within(realRoot, resolved) {
 		return "", fmt.Errorf("%w: %q", ErrOutsideRoot, rel)
 	}
 	if fi, err := os.Lstat(abs); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
@@ -169,7 +169,11 @@ func Resolve(root, rel string) (string, error) {
 	return abs, nil
 }
 
-func within(root, p string) bool {
+// Within reports whether p is root or lies under it. It is purely lexical
+// (filepath.Rel): resolve symlinks on both sides first when that matters. The
+// one containment check for the workspace's file access, the agent's SQL file
+// policy and the session's path guards.
+func Within(root, p string) bool {
 	rel, err := filepath.Rel(root, p)
 	if err != nil {
 		return false
@@ -251,7 +255,7 @@ func WriteAtomic(root string, w Write, obs Observer) (Stamp, error) {
 	// MkdirAll may have followed a link planted since Resolve: check again.
 	if resolved, err := filepath.EvalSymlinks(dir); err != nil {
 		return Stamp{}, fmt.Errorf("failed to resolve %s: %w", filepath.Dir(w.Rel), err)
-	} else if realRoot, _ := filepath.EvalSymlinks(root); !within(realRoot, resolved) {
+	} else if realRoot, _ := filepath.EvalSymlinks(root); !Within(realRoot, resolved) {
 		return Stamp{}, fmt.Errorf("%w: %q", ErrOutsideRoot, w.Rel)
 	}
 
@@ -439,13 +443,21 @@ var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
 // Slug turns a title into a filename stem: lowercase ASCII letters and
 // digits joined by "-", at most 64 bytes, "untitled" when nothing is left.
-func Slug(title string) string {
-	s := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(title), "-"), "-")
-	if len(s) > 64 {
-		s = strings.Trim(s[:64], "-")
+func Slug(title string) string { return SlugOr(title, "untitled", 64) }
+
+// SlugOr is the one slug routine: lowercase s, turn every run of characters
+// outside a-z and 0-9 into a single "-", trim "-" from both ends, cut to
+// maxBytes (0 means no cut; the result is pure ASCII, so a byte cut is safe)
+// and return fallback when nothing is left. Callers differ only in the
+// fallback word and the cap: files use Slug, workspace folders and skill
+// names pass their own.
+func SlugOr(s, fallback string, maxBytes int) string {
+	s = strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	if maxBytes > 0 && len(s) > maxBytes {
+		s = strings.Trim(s[:maxBytes], "-")
 	}
 	if s == "" {
-		return "untitled"
+		return fallback
 	}
 	return s
 }
@@ -533,4 +545,51 @@ func RemoveEmptyDir(root, rel string) {
 		return
 	}
 	_ = os.Remove(abs) // fails harmlessly when not empty
+}
+
+// WriteFileAtomic writes data to path through a temp file in the same
+// directory (synced, then renamed over path), so a reader never sees a
+// half-written file and a failure leaves the old one. Unlike WriteAtomic it is
+// not confined to a workspace root and does no compare-and-write: it is for
+// files the person chose (an export) and per-person config.
+//
+// The file's mode is the existing destination's when there is one; otherwise
+// mode with the process umask applied, as os.WriteFile would. Because the
+// file is replaced by rename, a symbolic link or hard link at path is
+// replaced, not written through.
+func WriteFileAtomic(path string, data []byte, mode fs.FileMode) error {
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	} else {
+		mode &^= processUmask()
+	}
+	return WriteFileAtomicExact(path, data, mode)
+}
+
+// WriteFileAtomicExact is WriteFileAtomic with the file's mode set to exactly
+// mode: no umask, and an existing file's mode is not kept. For files whose
+// permissions are part of their contract (a config that may hold a key).
+func WriteFileAtomicExact(path string, data []byte, mode fs.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), TempPrefix+filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
 }

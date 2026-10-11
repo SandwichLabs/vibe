@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -261,7 +262,7 @@ func insideRoot(root, p string) bool {
 	if err != nil {
 		return false
 	}
-	return isWithin(real, filepath.Clean(p))
+	return filestore.Within(real, filepath.Clean(p))
 }
 
 // ResolveLocalPath turns a duckdb connection's path into the file to attach.
@@ -291,7 +292,7 @@ func ResolveLocalPath(root, p string, scope Scope) (string, error) {
 		return "", fmt.Errorf("failed to resolve the workspace folder: %w", err)
 	}
 	abs := filepath.Join(realRoot, filepath.FromSlash(p))
-	if !isWithin(realRoot, abs) {
+	if !filestore.Within(realRoot, abs) {
 		return "", fmt.Errorf("path %q leaves the workspace folder; use an absolute path if that is intended", p)
 	}
 	// Resolve the deepest existing ancestor (the file itself when present) so a
@@ -311,7 +312,7 @@ func ResolveLocalPath(root, p string, scope Scope) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve path %q: %w", p, err)
 	}
-	if !isWithin(realRoot, resolved) {
+	if !filestore.Within(realRoot, resolved) {
 		return "", fmt.Errorf("path %q resolves outside the workspace folder through a symbolic link; use an absolute path if that is intended", p)
 	}
 	tail, _ := filepath.Rel(existing, abs)
@@ -319,12 +320,4 @@ func ResolveLocalPath(root, p string, scope Scope) (string, error) {
 		return resolved, nil
 	}
 	return filepath.Join(resolved, tail), nil
-}
-
-func isWithin(root, p string) bool {
-	rel, err := filepath.Rel(root, p)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }

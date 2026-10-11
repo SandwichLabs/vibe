@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // ClaudeConfig is what "Copy Claude Desktop config" and "Copy Claude Code
@@ -73,27 +75,7 @@ func LocateVibe() (string, error) {
 	return "", errors.New("could not find the vibe command-line tool; install it and make sure it is on your PATH")
 }
 
-func slug(s string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(s) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			dash = false
-		default:
-			if !dash && b.Len() > 0 {
-				b.WriteByte('-')
-				dash = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		return "workspace"
-	}
-	return out
-}
+func slug(s string) string { return filestore.SlugOr(s, "workspace", 0) }
 
 // shellQuote quotes s for a POSIX shell only when it needs it.
 func shellQuote(s string) string {

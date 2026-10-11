@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Discover walks up from start to the nearest directory holding a vibe.yaml,
@@ -76,7 +77,7 @@ func DiscoverForLaunch(start, home string) (string, error) {
 			homes = append(homes, real)
 		}
 		for _, h := range homes {
-			if rel, err := filepath.Rel(root, h); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if filestore.Within(root, h) {
 				return "", fmt.Errorf("%w from %s", ErrNotWorkspace, start)
 			}
 		}

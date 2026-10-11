@@ -22,13 +22,7 @@ func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec
 		f(&o)
 	}
 	resolver := ws.Resolver()
-	var c Connection
-	found := false
-	for _, x := range ws.Connections() {
-		if x.Name == name {
-			c, found = x, true
-		}
-	}
+	c, found := ws.Connection(name)
 	if !found {
 		return session.Spec{}, fmt.Errorf("unknown connection %q", name)
 	}

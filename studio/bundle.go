@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -206,7 +205,7 @@ func (a *App) GetBundleContent() (*BundleContent, error) {
 			if _, _, err := bundle.SanitizeConnection(d); err != nil {
 				c.Portable, c.Reason = false, portableReason(err)
 			}
-			c.Summary = connectionSummary(d)
+			c.Summary = bundle.ConnSummary(d)
 			out.Connections = append(out.Connections, c)
 		}
 	}
@@ -300,7 +299,7 @@ func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error)
 	}
 	// The file dialog already asked about replacing; a typed-in path is the
 	// person's own choice too.
-	if err := os.WriteFile(path, res.Data, 0o644); err != nil { //nolint:gosec // a file meant to be shared
+	if err := filestore.WriteFileAtomic(path, res.Data, 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write %s: %w", path, err)
 	}
 	out := &BundleExportResult{Path: path, Encrypted: res.Encrypted, Bytes: len(res.Data), Warnings: append([]string{}, res.Manifest.Warnings...)}
@@ -482,16 +481,6 @@ type BundleImportOpened struct {
 func (a *App) DiscardBundleImport(handle string) { a.bundles.drop(handle) }
 
 type bundleDef = workspace.ConnectionDef
-
-func connectionSummary(d workspace.ConnectionDef) string {
-	var parts []string
-	for _, v := range []string{d.Host, d.Database, d.Path, d.Scope} {
-		if v != "" {
-			parts = append(parts, v)
-		}
-	}
-	return strings.Join(parts, " ")
-}
 
 // portableReason says in a sentence why a definition cannot go in a bundle.
 func portableReason(err error) string {

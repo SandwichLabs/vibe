@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"gopkg.in/yaml.v3"
 )
 
@@ -163,24 +163,7 @@ func verifyBlanked(orig, edited []byte) error {
 }
 
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".vibe-yaml-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(mode); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, path)
+	return filestore.WriteFileAtomicExact(path, data, mode)
 }
 
 // yamlDocCount counts the documents in data.

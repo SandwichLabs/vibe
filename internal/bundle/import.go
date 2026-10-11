@@ -197,12 +197,7 @@ func existingConnection(t Target, name string) (workspace.Connection, bool) {
 	if t == nil {
 		return workspace.Connection{}, false
 	}
-	for _, c := range t.Connections() {
-		if c.Name == name {
-			return c, true
-		}
-	}
-	return workspace.Connection{}, false
+	return t.Connection(name)
 }
 
 func scopeWords(s workspace.Scope) string {
@@ -217,7 +212,9 @@ func scopeWords(s workspace.Scope) string {
 	return string(s)
 }
 
-func connSummary(d workspace.ConnectionDef) string {
+// ConnSummary is a one-line "where does this connection point" for a
+// definition: host, database, path and scope, space-separated, never a secret.
+func ConnSummary(d workspace.ConnectionDef) string {
 	var parts []string
 	for _, v := range []string{d.Host, d.Database, d.Path, d.Scope} {
 		if v != "" {
@@ -245,7 +242,7 @@ func (p *Package) Preview(t Target) Preview {
 	}
 	for _, d := range p.conns {
 		c := PreviewConnection{
-			Key: Key(KindConnection, d.Name), Name: d.Name, Type: d.Type, Summary: cleanText(connSummary(d), maxTextRunes),
+			Key: Key(KindConnection, d.Name), Name: d.Name, Type: d.Type, Summary: cleanText(ConnSummary(d), maxTextRunes),
 			Details: ConnectionDetails(d), Risks: ConnectionRisks(d), AskedWritable: p.askedWrite[d.Name],
 		}
 		if ex, ok := existingConnection(t, d.Name); t != nil && ok {

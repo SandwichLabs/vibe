@@ -9,8 +9,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
+
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Loaded is a read .env file. Vars holds values and must never cross the
@@ -52,8 +53,7 @@ func Read(root string) Loaded {
 			l.Ignored = "the file is a link that could not be followed"
 			return l
 		}
-		rel, err := filepath.Rel(root, r)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if !filestore.Within(root, r) {
 			l.Ignored = "the file is a link that points outside the workspace"
 			return l
 		}

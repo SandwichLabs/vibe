@@ -63,6 +63,8 @@ type Session interface {
 	Connect(ctx context.Context, name string) error
 	Detach(ctx context.Context, name string) error
 	Connections() []Status
+	// Status is the state of the connection called name.
+	Status(name string) (Status, bool)
 	// ConnectionInfos describes every registered connection for the agent SQL
 	// policy: type, state, read-only flag, remote or local, and the storage
 	// scope. No DSN, credential or path.
@@ -1075,6 +1077,16 @@ func (h *hub) Detach(ctx context.Context, name string) error {
 	h.mu.Unlock()
 	h.InvalidateSchema("")
 	return nil
+}
+
+func (h *hub) Status(name string) (Status, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	e, ok := h.conns[name]
+	if !ok {
+		return Status{}, false
+	}
+	return e.status, true
 }
 
 func (h *hub) Connections() []Status {

@@ -1,0 +1,8 @@
+id: go-local-parse-scope
+language: go
+severity: error
+message: Scope names are parsed by workspace.ParseScope only. Adapters (cmd, studio) call it and word their own error; they do not declare a parseScope.
+rule:
+  kind: function_declaration
+  has: {field: name, regex: '^[pP]arseScope$'}
+files: ["cmd/**/*.go", "studio/*.go"]

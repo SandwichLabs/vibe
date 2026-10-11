@@ -178,12 +178,13 @@ func scopeStrings(s []workspace.Scope) []string {
 	return out
 }
 
-func parseScope(s string) (workspace.Scope, error) {
-	switch workspace.Scope(s) {
-	case workspace.ScopeShared, workspace.ScopeLocal, workspace.ScopeUser:
-		return workspace.Scope(s), nil
+// scopeChoice reads the scope the editor sent; the wording is Studio's.
+func scopeChoice(s string) (workspace.Scope, error) {
+	sc, ok := workspace.ParseScope(s)
+	if !ok {
+		return "", fmt.Errorf("Choose where to save this connection: Team, This computer or All my workspaces.")
 	}
-	return "", fmt.Errorf("Choose where to save this connection: Team, This computer or All my workspaces.")
+	return sc, nil
 }
 
 // scopeDef reads name's definition out of one scope's file.
@@ -220,22 +221,17 @@ func (a *App) GetConnectionInScope(ref ConnectionRef) (*ConnectionDetail, error)
 	if err != nil {
 		return nil, err
 	}
-	var win *workspace.Connection
-	for _, c := range ws.Connections() {
-		if c.Name == ref.Name {
-			c := c
-			win = &c
-		}
-	}
-	if win == nil {
+	winConn, ok := ws.Connection(ref.Name)
+	if !ok {
 		return nil, fmt.Errorf("There is no connection called %q.", ref.Name)
 	}
+	win := &winConn
 	d := &ConnectionDetail{
 		Name: win.Name, Scope: string(win.Scope), Def: win.ConnectionDef,
 		Shadows: scopeStrings(win.Shadows), SignIn: win.SignIn, SignInHint: win.SignInHint,
 	}
 	if ref.Scope != "" && ref.Scope != string(win.Scope) {
-		sc, err := parseScope(ref.Scope)
+		sc, err := scopeChoice(ref.Scope)
 		if err != nil {
 			return nil, err
 		}
@@ -330,7 +326,7 @@ func (a *App) SaveConnection(req SaveConnectionRequest) (*ConnectionDetail, erro
 	if err != nil {
 		return nil, err
 	}
-	scope, err := parseScope(req.Scope)
+	scope, err := scopeChoice(req.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -367,19 +363,15 @@ func (a *App) MoveConnection(req MoveConnectionRequest) (*ConnectionDetail, erro
 	if err != nil {
 		return nil, err
 	}
-	to, err := parseScope(req.To)
+	to, err := scopeChoice(req.To)
 	if err != nil {
 		return nil, err
 	}
-	var from workspace.Scope
-	for _, c := range ws.Connections() {
-		if c.Name == req.Name {
-			from = c.Scope
-		}
-	}
-	if from == "" {
+	cur, ok := ws.Connection(req.Name)
+	if !ok || cur.Scope == "" {
 		return nil, fmt.Errorf("There is no connection called %q.", req.Name)
 	}
+	from := cur.Scope
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), keychainTimeout)
 	defer cancel()
 	if err := ws.MoveConnection(ctx, req.Name, from, to); err != nil {
@@ -397,7 +389,7 @@ func (a *App) DeleteConnection(ref ConnectionRef) error {
 	if err != nil {
 		return err
 	}
-	scope, err := parseScope(ref.Scope)
+	scope, err := scopeChoice(ref.Scope)
 	if err != nil {
 		return err
 	}
@@ -522,11 +514,9 @@ func (a *App) reregister(ctx context.Context, ws workspace.Workspace, sess sessi
 }
 
 func (a *App) emitStatus(sess session.Session, name string) {
-	for _, st := range sess.Connections() {
-		if st.Name == name {
-			a.emitEvent("connection:status", map[string]any{"name": name, "status": string(st.Kind), "detail": st.Message})
-			return
-		}
+	if st, ok := sess.Status(name); ok {
+		a.emitEvent("connection:status", map[string]any{"name": name, "status": string(st.Kind), "detail": st.Message})
+		return
 	}
 	a.emitEvent("connection:status", map[string]any{"name": name, "status": string(session.StatusNotConnected), "detail": ""})
 }
@@ -579,13 +569,7 @@ func (a *App) DisconnectConnection(ref ConnectionRef) (*ConnectionInfo, error) {
 	}
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), connTimeout)
 	defer cancel()
-	var c workspace.Connection
-	for _, x := range ws.Connections() {
-		if x.Name == ref.Name {
-			c = x
-		}
-	}
-	if c.Name == "" {
+	if _, ok := ws.Connection(ref.Name); !ok {
 		return nil, fmt.Errorf("There is no connection called %q.", ref.Name)
 	}
 	if err := sess.Detach(ctx, ref.Name); err != nil {
@@ -790,11 +774,8 @@ func (a *App) GetTableCapabilities(table string) (*TableCapabilities, error) {
 	}
 	caps := &TableCapabilities{Connection: ref.Catalog, Editable: true}
 	var st *session.Status
-	for _, s := range sess.Connections() {
-		if s.Name == ref.Catalog {
-			s := s
-			st = &s
-		}
+	if s, ok := sess.Status(ref.Catalog); ok {
+		st = &s
 	}
 	switch {
 	case st != nil && st.Kind == session.StatusLockedBy:
@@ -870,14 +851,8 @@ func (a *App) SetConnectionCredentials(req SetCredentialsRequest) (*ConnectionIn
 }
 
 func (a *App) applyCredentials(ws workspace.Workspace, req SetCredentialsRequest) error {
-	var cur *workspace.Connection
-	for _, c := range ws.Connections() {
-		if c.Name == req.Name {
-			c := c
-			cur = &c
-		}
-	}
-	if cur == nil {
+	cur, ok := ws.Connection(req.Name)
+	if !ok {
 		return fmt.Errorf("There is no connection called %q.", req.Name)
 	}
 	method := req.Method
@@ -932,18 +907,12 @@ func (a *App) ConnectWithCredentials(req ConnectWithCredentialsRequest) (*Connec
 	}
 	cred := req.toCredential()
 	a.secrets.Redactor().AddCredential(cred)
-	var cur *workspace.Connection
-	for _, c := range ws.Connections() {
-		if c.Name == req.Name {
-			c := c
-			cur = &c
-		}
-	}
-	if cur == nil {
+	cur, ok := ws.Connection(req.Name)
+	if !ok {
 		return nil, fmt.Errorf("There is no connection called %q.", req.Name)
 	}
 	if kind, _, _ := secrets.ParseMethod(cur.SignIn); kind == "keychain" && !req.Remember {
-		rc, rerr := workspace.ResolveConnection(ws, *cur, nil)
+		rc, rerr := workspace.ResolveConnection(ws, cur, nil)
 		if rerr == nil {
 			ctx, cancel := context.WithTimeout(a.ctxOrBackground(), keychainTimeout)
 			rerr = ws.Resolver().SetSessionCredentials(ctx, workspace.CredentialRef(ws.ID(), cur.Scope, cur.Name), cred, rc.Binding())
@@ -977,14 +946,8 @@ func (a *App) ClearConnectionCredentials(req ClearCredentialsRequest) (*Connecti
 	if req.Field == "" {
 		err = ws.ClearCredentials(ctx, req.Name)
 	} else {
-		var c *workspace.Connection
-		for _, x := range ws.Connections() {
-			if x.Name == req.Name {
-				x := x
-				c = &x
-			}
-		}
-		if c == nil {
+		c, ok := ws.Connection(req.Name)
+		if !ok {
 			return nil, fmt.Errorf("There is no connection called %q.", req.Name)
 		}
 		err = ws.Resolver().ClearCredentialField(ctx, workspace.CredentialRef(ws.ID(), c.Scope, c.Name), c.SignIn, req.Field)
@@ -998,17 +961,15 @@ func (a *App) ClearConnectionCredentials(req ClearCredentialsRequest) (*Connecti
 	// An explicit Clear takes the connection off the hub (dropping a storage
 	// connection's temporary secret too): it must not keep working on a credential
 	// the person just removed. The next use asks again.
-	for _, c := range ws.Connections() {
-		if c.Name == req.Name {
-			ctx2, cancel2 := context.WithTimeout(a.ctxOrBackground(), connTimeout)
-			a.mu.RLock()
-			ro := a.readOnly
-			a.mu.RUnlock()
-			a.syncMu.Lock()
-			_ = a.reregister(ctx2, ws, sess, c, ro)
-			a.syncMu.Unlock()
-			cancel2()
-		}
+	if c, ok := ws.Connection(req.Name); ok {
+		ctx2, cancel2 := context.WithTimeout(a.ctxOrBackground(), connTimeout)
+		a.mu.RLock()
+		ro := a.readOnly
+		a.mu.RUnlock()
+		a.syncMu.Lock()
+		_ = a.reregister(ctx2, ws, sess, c, ro)
+		a.syncMu.Unlock()
+		cancel2()
 	}
 	a.afterCredentialChange(sess, req.Name)
 	return a.infoOf(req.Name), nil
@@ -1073,7 +1034,7 @@ func (a *App) TestConnection(req TestConnectionRequest) (*TestResultView, error)
 	}
 	scope := workspace.ScopeLocal
 	if req.Scope != "" {
-		if scope, err = parseScope(req.Scope); err != nil {
+		if scope, err = scopeChoice(req.Scope); err != nil {
 			return nil, err
 		}
 	}
@@ -1217,13 +1178,10 @@ func listFailureMessage(res connections.MDDatabasesResult) string {
 func (a *App) savedMotherDuckToken(ws workspace.Workspace, req ListMotherDuckDatabasesRequest) (secrets.Credential, string, bool) {
 	method := req.SignIn
 	var saved *workspace.Connection
-	for _, c := range ws.Connections() {
-		if req.Name != "" && c.Name == req.Name {
-			c := c
-			saved = &c
-			if method == "" {
-				method = c.SignIn
-			}
+	if c, ok := ws.Connection(req.Name); ok && req.Name != "" {
+		saved = &c
+		if method == "" {
+			method = c.SignIn
 		}
 	}
 	if method == "" {
@@ -1267,13 +1225,10 @@ func (a *App) savedMotherDuckToken(ws workspace.Workspace, req ListMotherDuckDat
 func (a *App) testBaseCredential(ws workspace.Workspace, rc workspace.ResolvedConnection, def workspace.ConnectionDef, signIn string) (secrets.Credential, bool) {
 	method := signIn
 	var saved *workspace.Connection
-	for _, c := range ws.Connections() {
-		if c.Name == def.Name {
-			c := c
-			saved = &c
-			if method == "" {
-				method = c.SignIn
-			}
+	if c, ok := ws.Connection(def.Name); ok {
+		saved = &c
+		if method == "" {
+			method = c.SignIn
 		}
 	}
 	if method == "" {
@@ -1440,12 +1395,7 @@ func (a *App) installedExtensions(names []string) map[string]bool {
 		return out
 	}
 	defer db.Close() //nolint:errcheck
-	for _, n := range names {
-		var ok bool
-		err := db.QueryRow(`SELECT coalesce(bool_or(installed), false) FROM duckdb_extensions() WHERE extension_name = $1 OR list_contains(aliases, $1)`, n).Scan(&ok)
-		out[n] = err == nil && ok
-	}
-	return out
+	return session.ExtensionsInstalled(context.Background(), session.FromDB(db), names)
 }
 
 // InstallExtensionRequest is the person's consent to download one extension.

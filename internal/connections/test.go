@@ -185,10 +185,8 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	start := time.Now()
 	if err := sess.Attach(ctx, spec); err != nil {
 		kind, msg := session.StatusError, err.Error()
-		for _, st := range sess.Connections() {
-			if st.Name == def.Name {
-				kind = st.Kind
-			}
+		if st, ok := sess.Status(def.Name); ok {
+			kind = st.Kind
 		}
 		ext := ""
 		if kind == session.StatusExtensionMissing {

@@ -277,7 +277,8 @@ func buildInfo(ctx context.Context, o *openedWorkspace) *infoReport {
 		rep.Skills = len(l)
 	}
 
-	rep.DuckDB, rep.Extensions = engineInfo(ctx, o.Sess)
+	q := session.FromSession(o.Sess)
+	rep.DuckDB, rep.Extensions = session.EngineVersion(ctx, q), session.InstalledExtensions(ctx, q)
 
 	pol := agents.PolicyFrom(ws)
 	rep.Agent.Sandbox, rep.Agent.AskBeforeWrites = string(pol.Mode), pol.AskBeforeWrites
@@ -291,29 +292,6 @@ func buildInfo(ctx context.Context, o *openedWorkspace) *infoReport {
 		rep.HubHolder = "unknown (its lock file cannot be trusted)"
 	}
 	return rep
-}
-
-// engineInfo reads the DuckDB version and the installed (downloaded)
-// extensions. It is best effort: a failure leaves the fields empty.
-func engineInfo(ctx context.Context, sess session.Session) (string, []string) {
-	version := ""
-	if rows, err := sess.Query(ctx, "SELECT version()"); err == nil {
-		if rows.Next() {
-			_ = rows.Scan(&version)
-		}
-		_ = rows.Close()
-	}
-	exts := []string{}
-	if rows, err := sess.Query(ctx, "SELECT extension_name FROM duckdb_extensions() WHERE installed AND install_mode <> 'STATICALLY_LINKED' ORDER BY 1"); err == nil {
-		for rows.Next() {
-			var n string
-			if rows.Scan(&n) == nil {
-				exts = append(exts, n)
-			}
-		}
-		_ = rows.Close()
-	}
-	return version, exts
 }
 
 // countTables counts the tables and views of every schema of one catalog.
