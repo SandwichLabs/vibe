@@ -115,7 +115,6 @@ echo "Generating video..."
 
 # Create video: 2.5s per frame, with fade transitions
 FRAME_DUR=2.5
-FADE_DUR=0.5
 FRAME_COUNT=$(ls "$OUTDIR"/frame_*.png | wc -l)
 
 if [[ "$FRAME_COUNT" -lt 2 ]]; then
@@ -125,7 +124,7 @@ fi
 
 # Use concat demuxer with frame duration
 LISTFILE="/tmp/qa_ffmpeg_list.txt"
-> "$LISTFILE"
+: > "$LISTFILE"
 for f in "$OUTDIR"/frame_*.png; do
   echo "file '$(realpath "$f")'" >> "$LISTFILE"
   echo "duration $FRAME_DUR" >> "$LISTFILE"

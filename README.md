@@ -2,6 +2,8 @@
 
 # Vibe
 
+[![CI](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml)
+
 **An agentic workspace for the data you already have.**
 
 Connect to local DuckDB files, MotherDuck, Postgres, MySQL, SQLite, DuckLake, Iceberg and Delta tables and object storage (S3, GCS, R2, Azure);

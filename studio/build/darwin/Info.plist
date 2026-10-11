@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Wails fills the {{.…}} fields from wails.json at `wails build`. Everything
+<!-- Wails fills the template fields from wails.json at `wails build`. Everything
      else is ours: the identifier and the document types that make Finder offer
      "Open With > Vibe Studio" for workspace folders and .vibe bundles. Both
      arrive in the app as an Apple Event (studio/main.go: mac.Options.OnFileOpen),

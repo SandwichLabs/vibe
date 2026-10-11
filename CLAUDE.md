@@ -36,6 +36,8 @@ task build:studio # Studio desktop app (build:studio:linux on Linux)
 go test -v ./internal/workspace/   # one package
 ```
 
+**CI** (`.github/workflows/ci.yml`): every PR runs the Linux `test` job (vet, `xvfb-run go test`, golangci-lint, vitest, frontend build, shellcheck) and a Linux amd64/arm64 build smoke on ubuntu-22.04 (CLI round trip + `wails build`). macOS runs only on push to main and `workflow_dispatch` (10x minutes). govulncheck (#41) and vue-tsc (#34/#35) are report-only. Actions are pinned to commit SHAs; the golangci-lint version is pinned in the workflow, so bump it with the local one.
+
 Wails tasks pin `GOTOOLCHAIN` via `WAILS_GOTOOLCHAIN` in Taskfile.yml (Wails v2.11 can't load newer Go, #92). Run `wails` through `task`, or prefix `GOTOOLCHAIN=<that value>`.
 
 CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
