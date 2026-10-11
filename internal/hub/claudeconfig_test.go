@@ -51,7 +51,7 @@ func TestBuildClaudeConfigNeverCarriesATokenOrALoosenedPolicy(t *testing.T) {
 	for _, s := range []string{cfg.Desktop, cfg.Code} {
 		assert.NotContains(t, s, "tok-from-the-lockfile")
 		assert.NotContains(t, s, "token")
-		assert.NotContains(t, s, "127.0.0.1:4242")
+		assert.NotContains(t, s, ":4242")
 		assert.NotContains(t, s, "--sandbox")
 	}
 }
