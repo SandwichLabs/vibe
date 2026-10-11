@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

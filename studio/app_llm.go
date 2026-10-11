@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/llm"
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/llm"
 )
 
 // LLMSettingsView is Settings → App → "The agent's model" as the form needs

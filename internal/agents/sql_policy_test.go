@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // expand fills the %DATA% and %OUT% placeholders of a test statement.

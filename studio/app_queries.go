@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // --- Queries ---

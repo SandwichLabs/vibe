@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 func openMySQL(t *testing.T, readOnly bool) (*mysqlServer, workspace.Workspace, session.Session) {

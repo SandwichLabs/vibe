@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 func resolveOne(t *testing.T, ws Workspace, name string) (ResolvedConnection, error) {

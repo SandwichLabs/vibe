@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/connections"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // SessionSpec builds the session.Spec for one connection of ws, exactly as

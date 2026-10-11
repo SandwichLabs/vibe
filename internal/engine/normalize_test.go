@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"math"
 	"math/big"
 	"testing"

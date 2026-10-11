@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/connections"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/storageurl"
+	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 )
 
 // SnapshotEnv returns an environment lookup over a copy of the process

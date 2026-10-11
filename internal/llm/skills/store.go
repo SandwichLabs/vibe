@@ -3,7 +3,7 @@ package skills
 import (
 	"context"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Skill sources.

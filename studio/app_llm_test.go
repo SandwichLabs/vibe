@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
+	"github.com/SandwichLabs/vibe/internal/config"
 )
 
 func TestLLMSettings_NoWorkspaceNeeded_SaveReloads(t *testing.T) {

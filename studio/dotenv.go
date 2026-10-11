@@ -9,9 +9,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // GetDotEnvStatus describes the open workspace's .env: state (none, undecided,

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // TableInfo is one entry in the table list.

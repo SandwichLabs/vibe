@@ -13,7 +13,7 @@ import (
 	"github.com/marcboeker/go-duckdb/mapping"
 	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver, for the dedicated parser connection below
 
-	"github.com/sandwich-labs/vibe-app/internal/usersql"
+	"github.com/SandwichLabs/vibe/internal/usersql"
 )
 
 // sqlClass is what a run_query statement is allowed to do, used to gate it per

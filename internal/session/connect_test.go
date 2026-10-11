@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // stubType is a credentialed type that needs no network: its "remote" is an

@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"testing"
 

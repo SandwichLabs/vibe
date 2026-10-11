@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // explainEmptyResult is ported from schoolwork-workspace's

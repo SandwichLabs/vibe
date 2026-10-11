@@ -2,7 +2,7 @@ package agents
 
 import (
 	"fmt"
-	"github.com/sandwich-labs/vibe-app/internal/storageurl"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 	"io/fs"
 	"os"
 	"path/filepath"

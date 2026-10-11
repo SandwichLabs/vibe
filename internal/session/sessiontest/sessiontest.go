@@ -7,7 +7,7 @@ package sessiontest
 import (
 	"database/sql"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // ForTests wraps a bare *sql.DB (for example sql.Open("duckdb", "")) in a

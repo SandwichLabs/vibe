@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
-	"github.com/sandwich-labs/vibe-app/internal/jsonenc"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/jsonenc"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // Extension is the query file extension; Dir the workspace directory.

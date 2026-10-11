@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/sandwich-labs/vibe-app/internal/session"
+import "github.com/SandwichLabs/vibe/internal/session"
 
 // QuoteIdent quotes a DuckDB identifier for safe interpolation into SQL. It is
 // session.QuoteIdent, kept here because every package that builds SQL already

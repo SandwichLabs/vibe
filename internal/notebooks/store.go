@@ -3,7 +3,7 @@ package notebooks
 import (
 	"context"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Store is where a workspace keeps its notebooks (plan §4.1). Two

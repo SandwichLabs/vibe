@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
 // Store is where a workspace keeps its named queries. Two implementations

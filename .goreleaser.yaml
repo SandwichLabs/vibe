@@ -9,7 +9,7 @@ before:
 
 builds:
   - id: vibe
-    main: .
+    main: ./cmd/vibe
     binary: vibe
     env:
       - CGO_ENABLED=1
@@ -21,9 +21,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/sandwich-labs/vibe-app/cmd.version={{.Version}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.commit={{.Commit}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.date={{.Date}}
+      - -X github.com/SandwichLabs/vibe/cmd.version={{.Version}}
+      - -X github.com/SandwichLabs/vibe/cmd.commit={{.Commit}}
+      - -X github.com/SandwichLabs/vibe/cmd.date={{.Date}}
 
   - id: vibe-studio
     main: ./studio

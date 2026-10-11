@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 const needle = "sk-ant-NEEDLE-123456"

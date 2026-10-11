@@ -3,7 +3,7 @@ package notebooks
 import (
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/jsonenc"
+	"github.com/SandwichLabs/vibe/internal/jsonenc"
 )
 
 // Extension is the notebook file extension.

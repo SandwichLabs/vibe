@@ -14,11 +14,11 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/sandwich-labs/vibe-app/internal/dotenv"
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/dotenv"
+	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/queries"
 )
 
 // ChangeKind is what changed on disk.

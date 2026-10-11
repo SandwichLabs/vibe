@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/sandwich-labs/vibe-app/internal/bundle"
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/bundle"
+	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // .vibe bundles (#118). A bundle is something the person exports and imports;

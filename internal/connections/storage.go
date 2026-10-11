@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/storageurl"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 )
 
 // storageType is an object-store connection: s3, gcs or r2. It has no catalog:

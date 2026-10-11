@@ -5,11 +5,11 @@ import (
 	"math"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
 )
 
 // replSubmitMsg is sent when the user presses Enter in the REPL with input.

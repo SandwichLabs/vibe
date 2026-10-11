@@ -10,13 +10,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/google/uuid"
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
-	"github.com/sandwich-labs/vibe-app/internal/engine"
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
-	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
 // WorkspaceAccess provides access to the open workspace (interface to avoid circular imports).

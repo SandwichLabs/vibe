@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/templates"
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

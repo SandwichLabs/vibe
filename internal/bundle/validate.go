@@ -10,11 +10,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/sandwich-labs/vibe-app/internal/llm/skills"
-	"github.com/sandwich-labs/vibe-app/internal/notebooks"
-	"github.com/sandwich-labs/vibe-app/internal/queries"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // Skill limits, the same ones agents.SaveUserSkillAt applies to a skill the

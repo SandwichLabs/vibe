@@ -12,8 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/filestore"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 type exportItem struct {

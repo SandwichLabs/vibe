@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // RowQuerier is the subset of *sql.DB / *sql.Conn-less callers need: a plain

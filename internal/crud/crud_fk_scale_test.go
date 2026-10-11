@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/crud"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/crud"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

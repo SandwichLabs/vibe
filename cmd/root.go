@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

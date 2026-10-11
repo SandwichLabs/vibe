@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 var configCmd = &cobra.Command{

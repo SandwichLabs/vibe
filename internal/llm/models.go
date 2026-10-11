@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
+	"github.com/SandwichLabs/vibe/internal/config"
 )
 
 // ModelList is the answer to "which models does this server have".

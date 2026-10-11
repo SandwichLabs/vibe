@@ -1,4 +1,4 @@
-module github.com/sandwich-labs/vibe-app
+module github.com/SandwichLabs/vibe
 
 go 1.26.3
 

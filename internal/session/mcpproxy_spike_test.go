@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/agents"
+	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

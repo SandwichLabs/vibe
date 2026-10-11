@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/config"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // keychainTimeout bounds the work behind one binding. The keychain store has

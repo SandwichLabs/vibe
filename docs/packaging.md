@@ -123,7 +123,7 @@ the same, so switching later is cheap.
 ## 4. Prerequisites (outside the repo)
 
 1. **Where downloads live.** Homebrew and the website need public asset
-   URLs. The likely path is open-sourcing `SandwichLabs/vibe-app`. The
+   URLs. The likely path is open-sourcing `SandwichLabs/vibe`. The
    fallback is publishing releases to a public `SandwichLabs/vibe` repo from
    this one's workflow, using a fine-grained token secret.
 2. **A new Apple Developer Program account.** The existing one is tied to a
@@ -290,9 +290,9 @@ builds:
         env: [CC=aarch64-linux-gnu-gcc, CXX=aarch64-linux-gnu-g++]
     ldflags:
       - -s -w
-      - -X github.com/sandwich-labs/vibe-app/cmd.version={{.Version}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.commit={{.Commit}}
-      - -X github.com/sandwich-labs/vibe-app/cmd.date={{.Date}}
+      - -X github.com/SandwichLabs/vibe/cmd.version={{.Version}}
+      - -X github.com/SandwichLabs/vibe/cmd.commit={{.Commit}}
+      - -X github.com/SandwichLabs/vibe/cmd.date={{.Date}}
 archives:
   - formats: [tar.gz]
     name_template: "vibe_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

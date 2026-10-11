@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/agents"
 )
 
 // toolCategory looks up a tool's registered category (e.g. "data", "content",

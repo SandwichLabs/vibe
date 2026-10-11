@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/prefs"
+	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 

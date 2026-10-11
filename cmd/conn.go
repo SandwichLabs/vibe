@@ -13,11 +13,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/connections"
-	"github.com/sandwich-labs/vibe-app/internal/hub"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
-	"github.com/sandwich-labs/vibe-app/internal/session"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

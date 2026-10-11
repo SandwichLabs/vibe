@@ -17,9 +17,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/sandwich-labs/vibe-app/internal/agents"
 )
 
 // Handler is the tool-dispatch surface Server needs. The production

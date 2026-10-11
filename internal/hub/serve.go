@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/agents"
-	vibemcp "github.com/sandwich-labs/vibe-app/internal/mcp"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
+	"github.com/SandwichLabs/vibe/internal/agents"
+	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // Holder app names, as written into hub.lock.

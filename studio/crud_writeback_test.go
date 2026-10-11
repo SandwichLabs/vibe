@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sandwich-labs/vibe-app/internal/crud"
+	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

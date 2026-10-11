@@ -20,8 +20,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/google/uuid"
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
 )
 
 // SchemaVersion is this package's notebook schema version. Coerce rejects a

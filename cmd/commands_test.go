@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	_ "github.com/marcboeker/go-duckdb/v2"
-	"github.com/sandwich-labs/vibe-app/internal/hub"
-	"github.com/sandwich-labs/vibe-app/internal/workspace"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"

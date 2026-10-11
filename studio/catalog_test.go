@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/importer"
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/importer"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // appWithSecondCatalog opens an App and attaches "other" (a writable .duckdb

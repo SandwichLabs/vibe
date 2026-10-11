@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sandwich-labs/vibe-app/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // DuckDBEngine executes queries against a DuckDB session.

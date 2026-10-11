@@ -3,7 +3,7 @@ package agents
 import (
 	"context"
 	"database/sql"
-	"github.com/sandwich-labs/vibe-app/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"sync"
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // --- ParseSandboxMode ---

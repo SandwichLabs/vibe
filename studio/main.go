@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sandwich-labs/vibe-app/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"

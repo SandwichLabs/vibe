@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // Session is the DuckDB hub: one DuckDB instance whose attached catalogs are

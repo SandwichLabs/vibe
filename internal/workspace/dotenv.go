@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sandwich-labs/vibe-app/internal/dotenv"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/dotenv"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // DotEnvDecisionFile is the per-person file, beside local.yaml in the user

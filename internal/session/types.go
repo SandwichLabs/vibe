@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"regexp"
 	"strings"
 	"time"

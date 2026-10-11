@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sandwich-labs/vibe-app/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/a2ui"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
