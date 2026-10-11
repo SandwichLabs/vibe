@@ -1,0 +1,227 @@
+name: Release
+
+# Push a v* tag to build a DRAFT release; a human reviews and publishes it.
+# Tags containing -rc or -test become prereleases. workflow_dispatch rebuilds an existing tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and release (for example v0.1.0)
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "1"
+  # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
+  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_VERSION: v2.11.0
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: build (${{ matrix.os_name }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux is built on 22.04 only (glibc 2.35 baseline); never move it to a newer image.
+          - { os_name: linux, arch: amd64, runner: ubuntu-22.04 }
+          - { os_name: linux, arch: arm64, runner: ubuntu-22.04-arm }
+          - { os_name: darwin, arch: arm64, runner: macos-15 }
+          # Intel Macs: macos-13 is retired; macos-15-intel is the remaining Intel image.
+          - { os_name: darwin, arch: amd64, runner: macos-15-intel }
+    env:
+      OS_NAME: ${{ matrix.os_name }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      # TAG (also reachable from workflow_dispatch input) is attacker-influenced text. Validate it
+      # before anything uses it; later steps only read $VER and friends from the environment.
+      - name: Validate the tag
+        shell: bash
+        run: |
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "invalid tag: $TAG"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Derive version
+        shell: bash
+        run: |
+          git rev-parse "refs/tags/$TAG" >/dev/null
+          {
+            echo "VER=${TAG#v}"
+            echo "COMMIT=$(git rev-parse --short HEAD)"
+            echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct HEAD)"
+          } >>"$GITHUB_ENV"
+
+      # Caches are off: a release build must not consume a cache a PR run could have poisoned.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # Same flags as CLI_LDFLAGS / STUDIO_LDFLAGS in Taskfile.yml, with the tag as the version.
+      - name: Build the CLI
+        shell: bash
+        run: |
+          go build -ldflags "-s -w \
+            -X github.com/SandwichLabs/vibe/cmd.version=$VER \
+            -X github.com/SandwichLabs/vibe/cmd.commit=$COMMIT \
+            -X github.com/SandwichLabs/vibe/cmd.date=$DATE" \
+            -o vibe ./cmd/vibe
+
+      - name: Frontend install
+        working-directory: studio/frontend
+        run: npm ci
+
+      - name: Install the Wails CLI
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
+
+      # Stamped in the CI checkout only (never committed). Becomes CFBundleShortVersionString.
+      - name: Stamp wails.json productVersion
+        shell: bash
+        run: |
+          jq --arg v "$VER" '.info.productVersion = $v' studio/wails.json >"$RUNNER_TEMP/wails.json"
+          mv "$RUNNER_TEMP/wails.json" studio/wails.json
+
+      - name: Build Studio
+        working-directory: studio
+        shell: bash
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then tags=webkit2_41,duckdb_arrow; else tags=duckdb_arrow; fi
+          wails build -tags "$tags" -ldflags "-s -w \
+            -X main.version=$VER \
+            -X main.commit=$COMMIT \
+            -X main.date=$DATE"
+
+      - name: Package (and ad-hoc sign on macOS)
+        shell: bash
+        run: scripts/package.sh "$OS_NAME" "$ARCH" "$VER" dist
+
+      - name: Smoke test the packaged binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          tar -xzf "dist/vibe-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          if [ "$RUNNER_OS" = Linux ]; then
+            vibe="$d/bin/vibe"; studio="$d/bin/vibe-studio"
+          else
+            vibe="$d/vibe"; studio="$d/Vibe Studio.app/Contents/MacOS/vibe-studio"
+            codesign --verify --deep --strict "$d/Vibe Studio.app"
+          fi
+          # Capture first: grep -q closing a pipe early gives the writer SIGPIPE (exit 141) under pipefail.
+          out="$("$vibe" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
+          out="$("$studio" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
+          cd "$(mktemp -d)"
+          "$vibe" workspace init . --name smoke </dev/null
+          out="$("$vibe" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: release (draft)
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the draft release and upload assets
+      id-token: write # sigstore signing for attest-build-provenance
+      attestations: write
+    steps:
+      - name: Validate the tag
+        shell: bash
+        run: |
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "invalid tag: $TAG"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Check the tag exists
+        run: git rev-parse "refs/tags/$TAG" >/dev/null
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      # checksums.txt covers every uploaded asset, install.sh included.
+      - name: checksums.txt
+        shell: bash
+        run: |
+          [ -f install.sh ] && cp install.sh dist/install.sh
+          cd dist
+          sha256sum -- *.tar.gz $([ -f install.sh ] && echo install.sh) >checksums.txt
+          cat checksums.txt
+
+      # Artifact attestations on a private repo need GitHub Enterprise Cloud; this org is on the free
+      # plan, so the step would fail. It is skipped while the repo is private and turns itself on the
+      # moment the repo is made public (github.event.repository.private becomes false). Verify with
+      #   gh attestation verify <archive> --repo SandwichLabs/vibe
+      - name: Attest build provenance
+        if: ${{ github.event.repository.private == false }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+
+      - name: Create or refresh the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          : >notes.md
+          if [ -f CHANGELOG.md ]; then
+            # The section whose "## " heading mentions the version (with or without v and brackets).
+            awk -v v="$ver" '
+              /^## / { if (on) exit; on = (index($0, v) > 0) ; next }
+              on { print }' CHANGELOG.md >notes.md
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Never rewrite a release a human has already published.
+            [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = true ] || { echo "release $TAG is published; refusing to overwrite"; exit 1; }
+            gh release upload "$TAG" dist/* --clobber
+            exit 0
+          fi
+          args=(--draft --verify-tag --title "$TAG")
+          case "$TAG" in *-*) args+=(--prerelease) ;; esac
+          if [ -s notes.md ]; then args+=(--notes-file notes.md); else args+=(--generate-notes); fi
+          gh release create "$TAG" dist/* "${args[@]}"

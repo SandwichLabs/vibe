@@ -9,7 +9,7 @@ vars:
   # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
   # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
   WAILS_GOTOOLCHAIN: go1.26.3
-  # `task install` stamps these into both binaries, as goreleaser does for releases.
+  # `task install` stamps these into both binaries (release.yml stamps the same flags from the tag).
   INSTALL_DIR: '{{.HOME}}/go/bin'
   VERSION:
     sh: git describe --tags --always --dirty
@@ -145,10 +145,11 @@ tasks:
       - install -m 755 build/bin/vibe-studio {{.INSTALL_DIR}}/vibe-studio
       - '{{.INSTALL_DIR}}/vibe-studio --version'
 
-  release:*:
-    desc: Tag, build, and publish a release
-    vars:
-      VERSION: '{{index .MATCH 0}}'
+  release:
+    desc: How to cut a release (there is no local release; CI builds it)
+    silent: true
     cmds:
-      - git tag -a v{{.VERSION}} -m "Release v{{.VERSION}}"
-      - goreleaser release --clean
+      - |
+        echo "A release is: push a tag. .github/workflows/release.yml builds every platform and"
+        echo "creates a DRAFT release (tags with -rc or -test are prereleases); a human publishes it."
+        echo "  git tag -a vX.Y.Z -m 'Release vX.Y.Z' && git push origin vX.Y.Z"

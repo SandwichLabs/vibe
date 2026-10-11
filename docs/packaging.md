@@ -9,6 +9,23 @@ Vibe ships two binaries: `vibe` (CLI, TUI, `vibe mcp serve`) and
 `vibe-studio` (the Wails desktop app). Both are CGO (DuckDB, and
 for Studio, WebKit), which decides almost everything below.
 
+## v0.1.0 unsigned pipeline, as built (#46)
+
+This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.goreleaser.yaml` and `task release:*` are gone; a release is **push a tag**.
+
+- **Trigger:** `.github/workflows/release.yml` on `push` of `v*` tags, or `workflow_dispatch` with an existing tag. `-rc` and `-test` tags are prereleases. Every release is a **draft**; a human publishes it.
+- **Native matrix** (no cross-compiling CGO): linux amd64 `ubuntu-22.04` (glibc 2.35 baseline, never newer), linux arm64 `ubuntu-22.04-arm`, darwin arm64 `macos-15`, darwin amd64 `macos-15-intel` (`macos-13` is retired).
+- **Versions:** the tag minus `v` is stamped into the CLI (`cmd.version/commit/date`) and Studio (`main.version/commit/date`), and `wails.json` `info.productVersion` is rewritten in the CI checkout only (not committed). `vibe --version` and `vibe-studio --version` show the tag; the build job fails if they do not.
+- **Archives** (built by `scripts/package.sh`), per platform:
+  - `vibe_<ver>_<os>_<arch>.tar.gz`: `vibe`, `VERSION`, README/LICENSE/THIRD_PARTY_NOTICES.md when present.
+  - `vibe-studio_<ver>_<os>_<arch>.tar.gz`, macOS: `Vibe Studio.app/` (ad-hoc signed), `vibe`, `VERSION`.
+  - `vibe-studio_<ver>_linux_<arch>.tar.gz`: `bin/vibe`, `bin/vibe-studio`, `share/applications/vibe-studio.desktop`, `share/mime/packages/vibe-bundle.xml`, `share/icons/hicolor/...` (no icon is committed yet, so none ships), `VERSION`.
+- **macOS:** `codesign --force --deep -s -` (no hardened runtime, so downloaded DuckDB extensions still load), then `codesign --verify --deep --strict`. No notarisation.
+- **Release job** (the only one with `contents: write`): `checksums.txt` over all archives, `actions/attest-build-provenance` on every archive, `install.sh` uploaded when it exists in the repo root, notes from the matching `CHANGELOG.md` section or auto-generated. Attestations need GitHub Enterprise on a private repo, so the step runs only when `github.event.repository.private == false` and starts working when the repo goes public.
+- **Deviation from audit §4:** asset names carry the version (`vibe_<ver>_<os>_<arch>.tar.gz`, `x86_64`/`amd64` as `amd64`). `install.sh` resolves the latest tag from the `releases/latest` redirect (#47). The archive contents follow §4.
+- **Safety:** the tag is validated against `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$` before use (also for dispatch input), builds use no caches, and a re-run refuses to touch a release that is already published. Any `-suffix` tag is a prerelease. Archives are reproducible (sorted, root-owned, commit-time mtimes).
+- **Cutting a release:** `git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0`, review the draft, then publish it. `task release` prints this.
+
 ## 1. Where things stand
 
 | Finding | Consequence |
