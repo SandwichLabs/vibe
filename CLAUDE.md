@@ -36,6 +36,8 @@ task build:studio # Studio desktop app (build:studio:linux on Linux)
 go test -v ./internal/workspace/   # one package
 ```
 
+**Release**: `task release` prints the procedure; a release is just pushing a `v*` tag (`-rc`/`-test` tags are prereleases; every release is a draft until a human publishes it). See `docs/packaging.md`, "v0.1.0 unsigned pipeline, as built".
+
 **CI** (`.github/workflows/ci.yml`): every PR runs the Linux `test` job (vet, `xvfb-run go test`, golangci-lint, vitest, frontend build, shellcheck) and a Linux amd64/arm64 build smoke on ubuntu-22.04 (CLI round trip + `wails build`). macOS runs only on push to main and `workflow_dispatch` (10x minutes). govulncheck (#41) and vue-tsc (#34/#35) are report-only. Actions are pinned to commit SHAs; the golangci-lint version is pinned in the workflow, so bump it with the local one.
 
 Wails tasks pin `GOTOOLCHAIN` via `WAILS_GOTOOLCHAIN` in Taskfile.yml (Wails v2.11 can't load newer Go, #92). Run `wails` through `task`, or prefix `GOTOOLCHAIN=<that value>`.
@@ -92,7 +94,7 @@ docs/                see docs/README.md
 - **Focus is visible**: `theme/bridge.css` owns the `:focus-visible` ring; never `outline: none` without it. Ad-hoc modals use `composables/useModal.ts`.
 - **QA in a real browser**: Rodney against the Wails-bound dev server at `:34115` (see `RODNEY.md`); Vitest specs are supplementary, never the acceptance criterion. The older Rodney verification protocol is in `docs/archive/parity-remediation-plan.md` §1.
 - **Docs move with code**: keep `docs/reference/` and the architecture tree above current; `internal/docsref` fails when they drift.
-- **Goreleaser** (`.goreleaser.yaml`) for releases, ldflags for version injection.
+- **Releases** are `.github/workflows/release.yml`: push a `v*` tag and it builds natively on four runners, stamps the version with ldflags, and creates a draft release. No GoReleaser.
 
 ## Design principles
 
