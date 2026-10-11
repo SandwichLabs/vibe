@@ -594,3 +594,16 @@ func (s *slowGetKeyring) Get(svc, u string) (string, error) {
 	}
 	return v, err
 }
+
+func TestMotherDuckMissingCredentialHintNamesTheTokenVariable(t *testing.T) {
+	r := newResolver(newFake(), nil)
+	ctx := context.Background()
+	md := Binding{Fingerprint: "fp", Type: "motherduck"}
+	for _, method := range []string{"env:MOTHERDUCK", "keychain"} {
+		_, err := r.Resolve(ctx, Ref{Scope: ScopeUser, Name: "md"}, method, md)
+		require.Error(t, err, method)
+		assert.Contains(t, err.Error(), "MOTHERDUCK_TOKEN", method)
+		assert.NotContains(t, err.Error(), "MD_USER")
+		assert.NotContains(t, err.Error(), "MD_PASSWORD")
+	}
+}

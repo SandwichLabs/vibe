@@ -1115,6 +1115,134 @@ func (a *App) TestConnection(req TestConnectionRequest) (*TestResultView, error)
 	return out, nil
 }
 
+// ListMotherDuckDatabasesRequest asks which databases a MotherDuck token can
+// attach. Credentials are what the person just typed (write-only: never
+// returned); with none typed, the sign-in method in effect supplies the token
+// (keychain, or an env: variable), like Test.
+type ListMotherDuckDatabasesRequest struct {
+	// Name is the connection being edited ("" for a new one).
+	Name        string          `json:"name"`
+	Scope       string          `json:"scope"`
+	SignIn      string          `json:"signIn"`
+	Credentials CredentialInput `json:"credentials"`
+	// Install is the person's consent to download the MotherDuck extension.
+	Install bool `json:"install"`
+}
+
+// MotherDuckDatabase is one entry of the database picker.
+type MotherDuckDatabase struct {
+	Name  string `json:"name"`
+	Share bool   `json:"share"`
+}
+
+// MotherDuckDatabasesView is what ListMotherDuckDatabases returns. Nothing in
+// it is a secret.
+type MotherDuckDatabasesView struct {
+	OK        bool                 `json:"ok"`
+	Status    string               `json:"status"`
+	Databases []MotherDuckDatabase `json:"databases"`
+	// Source says where the token came from ("typed", "keychain", "env"),
+	// never the token itself.
+	Source string `json:"source,omitempty"`
+	// Message is a redacted plain-language reason when OK is false.
+	Message          string `json:"message,omitempty"`
+	InstallExtension string `json:"installExtension,omitempty"`
+}
+
+// ListMotherDuckDatabases lists the MotherDuck databases and shares the token
+// can attach, in a subprocess (a process holds one MotherDuck token), with the
+// same 10 second limit as Test. It never touches the workspace's own session.
+func (a *App) ListMotherDuckDatabases(req ListMotherDuckDatabasesRequest) (*MotherDuckDatabasesView, error) {
+	ws, _, _, err := a.snapshot()
+	if err != nil {
+		return nil, err
+	}
+	empty := func(status, msg string) *MotherDuckDatabasesView {
+		return &MotherDuckDatabasesView{Status: status, Databases: []MotherDuckDatabase{}, Message: a.redact(msg)}
+	}
+	typed := req.Credentials.toCredential()
+	if strings.HasPrefix(req.SignIn, "env:") {
+		typed = secrets.Credential{} // an environment sign-in never uses a typed token
+	}
+	a.secrets.Redactor().AddCredential(typed)
+	cred, source := secrets.Credential{Token: typed.Token}, "typed"
+	if typed.Token == "" {
+		var ok bool
+		if cred, source, ok = a.savedMotherDuckToken(ws, req); !ok {
+			return empty(string(session.StatusNeedsCredentials), "Enter a MotherDuck token, or choose an environment variable that holds one, to load your databases."), nil
+		}
+	}
+	a.secrets.Redactor().AddCredential(cred)
+	res := connections.ListMotherDuckDatabases(a.ctxOrBackground(), cred, connections.WithInstall(req.Install), connections.WithTestRedactor(a.secrets.Redactor()))
+	out := &MotherDuckDatabasesView{OK: res.OK, Status: string(res.Status), Databases: []MotherDuckDatabase{}, Source: source, InstallExtension: res.InstallExtension}
+	for _, d := range res.Databases {
+		out.Databases = append(out.Databases, MotherDuckDatabase{Name: d.Name, Share: d.Share})
+	}
+	if !res.OK {
+		out.Message = a.redact(listFailureMessage(res))
+	}
+	return out, nil
+}
+
+func listFailureMessage(res connections.MDDatabasesResult) string {
+	switch {
+	case res.InstallExtension != "" || res.Status == session.StatusExtensionMissing:
+		return "Vibe's database engine needs the motherduck extension, which isn't installed yet. Install it, then load again."
+	case res.Status == session.StatusNeedsCredentials:
+		return "MotherDuck turned down this token. Check it and try again."
+	case strings.Contains(strings.ToLower(res.Error), "timed out"):
+		return "No answer from MotherDuck after 10 seconds. Check your network connection."
+	}
+	return "Couldn't load your MotherDuck databases. You can still type the database name. " + res.Error
+}
+
+// savedMotherDuckToken is the token the sign-in method in effect supplies when
+// none was typed: the keychain or prompt entry of the connection being edited,
+// or an env: variable. It is looked up against the saved definition, not the
+// form (the Database field is what this call is for choosing).
+func (a *App) savedMotherDuckToken(ws workspace.Workspace, req ListMotherDuckDatabasesRequest) (secrets.Credential, string, bool) {
+	method := req.SignIn
+	var saved *workspace.Connection
+	for _, c := range ws.Connections() {
+		if req.Name != "" && c.Name == req.Name {
+			c := c
+			saved = &c
+			if method == "" {
+				method = c.SignIn
+			}
+		}
+	}
+	if method == "" {
+		method = "keychain"
+	}
+	kind, _, perr := secrets.ParseMethod(method)
+	if perr != nil {
+		return secrets.Credential{}, "", false
+	}
+	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), keychainTimeout)
+	defer cancel()
+	switch {
+	case kind == "env":
+		ref := secrets.Ref{Scope: secrets.ScopeWorkspace, Name: "motherduck"}
+		cred, err := ws.Resolver().Resolve(ctx, ref, method, secrets.Binding{Type: "motherduck"})
+		if err != nil || cred.Token == "" {
+			return secrets.Credential{}, "", false
+		}
+		return cred, "env", true
+	case saved != nil && saved.Type == "motherduck":
+		rc, err := workspace.ResolveConnection(ws, *saved, nil)
+		if err != nil {
+			return secrets.Credential{}, "", false
+		}
+		cred, err := ws.Resolver().Resolve(ctx, workspace.CredentialRef(ws.ID(), rc.Scope, saved.Name), method, rc.Binding())
+		if err != nil || cred.Token == "" {
+			return secrets.Credential{}, "", false
+		}
+		return cred, kind, true
+	}
+	return secrets.Credential{}, "", false
+}
+
 // testBaseCredential is the saved credential a test starts from: this person's
 // sign-in by the method in effect. It returns serverChanged (and no credential)
 // when the definition being tested differs, in any fingerprint field, from the

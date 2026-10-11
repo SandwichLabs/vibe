@@ -94,7 +94,7 @@ func TestMotherDuckEmittedSQL(t *testing.T) {
 	require.NoError(t, err)
 	// READ_ONLY is not supported on md: so it is never emitted, and the token is
 	// never in a statement.
-	assert.Equal(t, []string{`ATTACH 'md:my-db_1?attach_mode=single' AS "md"`}, stmts)
+	assert.Equal(t, []string{`ATTACH 'md:my-db_1' AS "md"`}, stmts)
 	steps, err := asCred(registry["motherduck"]).SecretSteps(d.Spec(), secrets.Credential{Token: "tok"})
 	require.NoError(t, err)
 	assert.Empty(t, steps, "no CREATE SECRET exists for motherduck on DuckDB 1.4.1")

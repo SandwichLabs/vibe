@@ -57,6 +57,7 @@ declare global {
           MoveConnection(req: { name: string; to: ConnScope }): Promise<ConnectionDetail>
           DeleteConnection(ref: ConnectionRef): Promise<void>
           TestConnection(req: TestConnectionRequest): Promise<TestResultView>
+          ListMotherDuckDatabases(req: ListMotherDuckDatabasesRequest): Promise<MotherDuckDatabasesView>
           ConnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
           ConnectWithCredentials(req: ConnectWithCredentialsRequest): Promise<ConnectionInfo | null>
           DisconnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
@@ -284,6 +285,9 @@ interface CredentialInput { username: string; keyId: string; password: string; t
 interface SetCredentialsRequest extends CredentialInput { name: string; method: string; remember: boolean; confirmRebind?: boolean }
 interface ConnectWithCredentialsRequest extends CredentialInput { name: string; remember: boolean }
 interface TestConnectionRequest { scope: ConnScope; def: ConnectionDef; signIn: string; credentials: CredentialInput }
+interface ListMotherDuckDatabasesRequest { name: string; scope: ConnScope; signIn: string; credentials: CredentialInput; install: boolean }
+interface MotherDuckDatabase { name: string; share: boolean }
+interface MotherDuckDatabasesView { ok: boolean; status: string; databases: MotherDuckDatabase[]; source?: string; message?: string; installExtension?: string }
 interface TestResultView {
   ok: boolean
   status: string

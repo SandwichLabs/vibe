@@ -230,6 +230,8 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 const ChildCommand = "__conn-test"
 
 type childRequest struct {
+	// Action is "" (test Def) or childActionListDatabases.
+	Action      string             `json:"action,omitempty"`
 	Def         Def                `json:"def"`
 	Cred        secrets.Credential `json:"cred"`
 	Install     bool               `json:"install"`
@@ -258,39 +260,49 @@ func testInSubprocess(ctx context.Context, def Def, cred secrets.Credential, o t
 	if cred.Token == "" {
 		return TestResult{Status: session.StatusNeedsCredentials, Error: "No MotherDuck token is set for this connection."}
 	}
-	exe := o.exe
-	if exe == "" {
-		var err error
-		if exe, err = os.Executable(); err != nil {
-			return fail(fmt.Errorf("failed to find the vibe executable: %w", err))
-		}
-	}
-	req, err := json.Marshal(childRequest{Def: def, Cred: cred, Install: o.install, ExtensionDr: o.extDir, TimeoutMS: o.timeout.Milliseconds()})
+	line, err := runChildProcess(ctx, childRequest{Def: def, Cred: cred, Install: o.install, ExtensionDr: o.extDir, TimeoutMS: o.timeout.Milliseconds()}, o)
 	if err != nil {
 		return fail(err)
 	}
-	// The credential travels over stdin: never argv, never the environment.
-	cmd := exec.CommandContext(ctx, exe, ChildCommand)
-	cmd.Env = childEnv(os.Environ())
-	cmd.WaitDelay = 500 * time.Millisecond // do not wait on grandchildren holding the pipes
-	cmd.Stdin = bytes.NewReader(req)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil && stdout.Len() == 0 {
-		if ctx.Err() != nil {
-			return fail(fmt.Errorf("timed out after %s", o.timeout))
-		}
-		return fail(fmt.Errorf("the MotherDuck test process failed: %w", err))
-	}
-	// MotherDuck may write other text to stdout: the result is the last line.
-	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	var res TestResult
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &res); err != nil {
+	if err := json.Unmarshal(line, &res); err != nil {
 		return fail(errors.New("the MotherDuck test process gave no result"))
 	}
 	res.Error = secrets.RedactPatterns(red.Redact(res.Error))
 	res.Detail = red.Redact(res.Detail)
 	return res
+}
+
+// runChildProcess re-executes the vibe binary as the MotherDuck child, hands it
+// req on stdin (the credential never touches argv or the environment) and
+// returns the last line of its stdout: MotherDuck may write other text there.
+// Errors are generic and never carry the credential.
+func runChildProcess(ctx context.Context, req childRequest, o testOpts) ([]byte, error) {
+	exe := o.exe
+	if exe == "" {
+		var err error
+		if exe, err = os.Executable(); err != nil {
+			return nil, fmt.Errorf("failed to find the vibe executable: %w", err)
+		}
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, exe, ChildCommand)
+	cmd.Env = childEnv(os.Environ())
+	cmd.WaitDelay = 500 * time.Millisecond // do not wait on grandchildren holding the pipes
+	cmd.Stdin = bytes.NewReader(body)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil && stdout.Len() == 0 {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("timed out after %s", o.timeout)
+		}
+		return nil, fmt.Errorf("the MotherDuck test process failed: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	return []byte(lines[len(lines)-1]), nil
 }
 
 // RunChild is the subprocess side of the MotherDuck test: it reads one JSON
@@ -301,6 +313,9 @@ func RunChild(ctx context.Context, in io.Reader, out io.Writer) error {
 	var req childRequest
 	if err := json.NewDecoder(in).Decode(&req); err != nil {
 		return fmt.Errorf("failed to read the test request: %w", err)
+	}
+	if req.Action == childActionListDatabases {
+		return runListChild(ctx, req, out)
 	}
 	to := time.Duration(req.TimeoutMS) * time.Millisecond
 	if to <= 0 || to > 2*TestTimeout {

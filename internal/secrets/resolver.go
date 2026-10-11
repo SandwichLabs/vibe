@@ -24,6 +24,9 @@ type Binding struct {
 	Fingerprint string
 	// Server is a host-level description ("db.internal:5432") for messages.
 	Server string
+	// Type is the connection type, used only to word the missing-credential
+	// hint (MotherDuck takes a token, not a user and password).
+	Type string
 }
 
 // ErrFingerprintChanged means the connection now points at a different server
@@ -49,9 +52,14 @@ type ErrNeedsCredentials struct {
 	// Reason is "not set" or the store's unavailability detail.
 	Reason string
 	Ref    Ref
+	// Type is the connection type ("" when unknown).
+	Type string
 }
 
 func (e *ErrNeedsCredentials) Error() string {
+	if e.Type == "motherduck" {
+		return fmt.Sprintf("no credentials for %s (%s): sign in with a MotherDuck token, or choose Environment variables and set MOTHERDUCK_TOKEN", e.Ref.Name, e.Reason)
+	}
 	ex := strings.ToUpper(e.Ref.Name)
 	return fmt.Sprintf("no credentials for %s (%s): sign in, or choose Environment variables and set %s_USER and %s_PASSWORD (or %s_TOKEN)", e.Ref.Name, e.Reason, ex, ex, ex)
 }
@@ -140,19 +148,19 @@ func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Bindin
 	case "env":
 		c, ok := r.env(prefix).Load()
 		if !ok {
-			return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "none of " + strings.Join(EnvVarNames(prefix), ", ") + " is set", Ref: ref}
+			return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "none of " + strings.Join(EnvVarNames(prefix), ", ") + " is set", Ref: ref, Type: b.Type}
 		}
 		r.redactor.AddCredential(c)
 		return c, nil
 	case MethodPrompt:
-		cred, err = r.load(ctx, r.memory, ref, method)
+		cred, err = r.load(ctx, r.memory, ref, method, b.Type)
 	default:
 		// A credential typed in the sign-in prompt with "Remember" off is held
 		// in memory for this session and wins over the keychain's.
-		if c, merr := r.load(ctx, r.memory, ref, method); merr == nil {
+		if c, merr := r.load(ctx, r.memory, ref, method, b.Type); merr == nil {
 			cred = c
 		} else {
-			cred, err = r.load(ctx, r.keyring, ref, method)
+			cred, err = r.load(ctx, r.keyring, ref, method, b.Type)
 		}
 	}
 	if err != nil {
@@ -165,11 +173,11 @@ func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Bindin
 	return cred, nil
 }
 
-func (r *Resolver) load(ctx context.Context, s Store, ref Ref, method string) (Credential, error) {
+func (r *Resolver) load(ctx context.Context, s Store, ref Ref, method, typ string) (Credential, error) {
 	raw, err := s.Get(ctx, ref)
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "not set", Ref: ref}
+		return Credential{}, &ErrNeedsCredentials{Method: method, Reason: "not set", Ref: ref, Type: typ}
 	case err != nil:
 		return Credential{}, err
 	}

@@ -201,6 +201,7 @@ function chooseType(id: string, from?: ConnectionDef) {
 }
 
 async function load() {
+  resetMD()
   loading.value = true
   loadError.value = ''
   try {
@@ -282,6 +283,52 @@ async function runTest() {
   await nextTick()
   resultEl.value?.focus()
 }
+
+// ---- MotherDuck database picker ----
+// The list comes from the account the token belongs to, loaded in a separate
+// process like Test. A typed token goes over the bridge once and is never
+// returned; typing the name by hand stays possible whatever happens here.
+const mdDbs = ref<MotherDuckDatabase[]>([])
+const mdLoading = ref(false)
+const mdLoaded = ref(false)
+const mdError = ref('')
+const mdInstall = ref('')
+const mdTokenReady = computed(() => !!typed.token.trim() || method.value === 'env' || (!isNew.value && method.value !== 'prompt' && !!status.value?.secretSet))
+let mdReq = 0
+function resetMD() { mdReq++; mdLoading.value = false; mdLoaded.value = false; mdDbs.value = []; mdError.value = ''; mdInstall.value = '' }
+async function loadDatabases() {
+  if (mdLoading.value) return
+  const my = ++mdReq
+  const key = JSON.stringify([route.path, route.params.name, methodString.value, typed.token])
+  const stale = () => my !== mdReq || key !== JSON.stringify([route.path, route.params.name, methodString.value, typed.token])
+  mdLoading.value = true
+  mdError.value = ''
+  mdInstall.value = ''
+  try {
+    const r = await window.go.main.App.ListMotherDuckDatabases({
+      name: isNew.value ? '' : f.name,
+      scope: connScope.value,
+      signIn: methodString.value,
+      credentials: method.value === 'env' ? { username: '', keyId: '', password: '', token: '', secret: '' } : { ...typed },
+      install: false,
+    })
+    if (stale()) return
+    mdLoaded.value = r.ok
+    mdDbs.value = r.databases ?? []
+    if (!r.ok) { mdError.value = r.message ?? 'Couldn\'t load your databases.'; mdInstall.value = r.installExtension ?? '' }
+  } catch (e: unknown) {
+    if (stale()) return
+    mdLoaded.value = false
+    mdError.value = errorText(e)
+  }
+  mdLoading.value = false
+}
+function pickDatabase(name: string) {
+  f.database = name
+  result.value = null
+}
+// A different token or sign-in means a different account: the old list is stale.
+watch(() => [typed.token, methodString.value], resetMD)
 
 async function installFor(ext: string) {
   extensionFor.value = { connection: f.name, extension: ext }
@@ -521,7 +568,27 @@ const title = computed(() => (isNew.value ? 'New connection' : `Edit ${f.name}`)
             <div style="display: flex; gap: 8px;">
               <input :id="`f-${fd.name}`" :value="val(fd)" class="field-input" style="flex: 1;" :type="fd.kind === 'number' ? 'number' : 'text'" autocomplete="off" spellcheck="false" :aria-describedby="fd.help || fd.name === 'database' ? `f-${fd.name}-h` : undefined" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
             </div>
-            <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp"> {{ fingerprintHelp }}</template></div>
+            <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
+            <div v-if="isMD && fd.name === 'database'" class="md-picker" data-testid="md-picker">
+              <div class="md-picker-bar">
+                <button type="button" class="btn btn-sm" :disabled="mdLoading || !mdTokenReady" data-testid="md-load" @click="loadDatabases">
+                  <Icon name="refresh" :size="14" /> {{ mdLoading ? 'Loading databases…' : mdLoaded ? 'Refresh databases' : 'Load databases' }}
+                </button>
+                <span v-if="!mdTokenReady && !mdLoading" class="help" data-testid="md-hint">Enter your token below to pick from your databases, or type the name.</span>
+              </div>
+              <div v-if="mdLoading" class="help" role="status" data-testid="md-loading">Asking MotherDuck which databases this token can reach…</div>
+              <div v-else-if="mdError" class="note attn" role="alert" data-testid="md-error">
+                <Icon name="alert" :size="16" />
+                <span>{{ mdError }}
+                  <button v-if="mdInstall" type="button" class="linkbtn" data-testid="md-install" @click="installFor(mdInstall)">Install the {{ mdInstall }} extension…</button></span>
+              </div>
+              <div v-else-if="mdLoaded && !mdDbs.length" class="help" role="status" data-testid="md-empty">This account has no databases yet. You can still type a name.</div>
+              <div v-else-if="mdLoaded" role="group" aria-label="Your MotherDuck databases" class="md-dbs" data-testid="md-dbs">
+                <button v-for="d in mdDbs" :key="d.name" type="button" class="md-db" :class="{ on: f.database === d.name }" :aria-pressed="f.database === d.name" :data-testid="`md-db-${d.name}`" @click="pickDatabase(d.name)">
+                  {{ d.name }}<span v-if="d.share" class="md-share">shared</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div v-if="fd.name === 'host' && portField" class="field">
             <label class="field-label" for="f-port">{{ portField.label }}</label>

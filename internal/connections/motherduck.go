@@ -11,7 +11,7 @@ import (
 
 // motherduckType attaches one MotherDuck database as one catalog:
 //
-//	ATTACH 'md:<database>?attach_mode=single' AS "x"
+//	ATTACH 'md:<database>' AS "x"
 //
 // The token is not part of any statement. DuckDB 1.4.1 has no
 // CREATE SECRET (TYPE motherduck); the token is SET on the hub after LOAD and
@@ -23,9 +23,11 @@ import (
 // MotherDuck definition is rejected (ErrMotherDuckReadOnly) instead of being
 // silently writable; use a read-scaling token for read-only access.
 //
-// Unverified without a real token (#115): the exact behaviour of
-// attach_mode=single on an already-running non-MotherDuck hub (a token-gated
-// test asserts that exactly one catalog is attached).
+// A named database attaches exactly that one database. The extension treats
+// the whole string after "md:" as the database name, so a "?attach_mode=single"
+// suffix is not accepted (#163: it failed with 'no database/share named
+// "my_db?attach_mode=single"'); only a bare "md:" is workspace mode, which
+// attaches every database of the account. Verified live on DuckDB 1.4.1.
 type motherduckType struct{}
 
 func (motherduckType) Name() string                      { return "motherduck" }
@@ -69,9 +71,10 @@ func (t motherduckType) AttachSQL(s session.Spec) ([]string, error) {
 	if param(s, "forced_read_only") != "" {
 		return nil, errors.New(ErrMotherDuckReadOnly + " (this command opens the workspace read-only)")
 	}
-	// The database name is restricted to [A-Za-z0-9_-] by Validate, so the
-	// literal cannot carry a '?' or '&' parameter of its own.
-	return []string{"ATTACH " + session.QuoteLiteral("md:"+param(s, "database")+"?attach_mode=single") + " AS " + session.QuoteIdent(s.Name)}, nil
+	// The database name is restricted to [A-Za-z0-9_-] by Validate (never
+	// empty), so the literal cannot be bare "md:" (every database) and cannot
+	// carry a '?' or '&' parameter of its own.
+	return []string{"ATTACH " + session.QuoteLiteral("md:"+param(s, "database")) + " AS " + session.QuoteIdent(s.Name)}, nil
 }
 
 func (motherduckType) Probe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {

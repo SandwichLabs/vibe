@@ -17,6 +17,10 @@ import (
 	"github.com/sandwich-labs/vibe-app/internal/session"
 )
 
+// The hub scrubs MOTHERDUCK_TOKEN from the process environment when it opens,
+// so the real token is captured before any test runs.
+var realMDToken = os.Getenv("MOTHERDUCK_TOKEN")
+
 const fakeMDToken = "eyFAKE.md_token_needle_9981.sig"
 
 func installMD(t *testing.T) string {
@@ -99,12 +103,12 @@ func TestMotherDuckInstalledAfterOpenNeedsARelaunch(t *testing.T) {
 
 // Needs a real token (and a database name): skipped otherwise.
 func TestMotherDuckRealToken(t *testing.T) {
-	tok, db := os.Getenv("MOTHERDUCK_TOKEN"), os.Getenv("MOTHERDUCK_TEST_DATABASE")
+	tok, db := realMDToken, os.Getenv("MOTHERDUCK_TEST_DATABASE")
 	if tok == "" {
 		t.Skip("MOTHERDUCK_TOKEN is not set")
 	}
 	if db == "" {
-		db = "my_db"
+		t.Skip("MOTHERDUCK_TEST_DATABASE is not set")
 	}
 	exe, err := os.Executable()
 	require.NoError(t, err)
@@ -114,27 +118,48 @@ func TestMotherDuckRealToken(t *testing.T) {
 	assert.True(t, res.OK, res.Error)
 }
 
-// Needs a real token and a database in that account (MOTHERDUCK_TEST_DATABASE):
-// skipped otherwise. attach_mode=single is UNVERIFIED until this has run with a
-// token: it asserts that attaching one MotherDuck database adds exactly one
-// catalog (workspace mode would attach every database of the account).
-func TestMotherDuckAttachModeSingleAttachesExactlyOneCatalog(t *testing.T) {
-	tok, db := os.Getenv("MOTHERDUCK_TOKEN"), os.Getenv("MOTHERDUCK_TEST_DATABASE")
-	if tok == "" || db == "" {
-		t.Skip("MOTHERDUCK_TOKEN and MOTHERDUCK_TEST_DATABASE are not set")
+// Needs a real token: skipped otherwise. Attaching one named database adds
+// exactly that catalog (plus MotherDuck's own md_information_schema), and the
+// database list the editor shows includes it (#163).
+func TestMotherDuckAttachesExactlyTheNamedDatabase(t *testing.T) {
+	tok := realMDToken
+	if tok == "" {
+		t.Skip("MOTHERDUCK_TOKEN is not set")
 	}
 	_ = installMD(t)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	list := connections.ListMotherDuckDatabases(context.Background(), secrets.Credential{Token: tok},
+		connections.WithExecutable(exe), connections.WithTestExtensionDir(extDir(t)))
+	require.True(t, list.OK, list.Error)
+	require.NotEmpty(t, list.Databases, "the account has at least one database")
+	db := os.Getenv("MOTHERDUCK_TEST_DATABASE")
+	if db == "" {
+		db = list.Databases[0].Name
+	}
+	var names []string
+	for _, d := range list.Databases {
+		names = append(names, d.Name)
+	}
+	assert.Contains(t, names, db)
+	assert.NotContains(t, names, "memory", "the local in-memory catalog is not a MotherDuck database")
+
 	sess, err := session.New(session.WithConnectionTypes(connections.Types()...), session.WithExtensionDirectory(extDir(t)),
 		session.WithMotherDuckToken(tok))
 	require.NoError(t, err)
 	defer sess.Close()
 	ctx := context.Background()
-	before, err := sess.ListCatalogs(ctx)
-	require.NoError(t, err)
 	require.NoError(t, sess.Register(session.Spec{Name: "md", Type: "motherduck", Params: map[string]string{"database": db},
 		Credential: credFn(secrets.Credential{Token: tok})}))
 	require.NoError(t, sess.Connect(ctx, "md"))
-	after, err := sess.ListCatalogs(ctx)
+	rows, err := sess.DB().QueryContext(ctx, `SELECT database_name FROM duckdb_databases() WHERE type = 'motherduck'`)
 	require.NoError(t, err)
-	assert.Len(t, after, len(before)+1, "exactly one catalog: %v -> %v", before, after)
+	defer rows.Close() //nolint:errcheck
+	var got []string
+	for rows.Next() {
+		var n string
+		require.NoError(t, rows.Scan(&n))
+		got = append(got, n)
+	}
+	assert.Equal(t, []string{"md"}, got, "exactly one MotherDuck catalog, not every database of the account")
 }

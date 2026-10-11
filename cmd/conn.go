@@ -92,7 +92,8 @@ var connAddCmd = &cobra.Command{
   vibe conn add wh --type ducklake --path data/wh.ducklake --option data_path=data/wh_files --read-only=false
   vibe conn add sales --type delta --path data/sales
 
-Connections are read-only unless --read-only=false. Without a terminal no
+Connections are read-only unless --read-only=false (MotherDuck is always
+writable: it has no read-only attach). Without a terminal no
 credentials are asked for; use "vibe conn credentials set <name>" (reads
 stdin) or --sign-in env:PREFIX. Nothing secret ever goes on the command line.`,
 	Args:         cobra.ExactArgs(1),
@@ -123,6 +124,10 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	def.Scope, _ = f.GetString("prefix")
 	if ro, _ := f.GetBool("read-only"); !ro {
 		def.ReadOnly = workspace.Bool(false)
+	} else if typ == "motherduck" && f.Changed("read-only") {
+		// MotherDuck has no read-only attach: refuse instead of saving a
+		// definition that can never attach. Left unset it defaults to writable.
+		return errors.New(connections.ErrMotherDuckReadOnly)
 	}
 	signIn, _ := f.GetString("sign-in")
 	if signIn != "" {
@@ -164,7 +169,11 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	c, _ := findConn(ws, def.Name)
 	method := c.SignIn
 	if kind, _, _ := secrets.ParseMethod(method); kind == "env" {
-		fmt.Fprintf(out, "Credentials come from the environment variables %s.\n", strings.Join(secrets.EnvVarNames(strings.TrimPrefix(method, "env:")), ", "))
+		names := secrets.EnvVarNames(strings.TrimPrefix(method, "env:"))
+		if typ == "motherduck" {
+			names = []string{strings.TrimPrefix(method, "env:") + "_TOKEN"} // a token is all MotherDuck takes
+		}
+		fmt.Fprintf(out, "Credentials come from the environment variables %s.\n", strings.Join(names, ", "))
 		return nil
 	}
 	if !stdinIsTerminal() {

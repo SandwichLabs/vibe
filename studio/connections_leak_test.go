@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sandwich-labs/vibe-app/internal/secrets"
+	"github.com/sandwich-labs/vibe-app/internal/session"
 	"github.com/sandwich-labs/vibe-app/internal/workspace"
 )
 
@@ -336,4 +337,17 @@ func TestSessionCredentials_DoNotSurviveCloseAndReopen(t *testing.T) {
 	_, err = app.ClearConnectionCredentials(ClearCredentialsRequest{Name: "prod_pg", Field: "password"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nothing saved to clear")
+}
+
+// An environment sign-in never uses a token typed into the (hidden) token field.
+func TestListMotherDuckDatabases_EnvSignInIgnoresATypedToken(t *testing.T) {
+	app := leakApp(t, nil) // MOTHERDUCK_TOKEN is not set
+	res, err := app.ListMotherDuckDatabases(ListMotherDuckDatabasesRequest{
+		SignIn: "env:MOTHERDUCK", Credentials: CredentialInput{Token: leakNeedle},
+	})
+	require.NoError(t, err)
+	assert.False(t, res.OK)
+	assert.Equal(t, string(session.StatusNeedsCredentials), res.Status)
+	assert.Empty(t, res.Source, "no typed token was used")
+	assert.NotContains(t, res.Message, leakNeedle)
 }

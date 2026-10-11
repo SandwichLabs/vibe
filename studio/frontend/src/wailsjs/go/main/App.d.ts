@@ -142,6 +142,8 @@ export function ListExtensions():Promise<Array<main.ExtensionInfo>>;
 
 export function ListLLMModels(arg1:string,arg2:string):Promise<llm.ModelList>;
 
+export function ListMotherDuckDatabases(arg1:main.ListMotherDuckDatabasesRequest):Promise<main.MotherDuckDatabasesView>;
+
 export function ListNotebooks():Promise<Array<notebooks.Summary>>;
 
 export function ListQueries():Promise<Array<main.QuerySummary>>;

@@ -72,7 +72,7 @@ func ServerDescription(d ConnectionDef) string {
 
 // BindingFor is the fingerprint binding of an environment-resolved definition.
 func BindingFor(d ConnectionDef) secrets.Binding {
-	return secrets.Binding{Fingerprint: Fingerprint(d), Server: ServerDescription(d)}
+	return secrets.Binding{Fingerprint: Fingerprint(d), Server: ServerDescription(d), Type: d.Type}
 }
 
 // toConnDef converts a resolved definition into the type registry's shape.

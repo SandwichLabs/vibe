@@ -262,6 +262,10 @@ export function ListLLMModels(arg1, arg2) {
   return window['go']['main']['App']['ListLLMModels'](arg1, arg2);
 }
 
+export function ListMotherDuckDatabases(arg1) {
+  return window['go']['main']['App']['ListMotherDuckDatabases'](arg1);
+}
+
 export function ListNotebooks() {
   return window['go']['main']['App']['ListNotebooks']();
 }
