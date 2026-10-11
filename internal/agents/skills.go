@@ -382,8 +382,9 @@ var builtinNameSet = func() map[string]bool {
 // (a git pull, an editor) is a conflict error, not a silent clobber. With expectRev empty the store's own last-seen revision
 // applies (the agent's create_or_update_skill, which has just listed or read
 // the skill); a file store refuses to write over an existing skill it has
-// never read.
-func SaveUserSkillAt(store skills.Store, sess session.Session, name, description, instructions, tableName, expectRev string) (string, error) {
+// never read. opts are passed to the store's Put (skills.Overwrite to write back
+// a skill deleted on disk).
+func SaveUserSkillAt(store skills.Store, sess session.Session, name, description, instructions, tableName, expectRev string, opts ...skills.PutOption) (string, error) {
 	if !SkillNamePattern.MatchString(name) {
 		return "", fmt.Errorf("invalid skill name %q: must match %s", name, SkillNamePattern.String())
 	}
@@ -431,7 +432,7 @@ func SaveUserSkillAt(store skills.Store, sess session.Session, name, description
 	// no longer purely import-generated, regardless of what created the entry
 	// originally.
 	rec := skills.Stored{Name: name, Description: description, Instructions: instructions, TableName: tableName, Source: skills.SourceUser, Rev: expectRev}
-	if err := store.Put(context.Background(), &rec); err != nil {
+	if err := store.Put(context.Background(), &rec, opts...); err != nil {
 		return "", fmt.Errorf("failed to save skill: %w", err)
 	}
 	return rec.Rev, nil

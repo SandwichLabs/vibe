@@ -1601,9 +1601,15 @@ func (a *App) resolveSkillConflict(ctx context.Context, req ConflictRequest) (*C
 		return &ConflictResult{ID: cur.Name, Rev: cur.Rev, Title: cur.Name}, nil
 	}
 	name, rev := req.ID, ""
+	var putOpts []skills.PutOption
 	if req.Action == "overwrite" {
-		if cur != nil {
-			rev = cur.Rev // the revision on disk right now: the person chose to replace it
+		switch {
+		case cur == nil:
+			putOpts = append(putOpts, skills.Overwrite()) // deleted on disk: write it back
+		case req.Rev != "":
+			rev = req.Rev // only the revision the banner was raised against, as for queries and notebooks
+		default:
+			rev = cur.Rev // no revision known: replace whatever is on disk now
 		}
 	} else {
 		name = req.ID + "-copy"
@@ -1615,7 +1621,7 @@ func (a *App) resolveSkillConflict(ctx context.Context, req ConflictRequest) (*C
 		}
 	}
 	newRev, err := agents.SaveUserSkillAt(store, a.sess, name,
-		str(req.Data, "description"), str(req.Data, "instructions"), str(req.Data, "tableName"), rev)
+		str(req.Data, "description"), str(req.Data, "instructions"), str(req.Data, "tableName"), rev, putOpts...)
 	if err != nil {
 		return nil, err
 	}
