@@ -69,6 +69,20 @@ jobs:
         working-directory: studio/frontend
         run: npx vue-tsc --noEmit
 
+      # The connection leak tests expect the DuckDB postgres extension to be installed (it is on a dev
+      # machine; a fresh runner reports extension-missing instead of server-changed). Install it into the
+      # app-private extension dir the way `vibe conn test --install` does for a person.
+      - name: Install the DuckDB postgres extension
+        run: |
+          go build -o "$RUNNER_TEMP/vibe" ./cmd/vibe
+          ws="$(mktemp -d)"
+          cd "$ws"
+          "$RUNNER_TEMP/vibe" workspace init . </dev/null
+          "$RUNNER_TEMP/vibe" conn add pg --type postgres --host 127.0.0.1 --port 1 --database x --sign-in env:CI_PG </dev/null
+          # The connect itself is expected to fail; only the download matters.
+          "$RUNNER_TEMP/vibe" conn test pg --install </dev/null || true
+          find "$HOME/.cache/vibe/duckdb/extensions" -name 'postgres*.duckdb_extension' | grep .
+
       - name: go vet
         run: go vet ./...
 
