@@ -73,6 +73,9 @@ jobs:
       # machine; a fresh runner reports extension-missing instead of server-changed). Install it into the
       # app-private extension dir the way `vibe conn test --install` does for a person.
       - name: Install the DuckDB postgres extension
+        env:
+          CI_PG_USER: ci
+          CI_PG_PASSWORD: ci
         run: |
           go build -o "$RUNNER_TEMP/vibe" ./cmd/vibe
           ws="$(mktemp -d)"
