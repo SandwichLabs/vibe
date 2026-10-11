@@ -48,8 +48,9 @@ CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`conf
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
-studio/              Wails app: app.go (bindings), workspace.go, connections.go, secrets.go, bundle.go,
-                     templates.go; frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
+studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
+                     notebooks,prefs,queries,skills,tables}.go (bindings by area), workspace.go,
+                     connections.go, secrets.go, bundle.go, dotenv.go, templates.go; frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher
@@ -64,7 +65,8 @@ internal/
   a2ui/              component schema + validator (Go validates, Vue renders)
   bundle/            .vibe bundle v2 export/import, optional age encryption
   crud/, importer/, engine/, usersql/  datasheet CRUD, CSV/xlsx import, query exec, courtesy SQL checks
-  filestore/, filelock/, storageurl/, prefs/, config/, templates/, tui/
+  filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
+                     (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
 docs/                see docs/README.md
 ```

@@ -15,7 +15,7 @@
 //   1. cellsToMerge — merge ONLY the ids the backend event says were
 //      appended (NotebooksChangedEvent.appendedCellIds), never "any id we
 //      don't have". An event with no appendedCellIds (every non-append
-//      emitter: CreateNotebook/SaveNotebook/RenameNotebook/DeleteNotebook/
+//      emitter: CreateNotebook/SaveNotebook/DeleteNotebook/
 //      ImportNotebook, including the view's own SaveNotebook echo) yields
 //      nothing to merge.
 //   2. Tombstones — a locally-deleted cell's id is remembered until a save
@@ -25,7 +25,7 @@
 //   3. pruneConfirmedTombstones — once OUR OWN save has gone out without a
 //      tombstoned id, that id's exclusion is now the durable truth on disk;
 //      there's nothing left to protect against, so drop it.
-export interface MergeCandidateCell {
+interface MergeCandidateCell {
   id: string
   [key: string]: any
 }

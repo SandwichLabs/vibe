@@ -35,7 +35,6 @@ type QueryResult struct {
 // top of this.
 const queryGridRowCap = 5000
 
-// ExecuteQuery runs a SQL query on DuckDB.
 // jsonRoundTripGuard is a last-resort, defence-in-depth check (review fix,
 // #67 step 2 round 3): Wails marshals a binding's return value to JSON
 // itself on the way back to the frontend, and an unmarshalable value there
@@ -70,10 +69,6 @@ func humanDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%.2f s", d.Seconds())
 	}
-}
-
-func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
-	return a.RunQuery(RunQueryRequest{SQL: sqlStr})
 }
 
 // RunQueryRequest is the query editor's run (#117, SPEC 08). Connection is the

@@ -1,3 +1,5 @@
+// Package config loads Vibe's app-level settings (Viper) and the LLM provider
+// settings, including provider defaults and the keychain-backed API key lookup.
 package config
 
 import (

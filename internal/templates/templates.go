@@ -1,3 +1,5 @@
+// Package templates holds the built-in workspace templates that "new
+// workspace" and the importer scaffold from.
 package templates
 
 // Bundled starter templates (plan §6 / P6.6). A template is an embedded builder

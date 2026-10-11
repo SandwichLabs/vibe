@@ -1,0 +1,6 @@
+# Architecture rules from the #54 review (docs/reviews/arch-2026-10/).
+# Run from the repo root:  ast-grep scan cmd internal studio
+# The rules' files:/ignores: globs resolve against this directory, so this file stays at the root.
+# (Survey rules from the earlier cleanup live in docs/reviews/cleanup-2026-10/.)
+ruleDirs:
+  - .ast-grep/rules

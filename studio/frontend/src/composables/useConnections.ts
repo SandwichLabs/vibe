@@ -55,7 +55,7 @@ export function startConnectionTracking(): void {
 export const connectionByName = (name: string) => connectionList.value.find((c) => c.name === name)
 export const defaultConnectionName = computed(() => connectionList.value.find((c) => c.default)?.name ?? 'local')
 
-export interface ConnectResult { ok: boolean; error?: string; info?: ConnectionInfo | null }
+interface ConnectResult { ok: boolean; error?: string; info?: ConnectionInfo | null }
 
 // connect dials a connection. When it can't be used yet, the matching prompt
 // opens (sign in, install the extension, take over) instead of a bare error.

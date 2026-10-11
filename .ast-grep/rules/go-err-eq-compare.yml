@@ -1,0 +1,11 @@
+id: go-err-eq-compare
+language: go
+severity: warning
+message: error compared with ==/!= against a sentinel; a wrapped error slips through. Use errors.Is.
+rule:
+  kind: binary_expression
+  all:
+    - has: {field: operator, regex: '^(==|!=)$'}
+    - has: {field: left, kind: identifier, regex: '^(err|[a-zA-Z]*Err)$'}
+    - has: {field: right, kind: selector_expression, regex: '\.(EOF|Err[A-Za-z]*|DeadlineExceeded|Canceled)$'}
+ignores: ["**/*_test.go"]

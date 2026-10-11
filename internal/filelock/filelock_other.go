@@ -13,14 +13,8 @@ type Lock struct{ path string }
 // Path is the lock file's path.
 func (l *Lock) Path() string { return l.path }
 
-// Acquire always succeeds here.
-func Acquire(path string, _ []byte) (*Lock, error) { return &Lock{path: path}, nil }
-
 // Write is a no-op.
 func (l *Lock) Write([]byte) error { return nil }
 
 // Release is a no-op.
 func (l *Lock) Release() error { return nil }
-
-// Probe always reports "not held".
-func Probe(string) (bool, error) { return false, nil }

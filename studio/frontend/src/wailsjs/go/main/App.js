@@ -14,10 +14,6 @@ export function AllowDotEnv() {
   return window['go']['main']['App']['AllowDotEnv']();
 }
 
-export function AnalyzeQueryInExcel(arg1, arg2) {
-  return window['go']['main']['App']['AnalyzeQueryInExcel'](arg1, arg2);
-}
-
 export function CancelAgentTask(arg1) {
   return window['go']['main']['App']['CancelAgentTask'](arg1);
 }
@@ -118,10 +114,6 @@ export function DropTable(arg1) {
   return window['go']['main']['App']['DropTable'](arg1);
 }
 
-export function ExecuteQuery(arg1) {
-  return window['go']['main']['App']['ExecuteQuery'](arg1);
-}
-
 export function ExportBundle(arg1) {
   return window['go']['main']['App']['ExportBundle'](arg1);
 }
@@ -132,14 +124,6 @@ export function ExportNotebook(arg1, arg2) {
 
 export function ExportQueryResults(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExportQueryResults'](arg1, arg2, arg3);
-}
-
-export function ExportQueryXLSX(arg1, arg2) {
-  return window['go']['main']['App']['ExportQueryXLSX'](arg1, arg2);
-}
-
-export function ExportTableXLSX(arg1, arg2) {
-  return window['go']['main']['App']['ExportTableXLSX'](arg1, arg2);
 }
 
 export function GetAgentConfig() {
@@ -326,10 +310,6 @@ export function OpenWorkspace(arg1) {
   return window['go']['main']['App']['OpenWorkspace'](arg1);
 }
 
-export function OpenWorkspaceReadOnly(arg1) {
-  return window['go']['main']['App']['OpenWorkspaceReadOnly'](arg1);
-}
-
 export function PreviewBundleImport(arg1, arg2) {
   return window['go']['main']['App']['PreviewBundleImport'](arg1, arg2);
 }
@@ -356,10 +336,6 @@ export function RelocateRecentWorkspace(arg1, arg2) {
 
 export function RemoveRecentWorkspace(arg1) {
   return window['go']['main']['App']['RemoveRecentWorkspace'](arg1);
-}
-
-export function RenameNotebook(arg1, arg2) {
-  return window['go']['main']['App']['RenameNotebook'](arg1, arg2);
 }
 
 export function ResolveAgentApproval(arg1, arg2) {
@@ -428,10 +404,6 @@ export function SelectWorkspaceFolder() {
 
 export function SetActiveNotebook(arg1) {
   return window['go']['main']['App']['SetActiveNotebook'](arg1);
-}
-
-export function SetAgentConfig(arg1) {
-  return window['go']['main']['App']['SetAgentConfig'](arg1);
 }
 
 export function SetConnectionCredentials(arg1) {

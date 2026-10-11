@@ -5,11 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +12,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 
 	"charm.land/fantasy"
 	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"
@@ -451,9 +453,9 @@ func TestLanguageModel_Providers(t *testing.T) {
 }
 
 func TestDefaultModelFor(t *testing.T) {
-	assert.Equal(t, "local", defaultModelFor(ProviderLocal))
-	assert.Contains(t, defaultModelFor(ProviderAnthropic), "claude")
-	assert.Contains(t, defaultModelFor(ProviderGemini), "gemini")
+	assert.Equal(t, "local", config.DefaultModelFor(ProviderLocal))
+	assert.Contains(t, config.DefaultModelFor(ProviderAnthropic), "claude")
+	assert.Contains(t, config.DefaultModelFor(ProviderGemini), "gemini")
 }
 
 func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {

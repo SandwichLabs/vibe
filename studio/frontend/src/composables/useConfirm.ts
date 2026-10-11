@@ -15,7 +15,7 @@
 // rather than each mounting its own.
 import { ref } from 'vue'
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   title?: string
   message: string
   // See ConfirmDialog.vue's own prop doc: 'destructive' (default) is the
@@ -23,15 +23,6 @@ export interface ConfirmOptions {
   variant?: 'destructive' | 'primary'
   // Button label naming the action ("Delete"). Defaults to "Confirm".
   confirmLabel?: string
-}
-
-export interface ConfirmChoiceOptions extends ConfirmOptions {
-  // Label for the third button (e.g. "Don't save", #81). See
-  // ConfirmDialog.vue's altLabel prop.
-  altLabel: string
-  // See ConfirmDialog.vue's altDestructive prop — true tints the alt
-  // button red (e.g. "Don't save", which discards data).
-  altDestructive?: boolean
 }
 
 export const confirmVisible = ref(false)
@@ -47,9 +38,8 @@ type ConfirmResult = 'confirm' | 'alt' | 'cancel'
 let pendingResolve: ((result: ConfirmResult) => void) | null = null
 
 // openConfirm is the one place that actually populates the shared dialog
-// state and returns a Promise<ConfirmResult> — askChoice and askConfirm are
-// both thin wrappers over it. A second
-// call while one is already pending resolves the first as 'cancel' before
+// state and returns a Promise<ConfirmResult> — askConfirm is a thin
+// wrapper over it. A second call while one is already pending resolves the first as 'cancel' before
 // showing the new one, rather than leaving it to hang forever unresolved.
 function openConfirm(opts: ConfirmOptions, altLabel: string, altDestructive: boolean): Promise<ConfirmResult> {
   if (pendingResolve) {
@@ -65,13 +55,6 @@ function openConfirm(opts: ConfirmOptions, altLabel: string, altDestructive: boo
   return new Promise((resolve) => {
     pendingResolve = resolve
   })
-}
-
-// askChoice shows the shared ConfirmDialog with a third ("alt") button and
-// resolves 'confirm' | 'alt' | 'cancel' — the overlay and Escape both
-// resolve 'cancel', matching ConfirmDialog's own cancel behaviour.
-export function askChoice(opts: ConfirmChoiceOptions): Promise<ConfirmResult> {
-  return openConfirm(opts, opts.altLabel, opts.altDestructive ?? false)
 }
 
 // askConfirm is the two-button case: no altLabel (ConfirmDialog renders no

@@ -1,0 +1,9 @@
+id: go-exec-command-in-adapter
+language: go
+severity: info
+message: Subprocess spawned from an adapter (studio/ or cmd/). Process/OS integration (git, open, keychain helpers) belongs behind an internal/ package so the CLI and Studio share it.
+rule:
+  kind: call_expression
+  has: {field: function, regex: '^exec\.(Command|CommandContext|LookPath)$'}
+files: ["studio/*.go", "cmd/*.go"]
+ignores: ["**/*_test.go"]

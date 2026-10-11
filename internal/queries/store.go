@@ -1,3 +1,5 @@
+// Package queries is the file-backed store of saved SQL queries
+// (queries/*.sql) and the filter model the table browser shares with them.
 package queries
 
 import (

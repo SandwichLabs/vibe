@@ -45,6 +45,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | Doc | What it is |
 |---|---|
 | [`reviews/cleanup-2026-10/FINDINGS.md`](reviews/cleanup-2026-10/FINDINGS.md) | The post-#105 cleanup survey (#137) and its review verdicts |
+| [`reviews/arch-2026-10/`](reviews/arch-2026-10/) | The architecture review for #54: rubric, findings, judge rulings. Its ast-grep rules are at the repo root |
 | [`reviews/ux-panel-2026-09-26/`](reviews/ux-panel-2026-09-26/) | The three-persona UX panel behind epic #93 |
 
 ## Archive

@@ -6,7 +6,7 @@ import { ref } from 'vue'
 // Export workspace content… (needs an open workspace).
 export const bundleExportOpen = ref(false)
 
-export interface BundleImportRequest {
+interface BundleImportRequest {
   // 'here' imports into the open workspace; 'new' creates one (the launcher).
   mode: 'here' | 'new'
   // A file already chosen (a .vibe passed on the command line); '' asks.

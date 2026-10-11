@@ -41,10 +41,8 @@ const wrapperOverhead = 512
 // values clipped (see clipOversizedRow) instead of being dropped entirely —
 // dropping it would hand the caller zero rows for a query that matched real
 // data, which is worse than a visibly-clipped one.
-func budgetRows(rows [][]any, budgetChars int) (out [][]any, truncated map[string]any) {
-	if budgetChars <= 0 {
-		budgetChars = RowResultBudgetChars
-	}
+func budgetRows(rows [][]any) (out [][]any, truncated map[string]any) {
+	const budgetChars = RowResultBudgetChars
 	if len(rows) == 0 {
 		return rows, nil
 	}

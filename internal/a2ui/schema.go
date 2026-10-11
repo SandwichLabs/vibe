@@ -20,6 +20,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/jsonenc"
 )
 
 // ColorTokens is the closed enum of A2UI color tokens. Any other value is a
@@ -179,14 +181,6 @@ func typeName(v any) string {
 	}
 }
 
-func jsonQuote(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(b)
-}
-
 // checkValue validates one field value against its spec, appending to errs.
 func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 	switch spec.kind {
@@ -218,9 +212,9 @@ func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 		if !enumContains(spec.values, value) {
 			labels := make([]string, len(spec.values))
 			for i, v := range spec.values {
-				labels[i] = jsonQuote(v)
+				labels[i] = jsonenc.Quote(v)
 			}
-			*errs = append(*errs, fmt.Sprintf("%s: expected one of %s, got %s", path, strings.Join(labels, ", "), jsonQuote(value)))
+			*errs = append(*errs, fmt.Sprintf("%s: expected one of %s, got %s", path, strings.Join(labels, ", "), jsonenc.Quote(value)))
 		}
 	case kindArray:
 		arr, ok := value.([]any)
@@ -343,7 +337,7 @@ func validateComponent(comp any, index int, errs *[]string) (id, ctype, parent s
 	typeVal, _ := obj["type"].(string)
 	spec, known := Components[typeVal]
 	if !known {
-		*errs = append(*errs, fmt.Sprintf("%s.type: unknown type %s. Valid types: %s", path, jsonQuote(obj["type"]), strings.Join(componentTypeNames, ", ")))
+		*errs = append(*errs, fmt.Sprintf("%s.type: unknown type %s. Valid types: %s", path, jsonenc.Quote(obj["type"]), strings.Join(componentTypeNames, ", ")))
 		return idVal, typeVal, parent, nil, false
 	}
 

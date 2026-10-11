@@ -2,7 +2,7 @@
 // expanded body (#91 P-F12/M-F21): the full pretty-printed input plus a
 // one-line preview for the collapsed chip, and the `sql` field pulled out
 // separately when present so the chip can offer a "Copy SQL" button.
-export interface FormattedToolInput {
+interface FormattedToolInput {
   pretty: string
   sql?: string
   preview: string

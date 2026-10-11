@@ -20,9 +20,9 @@
 // place a numeric value becomes text, so #96 adds one switch there — no
 // other call site changes.
 
-export type CellContext = 'grid' | 'report'
+type CellContext = 'grid' | 'report'
 
-export interface CellFormatOptions {
+interface CellFormatOptions {
   context?: CellContext // default 'grid'
 }
 
@@ -35,7 +35,7 @@ export interface FormattedCell {
   title?: string
 }
 
-export type TypeFamily = 'integer' | 'decimal' | 'float' | 'boolean' | 'temporal' | 'text' | 'nested'
+type TypeFamily = 'integer' | 'decimal' | 'float' | 'boolean' | 'temporal' | 'text' | 'nested'
 
 const TITLE_LEN_THRESHOLD = 40
 

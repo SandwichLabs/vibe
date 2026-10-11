@@ -2,10 +2,10 @@
 // words, the status shapes and the one-line "what to do" under a row. The UI
 // never shows the file-level scope words (shared / local / user).
 
-export const TYPE_CODE: Record<string, string> = {
+const TYPE_CODE: Record<string, string> = {
   duckdb: 'DK', postgres: 'PG', motherduck: 'MD', sqlite: 'SQ', s3: 'S3', gcs: 'GC', r2: 'R2', mysql: 'MY', ducklake: 'DL', azure: 'AZ', iceberg: 'IC', delta: 'DT',
 }
-export const TYPE_LABEL: Record<string, string> = {
+const TYPE_LABEL: Record<string, string> = {
   duckdb: 'DuckDB file', postgres: 'Postgres', motherduck: 'MotherDuck', sqlite: 'SQLite file',
   s3: 'Amazon S3', gcs: 'Google Cloud Storage', r2: 'Cloudflare R2', mysql: 'MySQL', ducklake: 'DuckLake',
   azure: 'Azure Blob / Data Lake', iceberg: 'Iceberg table', delta: 'Delta Lake table',
@@ -21,7 +21,7 @@ export const SCOPE_TIP: Record<ConnScope, string> = {
 }
 export const scopeLabel = (s: string) => SCOPE_LABEL[s as ConnScope] ?? s
 
-export type StatusKey = 'off' | 'ok' | 'err' | 'creds' | 'ext' | 'lock'
+type StatusKey = 'off' | 'ok' | 'err' | 'creds' | 'ext' | 'lock'
 
 export const STATUS_META: Record<StatusKey, { icon: string; label: string }> = {
   off: { icon: 'circle', label: 'Not connected' },
@@ -95,7 +95,7 @@ export function statusLabel(c: ConnectionInfo): string {
 }
 
 // quoteIdent quotes one SQL identifier part.
-export const quoteIdent = (s: string) => `"${s.replace(/"/g, '""')}"`
+const quoteIdent = (s: string) => `"${s.replace(/"/g, '""')}"`
 
 // selectFrom is the starter statement for "New query on this table".
 export function selectFrom(qualified: string): string {

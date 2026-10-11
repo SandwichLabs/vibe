@@ -27,7 +27,7 @@
 // # Release (take over)
 //
 // A holder that can let go (WithReleaseHandler) advertises control "sigusr1".
-// RequestRelease sends it SIGUSR1 after checking that the lock is really held,
+// TakeOver (via the internal requestRelease) sends it SIGUSR1 after checking that the lock is really held,
 // by a process on this host, with the recorded pid, that advertises it; the
 // holder runs its handler (close the session, Release) and TakeOver then
 // acquires the lock. SIGUSR1 rather than a control socket because a unix

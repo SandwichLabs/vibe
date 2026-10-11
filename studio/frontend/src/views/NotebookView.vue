@@ -804,7 +804,7 @@ interface NotebooksChangedPayload {
 // handleNotebooksChanged merges in ONLY the cells the event names in
 // appendedCellIds (review fix, finding 2) — never "any remote id we don't
 // already have". An event with no appendedCellIds (our own SaveNotebook
-// echo, CreateNotebook/RenameNotebook/DeleteNotebook/ImportNotebook — none
+// echo, CreateNotebook/DeleteNotebook/ImportNotebook — none
 // of which append a cell to THIS notebook) is a fast no-op via
 // cellsToMerge's own guard, so it's still safe to call this unconditionally.
 // Tombstoned ids (deleted locally, not yet confirmed excluded by a save —
@@ -846,7 +846,7 @@ async function replayPendingNotebooksChanged(id: string) {
 // applyNotebooksChanged merges in ONLY the cells the event names in
 // appendedCellIds (review fix, finding 2) — never "any remote id we don't
 // already have". An event with no appendedCellIds (our own SaveNotebook
-// echo, CreateNotebook/RenameNotebook/DeleteNotebook/ImportNotebook — none
+// echo, CreateNotebook/DeleteNotebook/ImportNotebook — none
 // of which append a cell to THIS notebook) is a fast no-op. Tombstoned ids
 // (deleted locally, not yet confirmed excluded by a save — see the
 // `tombstones` doc comment) are never merged back in even if a racing

@@ -5,8 +5,6 @@
 // type and TypeScript has no equivalent of the Go validator's closed
 // per-type field map at this layer (that check already happened server
 // side, in present_data/RunA2UIQuery's caller).
-export type A2UIColor = 'yellow' | 'black' | 'error' | 'muted'
-
 export interface A2UIComponentT {
   id: string
   type: string

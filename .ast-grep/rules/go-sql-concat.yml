@@ -1,0 +1,15 @@
+id: go-sql-concat
+language: go
+severity: info
+message: SQL assembled with + concatenation. Prefer the quoting helpers (session.QuoteIdent/QuoteLiteral/TableRef.SQL) and one builder per statement shape; every operand must already be quoted.
+rule:
+  kind: binary_expression
+  all:
+    - has: {field: operator, regex: '^\+$'}
+    - has:
+        stopBy: end
+        kind: interpreted_string_literal
+        regex: '\b(SELECT|FROM|WHERE|INSERT INTO|UPDATE|DELETE FROM|CREATE|DROP|ALTER|ATTACH|DESCRIBE|ORDER BY|LIMIT)\b'
+  not:
+    inside: {kind: binary_expression}
+ignores: ["**/*_test.go"]

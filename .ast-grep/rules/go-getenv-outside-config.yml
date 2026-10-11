@@ -1,0 +1,13 @@
+id: go-getenv-outside-config
+language: go
+severity: warning
+message: Environment read outside the config/secrets/dotenv/prefs layer. Route it through config or secrets so env handling (and redaction) has one owner.
+rule:
+  kind: call_expression
+  has: {field: function, regex: '^os\.(Getenv|LookupEnv|Environ)$'}
+ignores:
+  - "**/*_test.go"
+  - "internal/config/**"
+  - "internal/secrets/**"
+  - "internal/dotenv/**"
+  - "internal/prefs/**"

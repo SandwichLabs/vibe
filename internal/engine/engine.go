@@ -1,3 +1,5 @@
+// Package engine runs SQL against a DuckDB connection and normalises the
+// result: column metadata, typed values, parameters, row caps and table reads.
 package engine
 
 import (

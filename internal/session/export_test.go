@@ -26,3 +26,21 @@ func CacheStats(s Session) (hits, misses int) {
 	defer h.cache.mu.Unlock()
 	return h.cache.hits, h.cache.misses
 }
+
+// ResolveStatus returns the status that wins when several apply. An empty
+// input is StatusNotConnected; an unknown kind ranks below every known one.
+func ResolveStatus(kinds ...StatusKind) StatusKind {
+	best, bestRank := StatusNotConnected, len(precedence)+1
+	for _, k := range kinds {
+		r := len(precedence)
+		for i, p := range precedence {
+			if p == k {
+				r = i
+			}
+		}
+		if r < bestRank {
+			best, bestRank = k, r
+		}
+	}
+	return best
+}

@@ -1,0 +1,12 @@
+id: go-errorf-err-without-w
+language: go
+severity: warning
+message: fmt.Errorf formats an error value without %w, so errors.Is/As cannot see it (CLAUDE.md "wrap errors").
+note: Deliberate cases (a second error next to a %w sentinel, or text redacted before wrapping) should carry a comment saying so.
+rule:
+  kind: call_expression
+  all:
+    - has: {field: function, regex: '^fmt\.Errorf$'}
+    - has: {field: arguments, has: {kind: identifier, regex: '^(err|[a-z]+Err|why|cause)$'}}
+    - not: {has: {field: arguments, has: {kind: interpreted_string_literal, regex: '%w'}}}
+ignores: ["**/*_test.go"]

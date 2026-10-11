@@ -87,7 +87,7 @@ export function describeShape(columns: string[], rows: any[][], types?: string[]
   }
 }
 
-export interface ViewFit {
+interface ViewFit {
   ok: boolean
   why?: string
 }

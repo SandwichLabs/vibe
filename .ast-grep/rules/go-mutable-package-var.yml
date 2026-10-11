@@ -1,0 +1,12 @@
+id: go-mutable-package-var
+language: go
+severity: info
+message: Package-level var that is not an error sentinel, compiled regexp, interface assertion or func-typed test seam. CLAUDE.md says "no globals"; check whether it is mutated (caches, singletons, test hooks).
+rule:
+  kind: var_spec
+  inside: {kind: var_declaration, inside: {kind: source_file}}
+  not:
+    any:
+      - has: {stopBy: end, kind: call_expression, has: {field: function, regex: '^(errors\.New|regexp\.MustCompile|fmt\.Errorf)$'}}
+      - has: {field: name, regex: '^_$'}
+ignores: ["**/*_test.go"]

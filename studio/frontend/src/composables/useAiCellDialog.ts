@@ -18,9 +18,9 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { capPromptList } from '../lib/notebookMerge'
 import { errorText } from '../lib/errors'
 
-export type DialogState = 'closed' | 'prompt' | 'working' | 'proposal' | 'needs_info' | 'unresolved'
+type DialogState = 'closed' | 'prompt' | 'working' | 'proposal' | 'needs_info' | 'unresolved'
 
-export interface TaskCellArg {
+interface TaskCellArg {
   type: 'sql' | 'markdown'
   sql?: string
   view?: string
@@ -45,7 +45,7 @@ export interface EnvelopeCell {
   connection?: string
 }
 
-export interface TaskEnvelope {
+interface TaskEnvelope {
   outcome: 'cell' | 'needs_info' | 'unresolved'
   cell?: EnvelopeCell
   explanation?: string
@@ -59,7 +59,7 @@ export interface TaskEnvelope {
 // at 12 turns, keeping the FIRST turn (the original ask, which every
 // REFINE/ANSWER builds on) and the most recent ones — never silently
 // dropping the turn that framed the whole conversation.
-export const MAX_FOLLOWUP_TURNS = 12
+const MAX_FOLLOWUP_TURNS = 12
 
 // capFollowUp trims turns to at most MAX_FOLLOWUP_TURNS entries, keeping
 // turns[0] (if any) plus the most recent entries, dropping from just after
@@ -72,7 +72,7 @@ export function capFollowUp(turns: FollowUpTurn[]): FollowUpTurn[] {
   return [first, ...tail]
 }
 
-export type ApplyAction = { kind: 'insert' } | { kind: 'replace' }
+type ApplyAction = { kind: 'insert' } | { kind: 'replace' }
 
 // decideApplyAction is the apply-time type-safety rule (C2 in the ported
 // design): in 'create' mode there is nothing to replace, always insert. In
@@ -91,7 +91,7 @@ export function decideApplyAction(
   return { kind: 'insert' }
 }
 
-export interface CellSnapshot {
+interface CellSnapshot {
   source: string
   label?: string
   view?: string
@@ -100,13 +100,13 @@ export interface CellSnapshot {
 
 /** Whether two snapshots represent the same cell content. Both null (no
  * target, or target vanished) counts as equal — nothing to compare. */
-export function snapshotsEqual(a: CellSnapshot | null, b: CellSnapshot | null): boolean {
+function snapshotsEqual(a: CellSnapshot | null, b: CellSnapshot | null): boolean {
   if (a === b) return true
   if (!a || !b) return false
   return a.source === b.source && a.label === b.label && a.view === b.view && (a.connection ?? '') === (b.connection ?? '')
 }
 
-export interface ApplyPreview {
+interface ApplyPreview {
   action: ApplyAction
   // typeMismatch: edit mode, target exists, but the proposed type differs —
   // C2's "never destroy the cell" case, ported from ai-cell.js.

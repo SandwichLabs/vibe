@@ -141,21 +141,6 @@ func (a *App) SaveNotebook(raw map[string]any, sessionID string) (*NotebookSaveR
 	return &NotebookSaveResult{Notebook: nb, Warnings: warnings}, nil
 }
 
-// RenameNotebook updates a notebook's title without touching its cells.
-func (a *App) RenameNotebook(id, title string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return err
-	}
-	if err := a.ws.Notebooks().Rename(context.Background(), id, title); err != nil {
-		return err
-	}
-	a.emitNotebooksChanged(id, nil)
-	return nil
-}
-
 // DeleteNotebook removes a notebook by id.
 func (a *App) DeleteNotebook(id string) error {
 	a.mu.Lock()

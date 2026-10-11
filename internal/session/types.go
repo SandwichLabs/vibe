@@ -3,10 +3,11 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/SandwichLabs/vibe/internal/secrets"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/SandwichLabs/vibe/internal/secrets"
 )
 
 // StatusKind is a connection's state (plan §4.2). Lazy attach means a freshly
@@ -27,24 +28,6 @@ const (
 var precedence = []StatusKind{
 	StatusExtensionMissing, StatusNeedsCredentials, StatusError,
 	StatusLockedBy, StatusNotConnected, StatusOK,
-}
-
-// ResolveStatus returns the status that wins when several apply. An empty
-// input is StatusNotConnected; an unknown kind ranks below every known one.
-func ResolveStatus(kinds ...StatusKind) StatusKind {
-	best, bestRank := StatusNotConnected, len(precedence)+1
-	for _, k := range kinds {
-		r := len(precedence)
-		for i, p := range precedence {
-			if p == k {
-				r = i
-			}
-		}
-		if r < bestRank {
-			best, bestRank = k, r
-		}
-	}
-	return best
 }
 
 // Status describes one connection. Message is already redacted; it never
