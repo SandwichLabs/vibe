@@ -1,4 +1,6 @@
 // SchoolHouse / Lucide-style icons — 24px viewBox, 2px stroke, round caps.
+// Many paths are taken from or derived from Lucide (ISC, Copyright Lucide Icons and Contributors) and Feather
+// (MIT, Copyright Cole Bemis). Both licence texts are in THIRD_PARTY_NOTICES.md.
 // Each value is the inner SVG markup, injected into <svg> by Icon.vue.
 
 export const ICON_PATHS: Record<string, string> = {
