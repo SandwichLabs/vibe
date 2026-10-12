@@ -408,16 +408,16 @@ open(tmp, "w").write(str(s.server_address[1]))
 os.replace(tmp, os.path.join(root, "..", "port"))
 s.serve_forever()
 PY
-python3 "$WORK/server.py" "$SRVDIR" &
+python3 "$WORK/server.py" "$SRVDIR" 2>"$WORK/server.log" &
 SERVER_PID=$!
 # A cold python3 on a fresh macOS runner can take several seconds to start, so allow 60 s and
 # fail with a clear message if the server died instead.
 for _ in $(seq 600); do
 	[ -s "$WORK/port" ] && break
-	kill -0 "$SERVER_PID" 2>/dev/null || { echo "test-install.sh: fake GitHub server exited before it listened" >&2; exit 1; }
+	kill -0 "$SERVER_PID" 2>/dev/null || { echo "test-install.sh: fake GitHub server exited before it listened:" >&2; cat "$WORK/server.log" >&2; exit 1; }
 	sleep 0.1
 done
-[ -s "$WORK/port" ] || { echo "test-install.sh: fake GitHub server did not listen within 60 s" >&2; exit 1; }
+[ -s "$WORK/port" ] || { echo "test-install.sh: fake GitHub server did not listen within 60 s:" >&2; cat "$WORK/server.log" >&2; exit 1; }
 PORT="$(cat "$WORK/port")"
 SRV="http://127.0.0.1:$PORT"
 echo "serving fake GitHub on $SRV"
