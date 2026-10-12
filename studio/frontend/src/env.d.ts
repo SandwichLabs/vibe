@@ -13,6 +13,9 @@ declare module '*.vue' {
 // the wails-generated App.d.ts). The ONLY runtime access to window.go is
 // src/lib/bindings.ts.
 interface AppApi {
+  // About (#40)
+  GetBuildInfo(): Promise<BuildInfo>
+  GetThirdPartyNotices(): Promise<string>
   GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
   SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
   ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
@@ -702,3 +705,6 @@ interface BundlePreview {
 interface BundleDecisions { onConflict: BundleAction; items: Record<string, BundleAction>; connections: string[] }
 interface BundleOutcome { key: string; kind: string; id: string; finalId?: string; result: string; error?: string }
 interface BundleResult { outcomes: BundleOutcome[]; dryRun: boolean; warnings: string[] }
+
+// Settings > About (#40): what GetBuildInfo returns.
+interface BuildInfo { version: string; commit: string; date: string; goVersion: string; duckdbVersion: string; platform: string }

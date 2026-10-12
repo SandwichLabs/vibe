@@ -81,7 +81,9 @@ internal/
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
                      (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
+  buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
+legal.go            repo-root package embedding LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md (`task notices`)
 docs/                see docs/README.md
 ```
 

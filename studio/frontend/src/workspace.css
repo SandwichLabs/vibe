@@ -139,7 +139,7 @@ kbd {
 .ws-banner .row { flex: none; }
 
 /* [new] Settings tabs (Workspace | App) */
-.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--vibe-border); margin-bottom: 24px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 2px solid var(--vibe-border); margin-bottom: 24px; }
 .tabs button { background: none; border: 0; padding: 12px 20px; font-family: var(--sh-font-body); font-weight: 600; font-size: 15px; color: var(--sh-graphite); border-bottom: 4px solid transparent; margin-bottom: -2px; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tabs button .tsub { font-family: var(--sh-font-mono); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tabs button[aria-selected="true"] { color: var(--sh-ink); border-bottom-color: var(--vibe-accent); }

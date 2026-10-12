@@ -21,9 +21,12 @@ export COPYFILE_DISABLE=1 # keep AppleDouble (._*) files out of macOS tarballs
 docs() { # $1 = dir to receive the shared text files
 	printf '%s\n' "$ver" >"$1/VERSION"
 	local f
-	for f in LICENSE THIRD_PARTY_NOTICES.md; do
-		[ -f "$root/$f" ] && cp "$root/$f" "$1/$f"
+	# --- notices (#40): NOTICE and the generated third-party notices ship in every archive ---
+	for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md; do
+		[ -f "$root/$f" ] || { echo "package.sh: $f is missing" >&2; exit 1; }
+		cp "$root/$f" "$1/$f"
 	done
+	# --- end notices ---
 	[ -f "$root/README.md" ] && cp "$root/README.md" "$1/README.md"
 	return 0
 }
