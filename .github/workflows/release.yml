@@ -146,7 +146,7 @@ jobs:
           "$vibe" workspace init . --name smoke </dev/null
           out="$("$vibe" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.os_name }}-${{ matrix.arch }}
           path: dist/*.tar.gz
