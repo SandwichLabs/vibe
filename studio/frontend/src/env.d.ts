@@ -120,6 +120,7 @@ interface AppApi {
   AgentChatStream(turnId: string, message: string, pinnedContext: string, history: { role: string; text: string }[]): Promise<AgentChatResult>
   AgentTask(req: { taskId: string; mode: string; description: string; cell?: import('./composables/useAiCellDialog').TaskCellArg; followUp?: { role: string; text: string }[]; tables?: string[]; notebookSummary?: string[] }): Promise<import('./composables/useAiCellDialog').TaskEnvelope>
   CancelAgentTask(taskId: string): Promise<void>
+  CancelAgentQuery(turnId: string): Promise<void>
   // Notebooks (#66)
   ListNotebooks(): Promise<WailsNotebookSummary[]>
   GetNotebook(id: string): Promise<WailsNotebook>

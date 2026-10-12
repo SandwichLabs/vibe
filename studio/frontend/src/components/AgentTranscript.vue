@@ -21,12 +21,13 @@ const emit = defineEmits<{ resolve: [step: ToolStep, ok: boolean]; openNotebook:
     </div>
     <div class="body">
       <div class="who">
-        {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Agent · error' : (m.verifying ? 'Agent · verifying' : m.streaming ? 'Agent · streaming' : 'Agent') }}
+        {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Agent · error' : m.cancelled ? 'Agent · cancelled' : (m.verifying ? 'Agent · verifying' : m.streaming ? 'Agent · streaming' : 'Agent') }}
       </div>
       <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
       <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>
       <div v-else-if="m.text" class="agent-text agent-md vibe-content vibe-md-content" v-html="renderMarkdown(m.text)"></div>
-      <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
+      <p v-else-if="m.streaming && !m.cancelled" class="agent-text agent-dim">Thinking…</p>
+      <p v-if="m.cancelled" class="agent-text agent-dim" data-testid="agent-cancelled">Cancelled</p>
       <p v-if="m.verifying" class="agent-text agent-dim" data-testid="agent-verifying">Verifying that answer against the data…</p>
 
       <template v-for="(s, si) in m.steps" :key="si">
