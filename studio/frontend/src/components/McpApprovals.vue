@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // McpApprovals — approval cards for writes an external MCP client (Claude
 // Desktop, Claude Code) asks Studio to make through Studio's own MCP server
 // (turn "mcp"). Chat turns show their cards inline in the conversation; an MCP
@@ -41,7 +42,7 @@ onUnmounted(() => unsubs.splice(0).forEach((u) => u()))
 async function resolve(it: Item, approved: boolean) {
   it.approval.state = 'sending'
   try {
-    await window.go.main.App.ResolveAgentApproval(it.approval.id, approved)
+    await App.ResolveAgentApproval(it.approval.id, approved)
   } catch {
     if (it.approval.state === 'sending') it.approval.state = 'gone'
     setTimeout(() => { items.value = items.value.filter((x) => x !== it) }, 2500)

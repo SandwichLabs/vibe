@@ -69,11 +69,10 @@ jobs:
         working-directory: studio/frontend
         run: npm run check:exports
 
-      # Non-blocking until the ~315 known type errors are cleared: see #34 and #35.
-      - name: vue-tsc (non-blocking, #34/#35)
-        continue-on-error: true
+      # Blocking since #54 slice 9a (closes #34/#35): the binding types live in src/env.d.ts (AppApi).
+      - name: typecheck (vue-tsc)
         working-directory: studio/frontend
-        run: npx vue-tsc --noEmit
+        run: npm run typecheck
 
       # The connection leak tests expect the DuckDB postgres extension to be installed (it is on a dev
       # machine; a fresh runner reports extension-missing instead of server-changed). Install it into the
@@ -210,6 +209,12 @@ jobs:
         env:
           GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
         run: wails build -tags ${{ env.LINUX_TAGS }}
+
+      # wails build regenerated src/wailsjs/go/main/App.d.ts: AppApi (env.d.ts) must match its arities (#54 9a).
+      - name: AppApi matches the generated bindings
+        if: runner.os == 'Linux'
+        working-directory: studio/frontend
+        run: node scripts/check-arity.mjs
 
       - name: Build Studio (macOS)
         if: runner.os == 'macOS'

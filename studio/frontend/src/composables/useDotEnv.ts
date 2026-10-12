@@ -11,6 +11,7 @@ import { errorText } from '../lib/errors'
 import { hasWailsRuntime } from '../lib/wails'
 import { refreshConnections, relaunch } from './useConnections'
 import { workspaceInfo, openWorkspacePath } from './useWorkspace'
+import { App } from '../lib/bindings'
 
 export const dotenv = ref<DotEnvStatus | null>(null)
 export const dotenvBusy = ref(false)
@@ -26,7 +27,7 @@ export const dotenvPrompt = computed(() => {
 
 export async function refreshDotEnv(): Promise<void> {
   try {
-    dotenv.value = await window.go.main.App.GetDotEnvStatus()
+    dotenv.value = await App.GetDotEnvStatus()
   } catch {
     dotenv.value = null
   }
@@ -57,9 +58,9 @@ async function decide(call: () => Promise<DotEnvStatus>): Promise<void> {
   dotenvBusy.value = false
 }
 
-export const allowDotEnv = () => decide(() => window.go.main.App.AllowDotEnv())
-export const denyDotEnv = () => decide(() => window.go.main.App.DenyDotEnv())
-export const revokeDotEnv = () => decide(() => window.go.main.App.RevokeDotEnv())
+export const allowDotEnv = () => decide(() => App.AllowDotEnv())
+export const denyDotEnv = () => decide(() => App.DenyDotEnv())
+export const revokeDotEnv = () => decide(() => App.RevokeDotEnv())
 
 let started = false
 export function startDotEnvTracking(): void {

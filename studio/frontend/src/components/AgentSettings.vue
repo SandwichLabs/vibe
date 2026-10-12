@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // Settings > Workspace > The agent (#79, #111, SPEC 09). Two layers, because a
 // committed file must not be able to loosen anyone's safeguards:
 //   - Team limit: saved in vibe.yaml and shared through git. It can only make
@@ -47,7 +48,7 @@ async function persist(patch: Partial<WorkspaceSettings>) {
     ...patch,
   }
   try {
-    workspaceInfo.value = await window.go.main.App.SetWorkspaceSettings(next)
+    workspaceInfo.value = await App.SetWorkspaceSettings(next)
     status.value = 'Saved'
     setTimeout(() => { if (status.value === 'Saved') status.value = '' }, 2000)
   } catch (e: unknown) {

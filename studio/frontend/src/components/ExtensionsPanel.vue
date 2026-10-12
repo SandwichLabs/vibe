@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // ExtensionsPanel — App settings > Extensions (SPEC 09): one row per DuckDB
 // extension a connection type needs: what it is for, which connections here use
 // it, whether it is installed, and an Install button (the consent for the
@@ -18,7 +19,7 @@ const unsubs: Array<() => void> = []
 
 async function load() {
   try {
-    rows.value = (await window.go.main.App.ListExtensions()) ?? []
+    rows.value = (await App.ListExtensions()) ?? []
   } catch (e: unknown) {
     error.value = errorText(e)
   }
@@ -29,7 +30,7 @@ async function install(name: string) {
   busy.value = name
   error.value = ''
   try {
-    await window.go.main.App.InstallExtension({ name })
+    await App.InstallExtension({ name })
     await refreshConnections()
   } catch (e: unknown) {
     error.value = errorText(e)

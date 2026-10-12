@@ -6,135 +6,132 @@ declare module '*.vue' {
   export default component
 }
 
-// Wails runtime bindings
-declare global {
-  interface Window {
-    go: {
-      main: {
-        App: {
-          GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
-          SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
-          ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
-          OpenThemesDir(): Promise<string>
-          // Workspaces (#111)
-          GetInitialWorkspace(): Promise<{ path: string; message: string; bundlePath: string }>
-          ListRecentWorkspaces(): Promise<RecentWorkspace[]>
-          RemoveRecentWorkspace(path: string): Promise<RecentWorkspace | null>
-          RestoreRecentWorkspace(r: RecentWorkspace): Promise<void>
-          RelocateRecentWorkspace(oldPath: string, newPath: string): Promise<void>
-          ChooseFolder(title: string): Promise<string>
-          SelectWorkspaceFolder(): Promise<string>
-          CheckGitAvailable(): Promise<boolean>
-          CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
-          OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
-          CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
-          // .vibe bundles (#118)
-          GetBundleContent(): Promise<BundleContent>
-          SelectBundleFile(): Promise<string>
-          ExportBundle(req: BundleExportRequest): Promise<BundleExportResult>
-          PreviewBundleImport(path: string, passphrase: string): Promise<BundlePreview>
-          CommitBundleImport(handle: string, d: BundleDecisions): Promise<BundleResult>
-          ImportBundleIntoNewWorkspace(handle: string, req: CreateWorkspaceRequest, d: BundleDecisions): Promise<{ opened: OpenWorkspaceResult; result: BundleResult }>
-          DiscardBundleImport(handle: string): Promise<void>
-          CloseWorkspace(): Promise<void>
-          TakeOverWorkspace(): Promise<OpenWorkspaceResult>
-          GetWorkspaceInfo(): Promise<WorkspaceInfo>
-          GetSessionID(): Promise<string>
-          IsWorkspaceOpen(): Promise<boolean>
-          SetWorkspaceSettings(s: WorkspaceSettings): Promise<WorkspaceInfo>
-          RegenerateWorkspaceID(): Promise<WorkspaceInfo>
-          TrustLocalSettings(): Promise<WorkspaceInfo>
-          ResolveConflict(req: ConflictRequest): Promise<ConflictResult>
-          ListTemplates(): Promise<TemplateInfo[]>
-          ListCatalogGroups(): Promise<CatalogGroup[]>
-          // Connections (#117)
-          ListConnectionTypes(): Promise<ConnTypeSpec[]>
-          ListConnections(): Promise<ConnectionList>
-          GetConnection(name: string): Promise<ConnectionDetail>
-          GetConnectionInScope(ref: ConnectionRef): Promise<ConnectionDetail>
-          ConnectionFingerprint(def: ConnectionDef): Promise<string>
-          SaveConnection(req: SaveConnectionRequest): Promise<ConnectionDetail>
-          MoveConnection(req: { name: string; to: ConnScope }): Promise<ConnectionDetail>
-          DeleteConnection(ref: ConnectionRef): Promise<void>
-          TestConnection(req: TestConnectionRequest): Promise<TestResultView>
-          ListMotherDuckDatabases(req: ListMotherDuckDatabasesRequest): Promise<MotherDuckDatabasesView>
-          ConnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
-          ConnectWithCredentials(req: ConnectWithCredentialsRequest): Promise<ConnectionInfo | null>
-          DisconnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
-          RefreshCatalog(ref: ConnectionRef): Promise<void>
-          SetConnectionCredentials(req: SetCredentialsRequest): Promise<ConnectionInfo | null>
-          ClearConnectionCredentials(req: { name: string; field: string }): Promise<ConnectionInfo | null>
-          GetConnectionCredentialStatus(name: string): Promise<ConnCredentialStatus>
-          ListCatalog(req: { connection: string; schema: string; table: string }): Promise<CatalogListing>
-          GetTableCapabilities(table: string): Promise<TableCapabilities>
-          InstallExtension(req: { name: string }): Promise<void>
-          ListExtensions(): Promise<ExtensionInfo[]>
-          StartMCP(): Promise<MCPStatus>
-          StopMCP(): Promise<void>
-          GetMCPStatus(): Promise<MCPStatus>
-          // The workspace's .env (#168): names and state only, never values
-          GetDotEnvStatus(): Promise<DotEnvStatus>
-          AllowDotEnv(): Promise<DotEnvStatus>
-          DenyDotEnv(): Promise<DotEnvStatus>
-          RevokeDotEnv(): Promise<DotEnvStatus>
-          GetClaudeConfig(): Promise<{ name: string; desktop: string; code: string }>
-          CancelQuit(): Promise<void>
-          HoldQuit(): Promise<void>
-          Quit(): Promise<void>
-          ListSkills(): Promise<SkillSummary[]>
-          SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
-          DeleteSkill(name: string): Promise<void>
-          ListTables(): Promise<string[]>
-          DescribeTable(name: string): Promise<TableInfo>
-          GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
-          GetTableDataFiltered(name: string, spec: FilterSpec, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
-          SaveFilterAsQuery(name: string, spec: FilterSpec, columns: string[], title: string): Promise<string>
-          InsertRow(table: string, values: Record<string, any>): Promise<WriteResult>
-          UpdateRow(table: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
-          DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
-          CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
-          DropTable(name: string): Promise<void>
-          RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
-          RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
-          RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
-          ListQueries(): Promise<QuerySummary[]>
-          GetQuery(id: string): Promise<QueryDetail>
-          SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
-          DeleteQuery(id: string): Promise<void>
-          GetDashboard(): Promise<DashboardData>
-          GetAgentConfig(): Promise<AgentConfig>
-          ProbeKeychain(): Promise<KeychainProbe>
-          GetLLMKeyStatus(provider: string): Promise<LLMKeyStatus>
-          GetLLMSettings(): Promise<LLMSettingsView>
-          SetLLMSettings(s: LLMSettingsInput): Promise<void>
-          ListLLMModels(provider: string, endpoint: string): Promise<LLMModelList>
-          SetLLMKey(provider: string, key: string): Promise<void>
-          ClearLLMKey(provider: string): Promise<void>
-          MigrateLLMKeyToKeychain(overwrite: boolean): Promise<void>
-          ResolveAgentApproval(id: string, approved: boolean): Promise<void>
-          SelectImportFile(): Promise<string>
-          InspectImport(src: ImportSource): Promise<ImportInspection>
-          ImportFile(o: ImportOptions): Promise<ImportSummary>
-          // Agent chat and task mode (#63, #66)
-          AgentChatStream(turnId: string, message: string, pinnedContext: string, history: { role: string; text: string }[]): Promise<AgentChatResult>
-          AgentTask(req: { taskId: string; mode: string; description: string; cell?: import('./composables/useAiCellDialog').TaskCellArg; followUp?: { role: string; text: string }[]; tables?: string[]; notebookSummary?: string[] }): Promise<import('./composables/useAiCellDialog').TaskEnvelope>
-          CancelAgentTask(taskId: string): Promise<void>
-          // Notebooks (#66)
-          ListNotebooks(): Promise<WailsNotebookSummary[]>
-          GetNotebook(id: string): Promise<WailsNotebook>
-          CreateNotebook(title: string): Promise<WailsNotebook>
-          DeleteNotebook(id: string): Promise<void>
-          SaveNotebook(nb: Record<string, any>, sessionId: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
-          SelectNotebookFile(): Promise<string>
-          ImportNotebook(path: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
-          ExportNotebook(id: string, dst: string): Promise<string>
-          SetActiveNotebook(id: string): Promise<void>
-          // Exports
-          ExportQueryResults(sql: string, format: string, dst: string): Promise<string>
-        }
-      }
-    }
-  }
+// The typed shape of the Wails-bound Go App (every exported method on
+// studio.App). Hand-written; kept honest by two checks: scripts/check-bindings.sh
+// (every Go method is declared here and has a caller) and
+// studio/frontend/scripts/check-arity.mjs (CI build-smoke: parameter counts match
+// the wails-generated App.d.ts). The ONLY runtime access to window.go is
+// src/lib/bindings.ts.
+interface AppApi {
+  GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
+  SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
+  ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
+  OpenThemesDir(): Promise<string>
+  // Workspaces (#111)
+  GetInitialWorkspace(): Promise<{ path: string; message: string; bundlePath: string }>
+  ListRecentWorkspaces(): Promise<RecentWorkspace[]>
+  RemoveRecentWorkspace(path: string): Promise<RecentWorkspace | null>
+  RestoreRecentWorkspace(r: RecentWorkspace): Promise<void>
+  RelocateRecentWorkspace(oldPath: string, newPath: string): Promise<void>
+  ChooseFolder(title: string): Promise<string>
+  SelectWorkspaceFolder(): Promise<string>
+  CheckGitAvailable(): Promise<boolean>
+  CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
+  OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
+  CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
+  // .vibe bundles (#118)
+  GetBundleContent(): Promise<BundleContent>
+  SelectBundleFile(): Promise<string>
+  ExportBundle(req: BundleExportRequest): Promise<BundleExportResult>
+  PreviewBundleImport(path: string, passphrase: string): Promise<BundlePreview>
+  CommitBundleImport(handle: string, d: BundleDecisions): Promise<BundleResult>
+  ImportBundleIntoNewWorkspace(handle: string, req: CreateWorkspaceRequest, d: BundleDecisions): Promise<{ opened: OpenWorkspaceResult; result: BundleResult }>
+  DiscardBundleImport(handle: string): Promise<void>
+  CloseWorkspace(): Promise<void>
+  TakeOverWorkspace(): Promise<OpenWorkspaceResult>
+  GetWorkspaceInfo(): Promise<WorkspaceInfo>
+  GetSessionID(): Promise<string>
+  IsWorkspaceOpen(): Promise<boolean>
+  SetWorkspaceSettings(s: WorkspaceSettings): Promise<WorkspaceInfo>
+  RegenerateWorkspaceID(): Promise<WorkspaceInfo>
+  TrustLocalSettings(): Promise<WorkspaceInfo>
+  ResolveConflict(req: ConflictRequest): Promise<ConflictResult>
+  ListTemplates(): Promise<TemplateInfo[]>
+  ListCatalogGroups(): Promise<CatalogGroup[]>
+  // Connections (#117)
+  ListConnectionTypes(): Promise<ConnTypeSpec[]>
+  ListConnections(): Promise<ConnectionList>
+  GetConnection(name: string): Promise<ConnectionDetail>
+  GetConnectionInScope(ref: ConnectionRef): Promise<ConnectionDetail>
+  ConnectionFingerprint(def: ConnectionDef): Promise<string>
+  SaveConnection(req: SaveConnectionRequest): Promise<ConnectionDetail>
+  MoveConnection(req: { name: string; to: ConnScope }): Promise<ConnectionDetail>
+  DeleteConnection(ref: ConnectionRef): Promise<void>
+  TestConnection(req: TestConnectionRequest): Promise<TestResultView>
+  ListMotherDuckDatabases(req: ListMotherDuckDatabasesRequest): Promise<MotherDuckDatabasesView>
+  ConnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
+  ConnectWithCredentials(req: ConnectWithCredentialsRequest): Promise<ConnectionInfo | null>
+  DisconnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
+  RefreshCatalog(ref: ConnectionRef): Promise<void>
+  SetConnectionCredentials(req: SetCredentialsRequest): Promise<ConnectionInfo | null>
+  ClearConnectionCredentials(req: { name: string; field: string }): Promise<ConnectionInfo | null>
+  GetConnectionCredentialStatus(name: string): Promise<ConnCredentialStatus>
+  ListCatalog(req: { connection: string; schema: string; table: string }): Promise<CatalogListing>
+  GetTableCapabilities(table: string): Promise<TableCapabilities>
+  InstallExtension(req: { name: string }): Promise<void>
+  ListExtensions(): Promise<ExtensionInfo[]>
+  StartMCP(): Promise<MCPStatus>
+  StopMCP(): Promise<void>
+  GetMCPStatus(): Promise<MCPStatus>
+  // The workspace's .env (#168): names and state only, never values
+  GetDotEnvStatus(): Promise<DotEnvStatus>
+  AllowDotEnv(): Promise<DotEnvStatus>
+  DenyDotEnv(): Promise<DotEnvStatus>
+  RevokeDotEnv(): Promise<DotEnvStatus>
+  GetClaudeConfig(): Promise<{ name: string; desktop: string; code: string }>
+  CancelQuit(): Promise<void>
+  HoldQuit(): Promise<void>
+  Quit(): Promise<void>
+  ListSkills(): Promise<SkillSummary[]>
+  SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
+  DeleteSkill(name: string): Promise<void>
+  ListTables(): Promise<string[]>
+  DescribeTable(name: string): Promise<TableInfo>
+  GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
+  GetTableDataFiltered(name: string, spec: FilterSpec, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
+  SaveFilterAsQuery(name: string, spec: FilterSpec, columns: string[], title: string): Promise<string>
+  InsertRow(table: string, values: Record<string, any>): Promise<WriteResult>
+  UpdateRow(table: string, pkCol: string, pkVal: any, values: Record<string, any>): Promise<WriteResult>
+  DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
+  CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
+  DropTable(name: string): Promise<void>
+  RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
+  RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
+  RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
+  ListQueries(): Promise<QuerySummary[]>
+  GetQuery(id: string): Promise<QueryDetail>
+  SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
+  DeleteQuery(id: string): Promise<void>
+  GetDashboard(): Promise<DashboardData>
+  GetAgentConfig(): Promise<AgentConfig>
+  ProbeKeychain(): Promise<KeychainProbe>
+  GetLLMKeyStatus(provider: string): Promise<LLMKeyStatus>
+  GetLLMSettings(): Promise<LLMSettingsView>
+  SetLLMSettings(s: LLMSettingsInput): Promise<void>
+  ListLLMModels(provider: string, endpoint: string): Promise<LLMModelList>
+  SetLLMKey(provider: string, key: string): Promise<void>
+  ClearLLMKey(provider: string): Promise<void>
+  MigrateLLMKeyToKeychain(overwrite: boolean): Promise<void>
+  ResolveAgentApproval(id: string, approved: boolean): Promise<void>
+  SelectImportFile(): Promise<string>
+  InspectImport(src: ImportSource): Promise<ImportInspection>
+  ImportFile(o: ImportOptions): Promise<ImportSummary>
+  // Agent chat and task mode (#63, #66)
+  AgentChatStream(turnId: string, message: string, pinnedContext: string, history: { role: string; text: string }[]): Promise<AgentChatResult>
+  AgentTask(req: { taskId: string; mode: string; description: string; cell?: import('./composables/useAiCellDialog').TaskCellArg; followUp?: { role: string; text: string }[]; tables?: string[]; notebookSummary?: string[] }): Promise<import('./composables/useAiCellDialog').TaskEnvelope>
+  CancelAgentTask(taskId: string): Promise<void>
+  // Notebooks (#66)
+  ListNotebooks(): Promise<WailsNotebookSummary[]>
+  GetNotebook(id: string): Promise<WailsNotebook>
+  CreateNotebook(title: string): Promise<WailsNotebook>
+  DeleteNotebook(id: string): Promise<void>
+  SaveNotebook(nb: Record<string, any>, sessionId: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
+  SelectNotebookFile(): Promise<string>
+  ImportNotebook(path: string): Promise<{ notebook: WailsNotebook; warnings: string[] | null }>
+  ExportNotebook(id: string, dst: string): Promise<string>
+  SetActiveNotebook(id: string): Promise<void>
+  // Exports
+  ExportQueryResults(sql: string, format: string, dst: string): Promise<string>
 }
 
 // A notebook as the bindings return it: the editor owns the cell shapes, so
@@ -653,7 +650,6 @@ interface ImportSummary {
   blocked: string
 }
 
-export {}
 
 // --- .vibe bundles (#118): mirrors studio/bundle.go and internal/bundle ---
 

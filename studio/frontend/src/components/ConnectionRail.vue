@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // ConnectionRail — the DataGrip/DBeaver-style explorer under the nav (SPEC 05):
 // connection > schema > table or view > column, loaded lazily. Opening a
 // workspace dials nothing; expanding a connection connects it. One tab stop with
@@ -143,7 +144,7 @@ const tabKey = computed(() => (focusables.value.some((r) => r.key === focusKey.v
 async function load(key: string, req: { connection: string; schema: string; table: string }) {
   levels.value = { ...levels.value, [key]: { loading: true } }
   try {
-    const l = await window.go.main.App.ListCatalog(req)
+    const l = await App.ListCatalog(req)
     levels.value = { ...levels.value, [key]: l }
   } catch (e: unknown) {
     levels.value = { ...levels.value, [key]: { error: errorText(e) } }
@@ -259,7 +260,7 @@ function onDetailAction(r: Row) {
 // ---- connection actions ----
 async function disconnect(c: ConnectionInfo) {
   try {
-    await window.go.main.App.DisconnectConnection({ name: c.name, scope: '' })
+    await App.DisconnectConnection({ name: c.name, scope: '' })
     const ck = connKey(c.name)
     const next = new Set(expanded.value)
     next.delete(ck)
@@ -270,7 +271,7 @@ async function disconnect(c: ConnectionInfo) {
 
 async function refreshConn(c?: ConnectionInfo) {
   try {
-    await window.go.main.App.RefreshCatalog({ name: c?.name ?? '', scope: '' })
+    await App.RefreshCatalog({ name: c?.name ?? '', scope: '' })
     await refreshConnections()
     await reloadOpen(c?.name)
   } catch (e: unknown) { emit('error', errorText(e)) }
@@ -300,7 +301,7 @@ async function removeConn(c: ConnectionInfo) {
   })
   if (!ok) return
   try {
-    await window.go.main.App.DeleteConnection({ name: c.name, scope: c.scope })
+    await App.DeleteConnection({ name: c.name, scope: c.scope })
     await refreshConnections()
   } catch (e: unknown) { emit('error', errorText(e)) }
 }

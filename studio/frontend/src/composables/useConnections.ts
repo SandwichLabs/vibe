@@ -8,6 +8,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { takeOverOpen } from './useWorkspace'
 import { hasWailsRuntime } from '../lib/wails'
+import { App } from '../lib/bindings'
 
 export const connectionList = ref<ConnectionInfo[]>([])
 export const relaunch = ref<{ required: boolean; message: string }>({ required: false, message: '' })
@@ -26,7 +27,7 @@ const unsubs: Array<() => void> = []
 
 export async function refreshConnections(): Promise<void> {
   try {
-    const res = await window.go.main.App.ListConnections()
+    const res = await App.ListConnections()
     connectionList.value = res.connections ?? []
     relaunch.value = { required: !!res.relaunchRequired, message: res.relaunchMessage ?? '' }
   } catch {
@@ -62,7 +63,7 @@ interface ConnectResult { ok: boolean; error?: string; info?: ConnectionInfo | n
 export async function connect(name: string): Promise<ConnectResult> {
   connecting.value = new Set(connecting.value).add(name)
   try {
-    const info = await window.go.main.App.ConnectConnection({ name, scope: '' })
+    const info = await App.ConnectConnection({ name, scope: '' })
     await refreshConnections()
     return { ok: true, info }
   } catch (e: unknown) {

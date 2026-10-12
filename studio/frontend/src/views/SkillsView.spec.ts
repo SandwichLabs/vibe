@@ -1,6 +1,7 @@
 // SkillsView (#62) — lists built-in + file skills, shows a rendered/raw
 // detail pane, and lets the user create/edit/delete file skills. Built-ins
 // must render read-only (no edit/delete affordance).
+type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from '../router/index'
@@ -21,8 +22,8 @@ const SKILLS = [
   { name: 'revenue-rules', description: 'Revenue is in USD thousands.', instructions: 'Revenue is reported in USD thousands.', source: 'user' },
 ]
 
-function makeApp(overrides: Partial<Record<string, any>> = {}) {
-  const app = {
+function makeApp(overrides: MockApp = {}) {
+  const app: MockApp = {
     ListSkills: vi.fn(async () => SKILLS.map((s) => ({ ...s }))),
     SaveSkill: vi.fn(async () => {}),
     DeleteSkill: vi.fn(async () => {}),

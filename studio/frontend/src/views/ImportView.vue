@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // The Import wizard (#82): one card that covers CSV and xlsx. Pick a file,
 // review the full-file type inference and suggested primary key, and either
 // create a new table or choose how to reconcile with one that already
@@ -144,7 +145,7 @@ function buildOptions(dryRun: boolean): ImportOptions {
 
 async function loadTables() {
   try {
-    tables.value = (await window.go.main.App.ListTables()) || []
+    tables.value = (await App.ListTables()) || []
   } catch { /* leave the existing list; the dry run will still be accurate */ }
 }
 
@@ -167,7 +168,7 @@ async function selectFile() {
   error.value = ''
   errorContext.value = 'preview'
   try {
-    const p = await window.go.main.App.SelectImportFile()
+    const p = await App.SelectImportFile()
     if (!p) return
     resetAll()
     path.value = p
@@ -185,7 +186,7 @@ async function inspect() {
   error.value = ''
   errorContext.value = 'preview'
   try {
-    const insp = await window.go.main.App.InspectImport({
+    const insp = await App.InspectImport({
       path: path.value,
       sheet: sheet.value,
       has_header: hasHeader.value,
@@ -242,7 +243,7 @@ async function runDryRun() {
   const seq = ++dryRunSeq
   dryRunning.value = true
   try {
-    const s = await window.go.main.App.ImportFile(buildOptions(true))
+    const s = await App.ImportFile(buildOptions(true))
     if (seq !== dryRunSeq) return // a newer dry run has already started; ignore this stale response
     summary.value = s
     // The wizard always pre-selects the safest available mode so the
@@ -286,7 +287,7 @@ async function runImport() {
   errorContext.value = 'import'
   const key0 = requestKey.value
   try {
-    const s = await window.go.main.App.ImportFile(buildOptions(false))
+    const s = await App.ImportFile(buildOptions(false))
     summary.value = s
     if (s.ok) {
       successSummary.value = s

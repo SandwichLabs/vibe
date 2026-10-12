@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // LauncherView — the first screen when no workspace is open (#111; replaces
 // UnlockView). Get back into recent work, or start, in one click. Design spec:
 // docs/design/workspaces-connections/SPEC.md section 1.
@@ -29,7 +30,7 @@ const firstRun = computed(() => loaded.value && recents.value.length === 0)
 
 async function load() {
   try {
-    recents.value = (await window.go.main.App.ListRecentWorkspaces()) || []
+    recents.value = (await App.ListRecentWorkspaces()) || []
   } catch {
     recents.value = []
   }
@@ -57,9 +58,9 @@ async function openFolder() {
 
 async function locate(r: RecentWorkspace) {
   try {
-    const path = await window.go.main.App.ChooseFolder(`Locate ${r.name}`)
+    const path = await App.ChooseFolder(`Locate ${r.name}`)
     if (!path) return
-    await window.go.main.App.RelocateRecentWorkspace(r.path, path)
+    await App.RelocateRecentWorkspace(r.path, path)
     await load()
   } catch (e: unknown) {
     error.value = errorText(e)
@@ -68,7 +69,7 @@ async function locate(r: RecentWorkspace) {
 
 async function remove(r: RecentWorkspace) {
   try {
-    const removed = await window.go.main.App.RemoveRecentWorkspace(r.path)
+    const removed = await App.RemoveRecentWorkspace(r.path)
     undoEntry.value = removed ?? r
     if (undoTimer) clearTimeout(undoTimer)
     undoTimer = setTimeout(() => { undoEntry.value = null }, 8000)
@@ -88,7 +89,7 @@ async function undoRemove() {
   undoEntry.value = null
   if (undoTimer) clearTimeout(undoTimer)
   try {
-    await window.go.main.App.RestoreRecentWorkspace(r)
+    await App.RestoreRecentWorkspace(r)
     await load()
   } catch (e: unknown) {
     error.value = errorText(e)

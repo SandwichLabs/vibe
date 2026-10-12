@@ -26,7 +26,7 @@ function setup() {
   return app
 }
 
-const mountSel = (props: Record<string, unknown>) => mount(ConnectionSelect, { props, attachTo: document.body, global: { stubs: { Icon: true } } })
+const mountSel = (props: { modelValue: string; variant?: "cell" | "toolbar"; disabled?: boolean }) => mount(ConnectionSelect, { props, attachTo: document.body, global: { stubs: { Icon: true } } })
 
 describe('ConnectionSelect', () => {
   beforeEach(() => { _resetConnectionsForTests(); document.body.innerHTML = '' })

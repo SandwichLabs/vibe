@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // WorkspaceSwitcher — the folder button in the top bar and its menu (SPEC 04).
 // Sections: current workspace, recents (missing entries disabled with Locate…),
 // Open folder…, New workspace…, Manage workspaces… (the launcher). Roving
@@ -25,7 +26,7 @@ const others = computed(() => recents.value.filter((r) => r.path !== info.value?
 
 async function loadRecents() {
   try {
-    recents.value = (await window.go.main.App.ListRecentWorkspaces()) || []
+    recents.value = (await App.ListRecentWorkspaces()) || []
   } catch {
     recents.value = []
   }
@@ -88,9 +89,9 @@ async function switchTo(r: RecentWorkspace) {
 
 async function locate(r: RecentWorkspace) {
   try {
-    const path = await window.go.main.App.ChooseFolder(`Locate ${r.name}`)
+    const path = await App.ChooseFolder(`Locate ${r.name}`)
     if (!path) return
-    await window.go.main.App.RelocateRecentWorkspace(r.path, path)
+    await App.RelocateRecentWorkspace(r.path, path)
     await loadRecents()
   } catch (e: unknown) {
     emit('error', errorText(e))

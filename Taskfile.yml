@@ -60,6 +60,12 @@ tasks:
     cmds:
       - npm run test
 
+  typecheck:
+    desc: Type-check the Studio frontend (vue-tsc, blocking in CI)
+    dir: studio/frontend
+    cmds:
+      - npm run typecheck
+
   test:coverage:
     desc: Run tests with coverage report
     cmds:
@@ -68,9 +74,10 @@ tasks:
       - echo "Coverage report written to coverage.html"
 
   lint:
-    desc: Run golangci-lint
+    desc: Run golangci-lint and the frontend type-check
     cmds:
       - golangci-lint run ./...
+      - task: typecheck
 
   lint:fix:
     desc: Run golangci-lint with auto-fix

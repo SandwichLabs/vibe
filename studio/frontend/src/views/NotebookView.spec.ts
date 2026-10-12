@@ -1,6 +1,7 @@
 // NotebookView interaction tests (#66 part A): run a sql cell and see it
 // auto-fit a view, edit-without-running shows the stale badge, and a write
 // attempt surfaces the read-only message RunA2UIQuery already returns.
+type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -62,8 +63,8 @@ const MIXED_NOTEBOOK = {
   ],
 }
 
-function makeApp(overrides: Partial<Record<string, any>> = {}) {
-  const app = {
+function makeApp(overrides: MockApp = {}) {
+  const app: MockApp = {
     GetNotebook: vi.fn(async () => JSON.parse(JSON.stringify(BAR_NOTEBOOK))),
     SaveNotebook: vi.fn(async (nb: any) => ({ notebook: nb, warnings: [] })),
     RunA2UIQuery: vi.fn(async () => ({

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // NotebooksView — the notebook library list (#66 part A). Mirrors PagesView's
 // list/create/delete shape; each row opens NotebookView (#/notebooks/:id).
 import { ref, onMounted, watch } from 'vue'
@@ -33,7 +34,7 @@ const importing = ref(false)
 async function loadNotebooks() {
   loading.value = true
   try {
-    notebooks.value = (await window.go.main.App.ListNotebooks()) || []
+    notebooks.value = (await App.ListNotebooks()) || []
   } catch { /* ignore */ }
   loading.value = false
 }
@@ -49,7 +50,7 @@ async function createNotebook() {
   }
   titleError.value = false
   try {
-    const nb = await window.go.main.App.CreateNotebook(newTitle.value)
+    const nb = await App.CreateNotebook(newTitle.value)
     newTitle.value = ''
     showNewModal.value = false
     await loadNotebooks()
@@ -70,7 +71,7 @@ async function confirmDeleteNotebook() {
   pendingDeleteId.value = null
   if (!id) return
   try {
-    await window.go.main.App.DeleteNotebook(id)
+    await App.DeleteNotebook(id)
     await loadNotebooks()
   } catch (e: any) {
     errorMessage.value = 'Failed to delete notebook: ' + errorText(e)
@@ -80,9 +81,9 @@ async function confirmDeleteNotebook() {
 async function importNotebook() {
   importing.value = true
   try {
-    const path = await window.go.main.App.SelectNotebookFile()
+    const path = await App.SelectNotebookFile()
     if (!path) { importing.value = false; return }
-    const result = await window.go.main.App.ImportNotebook(path)
+    const result = await App.ImportNotebook(path)
     await loadNotebooks()
     if (result?.warnings?.length) {
       errorMessage.value = `Imported with ${result.warnings.length} warning(s): ${result.warnings[0]}`

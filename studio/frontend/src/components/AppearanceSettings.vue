@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App, hasBinding } from '../lib/bindings'
 /**
  * Settings → Appearance. App-wide (stored in the user's config dir by
  * internal/prefs), so it sits above the per-file settings and says so.
@@ -46,7 +47,7 @@ async function reload() {
 async function openFolder() {
   opening.value = true
   try {
-    themesDir.value = await window.go.main.App.OpenThemesDir()
+    themesDir.value = await App.OpenThemesDir()
   } catch (e: any) {
     flash('Could not open the themes folder: ' + errorText(e))
   } finally {
@@ -54,7 +55,7 @@ async function openFolder() {
   }
 }
 
-const hasWails = typeof window !== 'undefined' && !!(window as any).go?.main?.App?.OpenThemesDir
+const hasWails = hasBinding('OpenThemesDir')
 </script>
 
 <template>

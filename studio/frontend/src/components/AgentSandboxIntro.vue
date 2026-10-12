@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // AgentSandboxIntro — the agent empty-state paragraph, reflecting the
 // file's current sandbox mode AND ask-before-writes setting (#91 M-F6/P-F2,
 // #79). Shared by AgentView and AgentPanel's empty states, replacing each
@@ -19,7 +20,7 @@ const text = ref(sandboxIntro(''))
 
 async function refresh() {
   try {
-    const cfg = await window.go.main.App.GetAgentConfig()
+    const cfg = await App.GetAgentConfig()
     text.value = sandboxIntro(cfg.sandbox, cfg.askBeforeWrites)
   } catch {
     // Leave whatever copy is already showing (e.g. the sandboxIntro('')

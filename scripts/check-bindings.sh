@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Fails when an exported Studio App method (a Wails binding) has no non-test frontend caller.
+# Fails when an exported Studio App method (a Wails binding) has no non-test frontend caller
+# (calls go through App.X from src/lib/bindings.ts), or when the hand-written AppApi interface in
+# src/env.d.ts drifts from the Go methods (a method missing from it, or one it declares that Go lacks).
 # Usage: scripts/check-bindings.sh   (run from anywhere; needs ripgrep-free grep only)
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,6 +23,22 @@ for m in $methods; do
   case "$allow" in *" $m "*) continue ;; esac
   if ! grep -qE "\\b(App|b)\\??\\.$m\\b" "$callers"; then
     echo "binding without a non-test frontend caller: $m"
+    missing=1
+  fi
+done
+# AppApi (env.d.ts) must list exactly the Go methods: it is the frontend's only binding type source.
+declared="$(awk '/^interface AppApi \{/{f=1;next} f&&/^\}/{f=0} f' "$src/env.d.ts" \
+  | grep -E '^  [A-Z][A-Za-z0-9_]*\(' | sed -E 's/^  ([A-Za-z0-9_]+)\(.*/\1/' | sort -u)"
+for m in $methods; do
+  case "$allow" in *" $m "*) continue ;; esac
+  if ! grep -qx "$m" <<<"$declared"; then
+    echo "binding missing from AppApi in $src/env.d.ts: $m"
+    missing=1
+  fi
+done
+for m in $declared; do
+  if ! grep -qx "$m" <<<"$methods"; then
+    echo "AppApi in $src/env.d.ts declares a method Go does not have: $m"
     missing=1
   fi
 done

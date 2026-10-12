@@ -10,6 +10,7 @@ import { computed, reactive, readonly, watch } from 'vue'
 import { BUILTIN_THEMES, DEFAULT_DARK_ID, DEFAULT_LIGHT_ID, DEFAULT_THEME_ID } from './builtin'
 import { idFromFilename, parseTheme, resolveTheme, ThemeError, type ResolvedTheme, type ThemeSpec } from './schema'
 import { applyReduceMotion, applyThemeToDocument, applyUiScale } from './apply'
+import { App, hasBinding } from '../lib/bindings'
 import { errorText } from '../lib/errors'
 
 export const THEME_SYSTEM = 'system'
@@ -51,16 +52,10 @@ const DEFAULT_PREFS: ThemePreferences = {
 
 const LS_KEY = 'vibe.preferences'
 
-interface Bindings {
-  GetPreferences(): Promise<ThemePreferences>
-  SetPreferences(p: ThemePreferences): Promise<void>
-  ListUserThemes(): Promise<{ themes: UserThemeFile[] | null; problems: string[] | null }>
-}
+type Bindings = Pick<AppApi, 'GetPreferences' | 'SetPreferences' | 'ListUserThemes'>
 
 function bindings(): Bindings | null {
-  const app = (globalThis as any)?.window?.go?.main?.App
-  if (app && typeof app.GetPreferences === 'function') return app as Bindings
-  return null
+  return hasBinding('GetPreferences') ? App : null
 }
 
 function readLocal(): Partial<ThemePreferences> {

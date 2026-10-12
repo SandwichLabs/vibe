@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // BundleExportDialog — "Export workspace content…" (#118). Pick what goes in a
 // .vibe bundle, optionally lock it with a passphrase, and save. A bundle holds
 // no data and no credentials; the dialog says so where the person is deciding.
@@ -38,7 +39,7 @@ watch(bundleExportOpen, async (open) => {
   pass2.value = ''
   loading.value = true
   try {
-    const c = await window.go.main.App.GetBundleContent()
+    const c = await App.GetBundleContent()
     content.value = c
     picked.value = {
       nb: new Set(c.notebooks.map((x) => x.id)),
@@ -75,7 +76,7 @@ async function submit() {
   const team = portableConns.value.filter((c) => c.scope === 'team' && picked.value.cn.has(c.name)).map((c) => c.name)
   const local = portableConns.value.filter((c) => c.scope === 'this computer' && picked.value.cn.has(c.name)).map((c) => c.name)
   try {
-    const res = await window.go.main.App.ExportBundle({
+    const res = await App.ExportBundle({
       path: '',
       selection: {
         all: false,

@@ -17,6 +17,7 @@ import { reactive } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { capPromptList } from '../lib/notebookMerge'
 import { errorText } from '../lib/errors'
+import { App } from '../lib/bindings'
 
 type DialogState = 'closed' | 'prompt' | 'working' | 'proposal' | 'needs_info' | 'unresolved'
 
@@ -229,7 +230,7 @@ export function useAiCellDialog(host: DialogHost) {
   function close() {
     // Closing cancels an in-flight turn (never leaves a background call that
     // could still race an apply after the dialog is gone) — the caller is
-    // expected to also call window.go.main.App.CancelAgentTask(taskId)
+    // expected to also call App.CancelAgentTask(taskId)
     // before/after this; kept out of this pure-ish composable so it stays
     // testable without a Wails binding.
     reset()
@@ -286,7 +287,7 @@ export function useAiCellDialog(host: DialogHost) {
     const notebookSummary = capPromptList(host.getNotebookSummary ? host.getNotebookSummary() : [])
 
     try {
-      const envelope: TaskEnvelope = await window.go.main.App.AgentTask({
+      const envelope: TaskEnvelope = await App.AgentTask({
         taskId: dispatchTaskId,
         mode: state.mode,
         description,

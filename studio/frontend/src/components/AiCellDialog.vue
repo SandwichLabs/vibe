@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App, hasBinding } from '../lib/bindings'
 // AiCellDialog — the AI-cell authoring dialog (#66 part B). All state
 // machine logic lives in useAiCellDialog; this component is rendering only,
 // so NotebookView.spec.ts-style tests can exercise apply/cap rules against
@@ -70,8 +71,8 @@ function onApply() {
 function onClose() {
   try {
     const taskId = props.dialog.state.taskId
-    if (taskId && window.go?.main?.App?.CancelAgentTask) {
-      window.go.main.App.CancelAgentTask(taskId)
+    if (taskId && hasBinding('CancelAgentTask')) {
+      App.CancelAgentTask(taskId)
     }
   } catch {
     // best-effort cancel; closing the dialog must never throw

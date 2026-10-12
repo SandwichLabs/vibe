@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // WorkspaceBanner — SPEC 07 C. Across the top of the main pane while the
 // workspace is open read-only because another program (usually `vibe mcp serve`)
 // owns its database. Read-only is explained here, not in the agent pill.
@@ -39,7 +40,7 @@ const dupes = computed(() => info.value?.duplicateIds ?? [])
 async function regenerate() {
   busy.value = true
   error.value = ''
-  try { workspaceInfo.value = await window.go.main.App.RegenerateWorkspaceID() } catch (e: unknown) { error.value = errorText(e) }
+  try { workspaceInfo.value = await App.RegenerateWorkspaceID() } catch (e: unknown) { error.value = errorText(e) }
   busy.value = false
 }
 
@@ -47,7 +48,7 @@ async function regenerate() {
 async function trust() {
   busy.value = true
   error.value = ''
-  try { workspaceInfo.value = await window.go.main.App.TrustLocalSettings() } catch (e: unknown) { error.value = errorText(e) }
+  try { workspaceInfo.value = await App.TrustLocalSettings() } catch (e: unknown) { error.value = errorText(e) }
   busy.value = false
 }
 </script>
