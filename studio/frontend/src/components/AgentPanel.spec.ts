@@ -15,6 +15,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }))
 
 import AgentPanel from './AgentPanel.vue'
+import { useAgentChat } from '../composables/useAgentChat'
 
 function setBinding(impl: (turnId: string, msg: string, pinned: string, history: any[]) => Promise<any>) {
   ;(globalThis as any).window = (globalThis as any).window || {}
@@ -28,7 +29,7 @@ async function mountPanel() {
 }
 
 describe('AgentPanel (W0.5)', () => {
-  beforeEach(() => { streamHandler = null })
+  beforeEach(() => { streamHandler = null; useAgentChat().resetAll() })
 
   it('renders the agent answer as markdown and a done tool chip', async () => {
     setBinding(async (turnId) => {

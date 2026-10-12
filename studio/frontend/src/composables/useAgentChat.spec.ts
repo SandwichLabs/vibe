@@ -22,7 +22,7 @@ function setBinding(impl: (turnId: string, msg: string, pinned: string, history:
 }
 
 describe('useAgentChat (W0.5)', () => {
-  beforeEach(() => { streamHandler = null })
+  beforeEach(() => { streamHandler = null; useAgentChat().resetAll() })
 
   it('streams deltas + running->done tool chips and finalizes', async () => {
     const binding = setBinding(async (turnId) => {
@@ -347,6 +347,7 @@ describe('useAgentChat approvals (#79)', () => {
     llmSettings = { provider: 'ollama', endpoint: 'http://localhost:11434/v1' }
     setBinding(async () => { throw new Error('agent error: connection refused') })
     let chat = useAgentChat()
+    chat.resetAll()
     await chat.send('hi')
     expect(chat.messages.value[1].text).toBe('Agent error: connection refused. Is the model server at http://localhost:11434/v1 running?')
     expect(chat.messages.value[1].text).not.toContain('LLM server reachable')
@@ -354,6 +355,7 @@ describe('useAgentChat approvals (#79)', () => {
     llmSettings = { provider: 'cloudflare', endpoint: '' }
     setBinding(async () => { throw new Error('401 unauthorized') })
     chat = useAgentChat()
+    chat.resetAll()
     await chat.send('hi')
     expect(chat.messages.value[1].text).toBe('Agent error: 401 unauthorized. Check the API key and model in Settings \u2192 App.')
     llmSettings = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
@@ -366,9 +368,149 @@ describe('useAgentChat approvals (#79)', () => {
       throw new Error('bad key')
     })
     const chat = useAgentChat()
+    chat.resetAll()
     await chat.send('hi')
     const t = chat.messages.value[1].text
     expect(t.match(/Check the API key/g)).toHaveLength(1)
     llmSettings = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
+  })
+})
+
+
+// #2: the chat is a singleton shared by every consumer and wiped per workspace.
+describe('useAgentChat singleton + workspace scoping (#2)', () => {
+  async function fresh() {
+    const handlers: Record<string, ((p: any) => void)[]> = {}
+    vi.doMock('../wailsjs/runtime/runtime', () => ({
+      EventsOn: (name: string, cb: (p: any) => void) => { (handlers[name] ||= []).push(cb); return () => { handlers[name] = handlers[name].filter((h) => h !== cb) } },
+    }))
+    vi.resetModules()
+    ;(window as any).runtime = {}
+    const mod = await import('./useAgentChat')
+    const fire = (n: string, p?: any) => (handlers[n] || []).slice().forEach((h) => h(p))
+    return { ...mod, fire }
+  }
+
+  it('two consumers see the same conversation', async () => {
+    const { useAgentChat: u } = await fresh()
+    ;(window as any).go = { main: { App: { AgentChatStream: vi.fn(async () => ({ text: 'yo', steps: [] })) } } }
+    const a = u(), b = u()
+    await a.send('hello')
+    expect(b.messages.value).toHaveLength(2)
+    expect(b.messages.value[0].text).toBe('hello')
+  })
+
+  it.each(['workspace:opened', 'workspace:closed'])('%s wipes the transcript and unlocks sending; the old turn cannot leak in', async (evt) => {
+    const { useAgentChat: u, fire } = await fresh()
+    let finish!: (v: any) => void
+    ;(window as any).go = { main: { App: { AgentChatStream: vi.fn(() => new Promise((r) => { finish = r })) } } }
+    const chat = u()
+    chat.pin('the notebooks screen')
+    const turn = chat.send('old workspace question')
+    expect(chat.sending.value).toBe(true)
+
+    fire(evt)
+    expect(chat.messages.value).toHaveLength(0)
+    expect(chat.sending.value).toBe(false)
+    expect(chat.pinnedContext.value).toBe('')
+
+    // New workspace starts a turn; the old turn settling must not unlock it.
+    const second = vi.fn(() => new Promise<any>(() => {}))
+    ;(window as any).go.main.App.AgentChatStream = second
+    void chat.send('new workspace question')
+    expect(chat.sending.value).toBe(true)
+    finish({ text: 'stale', steps: [] })
+    await turn
+    expect(chat.sending.value).toBe(true)
+    expect(chat.messages.value.map((m) => m.text)).toEqual(['new workspace question', ''])
+  })
+})
+
+// Cancel an in-flight turn.
+describe('useAgentChat cancel', () => {
+  beforeEach(() => { useAgentChat().resetAll() })
+
+  it('cancel() calls CancelAgentQuery with the turn id and ends the turn as Cancelled', async () => {
+    let turn = ''
+    let reject!: (e: Error) => void
+    const cancelBinding = vi.fn(async () => {})
+    ;(window as any).go = { main: { App: {
+      AgentChatStream: vi.fn((id: string) => { turn = id; return new Promise((_r, rej) => { reject = rej }) }),
+      CancelAgentQuery: cancelBinding,
+    } } }
+    const chat = useAgentChat()
+    const done = chat.send('do a thing')
+    expect(chat.sending.value).toBe(true)
+    streamHandler!({ turnId: turn, kind: 'tool', id: 't1', tool: 'create_dashboard', input: '{}' })
+
+    await chat.cancel()
+    expect(cancelBinding).toHaveBeenCalledWith(turn)
+    // Go then emits "cancelled" and the binding rejects; neither may show an error.
+    streamHandler!({ turnId: turn, kind: 'cancelled' })
+    reject(new Error('agent turn cancelled: context canceled'))
+    await done
+
+    const m = chat.messages.value[1]
+    expect(m.cancelled).toBe(true)
+    expect(m.role).toBe('agent')
+    expect(m.steps[0].status).toBe('error')
+    expect(chat.sending.value).toBe(false)
+  })
+
+  it('cancel() closes a pending approval card and is a no-op when idle', async () => {
+    const cancelBinding = vi.fn(async () => {})
+    let turn = ''
+    ;(window as any).go = { main: { App: {
+      AgentChatStream: vi.fn((id: string) => { turn = id; return new Promise(() => {}) }),
+      CancelAgentQuery: cancelBinding,
+    } } }
+    const chat = useAgentChat()
+    await chat.cancel()
+    expect(cancelBinding).not.toHaveBeenCalled()
+
+    void chat.send('delete')
+    streamHandler!({ turnId: turn, kind: 'tool', id: 'c1', tool: 'delete_record', input: '{}' })
+    const step = chat.messages.value[1].steps[0]
+    step.approval = { id: 'a1', summary: 's', destructive: true, state: 'pending' }
+    await chat.cancel()
+    expect(step.approval.state).toBe('cancelled')
+  })
+})
+
+describe('useAgentChat cancel edge cases (review #42b)', () => {
+  beforeEach(() => { useAgentChat().resetAll() })
+
+  it('a late tool_done after cancel updates the same chip, no duplicate', async () => {
+    let turn = ''
+    let reject!: (e: Error) => void
+    ;(window as any).go = { main: { App: {
+      AgentChatStream: vi.fn((id: string) => { turn = id; return new Promise((_r, rej) => { reject = rej }) }),
+      CancelAgentQuery: vi.fn(async () => {}),
+    } } }
+    const chat = useAgentChat()
+    const done = chat.send('x')
+    streamHandler!({ turnId: turn, kind: 'tool', id: 't1', tool: 'run_query', input: '{}' })
+    await chat.cancel()
+    streamHandler!({ turnId: turn, kind: 'tool_done', id: 't1', tool: 'run_query', output: 'rows' })
+    streamHandler!({ turnId: turn, kind: 'cancelled' })
+    reject(new Error('agent turn cancelled'))
+    await done
+    expect(chat.messages.value[1].steps).toHaveLength(1)
+  })
+
+  it('"already running" gets no model-server hint and offers Stop for whatever is running', async () => {
+    const cancelBinding = vi.fn(async () => {})
+    ;(window as any).go = { main: { App: {
+      AgentChatStream: vi.fn(async () => { throw new Error('an agent turn is already running; cancel it or wait for it to finish') }),
+      GetLLMSettings: vi.fn(async () => ({ provider: 'local', endpoint: 'http://x' })),
+      CancelAgentQuery: cancelBinding,
+    } } }
+    const chat = useAgentChat()
+    await chat.send('again')
+    expect(chat.messages.value[1].text).not.toContain('model server')
+    expect(chat.stoppable.value).toBe(true)
+    await chat.cancel()
+    expect(cancelBinding).toHaveBeenCalledWith('')
+    expect(chat.stoppable.value).toBe(false)
   })
 })

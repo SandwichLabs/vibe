@@ -41,7 +41,7 @@ type ApprovalRequest struct {
 var (
 	ErrApprovalDeclined  = errors.New("declined")
 	ErrApprovalExpired   = errors.New("no answer in time")
-	ErrApprovalCancelled = errors.New("cancelled") // file closed/replaced while waiting
+	ErrApprovalCancelled = errors.New("cancelled") // turn cancelled, or file closed/replaced while waiting
 )
 
 // waitEntry is one registered Wait call: the channel Resolve answers on,

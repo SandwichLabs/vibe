@@ -17,12 +17,15 @@ import ConnectionDialogs from './ConnectionDialogs.vue'
 import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
 import { workspaceInfo } from '../composables/useWorkspace'
+import { useAgentChat } from '../composables/useAgentChat'
 import { hasWailsRuntime } from '../lib/wails'
 
 const theme = useTheme()
 
 // Agent wizard panel — a slide-in chat available across every screen.
 const agentOpen = ref(false)
+// A turn keeps running when its view is left (#2): say so on the Agent entries.
+const { sending: agentBusy } = useAgentChat()
 const route = useRoute()
 const errorMessage = ref('')
 
@@ -123,10 +126,11 @@ watch(() => info.value?.name, (name) => {
           data-testid="agent-toggle"
           :aria-expanded="agentOpen"
           aria-controls="agent-panel"
-          :title="`Toggle agent · ${shortcutLabel('J')}`"
+          :title="`Toggle agent · ${shortcutLabel('J')}${agentBusy ? ' · a turn is running' : ''}`"
           @click="agentOpen = !agentOpen"
         >
           <Icon name="bot" :size="16" /> Agent
+          <i v-if="agentBusy" class="agent-busy" data-testid="agent-busy-toggle" aria-hidden="true"></i>
         </button>
         <button
           class="theme-toggle"
@@ -151,11 +155,12 @@ watch(() => info.value?.name, (name) => {
           class="side-link"
           :class="{ active: isActive(item.path) }"
           :aria-current="isActive(item.path) ? 'page' : undefined"
-          :aria-label="item.label"
-          :title="item.label"
+          :aria-label="item.path === '/agent' && agentBusy ? 'Agent, a turn is running' : item.label"
+          :title="item.path === '/agent' && agentBusy ? 'Agent: a turn is running' : item.label"
         >
           <Icon :name="item.icon" :size="18" />
           <span>{{ item.label }}</span>
+          <i v-if="item.path === '/agent' && agentBusy" class="agent-busy" data-testid="agent-busy-nav" aria-hidden="true"></i>
         </router-link>
       </nav>
 
@@ -195,4 +200,16 @@ watch(() => info.value?.name, (name) => {
   cursor: pointer;
 }
 .theme-toggle:hover { background: color-mix(in srgb, var(--vibe-chrome-fg) 12%, transparent); }
+/* In-flight agent turn marker: a dot, not text, so it survives the collapsed sidebar. */
+.agent-busy {
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--vibe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vibe-accent) 30%, transparent);
+  animation: agent-busy-pulse 1.4s ease-in-out infinite;
+}
+@keyframes agent-busy-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .agent-busy { animation: none; } }
 </style>

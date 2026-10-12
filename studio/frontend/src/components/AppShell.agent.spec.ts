@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from '../router/index'
 import AppShell from './AppShell.vue'
+import { useAgentChat } from '../composables/useAgentChat'
 
 function makeApp() {
   const app = {}
@@ -53,5 +54,23 @@ describe('AppShell agent panel wiring', () => {
 
     const drawer = wrapper.find('[data-testid="agent-panel"]')
     expect(drawer.classes(), 'panel should be open after toggle').toContain('open')
+  })
+
+  it('marks the Agent nav entry and toggle while a turn is in flight (#2)', async () => {
+    makeApp()
+    useAgentChat().resetAll()
+    const wrapper = mountShell()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-busy-nav"]').exists()).toBe(false)
+
+    useAgentChat().sending.value = true
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-busy-nav"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-busy-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('a[aria-label^="Agent,"]').attributes('aria-label')).toBe('Agent, a turn is running')
+
+    useAgentChat().resetAll()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-busy-nav"]').exists()).toBe(false)
   })
 })

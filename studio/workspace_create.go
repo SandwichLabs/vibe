@@ -37,9 +37,7 @@ func (a *App) CreateWorkspace(req CreateWorkspaceRequest) (*OpenWorkspaceResult,
 	if err != nil {
 		return nil, err
 	}
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	opened, err := a.openLocked(created.Root, openAuto)
