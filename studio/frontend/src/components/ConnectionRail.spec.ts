@@ -160,6 +160,28 @@ describe('ConnectionRail', () => {
     expect(app.DeleteConnection).toHaveBeenCalledWith({ name: 'pg', scope: 'local' })
   })
 
+  it('menu arrows and End focus the item they mark, across separators', async () => {
+    setup([LOCAL, conn({ name: 'pg', status: 'ok' })], { 'local//': { kind: 'tables', schema: 'main', flattened: true, nodes: [] }, 'pg//': { kind: 'schemas', schema: '', flattened: false, nodes: [] } })
+    const w = mountRail()
+    await flushPromises()
+    await w.find('[data-name="pg"]').trigger('keydown', { key: 'F10', shiftKey: true })
+    await flushPromises()
+    const menu = w.find('[role="menu"]')
+    const focused = () => (document.activeElement as HTMLElement | null)?.dataset.testid
+    expect(focused()).toBe('menu-disconnect')
+    for (const want of ['menu-refresh', 'menu-newq', 'menu-edit', 'menu-test']) {
+      await menu.trigger('keydown', { key: 'ArrowDown' })
+      await flushPromises()
+      expect(focused()).toBe(want)
+    }
+    await menu.trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(focused()).toBe('menu-remove')
+    await menu.trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(focused()).toBe('menu-disconnect')
+  })
+
   it('shows the first-run card when local is the only connection, and a hint when a table list is empty', async () => {
     setup([LOCAL], { 'local//': { kind: 'tables', schema: 'main', flattened: true, nodes: [] } })
     const w = mountRail()

@@ -6,30 +6,15 @@
 // axis at the smallest value would make a 233-vs-208 gap look like 10x. Bar
 // widths are computed here as plain numbers (a clamped percentage) and bound
 // only through that numeric :style — never a raw model string.
-import { ref, onMounted, computed, inject } from 'vue'
+import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { runLiveQuery, toPoints, colorClass, type Point } from './query'
+import { toPoints, colorClass, type Point } from './query'
+import { useLiveQuery } from './useLiveQuery'
 import { formatNumber } from '../lib/formatCell'
 
 const props = defineProps<{ component: A2UIComponentT }>()
-const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)
-
-const loading = ref(false)
-const error = ref('')
-const livePoints = ref<Point[]>([])
-
-onMounted(async () => {
-  if (!props.component.sql) return
-  loading.value = true
-  const { columns, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal, 'low', props.component.connection || undefined)
-  if (aborted) return // caller stopped caring (unmounted/reloaded) — never apply a stale result
-  loading.value = false
-  if (err) {
-    error.value = err
-    return
-  }
-  livePoints.value = toPoints(columns, rows)
-})
+const { loading, error, data } = useLiveQuery(() => props.component)
+const livePoints = computed<Point[]>(() => (data.value ? toPoints(data.value.columns, data.value.rows) : []))
 
 const points = computed<Point[]>(() => (props.component.sql ? livePoints.value : (props.component.bars ?? [])))
 const values = computed(() => points.value.map((p) => p.value))

@@ -7,12 +7,16 @@
  * While `open` is true: Escape calls `close`, and focus moves to the first
  * focusable element inside the modal root (or the root itself). When it
  * closes, focus returns to whatever had it before.
+ *
+ * `initialFocus`, when given and it returns an element, picks that element
+ * instead of the first focusable one (ConfirmDialog focuses Cancel, not the
+ * button that discards data).
  */
 import { nextTick, onUnmounted, watch, type Ref } from 'vue'
 
 const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<HTMLElement | null>) {
+export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<HTMLElement | null>, initialFocus?: () => HTMLElement | null | undefined) {
   let previouslyFocused: Element | null = null
 
   function onKeydown(e: KeyboardEvent) {
@@ -29,7 +33,7 @@ export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<H
       document.addEventListener('keydown', onKeydown)
       await nextTick()
       const el = root?.value
-      const first = el?.querySelector<HTMLElement>(FOCUSABLE) ?? el
+      const first = initialFocus?.() ?? el?.querySelector<HTMLElement>(FOCUSABLE) ?? el
       first?.focus?.()
     } else {
       document.removeEventListener('keydown', onKeydown)
@@ -37,7 +41,7 @@ export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<H
       previouslyFocused = null
       if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus()
     }
-  })
+  }, { immediate: true })
 
   onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 }

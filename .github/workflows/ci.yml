@@ -69,6 +69,12 @@ jobs:
         working-directory: studio/frontend
         run: npm run check:exports
 
+      # Blocking (#54 slice 9b, F10 / O9): no .vue file over 600 lines, and no view with more than 150
+      # script lines unless it is named in scripts/check-vue-size.mjs. Views wire composables and render.
+      - name: Frontend view size
+        working-directory: studio/frontend
+        run: npm run check:vue-size
+
       # Blocking since #54 slice 9a (closes #34/#35): the binding types live in src/env.d.ts (AppApi).
       - name: typecheck (vue-tsc)
         working-directory: studio/frontend

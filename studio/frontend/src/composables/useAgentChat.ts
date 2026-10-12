@@ -81,7 +81,7 @@ export interface ToolStep {
   approval?: PendingApproval
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'user' | 'agent' | 'error'
   text: string
   steps: ToolStep[]

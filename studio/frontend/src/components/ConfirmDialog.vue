@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { ref, toRef } from 'vue'
+import { useModalKeys } from '../composables/useModal'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -33,24 +34,7 @@ const props = withDefaults(defineProps<{
 
 const confirmBtn = ref<HTMLButtonElement | null>(null)
 const cancelBtn = ref<HTMLButtonElement | null>(null)
-let previouslyFocused: Element | null = null
-watch(() => props.visible, async (v) => {
-  if (v) {
-    previouslyFocused = document.activeElement
-    await nextTick()
-    // A destructive confirm (the default) focuses Cancel, not the button
-    // that discards data — Enter must not be able to destroy something by
-    // accident. The #81 Save/Don't save/Cancel prompt passes
-    // variant: 'primary' (Save isn't destructive) and keeps focusing the
-    // confirm button, so Enter still means "Save" there.
-    if (props.variant === 'primary') confirmBtn.value?.focus()
-    else cancelBtn.value?.focus()
-  } else {
-    const prev = previouslyFocused as HTMLElement | null
-    previouslyFocused = null
-    if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus()
-  }
-})
+const root = ref<HTMLElement | null>(null)
 
 const emit = defineEmits<{
   confirm: []
@@ -58,20 +42,17 @@ const emit = defineEmits<{
   alt: []
 }>()
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.visible) {
-    e.preventDefault()
-    emit('cancel')
-  }
-}
-
-onMounted(() => document.addEventListener('keydown', onKeydown))
-onUnmounted(() => document.removeEventListener('keydown', onKeydown))
+// Escape cancels and focus returns to the opener (useModalKeys). A destructive
+// confirm (the default) focuses Cancel, not the button that discards data —
+// Enter must not be able to destroy something by accident. The #81 Save/Don't
+// save/Cancel prompt passes variant: 'primary' (Save isn't destructive) and
+// keeps focusing the confirm button, so Enter still means "Save" there.
+useModalKeys(toRef(props, 'visible'), () => emit('cancel'), root, () => (props.variant === 'primary' ? confirmBtn.value : cancelBtn.value))
 </script>
 
 <template>
   <div v-if="visible" class="modal-overlay" @click.self="$emit('cancel')">
-    <div class="card card-pad" style="width: 100%; max-width: 384px;" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
+    <div ref="root" class="card card-pad" style="width: 100%; max-width: 384px;" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
       <h3 v-if="title" id="confirm-dialog-title" class="card-title" style="font-size: 22px; margin-bottom: 8px;">{{ title }}</h3>
       <p id="confirm-dialog-message" class="sh-body" style="margin-bottom: 16px; color: var(--sh-graphite); white-space: pre-line; overflow-wrap: anywhere;">{{ message }}</p>
       <div class="row" style="justify-content: flex-end;">

@@ -10,6 +10,7 @@ import Icon from './Icon.vue'
 import { useModalKeys } from '../composables/useModal'
 import { signInFor, refreshConnections } from '../composables/useConnections'
 import { errorText } from '../lib/errors'
+import { CRED_KEY } from '../lib/connections'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -30,9 +31,6 @@ const cred = computed(() => detail.value?.credential ?? null)
 const keychainDown = computed(() => !!cred.value && cred.value.available === false)
 const isEnv = computed(() => (detail.value?.signIn ?? '').startsWith('env:'))
 const fields = computed(() => spec.value?.credentials ?? [])
-
-// The request key for a type's credential field name.
-const KEY: Record<string, keyof CredentialInput> = { user: 'username', key_id: 'keyId', password: 'password', token: 'token', secret: 'secret' }
 
 watch(signInFor, async (n) => {
   error.value = ''
@@ -69,7 +67,7 @@ async function submit() {
   error.value = ''
   const req: ConnectWithCredentialsRequest = { name: name.value, username: '', keyId: '', password: '', token: '', secret: '', remember: remember.value }
   for (const f of fields.value) {
-    const k = KEY[f.name]
+    const k = CRED_KEY[f.name]
     // Only the readable fields are trimmed; a password, token or secret is kept exactly as typed.
     const raw = values.value[f.name] ?? ''
     if (k) (req as any)[k] = f.secret ? raw : raw.trim()

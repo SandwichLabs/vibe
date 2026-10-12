@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:exports": "node scripts/check-exports.mjs",
+    "check:vue-size": "node scripts/check-vue-size.mjs",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.vitest.json"
   },
   "dependencies": {

@@ -12,6 +12,7 @@ import {
   closeWorkspace, relativeTime,
 } from '../composables/useWorkspace'
 import { shortcutLabel } from '../composables/useModal'
+import { useMenuKeys } from '../composables/useMenuKeys'
 import { openBundleExport, openBundleImport } from '../composables/useBundle'
 import { errorText } from '../lib/errors'
 
@@ -59,16 +60,13 @@ watch(switcherOpen, async (isOpen) => {
   ;(all.find((el) => el.getAttribute('aria-checked') === 'true') ?? all[0])?.focus()
 })
 
-function onMenuKey(e: KeyboardEvent) {
-  const all = items()
-  const i = all.indexOf(document.activeElement as HTMLElement)
-  if (e.key === 'ArrowDown') { e.preventDefault(); all[(i + 1) % all.length]?.focus() }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); all[(i - 1 + all.length) % all.length]?.focus() }
-  else if (e.key === 'Home') { e.preventDefault(); all[0]?.focus() }
-  else if (e.key === 'End') { e.preventDefault(); all[all.length - 1]?.focus() }
-  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close() }
-  else if (e.key === 'Tab') { close(false) }
-}
+const onMenuKey = useMenuKeys({
+  enabled: () => items().map(() => true),
+  current: () => items().indexOf(document.activeElement as HTMLElement),
+  moveTo: (i) => items()[i]?.focus(),
+  close: (restore) => close(restore),
+  tab: 'leave',
+})
 
 function onDocClick(e: MouseEvent) {
   if (!switcherOpen.value) return

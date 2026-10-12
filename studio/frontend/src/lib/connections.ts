@@ -104,3 +104,9 @@ export function selectFrom(qualified: string): string {
 
 // Connection names in SQL: lowercase letters, digits, underscore (the catalog alias rule).
 export const NAME_RE = /^[a-z_][a-z0-9_]{0,62}$/
+
+// The request key for a type's credential field name (ConnTypeSpec.credentials
+// name -> CredentialInput), and the suffix an environment sign-in appends to its
+// prefix (VIBE_PASSWORD). One map for the editor form and the sign-in prompt.
+export const CRED_KEY: Record<string, keyof CredentialInput> = { user: 'username', key_id: 'keyId', password: 'password', token: 'token', secret: 'secret' }
+export const CRED_ENV_SUFFIX: Record<string, string> = { user: 'USER', key_id: 'KEY_ID', password: 'PASSWORD', token: 'TOKEN', secret: 'SECRET' }

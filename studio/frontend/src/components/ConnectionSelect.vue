@@ -12,6 +12,7 @@ import StatusIcon from './StatusIcon.vue'
 import ScopeBadge from './ScopeBadge.vue'
 import ConnTypeTile from './ConnTypeTile.vue'
 import { connectionList, defaultConnectionName, connect, startConnectionTracking, refreshConnections } from '../composables/useConnections'
+import { useMenuKeys } from '../composables/useMenuKeys'
 
 const props = defineProps<{
   // The chosen connection; '' means the workspace default.
@@ -78,19 +79,14 @@ async function pick(o: Opt) {
 function onBtnKey(e: KeyboardEvent) {
   if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); void show() }
 }
-function onMenuKey(e: KeyboardEvent) {
-  const n = options.value.length
-  const step = (d: number) => { let i = active.value; for (let k = 0; k < n; k++) { i = (i + d + n) % n; if (!options.value[i].disabled) break } active.value = i }
-  switch (e.key) {
-    case 'ArrowDown': e.preventDefault(); step(1); break
-    case 'ArrowUp': e.preventDefault(); step(-1); break
-    case 'Home': e.preventDefault(); active.value = 0; break
-    case 'End': e.preventDefault(); active.value = n - 1; break
-    case 'Enter': case ' ': e.preventDefault(); e.stopPropagation(); { const o = options.value[active.value]; if (o) void pick(o) } break
-    case 'Escape': e.preventDefault(); e.stopPropagation(); hide(); break
-    case 'Tab': hide(false); break
-  }
-}
+const onMenuKey = useMenuKeys({
+  enabled: () => options.value.map((o) => !o.disabled),
+  current: () => active.value,
+  moveTo: (i) => { active.value = i },
+  close: (restore) => hide(restore),
+  tab: 'leave',
+  choose: (i) => { const o = options.value[i]; if (o) void pick(o) },
+})
 function onDoc(e: MouseEvent) {
   if (open.value && !(e.target as HTMLElement).closest(`[data-conn-select="${uid}"]`)) hide(false)
 }
