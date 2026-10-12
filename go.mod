@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/marcboeker/go-duckdb/mapping v0.0.21
 	github.com/marcboeker/go-duckdb/v2 v2.4.3
-	github.com/mark3labs/mcp-go v0.44.1
+	github.com/mark3labs/mcp-go v1.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
@@ -82,6 +82,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.21 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
@@ -116,6 +117,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/samber/lo v1.49.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
