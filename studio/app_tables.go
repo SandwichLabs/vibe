@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/SandwichLabs/vibe/internal/engine"
@@ -143,96 +142,26 @@ type TableData struct {
 
 // GetTableData returns paginated data from a table.
 func (a *App) GetTableData(name string, page, pageSize int, sortCol, sortDir string) (*TableData, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if err := a.requireWorkspace(); err != nil {
-		return nil, err
-	}
-
-	tref, err := a.tableRefArg(name)
-	if err != nil {
-		return nil, err
-	}
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 1000 {
-		pageSize = 50
-	}
-
-	db := a.sess.DB()
-	if db == nil {
-		return nil, fmt.Errorf("DuckDB not available")
-	}
-
-	var totalRows int
-	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tref.SQL())).Scan(&totalRows); err != nil {
-		return nil, fmt.Errorf("failed to count rows: %w", err)
-	}
-
-	orderClause := ""
-	if sortCol != "" && engine.ValidIdentifier(sortCol) {
-		dir := "ASC"
-		if strings.ToUpper(sortDir) == "DESC" {
-			dir = "DESC"
-		}
-		orderClause = fmt.Sprintf(" ORDER BY %s %s", session.QuoteIdent(sortCol), dir)
-	}
-
-	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %s%s LIMIT ? OFFSET ?", tref.SQL(), orderClause)
-	rows, err := db.Query(query, pageSize, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query table: %w", err)
-	}
-	defer rows.Close()
-
-	rs, _, err := engine.ScanRows(rows, 0)
-	if err != nil {
-		return nil, err
-	}
-	columns, types := rs.NamesAndTypes()
-
-	totalPages := (totalRows + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
-
-	result := &TableData{
-		Columns:    columns,
-		Types:      types,
-		Rows:       rs.Rows,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalRows:  totalRows,
-		TotalPages: totalPages,
-	}
-	if err := jsonRoundTripGuard(result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return a.pageTable(name, FilterSpec{}, page, pageSize, sortCol, sortDir)
 }
 
 // FilterCondition and FilterSpec are the structured datasheet / QBE filter
-// shapes (plan §2.3), defined once in internal/queries with the same JSON.
+// shapes (plan §2.3), defined once in internal/crud with the same JSON.
 type (
-	FilterCondition = queries.FilterCondition
-	FilterSpec      = queries.FilterSpec
+	FilterCondition = crud.FilterCondition
+	FilterSpec      = crud.FilterSpec
 )
 
 // GetTableDataFiltered returns paginated, structured-filter-driven table data
 // plus an accurate total-row count for the record-count bar (plan §2.3, P2.5).
-//
-// Translation rules:
-//   - each condition's column is validated against the table's real columns
-//     (case-sensitive ident allowlist) — no SQL injection via identifier
-//   - values are bound as parameters (?), never interpolated — no injection via
-//     value (a single quote matches literally)
-//   - is_null / is_not_null are value-less and bind no parameter
-//   - conditions join with the spec combinator (AND/OR; defaults to AND)
+// Filter columns and values are checked and bound by crud.Page (identifiers
+// against the table's real columns, values as parameters).
 func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize int, sortCol, sortDir string) (*TableData, error) {
+	return a.pageTable(name, spec, page, pageSize, sortCol, sortDir)
+}
+
+// pageTable is the shared body of the two table-read bindings.
+func (a *App) pageTable(name string, spec FilterSpec, page, pageSize int, sortCol, sortDir string) (*TableData, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -243,120 +172,30 @@ func (a *App) GetTableDataFiltered(name string, spec FilterSpec, page, pageSize 
 	if err != nil {
 		return nil, err
 	}
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 1000 {
-		pageSize = 50
-	}
-
 	db := a.sess.DB()
 	if db == nil {
 		return nil, fmt.Errorf("DuckDB not available")
 	}
 
-	// Build an allowlist of real columns to validate filter/sort identifiers.
-	cols, err := engine.TableColumns(db, tref)
-	if err != nil {
-		return nil, fmt.Errorf("failed to introspect columns for filter: %w", err)
-	}
-	known := make(map[string]bool, len(cols))
-	for _, c := range cols {
-		known[c.Name] = true
-	}
-
-	whereClause, args, err := buildFilterWhere(spec, known)
+	res, err := crud.Page(a.ctxOrBackground(), db, tref, crud.PageRequest{
+		Filter: spec, Page: page, PageSize: pageSize, SortCol: sortCol, SortDir: sortDir,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	var totalRows int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", tref.SQL(), whereClause)
-	if err := db.QueryRow(countQuery, args...).Scan(&totalRows); err != nil {
-		return nil, fmt.Errorf("failed to count filtered rows: %w", err)
-	}
-
-	orderClause := ""
-	if sortCol != "" && engine.ValidIdentifier(sortCol) && known[sortCol] {
-		dir := "ASC"
-		if strings.ToUpper(sortDir) == "DESC" {
-			dir = "DESC"
-		}
-		orderClause = fmt.Sprintf(" ORDER BY %s %s", session.QuoteIdent(sortCol), dir)
-	}
-
-	offset := (page - 1) * pageSize
-	query := fmt.Sprintf("SELECT * FROM %s%s%s LIMIT ? OFFSET ?", tref.SQL(), whereClause, orderClause)
-	queryArgs := append(append([]any{}, args...), pageSize, offset)
-	rows, err := db.Query(query, queryArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query filtered table: %w", err)
-	}
-	defer rows.Close()
-
-	rs, _, err := engine.ScanRows(rows, 0)
-	if err != nil {
-		return nil, err
-	}
-	columns, types := rs.NamesAndTypes()
-
-	totalPages := (totalRows + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
-
 	result := &TableData{
-		Columns:    columns,
-		Types:      types,
-		Rows:       rs.Rows,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalRows:  totalRows,
-		TotalPages: totalPages,
+		Columns:    res.Columns,
+		Types:      res.Types,
+		Rows:       res.Rows,
+		Page:       res.Page,
+		PageSize:   res.PageSize,
+		TotalRows:  res.TotalRows,
+		TotalPages: res.TotalPages,
 	}
 	if err := jsonRoundTripGuard(result); err != nil {
 		return nil, err
 	}
 	return result, nil
-}
-
-// buildFilterWhere translates a FilterSpec into a parameterized WHERE clause
-// (leading " WHERE ...", or "" when there are no conditions) plus its bound
-// args. Column identifiers are validated against the known-columns allowlist;
-// values are always bound, never interpolated.
-func buildFilterWhere(spec FilterSpec, known map[string]bool) (string, []any, error) {
-	if len(spec.Conditions) == 0 {
-		return "", nil, nil
-	}
-
-	combinator := strings.ToUpper(strings.TrimSpace(spec.Combinator))
-	if combinator != "OR" {
-		combinator = "AND"
-	}
-
-	var clauses []string
-	var args []any
-	for _, c := range spec.Conditions {
-		if !known[c.Column] {
-			return "", nil, fmt.Errorf("unknown filter column %q", c.Column)
-		}
-		switch c.Op {
-		case "is_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NULL", session.QuoteIdent(c.Column)))
-		case "is_not_null":
-			clauses = append(clauses, fmt.Sprintf("%s IS NOT NULL", session.QuoteIdent(c.Column)))
-		default:
-			sqlOp, ok := queries.SQLOperator(c.Op)
-			if !ok {
-				return "", nil, fmt.Errorf("unsupported filter operator %q", c.Op)
-			}
-			clauses = append(clauses, fmt.Sprintf("%s %s ?", session.QuoteIdent(c.Column), sqlOp))
-			args = append(args, c.Value)
-		}
-	}
-
-	return " WHERE " + strings.Join(clauses, " "+combinator+" "), args, nil
 }
 
 // InsertRow inserts a row into a table, coercing all-string form inputs to the
@@ -491,51 +330,19 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 	if err != nil {
 		return err
 	}
-	for _, col := range columns {
-		if !engine.ValidIdentifier(col.Name) {
-			return fmt.Errorf("invalid column name %q", col.Name)
-		}
-	}
-
-	var colDefs, seqDDL []string
-	for _, col := range columns {
-		def := fmt.Sprintf("%s %s", session.QuoteIdent(col.Name), col.Type)
-		if col.PK && engine.IsIntegerType(col.Type) {
-			// The sequence lives next to its table, in the same catalog and
-			// schema. A bare table keeps the legacy nextval('seq') default text.
-			seq := engine.AutoNumberSequence(tref.Name, col.Name)
-			seqRef := session.TableRef{Catalog: tref.Catalog, Schema: tref.Schema, Name: seq}
-			seqDDL = append(seqDDL, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START 1", seqRef.SQL()))
-			if a.isDefaultTarget(tref) {
-				def += fmt.Sprintf(" DEFAULT nextval('%s')", seq)
-			} else {
-				def += fmt.Sprintf(" DEFAULT nextval(%s)", session.QuoteLiteral(seqRef.SQL()))
-			}
-		}
-		if col.PK {
-			def += " PRIMARY KEY"
-		}
-		if col.NotNull {
-			def += " NOT NULL"
-		}
-		colDefs = append(colDefs, def)
-	}
-
-	query := fmt.Sprintf("CREATE TABLE %s (%s)", tref.SQL(), strings.Join(colDefs, ", "))
 	ddb := a.sess.DB()
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	for _, ddl := range seqDDL {
-		if _, err := ddb.Exec(ddl); err != nil {
-			return fmt.Errorf("failed to create id sequence: %w", err)
-		}
+	defs := make([]crud.ColumnDef, len(columns))
+	for i, c := range columns {
+		defs[i] = crud.ColumnDef{Name: c.Name, Type: c.Type, NotNull: c.NotNull, PK: c.PK}
 	}
-	_, err = ddb.Exec(query)
-	if err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
+	if err := crud.CreateTable(a.ctxOrBackground(), ddb, tref, defs, a.isDefaultTarget(tref)); err != nil {
+		return err
 	}
 	a.emitEvent("data:changed")
+	a.emitEvent("catalog:changed", map[string]any{"conn": ""})
 	return nil
 }
 
@@ -556,11 +363,11 @@ func (a *App) DropTable(name string) error {
 	if ddb == nil {
 		return fmt.Errorf("DuckDB not available")
 	}
-	_, err = ddb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tref.SQL()))
-	if err != nil {
-		return fmt.Errorf("failed to drop table: %w", err)
+	if err := crud.DropTable(a.ctxOrBackground(), ddb, tref); err != nil {
+		return err
 	}
 	a.emitEvent("data:changed")
+	a.emitEvent("catalog:changed", map[string]any{"conn": ""})
 	return nil
 }
 
@@ -619,5 +426,5 @@ func (a *App) generateFilterSQL(name string, spec FilterSpec, columns []string) 
 		known[c.Name] = true
 	}
 
-	return queries.BuildFilterSQLFrom(tref.SQL(), spec, columns, known)
+	return crud.BuildFilterSQLFrom(tref.SQL(), spec, columns, known)
 }

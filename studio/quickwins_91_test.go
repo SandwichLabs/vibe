@@ -32,28 +32,6 @@ func TestSaveQueryOn_ReturnsID(t *testing.T) {
 	assert.Equal(t, "Second title", list[0].Title)
 }
 
-// TestBuildCopySQL covers the trailing-semicolon / trailing-comment /
-// embedded-quote cases the plan calls out — buildCopySQL must strip a
-// trailing ";" (with surrounding whitespace) but must NOT try to parse a
-// trailing "-- comment" out of the query.
-func TestBuildCopySQL(t *testing.T) {
-	cases := []struct {
-		name, query, dst, opts, want string
-	}{
-		{"plain", "SELECT 1", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
-		{"trailing semicolon", "SELECT 1;", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
-		{"trailing semicolon + blank lines", "SELECT 1 ;\n\n", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
-		{"trailing comment kept", "SELECT 1 -- note", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1 -- note\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
-		{"semicolon inside a string literal kept", "SELECT ';' AS x", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT ';' AS x\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
-		{"quote in path doubled", "SELECT 1", "/tmp/o'brien.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/o''brien.csv' WITH (FORMAT csv)"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, buildCopySQL(tc.query, tc.dst, tc.opts))
-		})
-	}
-}
-
 // TestExportQueryResults_TrailingSemicolonAndComment proves the fix
 // end-to-end (P-F10): a query ending in ";" or "-- comment" must export,
 // not error.

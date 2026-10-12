@@ -134,3 +134,19 @@ func splitQualified(s string) ([]string, error) {
 	}
 	return append(parts, cur.String()), nil
 }
+
+// SelectAllSQL is "SELECT * FROM <ref>" with every part of the reference quoted.
+func (r TableRef) SelectAllSQL() string { return "SELECT * FROM " + r.SQL() }
+
+// CopyToSQL wraps a query in COPY (…) TO '<dst>' WITH (<opts>). Trailing
+// whitespace and semicolons are stripped from query (a query that runs fine with
+// a trailing ";" must export too: DuckDB rejects a second statement inside the
+// COPY's parenthesized subquery), and the closing paren goes on its own line so
+// a trailing "-- comment" in query cannot swallow it. dst is quoted with
+// QuoteLiteral, so a path containing a single quote stays one literal. opts is
+// caller-built option text (never user input). It does not try to parse comments
+// out of query; the caller must have checked that query is a single SELECT.
+func CopyToSQL(query, dst, opts string) string {
+	query = strings.TrimRight(query, " \t\r\n;")
+	return "COPY (" + query + "\n) TO " + QuoteLiteral(dst) + " WITH (" + opts + ")"
+}

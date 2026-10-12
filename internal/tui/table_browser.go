@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"fmt"
-
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -19,6 +17,7 @@ type tableDataMsg struct {
 type TableBrowserModel struct {
 	tableName string
 	rowCount  int
+	approx    bool
 	table     table.Model
 	loading   bool
 	err       string
@@ -41,9 +40,10 @@ func NewTableBrowserModel() TableBrowserModel {
 }
 
 // SetLoading sets the loading state for a table.
-func (t *TableBrowserModel) SetLoading(name string, rowCount int) {
+func (t *TableBrowserModel) SetLoading(name string, rowCount int, approx bool) {
 	t.tableName = name
 	t.rowCount = rowCount
+	t.approx = approx
 	t.loading = true
 	t.err = ""
 	t.hasData = false
@@ -66,7 +66,7 @@ func (t *TableBrowserModel) SetData(cols []table.Column, rows []table.Row, err e
 
 // SetTable is a convenience for the old API (sets metadata without data rows).
 func (t *TableBrowserModel) SetTable(name string, rowCount int, columns []string) {
-	t.SetLoading(name, rowCount)
+	t.SetLoading(name, rowCount, false)
 }
 
 // SetSize updates the table browser dimensions.
@@ -105,7 +105,7 @@ func (t TableBrowserModel) View(width, height int) string {
 	title := contentTitleStyle.Render(t.tableName)
 	info := dimStyle.Render("first 1000 rows")
 	if t.rowCount >= 0 {
-		info = dimStyle.Render(fmt.Sprintf("%d rows", t.rowCount))
+		info = dimStyle.Render(formatRowCount(t.rowCount, t.approx))
 	}
 	header := title + "\n" + info + "\n"
 

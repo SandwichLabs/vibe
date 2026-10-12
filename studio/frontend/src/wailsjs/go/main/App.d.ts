@@ -111,7 +111,7 @@ export function GetTableCapabilities(arg1:string):Promise<main.TableCapabilities
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
-export function GetTableDataFiltered(arg1:string,arg2:queries.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
+export function GetTableDataFiltered(arg1:string,arg2:crud.FilterSpec,arg3:number,arg4:number,arg5:string,arg6:string):Promise<main.TableData>;
 
 export function GetWorkspaceInfo():Promise<main.WorkspaceInfo>;
 
@@ -197,7 +197,7 @@ export function RunQuery(arg1:main.RunQueryRequest):Promise<main.QueryResult>;
 
 export function SaveConnection(arg1:main.SaveConnectionRequest):Promise<main.ConnectionDetail>;
 
-export function SaveFilterAsQuery(arg1:string,arg2:queries.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
+export function SaveFilterAsQuery(arg1:string,arg2:crud.FilterSpec,arg3:Array<string>,arg4:string):Promise<string>;
 
 export function SaveNotebook(arg1:Record<string, any>,arg2:string):Promise<main.NotebookSaveResult>;
 

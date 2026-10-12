@@ -2,13 +2,14 @@ package agents
 
 // Agent Query Wizard tool (plan §2.4, §4.3): "AI-as-Wizard" visual querying.
 //
-//   - build_query -> reuses the shared QBE renderer (queries.BuildFilterSQL)
+//   - build_query -> reuses the shared QBE renderer (crud.BuildFilterSQL)
 //     and persists a named query to _vibe_queries.
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -23,7 +24,7 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid table name %q", table))
 	}
 
-	spec := queries.FilterSpec{
+	spec := crud.FilterSpec{
 		Combinator: stringParam(req.Params["combinator"]),
 		Conditions: extractFilterConditions(req.Params["conditions"]),
 	}
@@ -43,7 +44,7 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 		known[c.Name] = true
 	}
 
-	sqlStr, err := queries.BuildFilterSQL(table, spec, columns, known)
+	sqlStr, err := crud.BuildFilterSQL(table, spec, columns, known)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("failed to build query: %v", err))
 	}
@@ -69,19 +70,19 @@ func (h *Handler) handleBuildQuery(ctx context.Context, req *Request) *Response 
 }
 
 // extractFilterConditions converts a params list ([]any of {column, op, value})
-// into queries.FilterCondition entries.
-func extractFilterConditions(raw any) []queries.FilterCondition {
+// into crud.FilterCondition entries.
+func extractFilterConditions(raw any) []crud.FilterCondition {
 	arr, ok := raw.([]any)
 	if !ok {
 		return nil
 	}
-	out := make([]queries.FilterCondition, 0, len(arr))
+	out := make([]crud.FilterCondition, 0, len(arr))
 	for _, item := range arr {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		out = append(out, queries.FilterCondition{
+		out = append(out, crud.FilterCondition{
 			Column: stringParam(m["column"]),
 			Op:     stringParam(m["op"]),
 			Value:  m["value"],

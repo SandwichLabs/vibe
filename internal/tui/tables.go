@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -14,6 +16,8 @@ import (
 type TableInfo struct {
 	Name     string
 	RowCount int
+	// Approx marks RowCount as DuckDB's statistics estimate, shown as "~1,234 rows".
+	Approx bool
 	// SQL is the quoted catalog.schema.table reference taken from the
 	// session's listing, so a table whose stored name contains dots is not
 	// re-parsed as a path.
@@ -40,8 +44,11 @@ func NewTablesModel() TablesModel {
 // LoadTables refreshes the table list from every attached connection (catalog).
 // Tables of the default connection's default schema keep their bare name; any
 // other is listed qualified ("sales.orders", "sales.archive.orders"). Row counts
-// are read for local DuckDB catalogs only: counting a remote table can be slow
-// or expensive, so those show no count.
+// come from DuckDB's table statistics (estimated_size: free, approximate, marked
+// "~" in the view), one query per catalog instead of a COUNT(*) per table. A
+// local DuckDB table with no estimate (empty, or not yet analysed) falls back to
+// an exact count, as does one with an estimate under 10,000; a remote table with no estimate shows none, since counting it
+// can be slow or expensive.
 func (m *TablesModel) LoadTables(sess session.Session) {
 	if sess == nil {
 		return
@@ -60,10 +67,15 @@ func (m *TablesModel) LoadTables(sess session.Session) {
 		if err != nil {
 			continue
 		}
+		est := session.EstimatedRows(ctx, sess.DB(), cat.Name)
 		for _, ti := range tables {
 			t := TableInfo{Name: displayTableName(ti, defCat, defSchema), SQL: ti.Ref().SQL(), RowCount: -1}
-			if cat.Type == "duckdb" {
-				sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL + ";").Scan(&t.RowCount) //nolint:errcheck
+			n, ok := est[session.TableKey{Schema: ti.Schema, Name: ti.Name}]
+			small := n < exactCountBelow
+			if ok && ti.Type == "BASE TABLE" && !(small && cat.Type == "duckdb") {
+				t.RowCount, t.Approx = int(n), true
+			} else if cat.Type == "duckdb" {
+				sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL).Scan(&t.RowCount) //nolint:errcheck
 			}
 			items = append(items, t)
 		}
@@ -73,6 +85,10 @@ func (m *TablesModel) LoadTables(sess session.Session) {
 		m.cursor = 0
 	}
 }
+
+// exactCountBelow is the estimate under which a local DuckDB table is counted
+// exactly (cheap, and the statistics go stale after small edits).
+const exactCountBelow = 10000
 
 // displayTableName is the name a table is listed under.
 func displayTableName(ti session.TableInfo, defCat, defSchema string) string {
@@ -133,7 +149,7 @@ func (m TablesModel) Update(msg tea.Msg, eng EngineAccess) (TablesModel, tea.Cmd
 		if m.cursor < len(m.items) {
 			sel := m.items[m.cursor]
 			m.browsing = true
-			m.browser.SetLoading(sel.Name, sel.RowCount)
+			m.browser.SetLoading(sel.Name, sel.RowCount, sel.Approx)
 			m.browser.SetFocused(true)
 			return m, m.loadTableData(eng, sel.Name, sel.SQL)
 		}
@@ -203,7 +219,7 @@ func (m TablesModel) View(width, height int) string {
 	for i, t := range m.items {
 		line := sanitizeForTerminal(t.Name, false)
 		if t.RowCount >= 0 {
-			line += fmt.Sprintf("  %d rows", t.RowCount)
+			line += "  " + formatRowCount(t.RowCount, t.Approx)
 		}
 		if i == m.cursor {
 			lines = append(lines, selectedItemStyle.Render("> "+line))
@@ -227,4 +243,21 @@ func sqlOrQuoted(tableSQL, name string) string {
 		return tableSQL
 	}
 	return engine.QuoteIdent(name)
+}
+
+// formatRowCount renders "1,234 rows", or "~1,234 rows" for an estimate.
+func formatRowCount(n int, approx bool) string {
+	digits := strconv.Itoa(n)
+	var b strings.Builder
+	for i, r := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(r)
+	}
+	prefix := ""
+	if approx {
+		prefix = "~"
+	}
+	return prefix + b.String() + " rows"
 }

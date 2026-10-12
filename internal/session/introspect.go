@@ -106,3 +106,31 @@ func AllTables(ctx context.Context, s Session, catalog string) ([]TableInfo, err
 	}
 	return out, nil
 }
+
+// TableKey names a table within one catalog.
+type TableKey struct{ Schema, Name string }
+
+// EstimatedRows reads DuckDB's table statistics (free, approximate) for every
+// table of catalog. Only tables with a positive estimate are present: remote
+// catalogs often have none, and an empty or unanalysed table reports 0, so the
+// map can be empty and a caller wanting an exact figure must count.
+func EstimatedRows(ctx context.Context, db *sql.DB, catalog string) map[TableKey]int64 {
+	out := map[TableKey]int64{}
+	if db == nil {
+		return out
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT schema_name, table_name, estimated_size FROM duckdb_tables() WHERE database_name = $1`, catalog)
+	if err != nil {
+		return out
+	}
+	defer rows.Close() //nolint:errcheck
+	for rows.Next() {
+		var k TableKey
+		var sz int64
+		if rows.Scan(&k.Schema, &k.Name, &sz) == nil && sz > 0 {
+			out[k] = sz
+		}
+	}
+	return out
+}

@@ -58,8 +58,8 @@ func fitsScan(ctx context.Context, conn *sql.Conn, target []targetCol) ([]BadVal
 			want = tc.RawType
 		}
 		parts = append(parts, fmt.Sprintf(
-			"SELECT __row AS row, '%s' AS col, CAST(%s AS VARCHAR) AS val, '%s' AS want FROM %s WHERE NOT (%s)",
-			escapeSQLString(tc.Name), col, escapeSQLString(want), stageTable, fits))
+			"SELECT __row AS row, %s AS col, CAST(%s AS VARCHAR) AS val, %s AS want FROM %s WHERE NOT (%s)",
+			session.QuoteLiteral(tc.Name), col, session.QuoteLiteral(want), stageTable, fits))
 	}
 	if len(parts) == 0 {
 		return nil, 0, nil
