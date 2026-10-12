@@ -21,9 +21,8 @@ permissions:
 
 env:
   CGO_ENABLED: "1"
-  # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
-  WAILS_GOTOOLCHAIN: go1.26.9
-  WAILS_VERSION: v2.11.0
+  # Keep the Wails CLI at the github.com/wailsapp/wails/v2 version in go.mod.
+  WAILS_VERSION: v2.16.0
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
@@ -114,8 +113,6 @@ jobs:
         run: npm ci
 
       - name: Install the Wails CLI
-        env:
-          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
         run: go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
 
       # productVersion is stamped for the build only (CFBundleVersion / CFBundleShortVersionString) and
@@ -123,8 +120,6 @@ jobs:
       - name: Build Studio
         working-directory: studio
         shell: bash
-        env:
-          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
         run: |
           if [ "$RUNNER_OS" = Linux ]; then tags=webkit2_41,duckdb_arrow; else tags=duckdb_arrow; fi
           ../scripts/stamp-wails-version.sh "$VER" wails build -tags "$tags" -ldflags "-s -w \

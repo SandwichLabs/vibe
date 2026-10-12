@@ -5,10 +5,6 @@ env:
 
 vars:
   BINARY: vibe
-  # Wails CLI v2.11's package loader can't read Go 1.27 export data ("package ... without types"),
-  # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
-  # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
-  WAILS_GOTOOLCHAIN: go1.26.9
   # `task install` stamps these into both binaries (release.yml stamps the same flags from the tag).
   INSTALL_DIR: '{{.HOME}}/go/bin'
   VERSION:
@@ -110,8 +106,6 @@ tasks:
   studio:dev:
     desc: Run Vibe Studio in dev mode
     dir: studio
-    env:
-      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
@@ -127,8 +121,6 @@ tasks:
   build:studio:
     desc: Build Vibe Studio desktop app (macOS)
     dir: studio
-    env:
-      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       # Deployment target for the host arch (docs/packaging.md); the bundle gets its release name.
       - |
@@ -142,8 +134,6 @@ tasks:
   build:studio:linux:
     desc: Build Vibe Studio desktop app (Linux)
     dir: studio
-    env:
-      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
 
@@ -164,8 +154,6 @@ tasks:
     desc: Versioned build of Vibe Studio into ~/go/bin (Linux; `vibe studio --gui` finds it beside vibe)
     platforms: [linux]
     dir: studio
-    env:
-      GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
       - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
       - mkdir -p {{.INSTALL_DIR}}

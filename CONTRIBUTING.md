@@ -8,10 +8,10 @@ By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Security 
 
 Prerequisites:
 
-- Go at the version in `go.mod` (1.26.x) or newer, with `CGO_ENABLED=1` and a C/C++ toolchain (DuckDB is embedded through cgo; no system DuckDB is needed).
+- Go at the version in `go.mod` (1.27.x) or newer, with `CGO_ENABLED=1` and a C/C++ toolchain (DuckDB is embedded through cgo; no system DuckDB is needed).
 - Node 24 (see `.nvmrc`) and npm, for the Studio frontend.
 - [Task](https://taskfile.dev) for the automation in `Taskfile.yml` (there is no Makefile).
-- For Studio (the desktop app): the [Wails CLI](https://wails.io) v2.11.0.
+- For Studio (the desktop app): the [Wails CLI](https://wails.io) v2.16.0 (the version of `github.com/wailsapp/wails/v2` in `go.mod`).
 - `jq`, which `task build:studio*` uses to stamp the version into `wails.json` for the length of the build.
   - Linux: `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`.
   - macOS: Xcode Command Line Tools.
@@ -27,8 +27,7 @@ task                 # default: lint + test + build
 
 Notes:
 
-- Use `task studio:dev`, not bare `wails dev`. It sets the build tags `webkit2_41,duckdb_arrow` and pins the Go toolchain.
-- Wails v2.11 cannot load the newest Go releases. The Taskfile pins `GOTOOLCHAIN` through `WAILS_GOTOOLCHAIN`. If you run `wails` yourself, prefix `GOTOOLCHAIN=<that value>`.
+- Use `task studio:dev`, not bare `wails dev`. It sets the build tags `webkit2_41,duckdb_arrow`.
 - Studio embeds `studio/frontend/dist`. On a fresh clone run `cd studio/frontend && npm ci && npm run build` once before `go build ./...` or `go vet ./...`.
 - One package: `go test -v ./internal/workspace/`.
 

@@ -15,7 +15,7 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 
 ## Tech stack
 
-- **Go 1.26+**, `CGO_ENABLED=1` (DuckDB bindings). Cobra + Viper for the CLI and config.
+- **Go 1.27+**, `CGO_ENABLED=1` (DuckDB bindings). Cobra + Viper for the CLI and config.
 - **Engine:** `go-duckdb` (embedded DuckDB) is the single query/CRUD engine. There is no SQLite or SQLCipher dependency (removed in #137): tests use DuckDB, FileStores in `t.TempDir()`, or the store `Mock`s.
 - **Desktop GUI:** Wails v2 + **Vue 3** (`studio/`). UI uses SchoolHouse (`studio/frontend/src/schoolhouse/`), themed through `--vibe-*` semantic roles (`docs/reference/themes.md`). Editor is CodeMirror. A2UI charts are hand-drawn CSS/SVG.
 - **Agent:** `internal/llm` on `charmbracelet/fantasy` (providers: `docs/reference/llm-config.md`); tools, sandbox and approvals in `internal/agents`; MCP in `internal/mcp` and `internal/hub` (`docs/reference/mcp.md`).
@@ -43,7 +43,7 @@ ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture
 
 **CI** (`.github/workflows/ci.yml`): every PR runs the Linux `test` job (vet, `xvfb-run go test`, golangci-lint, vitest, frontend build, shellcheck) and a Linux amd64/arm64 build smoke on ubuntu-22.04 (CLI round trip + `wails build`). macOS runs only on push to main and `workflow_dispatch` (10x minutes). vue-tsc (`npm run typecheck`) is blocking, and build-smoke also checks `AppApi` arities against the regenerated bindings (`check-arity.mjs`); only govulncheck (#41) is report-only. Actions are pinned to commit SHAs; the golangci-lint version is pinned in the workflow, so bump it with the local one.
 
-Wails tasks pin `GOTOOLCHAIN` via `WAILS_GOTOOLCHAIN` in Taskfile.yml (Wails v2.11 can't load newer Go, #92). Run `wails` through `task`, or prefix `GOTOOLCHAIN=<that value>`.
+Keep the Wails CLI at the `github.com/wailsapp/wails/v2` version in go.mod (v2.16.0; CI and release pin it as `WAILS_VERSION`). Wails v2.16 loads Go 1.27, so the old `WAILS_GOTOOLCHAIN` pin (#92) is gone.
 
 CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 

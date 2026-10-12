@@ -8,14 +8,14 @@ import (
 	"charm.land/fantasy/providers/openaicompat"
 )
 
-// Per-mode reasoning effort (#70). Checked directly against
-// charm.land/fantasy@v0.28.0 (the version pinned in go.mod): only the
-// openaicompat provider package exposes a ReasoningEffort provider option
-// (providers/openaicompat/provider_options.go, forwarded to the request as
-// OpenAI's `reasoning_effort` field by language_model_hooks.go) — the
-// anthropic and google provider packages this Runner also supports do not
-// have an equivalent option in this fantasy version, so reasoning effort is
-// a no-op for those providers, not a gap in this feature. The openai
+// Per-mode reasoning effort (#70). Written against charm.land/fantasy@v0.28.0
+// and rechecked at v0.45.2: the openaicompat provider package exposes a
+// ReasoningEffort provider option (providers/openaicompat/provider_options.go,
+// forwarded to the request as OpenAI's `reasoning_effort` field by
+// language_model_hooks.go). The google provider package has no equivalent.
+// Since v0.45 the anthropic package has an `Effort` option, but this Runner
+// does not set it, so reasoning effort stays a no-op for anthropic and
+// google (wiring anthropic.Effort is a separate change). The openai
 // provider (Responses API) takes it as openai.ResponsesProviderOptions; fantasy
 // only forwards it for models it recognises as reasoning models, so a
 // non-reasoning model id simply ignores it rather than being sent a parameter

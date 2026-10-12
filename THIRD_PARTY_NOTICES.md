@@ -9,11 +9,11 @@ Contents: [Go modules](#go-modules) · [Frontend packages](#frontend-packages) �
 ## Go modules
 
 Every module linked into the `vibe` CLI or Vibe Studio on linux and macOS (amd64 and arm64), found with go-licenses v2.
-137 module/licence-file pairs: Apache-2.0 41, BSD-2-Clause 5, BSD-3-Clause 27, MIT 64.
+137 module/licence-file pairs: Apache-2.0 42, BSD-2-Clause 5, BSD-3-Clause 27, ISC 1, MIT 62.
 
 #### Apache-2.0
 
-- charm.land/fantasy v0.28.0
+- charm.land/fantasy v0.45.2
 
 ```text
 Apache License
@@ -197,29 +197,29 @@ Apache License
 #### Apache-2.0
 
 - cloud.google.com/go v0.123.0
-- cloud.google.com/go/auth v0.20.0
+- cloud.google.com/go/auth v0.23.2
 - cloud.google.com/go/auth/oauth2adapt v0.2.8
 - cloud.google.com/go/compute/metadata v0.9.0
-- github.com/aws/aws-sdk-go-v2 v1.41.7
-- github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10
-- github.com/aws/aws-sdk-go-v2/config v1.32.18
-- github.com/aws/aws-sdk-go-v2/credentials v1.19.17
-- github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.23
-- github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.23
-- github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23
-- github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.24
-- github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9
-- github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.23
-- github.com/aws/aws-sdk-go-v2/service/signin v1.0.11
-- github.com/aws/aws-sdk-go-v2/service/sso v1.30.17
-- github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0
-- github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
+- github.com/aws/aws-sdk-go-v2 v1.45.1
+- github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20
+- github.com/aws/aws-sdk-go-v2/config v1.33.1
+- github.com/aws/aws-sdk-go-v2/credentials v1.20.1
+- github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.19.1
+- github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.1
+- github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.1
+- github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.1
+- github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19
+- github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.1
+- github.com/aws/aws-sdk-go-v2/service/signin v1.7.1
+- github.com/aws/aws-sdk-go-v2/service/sso v1.35.1
+- github.com/aws/aws-sdk-go-v2/service/ssooidc v1.40.1
+- github.com/aws/aws-sdk-go-v2/service/sts v1.47.1
 - github.com/go-logr/stdr v1.2.2
 - github.com/google/flatbuffers v25.2.10+incompatible
 - github.com/google/s2a-go v0.1.9
-- github.com/googleapis/enterprise-certificate-proxy v0.3.16
+- github.com/googleapis/enterprise-certificate-proxy v0.3.21
 - go.opentelemetry.io/auto/sdk v1.2.1
-- google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800
+- google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5
 - google.golang.org/grpc v1.84.0
 
 ```text
@@ -691,9 +691,9 @@ Distributed under MIT License.
 
 #### Apache-2.0
 
-- github.com/aws/smithy-go v1.25.1
-- github.com/spf13/afero v1.12.0
-- github.com/spf13/cobra v1.9.1
+- github.com/aws/smithy-go v1.28.1
+- github.com/spf13/afero v1.15.0
+- github.com/spf13/cobra v1.10.2
 
 ```text
 Apache License
@@ -874,7 +874,7 @@ Apache License
 
 #### Apache-2.0
 
-- github.com/charmbracelet/openai-go v0.0.0-20260319145158-d0740cc34266
+- github.com/charmbracelet/openai-go v0.0.0-20260921175203-216db9e71b83
 
 ```text
 Apache License
@@ -1082,8 +1082,8 @@ Apache License
 
 #### Apache-2.0
 
-- github.com/go-logr/logr v1.4.3
-- github.com/wk8/go-ordered-map/v2 v2.1.8
+- github.com/go-logr/logr v1.4.4
+- github.com/pb33f/ordered-map/v2 v2.3.1
 
 ```text
 Apache License
@@ -1499,7 +1499,7 @@ Apache License
 
 #### Apache-2.0
 
-- github.com/wailsapp/wails/v2 v2.11.0
+- github.com/wailsapp/wails/v2 v2.16.0
 
 ```text
 Apache License
@@ -1707,11 +1707,11 @@ Apache License
 
 #### Apache-2.0
 
-- go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0
-- go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
-- go.opentelemetry.io/otel v1.44.0
-- go.opentelemetry.io/otel/metric v1.44.0
-- go.opentelemetry.io/otel/trace v1.44.0
+- go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.71.0
+- go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
+- go.opentelemetry.io/otel v1.46.0
+- go.opentelemetry.io/otel/metric v1.46.0
+- go.opentelemetry.io/otel/trace v1.46.0
 
 ```text
 Apache License
@@ -1949,7 +1949,215 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### Apache-2.0
 
-- google.golang.org/genai v1.58.0
+- go.yaml.in/yaml/v4 v4.0.0-rc.3
+
+```text
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright 2025 - The go-yaml Project Contributors
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+```
+
+#### Apache-2.0
+
+- google.golang.org/genai v1.70.0
 
 ```text
 Apache License
@@ -2187,7 +2395,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-2-Clause
 
-- github.com/godbus/dbus/v5 v5.1.0
+- github.com/godbus/dbus/v5 v5.2.2
 
 ```text
 Copyright (c) 2013, Georg Reinke (<guelfey at gmail dot com>), Google
@@ -2340,10 +2548,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- filippo.io/age v1.2.1
+- filippo.io/age v1.3.2
 
 ```text
 Copyright 2019 The age Authors
+Copyright 2019 Google LLC
+Copyright 2022 Filippo Valsorda
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -2356,6 +2566,49 @@ copyright notice, this list of conditions and the following disclaimer
 in the documentation and/or other materials provided with the
 distribution.
    * Neither the name of the age project nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+#### BSD-3-Clause
+
+- filippo.io/hpke v0.4.0
+- golang.org/x/crypto v0.58.0
+- golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
+- golang.org/x/net v0.61.0
+- golang.org/x/oauth2 v0.36.0
+- golang.org/x/sync v0.24.0
+- golang.org/x/sys v0.49.0
+- golang.org/x/term v0.47.0
+- golang.org/x/text v0.43.0
+- golang.org/x/time v0.15.0
+
+```text
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
 contributors may be used to endorse or promote products derived from
 this software without specific prior written permission.
 
@@ -2408,8 +2661,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/aws/aws-sdk-go-v2 v1.41.7
-- github.com/aws/smithy-go v1.25.1
+- github.com/aws/aws-sdk-go-v2 v1.45.1
+- github.com/aws/smithy-go v1.28.1
 
 ```text
 Copyright (c) 2009 The Go Authors. All rights reserved.
@@ -2477,7 +2730,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/fsnotify/fsnotify v1.9.0
+- github.com/fsnotify/fsnotify v1.10.1
 
 ```text
 Copyright © 2012 The Go Authors. All rights reserved.
@@ -2505,40 +2758,6 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
-
-#### BSD-3-Clause
-
-- github.com/go-json-experiment/json v0.0.0-20260505212615-e40f80bf6836
-
-```text
-Copyright (c) 2020 The Go Authors. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
-
-   * Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-   * Neither the name of Google Inc. nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 #### BSD-3-Clause
@@ -2611,7 +2830,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/googleapis/gax-go/v2 v2.22.0
+- github.com/googleapis/gax-go/v2 v2.24.0
 
 ```text
 Copyright 2016, Google Inc.
@@ -2713,7 +2932,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/spf13/pflag v1.0.6
+- github.com/spf13/pflag v1.0.10
 
 ```text
 Copyright (c) 2012 Alex Ogier. All rights reserved.
@@ -2780,48 +2999,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- golang.org/x/crypto v0.58.0
-- golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
-- golang.org/x/net v0.61.0
-- golang.org/x/oauth2 v0.36.0
-- golang.org/x/sync v0.24.0
-- golang.org/x/sys v0.49.0
-- golang.org/x/term v0.47.0
-- golang.org/x/text v0.43.0
-- golang.org/x/time v0.15.0
-
-```text
-Copyright 2009 The Go Authors.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
-
-   * Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-   * Neither the name of Google LLC nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
-
-#### BSD-3-Clause
-
 - golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 
 ```text
@@ -2856,7 +3033,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- google.golang.org/api v0.280.0
+- google.golang.org/api v0.294.0
 
 ```text
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -2890,7 +3067,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- google.golang.org/api v0.280.0
+- google.golang.org/api v0.294.0
 
 ```text
 Copyright (c) 2013 Joshua Tacoma. All rights reserved.
@@ -2924,7 +3101,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- google.golang.org/protobuf v1.36.11
+- google.golang.org/protobuf v1.36.12
 
 ```text
 Copyright (c) 2018 The Go Authors. All rights reserved.
@@ -2956,32 +3133,38 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-#### MIT
+#### ISC
 
-- al.essio.dev/pkg/shellescape v1.5.1
+- github.com/coder/websocket v1.8.15
 
 ```text
-The MIT License (MIT)
+Copyright (c) 2025 Coder
 
-Copyright (c) 2016 Alessio Treglia
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+#### MIT
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- github.com/anthropics/anthropic-sdk-go v1.68.0
+
+```text
+Copyright 2023 Anthropic, PBC.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 #### MIT
@@ -3068,20 +3251,6 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
 LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
-#### MIT
-
-- github.com/charmbracelet/anthropic-sdk-go v0.0.0-20260223140439-63879b0b8dab
-
-```text
-Copyright 2023 Anthropic, PBC.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 #### MIT
@@ -3174,7 +3343,6 @@ SOFTWARE.
 - github.com/charmbracelet/x/ansi v0.11.6
 - github.com/charmbracelet/x/cellbuf v0.0.15
 - github.com/charmbracelet/x/exp/slice v0.0.0-20250904123553-b4e2667e5ad5
-- github.com/charmbracelet/x/json v0.2.0
 - github.com/charmbracelet/x/term v0.2.2
 
 ```text
@@ -3387,7 +3555,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/invopop/jsonschema v0.13.0
+- github.com/invopop/jsonschema v0.14.0
 
 ```text
 Copyright (C) 2014 Alec Thomas
@@ -3413,42 +3581,13 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/kaptinlin/go-i18n v0.4.8
-- github.com/kaptinlin/jsonpointer v0.4.23
-- github.com/kaptinlin/jsonschema v0.7.14
+- github.com/kaptinlin/jsonpointer v0.4.28
+- github.com/kaptinlin/jsonschema v0.9.9
 
 ```text
 MIT License
 
 Copyright (c) 2026 kaptinlin
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-#### MIT
-
-- github.com/kaptinlin/messageformat-go v0.6.4
-
-```text
-MIT License
-
-Copyright (c) 2026 KaptinLin
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3908,20 +4047,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #### MIT
 
-- github.com/mailru/easyjson v0.7.7
-
-```text
-Copyright (c) 2016 Mail.Ru Group
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
-#### MIT
-
 - github.com/marcboeker/go-duckdb/arrowmapping v0.0.21
 - github.com/marcboeker/go-duckdb/mapping v0.0.21
 - github.com/marcboeker/go-duckdb/v2 v2.4.3
@@ -4094,7 +4219,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/pelletier/go-toml/v2 v2.3.1
+- github.com/pelletier/go-toml/v2 v2.4.3
 
 ```text
 The MIT License (MIT)
@@ -4151,7 +4276,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/sagikazarmark/locafero v0.7.0
+- github.com/sagikazarmark/locafero v0.11.0
 
 ```text
 Copyright (c) 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
@@ -4205,7 +4330,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/sourcegraph/conc v0.3.0
+- github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8
 
 ```text
 MIT License
@@ -4233,8 +4358,8 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/spf13/cast v1.7.1
-- github.com/spf13/viper v1.20.0
+- github.com/spf13/cast v1.10.0
+- github.com/spf13/viper v1.21.0
 
 ```text
 The MIT License (MIT)
@@ -4258,6 +4383,34 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+#### MIT
+
+- github.com/standard-webhooks/standard-webhooks/libraries v0.0.1
+
+```text
+The MIT License
+
+Copyright (c) 2023 Svix (https://www.svix.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ```
 
 #### MIT
@@ -4290,7 +4443,7 @@ THE SOFTWARE.
 
 #### MIT
 
-- github.com/tidwall/gjson v1.18.0
+- github.com/tidwall/gjson v1.19.0
 - github.com/tidwall/match v1.1.1
 - github.com/tidwall/sjson v1.2.5
 
@@ -4374,7 +4527,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/wailsapp/wails/v2 v2.11.0
+- github.com/wailsapp/wails/v2 v2.16.0
 
 ```text
 MIT License
@@ -4430,7 +4583,7 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/zalando/go-keyring v0.2.6
+- github.com/zalando/go-keyring v0.2.8
 
 ```text
 The MIT License (MIT)
@@ -4458,6 +4611,35 @@ SOFTWARE.
 
 #### MIT
 
+- github.com/zalando/go-keyring v0.2.8
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2016 Alessio Treglia
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+#### MIT
+
+- go.yaml.in/yaml/v3 v3.0.5
 - gopkg.in/yaml.v3 v3.0.1
 
 ```text
@@ -8091,7 +8273,7 @@ THE SOFTWARE.
 Apache-2.0 section 4(d) asks that the NOTICE file of an Apache-licensed work be reproduced. These are the NOTICE files
 shipped by the Go modules and npm packages above.
 
-#### charm.land/fantasy v0.28.0
+#### charm.land/fantasy v0.45.2
 
 ```text
 Copyright 2025-2026 Charmbracelet, Inc.
@@ -8119,7 +8301,7 @@ This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 ```
 
-#### github.com/aws/aws-sdk-go-v2 v1.41.7
+#### github.com/aws/aws-sdk-go-v2 v1.45.1
 
 ```text
 AWS SDK for Go
@@ -8127,16 +8309,16 @@ Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 Copyright 2014-2015 Stripe, Inc.
 ```
 
-#### github.com/aws/smithy-go v1.25.1
+#### github.com/aws/smithy-go v1.28.1
 
 ```text
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 ```
 
-#### google.golang.org/grpc v1.84.0
+#### go.yaml.in/yaml/v3 v3.0.5, gopkg.in/yaml.v3 v3.0.1
 
 ```text
-Copyright 2014 gRPC authors.
+Copyright 2011-2016 Canonical Ltd.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8151,10 +8333,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-#### gopkg.in/yaml.v3 v3.0.1
+#### go.yaml.in/yaml/v4 v4.0.0-rc.3
 
 ```text
-Copyright 2011-2016 Canonical Ltd.
+The following files were ported to Go from C files of libyaml, and thus are
+still covered by their original MIT license, with the additional copyright
+starting in 2011 when the project was ported over:
+
+- internal/libyaml/api.go
+- internal/libyaml/emitter.go
+- internal/libyaml/parser.go
+- internal/libyaml/reader.go
+- internal/libyaml/scanner.go
+- internal/libyaml/writer.go
+- internal/libyaml/yaml.go
+- internal/libyaml/yamlprivate.go
+
+Copyright 2006-2011 - Kirill Simonov
+https://opensource.org/license/mit
+
+All the remaining project files are covered by the Apache license:
+
+Copyright 2011-2019 - Canonical Ltd
+Copyright 2025 - The go-yaml Project Contributors
+http://www.apache.org/licenses/LICENSE-2.0
+```
+
+#### google.golang.org/grpc v1.84.0
+
+```text
+Copyright 2014 gRPC authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
