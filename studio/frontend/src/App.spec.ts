@@ -25,6 +25,7 @@ function makeApp(over: MockApp = {}) {
     IsWorkspaceOpen: vi.fn(async () => false),
     GetWorkspaceInfo: vi.fn(async () => ({ root: '/w/a', name: 'A', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true } })),
     GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '' })),
+    MarkLaunchHandled: vi.fn(async () => {}),
     ListRecentWorkspaces: vi.fn(async () => []),
     OpenWorkspace: vi.fn(async (path: string) => ({ status: 'opened', path, info: { root: path, name: 'Opened', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] } })),
     SelectWorkspaceFolder: vi.fn(async () => ''),
@@ -95,6 +96,37 @@ describe('App.vue', () => {
     mountApp()
     await flushPromises()
     expect(launcherNotice.value).toContain('.vibe files are no longer opened')
+  })
+
+  it('consumes the launch target only after the open is handled (#33)', async () => {
+    let finish: (v: unknown) => void = () => {}
+    const app = makeApp({
+      GetInitialWorkspace: vi.fn(async () => ({ path: '/w/from-cli', message: '' })),
+      OpenWorkspace: vi.fn(() => new Promise((r) => { finish = r })),
+    })
+    mountApp()
+    await flushPromises()
+    expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/from-cli')
+    expect(app.MarkLaunchHandled).not.toHaveBeenCalled() // a reload now would still reopen it
+    finish({ status: 'opened', path: '/w/from-cli', info: { root: '/w/from-cli', name: 'X', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true }, connections: [] } })
+    await flushPromises()
+    expect(app.MarkLaunchHandled).toHaveBeenCalledTimes(1)
+  })
+
+  it('consumes the launch target when the open fails, and when a workspace is already open (#33)', async () => {
+    const failing = makeApp({
+      GetInitialWorkspace: vi.fn(async () => ({ path: '/w/bad', message: '' })),
+      OpenWorkspace: vi.fn(async () => { throw new Error('nope') }),
+    })
+    mountApp()
+    await flushPromises()
+    expect(failing.MarkLaunchHandled).toHaveBeenCalledTimes(1)
+
+    _resetForTests()
+    const open = makeApp({ IsWorkspaceOpen: vi.fn(async () => true) })
+    mountApp()
+    await flushPromises()
+    expect(open.MarkLaunchHandled).toHaveBeenCalledTimes(1)
   })
 
   it('does not flash the launcher while a launch workspace is opening', async () => {

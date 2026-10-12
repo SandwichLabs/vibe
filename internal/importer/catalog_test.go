@@ -94,7 +94,8 @@ func TestImport_IntoSecondCatalog(t *testing.T) {
 	// The sequence was bumped past the explicit key in the right catalog.
 	_, err = db.Exec("INSERT INTO other.main.people (name) VALUES ('Eve')")
 	require.NoError(t, err)
-	assert.Equal(t, 11, count(t, db, "SELECT MAX(person_id) FROM other.main.people"))
+	// Never a collision; one spare value may be skipped (#19: last_value == start_value is ambiguous).
+	assert.Equal(t, 12, count(t, db, "SELECT MAX(person_id) FROM other.main.people"))
 }
 
 func TestImport_CatalogOnlyQualification(t *testing.T) {

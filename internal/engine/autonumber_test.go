@@ -126,3 +126,73 @@ func TestAutoNumberGap_CaseInsensitive(t *testing.T) {
 	require.True(t, ok)
 	require.Greater(t, gap, int64(0))
 }
+
+// TestAutoNumberGap_AfterReopen (#19): duckdb_sequences().last_value must be
+// read as the last dispensed value both in the session that created the
+// sequence and after the file is closed and reopened, so a fully caught-up
+// sequence reports gap 0 and a lagging one reports the exact distance.
+func TestAutoNumberGap_AfterReopen(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/seq.duckdb"
+	open := func() *sql.DB {
+		db, err := sql.Open("duckdb", path)
+		require.NoError(t, err)
+		return db
+	}
+
+	db := open()
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "INSERT INTO t (name) VALUES ('a'), ('b'), ('c')") // ids 1..3
+	require.NoError(t, err)
+
+	ref := session.TableRef{Name: "t"}
+	gap, ok, err := AutoNumberGap(ctx, db, ref, "id", 3)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, int64(0), gap, "same session")
+	require.NoError(t, db.Close())
+
+	db = open()
+	defer db.Close()
+	gap, ok, err = AutoNumberGap(ctx, db, ref, "id", 3)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.LessOrEqual(t, gap, int64(1), "after reopen: sequence already at max, at most one spare value")
+	gap, _, err = AutoNumberGap(ctx, db, ref, "id", 10)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, gap, int64(7), "after reopen: never under-reports the distance to 10")
+
+	// Bump past an external max, reopen again, and the default insert must not collide.
+	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (10, 'x')")
+	require.NoError(t, err)
+	require.NoError(t, BumpAutoNumber(ctx, db, ref, "id"))
+	require.NoError(t, db.Close())
+	db = open()
+	defer db.Close()
+	var next int64
+	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO t (name) VALUES ('z') RETURNING id").Scan(&next))
+	require.Equal(t, int64(11), next)
+}
+
+// The ambiguous-position adjustment uses the sequence's own step, not 1.
+func TestSequencePosition_UsesIncrement(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/inc.duckdb"
+	db, err := sql.Open("duckdb", path)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "CREATE SEQUENCE s START 10 INCREMENT 5")
+	require.NoError(t, err)
+	var v int64
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT nextval('s')").Scan(&v)) // 10
+	require.NoError(t, db.Close())
+	db, err = sql.Open("duckdb", path)
+	require.NoError(t, err)
+	defer db.Close()
+	pos, found, err := sequencePosition(ctx, db, session.TableRef{}, "s")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, int64(10), pos) // next is 15; last dispensed 10
+}
