@@ -1,0 +1,90 @@
+name: macOS spike (#43)
+
+# Spike only: lives on spike/** branches, never on main. Answers the questions in issue #43 on
+# GitHub-hosted macOS runners. macOS minutes are billed 10x on a private repo, so it is tight.
+on:
+  push:
+    branches: ["spike/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "1"
+  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_VERSION: v2.11.0
+
+jobs:
+  spike:
+    name: spike (darwin-${{ matrix.arch }}, ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-15 }
+          - { arch: amd64, runner: macos-15-intel }
+    env:
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: studio/frontend/package-lock.json
+
+      - name: Build CLI and the extension probe
+        run: |
+          go build -ldflags "-s -w -X github.com/SandwichLabs/vibe/cmd.version=0.0.0-spike" -o vibe ./cmd/vibe
+          go build -o probe ./spike/macosprobe
+
+      - run: npm ci
+        working-directory: studio/frontend
+
+      - name: Install the Wails CLI
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
+
+      # CI checkout only: make OnFileOpen observable without a Finder.
+      - name: Instrument handleOpenPath (spike only)
+        run: |
+          sed -i '' '/^func (a \*App) handleOpenPath(path string) {/a\
+          	println("SPIKE-OnFileOpen: " + path)
+          ' studio/workspace_launch.go
+          grep -n -A2 'func (a \*App) handleOpenPath' studio/workspace_launch.go
+
+      - name: Build Studio (same tags as release.yml on macOS)
+        working-directory: studio
+        env:
+          GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
+        run: wails build -tags duckdb_arrow -ldflags "-s -w -X main.version=0.0.0-spike"
+
+      - name: Spike probes
+        shell: bash
+        run: bash spike/macos/run.sh 2>&1 | tee "$RUNNER_TEMP/spike.log"
+
+      - name: Results
+        if: always()
+        shell: bash
+        run: grep '^RESULT' "$RUNNER_TEMP/spike.log" || true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: spike-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/spike.log
+            ${{ runner.temp }}/spike/*.png
+          retention-days: 7
