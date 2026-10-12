@@ -58,7 +58,7 @@ linters:
         path: internal/usersql/(tokens|usersql)\.go
         text: "`(Tokens|statements)`"
       - linters: [gocognit]
-        path: internal/session/session\.go
+        path: internal/session/session_connect\.go
         text: "`qualifiers`"
       - linters: [gocognit]
         path: internal/notebooks/model\.go

@@ -1,0 +1,36 @@
+id: go-fantasy-tool-outside-agents
+language: go
+severity: error
+message: >-
+  A fantasy agent tool is constructed or implemented outside the one tool surface (CLAUDE.md "One tool surface"). New agent
+  capabilities are agents.ToolDef entries in internal/agents; the only code that may turn a ToolDef into a fantasy tool is the
+  adapter in internal/llm/runner.go (handlerTool, ToolInfo) and internal/llm/task.go (taskTerminalTool). charm.land/fantasy
+  is imported under its own name only, so this rule can see every use.
+rule:
+  any:
+    # Constructors, called (plain or generic) or taken as a function value.
+    - kind: selector_expression
+      regex: '^fantasy\.(New(Parallel)?AgentTool|NewExecutableProviderTool)$'
+    # Tool literals, including slices/arrays/maps/pointers of them.
+    - kind: composite_literal
+      has: {field: type, regex: '^(\[[^\]]*\]|map\[[^\]]*\]|\*)*fantasy\.(FunctionTool|ProviderDefinedTool|ExecutableProviderTool|ToolInfo)$'}
+    # Implementing fantasy.AgentTool: an Info() method returning fantasy.ToolInfo (any receiver, parenthesised result).
+    - kind: method_declaration
+      all:
+        - has: {field: name, regex: '^Info$'}
+        - has: {field: result, regex: '^\(?\s*fantasy\.ToolInfo\s*\)?$'}
+    # A local name for a tool type (type T = fantasy.ToolInfo / type T fantasy.FunctionTool) would hide the literals above.
+    - any:
+        - kind: type_alias
+        - kind: type_spec
+      has: {field: type, regex: '^fantasy\.(FunctionTool|ProviderDefinedTool|ExecutableProviderTool|ToolInfo|AgentTool)$'}
+    # An aliased or dot import of fantasy would hide every pattern above.
+    - kind: import_spec
+      all:
+        - has: {field: path, regex: '^"charm\.land/fantasy"$'}
+        - has: {field: name, regex: '.'}
+ignores:
+  - "**/*_test.go"
+  - "internal/agents/**"
+  - "internal/llm/runner.go"
+  - "internal/llm/task.go"

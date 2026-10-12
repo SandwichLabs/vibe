@@ -1,5 +1,3 @@
 # Non-test Go files over 800 lines that are allowed for now (scripts/check-filesize.sh).
 # Format: <path> <max-lines> <reason>. <max-lines> is the file's length when it was waived.
 # A waived file may not grow past it, and one that shrinks under the limit fails until its line is removed.
-internal/session/session.go 1205 the DuckDB hub: attach, detach, status, preflight and introspection share one type and its lock (1205 lines); a split by concern is a mechanical move that was not part of the Studio slice
-cmd/conn.go 825 the `vibe conn` command tree: list, show, add, edit, test, remove and the prompts share flag and output helpers (825 lines); over the limit by 25 lines

@@ -108,7 +108,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
           <textarea
             v-model="sqlText"
             @keydown="handleKeydown"
-            style="width: 100%; height: 180px; resize: none; outline: none; background: var(--vibe-editor-bg); color: var(--vibe-editor-fg); border: 2px solid var(--vibe-border); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
+            style="width: 100%; height: 180px; resize: none; background: var(--vibe-editor-bg); color: var(--vibe-editor-fg); border: 2px solid var(--vibe-border); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
             placeholder="Enter SQL query…"
             spellcheck="false"
             data-testid="sql-input"

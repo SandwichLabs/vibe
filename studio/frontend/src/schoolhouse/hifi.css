@@ -732,3 +732,7 @@
   width: 12px; height: 12px;
   border: 1.5px solid var(--vibe-border);
 }
+
+/* The fallback SQL textarea sits inside .editor, which clips overflow: draw its
+   focus ring inside the box so all four sides stay visible. */
+.editor textarea:focus-visible { box-shadow: inset 0 0 0 2px var(--vibe-focus), inset 0 0 0 4px var(--vibe-bg); }

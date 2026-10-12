@@ -91,4 +91,31 @@ func TestDefaultPreparersCoverEveryEagerAndSpecialType(t *testing.T) {
 	}
 }
 
+// A connection type that needs preparing (it takes a hub token, or it
+// is writable and its definition names a local path) must have an entry in defaultPreparers: the
+// fallback only validates, so a new such type would otherwise be silently
+// attached with no folder, claim or read-only rule.
+func TestEveryTypeThatNeedsPreparationHasAPreparer(t *testing.T) {
+	preparers := defaultPreparers()
+	usesHubToken := map[string]bool{}
+	for _, typ := range connections.Types() {
+		if h, ok := typ.(session.HubTokenType); ok && h.UsesHubToken() {
+			usesHubToken[typ.Name()] = true
+		}
+	}
+	for _, name := range connections.AllTypeNames() {
+		info, err := connections.TypeInfoFor(name)
+		require.NoError(t, err)
+		needs := usesHubToken[name]
+		for _, f := range info.Fields {
+			if f.Kind == connections.KindPath && info.Capabilities.Writable {
+				needs = true
+			}
+		}
+		if needs {
+			assert.Contains(t, preparers, name, "connection type %q takes a path or the hub token: add it to defaultPreparers", name)
+		}
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
