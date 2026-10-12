@@ -1,9 +1,9 @@
 # Packaging and release plan: macOS and Linux
 
-> **Slice 3 wiring (epic #105) is done; shipping is not.** The app side of "open a workspace folder, import a `.vibe`" is built and tested (see §1a): launch arguments, macOS `OnFileOpen`, the `Info.plist` document types, the Linux `.desktop` and MIME files. Signing, notarisation, CI, the release pipeline, the extension-bundling decision and the signed-build keychain check are still epic #77 (§5, §8).
+> **How Vibe ships in v0.1.0: unsigned.** A release is a pushed tag. GitHub Actions builds native tarballs for Linux and macOS (amd64 and arm64), ad-hoc signs the macOS app, publishes `checksums.txt`, and attaches [`install.sh`](https://github.com/SandwichLabs/vibe/blob/main/install.sh), which is how people install it ([`install.md`](install.md)). There is no notarisation, no Apple Developer ID, no `.deb`/`.rpm`, no Homebrew tap and no auto-update. The first sections below ("v0.1.0 unsigned pipeline", "macOS unsigned path", "Installing") describe that path as built. Everything from "1. Where things stand" on is the **signed distribution plan** (epic #77) that comes after v0.1.0; where it disagrees with the unsigned sections, the unsigned sections win.
 
-**Date:** 2026-09-23
-**Status:** Proposed, except §1a (the app-side file-open wiring, built under #105). The pipeline, signing and CI are not built. Tracking: epic #77.
+**Date:** 2026-09-23 (unsigned sections updated 2026-10-12)
+**Status:** The unsigned pipeline and installer are built (#46, #47); the macOS spike (#43) is done. The signed plan (§2 onward: notarised dmg, deb/rpm, Homebrew, GoReleaser) is **proposed and not built**. Tracking: epic #77.
 
 Vibe ships two binaries: `vibe` (CLI, TUI, `vibe mcp serve`) and
 `vibe-studio` (the Wails desktop app). Both are CGO (DuckDB, and
@@ -55,6 +55,12 @@ Run on GitHub-hosted runners, `macos-15` (arm64, macOS 15.7.9) and `macos-15-int
 - **Do not turn on the hardened runtime** for the unsigned release. It is not needed and is not what breaks extensions here, but it becomes the failure mode as soon as #77 signs with a Developer ID: then add `com.apple.security.cs.disable-library-validation`.
 - **Needs a human on a real Mac:** the first-use keychain dialog after an upgrade, TCC prompts, a Finder double-click on a `.vibe`, and macOS 13/14.
 
+---
+
+# Signed distribution plan (after v0.1.0, epic #77)
+
+> §1 records the state of the repo before the unsigned pipeline existed (several rows are fixed now). §1a is as built. §2 to §8 are the plan for signed, notarised and package-manager distribution and are not built.
+
 ## 1. Where things stand
 
 | Finding | Consequence |
@@ -68,7 +74,7 @@ Run on GitHub-hosted runners, `macos-15` (arm64, macOS 15.7.9) and `macos-15-int
 | ~~`studio/main.go` read the path to open from `os.Args[1]` only.~~ Fixed in #105 wrap-up. | On macOS an opened folder or `.vibe` arrives as an Apple Event (`mac.Options.OnFileOpen`), not argv; Studio now handles both (§1a). |
 | `vibe studio --gui` looks for `vibe-studio` beside the executable, then on `PATH`. | Needs an `open -a "Vibe Studio"` path on macOS, and symlink resolution when `vibe` is a Homebrew link. |
 | DuckDB extensions (`excel`, `postgres`, `httpfs`, ...) download from extensions.duckdb.org on first use, after the person agrees, into Vibe's own directory (§8). | The first use of each needs network access. On macOS, loading a `.duckdb_extension` dylib under the hardened runtime likely needs `com.apple.security.cs.disable-library-validation`. Verify in the spike. |
-| Studio has no version ldflags. | The About screen and bug reports can't say which build they came from. |
+| ~~Studio has no version ldflags.~~ Fixed (#44, #40): Studio and the CLI are stamped, and Settings > About shows version, commit, build date and platform with a Copy build info button. | Bug reports carry the build. |
 
 ## 1a. File opening, as built (#105 Slice 3)
 
@@ -123,7 +129,7 @@ Flags: `--version vX.Y.Z`, `--cli-only`, `--install-dir DIR` (env `VIBE_INSTALL_
 - **Manifest, upgrade, uninstall.** `~/.local/share/vibe/install-manifest` (macOS: `~/Library/Application Support/vibe/`) records `version=` and, per file, `F <sha256> <path>` (the macOS app is `D - <path>`). Re-running is the upgrade: files are replaced, files the new version no longer ships are removed, `0.1.0 -> 0.2.0` is printed. `--uninstall` removes only entries of the shapes the installer writes (`vibe`, `vibe-studio`, its `.desktop`, MIME and icon files, the `Vibe Studio.app` directory) whose hash is unchanged, says which it kept, and lists what it never touches: config, the extension cache, keychain items and workspaces.
 - **Tests.** `scripts/test-install.sh` builds fake releases with the real `scripts/package.sh`, serves them from a local HTTP server and runs the scenarios (install, `--cli-only`, collision, upgrade, uninstall, `latest`, dry run, unsupported arch, missing libraries, and hostile releases: swapped, undeclared or decoy checksums, traversal and symlink archives, tampered manifest, replaced binary) in unprivileged ubuntu:22.04, ubuntu:24.04, debian:12 and fedora:latest containers. `--native` runs it on the host. `--assets DIR --tag vX.Y.Z` smoke-tests real release assets; `.github/workflows/install-test.yml` does that after a release is published (or manually, for a published tag), on those images plus macos-15 and macos-15-intel.
 - **Testing a release candidate.** `install-test.yml` holds only `contents: read`, so rc1 must be published as a prerelease first; or test locally with `gh release download <tag> --dir dist` (needs write access for a draft) and `scripts/test-install.sh --assets dist --tag <tag>`.
-- **Hosting.** `https://sandwichlabs.dev/vibe/install.sh` redirects to `https://github.com/SandwichLabs/vibe/releases/latest/download/install.sh` (outside this repo). The public `README` and `docs/install.md` are #48.
+- **Hosting.** `https://sandwichlabs.dev/vibe/install.sh` redirects to `https://github.com/SandwichLabs/vibe/releases/latest/download/install.sh` (outside this repo). User-facing install steps are in [`install.md`](install.md).
 
 ## 2. What we ship
 
