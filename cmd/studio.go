@@ -8,9 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/hub"
@@ -299,37 +297,6 @@ func guiTarget(dir string) string {
 		}
 	}
 	return dir
-}
-
-// launchGUI finds and executes the vibe-studio binary, replacing the current
-// process. dir is passed through as its one argument, the workspace folder
-// Studio opens at launch; empty means no argument.
-func launchGUI(dir string) error {
-	const binName = "vibe-studio"
-	argv := []string{binName}
-	if dir != "" {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			return fmt.Errorf("failed to resolve %q: %w", dir, err)
-		}
-		argv = append(argv, abs)
-	}
-	var searched []string
-
-	if exe, err := os.Executable(); err == nil {
-		beside := filepath.Join(filepath.Dir(exe), binName)
-		searched = append(searched, beside)
-		if _, err := os.Stat(beside); err == nil {
-			return syscall.Exec(beside, argv, os.Environ())
-		}
-	}
-
-	if found, err := exec.LookPath(binName); err == nil {
-		return syscall.Exec(found, argv, os.Environ())
-	}
-	searched = append(searched, "$PATH")
-
-	return fmt.Errorf("vibe-studio binary not found; searched: %s (`vibe studio` without --gui opens the terminal UI)", strings.Join(searched, ", "))
 }
 
 func init() {

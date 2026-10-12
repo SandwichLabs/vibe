@@ -33,7 +33,8 @@ task test         # Go + Vitest tests (alias: task t); task test:frontend is Vit
 task lint         # golangci-lint (task lint:fix to auto-fix)
 task typecheck    # vue-tsc over studio/frontend (`npm run typecheck`); part of `task lint`, blocking in CI, 0 errors
 task studio:dev   # Wails dev server (NOT bare `wails dev`: needs -tags webkit2_41,duckdb_arrow)
-task build:studio # Studio desktop app (build:studio:linux on Linux)
+task build:studio # Studio desktop app (build:studio:linux on Linux); stamps the version, then restores wails.json
+scripts/gen-icons.sh  # regenerate appicon.png + Linux icons from studio/build/icon/vibe.svg
 go test -v ./internal/workspace/   # one package
 ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture rules (CI-blocking at error severity), incl. ts-window-go-outside-binding-layer
 ```

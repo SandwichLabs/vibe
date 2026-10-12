@@ -12,6 +12,7 @@ Prerequisites:
 - Node 24 (see `.nvmrc`) and npm, for the Studio frontend.
 - [Task](https://taskfile.dev) for the automation in `Taskfile.yml` (there is no Makefile).
 - For Studio (the desktop app): the [Wails CLI](https://wails.io) v2.11.0.
+- `jq`, which `task build:studio*` uses to stamp the version into `wails.json` for the length of the build.
   - Linux: `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`.
   - macOS: Xcode Command Line Tools.
 

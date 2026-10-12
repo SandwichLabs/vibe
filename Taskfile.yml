@@ -111,13 +111,22 @@ tasks:
       - task: studio:install
       - task: build:studio:linux
 
+  # The Studio build tasks stamp {{.VERSION}} into wails.json (productVersion, so the macOS bundle
+  # says it too) for the length of the build, then restore the file; the tree stays clean.
   build:studio:
     desc: Build Vibe Studio desktop app (macOS)
     dir: studio
     env:
       GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
-      - wails build
+      # Deployment target for the host arch (docs/packaging.md); the bundle gets its release name.
+      - |
+        case "$(uname -m)" in arm64 | aarch64) arch=arm64 ;; *) arch=amd64 ;; esac
+        min="$(../scripts/macos-target.sh "$arch")"
+        export MACOSX_DEPLOYMENT_TARGET="$min" CGO_CFLAGS="-O2 -g -mmacosx-version-min=$min" CGO_LDFLAGS="-mmacosx-version-min=$min"
+        ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
+        rm -rf "build/bin/Vibe Studio.app"
+        mv build/bin/vibe-studio.app "build/bin/Vibe Studio.app"
 
   build:studio:linux:
     desc: Build Vibe Studio desktop app (Linux)
@@ -125,7 +134,7 @@ tasks:
     env:
       GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
-      - wails build -tags webkit2_41
+      - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
 
   install:
     desc: Versioned build of the vibe CLI and Vibe Studio into ~/go/bin (Linux)
@@ -147,7 +156,7 @@ tasks:
     env:
       GOTOOLCHAIN: '{{.WAILS_GOTOOLCHAIN}}'
     cmds:
-      - wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
+      - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
       - mkdir -p {{.INSTALL_DIR}}
       - install -m 755 build/bin/vibe-studio {{.INSTALL_DIR}}/vibe-studio
       - '{{.INSTALL_DIR}}/vibe-studio --version'
