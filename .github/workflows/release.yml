@@ -205,9 +205,9 @@ jobs:
       - name: checksums.txt
         shell: bash
         run: |
-          [ -f install.sh ] && cp install.sh dist/install.sh
+          cp install.sh dist/install.sh
           cd dist
-          sha256sum -- *.tar.gz $([ -f install.sh ] && echo install.sh) >checksums.txt
+          sha256sum -- *.tar.gz install.sh >checksums.txt
           cat checksums.txt
 
       # Artifact attestations on a private repo need GitHub Enterprise Cloud; this org is on the free

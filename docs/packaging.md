@@ -27,6 +27,7 @@ This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.gorel
 - **Build tags:** `duckdb_arrow` everywhere (Linux adds `webkit2_41`); `wails.json` installs the frontend with `npm ci` (`frontend:dev:install` stays `npm install` for `wails dev`).
 - **macOS:** `codesign --force --deep -s -` (no hardened runtime, so downloaded DuckDB extensions still load), then `codesign --verify --deep --strict`. No notarisation.
 - **Release job** (the only one with `contents: write`): `checksums.txt` over all archives, `actions/attest-build-provenance` on every archive, `install.sh` uploaded when it exists in the repo root, notes from the matching `CHANGELOG.md` section or auto-generated. Attestations need GitHub Enterprise on a private repo, so the step runs only when `github.event.repository.private == false` and starts working when the repo goes public.
+- **Installer (#47):** `install.sh` (repo root, POSIX sh, attached to every release). See "Installing" below.
 - **Deviation from audit §4:** asset names carry the version (`vibe_<ver>_<os>_<arch>.tar.gz`, `x86_64`/`amd64` as `amd64`). `install.sh` resolves the latest tag from the `releases/latest` redirect (#47). The archive contents follow §4.
 - **Safety:** the tag is validated against `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$` before use (also for dispatch input), builds use no caches, and a re-run refuses to touch a release that is already published. Any `-suffix` tag is a prerelease. Archives are reproducible (sorted, root-owned, commit-time mtimes).
 - **Cutting a release:** `git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0`, review the draft, then publish it. `task release` prints this.
@@ -104,6 +105,26 @@ Wails still fills in the product name, version and copyright from `wails.json` (
 - **Decision: the `.desktop` file does not claim `inode/directory`.** That MIME type would add Vibe to *Open With* for every folder on the machine and, on some desktops, compete for the "open folder" default, which is the file manager's job. A workspace folder is opened with `vibe-studio <dir>` or `vibe studio --gui <dir>`, or from Studio's own launcher (Open folder…, recent workspaces). People who want a file-manager entry can add one themselves (a Nautilus script or a Dolphin service menu that runs `vibe-studio "$@"`); this is documented, not shipped. Revisit if testers ask.
 - **Install steps** (for the nfpm package, §5.3, and `install.sh` in the tarball): `/usr/share/applications/vibe-studio.desktop`, `/usr/share/mime/packages/vibe-bundle.xml` (installed under that name), hicolor icons; post-install runs `update-desktop-database` and `update-mime-database /usr/share/mime`. The nfpm config itself is part of the pipeline work in #77.
 
+## Installing (install.sh, #47)
+
+```sh
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh                        # CLI + Studio
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh -s -- --cli-only       # servers, MCP-only
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | VIBE_VERSION=v0.1.0 sh    # pin a version
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh -s -- --uninstall
+```
+
+Flags: `--version vX.Y.Z`, `--cli-only`, `--install-dir DIR` (env `VIBE_INSTALL_DIR`), `--force`, `--uninstall`, `--dry-run`, `--help`. Env: `VIBE_VERSION`, `VIBE_APP_DIR` (macOS, default `~/Applications`), `VIBE_DOWNLOAD_BASE` (mirror), `NO_COLOR`. It never uses `sudo`, sends no telemetry, and the whole script is one brace group, so a truncated download runs nothing.
+
+- **Resolve and verify.** `latest` is read from the `releases/latest` redirect (no API; needs curl). It downloads the archive and `checksums.txt` (curl, or wget for pinned versions), matches the archive's exact name in `checksums.txt`, and aborts on a mismatch or a missing entry before touching anything. Archives with `..`/absolute paths, links or special files are refused.
+- **Where files go.** The CLI to `~/.local/bin`. Linux Studio: `vibe-studio` beside it, the `.desktop` file (absolute, quoted `Exec=`) in `~/.local/share/applications`, the MIME XML in `~/.local/share/mime/packages`, the hicolor icons from the archive in `~/.local/share/icons/hicolor`, then `update-mime-database`, `update-desktop-database` and `gtk-update-icon-cache` when present (the cache file it writes is left in place on uninstall). macOS Studio: `Vibe Studio.app` in `~/Applications` via `ditto` (no quarantine bit with curl; nothing in the bundle is touched afterwards), checked with `codesign --verify --deep --strict`. No `vibe-studio` wrapper is installed on macOS: `vibe studio --gui` finds the app itself (`open -a`, see #44).
+- **Collision guard.** `~/.local/bin/vibe` is replaced only when its sha256 matches the manifest, or (first install over an older copy) the file contains Vibe's Go module path. Anything else (Mistral Vibe uses the same name) stops the install and points to `--force` or `--install-dir`. Foreign programs are never executed to find out. A different `vibe` earlier on `PATH` only warns.
+- **Checks that warn, not fail.** Missing WebKitGTK/GTK (via `ldd`, with an apt/dnf/pacman/zypper line) and no Secret Service on the session bus. The CLI works without both. musl and glibc older than 2.35 are refused; macOS older than 14 (arm64) or 13 (Intel) is refused unless `--force`.
+- **Manifest, upgrade, uninstall.** `~/.local/share/vibe/install-manifest` (macOS: `~/Library/Application Support/vibe/`) records `version=` and, per file, `F <sha256> <path>` (the macOS app is `D - <path>`). Re-running is the upgrade: files are replaced, files the new version no longer ships are removed, `0.1.0 -> 0.2.0` is printed. `--uninstall` removes only entries of the shapes the installer writes (`vibe`, `vibe-studio`, its `.desktop`, MIME and icon files, the `Vibe Studio.app` directory) whose hash is unchanged, says which it kept, and lists what it never touches: config, the extension cache, keychain items and workspaces.
+- **Tests.** `scripts/test-install.sh` builds fake releases with the real `scripts/package.sh`, serves them from a local HTTP server and runs the scenarios (install, `--cli-only`, collision, upgrade, uninstall, `latest`, dry run, unsupported arch, missing libraries, and hostile releases: swapped, undeclared or decoy checksums, traversal and symlink archives, tampered manifest, replaced binary) in unprivileged ubuntu:22.04, ubuntu:24.04, debian:12 and fedora:latest containers. `--native` runs it on the host. `--assets DIR --tag vX.Y.Z` smoke-tests real release assets; `.github/workflows/install-test.yml` does that after a release is published (or manually, for a published tag), on those images plus macos-15 and macos-15-intel.
+- **Testing a release candidate.** `install-test.yml` holds only `contents: read`, so rc1 must be published as a prerelease first; or test locally with `gh release download <tag> --dir dist` (needs write access for a draft) and `scripts/test-install.sh --assets dist --tag <tag>`.
+- **Hosting.** `https://sandwichlabs.dev/vibe/install.sh` redirects to `https://github.com/SandwichLabs/vibe/releases/latest/download/install.sh` (outside this repo). The public `README` and `docs/install.md` are #48.
+
 ## 2. What we ship
 
 One install per platform gives you **both** binaries, so `vibe studio --gui`
@@ -113,7 +134,7 @@ and `vibe mcp serve` work without a second download.
 |---|---|---|---|
 | macOS (universal: arm64 + x86_64) | `Vibe-Studio-<ver>-macos-universal.dmg`, signed, notarized and stapled | `Vibe Studio.app`, with `vibe` at `Contents/MacOS/vibe` | GitHub Release, plus the Homebrew **cask** `sandwichlabs/tap/vibe-studio` (`binary` stanza links `vibe` onto `PATH`) |
 | Linux amd64 and arm64 | `vibe_<ver>_<arch>.deb`, `vibe-<ver>.<arch>.rpm` | `/usr/bin/vibe`, `/usr/bin/vibe-studio`, `.desktop` file, hicolor icons, MIME type for `.vibe` bundles | GitHub Release |
-| Linux amd64 and arm64 | `vibe-studio_<ver>_linux_<arch>.tar.gz` | both binaries, `.desktop`, icon, `install.sh` | GitHub Release |
+| Linux amd64 and arm64 | `vibe-studio_<ver>_linux_<arch>.tar.gz` | both binaries, `.desktop`, MIME type, icons | GitHub Release |
 | Linux amd64 and arm64, CLI only | `vibe_<ver>_linux_<arch>.tar.gz` | `vibe` | GitHub Release, plus the Homebrew **formula** `sandwichlabs/tap/vibe` (Linuxbrew, servers, MCP-only users) |
 | All | `checksums.txt`, plus SBOM and build provenance attestation | | GitHub Release |
 
