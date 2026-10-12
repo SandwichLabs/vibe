@@ -4,16 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // newClassifierTestDB creates a fresh, real, in-memory DuckDB with a small
@@ -951,7 +953,7 @@ func TestHandleRunQuery_RealDuckDB_ParameterizedQueries(t *testing.T) {
 // param appended straight onto the statement) — the reviewer proved
 // delete_record{table:"users", where:"1=0; COPY (SELECT 'x') TO '<path>'"}
 // wrote a file, and where:"1=0; DROP TABLE users" dropped the table, under
-// read-write. The fix: every identifier goes through engine.QuoteIdent, and
+// read-write. The fix: every identifier goes through session.QuoteIdent, and
 // create/update/delete/bulk_insert now build the FULL statement (quoted
 // identifiers + the raw `where`/whatever) and run it through classifySQL
 // (requireWriteStatement) before ever calling ExecContext — the exact same
@@ -1019,7 +1021,7 @@ func TestHandler_DeleteRecord_LegitimateWhere_StillWorks(t *testing.T) {
 // TestHandler_RecordTools_HostileIdentifiers_CannotWriteFile proves
 // create_record/update_record/bulk_insert/create_table/add_column/
 // drop_table all quote their table/column identifiers correctly (via
-// engine.QuoteIdent) instead of concatenating them raw — a crafted
+// session.QuoteIdent) instead of concatenating them raw — a crafted
 // table/column name can't break out and run an attacker statement.
 func TestHandler_RecordTools_HostileIdentifiers_CannotWriteFile(t *testing.T) {
 	evilTable := `x") ; COPY (SELECT 'pwned') TO '`

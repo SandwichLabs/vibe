@@ -57,6 +57,7 @@ func (t *TableBrowserModel) SetData(cols []table.Column, rows []table.Row, err e
 		return
 	}
 	t.hasData = true
+	t.table.SetRows(nil) // stale rows wider than the new columns would index out of range
 	t.table.SetColumns(cols)
 	t.table.SetRows(rows)
 	t.table.SetStyles(defaultTableStyles())

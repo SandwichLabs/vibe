@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // Sentinels for Options.Key: KeyAuto adds a generated auto-number id column;
@@ -135,7 +136,7 @@ func Inspect(ctx context.Context, db *sql.DB, s Source) (*Inspection, error) {
 //     anything else (TIME, ...) -> text
 func inferType(ctx context.Context, conn *sql.Conn, sc stagedCol) ColType {
 	sniffed := strings.ToUpper(strings.TrimSpace(sc.SniffedType))
-	col := engine.QuoteIdent(sc.SourceName)
+	col := session.QuoteIdent(sc.SourceName)
 
 	switch {
 	case engine.IsIntegerType(sniffed):
@@ -289,7 +290,7 @@ func keyCandidates(ctx context.Context, conn *sql.Conn, staged []stagedCol, cols
 		if cols[i].Inferred.Type != TypeInteger && cols[i].Inferred.Type != TypeText {
 			continue
 		}
-		col := engine.QuoteIdent(sc.SourceName)
+		col := session.QuoteIdent(sc.SourceName)
 		parts = append(parts, fmt.Sprintf("COUNT(%s) = %d AND COUNT(DISTINCT %s) = %d", col, rowCount, col, rowCount))
 		eligible = append(eligible, i)
 	}
@@ -339,7 +340,7 @@ func looksLikeKeyName(normalized, source string) bool {
 func previewRows(ctx context.Context, conn *sql.Conn, staged []stagedCol, names []string) ([][]*string, error) {
 	exprs := make([]string, len(staged))
 	for i, sc := range staged {
-		exprs[i] = fmt.Sprintf("CAST(%s AS VARCHAR)", engine.QuoteIdent(sc.SourceName))
+		exprs[i] = fmt.Sprintf("CAST(%s AS VARCHAR)", session.QuoteIdent(sc.SourceName))
 	}
 	query := fmt.Sprintf("SELECT %s FROM %s ORDER BY __row LIMIT %d", strings.Join(exprs, ", "), stageTable, previewRowCount)
 	rows, err := conn.QueryContext(ctx, query)

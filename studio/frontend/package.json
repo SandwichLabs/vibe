@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:exports": "node scripts/check-exports.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.0",
@@ -28,6 +29,7 @@
     "@vitejs/plugin-vue": "^5.2.0",
     "@vue/test-utils": "^2.4.10",
     "jsdom": "^25.0.1",
+    "knip": "5.61.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.4.2",

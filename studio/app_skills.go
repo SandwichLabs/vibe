@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // --- Skills (#62) ---
@@ -33,11 +33,11 @@ func (a *App) ListSkills() ([]SkillSummary, error) {
 		return nil, err
 	}
 
-	entries, err := agents.LoadSkills(a.ws.Skills(), a.sess, a.logger)
+	entries, err := skills.LoadSkills(a.ws.Skills(), a.sess, a.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %w", err)
 	}
-	visible := agents.ChatVisibleSkills(entries)
+	visible := skills.ChatVisibleSkills(entries)
 	out := make([]SkillSummary, 0, len(visible))
 	for _, s := range visible {
 		out = append(out, SkillSummary{
@@ -61,7 +61,7 @@ func (a *App) SaveSkill(name, description, instructions, tableName, rev string) 
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if _, err := agents.SaveUserSkillAt(a.ws.Skills(), a.sess, name, description, instructions, tableName, rev); err != nil {
+	if _, err := skills.SaveUserSkillAt(a.ws.Skills(), a.sess, name, description, instructions, tableName, rev); err != nil {
 		return conflictErr(err)
 	}
 	a.emitEvent("data:changed")
@@ -77,7 +77,7 @@ func (a *App) DeleteSkill(name string) error {
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if err := agents.DeleteSkill(a.ws.Skills(), name); err != nil {
+	if err := skills.DeleteSkill(a.ws.Skills(), name); err != nil {
 		return err
 	}
 	a.emitEvent("data:changed")

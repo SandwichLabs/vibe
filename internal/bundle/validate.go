@@ -10,14 +10,14 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
-// Skill limits, the same ones agents.SaveUserSkillAt applies to a skill the
+// Skill limits, the same ones skills.SaveUserSkillAt applies to a skill the
 // agent or the editor writes.
 const (
 	skillMaxDescriptionRunes = 300

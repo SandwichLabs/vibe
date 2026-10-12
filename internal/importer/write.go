@@ -52,7 +52,7 @@ func writeReplace(ctx context.Context, conn *sql.Conn, table string, existing *e
 	}
 	for _, c := range existing.columns {
 		seq := engine.AutoNumberSequence(table, c.Name)
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP SEQUENCE IF EXISTS %s", engine.QuoteIdent(seq))); err != nil {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP SEQUENCE IF EXISTS %s", session.QuoteIdent(seq))); err != nil {
 			tx.Rollback() //nolint:errcheck
 			return fmt.Errorf("failed to drop sequence %q: %w", seq, err)
 		}
@@ -91,11 +91,11 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 			autoName = fmt.Sprintf("id_%d", i)
 		}
 		seq := engine.AutoNumberSequence(table, autoName)
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE SEQUENCE %s START %d", engine.QuoteIdent(seq), rowCount+1)); err != nil {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE SEQUENCE %s START %d", session.QuoteIdent(seq), rowCount+1)); err != nil {
 			return fmt.Errorf("failed to create id sequence: %w", err)
 		}
-		colDefs = append(colDefs, fmt.Sprintf("%s BIGINT PRIMARY KEY DEFAULT nextval('%s')", engine.QuoteIdent(autoName), seq))
-		colNames = append(colNames, engine.QuoteIdent(autoName))
+		colDefs = append(colDefs, fmt.Sprintf("%s BIGINT PRIMARY KEY DEFAULT nextval('%s')", session.QuoteIdent(autoName), seq))
+		colNames = append(colNames, session.QuoteIdent(autoName))
 		selectExprs = append(selectExprs, "__row")
 	} else if key != KeyNone {
 		for _, tc := range target {
@@ -106,19 +106,19 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 		if keyIsInteger {
 			seq := engine.AutoNumberSequence(table, key)
 			var maxQuery = fmt.Sprintf("SELECT COALESCE(MAX(TRY_CAST(%s AS BIGINT)), 0) + 1 FROM %s",
-				engine.QuoteIdent(findStagedSource(target, key)), stageTable)
+				session.QuoteIdent(findStagedSource(target, key)), stageTable)
 			var start int64
 			if err := tx.QueryRowContext(ctx, maxQuery).Scan(&start); err != nil {
 				return fmt.Errorf("failed to seed key sequence: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE SEQUENCE %s START %d", engine.QuoteIdent(seq), start)); err != nil {
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE SEQUENCE %s START %d", session.QuoteIdent(seq), start)); err != nil {
 				return fmt.Errorf("failed to create key sequence: %w", err)
 			}
 		}
 	}
 
 	for _, tc := range target {
-		def := fmt.Sprintf("%s %s", engine.QuoteIdent(tc.Name), tc.Friendly.DuckDB())
+		def := fmt.Sprintf("%s %s", session.QuoteIdent(tc.Name), tc.Friendly.DuckDB())
 		if tc.Name == key && keyIsInteger {
 			def += fmt.Sprintf(" DEFAULT nextval('%s')", engine.AutoNumberSequence(table, key))
 		}
@@ -126,8 +126,8 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 			def += " PRIMARY KEY"
 		}
 		colDefs = append(colDefs, def)
-		colNames = append(colNames, engine.QuoteIdent(tc.Name))
-		value, _ := castExpr(engine.QuoteIdent(tc.Staged.SourceName), tc.Staged.StagedType, tc.Friendly)
+		colNames = append(colNames, session.QuoteIdent(tc.Name))
+		value, _ := castExpr(session.QuoteIdent(tc.Staged.SourceName), tc.Staged.StagedType, tc.Friendly)
 		selectExprs = append(selectExprs, value)
 	}
 
@@ -149,7 +149,7 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 // bare — used wherever a key comparison runs against an aliased stage
 // table rather than the whole table.
 func keyValueExpr(tc *targetCol, qualifier string) string {
-	col := qualifier + engine.QuoteIdent(tc.Staged.SourceName)
+	col := qualifier + session.QuoteIdent(tc.Staged.SourceName)
 	var value string
 	if tc.HasFriendly {
 		value, _ = castExpr(col, tc.Staged.StagedType, tc.Friendly)
@@ -191,12 +191,12 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 		if tc.Staged == nil {
 			continue // no DEFAULT-having column absent from the file: leave it to its DEFAULT
 		}
-		colNames = append(colNames, engine.QuoteIdent(tc.Name))
+		colNames = append(colNames, session.QuoteIdent(tc.Name))
 		var value string
 		if tc.HasFriendly {
-			value, _ = castExpr(engine.QuoteIdent(tc.Staged.SourceName), tc.Staged.StagedType, tc.Friendly)
+			value, _ = castExpr(session.QuoteIdent(tc.Staged.SourceName), tc.Staged.StagedType, tc.Friendly)
 		} else {
-			value, _ = castExprRaw(engine.QuoteIdent(tc.Staged.SourceName), tc.RawType)
+			value, _ = castExprRaw(session.QuoteIdent(tc.Staged.SourceName), tc.RawType)
 		}
 		selectExprs = append(selectExprs, value)
 	}
@@ -211,12 +211,12 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 			if tc.Name == existing.pkCol || tc.Staged == nil {
 				continue
 			}
-			q := engine.QuoteIdent(tc.Name)
+			q := session.QuoteIdent(tc.Name)
 			setParts = append(setParts, fmt.Sprintf("%s = excluded.%s", q, q))
-			distinctOld = append(distinctOld, engine.QuoteIdent(table)+"."+q)
+			distinctOld = append(distinctOld, session.QuoteIdent(table)+"."+q)
 			distinctNew = append(distinctNew, "excluded."+q)
 		}
-		insertSQL += fmt.Sprintf(" ON CONFLICT (%s) ", engine.QuoteIdent(existing.pkCol))
+		insertSQL += fmt.Sprintf(" ON CONFLICT (%s) ", session.QuoteIdent(existing.pkCol))
 		if len(setParts) == 0 {
 			insertSQL += "DO NOTHING"
 		} else {
@@ -285,7 +285,7 @@ func countUpsert(ctx context.Context, conn *sql.Conn, table string, existing *ex
 	// miss that "1" and "01" are the same BIGINT key, and fails outright
 	// when the key is text-staged but the table's PK is an integer.
 	keyValue := keyValueExpr(keyStaged, "s.")
-	tableKeyCol := engine.QuoteIdent(existing.pkCol)
+	tableKeyCol := session.QuoteIdent(existing.pkCol)
 
 	q := fmt.Sprintf("SELECT COUNT(*) FROM %s s WHERE NOT EXISTS (SELECT 1 FROM %s t WHERE t.%s = %s)",
 		stageTable, tableSQL(ctx, table), tableKeyCol, keyValue)
@@ -305,8 +305,8 @@ func countUpsert(ctx context.Context, conn *sql.Conn, table string, existing *ex
 
 	var oldExprs, newExprs []string
 	for _, tc := range nonKey {
-		q := engine.QuoteIdent(tc.Name)
-		srcCol := "s." + engine.QuoteIdent(tc.Staged.SourceName)
+		q := session.QuoteIdent(tc.Name)
+		srcCol := "s." + session.QuoteIdent(tc.Staged.SourceName)
 		var value string
 		if tc.HasFriendly {
 			value, _ = castExpr(srcCol, tc.Staged.StagedType, tc.Friendly)

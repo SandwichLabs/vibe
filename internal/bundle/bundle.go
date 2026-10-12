@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 

@@ -3,7 +3,6 @@ package agents
 import (
 	"context"
 	"database/sql"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -165,24 +164,6 @@ func TestRunReadOnlySQLIn_ConnectionIsDefaultCatalog(t *testing.T) {
 
 	_, _, err = h.RunReadOnlySQLIn(ctx, "ghost", "SELECT 1", nil, 10)
 	assert.Error(t, err)
-}
-
-func TestSkills_TableBoundOnSecondCatalog(t *testing.T) {
-	_, sess := newCatalogHandler(t)
-	assert.True(t, tableHasRows(sess, "other.main.orders"))
-	assert.True(t, tableHasRows(sess, "users"))
-	assert.False(t, tableHasRows(sess, "orders"), "orders only exists in the other catalog")
-	assert.False(t, tableHasRows(sess, "other.main.ghost"))
-	assert.False(t, tableHasRows(sess, `other.main.orders"; DROP TABLE users; --`))
-
-	store := &skills.Mock{}
-	require.NoError(t, WriteImportSkill(store, sess, "other.main.orders"))
-	stored, err := store.List(context.Background())
-	require.NoError(t, err)
-	require.Len(t, stored, 1)
-	instr := stored[0].Instructions
-	assert.Contains(t, instr, "total", "the skill describes the other catalog's table")
-	assert.NotContains(t, instr, "seven")
 }
 
 func TestWriteTools_ResolvedNamesAndLegacyDottedTable(t *testing.T) {

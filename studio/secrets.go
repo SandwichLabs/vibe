@@ -137,7 +137,7 @@ func (a *App) GetLLMKeyStatus(provider string) LLMKeyStatus {
 		Provider:          provider,
 		Source:            string(src),
 		Set:               src != config.KeySourceNone,
-		FileKey:           config.HasFileKey(config.LegacyConfigPath()),
+		FileKey:           config.HasFileKey(config.LLMConfigPath()),
 		KeychainAvailable: probe.Available,
 	}
 	st.CanMigrate = st.FileKey && probe.Available
@@ -200,7 +200,7 @@ func (a *App) ClearLLMKey(provider string) error {
 // different key it refuses unless overwrite is true (the UI asks first).
 func (a *App) MigrateLLMKeyToKeychain(overwrite bool) error {
 	snap := a.llmSnapshot()
-	path := config.LegacyConfigPath()
+	path := config.LLMConfigPath()
 	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
 	defer cancel()
 	a.secrets.Redactor().Add(snap.FileAPIKey)

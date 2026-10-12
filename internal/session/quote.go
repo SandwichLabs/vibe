@@ -11,7 +11,7 @@ import (
 // are dropped: they are never legal in an identifier and a C-string boundary
 // in the driver could truncate the statement at one.
 //
-// This is the ONE identifier quoter for the codebase (engine.QuoteIdent
+// This is the ONE identifier quoter for the codebase (session.QuoteIdent
 // delegates here). All ATTACH / secret / USE SQL the session builds goes
 // through it and QuoteLiteral; nothing is concatenated raw.
 func QuoteIdent(ident string) string {

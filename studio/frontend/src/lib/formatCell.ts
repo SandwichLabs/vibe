@@ -26,7 +26,7 @@ interface CellFormatOptions {
   context?: CellContext // default 'grid'
 }
 
-export type CellKind = 'null' | 'number' | 'bool' | 'text' | 'nested'
+type CellKind = 'null' | 'number' | 'bool' | 'text' | 'nested'
 
 export interface FormattedCell {
   text: string

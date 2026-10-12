@@ -53,7 +53,7 @@ func (a *App) GetLLMSettings() LLMSettingsView {
 // the API key), reloads them and tells the UI ("llm:config"). A field set by
 // an environment variable keeps the file's own value. No workspace needed.
 func (a *App) SetLLMSettings(s config.LLMSettings) error {
-	if err := config.SaveLLMSettingsKeepingEnv(config.LegacyConfigPath(), s); err != nil {
+	if err := config.SaveLLMSettingsKeepingEnv(config.LLMConfigPath(), s); err != nil {
 		return err
 	}
 	cfg := config.Load().LLM

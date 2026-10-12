@@ -26,6 +26,9 @@ type PageRequest struct {
 	PageSize int
 	SortCol  string
 	SortDir  string
+	// SkipCount leaves out the total-matching COUNT(*) (a full scan on a
+	// remote table); TotalRows and TotalPages are then 0.
+	SkipCount bool
 }
 
 // PageResult is one page of rows with the total matching row count.
@@ -86,8 +89,10 @@ func Page(ctx context.Context, db *sql.DB, ref session.TableRef, req PageRequest
 	}
 
 	var total int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+ref.SQL()+where, args...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to count rows: %w", err)
+	if !req.SkipCount {
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+ref.SQL()+where, args...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("failed to count rows: %w", err)
+		}
 	}
 
 	query := "SELECT * FROM " + ref.SQL() + where + OrderClause(req.SortCol, req.SortDir, known) + " LIMIT ? OFFSET ?"
@@ -104,9 +109,12 @@ func Page(ctx context.Context, db *sql.DB, ref session.TableRef, req PageRequest
 	}
 	names, types := rs.NamesAndTypes()
 
-	totalPages := (total + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
+	totalPages := 0
+	if !req.SkipCount {
+		totalPages = (total + pageSize - 1) / pageSize
+		if totalPages < 1 {
+			totalPages = 1
+		}
 	}
 	return &PageResult{
 		Columns: names, Types: types, Rows: rs.Rows,
@@ -122,4 +130,13 @@ type ctxQuerier struct {
 
 func (q ctxQuerier) Query(query string, args ...any) (*sql.Rows, error) {
 	return q.db.QueryContext(q.ctx, query, args...)
+}
+
+// Count returns the exact number of rows in ref (one query).
+func Count(ctx context.Context, db *sql.DB, ref session.TableRef) (int, error) {
+	var n int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+ref.SQL()).Scan(&n); err != nil {
+		return 0, fmt.Errorf("failed to count rows: %w", err)
+	}
+	return n, nil
 }

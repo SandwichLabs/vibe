@@ -28,8 +28,6 @@ func tableRef(table string) session.TableRef {
 	return ref
 }
 
-func tableSQL(table string) string { return engine.TableSQL(table) }
-
 // WriteResult reports the outcome of a single CRUD write (rows affected).
 type WriteResult struct {
 	Affected int64 `json:"affected"`
@@ -120,7 +118,7 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, table string, values m
 	}
 	values = kept
 	if len(values) == 0 {
-		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", tableSQL(table)))
+		res, err := tx.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", engine.TableSQL(table)))
 		if err != nil {
 			return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
 		}
@@ -133,12 +131,12 @@ func InsertRowTx(tx TxExecer, colTypes map[string]string, table string, values m
 	placeholders := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols))
 	for _, c := range cols {
-		colSQL = append(colSQL, engine.QuoteIdent(c))
+		colSQL = append(colSQL, session.QuoteIdent(c))
 		placeholders = append(placeholders, fmt.Sprintf("CAST(? AS %s)", castType(colTypes, c)))
 		args = append(args, values[c])
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableSQL(table), strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", engine.TableSQL(table), strings.Join(colSQL, ", "), strings.Join(placeholders, ", "))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to insert into %q: %v", table, err)}
@@ -155,13 +153,13 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, p
 	setClauses := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols)+1)
 	for _, c := range cols {
-		setClauses = append(setClauses, fmt.Sprintf("%s = CAST(? AS %s)", engine.QuoteIdent(c), castType(colTypes, c)))
+		setClauses = append(setClauses, fmt.Sprintf("%s = CAST(? AS %s)", session.QuoteIdent(c), castType(colTypes, c)))
 		args = append(args, values[c])
 	}
 	args = append(args, pkVal)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = CAST(? AS %s)",
-		tableSQL(table), strings.Join(setClauses, ", "), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
+		engine.TableSQL(table), strings.Join(setClauses, ", "), session.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, args...)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to update %q: %v", table, err)}
@@ -179,7 +177,7 @@ func UpdateRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, p
 // structured *WriteError rather than a silent no-op.
 func DeleteRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, pkVal any) (*WriteResult, error) {
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = CAST(? AS %s)",
-		tableSQL(table), engine.QuoteIdent(pkCol), castType(colTypes, pkCol))
+		engine.TableSQL(table), session.QuoteIdent(pkCol), castType(colTypes, pkCol))
 	res, err := tx.Exec(query, pkVal)
 	if err != nil {
 		return nil, &WriteError{Message: fmt.Sprintf("failed to delete from %q: %v", table, err)}

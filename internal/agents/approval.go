@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // ApprovalRequest describes one write operation waiting on the user's OK
@@ -276,7 +276,7 @@ func estimateRows(ctx context.Context, db *sql.DB, table, where string) int64 {
 	if db == nil || strings.TrimSpace(table) == "" {
 		return -1
 	}
-	query := "SELECT count(*) FROM " + engine.QuoteIdent(table)
+	query := "SELECT count(*) FROM " + session.QuoteIdent(table)
 	if strings.TrimSpace(where) != "" {
 		query += " WHERE " + where
 	}

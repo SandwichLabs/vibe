@@ -244,3 +244,13 @@ func TestCreateTable_RejectsInjectedColumnType(t *testing.T) {
 		assert.False(t, ValidColumnType(bad), bad)
 	}
 }
+
+func TestPage_SkipCountAndCount(t *testing.T) {
+	ctx, ref, page := pageTable(t)
+	res := page(PageRequest{SkipCount: true})
+	assert.Zero(t, res.TotalRows)
+	assert.NotEmpty(t, res.Rows)
+	assert.Positive(t, page(PageRequest{}).TotalRows)
+	_ = ctx
+	_ = ref
+}

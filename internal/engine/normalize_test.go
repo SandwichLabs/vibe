@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"math"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 
 	duckdb "github.com/marcboeker/go-duckdb/v2"
 	"github.com/stretchr/testify/assert"

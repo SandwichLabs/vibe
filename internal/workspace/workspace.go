@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // Workspace is an open workspace folder: its configuration (committed, local

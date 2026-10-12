@@ -2,13 +2,14 @@ package workspace
 
 import (
 	"database/sql"
-	"github.com/SandwichLabs/vibe/internal/connections"
 	"path/filepath"
 
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/connections"
+
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // AgentAccess is a workspace as the agent sees it: its DuckDB hub plus its

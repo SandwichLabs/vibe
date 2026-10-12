@@ -3,9 +3,10 @@ package engine
 import (
 	"context"
 	"database/sql"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"testing"
+
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/SandwichLabs/vibe/internal/importer"
 	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // ExportQueryResults writes the result of a SQL query to CSV or Parquet via
@@ -154,7 +155,7 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 		// against a table actually named "Customers") — writing the skill
 		// under the caller's original casing could create a second,
 		// wrong-table skill instead of refreshing the real one's.
-		if err := agents.WriteImportSkill(a.ws.Skills(), a.sess, summary.Table); err != nil {
+		if err := skills.WriteImportSkill(a.ws.Skills(), a.sess, summary.Table); err != nil {
 			a.logger.Warn("failed to write import skill", "table", summary.Table, "error", err)
 		}
 		a.emitEvent("data:changed")

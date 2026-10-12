@@ -33,6 +33,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // Sandbox modes mirror internal/agents' SandboxMode values exactly (they are
@@ -205,7 +206,7 @@ func systemPromptFor(sandbox string, ask bool, skillsBlock string) string {
 // <skills> section is a much smaller problem than a broken agent turn.
 //
 // Rendering itself is NOT done here: this only extracts (name, description)
-// pairs from the tool result and hands them to agents.RenderSkillsBlock,
+// pairs from the tool result and hands them to skills.RenderSkillsBlock,
 // the ONE function that knows how to escape/filter/frame that text for the
 // prompt. An earlier version of this function hand-rolled its own
 // `<skill name=%q>...` formatting with no escaping or name validation — a
@@ -231,13 +232,13 @@ func (r *Runner) skillsBlockFor(ctx context.Context) string {
 	if !ok || len(raw) == 0 {
 		return ""
 	}
-	refs := make([]agents.SkillRef, 0, len(raw))
+	refs := make([]skills.SkillRef, 0, len(raw))
 	for _, s := range raw {
 		name, _ := s["name"].(string)
 		desc, _ := s["description"].(string)
-		refs = append(refs, agents.SkillRef{Name: name, Description: desc})
+		refs = append(refs, skills.SkillRef{Name: name, Description: desc})
 	}
-	return agents.RenderSkillsBlock(refs)
+	return skills.RenderSkillsBlock(refs)
 }
 
 // recorder accumulates tool steps during a single Generate call. Tools may run

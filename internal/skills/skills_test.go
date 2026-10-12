@@ -83,7 +83,7 @@ func TestBuiltins_OnlyTaskNotebookCellsIsTaskPrefixed(t *testing.T) {
 	// task-notebook-cells (#66 part B) is the first built-in to use the
 	// task- prefix, intentionally: it's task mode's own workflow skill, and
 	// must be invisible to chat's system prompt / read_skill / list_skills
-	// (see internal/agents.ChatVisibleSkills). Every other built-in staying
+	// (see internal/skills.ChatVisibleSkills). Every other built-in staying
 	// off the prefix is still worth asserting so a future addition has to
 	// consciously opt in.
 	for _, s := range Builtins() {

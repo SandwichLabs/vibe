@@ -57,7 +57,7 @@ func ParseTable(name string) (session.TableRef, error) {
 func TableSQL(name string) string {
 	ref, err := session.ParseTableRef(name)
 	if err != nil {
-		return QuoteIdent(name)
+		return session.QuoteIdent(name)
 	}
 	return ref.SQL()
 }

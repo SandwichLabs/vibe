@@ -14,11 +14,11 @@ import (
 	"testing"
 
 	"github.com/SandwichLabs/vibe/internal/config"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/skills"
 
 	"charm.land/fantasy"
 	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"

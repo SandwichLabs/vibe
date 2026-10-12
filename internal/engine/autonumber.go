@@ -155,7 +155,7 @@ func sequencePosition(ctx context.Context, q Querier, ref session.TableRef, seq 
 func BumpAutoNumber(ctx context.Context, q Querier, ref session.TableRef, column string) error {
 	table := ref.Name
 	var maxVal sql.NullInt64
-	if err := q.QueryRowContext(ctx, fmt.Sprintf("SELECT MAX(%s) FROM %s", QuoteIdent(column), ref.SQL())).Scan(&maxVal); err != nil {
+	if err := q.QueryRowContext(ctx, fmt.Sprintf("SELECT MAX(%s) FROM %s", session.QuoteIdent(column), ref.SQL())).Scan(&maxVal); err != nil {
 		return fmt.Errorf("failed to read max %q: %w", column, err)
 	}
 	if !maxVal.Valid {

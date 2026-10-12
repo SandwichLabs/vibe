@@ -249,7 +249,7 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.repl, cmd = a.repl.Update(msg)
 	case modeTables:
 		var loadCmd tea.Cmd
-		a.tables, loadCmd = a.tables.Update(msg, a.engine)
+		a.tables, loadCmd = a.tables.Update(msg)
 		cmd = loadCmd
 	case modeNotebooks:
 		a.notebooks, cmd = a.notebooks.Update(msg, a.ws)

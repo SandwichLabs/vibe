@@ -6,6 +6,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	_ "github.com/marcboeker/go-duckdb/v2"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ func TestTablesModel_LoadAndNavigate(t *testing.T) {
 	assert.Equal(t, "widgets", m.items[1].Name)
 	assert.Equal(t, 2, m.items[1].RowCount)
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, nil)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	assert.Equal(t, 1, m.cursor)
 
 	view := m.View(80, 20)
@@ -41,14 +42,14 @@ func TestTablesModel_EnterBrowsesRows(t *testing.T) {
 	m := NewTablesModel()
 	m.items = []TableInfo{{Name: "widgets", RowCount: 2}}
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}, nil)
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	assert.True(t, m.browsing)
 	require.NotNil(t, cmd)
 
 	msg := cmd()
 	dataMsg, ok := msg.(tableDataMsg)
 	require.True(t, ok)
-	assert.Error(t, dataMsg.err, "no engine available")
+	assert.Error(t, dataMsg.err, "no session available")
 
 	m.SetData(dataMsg)
 
@@ -108,4 +109,38 @@ func TestTablesModel_SmallLocalTableIsExact(t *testing.T) {
 	require.Len(t, m.items, 1)
 	assert.False(t, m.items[0].Approx)
 	assert.Equal(t, 50, m.items[0].RowCount)
+}
+
+// Enter on a listed table pages its rows through crud.Page.
+func TestTablesModel_EnterLoadsRowsViaPage(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE widgets (id INTEGER, name TEXT); INSERT INTO widgets VALUES (1, 'a'), (2, 'b');`)
+	require.NoError(t, err)
+
+	m := NewTablesModel()
+	m.LoadTables(sessiontest.ForTests(db))
+	require.Len(t, m.items, 1)
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, cmd)
+	msg, ok := cmd().(tableDataMsg)
+	require.True(t, ok)
+	require.NoError(t, msg.err)
+	assert.Len(t, msg.columns, 2)
+	assert.Len(t, msg.rows, 2)
+}
+
+// Browsing a narrower table after a wider one must not render stale wide rows.
+func TestTableBrowser_NarrowerAfterWiderDoesNotPanic(t *testing.T) {
+	b := NewTableBrowserModel()
+	b.SetSize(80, 20)
+	wide := []table.Column{{Title: "a", Width: 8}, {Title: "b", Width: 8}, {Title: "c", Width: 8}}
+	b.SetData(wide, []table.Row{{"1", "2", "3"}, {"4", "5", "6"}}, nil)
+	narrow := []table.Column{{Title: "a", Width: 8}}
+	assert.NotPanics(t, func() {
+		b.SetData(narrow, []table.Row{{"x"}}, nil)
+		_ = b.View(80, 20)
+	})
 }
