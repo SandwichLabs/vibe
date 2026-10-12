@@ -72,7 +72,7 @@ vibe studio --gui
 
 Run from inside the workspace, this opens the desktop app on it. You can also start **Vibe Studio** from your application menu or `~/Applications` and use **Open folder...**. (`vibe studio` without `--gui` is a terminal UI with a SQL prompt, a table browser and a notebook list.)
 
-<!-- PLACEHOLDER #49: ![Studio with the sales-demo workspace open](assets/quickstart-studio-home.png) -->
+![Vibe Studio Home with a workspace open (the screenshots use a richer demo workspace, "Coffee Shop Analytics", so your screen will differ): counts, tables and the connections list](assets/quickstart-studio-home.png)
 
 ### Run a query
 
@@ -92,7 +92,7 @@ and press **Run** (Ctrl+Enter, Cmd+Enter on a Mac). The connections rail on the 
 
 A notebook stores your questions, not the answers: every cell runs again when you open it, so the numbers are always current. See [notebooks](reference/notebooks.md).
 
-<!-- PLACEHOLDER #49: ![A notebook with a SQL cell and its result](assets/quickstart-notebook.png) -->
+![A notebook with a SQL cell showing its query and a table of results below it (from the richer "Coffee Shop Analytics" demo workspace, so yours will look simpler)](assets/quickstart-notebook.png)
 
 ## 5. Connect Claude Code (MCP)
 

@@ -15,7 +15,21 @@
 
 Vibe is a desktop data tool in the DataGrip / DBeaver mould, with an AI agent built in. Point it at the data where it already lives (local DuckDB, CSV and Parquet files, MotherDuck, Postgres, MySQL, SQLite, S3, GCS, R2, Azure, DuckLake, Iceberg, Delta), query and join across all of it with one embedded DuckDB, and keep your notebooks, saved queries and skills as plain files in a folder you can share through git. The agent reads freely and asks before it writes; the same tools are available to Claude Code, Claude Desktop and other agents over MCP. Credentials stay in your OS keychain. Everything works without AI, and nothing is sent to Sandwich Labs.
 
-<!-- PLACEHOLDER #49: hero screenshot, e.g. ![Vibe Studio: a notebook with live charts](docs/assets/hero-notebook.png) -->
+<p align="center">
+  <a href="docs/assets/hero.mp4">
+    <img src="docs/assets/hero.gif" alt="Vibe Studio opening a notebook: stat cards and a bar chart render from live SQL, then a monthly revenue line chart and a result table as the notebook scrolls" width="880">
+  </a>
+</p>
+
+<details>
+<summary>Still screenshot</summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-notebook-dark.png">
+  <img src="docs/assets/hero-notebook.png" alt="A Vibe Studio notebook with revenue stat cards, a bar chart of revenue by shop and a monthly revenue line chart" width="880">
+</picture>
+
+</details>
 
 ## Install
 
