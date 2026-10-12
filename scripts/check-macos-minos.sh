@@ -11,13 +11,21 @@ plist="${1:?Info.plist}"
 shift
 [ "$#" -gt 0 ] || { echo "usage: $0 <Info.plist> <binary>..." >&2; exit 2; }
 
+# macos_minos reads `vtool -show-build` output on stdin and prints each slice's minimum macOS.
+macos_minos() {
+	awk '$1 == "cmd" { cmd = $2 }
+		cmd == "LC_BUILD_VERSION" && $1 == "minos" { print $2 }
+		cmd == "LC_VERSION_MIN_MACOSX" && $1 == "version" { print $2 }'
+}
+
 min="$(plutil -extract LSMinimumSystemVersion raw -o - "$plist")"
 status=0
 for bin in "$@"; do
-	# `vtool -show-build` prints "minos 14.0" (LC_BUILD_VERSION) or "version 13.0" (LC_VERSION_MIN_MACOSX),
-	# once per slice of a universal binary. Compare the highest.
-	minos="$(vtool -show-build "$bin" | awk '$1 == "minos" || $1 == "version" { print $2 }' |
-		sort -t. -k1,1n -k2,2n | tail -n 1)"
+	# `vtool -show-build` prints "minos 14.0" under LC_BUILD_VERSION or "version 13.0" under
+	# LC_VERSION_MIN_MACOSX, once per slice of a universal binary. Compare the highest. Only read
+	# those keys inside their own load command: LC_BUILD_VERSION also lists its tools ("tool LD",
+	# "version 1167.5"), and that linker version is not a macOS version.
+	minos="$(vtool -show-build "$bin" | macos_minos | sort -t. -k1,1n -k2,2n | tail -n 1)"
 	if [ -z "$minos" ]; then
 		echo "FAIL $bin: no minos in vtool output" >&2
 		status=1
