@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in Vibe does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not paste credentials, tokens, connection strings with passwords, or private data.** Redact them. Security vulnerabilities go through the private report form (see SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Vibe version
+      description: Output of `vibe --version`.
+      placeholder: "0.1.0 (commit: abc1234, built: 2026-10-12)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and architecture
+      placeholder: "macOS 14 arm64, Ubuntu 22.04 x86_64"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      options:
+        - Studio (desktop app)
+        - CLI
+        - TUI (vibe studio without --gui)
+        - MCP server (vibe mcp serve)
+    validations:
+      required: true
+  - type: input
+    id: connection
+    attributes:
+      label: Connection type
+      description: If a connection is involved (local DuckDB, MotherDuck, Postgres, MySQL, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg/Delta). Otherwise write "none".
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Redact credentials first.
+      render: shell

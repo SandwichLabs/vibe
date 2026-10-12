@@ -15,7 +15,7 @@
     "companyName": "Sandwich Labs",
     "productName": "Vibe Studio",
     "productVersion": "0.1.0",
-    "copyright": "Copyright (c) Sandwich Labs",
+    "copyright": "Copyright © 2026 Sandwich Labs. SPDX-License-Identifier: Apache-2.0",
     "comments": "An agentic workspace for working with data where it lives"
   }
 }
