@@ -5298,16 +5298,16 @@ THE SOFTWARE.
 #### MIT
 
 - @codemirror/autocomplete 6.20.1
-- @codemirror/commands 6.10.2
+- @codemirror/commands 6.11.1
 - @codemirror/lang-css 6.3.1
 - @codemirror/lang-html 6.4.11
 - @codemirror/lang-javascript 6.2.5
-- @codemirror/lang-markdown 6.5.0
+- @codemirror/lang-markdown 6.5.2
 - @codemirror/lang-sql 6.10.0
-- @codemirror/language 6.12.2
+- @codemirror/language 6.12.4
 - @codemirror/lint 6.9.5
-- @codemirror/state 6.5.4
-- @codemirror/view 6.39.16
+- @codemirror/state 6.7.6
+- @codemirror/view 6.43.13
 
 ```text
 MIT License
@@ -5363,7 +5363,7 @@ SOFTWARE.
 
 - @lezer/common 1.5.1
 - @lezer/css 1.3.1
-- @lezer/highlight 1.2.3
+- @lezer/highlight 1.2.5
 - @lezer/html 1.3.13
 - @lezer/javascript 1.5.4
 - @lezer/lr 1.4.8
