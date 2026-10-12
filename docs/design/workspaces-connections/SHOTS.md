@@ -1,6 +1,6 @@
 # How the screenshots were taken
 
-Taken with [rodney](../../../RODNEY.md) (headless Chrome) against the static pages in this folder. Nothing in the real app was run.
+Taken with [rodney](../../contributing/rodney.md) (headless Chrome) against the static pages in this folder. Nothing in the real app was run.
 
 1. `node docs/design/workspaces-connections/build.mjs` (regenerates `mock.css` and the HTML).
 2. For each page, `rodney open "file://…/<page>.html?theme=light|dark"` (the page's own light/dark toggle reads `?theme=`), read `document.documentElement.scrollHeight`, then `rodney screenshot -w <1280|900> -h <that height> <file>` for a full-page capture.

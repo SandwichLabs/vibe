@@ -161,3 +161,7 @@ go test -v ./internal/workspace/
 - **Live, not frozen** — notebooks store questions, not answers; outputs re-run on open.
 - **AI as collaborator, not dependency** — everything works without AI.
 - **Progressive disclosure** — skills advertise a line and load on demand; connections connect on first use.
+
+## License
+
+Vibe is licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Contributions are accepted under the same license with a [DCO](https://developercertificate.org/) sign-off; see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).

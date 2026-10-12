@@ -256,7 +256,7 @@ func TestPolicy_Denied(t *testing.T) {
 		{"read_csv /etc/passwd", "SELECT * FROM read_csv('/etc/passwd')", sqlClassOther, "outside"},
 		{"read_text hostname", "SELECT * FROM read_text('/etc/hostname')", sqlClassOther, "outside"},
 		{"read_text on ~/.bashrc", "SELECT * FROM read_text('~/.bashrc')", sqlClassOther, "relative"},
-		{"read_text on an absolute .bashrc", "SELECT * FROM read_text('/home/zac/.bashrc')", sqlClassOther, "outside"},
+		{"read_text on an absolute .bashrc", "SELECT * FROM read_text('/home/user/.bashrc')", sqlClassOther, "outside"},
 		{"read_blob scalar form", "SELECT read_blob('%DATA%/x.csv')", sqlClassOther, "table"},
 		{"read_csv relative path", "SELECT * FROM read_csv('x.csv')", sqlClassOther, "relative"},
 		{"read_csv data/ relative", "SELECT * FROM read_csv('data/x.csv')", sqlClassOther, "relative"},

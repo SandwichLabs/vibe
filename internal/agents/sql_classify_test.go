@@ -962,8 +962,8 @@ func TestHandleRunQuery_RealDuckDB_ParameterizedQueries(t *testing.T) {
 // sqlClassOther and requireWriteStatement denies it — no hand-rolled
 // semicolon scanning. ---
 
-// TestHandler_DeleteRecord_MultiStatementWhere_Denied mirrors
-// scratchpad/poc/poc4_test.go's TestPOC4_ReadWriteBypass exactly: under
+// TestHandler_DeleteRecord_MultiStatementWhere_Denied reproduces
+// a reviewer's read-write bypass proof of concept exactly: under
 // read-write, a `where` smuggling a second statement (COPY ... TO or DROP
 // TABLE) must be denied, no file written, and the table must survive.
 func TestHandler_DeleteRecord_MultiStatementWhere_Denied(t *testing.T) {

@@ -9,6 +9,7 @@ Start with [`direction.md`](direction.md), then the reference for the surface yo
 | [`direction.md`](direction.md) | The north star: workspaces, connections, the eight primitives, and (§9) what changed from the plan |
 | [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic #105 (delivered; "as built" summary at the top) |
 | [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic #157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode |
+| [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
 | [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
 
@@ -34,6 +35,13 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 |---|---|
 | [`design/workspaces-connections/`](design/workspaces-connections/index.html) | The mockup set and [spec](design/workspaces-connections/SPEC.md) for #106 (launcher, shell switcher, connections rail and editor, states, approval card). Open `index.html` in a browser; [`SHOTS.md`](design/workspaces-connections/SHOTS.md) lists the captured screenshots. The design record, not a description of the current UI. |
 
+## Contributing
+
+| Doc | What it is |
+|---|---|
+| [`contributing/rodney.md`](contributing/rodney.md) | Driving Studio in a headless browser with Rodney for QA |
+| [`../tools/ast-grep/`](../tools/ast-grep/sgconfig.yml) | The architecture lint rules CI runs (`ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio`) |
+
 ## Packaging
 
 | Doc | What it is |
@@ -45,8 +53,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | Doc | What it is |
 |---|---|
 | [`reviews/cleanup-2026-10/FINDINGS.md`](reviews/cleanup-2026-10/FINDINGS.md) | The post-#105 cleanup survey (#137) and its review verdicts |
-| [`reviews/arch-2026-10/`](reviews/arch-2026-10/) | The architecture review for #54: rubric, findings, judge rulings. Its ast-grep rules are at the repo root |
-| [`reviews/ux-panel-2026-09-26/`](reviews/ux-panel-2026-09-26/) | The three-persona UX panel behind epic #93 |
+| [`reviews/arch-2026-10/`](reviews/arch-2026-10/) | The architecture review for #54: rubric, findings, judge rulings. Its ast-grep rules are in `tools/ast-grep/` |
 
 ## Archive
 

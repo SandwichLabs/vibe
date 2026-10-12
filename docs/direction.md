@@ -133,9 +133,8 @@ Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #77 
 
 ## 8. Prior art and references
 
-- `../duck-tape/`: `cmd/database.go` (hub and ATTACH), `docs/PRD-schema-intelligence.md` (project discovery, env interpolation, prepare-based validation, schema cache), `PRODUCTION_READINESS.md` (the secret-handling gaps to avoid).
-- `../schoolwork-workspace/`: notebook, A2UI, skills and task-mode prior art (the 2026-09-22 direction).
-- `docs/reviews/ux-panel-2026-09-26/SYNTHESIS.md`: the trust findings this direction answers.
+- Earlier internal prototypes (a DuckDB hub with ATTACH, schema discovery and secret-handling lessons; a notebook, A2UI, skills and task-mode prototype). Not part of this repository.
+- A three-persona UX panel review (2026-09-26): the trust findings this direction answers. Its write-up is not part of the public repository.
 - `docs/archive/ms-access-parity-plan.md` and related: the Access-parity roadmap, superseded 2026-09-22.
 
 ## 9. As delivered: what changed from the plan
@@ -149,6 +148,21 @@ Everything above shipped. These are the places where the result differs from wha
 - **MotherDuck cannot be read-only.** `READ_ONLY` is not supported on `md:` attaches, so the type defaults to `read_only: false` and rejects `true`; read-only comes from a read-scaling token.
 - **Bundles use age (#118).** The optional passphrase envelope is an [age](https://age-encryption.org) scrypt recipient, not a bespoke format.
 - **Packaging is wired but not shipped.** Launch arguments, macOS `OnFileOpen`, the `Info.plist` document types and the Linux `.desktop` and MIME files are in the repo ([`packaging.md`](packaging.md) §1a). Signing, notarisation, CI, the release pipeline, the offline-extension decision and the signed-build keychain check remain epic #77.
+
+### Open-source launch decisions (2026-10-11, epic #51)
+
+Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-launch.md`](plans/open-source-launch.md).
+
+- **Name:** keep **Vibe**; the CLI binary stays `vibe`. Because Mistral Vibe also installs a `vibe` command, `install.sh` will carry a collision guard (#47) (it refuses to overwrite another vendor's `vibe`) and the README says so. Revisit before 1.0.
+- **Repo and module:** `SandwichLabs/vibe`, Go module `github.com/SandwichLabs/vibe`. Private until the go-public step (#50).
+- **Licence:** Apache-2.0.
+- **History:** the public repo is a filtered copy of `vibe-app` `main`. `landing/`, `docs/reviews/ux-panel-2026-09-26/` and `docs/archive/*.txt` were dropped from all history, the 88 MB binary was never on `main`, and a work-email author was mailmapped.
+- **Reporting:** GitHub only, no email address. Vulnerabilities go through GitHub private vulnerability reporting; everything else through Issues.
+- **Contributions:** DCO sign-off (`git commit -s`), no CLA.
+- **Old repo:** `SandwichLabs/vibe-app` is archived (read-only, pointer in its README). All development happens in `SandwichLabs/vibe`; `vibe-app#N` references in the docs are history.
+- **Telemetry:** none.
+- **v0.1.0 shape:** unsigned, ad-hoc-signed tarballs installed by `install.sh`; signing, notarisation and Homebrew stay with the packaging plan ([`packaging.md`](packaging.md)).
+- **Pruned for the public:** the ast-grep rules moved to `tools/ast-grep/` and `RODNEY.md` to `docs/contributing/rodney.md`.
 
 ### Open follow-ups
 

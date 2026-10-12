@@ -6,7 +6,6 @@ These files are **history**. They describe directions and designs that were supe
 |---|---|
 | `ms-access-parity-plan.md`, `parity-remediation-plan.md`, `parity-screen-discrepancies.md` | The Microsoft Access 97 parity roadmap and its screen audit (superseded 2026-09-22). `parity-remediation-plan.md` §1 also holds an early Rodney QA protocol. |
 | `EVIDENCE_PARITY_PLAN.md`, `EVIDENCE_INDEX.md` | A plan (and index of the docs it drew on) for the retired page/directive renderer |
-| `Access 97_ Small Business Data Backbone.txt`, `ms-access-ux-research.txt` | Background research on Access 97 |
 | `vibe-studio-system-design.md` | The early "Access successor" system design (PWA, Tailscale mesh) |
 | `PROJECT.md`, `PLAN.md` | The original MVP spec and phased build plan, written around the SQLCipher `.vibe` container |
 | `motherduck-research.md` | MotherDuck platform research that informed the workspaces-and-connections direction |
