@@ -309,6 +309,8 @@ fake_release() { # ver with_extra_icon(0|1)
 	cp "$REPO/scripts/package.sh" "$root/scripts/"
 	cp -R "$REPO"/studio/build/linux/vibe-studio.desktop "$REPO"/studio/build/linux/vibe-mime.xml "$REPO"/studio/build/linux/icons "$root/studio/build/linux/"
 	printf 'Apache-2.0 (test)\n' >"$root/LICENSE"
+	printf 'Vibe (test)\n' >"$root/NOTICE"
+	printf '# notices (test)\n' >"$root/THIRD_PARTY_NOTICES.md"
 	printf '#!/bin/sh\n# github.com/SandwichLabs/vibe\necho "vibe version %s (commit: abc1234, built: 2026-01-01T00:00:00Z)"\n' "$ver" >"$root/vibe"
 	printf '#!/bin/sh\n# github.com/SandwichLabs/vibe\necho "vibe-studio %s (commit: abc1234, built: 2026-01-01T00:00:00Z)"\n' "$ver" >"$root/studio/build/bin/vibe-studio"
 	chmod 755 "$root/vibe" "$root/studio/build/bin/vibe-studio"
