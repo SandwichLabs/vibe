@@ -94,7 +94,7 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE SEQUENCE %s START %d", session.QuoteIdent(seq), rowCount+1)); err != nil {
 			return fmt.Errorf("failed to create id sequence: %w", err)
 		}
-		colDefs = append(colDefs, fmt.Sprintf("%s BIGINT PRIMARY KEY DEFAULT nextval('%s')", session.QuoteIdent(autoName), seq))
+		colDefs = append(colDefs, fmt.Sprintf("%s BIGINT PRIMARY KEY DEFAULT nextval(%s)", session.QuoteIdent(autoName), session.QuoteLiteral(seq)))
 		colNames = append(colNames, session.QuoteIdent(autoName))
 		selectExprs = append(selectExprs, "__row")
 	} else if key != KeyNone {

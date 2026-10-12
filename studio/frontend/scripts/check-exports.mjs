@@ -17,6 +17,8 @@ const found = []
 for (const f of report.files ?? []) if (scope.test(f)) found.push(`unused file: ${f}`)
 for (const issue of report.issues ?? []) {
   if (!scope.test(issue.file)) continue
+  // knip 6 reports unused files per issue; knip 5 used a top-level report.files list.
+  if ((issue.files ?? []).length) found.push(`unused file: ${issue.file}`)
   for (const kind of ['exports', 'types']) {
     for (const e of issue[kind] ?? []) found.push(`unused ${kind.slice(0, -1)}: ${issue.file}:${e.line ?? '?'} ${e.name}`)
   }

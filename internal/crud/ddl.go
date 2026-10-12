@@ -85,22 +85,33 @@ func DropTable(ctx context.Context, db *sql.DB, ref session.TableRef) error {
 // spaces, parens and commas. That is enough for "VARCHAR(64)", "DECIMAL(10,2)"
 // or a type plus constraint like "INTEGER PRIMARY KEY", and rejects quotes,
 // semicolons and comment sequences. DuckDB still validates the type
-// semantically at Exec time.
+// semantically at Exec time. Parentheses must balance, so the text can never
+// close the enclosing column list.
 func ValidColumnType(t string) bool {
 	t = strings.TrimSpace(t)
 	if t == "" {
 		return false
 	}
 	hasAlpha := false
+	depth := 0
 	for _, c := range t {
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
 			hasAlpha = true
 		case c >= '0' && c <= '9':
-		case c == ' ' || c == '(' || c == ')' || c == ',':
+		case c == '(':
+			depth++
+		case c == ')':
+			// A ")" with no matching "(" would close the column list early and let the rest of
+			// the type text become a new clause of the statement (e.g. ") AS SELECT ...").
+			depth--
+			if depth < 0 {
+				return false
+			}
+		case c == ' ' || c == ',':
 		default:
 			return false
 		}
 	}
-	return hasAlpha
+	return hasAlpha && depth == 0
 }
