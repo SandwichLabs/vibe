@@ -80,7 +80,8 @@ func main() {
 		},
 	})
 	if err != nil {
-		logger.Error("application error", "error", err)
+		// app.logger, not logger: only the app's handler redacts (#97).
+		app.logger.Error("application error", "error", err)
 		os.Exit(1)
 	}
 }

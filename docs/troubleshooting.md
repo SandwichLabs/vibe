@@ -93,13 +93,13 @@ The chat agent needs a model provider. Set one in Studio (Settings, App) or with
 
 ## Where the logs are
 
-Vibe writes no log file. The command line and Studio log structured JSON lines to **stderr**, and `vibe mcp serve` prints plain-text notices there. Only the command line's logger runs through a secret redactor; Studio's does not, so treat all of it as unreviewed. Run Studio from a terminal (`vibe studio --gui` or `vibe-studio`) to see them; add `--verbose` to the CLI for more. Settings live in `~/.vibe.yaml` and the per-user config directory (`~/.config/vibe` on Linux, `~/Library/Application Support/vibe` on macOS); set `VIBE_CONFIG_DIR` to use a different one, for example when testing. Per-workspace local state is in `.vibe-local/` inside the workspace folder (git-ignored).
+Vibe writes no log file. The command line and Studio log structured JSON lines to **stderr**, and `vibe mcp serve` prints plain-text notices there. The command line and Studio log through the same secret redactor: it scrubs every secret value they have seen and credential-shaped text such as `password=…` or the password in `user:pass@host`. It cannot know every value, so read the log before you share it. Run Studio from a terminal (`vibe studio --gui` or `vibe-studio`) to see them; add `--verbose` to the CLI for more. Settings live in `~/.vibe.yaml` and the per-user config directory (`~/.config/vibe` on Linux, `~/Library/Application Support/vibe` on macOS); set `VIBE_CONFIG_DIR` to use a different one, for example when testing. Per-workspace local state is in `.vibe-local/` inside the workspace folder (git-ignored).
 
 ## Report a bug
 
 1. In Studio open **Settings, About** (version, commit, build date, platform), press **Copy build info**, and paste it into the report. From a terminal, `vibe --version` prints the version, commit and build date.
 2. Press **Report a bug** (it opens GitHub's issue chooser in your browser, with nothing prefilled), or go to <https://github.com/SandwichLabs/vibe/issues/new/choose>.
 3. Say what you did, what you expected and what happened. Add stderr output if there is any.
-4. **Do not paste credentials, tokens, connection strings or private data.** The command line redacts known secrets from its logs (Studio does not yet, #97), so check before you post.
+4. **Do not paste credentials, tokens, connection strings or private data.** The command line and Studio redact known secrets from their logs, but the redactor cannot know every value, so check before you post.
 
 For security problems, do not open a public issue: use GitHub private vulnerability reporting as described in [SECURITY.md](../SECURITY.md).
