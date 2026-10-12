@@ -49,15 +49,23 @@ CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`conf
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
-                     notebooks,prefs,queries,skills,tables}.go (bindings by area), workspace.go,
-                     connections.go, secrets.go, bundle.go, dotenv.go, templates.go; frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
+                     notebooks,prefs,queries,skills,tables}.go (bindings by area),
+                     workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go,
+                     connections_{crud,sync,catalog,creds,probe,extensions}.go, secrets.go, bundle.go,
+                     dotenv.go, templates.go; every exported App method is a thin binding (<= 25
+                     statements counting nested ones; no file/process/SQL work, no filestore write, no
+                     dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
+                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
-                     ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard)
+                     ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard);
+                     ApplySettings (the "only tighten" rules), ResolveConflict (Keep mine / Reload / Save as
+                     copy over the notebook, query and skill stores), CreateNew, GitInfo (reads .git/HEAD, runs no git)
   connections/       connection type registry and attach SQL
   connname/          the connection-name rule (catalog alias), a dependency-free leaf
   session/           the DuckDB hub for a workspace; connection lifecycle and status
+  sandbox/           the three sandbox tiers: Mode, Parse, Rank/Tighter (leaf; shared by workspace policy and agents)
   secrets/           keychain + env credential store (write-only across every boundary)
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
@@ -66,10 +74,10 @@ internal/
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   a2ui/              component schema + validator (Go validates, Vue renders)
-  bundle/            .vibe bundle v2 export/import, optional age encryption
-  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), courtesy SQL checks
+  bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
+  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
-                     (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote)
+                     (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
 docs/                see docs/README.md
 ```

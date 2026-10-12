@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/bundle"
-	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -156,17 +153,6 @@ func (a *App) DeleteNotebook(id string) error {
 	return nil
 }
 
-// notebookExportFile is the shape ExportNotebook writes and ImportNotebook
-// reads — matching model.js's toFile()/coerceNotebook's accepted wrapper
-// shape ({kind, schemaVersion, notebook}), adapted to this product's file
-// kind (notebooks.FileKind).
-type notebookExportFile struct {
-	Kind          string             `json:"kind"`
-	SchemaVersion int                `json:"schemaVersion"`
-	ExportedAt    string             `json:"exportedAt"`
-	Notebook      notebooks.Notebook `json:"notebook"`
-}
-
 // ExportNotebook writes one notebook to a JSON file. If dst is empty, a save
 // dialog picks the destination; dst == "" and a cancelled dialog both return
 // ("", nil), matching ExportQueryResults's cancel semantics.
@@ -202,16 +188,8 @@ func (a *App) ExportNotebook(id, dst string) (string, error) {
 		}
 	}
 
-	file := notebookExportFile{
-		Kind: notebooks.FileKind, SchemaVersion: notebooks.SchemaVersion,
-		ExportedAt: time.Now().UTC().Format(time.RFC3339), Notebook: nb,
-	}
-	b, err := json.MarshalIndent(file, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal notebook: %w", err)
-	}
-	if err := filestore.WriteFileAtomic(path, b, 0o644); err != nil {
-		return "", fmt.Errorf("failed to write notebook file: %w", err)
+	if err := bundle.WriteNotebookFile(path, nb, time.Now()); err != nil {
+		return "", err
 	}
 	return path, nil
 }
@@ -233,17 +211,10 @@ func (a *App) SelectNotebookFile() (string, error) {
 
 // ImportNotebook reads path (an ExportNotebook file) and imports it as a
 // brand-new notebook, through notebooks.Coerce like every other load. Import
-// never overwrites a notebook already in this container — the file's own id/
-// updatedAt are stripped before Coerce so a fresh id is always assigned,
-// matching model.js's importFile ("Import always lands as a new notebook").
-// maxImportNotebookFileBytes caps an imported notebook file at the same
-// per-entry limit a .vibe bundle applies (bundle.MaxEntryBytes, #118), so a
-// single notebook and a bundled one share one validation path (review
-// fix, step 4a #7c) — checked via os.Stat BEFORE the file is read, so a
-// multi-hundred-MB file (or a symlink/fifo pointed at one) never gets
-// fully loaded into memory just to be rejected.
-const maxImportNotebookFileBytes = bundle.MaxEntryBytes
-
+// never overwrites a notebook already in this workspace: the file's own id and
+// updatedAt are stripped (bundle.ReadNotebookFile, which also holds the file to
+// a bundle's size limit) so a fresh id is always assigned, matching model.js's
+// importFile ("Import always lands as a new notebook").
 func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -251,51 +222,11 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return nil, err
 	}
-
-	info, err := os.Stat(path)
+	doc, err := bundle.ReadNotebookFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read notebook file: %w", err)
-	}
-	if info.Size() > maxImportNotebookFileBytes {
-		return nil, fmt.Errorf("notebook file is %d bytes, exceeding the %d byte import limit", info.Size(), maxImportNotebookFileBytes)
-	}
-
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read notebook file: %w", err)
-	}
-	var wrapper map[string]any
-	if err := json.Unmarshal(b, &wrapper); err != nil {
-		return nil, fmt.Errorf("invalid notebook file: %w", err)
-	}
-	// ImportNotebook specifically (unlike Storage.Get/SaveNotebook, which
-	// stay permissive about a bare notebook object with no "kind") requires
-	// the file to be self-identified as a Vibe notebook export — review fix,
-	// step 4a #7b: without this, importing an arbitrary JSON file that
-	// happens to parse (e.g. package.json) would silently either fail deep
-	// inside Coerce with a confusing error, or in a pathological case
-	// coincidentally look enough like a notebook to import garbage.
-	if kind, _ := wrapper["kind"].(string); kind != notebooks.FileKind {
-		return nil, fmt.Errorf("not a Vibe notebook file (expected \"kind\": %q, got %q)", notebooks.FileKind, kind)
-	}
-	if nested, ok := wrapper["notebook"].(map[string]any); ok {
-		delete(nested, "id")
-		delete(nested, "updatedAt")
-	} else {
-		delete(wrapper, "id")
-		delete(wrapper, "updatedAt")
-	}
-
-	// The same checks a notebook in a bundle gets (bundle.CheckNotebook), then
-	// the store's own Save.
-	inner, err := json.Marshal(wrapper)
-	if err != nil {
-		return nil, fmt.Errorf("invalid notebook file: %w", err)
-	}
-	if _, _, err := bundle.CheckNotebook(inner); err != nil {
 		return nil, err
 	}
-	nb, warnings, err := a.ws.Notebooks().Save(a.ctxOrBackground(), wrapper)
+	nb, warnings, err := a.ws.Notebooks().Save(a.ctxOrBackground(), doc)
 	if err != nil {
 		return nil, err
 	}

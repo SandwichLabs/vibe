@@ -99,3 +99,16 @@ func TestCopyToSQL(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyFormat(t *testing.T) {
+	ext, opts, err := CopyFormat(" CSV ")
+	require.NoError(t, err)
+	assert.Equal(t, ".csv", ext)
+	assert.Contains(t, opts, "HEADER true")
+	ext, opts, err = CopyFormat("parquet")
+	require.NoError(t, err)
+	assert.Equal(t, ".parquet", ext)
+	assert.Equal(t, "FORMAT parquet", opts)
+	_, _, err = CopyFormat("xlsx")
+	assert.EqualError(t, err, `unsupported export format "xlsx" (want csv or parquet)`)
+}

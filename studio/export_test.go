@@ -1,5 +1,7 @@
 package main
 
+import "github.com/SandwichLabs/vibe/internal/workspace"
+
 // Test-only helpers: kept out of the production build.
 
 // has reports whether h still names a held bundle.
@@ -36,7 +38,7 @@ func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if err := a.saveLocalAgentLocked(cfg.Sandbox, cfg.AskBeforeWrites); err != nil {
+	if err := workspace.SetLocalAgent(a.ws, cfg.Sandbox, cfg.AskBeforeWrites); err != nil {
 		return err
 	}
 	policy := a.agentPolicy()

@@ -212,19 +212,7 @@ func (a *App) InsertRow(table string, values map[string]any) (*crud.WriteResult,
 		return nil, err
 	}
 
-	tx, err := ddb.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	res, err := crud.InsertRowTx(tx, colTypes, table, values)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit insert: %w", err)
-	}
-	return res, nil
+	return crud.InsertRow(ddb, colTypes, table, values)
 }
 
 // UpdateRow updates a row in a table by primary key, applying the same coercion
@@ -243,19 +231,7 @@ func (a *App) UpdateRow(table, pkCol string, pkVal any, values map[string]any) (
 		return nil, err
 	}
 
-	tx, err := ddb.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	res, err := crud.UpdateRowTx(tx, colTypes, table, pkCol, pkVal, values)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit update: %w", err)
-	}
-	return res, nil
+	return crud.UpdateRow(ddb, colTypes, table, pkCol, pkVal, values)
 }
 
 // prepareWrite validates the open container + table and loads the column types
@@ -301,19 +277,7 @@ func (a *App) DeleteRow(table, pkCol string, pkVal any) (*crud.WriteResult, erro
 		return nil, err
 	}
 
-	tx, err := ddb.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	res, err := crud.DeleteRowTx(tx, colTypes, table, pkCol, pkVal)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit delete: %w", err)
-	}
-	return res, nil
+	return crud.DeleteRow(ddb, colTypes, table, pkCol, pkVal)
 }
 
 // CreateTable creates a new table with the given columns. Integer primary-key

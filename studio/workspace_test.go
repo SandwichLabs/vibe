@@ -628,17 +628,6 @@ func TestListCatalogGroups_AndDashboardLocalTables(t *testing.T) {
 	assert.Equal(t, 0, len(data.Rows))
 }
 
-func TestGitBranch(t *testing.T) {
-	dir := t.TempDir()
-	_, isRepo := gitBranch(dir)
-	assert.False(t, isRepo)
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte("ref: refs/heads/feature/x\n"), 0o600))
-	br, isRepo := gitBranch(dir)
-	assert.True(t, isRepo)
-	assert.Equal(t, "feature/x", br)
-}
-
 func TestNoWorkspace_BindingsRefuse(t *testing.T) {
 	app := newBareApp(t)
 	_, err := app.ListNotebooks()

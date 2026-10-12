@@ -7,7 +7,7 @@ studio/build/bin/
 studio/build/appicon.png
 studio/build/darwin/Info.dev.plist
 studio/build/windows/
-studio/studio/
+/studio/studio
 *.exe
 
 .env

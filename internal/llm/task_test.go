@@ -261,3 +261,14 @@ func TestConnectionDefaulter_FillsTheEditedCellsConnection(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskConfigIsAlwaysReadOnly(t *testing.T) {
+	for _, tier := range []string{"", SandboxReadOnly, SandboxReadWrite, SandboxFull, "bogus"} {
+		got := TaskConfig(Config{Provider: "openai", Model: "m", APIKey: "k", Sandbox: tier, AskBeforeWrites: true})
+		assert.Equal(t, SandboxReadOnly, got.Sandbox, tier)
+		assert.False(t, got.AskBeforeWrites)
+		assert.Equal(t, "openai", got.Provider)
+		assert.Equal(t, "k", got.APIKey)
+	}
+	assert.Equal(t, agents.ModeReadOnly, agents.TaskSandbox)
+}

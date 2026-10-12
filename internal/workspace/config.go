@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/sandbox"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
@@ -194,8 +195,10 @@ func looksLikeEmbeddedSecret(v string) bool {
 
 // ValidateSandbox checks a sandbox tier string ("" is allowed: unset).
 func ValidateSandbox(s string) error {
-	switch s {
-	case "", SandboxReadOnly, SandboxReadWrite, SandboxFull:
+	if s == "" {
+		return nil
+	}
+	if _, err := sandbox.Parse(s); err == nil {
 		return nil
 	}
 	return fmt.Errorf("unknown sandbox %q (want %s, %s or %s)", s, SandboxReadOnly, SandboxReadWrite, SandboxFull)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -190,17 +191,10 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 			return nil, fmt.Errorf("unknown connection %q", connection)
 		}
 	}
-	a.mu.RLock()
-	if err := a.requireWorkspace(); err != nil {
-		a.mu.RUnlock()
+	handler, runSess, err := a.readOnlyRunner()
+	if err != nil {
 		return nil, err
 	}
-	// ceiling = ModeFull: RunReadOnlySQL (below) forces read-only regardless
-	// of the sandbox mode, via its own checkSQLClassReadOnly gate — see this
-	// function's doc comment — so no additional cap is needed here.
-	handler := a.newAgentToolHandler(agents.ModeFull)
-	runSess := a.sess
-	a.mu.RUnlock()
 
 	// Row cap enforced server side (review fix) and pushed down into the
 	// query itself via LIMIT (review fix, round 4) rather than fetched in
@@ -227,6 +221,26 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 		return nil, a.explainReadOnlyDenial(err)
 	}
 
+	return a2uiResult(rs, truncated)
+}
+
+// readOnlyRunner is the handler (and the session it runs on) behind a live
+// read-only binding.
+func (a *App) readOnlyRunner() (*agentToolHandler, session.Session, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return nil, nil, err
+	}
+	// ceiling = ModeFull: RunReadOnlySQL forces read-only regardless of the
+	// sandbox mode, via its own checkSQLClassReadOnly gate — see
+	// RunA2UIQuery's doc comment — so no additional cap is needed here.
+	return a.newAgentToolHandler(agents.ModeFull), a.sess, nil
+}
+
+// a2uiResult shapes a result set for the renderer, refusing one that does not
+// survive a JSON round trip.
+func a2uiResult(rs *engine.ResultSet, truncated bool) (*A2UIQueryResult, error) {
 	out := &A2UIQueryResult{Truncated: truncated}
 	out.Columns, out.Types = rs.NamesAndTypes()
 	out.Rows = rs.Rows

@@ -10,6 +10,7 @@ import {hub} from '../models';
 import {secrets} from '../models';
 import {prefs} from '../models';
 import {queries} from '../models';
+import {engine} from '../models';
 import {importer} from '../models';
 import {config} from '../models';
 
@@ -25,7 +26,7 @@ export function CancelQuit():Promise<void>;
 
 export function CheckGitAvailable():Promise<boolean>;
 
-export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<main.WorkspaceDirCheck>;
+export function CheckWorkspaceDir(arg1:string,arg2:string):Promise<workspace.DirCheck>;
 
 export function ChooseFolder(arg1:string):Promise<string>;
 
@@ -47,7 +48,7 @@ export function CreateNotebook(arg1:string):Promise<notebooks.Notebook>;
 
 export function CreateTable(arg1:string,arg2:Array<main.ColumnInfo>):Promise<void>;
 
-export function CreateWorkspace(arg1:main.CreateWorkspaceRequest):Promise<main.OpenWorkspaceResult>;
+export function CreateWorkspace(arg1:workspace.NewRequest):Promise<main.OpenWorkspaceResult>;
 
 export function DeleteConnection(arg1:main.ConnectionRef):Promise<void>;
 
@@ -77,7 +78,7 @@ export function ExportQueryResults(arg1:string,arg2:string,arg3:string):Promise<
 
 export function GetAgentConfig():Promise<main.AgentConfig>;
 
-export function GetBundleContent():Promise<main.BundleContent>;
+export function GetBundleContent():Promise<bundle.Contents>;
 
 export function GetClaudeConfig():Promise<hub.ClaudeConfig>;
 
@@ -107,7 +108,7 @@ export function GetQuery(arg1:string):Promise<queries.Query>;
 
 export function GetSessionID():Promise<string>;
 
-export function GetTableCapabilities(arg1:string):Promise<main.TableCapabilities>;
+export function GetTableCapabilities(arg1:string):Promise<engine.TableCapabilities>;
 
 export function GetTableData(arg1:string,arg2:number,arg3:number,arg4:string,arg5:string):Promise<main.TableData>;
 
@@ -117,7 +118,7 @@ export function GetWorkspaceInfo():Promise<main.WorkspaceInfo>;
 
 export function HoldQuit():Promise<void>;
 
-export function ImportBundleIntoNewWorkspace(arg1:string,arg2:main.CreateWorkspaceRequest,arg3:main.BundleDecisions):Promise<main.BundleImportOpened>;
+export function ImportBundleIntoNewWorkspace(arg1:string,arg2:workspace.NewRequest,arg3:main.BundleDecisions):Promise<main.BundleImportOpened>;
 
 export function ImportFile(arg1:importer.Options):Promise<importer.Summary>;
 
@@ -131,7 +132,7 @@ export function InstallExtension(arg1:main.InstallExtensionRequest):Promise<void
 
 export function IsWorkspaceOpen():Promise<boolean>;
 
-export function ListCatalog(arg1:main.CatalogRequest):Promise<main.CatalogListing>;
+export function ListCatalog(arg1:engine.CatalogRequest):Promise<engine.CatalogListing>;
 
 export function ListCatalogGroups():Promise<Array<main.CatalogGroup>>;
 
@@ -183,7 +184,7 @@ export function RemoveRecentWorkspace(arg1:string):Promise<main.RecentWorkspace>
 
 export function ResolveAgentApproval(arg1:string,arg2:boolean):Promise<void>;
 
-export function ResolveConflict(arg1:main.ConflictRequest):Promise<main.ConflictResult>;
+export function ResolveConflict(arg1:workspace.ConflictRequest):Promise<workspace.ConflictResult>;
 
 export function RestoreRecentWorkspace(arg1:main.RecentWorkspace):Promise<void>;
 
@@ -223,7 +224,7 @@ export function SetLLMSettings(arg1:config.LLMSettings):Promise<void>;
 
 export function SetPreferences(arg1:prefs.Preferences):Promise<void>;
 
-export function SetWorkspaceSettings(arg1:main.WorkspaceSettings):Promise<main.WorkspaceInfo>;
+export function SetWorkspaceSettings(arg1:workspace.Settings):Promise<main.WorkspaceInfo>;
 
 export function StartMCP():Promise<main.MCPStatus>;
 

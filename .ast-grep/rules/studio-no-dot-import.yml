@@ -1,0 +1,10 @@
+id: studio-no-dot-import
+language: go
+severity: error
+message: A dot import in studio/ hides which package a call comes from, so an I/O call (os.ReadFile as a bare ReadFile) slips past the thin-binding checks. Import the package by name.
+rule:
+  kind: import_spec
+  has:
+    kind: dot
+files: ["studio/*.go"]
+ignores: ["**/*_test.go"]
