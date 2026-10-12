@@ -152,18 +152,23 @@ func seedWorkspaceTemplate(ctx context.Context, ws workspace.Workspace, tmpl tem
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	hold, err := hub.AcquireHub(ws, "vibe workspace init")
+	// Open the workspace again through the one open path (the init handle only
+	// supplies the path and is closed by the caller). No .env question here:
+	// a brand-new workspace has no .env to ask about.
+	o, err := hub.Open(ctx, ws.Root(), hub.OpenOptions{
+		App: "vibe workspace init", Logger: logger, Resolver: cliResolver(), Redactor: cliRedactor,
+	})
 	if err != nil {
-		return heldMessage(ws.Root(), err, false)
-	}
-	defer hold.Release() //nolint:errcheck
-	sess, issues, err := workspace.OpenSession(ctx, ws, logger)
-	if err != nil {
+		var oe *hub.OpenError
+		if errors.As(err, &oe) && oe.Step == hub.StepHub {
+			return heldMessage(ws.Root(), oe.Err, false)
+		}
 		return err
 	}
-	defer sess.Close() //nolint:errcheck
+	defer o.Close()
+	sess, issues := o.Sess, o.Issues
 	for _, i := range issues {
-		if i.Connection == ws.DefaultConnection() {
+		if i.Connection == o.WS.DefaultConnection() {
 			return fmt.Errorf("the default connection is not available: %s", i.Message)
 		}
 	}
@@ -174,7 +179,7 @@ func seedWorkspaceTemplate(ctx context.Context, ws workspace.Workspace, tmpl tem
 	if err != nil {
 		return err
 	}
-	if _, _, err := ws.Notebooks().Insert(ctx, tmpl.Book); err != nil {
+	if _, _, err := o.WS.Notebooks().Insert(ctx, tmpl.Book); err != nil {
 		return fmt.Errorf("failed to write the starter notebook: %w", err)
 	}
 	return nil

@@ -58,33 +58,8 @@ func addWorkspaceFlag(c *cobra.Command) {
 
 // openedWorkspace is a workspace opened for one CLI command: its stores, its
 // DuckDB hub, and (unless read-only) the hub lock that makes this process the
-// only writer.
-type openedWorkspace struct {
-	WS       workspace.Workspace
-	Sess     session.Session
-	Eng      *engine.Manager
-	Issues   []workspace.SessionIssue
-	ReadOnly bool
-	hold     *hub.Hold
-}
-
-// Close closes the session first, then gives up the hub, then closes the
-// workspace: the next owner may open the DuckDB files the moment the lock is
-// free.
-func (o *openedWorkspace) Close() {
-	if o == nil {
-		return
-	}
-	if o.Sess != nil {
-		_ = o.Sess.Close()
-	}
-	if o.hold != nil {
-		_ = o.hold.Release()
-	}
-	if o.WS != nil {
-		_ = o.WS.Close()
-	}
-}
+// only writer. Close releases them in the reverse order they were taken.
+type openedWorkspace struct{ *hub.Opened }
 
 // hubHeldError is the friendly form of a hub.HeldError. It still satisfies
 // errors.Is(err, hub.ErrHubHeld), so a caller can offer --read-only.
@@ -132,10 +107,20 @@ func lockedMessage(root string) string {
 	return fmt.Sprintf("a local DuckDB file that %s has open for writing; DuckDB cannot read it while a writer holds it, so close that process first (--read-only only reaches other connections)", who)
 }
 
-// openWorkspaceRemoteOnly opens the workspace without the hub lock and without
-// attaching its local files, for `vibe conn connect` of a connection that
-// cannot be attached read-only (MotherDuck): nothing here writes a file.
-func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*openedWorkspace, error) {
+// cliBeforeSession is what the CLI shows between taking the hub and opening
+// the session: the workspace's warnings, then the .env question (its answer
+// decides which credentials the session can resolve).
+func cliBeforeSession(errW io.Writer) func(workspace.Workspace) {
+	return func(ws workspace.Workspace) {
+		for _, w := range ws.Warnings() {
+			fmt.Fprintln(errW, "warning:", w)
+		}
+		maybePromptDotEnv(ws, errW)
+	}
+}
+
+// cliOpen opens the workspace through hub.Open and words its errors for the CLI.
+func cliOpen(ctx context.Context, dir string, mode hub.Mode, advise bool, app string, errW io.Writer) (*openedWorkspace, error) {
 	if isVibeFile(dir) {
 		return nil, errLegacyFileArg
 	}
@@ -143,24 +128,31 @@ func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*
 	if err != nil {
 		return nil, err
 	}
-	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver()))
+	o, err := hub.Open(ctx, root, hub.OpenOptions{
+		App: app, Mode: mode, Logger: logger, Resolver: cliResolver(), Redactor: cliRedactor,
+		BeforeSession: cliBeforeSession(errW),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open the workspace: %w", err)
-	}
-	for _, w := range ws.Warnings() {
-		fmt.Fprintln(errW, "warning:", w)
-	}
-	maybePromptDotEnv(ws, errW)
-	o := &openedWorkspace{WS: ws}
-	sess, issues, err := workspace.OpenSession(ctx, ws, logger, workspace.WithSkipLocalFiles(),
-		workspace.WithSessionOptions(session.WithRedactor(cliRedactor)))
-	if err != nil {
-		o.Close()
+		var oe *hub.OpenError
+		if errors.As(err, &oe) {
+			switch oe.Step {
+			case hub.StepOpen:
+				return nil, fmt.Errorf("failed to open the workspace: %w", oe.Err)
+			case hub.StepHub:
+				return nil, heldMessage(root, oe.Err, advise)
+			}
+			return nil, oe.Err
+		}
 		return nil, err
 	}
-	o.Sess, o.Issues = sess, issues
-	o.Eng = engine.NewManager(sess, engine.WithLogger(logger))
-	return o, nil
+	return &openedWorkspace{o}, nil
+}
+
+// openWorkspaceRemoteOnly opens the workspace without the hub lock and without
+// attaching its local files, for `vibe conn connect` of a connection that
+// cannot be attached read-only (MotherDuck): nothing here writes a file.
+func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*openedWorkspace, error) {
+	return cliOpen(ctx, dir, hub.ModeRemoteOnly, false, "", errW)
 }
 
 // openWorkspace finds the workspace (dir, or the nearest one above the working
@@ -169,42 +161,11 @@ func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*
 // the lock and attaches every connection read-only. advise says whether the
 // command has a --read-only flag its "held" error may suggest.
 func openWorkspace(ctx context.Context, dir string, readOnly, advise bool, app string, errW io.Writer) (*openedWorkspace, error) {
-	if isVibeFile(dir) {
-		return nil, errLegacyFileArg
-	}
-	root, err := hub.ResolveRoot(dir, "")
-	if err != nil {
-		return nil, err
-	}
-	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to open the workspace: %w", err)
-	}
-	o := &openedWorkspace{WS: ws, ReadOnly: readOnly}
-	if !readOnly {
-		hold, err := hub.AcquireHub(ws, app)
-		if err != nil {
-			_ = ws.Close()
-			return nil, heldMessage(root, err, advise)
-		}
-		o.hold = hold
-	}
-	for _, w := range ws.Warnings() {
-		fmt.Fprintln(errW, "warning:", w)
-	}
-	maybePromptDotEnv(ws, errW)
-	sopts := []workspace.SessionOption{workspace.WithSessionOptions(session.WithRedactor(cliRedactor))}
+	mode := hub.ModeReadWrite
 	if readOnly {
-		sopts = append(sopts, workspace.WithForceReadOnly())
+		mode = hub.ModeReadOnly
 	}
-	sess, issues, err := workspace.OpenSession(ctx, ws, logger, sopts...)
-	if err != nil {
-		o.Close()
-		return nil, err
-	}
-	o.Sess, o.Issues = sess, issues
-	o.Eng = engine.NewManager(sess, engine.WithLogger(logger))
-	return o, nil
+	return cliOpen(ctx, dir, mode, advise, app, errW)
 }
 
 // hasIssue reports whether a connection failed to come up.

@@ -245,6 +245,36 @@ func TestServeProxiesToStudioWhenStudioOwnsTheHub(t *testing.T) {
 	}
 }
 
+func TestServeProxiesEvenWhenTheWorkspaceFileIsBroken(t *testing.T) {
+	ws := newWorkspace(t)
+	seedLocalDB(t, ws.Root())
+	hold, err := AcquireHub(ws, AppStudio)
+	require.NoError(t, err)
+	defer hold.Release() //nolint:errcheck
+	sess, _, err := workspace.OpenSession(t.Context(), ws, quietLogger())
+	require.NoError(t, err)
+	defer sess.Close() //nolint:errcheck
+	studio, err := StartWorkspaceMCP(ws, sess, hold, WithMCPLogger(quietLogger()))
+	require.NoError(t, err)
+	defer studio.Stop() //nolint:errcheck
+
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), workspace.ConfigFile), []byte("version: 1\nbogus: [\n"), 0o600))
+
+	run := startServe(t, ServeOptions{Workspace: ws.Root()})
+	run.handshake()
+	text, isErr := run.tool("run_query", map[string]any{"sql": "SELECT count(*) FROM orders"})
+	require.False(t, isErr, text)
+	assert.Contains(t, text, "3")
+	assert.Contains(t, run.stderr.String(), "passing MCP through")
+}
+
+func TestServeBrokenWorkspaceFileWithNoHolderIsAnError(t *testing.T) {
+	ws := newWorkspace(t)
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), workspace.ConfigFile), []byte("version: 1\nbogus: [\n"), 0o600))
+	err := Serve(t.Context(), ServeOptions{Workspace: ws.Root(), In: strings.NewReader(""), Out: io.Discard, Err: io.Discard, Logger: quietLogger()})
+	require.ErrorContains(t, err, "failed to open the workspace")
+}
+
 func TestServeNamesAHolderThatIsNotServingMCP(t *testing.T) {
 	ws := newWorkspace(t)
 	hold, err := AcquireHub(ws, AppStudio) // Studio with MCP off

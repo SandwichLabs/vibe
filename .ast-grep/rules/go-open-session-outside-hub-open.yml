@@ -1,0 +1,15 @@
+id: go-open-session-outside-hub-open
+language: go
+severity: error
+message: workspace.OpenSession is called only by the one open path, hub.Open (internal/hub/open.go). Open a workspace with hub.Open, so the lock, the session and the close-on-error order stay in one place.
+note: Exempt by function name (defaultSteps wires the real step); the sibling rule go-open-session-in-defaultsteps-elsewhere confines that name to internal/hub/open.go. Tests are not scanned.
+rule:
+  kind: selector_expression
+  regex: '^workspace\.OpenSession$'
+  not:
+    inside:
+      stopBy: end
+      kind: function_declaration
+      has: {field: name, regex: '^defaultSteps$'}
+ignores:
+  - "**/*_test.go"

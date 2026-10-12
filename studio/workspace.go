@@ -6,7 +6,7 @@ package main
 //
 // Everything here follows the order the hub requires:
 //
-//	open:  workspace.Open -> hub.AcquireHub -> workspace.OpenSession
+//	open:  hub.Open (workspace.Open -> hub lock -> DuckDB session -> engine)
 //	close: MCP stop -> watcher stop -> session close -> hub release -> workspace close
 //
 // The caller of every *Locked function holds a.mu for writing.
@@ -27,7 +27,6 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/llm/skills"
@@ -719,67 +718,34 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 		return nil, fmt.Errorf("failed to look for a workspace in %s: %w", path, err)
 	}
 
-	// Parse and validate the new workspace BEFORE letting go of the current one,
-	// so a broken folder never drops what is open. (workspace.Open takes no hub
-	// lock; the one-releasable-hold rule only bites at AcquireHub below.)
-	ws, err := workspace.Open(root, workspace.WithLogger(a.logger), workspace.WithResolver(a.secrets))
-	if errors.Is(err, workspace.ErrMissingID) {
-		// A hand-written vibe.yaml, or a template copied without an id.
-		if _, ierr := workspace.EnsureID(root); ierr != nil {
-			return nil, fmt.Errorf("failed to give this workspace an id: %w", ierr)
-		}
-		ws, err = workspace.Open(root, workspace.WithLogger(a.logger), workspace.WithResolver(a.secrets))
-	}
-	if err != nil {
-		return nil, fmt.Errorf("Couldn't open this workspace: %w", err)
-	}
-	a.closeWorkspaceLocked("switch")
-
-	var (
-		hold     *hub.Hold
-		holder   *hub.Holder
-		readOnly bool
-	)
+	// hub.Open parses the new workspace BEFORE the current one is let go
+	// (OnWorkspaceOpened), so a folder that does not parse never drops what is
+	// open. Once it has parsed, the current workspace is closed: a failure at
+	// the hub or the session leaves nothing open.
+	hmode := hub.ModeReadWrite
 	switch mode {
 	case openReadOnly:
-		readOnly = true
-		holder, _ = hub.ReadHolder(root)
+		hmode = hub.ModeReadOnly
 	case openTakeOver:
-		hold, err = hub.TakeOver(a.ctxOrBackground(), ws, hub.AppStudio, 10*time.Second, hub.WithReleaseHandler(a.onReleaseRequested))
-		if err != nil {
-			_ = ws.Close()
-			return nil, takeOverError(err)
-		}
-	default:
-		hold, err = hub.AcquireHub(ws, hub.AppStudio, hub.WithReleaseHandler(a.onReleaseRequested))
-		var held *hub.HeldError
-		switch {
-		case err == nil:
-		case errors.As(err, &held):
-			readOnly, holder, hold = true, held.Holder, nil
-		default:
-			_ = ws.Close()
-			return nil, fmt.Errorf("failed to take the workspace's database: %w", err)
-		}
+		hmode = hub.ModeTakeOver
 	}
-
 	// The session shares the app's redactor, so a credential resolved for a
 	// connection is scrubbed from its connect and query errors (#114).
-	sopts := []workspace.SessionOption{workspace.WithSessionOptions(session.WithRedactor(a.secrets.Redactor()))}
-	if readOnly {
-		sopts = append(sopts, workspace.WithForceReadOnly())
-	}
-	sess, issues, err := workspace.OpenSession(a.ctxOrBackground(), ws, a.logger, sopts...)
+	opened, err := hub.Open(a.ctxOrBackground(), root, hub.OpenOptions{
+		App: hub.AppStudio, Mode: hmode, FallbackReadOnly: true, RepairMissingID: true,
+		TakeOverTimeout: 10 * time.Second,
+		HubOptions:      []hub.Option{hub.WithReleaseHandler(a.onReleaseRequested)},
+		Logger:          a.logger, Resolver: a.secrets, Redactor: a.secrets.Redactor(),
+		OnWorkspaceOpened: func(workspace.Workspace) { a.closeWorkspaceLocked("switch") },
+	})
 	if err != nil {
-		if hold != nil {
-			_ = hold.Release()
-		}
-		_ = ws.Close()
-		return nil, err
+		return nil, openError(err, mode)
 	}
+	ws, sess, hold, issues := opened.WS, opened.Sess, opened.Hold, opened.Issues
+	readOnly, holder := opened.ReadOnly, opened.Holder
 
 	a.ws, a.sess, a.hold = ws, sess, hold
-	a.engine = engine.NewManager(sess, engine.WithLogger(a.logger))
+	a.engine = opened.Eng
 	a.issues = issues
 	a.recordConnSigs(ws)
 	a.readOnly, a.holder = readOnly, holder
@@ -794,6 +760,26 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 		a.emitEvent("workspace:locked", holderInfo(holder))
 	}
 	return &OpenWorkspaceResult{Status: "opened", Path: ws.Root(), Info: info}, nil
+}
+
+// openError words a hub.Open failure for the person at the window.
+func openError(err error, mode openMode) error {
+	var oe *hub.OpenError
+	if !errors.As(err, &oe) {
+		return err
+	}
+	switch oe.Step {
+	case hub.StepRepair:
+		return oe.Err
+	case hub.StepOpen:
+		return fmt.Errorf("Couldn't open this workspace: %w", oe.Err)
+	case hub.StepHub:
+		if mode == openTakeOver {
+			return takeOverError(oe.Err)
+		}
+		return fmt.Errorf("failed to take the workspace's database: %w", oe.Err)
+	}
+	return oe.Err
 }
 
 func takeOverError(err error) error {

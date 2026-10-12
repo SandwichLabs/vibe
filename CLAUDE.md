@@ -60,7 +60,7 @@ internal/
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler
   llm/               in-app agent runner (fantasy), task mode, grounding; llm/skills = SKILL.md loading
-  mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`)
+  mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   a2ui/              component schema + validator (Go validates, Vue renders)
   bundle/            .vibe bundle v2 export/import, optional age encryption
