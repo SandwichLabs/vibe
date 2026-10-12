@@ -8,6 +8,7 @@
 package dotenv
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -54,7 +55,7 @@ func Parse(data []byte) Parsed {
 			continue
 		}
 		val, err := parseValue(strings.TrimLeft(rawVal, " \t"))
-		if err != nil && strings.Contains(err.Error(), "unterminated") {
+		if errors.Is(err, errUnterminated) {
 			// A multi-line quoted value (a PEM block): skip to the line that
 			// closes it, so continuation lines never read as variables.
 			q := strings.TrimLeft(rawVal, " \t")[:1]
@@ -99,6 +100,9 @@ func validName(k string) bool {
 	return true
 }
 
+// errUnterminated marks a quoted value that does not close on its line.
+var errUnterminated = errors.New("unterminated quote")
+
 func parseValue(s string) (string, error) {
 	if s == "" {
 		return "", nil
@@ -107,7 +111,7 @@ func parseValue(s string) (string, error) {
 	case '\'':
 		end := strings.IndexByte(s[1:], '\'')
 		if end < 0 {
-			return "", fmt.Errorf("unterminated quote")
+			return "", errUnterminated
 		}
 		if err := onlyComment(s[end+2:]); err != nil {
 			return "", err
@@ -119,7 +123,7 @@ func parseValue(s string) (string, error) {
 			switch c := s[i]; c {
 			case '\\':
 				if i+1 >= len(s) {
-					return "", fmt.Errorf("unterminated quote")
+					return "", errUnterminated
 				}
 				i++
 				switch s[i] {
@@ -144,7 +148,7 @@ func parseValue(s string) (string, error) {
 				b.WriteByte(c)
 			}
 		}
-		return "", fmt.Errorf("unterminated quote")
+		return "", errUnterminated
 	}
 	// Unquoted: an inline comment starts at whitespace followed by '#'.
 	for i := 0; i < len(s); i++ {

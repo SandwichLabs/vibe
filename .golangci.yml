@@ -11,7 +11,13 @@ version: "2"
 linters:
   enable:
     - misspell
+    - gocognit
   settings:
+    # Cognitive complexity over 30 fails the build (#54 slice 10). The only
+    # exceptions are the named waivers under exclusions.rules below; do not add
+    # one without a one-line reason there.
+    gocognit:
+      min-complexity: 30
     errcheck:
       check-type-assertions: true
     govet:
@@ -35,6 +41,39 @@ linters:
       - third_party$
       - builtin$
       - examples$
+    rules:
+      # Waived by the architecture judge (#54 §3): a tokenizer, a decoder or
+      # validator of one wire format, or a single type-mapping switch, each with
+      # a table-driven test of its own. Splitting them hides the state machine.
+      - linters: [gocognit]
+        path: internal/agents/sql_lex\.go
+        text: "`lexStatements`"
+      - linters: [gocognit]
+        path: internal/agents/sql_classify\.go
+        text: "`tokensTouchSecrets`"
+      - linters: [gocognit]
+        path: internal/agents/sql_policy_(stmt|select)\.go
+        text: "`\\(\\*analyzer\\)\\.(screenTokens|walk|ddl|dml|tableFunc)`"
+      - linters: [gocognit]
+        path: internal/usersql/(tokens|usersql)\.go
+        text: "`(Tokens|statements)`"
+      - linters: [gocognit]
+        path: internal/session/session\.go
+        text: "`qualifiers`"
+      - linters: [gocognit]
+        path: internal/notebooks/model\.go
+        text: "`Coerce`"
+      - linters: [gocognit]
+        path: internal/bundle/read\.go
+        text: "`unpack`"
+      - linters: [gocognit]
+        path: internal/a2ui/schema\.go
+        text: "`(checkValue|validateDecoded)`"
+      # Test functions (not helpers in a _test.go file) are linear scripts: a
+      # long table of cases, a property loop, an integration walk-through.
+      - linters: [gocognit]
+        path: _test\.go
+        text: "of func `(Test|Benchmark|Fuzz)"
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

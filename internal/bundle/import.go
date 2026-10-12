@@ -258,12 +258,35 @@ func (p *Package) Preview(ctx context.Context, t Target) Preview {
 // is recorded on that item and the rest carry on; the error return is only for
 // bad options.
 func (p *Package) Import(ctx context.Context, t Target, opts ImportOptions) (Result, error) {
+	onConflict, connNames, err := p.checkImportOptions(opts)
+	if err != nil {
+		return Result{}, err
+	}
+	res := Result{DryRun: opts.DryRun, Warnings: append([]string{}, p.Warnings...), Outcomes: []Outcome{}}
+	run := itemImporter{p: p, t: t, opts: opts, onConflict: onConflict, taken: map[string]map[string]bool{}}
+	for _, it := range p.items {
+		res.Outcomes = append(res.Outcomes, run.importItem(ctx, it))
+	}
+
+	defs := map[string]workspace.ConnectionDef{}
+	for _, d := range p.conns {
+		defs[d.Name] = d
+	}
+	for _, n := range connNames {
+		res.Outcomes = append(res.Outcomes, p.importConnection(ctx, t, defs[n], opts, onConflict))
+	}
+	return res, nil
+}
+
+// checkImportOptions validates opts against the package and returns the
+// default conflict action and the sorted names of the connections to import.
+func (p *Package) checkImportOptions(opts ImportOptions) (Action, []string, error) {
 	onConflict := opts.OnConflict
 	if onConflict == "" {
 		onConflict = ActionRename
 	}
 	if onConflict == ActionImport || !onConflict.valid() {
-		return Result{}, fmt.Errorf("invalid conflict action %q (want rename, overwrite or skip)", opts.OnConflict)
+		return "", nil, fmt.Errorf("invalid conflict action %q (want rename, overwrite or skip)", opts.OnConflict)
 	}
 	known := map[string]bool{}
 	for _, it := range p.items {
@@ -274,80 +297,89 @@ func (p *Package) Import(ctx context.Context, t Target, opts ImportOptions) (Res
 	}
 	for k, a := range opts.Decisions {
 		if !a.valid() {
-			return Result{}, fmt.Errorf("invalid action %q for %s (want rename, overwrite or skip)", a, k)
+			return "", nil, fmt.Errorf("invalid action %q for %s (want rename, overwrite or skip)", a, k)
 		}
 		if !known[k] {
-			return Result{}, fmt.Errorf("%s is not in this bundle", k)
+			return "", nil, fmt.Errorf("%s is not in this bundle", k)
 		}
 	}
-	include := map[string]bool{}
+	names := make([]string, 0, len(opts.IncludeConnections))
+	seen := map[string]bool{}
 	for _, n := range opts.IncludeConnections {
 		if !known[Key(KindConnection, n)] {
-			return Result{}, fmt.Errorf("this bundle has no connection named %q", n)
+			return "", nil, fmt.Errorf("this bundle has no connection named %q", n)
 		}
-		include[n] = true
-	}
-
-	res := Result{DryRun: opts.DryRun, Warnings: append([]string{}, p.Warnings...), Outcomes: []Outcome{}}
-	taken := map[string]map[string]bool{} // final ids this run uses, per kind (dry run or not)
-	isTaken := func(kind ItemKind, id string) bool { return taken[string(kind)][id] }
-	take := func(kind ItemKind, id string) {
-		if taken[string(kind)] == nil {
-			taken[string(kind)] = map[string]bool{}
+		if !seen[n] {
+			seen[n] = true
+			names = append(names, n)
 		}
-		taken[string(kind)][id] = true
-	}
-	for _, it := range p.items {
-		key := Key(it.Kind, it.ID)
-		o := Outcome{Key: key, Kind: it.Kind, ID: it.ID}
-		inStore := storeHas(t, it.Kind, it.ID)
-		clash := inStore || isTaken(it.Kind, it.ID)
-		action := ActionImport
-		if clash {
-			action = onConflict
-		}
-		if d, ok := opts.Decisions[key]; ok && (clash || d == ActionSkip) {
-			action = d
-		}
-		if action == ActionImport && clash {
-			action = onConflict
-		}
-		// Only an item that is in the workspace can be replaced; one that
-		// merely clashes with another item of this run is kept beside it.
-		if action == ActionOverwrite && !inStore {
-			action = ActionRename
-		}
-		switch {
-		case action == ActionSkip:
-			o.Result = "skipped"
-		case action == ActionRename && clash:
-			final := filestore.UniqueSlug(it.ID, func(c string) bool { return isTaken(it.Kind, c) || storeHas(t, it.Kind, c) })
-			take(it.Kind, final)
-			o.Result, o.FinalID = p.write(ctx, t, it, final, false, opts.DryRun, &o)
-			if o.Error == "" {
-				o.Result = "renamed"
-			}
-		default:
-			take(it.Kind, it.ID)
-			// A new item, or an overwrite of the one that is there.
-			o.Result, o.FinalID = p.write(ctx, t, it, it.ID, action == ActionOverwrite && inStore, opts.DryRun, &o)
-		}
-		res.Outcomes = append(res.Outcomes, o)
-	}
-
-	names := make([]string, 0, len(include))
-	for n := range include {
-		names = append(names, n)
 	}
 	sort.Strings(names)
-	defs := map[string]workspace.ConnectionDef{}
-	for _, d := range p.conns {
-		defs[d.Name] = d
+	return onConflict, names, nil
+}
+
+// itemImporter writes the notebooks, queries and skills of one Import,
+// remembering the final ids the run has used so two items never land on one.
+type itemImporter struct {
+	p          *Package
+	t          Target
+	opts       ImportOptions
+	onConflict Action
+	taken      map[string]map[string]bool // final ids this run uses, per kind (dry run or not)
+}
+
+func (r *itemImporter) isTaken(kind ItemKind, id string) bool { return r.taken[string(kind)][id] }
+
+func (r *itemImporter) take(kind ItemKind, id string) {
+	if r.taken[string(kind)] == nil {
+		r.taken[string(kind)] = map[string]bool{}
 	}
-	for _, n := range names {
-		res.Outcomes = append(res.Outcomes, p.importConnection(ctx, t, defs[n], opts, onConflict))
+	r.taken[string(kind)][id] = true
+}
+
+// action decides what to do with it: the person's decision for the item, else
+// the default for a clash, else a plain import.
+func (r *itemImporter) action(it item, clash, inStore bool) Action {
+	key := Key(it.Kind, it.ID)
+	action := ActionImport
+	if clash {
+		action = r.onConflict
 	}
-	return res, nil
+	if d, ok := r.opts.Decisions[key]; ok && (clash || d == ActionSkip) {
+		action = d
+	}
+	if action == ActionImport && clash {
+		action = r.onConflict
+	}
+	// Only an item that is in the workspace can be replaced; one that
+	// merely clashes with another item of this run is kept beside it.
+	if action == ActionOverwrite && !inStore {
+		action = ActionRename
+	}
+	return action
+}
+
+func (r *itemImporter) importItem(ctx context.Context, it item) Outcome {
+	o := Outcome{Key: Key(it.Kind, it.ID), Kind: it.Kind, ID: it.ID}
+	inStore := storeHas(r.t, it.Kind, it.ID)
+	clash := inStore || r.isTaken(it.Kind, it.ID)
+	action := r.action(it, clash, inStore)
+	switch {
+	case action == ActionSkip:
+		o.Result = "skipped"
+	case action == ActionRename && clash:
+		final := filestore.UniqueSlug(it.ID, func(c string) bool { return r.isTaken(it.Kind, c) || storeHas(r.t, it.Kind, c) })
+		r.take(it.Kind, final)
+		o.Result, o.FinalID = r.p.write(ctx, r.t, it, final, false, r.opts.DryRun, &o)
+		if o.Error == "" {
+			o.Result = "renamed"
+		}
+	default:
+		r.take(it.Kind, it.ID)
+		// A new item, or an overwrite of the one that is there.
+		o.Result, o.FinalID = r.p.write(ctx, r.t, it, it.ID, action == ActionOverwrite && inStore, r.opts.DryRun, &o)
+	}
+	return o
 }
 
 // write stores one item under finalID. overwrite is a compare-and-write

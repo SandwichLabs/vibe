@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,92 +52,52 @@ var exportFormats = map[string]string{
 	".xlsx":    "FORMAT xlsx, HEADER true",
 }
 
+// exportOpts are runExport's flags.
+type exportOpts struct {
+	dir, sql, outFile, conn, format string
+	force, readOnly                 bool
+}
+
+func exportFlags(cmd *cobra.Command) exportOpts {
+	var e exportOpts
+	e.dir, _ = cmd.Flags().GetString("workspace")
+	e.sql, _ = cmd.Flags().GetString("sql")
+	e.outFile, _ = cmd.Flags().GetString("output")
+	e.conn, _ = cmd.Flags().GetString("connection")
+	e.format, _ = cmd.Flags().GetString("format")
+	e.force, _ = cmd.Flags().GetBool("force")
+	e.readOnly, _ = cmd.Flags().GetBool("read-only")
+	return e
+}
+
 func runExport(cmd *cobra.Command, args []string) error {
-	dir, _ := cmd.Flags().GetString("workspace")
-	sqlFlag, _ := cmd.Flags().GetString("sql")
-	outFile, _ := cmd.Flags().GetString("output")
-	conn, _ := cmd.Flags().GetString("connection")
-	format, _ := cmd.Flags().GetString("format")
-	force, _ := cmd.Flags().GetBool("force")
-	readOnly, _ := cmd.Flags().GetBool("read-only")
+	e := exportFlags(cmd)
 	errW := cmd.ErrOrStderr()
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	if len(args) == 1 && isVibeTableArg(args[0]) {
-		return errLegacyFileArg
+	copyOpts, ext, err := e.validate(args)
+	if err != nil {
+		return err
 	}
-	switch {
-	case sqlFlag != "" && len(args) == 1:
-		return fmt.Errorf("give a table or --sql, not both")
-	case sqlFlag == "" && len(args) == 0:
-		return fmt.Errorf("give a table to export (conn.table) or --sql \"<query>\"")
-	}
-	if sqlFlag == "" && conn != "" {
-		return fmt.Errorf("-c only applies with --sql; name the connection in the table (conn.table)")
-	}
-	if sqlFlag != "" {
-		if err := usersql.Check(sqlFlag, readOnly); err != nil {
-			return err
-		}
-	}
-	var copyOpts, ext string
-	if outFile != "" {
-		ext = strings.ToLower(filepath.Ext(outFile))
-		var ok bool
-		if copyOpts, ok = exportFormats[ext]; !ok {
-			return fmt.Errorf("unsupported file type %q: use .csv, .parquet, .json or .xlsx", filepath.Ext(outFile))
-		}
-		// Lstat, so a dangling symlink counts as existing: writing would follow
-		// it to somewhere else. There is a small window between this check and
-		// DuckDB opening the file; the destination is chosen by the person at
-		// the keyboard, so this guards against mistakes, not an attacker.
-		if _, err := os.Lstat(outFile); err == nil && !force {
-			return fmt.Errorf("%s already exists (or is a symbolic link); use --force to replace it", outFile)
-		}
-	} else if err := validateFormat(format); err != nil || format == "table" {
-		return fmt.Errorf("unsupported --format %q for export: use csv or json", format)
-	}
-
-	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe export", errW)
+	o, err := openWorkspace(ctx, e.dir, e.readOnly, true, "vibe export", errW)
 	if err != nil {
 		return err
 	}
 	defer o.Close()
 
-	source := sqlFlag
-	if sqlFlag == "" {
-		ref, err := o.resolveTarget(ctx, args[0], errW)
-		if err != nil {
-			return err
-		}
-		source = ref.SelectAllSQL()
-		conn = ""
-	} else {
-		catalog := conn
-		if catalog == "" {
-			catalog = o.WS.DefaultConnection()
-		} else if _, ok := o.knownConnection(catalog); !ok {
-			return fmt.Errorf("unknown connection %q; this workspace has: %s", catalog, connectionNames(o))
-		}
-		if err := o.requireConnection(catalog, errW); err != nil {
-			return err
-		}
-		// The text goes inside COPY (...), so it must be exactly one SELECT:
-		// nothing else can be smuggled in after a closing parenthesis.
-		if err := usersql.RequireSelect(ctx, o.Sess.DB(), sqlFlag); err != nil {
-			return err
-		}
+	source, conn, err := e.source(ctx, o, args, errW)
+	if err != nil {
+		return err
 	}
-
-	if outFile == "" {
+	if e.outFile == "" {
 		rs, _, err := o.Eng.ExecuteCappedIn(ctx, conn, source, nil, 0)
 		if err != nil {
 			return err
 		}
-		return writeResult(cmd.OutOrStdout(), rs, format)
+		return writeResult(cmd.OutOrStdout(), rs, e.format)
 	}
 
 	if ext == ".xlsx" {
@@ -148,10 +109,78 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if conn != "" {
 		qopts = append(qopts, session.WithCatalog(conn))
 	}
-	copySQL := session.CopyToSQL(source, outFile, copyOpts)
+	copySQL := session.CopyToSQL(source, e.outFile, copyOpts)
 	if _, err := o.Sess.ExecWith(ctx, copySQL, nil, qopts...); err != nil {
 		return fmt.Errorf("failed to export: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Exported to %s\n", outFile)
+	fmt.Fprintf(cmd.OutOrStdout(), "Exported to %s\n", e.outFile)
 	return nil
+}
+
+// validate checks the arguments and flags before the workspace is opened, and
+// returns the COPY options and the lower-cased extension of the destination.
+func (e exportOpts) validate(args []string) (copyOpts, ext string, err error) {
+	if len(args) == 1 && isVibeTableArg(args[0]) {
+		return "", "", errLegacyFileArg
+	}
+	switch {
+	case e.sql != "" && len(args) == 1:
+		return "", "", fmt.Errorf("give a table or --sql, not both")
+	case e.sql == "" && len(args) == 0:
+		return "", "", fmt.Errorf("give a table to export (conn.table) or --sql \"<query>\"")
+	}
+	if e.sql == "" && e.conn != "" {
+		return "", "", fmt.Errorf("-c only applies with --sql; name the connection in the table (conn.table)")
+	}
+	if e.sql != "" {
+		if err := usersql.Check(e.sql, e.readOnly); err != nil {
+			return "", "", err
+		}
+	}
+	if e.outFile == "" {
+		if err := validateFormat(e.format); err != nil || e.format == "table" {
+			return "", "", fmt.Errorf("unsupported --format %q for export: use csv or json", e.format)
+		}
+		return "", "", nil
+	}
+	ext = strings.ToLower(filepath.Ext(e.outFile))
+	copyOpts, ok := exportFormats[ext]
+	if !ok {
+		return "", "", fmt.Errorf("unsupported file type %q: use .csv, .parquet, .json or .xlsx", filepath.Ext(e.outFile))
+	}
+	// Lstat, so a dangling symlink counts as existing: writing would follow
+	// it to somewhere else. There is a small window between this check and
+	// DuckDB opening the file; the destination is chosen by the person at
+	// the keyboard, so this guards against mistakes, not an attacker.
+	if _, err := os.Lstat(e.outFile); err == nil && !e.force {
+		return "", "", fmt.Errorf("%s already exists (or is a symbolic link); use --force to replace it", e.outFile)
+	}
+	return copyOpts, ext, nil
+}
+
+// source returns the SELECT to export and the connection whose catalog its
+// unqualified names use ("" for a table, which is named in full).
+func (e exportOpts) source(ctx context.Context, o *openedWorkspace, args []string, errW io.Writer) (source, conn string, err error) {
+	if e.sql == "" {
+		ref, err := o.resolveTarget(ctx, args[0], errW)
+		if err != nil {
+			return "", "", err
+		}
+		return ref.SelectAllSQL(), "", nil
+	}
+	catalog := e.conn
+	if catalog == "" {
+		catalog = o.WS.DefaultConnection()
+	} else if _, ok := o.knownConnection(catalog); !ok {
+		return "", "", fmt.Errorf("unknown connection %q; this workspace has: %s", catalog, connectionNames(o))
+	}
+	if err := o.requireConnection(catalog, errW); err != nil {
+		return "", "", err
+	}
+	// The text goes inside COPY (...), so it must be exactly one SELECT:
+	// nothing else can be smuggled in after a closing parenthesis.
+	if err := usersql.RequireSelect(ctx, o.Sess.DB(), e.sql); err != nil {
+		return "", "", err
+	}
+	return e.sql, e.conn, nil
 }

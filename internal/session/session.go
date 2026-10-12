@@ -502,7 +502,7 @@ func (c *Conn) Close() error {
 	// Roll it back; "no transaction is active" is the normal case. A run is at
 	// most one transaction, and Rows.Close releases the conn only after the
 	// result is fully consumed and closed, so this never cuts a read short.
-	if _, err := c.c.ExecContext(ctx, "ROLLBACK"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "no transaction is active") {
+	if _, err := c.c.ExecContext(ctx, "ROLLBACK"); err != nil && !isNoTransaction(err) {
 		_ = c.c.Raw(func(any) error { return driver.ErrBadConn })
 		return c.c.Close()
 	}

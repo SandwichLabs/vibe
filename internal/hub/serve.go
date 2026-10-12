@@ -91,20 +91,8 @@ func ResolveRoot(dir, cwd string) (string, error) {
 //   - Proxy mode: a live holder (Studio, or another owner) advertises MCP, so
 //     stdio is bridged to it.
 func Serve(ctx context.Context, opts ServeOptions) error {
-	if opts.Transport == "" {
-		opts.Transport = "stdio"
-	}
-	if opts.Transport != "stdio" && opts.Transport != "sse" {
-		return fmt.Errorf("invalid --transport %q: want stdio or sse", opts.Transport)
-	}
-	if opts.Err == nil {
-		opts.Err = io.Discard
-	}
-	if opts.Logger == nil {
-		opts.Logger = slog.New(slog.NewTextHandler(opts.Err, nil))
-	}
-	if opts.App == "" {
-		opts.App = AppServe
+	if err := opts.applyDefaults(); err != nil {
+		return err
 	}
 	// Validate before touching anything so a bad flag never takes the lock.
 	if _, err := ResolveSandbox(agents.ModeFull, opts.Sandbox); err != nil {
@@ -141,39 +129,21 @@ func Serve(ctx context.Context, opts ServeOptions) error {
 		if err == nil {
 			return serveOwner(ctx, opened, opts, releasing)
 		}
-		var held *HeldError
-		if !errors.As(err, &held) {
-			var oe *OpenError
-			if !errors.As(err, &oe) || oe.Step != StepOpen {
-				return err
-			}
-			// A workspace that does not parse can still be proxied to: the
-			// holder has it open, and passing MCP through never reads the yaml.
-			if _, rerr := ReadHolder(root); rerr != nil {
-				return fmt.Errorf("failed to open the workspace: %w", oe.Err)
-			}
-			err = fmt.Errorf("failed to open the workspace: %w", oe.Err)
+		held, fatal := heldError(root, err)
+		if fatal != nil {
+			return fatal
 		}
-		lastErr = err
+		lastErr = held
 		holder, rerr := ReadHolder(root)
-		switch {
-		case errors.Is(rerr, ErrNotHeld):
-		case rerr != nil:
-			return fmt.Errorf("%w: another process has workspace %s open but its hub lock cannot be read safely (%v); close it, or remove %s if no Vibe process is running",
-				ErrHubHeld, filepath.Base(root), rerr, LockPath(root))
-		case holder.MCP != nil && holder.MCP.Pending, holder.MCP == nil && holder.App == AppServe:
-			// Another `vibe mcp serve` is still opening the workspace.
-		default:
+		proxy, err := holderDecision(root, holder, rerr)
+		if err != nil {
+			return err
+		}
+		if proxy {
 			return serveProxy(ctx, root, holder, opts)
 		}
 		if time.Now().After(deadline) {
-			if errors.Is(rerr, ErrNotHeld) {
-				return lastErr
-			}
-			if holder != nil {
-				return fmt.Errorf("%w: %s did not finish opening the workspace in time", ErrHubHeld, holder)
-			}
-			return lastErr
+			return startupTimeout(lastErr, holder, rerr)
 		}
 		select {
 		case <-ctx.Done():
@@ -181,6 +151,73 @@ func Serve(ctx context.Context, opts ServeOptions) error {
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
+}
+
+// applyDefaults fills in the unset options and checks the transport.
+func (opts *ServeOptions) applyDefaults() error {
+	if opts.Transport == "" {
+		opts.Transport = "stdio"
+	}
+	if opts.Transport != "stdio" && opts.Transport != "sse" {
+		return fmt.Errorf("invalid --transport %q: want stdio or sse", opts.Transport)
+	}
+	if opts.Err == nil {
+		opts.Err = io.Discard
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.NewTextHandler(opts.Err, nil))
+	}
+	if opts.App == "" {
+		opts.App = AppServe
+	}
+	return nil
+}
+
+// heldError says why Open did not make this process the owner. It returns the
+// error to remember while waiting for the holder (the workspace is held), or a
+// fatal error as its second result.
+func heldError(root string, err error) (held, fatal error) {
+	var he *HeldError
+	if errors.As(err, &he) {
+		return err, nil
+	}
+	var oe *OpenError
+	if !errors.As(err, &oe) || oe.Step != StepOpen {
+		return nil, err
+	}
+	// A workspace that does not parse can still be proxied to: the
+	// holder has it open, and passing MCP through never reads the yaml.
+	if _, rerr := ReadHolder(root); rerr != nil {
+		return nil, fmt.Errorf("failed to open the workspace: %w", oe.Err)
+	}
+	return fmt.Errorf("failed to open the workspace: %w", oe.Err), nil
+}
+
+// holderDecision says what to do about whoever holds the workspace: proxy to
+// it, or (false, nil) wait and try again. An unreadable lock is an error.
+func holderDecision(root string, holder *Holder, rerr error) (proxy bool, err error) {
+	switch {
+	case errors.Is(rerr, ErrNotHeld):
+		return false, nil
+	case rerr != nil:
+		return false, fmt.Errorf("%w: another process has workspace %s open but its hub lock cannot be read safely (%v); close it, or remove %s if no Vibe process is running",
+			ErrHubHeld, filepath.Base(root), rerr, LockPath(root))
+	case holder.MCP != nil && holder.MCP.Pending, holder.MCP == nil && holder.App == AppServe:
+		// Another `vibe mcp serve` is still opening the workspace.
+		return false, nil
+	}
+	return true, nil
+}
+
+// startupTimeout is the error once the wait for the holder runs out.
+func startupTimeout(lastErr error, holder *Holder, rerr error) error {
+	if errors.Is(rerr, ErrNotHeld) {
+		return lastErr
+	}
+	if holder != nil {
+		return fmt.Errorf("%w: %s did not finish opening the workspace in time", ErrHubHeld, holder)
+	}
+	return lastErr
 }
 
 // startupWait is how long a second `vibe mcp serve` waits for the first to

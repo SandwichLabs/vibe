@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -147,4 +148,14 @@ func settingMatches(option, want, got string) bool {
 		return filepath.Clean(got) == filepath.Clean(want)
 	}
 	return strings.EqualFold(got, want)
+}
+
+// isNoTransaction reports the error DuckDB gives ROLLBACK when no transaction
+// is open: a transaction-class error from the driver, not a message to match.
+// Any transaction-class error is treated as "nothing to roll back" because the
+// caller only wants the connection clean, and a ROLLBACK that fails for a
+// transaction reason leaves no transaction either way.
+func isNoTransaction(err error) bool {
+	var de *duckdb.Error
+	return errors.As(err, &de) && de.Type == duckdb.ErrorTypeTransaction
 }

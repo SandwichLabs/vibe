@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -262,87 +263,106 @@ func (w *workspace) reload() error {
 		return err
 	}
 
-	var warnings []string
-	var local LocalConfig
-	localRev := ""
-	untrusted := false
-	if w.configDir == "" {
-		local = LocalConfig{Version: ConfigVersion}
-	} else {
-		ldata, found, lerr := readOptional(w.localPath(cfg.ID))
-		switch {
-		case lerr != nil:
-			return fmt.Errorf("failed to read your settings for this workspace: %w", lerr)
-		case found:
-			local, err = ParseLocalConfig(ldata)
-			if err != nil {
-				return fmt.Errorf("%s: %w", w.localPath(cfg.ID), err)
-			}
-			localRev = filestore.HashBytes(ldata)
-			folder := w.readNonce()
-			switch {
-			case local.Nonce != "" && local.Nonce != folder:
-				// Same id at the same path, but not the folder these settings
-				// were made for (deleted and cloned again, perhaps from a
-				// different repository): trust nothing in them.
-				untrusted = true
-				local = LocalConfig{Version: ConfigVersion}
-				warnings = append(warnings, "this folder is not the one your saved settings for this workspace were made for, so they were ignored (agent limits you loosened, sign-in methods, your own connections); confirm them with TrustLocal if it is the same project")
-			case local.Nonce == "" && folder == "":
-				w.writeNonce() // an older or hand-written file: adopt this folder
-			}
-		default:
-			local = LocalConfig{Version: ConfigVersion}
-			// First open (or settings deleted): make this folder's mark once,
-			// when it has none. An open never rewrites an existing mark:
-			// another process may have stamped it into a settings file, and
-			// changing it would make those settings look like another folder's.
-			if w.readNonce() == "" {
-				w.writeNonce()
-			}
-		}
+	ls, err := w.loadLocalScope(cfg)
+	if err != nil {
+		return err
 	}
+	warnings := ls.warnings
 	// A connections.yaml inside the folder is whatever the repository
 	// committed: it is never read (D-A), only reported.
 	if _, _, ferr := filestore.Read(w.root, LocalDir+"/"+LocalConfigFile); ferr == nil || errors.Is(ferr, filestore.ErrTooLarge) {
 		warnings = append(warnings, ".vibe-local/"+LocalConfigFile+" was ignored: settings that affect the agent, connections and sign-in are only read from your own config directory ("+w.localPath(cfg.ID)+")")
 	}
 
-	var user UserConfig
-	if w.opts.user != nil {
-		user = *w.opts.user
-		if err := user.Validate(); err != nil {
-			return err
-		}
-	} else if user, err = w.loadUser(); err != nil {
-		// A broken user file must not make every workspace unopenable: skip
-		// that scope and say so.
-		w.logger.Warn("ignoring unreadable user connections file", "error", err)
-		user = UserConfig{Version: ConfigVersion}
-		warnings = append(warnings, "your connections.yaml could not be read and was ignored: "+err.Error())
+	user, userWarnings, err := w.loadUserScope()
+	if err != nil {
+		return err
 	}
+	warnings = append(warnings, userWarnings...)
 
-	merged := Merge(user, cfg, local, cfg.DefaultConnection)
-	if cfg.DefaultConnection != "" {
-		found := false
-		for _, c := range merged {
-			if c.Name == cfg.DefaultConnection {
-				found = true
-			}
-		}
-		if !found {
-			warnings = append(warnings, fmt.Sprintf("default_connection %q is not defined in any scope on this computer", cfg.DefaultConnection))
-		}
+	merged := Merge(user, cfg, ls.local, cfg.DefaultConnection)
+	if cfg.DefaultConnection != "" && !slices.ContainsFunc(merged, func(c Connection) bool { return c.Name == cfg.DefaultConnection }) {
+		warnings = append(warnings, fmt.Sprintf("default_connection %q is not defined in any scope on this computer", cfg.DefaultConnection))
 	}
 
 	w.mu.Lock()
 	w.cfg, w.cfgRev = cfg, st.Rev()
-	w.local, w.localRev, w.localUntrusted = local, localRev, untrusted
+	w.local, w.localRev, w.localUntrusted = ls.local, ls.rev, ls.untrusted
 	w.user, w.merged = user, merged
 	w.userRev = w.readUserRev()
 	w.warnings = warnings
 	w.mu.Unlock()
 	return nil
+}
+
+// localScope is the per-person settings read for one workspace.
+type localScope struct {
+	local     LocalConfig
+	rev       string
+	untrusted bool
+	warnings  []string
+}
+
+// loadLocalScope reads this person's settings for the workspace from the
+// config directory, ignoring them when they were made for another folder, and
+// stamps the folder's nonce when it has none.
+func (w *workspace) loadLocalScope(cfg Config) (localScope, error) {
+	ls := localScope{local: LocalConfig{Version: ConfigVersion}}
+	if w.configDir == "" {
+		return ls, nil
+	}
+	ldata, found, err := readOptional(w.localPath(cfg.ID))
+	if err != nil {
+		return ls, fmt.Errorf("failed to read your settings for this workspace: %w", err)
+	}
+	if !found {
+		// First open (or settings deleted): make this folder's mark once,
+		// when it has none. An open never rewrites an existing mark:
+		// another process may have stamped it into a settings file, and
+		// changing it would make those settings look like another folder's.
+		if w.readNonce() == "" {
+			w.writeNonce()
+		}
+		return ls, nil
+	}
+	local, err := ParseLocalConfig(ldata)
+	if err != nil {
+		return ls, fmt.Errorf("%s: %w", w.localPath(cfg.ID), err)
+	}
+	ls.local, ls.rev = local, filestore.HashBytes(ldata)
+	folder := w.readNonce()
+	switch {
+	case local.Nonce != "" && local.Nonce != folder:
+		// Same id at the same path, but not the folder these settings
+		// were made for (deleted and cloned again, perhaps from a
+		// different repository): trust nothing in them.
+		ls.untrusted = true
+		ls.local = LocalConfig{Version: ConfigVersion}
+		ls.warnings = append(ls.warnings, "this folder is not the one your saved settings for this workspace were made for, so they were ignored (agent limits you loosened, sign-in methods, your own connections); confirm them with TrustLocal if it is the same project")
+	case local.Nonce == "" && folder == "":
+		w.writeNonce() // an older or hand-written file: adopt this folder
+	}
+	return ls, nil
+}
+
+// loadUserScope reads the all-workspaces connections, from the injected value
+// or the user file.
+func (w *workspace) loadUserScope() (UserConfig, []string, error) {
+	if w.opts.user != nil {
+		user := *w.opts.user
+		if err := user.Validate(); err != nil {
+			return UserConfig{}, nil, err
+		}
+		return user, nil, nil
+	}
+	user, err := w.loadUser()
+	if err != nil {
+		// A broken user file must not make every workspace unopenable: skip
+		// that scope and say so.
+		w.logger.Warn("ignoring unreadable user connections file", "error", err)
+		return UserConfig{Version: ConfigVersion}, []string{"your connections.yaml could not be read and was ignored: " + err.Error()}, nil
+	}
+	return user, nil, nil
 }
 
 func isNotFound(err error) bool {

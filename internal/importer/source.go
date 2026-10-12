@@ -80,86 +80,18 @@ func stage(ctx context.Context, conn *sql.Conn, s Source, textCols map[string]bo
 	if err != nil {
 		return nil, err
 	}
-
-	var expr string
-	sniffed := map[string]string{}
-	promote := map[string]bool{}
-	allPromoted := false
-
+	var plan stagePlan
 	switch kind {
 	case "csv":
-		base := csvExpr(s.Path, s.HasHeader, nil)
-		sniffed, err = describeExpr(ctx, conn, base)
-		if err != nil {
-			// The full-file sniff itself couldn't settle on one type per
-			// column (a raw DuckDB parse/format error). Fall back to
-			// reading every column as text; inference then decides each
-			// column's friendly type independently.
-			expr = csvExprAllVarchar(s.Path, s.HasHeader)
-			allPromoted = true
-			break
-		}
-		overrides := map[string]string{}
-		for name, typ := range sniffed {
-			up := strings.ToUpper(typ)
-			forceText := up == "DOUBLE" || up == "FLOAT" || up == "REAL" ||
-				up == "DATE" || strings.HasPrefix(up, "TIMESTAMP")
-			if !forceText && textCols != nil {
-				forceText = textCols[NormalizeName(name)]
-			}
-			if forceText {
-				overrides[name] = "VARCHAR"
-				promote[name] = true
-			}
-		}
-		expr = csvExpr(s.Path, s.HasHeader, overrides)
+		plan = planCSVStage(ctx, conn, s, textCols)
 	case "xlsx":
-		if err := session.EnsureExtension(ctx, conn, "excel", "Importing an Excel file"); err != nil {
+		plan, err = planXLSXStage(ctx, conn, s)
+		if err != nil {
 			return nil, err
 		}
-		expr = readXLSXExpr(s.Path, s.Sheet, s.HasHeader)
-		xlsxCols, derr := describeColumns(ctx, conn, expr)
-		if derr != nil {
-			return nil, fmt.Errorf("failed to read %q: %w", s.Path, derr)
-		}
-		for _, c := range xlsxCols {
-			sniffed[c.Name] = c.Type
-		}
 	}
-
-	if _, err := conn.ExecContext(ctx, "DROP TABLE IF EXISTS "+stageTable); err != nil {
-		return nil, fmt.Errorf("failed to drop stale stage table: %w", err)
-	}
-	createSQL := fmt.Sprintf("CREATE TEMP TABLE %s AS SELECT row_number() OVER () AS __row, * FROM %s", stageTable, expr)
-	if _, err := conn.ExecContext(ctx, createSQL); err != nil {
-		switch {
-		case allPromoted:
-			// Already tried the all-text fallback; nothing more to try.
-			return nil, fmt.Errorf("failed to read %q: %w", s.Path, err)
-		case kind == "csv":
-			// A column type DuckDB was confident enough about to DESCRIBE
-			// (it only samples) still failed once every row was actually
-			// read. Retry with every column forced to text — lossless
-			// for CSV, since the original text is exactly what a VARCHAR
-			// column keeps.
-			expr = csvExprAllVarchar(s.Path, s.HasHeader)
-			allPromoted = true
-			createSQL = fmt.Sprintf("CREATE TEMP TABLE %s AS SELECT row_number() OVER () AS __row, * FROM %s", stageTable, expr)
-			if _, err2 := conn.ExecContext(ctx, createSQL); err2 != nil {
-				return nil, fmt.Errorf("failed to read %q: %w", s.Path, err)
-			}
-		default: // xlsx
-			// NOT retried with all_varchar=true: unlike CSV text, an xlsx
-			// numeric/date cell has no separate "original text" —
-			// all_varchar renders a DATE cell as its underlying serial
-			// number ("45659.0") and a number as its raw text, both
-			// silently wrong rather than merely conservative. A clean, named
-			// error is the only safe response to a column DuckDB itself
-			// can't type consistently (typically numbers mixed with text
-			// in one column, which read_xlsx has no per-column override
-			// for, unlike read_csv's `types=`).
-			return nil, wrapXLSXMaterializeError(s.Sheet, err)
-		}
+	if err := plan.materialize(ctx, conn, s, kind); err != nil {
+		return nil, err
 	}
 
 	// DESCRIBE the stage table itself for both the final type and file order
@@ -171,13 +103,118 @@ func stage(ctx context.Context, conn *sql.Conn, s Source, textCols map[string]bo
 
 	cols := make([]stagedCol, 0, len(staged))
 	for _, dc := range staged {
-		sc := stagedCol{SourceName: dc.Name, StagedType: dc.Type, SniffedType: sniffed[dc.Name], Promote: promote[dc.Name] || allPromoted}
+		sc := stagedCol{SourceName: dc.Name, StagedType: dc.Type, SniffedType: plan.sniffed[dc.Name], Promote: plan.promote[dc.Name] || plan.allPromoted}
 		if sc.SniffedType == "" {
 			sc.SniffedType = sc.StagedType
 		}
 		cols = append(cols, sc)
 	}
 	return cols, nil
+}
+
+// stagePlan is how stage reads a file: the table expression, what the sniffer
+// said per column, which columns are read as text so inference re-derives
+// their type, and whether every column is.
+type stagePlan struct {
+	expr        string
+	sniffed     map[string]string
+	promote     map[string]bool
+	allPromoted bool
+}
+
+// planCSVStage sniffs a CSV and forces the lossy-sniffed and text-overridden
+// columns to VARCHAR.
+func planCSVStage(ctx context.Context, conn *sql.Conn, s Source, textCols map[string]bool) stagePlan {
+	p := stagePlan{promote: map[string]bool{}}
+	base := csvExpr(s.Path, s.HasHeader, nil)
+	sniffed, err := describeExpr(ctx, conn, base)
+	if err != nil {
+		// The full-file sniff itself couldn't settle on one type per
+		// column (a raw DuckDB parse/format error). Fall back to
+		// reading every column as text; inference then decides each
+		// column's friendly type independently.
+		p.sniffed = map[string]string{}
+		p.expr = csvExprAllVarchar(s.Path, s.HasHeader)
+		p.allPromoted = true
+		return p
+	}
+	p.sniffed = sniffed
+	overrides := map[string]string{}
+	for name, typ := range sniffed {
+		up := strings.ToUpper(typ)
+		forceText := up == "DOUBLE" || up == "FLOAT" || up == "REAL" ||
+			up == "DATE" || strings.HasPrefix(up, "TIMESTAMP")
+		if !forceText && textCols != nil {
+			forceText = textCols[NormalizeName(name)]
+		}
+		if forceText {
+			overrides[name] = "VARCHAR"
+			p.promote[name] = true
+		}
+	}
+	p.expr = csvExpr(s.Path, s.HasHeader, overrides)
+	return p
+}
+
+// planXLSXStage describes the sheet; the excel extension has no per-cell type.
+func planXLSXStage(ctx context.Context, conn *sql.Conn, s Source) (stagePlan, error) {
+	p := stagePlan{sniffed: map[string]string{}, promote: map[string]bool{}}
+	if err := session.EnsureExtension(ctx, conn, "excel", "Importing an Excel file"); err != nil {
+		return p, err
+	}
+	p.expr = readXLSXExpr(s.Path, s.Sheet, s.HasHeader)
+	xlsxCols, derr := describeColumns(ctx, conn, p.expr)
+	if derr != nil {
+		return p, fmt.Errorf("failed to read %q: %w", s.Path, derr)
+	}
+	for _, c := range xlsxCols {
+		p.sniffed[c.Name] = c.Type
+	}
+	return p, nil
+}
+
+// materialize creates the TEMP stage table from the plan, retrying a CSV that
+// fails mid-read as all text.
+func (p *stagePlan) materialize(ctx context.Context, conn *sql.Conn, s Source, kind string) error {
+	if _, err := conn.ExecContext(ctx, "DROP TABLE IF EXISTS "+stageTable); err != nil {
+		return fmt.Errorf("failed to drop stale stage table: %w", err)
+	}
+	create := func() error {
+		_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE %s AS SELECT row_number() OVER () AS __row, * FROM %s", stageTable, p.expr))
+		return err
+	}
+	err := create()
+	if err == nil {
+		return nil
+	}
+	switch {
+	case p.allPromoted:
+		// Already tried the all-text fallback; nothing more to try.
+		return fmt.Errorf("failed to read %q: %w", s.Path, err)
+	case kind == "csv":
+		// A column type DuckDB was confident enough about to DESCRIBE
+		// (it only samples) still failed once every row was actually
+		// read. Retry with every column forced to text — lossless
+		// for CSV, since the original text is exactly what a VARCHAR
+		// column keeps.
+		p.expr = csvExprAllVarchar(s.Path, s.HasHeader)
+		p.allPromoted = true
+		if err2 := create(); err2 != nil {
+			return fmt.Errorf("failed to read %q: %w", s.Path, err)
+		}
+		return nil
+	default: // xlsx
+		// NOT retried with all_varchar=true: unlike CSV text, an xlsx
+		// numeric/date cell has no separate "original text" —
+		// all_varchar renders a DATE cell as its underlying serial
+		// number ("45659.0") and a number as its raw text, both
+		// silently wrong rather than merely conservative. A clean, named
+		// error is the only safe response to a column DuckDB itself
+		// can't type consistently (typically numbers mixed with text
+		// in one column, which read_xlsx has no per-column override
+		// for, unlike read_csv's `types=`).
+		return wrapXLSXMaterializeError(s.Sheet, err)
+	}
 }
 
 // dropStage removes the TEMP stage table. It must always run (deferred) once

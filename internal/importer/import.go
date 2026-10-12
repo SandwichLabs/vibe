@@ -219,14 +219,9 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 	ctx = context.WithValue(ctx, targetKey{}, session.TableRef{Catalog: tcat, Schema: tschema})
 	sum := &Summary{Table: o.Table, Mode: o.Mode}
 
-	for name, ct := range o.Types {
-		if ct.Type == TypeDecimal && (ct.Scale < 0 || ct.Scale > maxDecimalScale) {
-			// Caught here, not left to DuckDB: an out-of-range scale
-			// otherwise reaches CREATE TABLE/the fits scan as a raw
-			// "Scale cannot be bigger than width" parser error.
-			sum.Blocked = fmt.Sprintf("invalid decimal scale %d for column %q (must be 0-%d)", ct.Scale, name, maxDecimalScale)
-			return sum, nil
-		}
+	if msg := checkDecimalScales(o.Types); msg != "" {
+		sum.Blocked = msg
+		return sum, nil
 	}
 
 	existing, err := describeExistingTable(ctx, conn, o.Table)
@@ -253,13 +248,7 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 
 	// Text overrides are forwarded to stage() so a column overridden to Text
 	// keeps its original file text rather than a lossy sniffed DOUBLE.
-	textCols := map[string]bool{}
-	for name, ct := range o.Types {
-		if ct.Type == TypeText {
-			textCols[name] = true
-		}
-	}
-	staged, err := stage(ctx, conn, o.Source, textCols)
+	staged, err := stage(ctx, conn, o.Source, textOverrides(o.Types))
 	if err != nil {
 		return nil, err
 	}
@@ -277,90 +266,155 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 		return sum, nil
 	}
 
-	if !sum.Exists {
-		sum.Modes = []Mode{ModeCreate}
-		if o.Mode == "" {
-			o.Mode, sum.Mode = ModeCreate, ModeCreate
-		}
-		if o.Mode != ModeCreate {
-			sum.Blocked = fmt.Sprintf("table %q does not exist; pass mode create", o.Table)
-			return sum, nil
-		}
-		target := createTargetColumns(ctx, conn, staged, o.Types)
-		if err := preflightCreate(ctx, conn, sum, target, o.Key); err != nil {
-			return nil, err
-		}
-		if sum.OK && !o.DryRun {
-			if err := writeCreate(ctx, conn, o.Table, target, o.Key, sum.Rows); err != nil {
-				return nil, err
-			}
-		}
-		return sum, nil
+	run := importRun{conn: conn, o: o, sum: sum, existing: existing, staged: staged}
+	if sum.Exists {
+		err = run.withExisting(ctx)
+	} else {
+		err = run.create(ctx)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return sum, nil
+}
 
-	sum.Modes = allowedModes(existing, staged)
+// checkDecimalScales returns the reason an override is unusable, or "". It is
+// caught here, not left to DuckDB: an out-of-range scale otherwise reaches
+// CREATE TABLE/the fits scan as a raw "Scale cannot be bigger than width"
+// parser error.
+func checkDecimalScales(types map[string]ColType) string {
+	for name, ct := range types {
+		if ct.Type == TypeDecimal && (ct.Scale < 0 || ct.Scale > maxDecimalScale) {
+			return fmt.Sprintf("invalid decimal scale %d for column %q (must be 0-%d)", ct.Scale, name, maxDecimalScale)
+		}
+	}
+	return ""
+}
+
+// textOverrides names the columns overridden to Text.
+func textOverrides(types map[string]ColType) map[string]bool {
+	textCols := map[string]bool{}
+	for name, ct := range types {
+		if ct.Type == TypeText {
+			textCols[name] = true
+		}
+	}
+	return textCols
+}
+
+// importRun is one import past staging: the connection, the options (with the
+// canonical table name), the summary being filled in, the table it found (nil
+// when it does not exist) and the staged file columns.
+type importRun struct {
+	conn     *sql.Conn
+	o        Options
+	sum      *Summary
+	existing *existingTable
+	staged   []stagedCol
+}
+
+// create handles a table that does not exist yet: only mode create applies.
+func (r importRun) create(ctx context.Context) error {
+	o, sum := r.o, r.sum
+	sum.Modes = []Mode{ModeCreate}
+	if o.Mode == "" {
+		o.Mode, sum.Mode = ModeCreate, ModeCreate
+	}
+	if o.Mode != ModeCreate {
+		sum.Blocked = fmt.Sprintf("table %q does not exist; pass mode create", o.Table)
+		return nil
+	}
+	target := createTargetColumns(ctx, r.conn, r.staged, o.Types)
+	if err := preflightCreate(ctx, r.conn, sum, target, o.Key); err != nil {
+		return err
+	}
+	if sum.OK && !o.DryRun {
+		return writeCreate(ctx, r.conn, o.Table, target, o.Key, sum.Rows)
+	}
+	return nil
+}
+
+// withExisting checks the requested mode against the ones available for the
+// table that is already there, then runs it.
+func (r importRun) withExisting(ctx context.Context) error {
+	o, sum := r.o, r.sum
+	sum.Modes = allowedModes(r.existing, r.staged)
 	if o.Mode == "" {
 		sum.Blocked = fmt.Sprintf("table %q already exists (%d rows); pass mode %s",
 			o.Table, sum.ExistingRows, joinModes(sum.Modes))
-		return sum, nil
+		return nil
 	}
 	if !modeAllowed(sum.Modes, o.Mode) {
 		sum.Blocked = fmt.Sprintf("mode %q is not available for %q; available: %s", o.Mode, o.Table, joinModes(sum.Modes))
-		return sum, nil
+		return nil
 	}
-
 	switch o.Mode {
 	case ModeReplace:
-		target := createTargetColumns(ctx, conn, staged, o.Types)
-		if err := preflightCreate(ctx, conn, sum, target, o.Key); err != nil {
-			return nil, err
-		}
-		if sum.OK {
-			// The old row count is known as soon as the pre-flight passes —
-			// a dry run can report it without touching the table.
-			sum.Replaced = existing.rowCount
-			if !o.DryRun {
-				if err := writeReplace(ctx, conn, o.Table, existing, target, o.Key, sum.Rows); err != nil {
-					return nil, err
-				}
-			}
-		}
-
+		return r.replace(ctx)
 	case ModeAppend:
-		target, missing, extra := matchExistingColumns(existing, staged)
-		sum.Missing, sum.Extra = missing, extra
-		if err := preflightAppend(ctx, conn, sum, existing, target); err != nil {
-			return nil, err
-		}
-		if sum.OK && !o.DryRun {
-			n, err := writeAppendOrUpsert(ctx, conn, o.Table, existing, target, false)
-			if err != nil {
-				return nil, err
-			}
-			sum.Inserted = n
-		}
-
+		return r.append(ctx)
 	case ModeUpsert:
-		target, missing, extra := matchExistingColumns(existing, staged)
-		sum.Missing, sum.Extra = missing, extra
-		if err := preflightUpsert(ctx, conn, sum, existing, target); err != nil {
-			return nil, err
-		}
-		if sum.OK {
-			ins, upd, unch, err := countUpsert(ctx, conn, o.Table, existing, target)
-			if err != nil {
-				return nil, err
-			}
-			sum.Inserted, sum.Updated, sum.Unchanged = ins, upd, unch
-			if !o.DryRun {
-				if _, err := writeAppendOrUpsert(ctx, conn, o.Table, existing, target, true); err != nil {
-					return nil, err
-				}
-			}
-		}
+		return r.upsert(ctx)
 	}
+	return nil
+}
 
-	return sum, nil
+func (r importRun) replace(ctx context.Context) error {
+	o, sum := r.o, r.sum
+	target := createTargetColumns(ctx, r.conn, r.staged, o.Types)
+	if err := preflightCreate(ctx, r.conn, sum, target, o.Key); err != nil {
+		return err
+	}
+	if !sum.OK {
+		return nil
+	}
+	// The old row count is known as soon as the pre-flight passes — a dry run
+	// can report it without touching the table.
+	sum.Replaced = r.existing.rowCount
+	if o.DryRun {
+		return nil
+	}
+	return writeReplace(ctx, r.conn, o.Table, r.existing, target, o.Key, sum.Rows)
+}
+
+func (r importRun) append(ctx context.Context) error {
+	o, sum := r.o, r.sum
+	target, missing, extra := matchExistingColumns(r.existing, r.staged)
+	sum.Missing, sum.Extra = missing, extra
+	if err := preflightAppend(ctx, r.conn, sum, r.existing, target); err != nil {
+		return err
+	}
+	if !sum.OK || o.DryRun {
+		return nil
+	}
+	n, err := writeAppendOrUpsert(ctx, r.conn, o.Table, r.existing, target, false)
+	if err != nil {
+		return err
+	}
+	sum.Inserted = n
+	return nil
+}
+
+func (r importRun) upsert(ctx context.Context) error {
+	o, sum := r.o, r.sum
+	target, missing, extra := matchExistingColumns(r.existing, r.staged)
+	sum.Missing, sum.Extra = missing, extra
+	if err := preflightUpsert(ctx, r.conn, sum, r.existing, target); err != nil {
+		return err
+	}
+	if !sum.OK {
+		return nil
+	}
+	ins, upd, unch, err := countUpsert(ctx, r.conn, o.Table, r.existing, target)
+	if err != nil {
+		return err
+	}
+	sum.Inserted, sum.Updated, sum.Unchanged = ins, upd, unch
+	if o.DryRun {
+		return nil
+	}
+	_, err = writeAppendOrUpsert(ctx, r.conn, o.Table, r.existing, target, true)
+	return err
 }
 
 // describeExistingTable gathers everything Import needs to know about a
@@ -401,19 +455,31 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 		return nil, fmt.Errorf("failed to count rows in %q: %w", table, err)
 	}
 
+	if err := et.loadColumns(ctx, conn); err != nil {
+		return nil, err
+	}
+	if err := et.loadConstraints(ctx, conn); err != nil {
+		return nil, err
+	}
+	return et, nil
+}
+
+// loadColumns reads the table's columns (raw type, default) in order.
+func (et *existingTable) loadColumns(ctx context.Context, conn *sql.Conn) error {
+	table := et.tableName
 	rows, err := conn.QueryContext(ctx,
 		`SELECT column_name, data_type, column_default IS NOT NULL
 		   FROM information_schema.columns
 		  WHERE table_catalog=current_database() AND table_schema=current_schema() AND lower(table_name)=lower($1) ORDER BY ordinal_position`, table)
 	if err != nil {
-		return nil, fmt.Errorf("failed to describe %q: %w", table, err)
+		return fmt.Errorf("failed to describe %q: %w", table, err)
 	}
 	for rows.Next() {
 		var c targetCol
 		var raw string
 		if err := rows.Scan(&c.Name, &raw, &c.HasDefault); err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("failed to scan column: %w", err)
+			return fmt.Errorf("failed to scan column: %w", err)
 		}
 		c.RawType = raw
 		if ct, ok := FromDuckDB(raw); ok {
@@ -423,16 +489,22 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate columns: %w", err)
+		return fmt.Errorf("failed to iterate columns: %w", err)
 	}
+	return nil
+}
 
+// loadConstraints reads the single-column primary key and the foreign keys
+// that touch the table, incoming or outgoing.
+func (et *existingTable) loadConstraints(ctx context.Context, conn *sql.Conn) error {
+	table := et.tableName
 	crows, err := conn.QueryContext(ctx,
 		`SELECT constraint_type, constraint_column_names, referenced_table, referenced_column_names, table_name
 		   FROM duckdb_constraints()
 		  WHERE database_name=current_database() AND schema_name=current_schema() AND (lower(table_name)=lower($1) OR lower(referenced_table)=lower($1))
 		    AND constraint_type IN ('PRIMARY KEY','FOREIGN KEY')`, table)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read constraints for %q: %w", table, err)
+		return fmt.Errorf("failed to read constraints for %q: %w", table, err)
 	}
 	for crows.Next() {
 		var ctype string
@@ -440,37 +512,45 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 		var refTable, ownTable sql.NullString
 		if err := crows.Scan(&ctype, &cols, &refTable, &refCols, &ownTable); err != nil {
 			crows.Close()
-			return nil, fmt.Errorf("failed to scan constraint: %w", err)
+			return fmt.Errorf("failed to scan constraint: %w", err)
 		}
 		switch ctype {
 		case "PRIMARY KEY":
-			if len(cols) == 1 {
-				if s, ok := cols[0].(string); ok {
-					et.pkCol = s
-				}
-			}
+			et.notePrimaryKey(cols)
 		case "FOREIGN KEY":
-			outgoing := ownTable.Valid && strings.EqualFold(ownTable.String, table)
-			if outgoing {
-				et.fkOut = true
-				if len(cols) == 1 && len(refCols) == 1 {
-					col, _ := cols[0].(string)
-					refCol, _ := refCols[0].(string)
-					if col != "" && refCol != "" && refTable.Valid {
-						et.fks = append(et.fks, fkInfo{Column: col, RefTable: refTable.String, RefColumn: refCol})
-					}
-				}
-			} else {
-				et.fkIn = true
-			}
+			et.noteForeignKey(table, ownTable, cols, refTable, refCols)
 		}
 	}
 	crows.Close()
 	if err := crows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate constraints: %w", err)
+		return fmt.Errorf("failed to iterate constraints: %w", err)
 	}
+	return nil
+}
 
-	return et, nil
+func (et *existingTable) notePrimaryKey(cols []any) {
+	if len(cols) != 1 {
+		return
+	}
+	if s, ok := cols[0].(string); ok {
+		et.pkCol = s
+	}
+}
+
+func (et *existingTable) noteForeignKey(table string, ownTable sql.NullString, cols []any, refTable sql.NullString, refCols []any) {
+	if !(ownTable.Valid && strings.EqualFold(ownTable.String, table)) {
+		et.fkIn = true
+		return
+	}
+	et.fkOut = true
+	if len(cols) != 1 || len(refCols) != 1 {
+		return
+	}
+	col, _ := cols[0].(string)
+	refCol, _ := refCols[0].(string)
+	if col != "" && refCol != "" && refTable.Valid {
+		et.fks = append(et.fks, fkInfo{Column: col, RefTable: refTable.String, RefColumn: refCol})
+	}
 }
 
 // createTargetColumns builds the target column list for create/replace:

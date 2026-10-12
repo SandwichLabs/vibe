@@ -169,35 +169,58 @@ func SaveLLMSettings(path string, s LLMSettings) error {
 }
 
 func editLLMSettings(data []byte, s LLMSettings) ([]byte, error) {
-	var root, out *yaml.Node
-	if len(bytes.TrimSpace(data)) == 0 {
-		root = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		out = &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
-	} else {
-		if n, err := yamlDocCount(data); err != nil || n != 1 {
-			return nil, errors.New("the file is not a single YAML document")
-		}
-		var doc yaml.Node
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return nil, fmt.Errorf("the file is not valid YAML: %w", err)
-		}
-		if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
-			return nil, errors.New("unexpected YAML layout")
-		}
-		root = doc.Content[0]
-		out = &doc // encode the whole document: header and trailing comments live on it
-		if root.Kind == yaml.ScalarNode && root.Tag == "!!null" {
-			*root = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		}
-		if root.Kind != yaml.MappingNode {
-			return nil, errors.New("the top level is not a mapping")
-		}
+	root, out, err := parseSettingsRoot(data)
+	if err != nil {
+		return nil, err
 	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		if k := root.Content[i].Value; k != "llm" && strings.EqualFold(k, "llm") {
 			return nil, fmt.Errorf("the key %q is not spelled llm", k)
 		}
 	}
+	llm, err := llmMapping(root)
+	if err != nil {
+		return nil, err
+	}
+	setScalar(llm, "provider", s.Provider)
+	setScalar(llm, "model", s.Model)
+	setScalar(llm, "endpoint", s.Endpoint)
+	setScalar(llm, "account_id", s.AccountID)
+	setScalar(llm, "gateway", s.Gateway)
+	return encodeSettings(out, data)
+}
+
+// parseSettingsRoot returns the top-level mapping of the settings file and the
+// document node to encode (an empty file gets a new mapping).
+func parseSettingsRoot(data []byte) (root, out *yaml.Node, err error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		root = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		return root, &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}, nil
+	}
+	if n, err := yamlDocCount(data); err != nil || n != 1 {
+		return nil, nil, errors.New("the file is not a single YAML document")
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, nil, fmt.Errorf("the file is not valid YAML: %w", err)
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
+		return nil, nil, errors.New("unexpected YAML layout")
+	}
+	root = doc.Content[0]
+	if root.Kind == yaml.ScalarNode && root.Tag == "!!null" {
+		*root = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil, nil, errors.New("the top level is not a mapping")
+	}
+	// Encode the whole document: header and trailing comments live on it.
+	return root, &doc, nil
+}
+
+// llmMapping returns the llm: mapping of root (creating it), refusing shapes
+// that cannot be edited without changing their meaning.
+func llmMapping(root *yaml.Node) (*yaml.Node, error) {
 	llm := mapChild(root, "llm")
 	if llm != nil && (llm.Anchor != "" || llm.Kind == yaml.AliasNode) {
 		return nil, errors.New("llm is an anchor or alias")
@@ -220,12 +243,11 @@ func editLLMSettings(data []byte, s LLMSettings) ([]byte, error) {
 			return nil, fmt.Errorf("the key llm.%s is not spelled in lower case", k)
 		}
 	}
-	setScalar(llm, "provider", s.Provider)
-	setScalar(llm, "model", s.Model)
-	setScalar(llm, "endpoint", s.Endpoint)
-	setScalar(llm, "account_id", s.AccountID)
-	setScalar(llm, "gateway", s.Gateway)
+	return llm, nil
+}
 
+// encodeSettings encodes the edited document and checks that it still parses.
+func encodeSettings(out *yaml.Node, orig []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -236,16 +258,15 @@ func editLLMSettings(data []byte, s LLMSettings) ([]byte, error) {
 		return nil, err
 	}
 	outBytes := buf.Bytes()
-	if bytes.HasPrefix(data, []byte("---\n")) {
+	if bytes.HasPrefix(orig, []byte("---\n")) {
 		outBytes = append([]byte("---\n"), outBytes...) // yaml.v3 drops an explicit document start
 	}
-	buf = *bytes.NewBuffer(outBytes)
 	// The result must still parse and must not have changed the key.
 	var chk map[string]any
-	if err := yaml.Unmarshal(buf.Bytes(), &chk); err != nil {
+	if err := yaml.Unmarshal(outBytes, &chk); err != nil {
 		return nil, errors.New("the edit would leave an invalid file")
 	}
-	return buf.Bytes(), nil
+	return outBytes, nil
 }
 
 func isManaged(k string) bool {

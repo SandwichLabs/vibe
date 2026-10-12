@@ -186,6 +186,34 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
+	insertSQL := buildInsertSQL(ctx, table, existing, target, upsert)
+	res, err := tx.ExecContext(ctx, insertSQL)
+	if err != nil {
+		tx.Rollback() //nolint:errcheck
+		return 0, fmt.Errorf("failed to insert rows: %w", err)
+	}
+	n, _ := res.RowsAffected()
+
+	if err := bumpKeySequence(ctx, tx, table, existing, target); err != nil {
+		tx.Rollback() //nolint:errcheck
+		return 0, err
+	}
+
+	if beforeCommit != nil {
+		if err := beforeCommit(tx); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit: %w", err)
+	}
+	return int(n), nil
+}
+
+// buildInsertSQL is the INSERT ... SELECT from the stage table for the
+// matched columns, with the ON CONFLICT clause when upserting.
+func buildInsertSQL(ctx context.Context, table string, existing *existingTable, target []targetCol, upsert bool) string {
 	var colNames, selectExprs []string
 	for _, tc := range target {
 		if tc.Staged == nil {
@@ -203,62 +231,48 @@ func writeAppendOrUpsert(ctx context.Context, conn *sql.Conn, table string, exis
 
 	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s ORDER BY __row",
 		tableSQL(ctx, table), strings.Join(colNames, ", "), strings.Join(selectExprs, ", "), stageTable)
-
-	if upsert {
-		var setParts []string
-		var distinctOld, distinctNew []string
-		for _, tc := range target {
-			if tc.Name == existing.pkCol || tc.Staged == nil {
-				continue
-			}
-			q := session.QuoteIdent(tc.Name)
-			setParts = append(setParts, fmt.Sprintf("%s = excluded.%s", q, q))
-			distinctOld = append(distinctOld, session.QuoteIdent(table)+"."+q)
-			distinctNew = append(distinctNew, "excluded."+q)
-		}
-		insertSQL += fmt.Sprintf(" ON CONFLICT (%s) ", session.QuoteIdent(existing.pkCol))
-		if len(setParts) == 0 {
-			insertSQL += "DO NOTHING"
-		} else {
-			insertSQL += fmt.Sprintf("DO UPDATE SET %s WHERE (%s) IS DISTINCT FROM (%s)",
-				strings.Join(setParts, ", "), strings.Join(distinctOld, ", "), strings.Join(distinctNew, ", "))
-		}
+	if !upsert {
+		return insertSQL
 	}
 
-	res, err := tx.ExecContext(ctx, insertSQL)
-	if err != nil {
-		tx.Rollback() //nolint:errcheck
-		return 0, fmt.Errorf("failed to insert rows: %w", err)
+	var setParts []string
+	var distinctOld, distinctNew []string
+	for _, tc := range target {
+		if tc.Name == existing.pkCol || tc.Staged == nil {
+			continue
+		}
+		q := session.QuoteIdent(tc.Name)
+		setParts = append(setParts, fmt.Sprintf("%s = excluded.%s", q, q))
+		distinctOld = append(distinctOld, session.QuoteIdent(table)+"."+q)
+		distinctNew = append(distinctNew, "excluded."+q)
 	}
-	n, _ := res.RowsAffected()
+	insertSQL += fmt.Sprintf(" ON CONFLICT (%s) ", session.QuoteIdent(existing.pkCol))
+	if len(setParts) == 0 {
+		return insertSQL + "DO NOTHING"
+	}
+	return insertSQL + fmt.Sprintf("DO UPDATE SET %s WHERE (%s) IS DISTINCT FROM (%s)",
+		strings.Join(setParts, ", "), strings.Join(distinctOld, ", "), strings.Join(distinctNew, ", "))
+}
 
-	if existing.pkCol != "" {
-		for _, tc := range target {
-			// Only bump when the file supplied explicit key values: when
-			// the key is absent from the file (a plain append relying on
-			// the column's own DEFAULT), every inserted row already
-			// consumed nextval() through that DEFAULT and the sequence is
-			// already correct — bumping again here would open an
-			// unnecessary gap.
-			if tc.Name == existing.pkCol && tc.HasFriendly && tc.Friendly.Type == TypeInteger && tc.Staged != nil {
-				if err := engine.BumpAutoNumber(ctx, tx, session.TableRef{Name: table}, existing.pkCol); err != nil {
-					tx.Rollback() //nolint:errcheck
-					return 0, fmt.Errorf("failed to advance key sequence: %w", err)
-				}
+// bumpKeySequence advances an integer auto-number key past the inserted rows.
+func bumpKeySequence(ctx context.Context, tx *sql.Tx, table string, existing *existingTable, target []targetCol) error {
+	if existing.pkCol == "" {
+		return nil
+	}
+	for _, tc := range target {
+		// Only bump when the file supplied explicit key values: when
+		// the key is absent from the file (a plain append relying on
+		// the column's own DEFAULT), every inserted row already
+		// consumed nextval() through that DEFAULT and the sequence is
+		// already correct — bumping again here would open an
+		// unnecessary gap.
+		if tc.Name == existing.pkCol && tc.HasFriendly && tc.Friendly.Type == TypeInteger && tc.Staged != nil {
+			if err := engine.BumpAutoNumber(ctx, tx, session.TableRef{Name: table}, existing.pkCol); err != nil {
+				return fmt.Errorf("failed to advance key sequence: %w", err)
 			}
 		}
 	}
-
-	if beforeCommit != nil {
-		if err := beforeCommit(tx); err != nil {
-			tx.Rollback() //nolint:errcheck
-			return 0, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit: %w", err)
-	}
-	return int(n), nil
+	return nil
 }
 
 // countUpsert computes the Inserted/Updated/Unchanged breakdown an upsert

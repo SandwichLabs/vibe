@@ -300,41 +300,13 @@ func (a *analyzer) checkRef(parts []string, st *walkState) {
 // shaped like a file or URL (DuckDB would read it by replacement scan) held to
 // the same path rule as read_csv('...').
 func (a *analyzer) resolveRef(catalogName, schema, table string, st *walkState) {
-	if st.summary > 0 && a.isRemote(catalogName, schema) {
-		st.fail("SUMMARIZE would copy the whole table out of a remote connection; use SELECT with aggregates or a LIMIT instead")
-		return
-	}
-	if isDuckLakeInternal(catalogName) || isDuckLakeInternal(schema) {
-		st.fail("%s", duckLakeInternalMsg)
-		return
-	}
-	if a.mysqlServerSchema(catalogName, schema) {
-		st.fail("%s", mysqlSystemSchemaMsg)
+	if a.refDenied(catalogName, schema, st) {
 		return
 	}
 	full := dotJoin(catalogName, schema, table)
 	fileish := looksLikeFile(full)
-	dbs := a.databases()
-	userCat := func(n string) (dbRow, bool) {
-		r, ok := dbs[strings.ToLower(n)]
-		return r, ok && !(r.internal && strings.EqualFold(r.name, "system"))
-	}
-	lc := strings.ToLower(catalogName)
-	switch {
-	case lc == "system":
-		if allowedSystemObjects[systemObjectKey(schema, table)] {
-			return
-		}
-		st.fail("%s", unresolvedTableDeniedMsg(catalogName, schema, table))
+	if done := a.refHandledByCatalogName(catalogName, schema, table, fileish, st); done {
 		return
-	case catalogName != "":
-		if row, ok := userCat(catalogName); ok && !fileish && serverSide(row) {
-			return // a server's own objects (views run on that server); DuckDB reports a missing table
-		}
-	case schema != "":
-		if row, ok := userCat(schema); ok && !fileish && serverSide(row) {
-			return
-		}
 	}
 	cat := a.catalog()
 	if e, ok := cat.lookup(catalogName, schema, table); ok {
@@ -360,16 +332,57 @@ func (a *analyzer) resolveRef(catalogName, schema, table string, st *walkState) 
 	// A qualified name inside an attached catalog that is simply not listed
 	// (a table created after the attach): DuckDB reports it if it is missing.
 	if catalogName != "" {
-		if _, ok := userCat(catalogName); ok {
+		if _, ok := a.userCatalog(catalogName); ok {
 			return
 		}
 	}
 	if catalogName == "" && schema != "" {
-		if _, ok := userCat(schema); ok {
+		if _, ok := a.userCatalog(schema); ok {
 			return
 		}
 	}
 	st.fail("%s", unresolvedTableDeniedMsg(catalogName, schema, table))
+}
+
+// userCatalog looks up an attached catalog, hiding DuckDB's own system one.
+func (a *analyzer) userCatalog(n string) (dbRow, bool) {
+	r, ok := a.databases()[strings.ToLower(n)]
+	return r, ok && !(r.internal && strings.EqualFold(r.name, "system"))
+}
+
+// refDenied fails a reference into a remote summary, a DuckLake internal or a
+// MySQL server schema.
+func (a *analyzer) refDenied(catalogName, schema string, st *walkState) bool {
+	switch {
+	case st.summary > 0 && a.isRemote(catalogName, schema):
+		st.fail("SUMMARIZE would copy the whole table out of a remote connection; use SELECT with aggregates or a LIMIT instead")
+	case isDuckLakeInternal(catalogName) || isDuckLakeInternal(schema):
+		st.fail("%s", duckLakeInternalMsg)
+	case a.mysqlServerSchema(catalogName, schema):
+		st.fail("%s", mysqlSystemSchemaMsg)
+	default:
+		return false
+	}
+	return true
+}
+
+// refHandledByCatalogName settles the references decided by the catalog part
+// alone: the system catalog (allow-list) and a server's own objects.
+func (a *analyzer) refHandledByCatalogName(catalogName, schema, table string, fileish bool, st *walkState) bool {
+	switch {
+	case strings.EqualFold(catalogName, "system"):
+		if !allowedSystemObjects[systemObjectKey(schema, table)] {
+			st.fail("%s", unresolvedTableDeniedMsg(catalogName, schema, table))
+		}
+		return true
+	case catalogName != "":
+		row, ok := a.userCatalog(catalogName)
+		return ok && !fileish && serverSide(row) // views run on that server; DuckDB reports a missing table
+	case schema != "":
+		row, ok := a.userCatalog(schema)
+		return ok && !fileish && serverSide(row)
+	}
+	return false
 }
 
 func isRemoteType(r dbRow) bool { return r.typ != "duckdb" && r.typ != "sqlite" && r.typ != "" }

@@ -86,27 +86,7 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 	}
 	errW := cmd.ErrOrStderr()
 
-	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe studio", errW)
-	if err != nil && !readOnly && errors.Is(err, hub.ErrHubHeld) && stdinIsTerminal() {
-		// Offer read-only only when it can show something: probe first, since
-		// a locked default database would leave the TUI empty.
-		suppressDotEnvPrompt = true
-		probe, perr := openWorkspace(ctx, dir, true, true, "vibe studio", io.Discard)
-		suppressDotEnvPrompt = false
-		switch {
-		case perr != nil:
-		case defaultIsLocalDuckDB(probe) && probe.hasIssue(probe.WS.DefaultConnection()):
-			probe.Close()
-			return fmt.Errorf("%w\n(read-only would not help: this workspace's own database is a local DuckDB file the owner keeps locked)", err)
-		default:
-			fmt.Fprintln(errW, err)
-			if askYesNo(errW, "Open read-only instead?") {
-				readOnly, o, err = true, probe, nil
-			} else {
-				probe.Close()
-			}
-		}
-	}
+	o, readOnly, err := openForTUI(ctx, dir, readOnly, errW)
 	if err != nil {
 		return err
 	}
@@ -118,8 +98,60 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("connection %s is %s", d, lockedMessage(o.WS.Root()))
 		}
 	}
-	// The alternate screen would hide anything printed to stderr from here on,
-	// so connection problems go into the REPL's first lines.
+
+	// An agent over stdio or a socket gets the same tools and gating as MCP.
+	// A read-only open never serves one: it does not own the database.
+	if agentCmd != "" || agentListen != "" {
+		if readOnly {
+			return fmt.Errorf("--agent-cmd and --agent-listen need the workspace's database; they cannot run with --read-only")
+		}
+		stop, err := startTUIAgent(ctx, o, agentCmd, agentListen, agentMode)
+		if err != nil {
+			return err
+		}
+		defer stop()
+	}
+
+	app := tui.NewApp(tuiWorkspace{o}, o.Eng, logger,
+		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(tuiNotices(o)...))
+	app.LoadData()
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithInput(in), tea.WithOutput(out))
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+	return nil
+}
+
+// openForTUI opens the workspace for the TUI. When the owner holds it and a
+// person is at the keyboard, it offers a read-only open instead (probing first,
+// since a locked default database would leave the TUI empty). It returns the
+// effective read-only flag.
+func openForTUI(ctx context.Context, dir string, readOnly bool, errW io.Writer) (*openedWorkspace, bool, error) {
+	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe studio", errW)
+	if err == nil || readOnly || !errors.Is(err, hub.ErrHubHeld) || !stdinIsTerminal() {
+		return o, readOnly, err
+	}
+	suppressDotEnvPrompt = true
+	probe, perr := openWorkspace(ctx, dir, true, true, "vibe studio", io.Discard)
+	suppressDotEnvPrompt = false
+	switch {
+	case perr != nil:
+	case defaultIsLocalDuckDB(probe) && probe.hasIssue(probe.WS.DefaultConnection()):
+		probe.Close()
+		return nil, readOnly, fmt.Errorf("%w\n(read-only would not help: this workspace's own database is a local DuckDB file the owner keeps locked)", err)
+	default:
+		fmt.Fprintln(errW, err)
+		if askYesNo(errW, "Open read-only instead?") {
+			return probe, true, nil
+		}
+		probe.Close()
+	}
+	return nil, readOnly, err
+}
+
+// tuiNotices turns connection problems into the REPL's first lines: the
+// alternate screen would hide anything printed to stderr from here on.
+func tuiNotices(o *openedWorkspace) []string {
 	var notices []string
 	for _, i := range o.Issues {
 		msg := i.Message
@@ -128,46 +160,44 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 		}
 		notices = append(notices, fmt.Sprintf("-- connection %s is not available: %s", i.Connection, msg))
 	}
+	return notices
+}
 
-	// An agent over stdio or a socket gets the same tools and gating as MCP.
-	// A read-only open never serves one: it does not own the database.
-	if agentCmd != "" || agentListen != "" {
-		if readOnly {
-			return fmt.Errorf("--agent-cmd and --agent-listen need the workspace's database; they cannot run with --read-only")
-		}
-		handler, _, err := hub.NewAgentHandler(o.WS, o.Sess, agentMode, logger)
-		if err != nil {
-			return err
-		}
-		agentCtx, agentCancel := context.WithCancel(ctx)
-		defer agentCancel()
-		if agentCmd != "" {
-			srv, proc, startErr := startAgentCmd(agentCmd, handler, agentCtx)
-			if startErr != nil {
-				return fmt.Errorf("failed to start agent command: %w", startErr)
-			}
-			defer func() {
-				srv.Stop()  //nolint:errcheck
-				proc.Kill() //nolint:errcheck
-			}()
-		}
-		if agentListen != "" {
-			srv, startErr := startAgentListener(agentListen, handler, agentCtx)
-			if startErr != nil {
-				return fmt.Errorf("failed to start agent listener: %w", startErr)
-			}
-			defer srv.Stop() //nolint:errcheck
-		}
+// startTUIAgent serves the workspace's agent tools over a subprocess's stdio
+// and/or a socket. The returned stop shuts both down.
+func startTUIAgent(ctx context.Context, o *openedWorkspace, agentCmd, agentListen, agentMode string) (stop func(), err error) {
+	handler, _, err := hub.NewAgentHandler(o.WS, o.Sess, agentMode, logger)
+	if err != nil {
+		return nil, err
 	}
-
-	app := tui.NewApp(tuiWorkspace{o}, o.Eng, logger,
-		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(notices...))
-	app.LoadData()
-	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithInput(in), tea.WithOutput(out))
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("TUI error: %w", err)
+	agentCtx, agentCancel := context.WithCancel(ctx)
+	var stops []func()
+	stop = func() {
+		for i := len(stops) - 1; i >= 0; i-- {
+			stops[i]()
+		}
+		agentCancel()
 	}
-	return nil
+	if agentCmd != "" {
+		srv, proc, startErr := startAgentCmd(agentCmd, handler, agentCtx)
+		if startErr != nil {
+			agentCancel()
+			return nil, fmt.Errorf("failed to start agent command: %w", startErr)
+		}
+		stops = append(stops, func() {
+			srv.Stop()  //nolint:errcheck
+			proc.Kill() //nolint:errcheck
+		})
+	}
+	if agentListen != "" {
+		srv, startErr := startAgentListener(agentListen, handler, agentCtx)
+		if startErr != nil {
+			stop()
+			return nil, fmt.Errorf("failed to start agent listener: %w", startErr)
+		}
+		stops = append(stops, func() { srv.Stop() }) //nolint:errcheck
+	}
+	return stop, nil
 }
 
 // tuiWorkspace adapts an opened workspace to tui.WorkspaceAccess.

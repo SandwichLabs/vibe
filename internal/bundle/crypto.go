@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"filippo.io/age"
@@ -76,6 +77,29 @@ func encrypt(plain []byte, passphrase string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// declaredWorkFactor reads the scrypt work factor (log2 N) the envelope's
+// header asks for, or 0 when there is none. age reports an over-limit factor
+// only as error text, so the header is read directly rather than the message
+// matched.
+func declaredWorkFactor(data []byte) int {
+	var src io.Reader = bytes.NewReader(data)
+	if isArmored(data) {
+		src = armor.NewReader(src)
+	}
+	head, _ := io.ReadAll(io.LimitReader(src, 4096))
+	for _, line := range strings.Split(string(head), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 4 && f[0] == "->" && f[1] == "scrypt" {
+			n, err := strconv.Atoi(f[3])
+			if err != nil {
+				return 0
+			}
+			return n
+		}
+	}
+	return 0
+}
+
 // decrypt opens an age envelope. The plaintext is capped: an authenticated
 // stream can still be arbitrarily long.
 func decrypt(data []byte, passphrase string) ([]byte, error) {
@@ -97,7 +121,7 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 		if errors.As(err, &noMatch) {
 			return nil, ErrWrongPassphrase
 		}
-		if strings.Contains(err.Error(), "work factor") {
+		if declaredWorkFactor(data) > maxScryptWork {
 			return nil, ErrUnsupportedKDF
 		}
 		return nil, corrupt("the encrypted bundle could not be read (%v)", err)
