@@ -88,6 +88,21 @@ func TestSetInitialArg(t *testing.T) {
 	assert.Contains(t, app.GetInitialWorkspace().Message, "isn't there")
 }
 
+// #33: the launch target survives being read (a reload mid-open still finds
+// it) and is spent only by MarkLaunchHandled (a reload after close shows the
+// Launcher).
+func TestMarkLaunchHandled_ConsumesLaunchTarget(t *testing.T) {
+	app := newBareApp(t)
+	dir := t.TempDir()
+	app.setInitialArg(dir)
+
+	assert.Equal(t, dir, app.GetInitialWorkspace().Path)
+	assert.Equal(t, dir, app.GetInitialWorkspace().Path, "a reload before the open was handled still sees it")
+
+	app.MarkLaunchHandled()
+	assert.Equal(t, InitialWorkspace{}, app.GetInitialWorkspace(), "a reload after it was handled opens nothing")
+}
+
 func TestOpenWorkspace_PlainFolderThenCreateInPlace(t *testing.T) {
 	app := newBareApp(t)
 	dir := t.TempDir()

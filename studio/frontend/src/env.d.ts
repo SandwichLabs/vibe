@@ -19,6 +19,7 @@ interface AppApi {
   OpenThemesDir(): Promise<string>
   // Workspaces (#111)
   GetInitialWorkspace(): Promise<{ path: string; message: string; bundlePath: string }>
+  MarkLaunchHandled(): Promise<void>
   ListRecentWorkspaces(): Promise<RecentWorkspace[]>
   RemoveRecentWorkspace(path: string): Promise<RecentWorkspace | null>
   RestoreRecentWorkspace(r: RecentWorkspace): Promise<void>

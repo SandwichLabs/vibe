@@ -43,7 +43,9 @@ This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.gorel
 
 ## 1a. File opening, as built (#105 Slice 3)
 
-What the app does, whichever way the OS hands it a path. All of it is `studio/workspace.go` (`classifyLaunchArg`, `setInitialArg`, `handleOpenPath`, `GetInitialWorkspace`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
+What the app does, whichever way the OS hands it a path. All of it is `studio/workspace_launch.go` (`classifyLaunchArg`, `resolveLaunch`, `handleOpenPath`, `GetInitialWorkspace`, `MarkLaunchHandled`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
+
+The launch target is used once: `GetInitialWorkspace` only reads it, and the frontend calls `MarkLaunchHandled` after the open is handled (opened, failed or declined), so a later reload shows the Launcher instead of reopening it.
 
 | Path is | Studio does |
 |---|---|

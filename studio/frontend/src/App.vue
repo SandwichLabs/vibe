@@ -42,11 +42,15 @@ onMounted(async () => {
         await handleOpenRequest(await App.GetInitialWorkspace())
       } catch {
         // ignore
+      } finally {
+        // Handled, whatever happened: a later reload must not reopen it (#33).
+        try { await App.MarkLaunchHandled() } catch { /* ignore */ }
       }
     } else {
       launching.value = false
-      // Still tells the backend it can send open requests as events.
-      try { await App.GetInitialWorkspace() } catch { /* ignore */ }
+      // Still tells the backend it can send open requests as events, and that
+      // the launch target (already satisfied by the open workspace) is spent.
+      try { await App.GetInitialWorkspace(); await App.MarkLaunchHandled() } catch { /* ignore */ }
     }
     // EventsOn returns an unsubscribe function scoped to THIS listener; the global
     // EventsOff(name) would remove every listener for the event name.
