@@ -1,6 +1,6 @@
 module github.com/SandwichLabs/vibe
 
-go 1.27.0
+go 1.27.2
 
 require (
 	charm.land/fantasy v0.45.2
