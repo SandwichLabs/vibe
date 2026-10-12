@@ -9,7 +9,7 @@ Contents: [Go modules](#go-modules) Â· [Frontend packages](#frontend-packages) Â
 ## Go modules
 
 Every module linked into the `vibe` CLI or Vibe Studio on linux and macOS (amd64 and arm64), found with go-licenses v2.
-137 module/licence-file pairs: Apache-2.0 42, BSD-2-Clause 5, BSD-3-Clause 27, ISC 1, MIT 62.
+139 module/licence-file pairs: Apache-2.0 43, BSD-2-Clause 5, BSD-3-Clause 27, ISC 1, MIT 63.
 
 #### Apache-2.0
 
@@ -692,6 +692,7 @@ Distributed under MIT License.
 #### Apache-2.0
 
 - github.com/aws/smithy-go v1.28.1
+- github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 - github.com/spf13/afero v1.15.0
 - github.com/spf13/cobra v1.10.2
 
@@ -3555,6 +3556,34 @@ SOFTWARE.
 
 #### MIT
 
+- github.com/google/jsonschema-go v0.4.2
+
+```text
+MIT License
+
+Copyright (c) 2025 JSON Schema Go Project Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+#### MIT
+
 - github.com/invopop/jsonschema v0.14.0
 
 ```text
@@ -4063,7 +4092,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #### MIT
 
-- github.com/mark3labs/mcp-go v0.44.1
+- github.com/mark3labs/mcp-go v1.2.1
 
 ```text
 MIT License
