@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -584,7 +583,7 @@ func (a *App) SaveFilterAsQuery(name string, spec FilterSpec, columns []string, 
 		Engine:     "duckdb",
 		Parameters: []queries.Param{},
 	}
-	if err := a.ws.Queries().Create(context.Background(), q); err != nil {
+	if err := a.ws.Queries().Create(a.ctxOrBackground(), q); err != nil {
 		return "", fmt.Errorf("failed to save filter as query: %w", err)
 	}
 	a.logger.Info("saved filter as named query", "id", q.ID, "table", name, "title", title)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -173,7 +174,7 @@ func (s *AgentServer) Serve(ctx context.Context) error {
 
 		req, err := s.transport.ReadRequest()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				s.logger.Info("transport closed")
 				return nil
 			}

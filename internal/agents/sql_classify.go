@@ -228,7 +228,11 @@ func classifierDB() (*sql.DB, error) {
 		var v string
 		if err := db.QueryRow("SELECT current_setting('enable_external_access')").Scan(&v); err != nil || !strings.EqualFold(v, "false") {
 			_ = db.Close()
-			classifierDBErr = fmt.Errorf("the SQL parser connection is not hardened (enable_external_access=%q, %v)", v, err)
+			if err != nil {
+				classifierDBErr = fmt.Errorf("the SQL parser connection is not hardened (enable_external_access=%q): %w", v, err)
+			} else {
+				classifierDBErr = fmt.Errorf("the SQL parser connection is not hardened (enable_external_access=%q)", v)
+			}
 			return
 		}
 		classifierDBConn = db

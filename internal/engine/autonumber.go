@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -114,7 +115,7 @@ func sequencePosition(ctx context.Context, q Querier, ref session.TableRef, seq 
 		args...,
 	).Scan(&lastVal, &startVal)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return 0, false, nil
 		}
 		return 0, false, fmt.Errorf("failed to inspect sequence %q: %w", seq, err)

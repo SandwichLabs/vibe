@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -387,7 +388,7 @@ func describeExistingTable(ctx context.Context, conn *sql.Conn, table string) (*
 	var canonical sql.NullString
 	if err := conn.QueryRowContext(ctx,
 		"SELECT table_name FROM information_schema.tables WHERE table_catalog=current_database() AND table_schema=current_schema() AND lower(table_name)=lower($1) LIMIT 1", table,
-	).Scan(&canonical); err != nil && err != sql.ErrNoRows {
+	).Scan(&canonical); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to check for existing table: %w", err)
 	}
 	if !canonical.Valid {

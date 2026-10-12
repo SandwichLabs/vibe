@@ -409,13 +409,13 @@ func decode(raw any) (any, error) {
 	case string:
 		var out any
 		if err := json.Unmarshal([]byte(v), &out); err != nil {
-			return nil, fmt.Errorf("invalid JSON: %v", err)
+			return nil, fmt.Errorf("invalid JSON: %w", err)
 		}
 		return out, nil
 	case []byte:
 		var out any
 		if err := json.Unmarshal(v, &out); err != nil {
-			return nil, fmt.Errorf("invalid JSON: %v", err)
+			return nil, fmt.Errorf("invalid JSON: %w", err)
 		}
 		return out, nil
 	default:

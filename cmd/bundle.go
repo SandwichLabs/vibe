@@ -146,7 +146,7 @@ func runImportNotebook(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer ws.Close()
-	pkg.Preview(ws) // note the revision an overwrite would replace
+	pkg.Preview(cmdCtx(cmd), ws) // note the revision an overwrite would replace
 	res, err := pkg.Import(cmdCtx(cmd), ws, bundle.ImportOptions{OnConflict: action})
 	if err != nil {
 		return err
@@ -332,7 +332,7 @@ func runImportBundle(cmd *cobra.Command, file string) error {
 	defer ws.Close()
 
 	opts := bundle.ImportOptions{OnConflict: action, DryRun: dry}
-	pv := pkg.Preview(ws)
+	pv := pkg.Preview(cmdCtx(cmd), ws)
 	if len(withConns) == 1 && withConns[0] == "all" {
 		withConns = nil
 		for _, c := range pv.Connections {

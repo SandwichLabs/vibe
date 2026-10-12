@@ -74,8 +74,8 @@ func (t storageType) Validate(s session.Spec) error {
 	if err := unknownOptions(s, t.allowedOptions()...); err != nil {
 		return err
 	}
-	if e := opt(s, "endpoint"); e != "" && !endptRE.MatchString(e) {
-		return fmt.Errorf("%s connection %q: endpoint %q is not a host name (no scheme, no path)", t.kind, s.Name, e)
+	if ep := opt(s, "endpoint"); ep != "" && !endptRE.MatchString(ep) {
+		return fmt.Errorf("%s connection %q: endpoint %q is not a host name (no scheme, no path)", t.kind, s.Name, ep)
 	}
 	if err := oneOf("url_style", opt(s, "url_style"), urlStyles...); err != nil {
 		return err

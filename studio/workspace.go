@@ -57,8 +57,22 @@ const releaseGrace = 400 * time.Millisecond
 const legacyVibeMessage = ".vibe files are bundles: use Import .vibe… to bring one into a workspace. Open a workspace folder to work in it."
 
 // conflictPrefix starts the message of a save refused because the file changed
-// on disk; the frontend matches it to show the conflict banner.
+// on disk. The Wails bridge carries errors as plain strings, so this prefix is
+// the wire format; the frontend's isConflict (lib/errors.ts) is its one reader.
 const conflictPrefix = "conflict: "
+
+// bridgeConflict is the one error shape a compare-and-write conflict takes
+// when it crosses the Wails bridge. It satisfies errors.Is(err,
+// filestore.ErrConflict) for Go callers and renders with conflictPrefix for
+// the UI.
+type bridgeConflict struct{ msg string }
+
+func (c *bridgeConflict) Error() string { return conflictPrefix + c.msg }
+
+func (c *bridgeConflict) Is(target error) bool { return target == filestore.ErrConflict }
+
+// newConflict builds the bridge conflict for a message.
+func newConflict(msg string) error { return &bridgeConflict{msg: msg} }
 
 // conflictErr marks a filestore conflict so the UI can tell it from any other
 // save failure. Other errors pass through untouched.
@@ -66,9 +80,9 @@ func conflictErr(err error) error {
 	if err != nil && errors.Is(err, filestore.ErrConflict) {
 		var ce *filestore.ConflictError
 		if errors.As(err, &ce) {
-			return errors.New(conflictPrefix + ce.Error())
+			return newConflict(ce.Error())
 		}
-		return errors.New(conflictPrefix + "the file changed on disk since it was loaded")
+		return newConflict("the file changed on disk since it was loaded")
 	}
 	return err
 }
@@ -1381,7 +1395,7 @@ func (a *App) SetWorkspaceSettings(s WorkspaceSettings) (*WorkspaceInfo, error) 
 		}
 		curAsk := cfg.AskBeforeWrites != nil && *cfg.AskBeforeWrites
 		if (s.LoadedTeamSandbox != nil && *s.LoadedTeamSandbox != curSandbox) || (s.LoadedTeamAsk != nil && *s.LoadedTeamAsk != curAsk) {
-			return nil, errors.New(conflictPrefix + "the team's agent limit in vibe.yaml changed since Settings was opened. Reload the page and try again.")
+			return nil, newConflict("the team's agent limit in vibe.yaml changed since Settings was opened. Reload the page and try again.")
 		}
 	}
 	next := cfg
@@ -1395,7 +1409,7 @@ func (a *App) SetWorkspaceSettings(s WorkspaceSettings) (*WorkspaceInfo, error) 
 	if !configEqual(cfg, next) {
 		if err := a.ws.SaveConfig(next); err != nil {
 			if errors.Is(err, workspace.ErrConflict) {
-				return nil, errors.New(conflictPrefix + "vibe.yaml changed on disk since Settings was opened. Reload and try again.")
+				return nil, newConflict("vibe.yaml changed on disk since Settings was opened. Reload and try again.")
 			}
 			return nil, err
 		}

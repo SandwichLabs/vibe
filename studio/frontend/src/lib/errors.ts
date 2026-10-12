@@ -14,8 +14,25 @@ const WRAP_PREFIX = /^(?:query failed|failed to (?:[^:"]|"[^"]*")*): /i
 // do (the panels offer a "Reload settings" button when stale is true).
 export function settingsError(e: unknown): { text: string; stale: boolean } {
   const t = errorText(e)
-  if (t.startsWith('conflict: ')) return { text: t.slice('conflict: '.length), stale: true }
+  if (isConflict(e)) return { text: t.slice(CONFLICT_PREFIX.length), stale: true }
   return { text: t, stale: false }
+}
+
+// CONFLICT_PREFIX is the wire marker studio/workspace.go's conflictErr puts on
+// a save refused because the file changed on disk (filestore.ErrConflict). The
+// Wails bridge carries errors as plain strings, so this is the one place the
+// marker is known on the frontend; views call isConflict instead of matching it.
+const CONFLICT_PREFIX = 'conflict: '
+
+// isConflict reports whether a thrown binding error is a compare-and-write
+// conflict (the file changed or vanished on disk since it was loaded).
+export function isConflict(e: unknown): boolean {
+  return errorText(e).startsWith(CONFLICT_PREFIX.trimEnd())
+}
+
+// isDeletedConflict is a conflict where the file is gone, not just changed.
+export function isDeletedConflict(e: unknown): boolean {
+  return isConflict(e) && /deleted/.test(errorText(e))
 }
 
 export function errorText(e: unknown): string {

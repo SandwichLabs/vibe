@@ -113,13 +113,13 @@ func TestListUserThemes(t *testing.T) {
 
 func TestDefaultDir_EnvOverride(t *testing.T) {
 	t.Setenv("VIBE_CONFIG_DIR", "/tmp/vibe-test-cfg")
-	d, err := DefaultDir()
+	d, err := DefaultDir(nil)
 	require.NoError(t, err)
 	assert.Equal(t, "/tmp/vibe-test-cfg", d)
 
 	t.Setenv("VIBE_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
-	d, err = DefaultDir()
+	d, err = DefaultDir(nil)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join("/tmp/xdg", "vibe"), d)
 }
@@ -127,12 +127,12 @@ func TestDefaultDir_EnvOverride(t *testing.T) {
 func TestDefaultDir_RelativeEnvIsIgnored(t *testing.T) {
 	abs := t.TempDir()
 	t.Setenv("VIBE_CONFIG_DIR", abs)
-	got, err := DefaultDir()
+	got, err := DefaultDir(nil)
 	require.NoError(t, err)
 	assert.Equal(t, abs, got)
 
 	t.Setenv("VIBE_CONFIG_DIR", "relative/dir")
-	got, err = DefaultDir()
+	got, err = DefaultDir(nil)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "relative/dir", "a relative VIBE_CONFIG_DIR falls back to the user config dir")
 	assert.True(t, filepath.IsAbs(got))

@@ -359,9 +359,9 @@ func (a *App) PreviewBundleImport(path, passphrase string) (*BundlePreview, erro
 	a.mu.RLock()
 	var inner bundle.Preview
 	if a.ws != nil {
-		inner = pkg.Preview(a.ws)
+		inner = pkg.Preview(a.ctxOrBackground(), a.ws)
 	} else {
-		inner = pkg.Preview(nil)
+		inner = pkg.Preview(a.ctxOrBackground(), nil)
 	}
 	a.mu.RUnlock()
 	pv.Preview = inner

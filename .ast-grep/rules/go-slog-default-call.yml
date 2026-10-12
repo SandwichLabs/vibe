@@ -1,0 +1,17 @@
+id: go-slog-default-call
+language: go
+severity: error
+message: >-
+  Global slog use (slog.Default().X, slog.Info/Warn/..., or `l := slog.Default()`). Inject a *slog.Logger (CLAUDE.md); a nil-fallback `logger = slog.Default()` or `logger: slog.Default()` in a constructor is allowed.
+rule:
+  any:
+    - kind: call_expression
+      has:
+        field: function
+        kind: selector_expression
+        has: {field: operand, pattern: slog.Default()}
+    - kind: call_expression
+      has: {field: function, regex: '^slog\.(Debug|Info|Warn|Error|Log|DebugContext|InfoContext|WarnContext|ErrorContext|LogAttrs)$'}
+    - kind: short_var_declaration
+      has: {field: right, has: {pattern: slog.Default()}}
+ignores: ["**/*_test.go"]

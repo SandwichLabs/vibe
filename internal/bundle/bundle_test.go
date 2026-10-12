@@ -78,7 +78,7 @@ func TestRoundTripIsByteIdentical(t *testing.T) {
 	dst, _ := newWS(t)
 	pkg, err := Open(res.Data, "")
 	require.NoError(t, err)
-	pv := pkg.Preview(dst)
+	pv := pkg.Preview(context.Background(), dst)
 	require.Len(t, pv.Items, 3)
 	for _, it := range pv.Items {
 		assert.False(t, it.Conflict)
@@ -133,7 +133,7 @@ func TestEncryptedRoundTripAndWrongPassphrase(t *testing.T) {
 	pkg, err := Open(res.Data, "correct horse")
 	require.NoError(t, err)
 	assert.True(t, pkg.Encrypted)
-	assert.Len(t, pkg.Preview(src).Items, 3)
+	assert.Len(t, pkg.Preview(context.Background(), src).Items, 3)
 
 	// A flipped byte in the ciphertext is refused (authenticated envelope).
 	bad := append([]byte(nil), res.Data...)
@@ -413,7 +413,7 @@ func TestConnectionsAreStrippedAndImportedLocalWithoutCredentials(t *testing.T) 
 	dst, dstStore := newWS(t)
 	pkg, err := Open(res.Data, "")
 	require.NoError(t, err)
-	pv := pkg.Preview(dst)
+	pv := pkg.Preview(context.Background(), dst)
 	require.Len(t, pv.Connections, 3, "warehouse, scratch, lake (mine was stripped)")
 
 	out, err := pkg.Import(ctx, dst, ImportOptions{}) // not named: nothing
@@ -576,7 +576,7 @@ func TestConflictModes(t *testing.T) {
 	nbRel := "notebooks/" + nbID + ".vnb"
 
 	t.Run("preview marks conflicts", func(t *testing.T) {
-		pv := pkg.Preview(setup(t))
+		pv := pkg.Preview(context.Background(), setup(t))
 		for _, it := range pv.Items {
 			assert.True(t, it.Conflict, it.Key)
 		}
@@ -629,7 +629,7 @@ func TestConflictModes(t *testing.T) {
 		dst := setup(t)
 		fresh, err := Open(res.Data, "")
 		require.NoError(t, err)
-		fresh.Preview(dst) // the person looks at the preview...
+		fresh.Preview(context.Background(), dst) // the person looks at the preview...
 		// ...and the notebook changes before they press Import.
 		require.NoError(t, os.WriteFile(filepath.Join(dst.Root(), filepath.FromSlash(nbRel)), []byte(`{"schemaVersion":2,"title":"Edited elsewhere","cells":[]}`+"\n"), 0o644))
 		out, err := fresh.Import(ctx, dst, ImportOptions{Decisions: map[string]Action{nbKey: ActionOverwrite, qKey: ActionSkip, skKey: ActionSkip}})
@@ -668,7 +668,7 @@ func TestConnectionConflicts(t *testing.T) {
 
 	dst, _ := newWS(t)
 	require.NoError(t, dst.AddConnection(workspace.ScopeShared, workspace.ConnectionDef{Name: "warehouse", Type: "postgres", Host: "db.team", Database: "d"}))
-	pv := pkg.Preview(dst)
+	pv := pkg.Preview(context.Background(), dst)
 	require.Len(t, pv.Connections, 1)
 	assert.True(t, pv.Connections[0].Conflict)
 	assert.Equal(t, "team", pv.Connections[0].ConflictScope)
@@ -738,8 +738,8 @@ func TestTeamConnectionsCanBePickedByName(t *testing.T) {
 	require.NoError(t, err)
 	pkg, err := Open(res.Data, "")
 	require.NoError(t, err)
-	require.Len(t, pkg.Preview(nil).Connections, 1)
-	assert.Equal(t, "b_pg", pkg.Preview(nil).Connections[0].Name)
+	require.Len(t, pkg.Preview(context.Background(), nil).Connections, 1)
+	assert.Equal(t, "b_pg", pkg.Preview(context.Background(), nil).Connections[0].Name)
 	_, err = Export(context.Background(), ws, ExportOptions{Selection: Selection{All: true, TeamConnections: []string{"nope"}}})
 	require.Error(t, err)
 }
@@ -764,4 +764,11 @@ func TestBundleNeverHoldsTheDotEnv(t *testing.T) {
 		assert.NotContains(t, rawZipText(t, res.Data), secret)
 		assert.NotContains(t, string(res.Data), secret)
 	}
+}
+
+func TestSkillUnknownSourceWarns(t *testing.T) {
+	doc := "---\nname: odd\ndescription: Odd source\nsource: team-blessed\n---\n\nBody.\n"
+	pkg, err := Open(build(t, map[string][]byte{"skills/odd/SKILL.md": []byte(doc)}, nil), "")
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(pkg.Warnings, "\n"), `claims an unknown source "team-blessed"`)
 }

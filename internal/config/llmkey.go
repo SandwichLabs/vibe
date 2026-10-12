@@ -134,7 +134,7 @@ func MigrateFileKey(ctx context.Context, store secrets.Store, path, provider str
 		return ErrNothingToMigrate
 	}
 	byHand := func(why error) error {
-		return fmt.Errorf("Vibe can't safely edit %s (%v). Save the key with \"vibe config llm-key set\" and delete llm.api_key from the file by hand", path, why)
+		return fmt.Errorf("Vibe can't safely edit %s (%w). Save the key with \"vibe config llm-key set\" and delete llm.api_key from the file by hand", path, why)
 	}
 	if n, derr := yamlDocCount(data); derr != nil || n != 1 {
 		return byHand(errors.New("the file is not a single YAML document"))

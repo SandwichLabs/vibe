@@ -101,7 +101,7 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	sqlStr := req.SQL
 	before := statusSnapshot(a.sess)
 	start := time.Now()
-	rs, total, err := a.engine.ExecuteCappedIn(context.Background(), req.Connection, sqlStr, nil, queryGridRowCap)
+	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, nil, queryGridRowCap)
 	a.afterRun(a.sess, before, sqlStr)
 	duration := time.Since(start)
 
@@ -253,7 +253,7 @@ func (a *App) ListQueries() ([]QuerySummary, error) {
 		return nil, err
 	}
 
-	qs, err := a.ws.Queries().List(context.Background())
+	qs, err := a.ws.Queries().List(a.ctxOrBackground())
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 		return nil, err
 	}
 
-	return a.ws.Queries().Get(context.Background(), id)
+	return a.ws.Queries().Get(a.ctxOrBackground(), id)
 }
 
 // QuerySaveResult is what SaveQueryOn returns: the query's id and the revision
@@ -332,7 +332,7 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) 
 	// connection is authoritative, set below); whatever else the file carries
 	// (parameters, a description) is kept.
 	if id != "" {
-		if base, err := a.ws.Queries().Get(context.Background(), id); err == nil && base != nil {
+		if base, err := a.ws.Queries().Get(a.ctxOrBackground(), id); err == nil && base != nil {
 			q.Parameters, q.Engine = base.Parameters, base.Engine
 			if description == "" {
 				q.Description = base.Description
@@ -346,7 +346,7 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) 
 	// on disk included, is returned to the caller instead of being retried as
 	// a create.
 	if id != "" {
-		err := a.ws.Queries().Update(context.Background(), q)
+		err := a.ws.Queries().Update(a.ctxOrBackground(), q)
 		if err == nil {
 			return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
 		}
@@ -354,7 +354,7 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) 
 			return nil, conflictErr(err)
 		}
 	}
-	if err := a.ws.Queries().Create(context.Background(), q); err != nil {
+	if err := a.ws.Queries().Create(a.ctxOrBackground(), q); err != nil {
 		return nil, err
 	}
 	return &QuerySaveResult{ID: q.ID, Rev: q.Rev}, nil
@@ -369,7 +369,7 @@ func (a *App) DeleteQuery(id string) error {
 		return err
 	}
 
-	return a.ws.Queries().Delete(context.Background(), id)
+	return a.ws.Queries().Delete(a.ctxOrBackground(), id)
 }
 
 // --- Dashboard ---

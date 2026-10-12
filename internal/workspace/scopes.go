@@ -214,7 +214,7 @@ func readOptional(path string) ([]byte, bool, error) {
 
 // LoadUserConfig reads the user-scope file; a missing file is empty.
 func LoadUserConfig() (UserConfig, error) {
-	dir, err := prefs.DefaultDir()
+	dir, err := prefs.DefaultDir(nil)
 	if err != nil {
 		return UserConfig{Version: ConfigVersion}, nil //nolint:nilerr // no config dir: no user scope
 	}

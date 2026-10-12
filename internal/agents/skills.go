@@ -140,7 +140,7 @@ func tableHasRows(sess session.Session, table string) bool {
 
 // loadStoredSkills reads every stored skill as merged-view entries. An empty or
 // missing store is an empty slice, not an error.
-func loadStoredSkills(ctx context.Context, store skills.Store) ([]SkillEntry, error) {
+func loadStoredSkills(ctx context.Context, store skills.Store, logger *slog.Logger) ([]SkillEntry, error) {
 	if store == nil {
 		return nil, nil
 	}
@@ -151,7 +151,7 @@ func loadStoredSkills(ctx context.Context, store skills.Store) ([]SkillEntry, er
 	out := make([]SkillEntry, 0, len(stored))
 	for _, s := range stored {
 		if s.Error != "" {
-			slog.Default().Warn("skipping unreadable stored skill", "name", s.Name, "error", s.Error)
+			logger.Warn("skipping unreadable stored skill", "name", s.Name, "error", s.Error)
 			continue
 		}
 		out = append(out, SkillEntry{Name: s.Name, Description: s.Description, Instructions: s.Instructions, TableName: s.TableName, Source: s.Source, Rev: s.Rev})
@@ -187,7 +187,7 @@ func LoadSkills(store skills.Store, sess session.Session, logger *slog.Logger) (
 		out = append(out, SkillEntry{Name: b.Name, Description: b.Description, Instructions: b.Instructions, Source: SkillSourceBuiltin})
 	}
 
-	stored, err := loadStoredSkills(context.Background(), store)
+	stored, err := loadStoredSkills(context.Background(), store, logger)
 	if err != nil {
 		return nil, err
 	}

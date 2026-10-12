@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +52,7 @@ func (a *App) ListNotebooks() ([]notebooks.Summary, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return nil, err
 	}
-	return a.ws.Notebooks().List(context.Background())
+	return a.ws.Notebooks().List(a.ctxOrBackground())
 }
 
 // GetNotebook loads one notebook, rebuilt through notebooks.Coerce.
@@ -64,7 +63,7 @@ func (a *App) GetNotebook(id string) (*notebooks.Notebook, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return nil, err
 	}
-	nb, warnings, err := a.ws.Notebooks().Get(context.Background(), id)
+	nb, warnings, err := a.ws.Notebooks().Get(a.ctxOrBackground(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +93,7 @@ func (a *App) CreateNotebook(title string) (*notebooks.Notebook, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return nil, err
 	}
-	nb, err := a.ws.Notebooks().Create(context.Background(), title)
+	nb, err := a.ws.Notebooks().Create(a.ctxOrBackground(), title)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +133,7 @@ func (a *App) SaveNotebook(raw map[string]any, sessionID string) (*NotebookSaveR
 	if sessionID != a.sessionID {
 		return nil, fmt.Errorf("stale workspace session: the open workspace changed since this notebook was loaded; reopen it and try again")
 	}
-	nb, warnings, err := a.ws.Notebooks().Save(context.Background(), raw)
+	nb, warnings, err := a.ws.Notebooks().Save(a.ctxOrBackground(), raw)
 	if err != nil {
 		return nil, conflictErr(err)
 	}
@@ -150,7 +149,7 @@ func (a *App) DeleteNotebook(id string) error {
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if err := a.ws.Notebooks().Delete(context.Background(), id); err != nil {
+	if err := a.ws.Notebooks().Delete(a.ctxOrBackground(), id); err != nil {
 		return err
 	}
 	a.emitNotebooksChanged(id, nil)
@@ -177,7 +176,7 @@ func (a *App) ExportNotebook(id, dst string) (string, error) {
 		a.mu.RUnlock()
 		return "", err
 	}
-	nb, warnings, err := a.ws.Notebooks().Get(context.Background(), id)
+	nb, warnings, err := a.ws.Notebooks().Get(a.ctxOrBackground(), id)
 	a.mu.RUnlock()
 	if err != nil {
 		return "", err
@@ -296,7 +295,7 @@ func (a *App) ImportNotebook(path string) (*NotebookSaveResult, error) {
 	if _, _, err := bundle.CheckNotebook(inner); err != nil {
 		return nil, err
 	}
-	nb, warnings, err := a.ws.Notebooks().Save(context.Background(), wrapper)
+	nb, warnings, err := a.ws.Notebooks().Save(a.ctxOrBackground(), wrapper)
 	if err != nil {
 		return nil, err
 	}

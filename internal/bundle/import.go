@@ -227,7 +227,7 @@ func ConnSummary(d workspace.ConnectionDef) string {
 // Preview describes the package against t: every item, and which of them
 // already exist there. It writes nothing. A nil t (no workspace yet: the
 // launcher importing into a new one) reports no conflicts.
-func (p *Package) Preview(t Target) Preview {
+func (p *Package) Preview(ctx context.Context, t Target) Preview {
 	pv := Preview{
 		WorkspaceName: p.Manifest.WorkspaceName, CreatedAt: p.Manifest.CreatedAt, CreatedBy: p.Manifest.CreatedBy,
 		Encrypted: p.Encrypted, Items: []PreviewItem{}, Connections: []PreviewConnection{}, Warnings: append([]string{}, p.Warnings...),
@@ -236,7 +236,7 @@ func (p *Package) Preview(t Target) Preview {
 	for _, it := range p.Items() {
 		it.Conflict = t != nil && storeHas(t, it.Kind, it.ID)
 		if it.Conflict {
-			p.noteRev(context.Background(), t, it.Kind, it.ID)
+			p.noteRev(ctx, t, it.Kind, it.ID)
 		}
 		pv.Items = append(pv.Items, it)
 	}
@@ -345,7 +345,7 @@ func (p *Package) Import(ctx context.Context, t Target, opts ImportOptions) (Res
 		defs[d.Name] = d
 	}
 	for _, n := range names {
-		res.Outcomes = append(res.Outcomes, p.importConnection(t, defs[n], opts, onConflict))
+		res.Outcomes = append(res.Outcomes, p.importConnection(ctx, t, defs[n], opts, onConflict))
 	}
 	return res, nil
 }
@@ -432,7 +432,7 @@ func (p *Package) writeQuery(ctx context.Context, t Target, it item, id string, 
 }
 
 func (p *Package) writeSkill(ctx context.Context, t Target, it item, name string, overwrite bool) (string, error) {
-	st, err := skills.Decode(it.ID, it.Data)
+	st, err := skills.Decode(it.ID, it.Data, nil)
 	if err != nil {
 		return "", err
 	}
@@ -455,7 +455,7 @@ func (p *Package) writeSkill(ctx context.Context, t Target, it item, name string
 	return st.Name, nil
 }
 
-func (p *Package) importConnection(t Target, d workspace.ConnectionDef, opts ImportOptions, onConflict Action) Outcome {
+func (p *Package) importConnection(ctx context.Context, t Target, d workspace.ConnectionDef, opts ImportOptions, onConflict Action) Outcome {
 	key := Key(KindConnection, d.Name)
 	o := Outcome{Key: key, Kind: KindConnection, ID: d.Name}
 	ex, conflict := existingConnection(t, d.Name)
@@ -493,7 +493,7 @@ func (p *Package) importConnection(t Target, d workspace.ConnectionDef, opts Imp
 			}
 		}
 		if !opts.DryRun {
-			if err = t.RemoveConnection(context.Background(), workspace.ScopeLocal, d.Name); err == nil {
+			if err = t.RemoveConnection(ctx, workspace.ScopeLocal, d.Name); err == nil {
 				err = t.AddConnection(workspace.ScopeLocal, d)
 			}
 		}

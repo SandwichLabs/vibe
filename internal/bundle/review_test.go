@@ -83,7 +83,7 @@ func TestConnectionPreviewShowsEverythingAndWarns(t *testing.T) {
 		"  - name: lake\n    type: s3\n    scope: s3://acme-prod/\n    read_only: false\n    options:\n      endpoint: s3.attacker.example\n      use_ssl: \"false\"\n      url_style: path\n" +
 		"  - name: pg\n    type: postgres\n    host: db.acme.com\n    database: d\n    options:\n      sslmode: disable\n" +
 		"  - name: narrow\n    type: s3\n    scope: s3://acme-prod/reports/2026/\n    region: us-east-1\n"
-	pv := connBundle(t, y).Preview(ws)
+	pv := connBundle(t, y).Preview(context.Background(), ws)
 	by := map[string]PreviewConnection{}
 	for _, c := range pv.Connections {
 		by[c.Name] = c
@@ -171,7 +171,7 @@ func TestMakerTextIsCleanedAndKeptApart(t *testing.T) {
 	})
 	pkg, err := Open(data, "")
 	require.NoError(t, err)
-	pv := pkg.Preview(nil)
+	pv := pkg.Preview(context.Background(), nil)
 	for _, s := range []string{pv.WorkspaceName, pv.CreatedBy, pv.MakerNotes[0]} {
 		assert.NotContains(t, s, "‮")
 		assert.NotContains(t, s, "​")
@@ -224,7 +224,7 @@ func TestGeneratedLookingNotebookIdsAreKept(t *testing.T) {
 	assert.Equal(t, id, out.Outcomes[0].FinalID)
 	assert.FileExists(t, filepath.Join(ws.Root(), "notebooks", id+".vnb"))
 	// Importing again and choosing Replace replaces it, rather than adding a duplicate.
-	pv := pkg.Preview(ws)
+	pv := pkg.Preview(context.Background(), ws)
 	assert.True(t, pv.Items[0].Conflict)
 	out, err = pkg.Import(ctx, ws, ImportOptions{OnConflict: ActionOverwrite})
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ connections:
 		assert.Contains(t, w, fmt.Sprintf("connection %q was not imported", n))
 	}
 	assert.Contains(t, w, "only you can add them")
-	pv := pkg.Preview(ws)
+	pv := pkg.Preview(context.Background(), ws)
 	require.Len(t, pv.Connections, 1)
 	assert.Equal(t, "pg", pv.Connections[0].Name)
 	_, err := pkg.Import(context.Background(), ws, ImportOptions{IncludeConnections: []string{"tbl"}})

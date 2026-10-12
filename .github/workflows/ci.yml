@@ -108,7 +108,8 @@ jobs:
         run: scripts/check-bindings.sh
 
       # Blocking: the root sgconfig.yml rules at severity "error" (the ones already at zero:
-      # one ParseScope, one path-containment helper, no find-connection-by-name loops). The
+      # one ParseScope, one path-containment helper, no find-connection-by-name loops, and from
+      # slice 3 errors wrapped with %w, errors.Is not ==, no slog.Default().X calls). The
       # other rules are report-only until their slice lands.
       - name: ast-grep rules
         run: |

@@ -508,8 +508,8 @@ func runConnConnect(cmd *cobra.Command, args []string) error {
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	err = o.Sess.Connect(cctx, name)
-	if relaunch, why := o.Sess.RelaunchRequired(); relaunch {
-		return fmt.Errorf("%s: %s", name, why)
+	if relaunch, reason := o.Sess.RelaunchRequired(); relaunch {
+		return fmt.Errorf("%s: %s", name, reason)
 	}
 	if err != nil {
 		st := connStatus(o.Sess, name)

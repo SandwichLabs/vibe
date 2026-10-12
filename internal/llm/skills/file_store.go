@@ -41,8 +41,9 @@ const (
 //
 // Conflict handling and identity follow notebooks.FileStore.
 type FileStore struct {
-	root string
-	obs  filestore.Observer
+	root   string
+	obs    filestore.Observer
+	logger *slog.Logger
 
 	mu   sync.Mutex
 	seen map[string]string
@@ -56,9 +57,18 @@ func WithObserver(o filestore.Observer) FileStoreOption {
 	return func(s *FileStore) { s.obs = o }
 }
 
+// WithLogger sets where the store reports files it normalises (default slog.Default()).
+func WithLogger(l *slog.Logger) FileStoreOption {
+	return func(s *FileStore) {
+		if l != nil {
+			s.logger = l
+		}
+	}
+}
+
 // NewFileStore returns the file-backed Store rooted at a workspace folder.
 func NewFileStore(root string, opts ...FileStoreOption) *FileStore {
-	s := &FileStore{root: root, seen: map[string]string{}}
+	s := &FileStore{root: root, seen: map[string]string{}, logger: slog.Default()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -137,7 +147,7 @@ func Encode(st Stored) ([]byte, error) {
 }
 
 // Decode parses SKILL.md bytes for the skill in directory name.
-func Decode(name string, data []byte) (Stored, error) {
+func Decode(name string, data []byte, logger *slog.Logger) (Stored, error) {
 	doc, ok := ParseDocument(string(data))
 	if !ok {
 		return Stored{}, fmt.Errorf("skill %q has no valid frontmatter (name and description are required)", name)
@@ -155,7 +165,9 @@ func Decode(name string, data []byte) (Stored, error) {
 	case "":
 		src = SourceUser
 	default:
-		slog.Default().Warn("skill file claims an unknown source; treating it as a user skill", "skill", name, "source", src)
+		if logger != nil {
+			logger.Warn("skill file claims an unknown source; treating it as a user skill", "skill", name, "source", src)
+		}
 		src = SourceUser
 	}
 	return Stored{
@@ -181,7 +193,7 @@ func (s *FileStore) load(name string) (Stored, error) {
 	if err != nil {
 		return Stored{}, err
 	}
-	sk, err := Decode(name, data)
+	sk, err := Decode(name, data, s.logger)
 	if err != nil {
 		return Stored{}, err
 	}
