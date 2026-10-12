@@ -22,7 +22,7 @@ permissions:
 env:
   CGO_ENABLED: "1"
   # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
-  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_GOTOOLCHAIN: go1.26.9
   WAILS_VERSION: v2.11.0
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 

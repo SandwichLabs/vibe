@@ -211,9 +211,19 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 	case "create_table":
 		ar.Table = stringParam(req.Params["name"])
 		ar.Summary = fmt.Sprintf("Create table %s", ar.Table)
+		// The column type is raw SQL text (it can carry constraints), so the person sees all of it.
+		if cols, ok := req.Params["columns"].([]any); ok && len(cols) > 0 {
+			defs := make([]string, 0, len(cols))
+			for _, c := range cols {
+				if m, ok := c.(map[string]any); ok {
+					defs = append(defs, stringParam(m["name"])+" "+stringParam(m["type"]))
+				}
+			}
+			ar.Summary += " with " + strings.Join(defs, ", ")
+		}
 	case "add_column":
 		ar.Rows = -1
-		ar.Summary = fmt.Sprintf("Add column %s to %s", stringParam(req.Params["name"]), table)
+		ar.Summary = fmt.Sprintf("Add column %s %s to %s", stringParam(req.Params["name"]), stringParam(req.Params["type"]), table)
 	case "import_csv":
 		ar.Rows = -1
 		ar.Summary = fmt.Sprintf("Import CSV data into %s", table)

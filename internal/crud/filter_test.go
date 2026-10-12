@@ -237,10 +237,11 @@ func TestCreateTable_RejectsInjectedColumnType(t *testing.T) {
 	var n int
 	assert.Error(t, db.QueryRow(`SELECT count(*) FROM victim`).Scan(&n), "no table was created")
 
-	for _, ok := range []string{"VARCHAR(64)", "DECIMAL(10,2)", "INTEGER PRIMARY KEY", "timestamp"} {
+	for _, ok := range []string{"VARCHAR(64)", "DECIMAL(10,2)", "INTEGER PRIMARY KEY", "timestamp", "INTEGER REFERENCES customers(id)", "STRUCT(a INT, b VARCHAR(8))"} {
 		assert.True(t, ValidColumnType(ok), ok)
 	}
-	for _, bad := range []string{"", "  ", "123", "INT;", "INT--", "INT'", `"x"`, "INT/*", "ENUM('a')"} {
+	for _, bad := range []string{"", "  ", "123", "INT;", "INT--", "INT'", `"x"`, "INT/*", "ENUM('a')",
+		"INTEGER) AS SELECT a FROM secret_table WHERE (1", "INTEGER)", "VARCHAR(64", ")INTEGER("} {
 		assert.False(t, ValidColumnType(bad), bad)
 	}
 }

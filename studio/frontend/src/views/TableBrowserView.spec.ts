@@ -251,7 +251,7 @@ describe('TableBrowserView inline datasheet editing', () => {
     // DescribeTable/GetTableData are re-mocked for the second table so
     // selectTable resolves cleanly.
     app.DescribeTable = vi.fn(async () => ({ name: 'other', columns: [{ name: 'id', type: 'INTEGER', not_null: true, pk: true }] }))
-    app.GetTableData = vi.fn(async () => ({ columns: ['id'], rows: [[1]], page: 1, page_size: 50, total_rows: 1, total_pages: 1 }))
+    app.GetTableData = vi.fn(async () => ({ columns: ['id'], types: ['INTEGER'], rows: [[1]], page: 1, page_size: 50, total_rows: 1, total_pages: 1 }))
     ;(globalThis as any).__mockRoute.query.table = 'other'
     await flushPromises()
 
