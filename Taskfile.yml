@@ -8,7 +8,7 @@ vars:
   # Wails CLI v2.11's package loader can't read Go 1.27 export data ("package ... without types"),
   # so the Wails tasks run on this toolchain (#92). An exported GOTOOLCHAIN in your shell wins.
   # Remove once a Wails release supports Go 1.27. Keep >= the `go` line in go.mod.
-  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_GOTOOLCHAIN: go1.26.9
   # `task install` stamps these into both binaries (release.yml stamps the same flags from the tag).
   INSTALL_DIR: '{{.HOME}}/go/bin'
   VERSION:

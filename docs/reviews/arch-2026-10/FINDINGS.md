@@ -441,3 +441,5 @@ Every slice is independently shippable and preserves behaviour unless marked **(
 - Slice 10 is optional for "clean", except perhaps P3.
 
 **Rule note:** ast-grep resolves `files:` and `ignores:` globs against the sgconfig's directory. The adapter-scoped rules are therefore exact only when the rules sit at the repo root, as they would once committed. The survey ran each rule with `ast-grep scan -r rules/<id>.yml cmd internal studio` from the repo root.
+
+*Later note: with ast-grep 0.45.3 the globs resolve against the working directory, so the rules now live in `tools/ast-grep/` and are run from the repo root (see `tools/ast-grep/sgconfig.yml`).*

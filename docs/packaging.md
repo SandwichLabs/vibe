@@ -26,6 +26,29 @@ This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.gorel
 - **Safety:** the tag is validated against `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$` before use (also for dispatch input), builds use no caches, and a re-run refuses to touch a release that is already published. Any `-suffix` tag is a prerelease. Archives are reproducible (sorted, root-owned, commit-time mtimes).
 - **Cutting a release:** `git tag -a v0.1.0 -m "Release v0.1.0" && git push origin v0.1.0`, review the draft, then publish it. `task release` prints this.
 
+## macOS unsigned path (spike #43)
+
+Run on GitHub-hosted runners, `macos-15` (arm64, macOS 15.7.9) and `macos-15-intel` (x86_64, 15.7.9), by `.github/workflows/macos-spike.yml` on the `spike/43-macos` branch (the workflow is not on `main`). Evidence: run 1 <https://github.com/SandwichLabs/vibe/actions/runs/38242439595>, run 2 <https://github.com/SandwichLabs/vibe/actions/runs/38243781472> (step logs, `RESULT` lines, screenshots in the `spike-*` artifacts). Builds used the same tags and ldflags as `release.yml`, packaged with `scripts/package.sh`.
+
+| Question (issue #43) | Result | Evidence |
+|---|---|---|
+| `wails build` arm64 and amd64 | **Works** on both. Studio renders and runs. | runs 1 and 2, both jobs |
+| Ad-hoc signing without the hardened runtime | **Works.** `CodeDirectory flags=0x2(adhoc)`, no `runtime` flag, `TeamIdentifier=not set`; `codesign --verify --deep --strict` passes on both archs. `spctl -a -vv` says `rejected` (exit 3) for the app and the CLI, as expected with no notarisation. | run 1 |
+| curl-style launch: no quarantine, no prompt | **Confirmed.** A tarball fetched with `curl` carries no `com.apple.quarantine` (`xattr -l` empty); the extracted tree has none; `tar` adds none. `open -a "Vibe Studio.app"` launched with no Gatekeeper dialog and the window rendered. **Contrast:** the same app with `com.apple.quarantine` set (what a browser download gets) shows "Vibe Studio" Not Opened / "Apple could not verify..." (Move to Trash / Done) and does not start through `open`. A quarantined binary run **from a shell** is not checked (`vibe --version` exits 0). `spctl -a` rejects both variants, so it does not tell them apart. | run 1 `shot-curl.png`; run 2 `shot-quarantined.png` |
+| `LOAD excel` / `postgres` / `httpfs` | **Works** on both archs, with the hardened runtime off (`INSTALL`+`LOAD` through `session.EnsureExtension`; `read_csv` over http through httpfs returned the rows). The `osx_arm64` extension files are ad-hoc linker-signed; the `osx_amd64` ones are unsigned and still load (Intel does not demand signatures). **Surprise:** the probe re-signed with `--options runtime` and *no* `disable-library-validation` also loaded all three. Library validation compares team IDs, and an ad-hoc host and ad-hoc/unsigned dylibs both have none, so it passes. The failure mode only appears with a real Developer ID signature (#77). | runs 1 and 2, section 7 |
+| Keychain credential survives a re-sign | **Works, with a caveat.** `vibe config llm-key set` then `status` (reads the keychain) returns `source: keychain` for v1 and again for a rebuilt, re-signed v2 (CDHash changed), on the runner's login keychain and on a temporary default keychain, with no prompt. go-keyring shells out to `/usr/bin/security`, so the item ACL trusts Apple's tool, not Vibe's code hash. Caveat: a runner has an unlocked, prompt-free session, so a real user's first "Always Allow" dialog and TCC grants (Documents/Desktop) are **not** exercised; they still need a human on a Mac. | run 1, section 8 |
+| `OnFileOpen` for a folder and a `.vibe` | **Works.** With a `println` added in the CI checkout only, `open -a app <folder>` (cold launch), `open -a app <folder>` and `open -a app x.vibe` (app running), and `open x.vibe` after `lsregister -f` (the UTI `dev.sandwichlabs.vibe-bundle`, Owner rank, resolves to Vibe Studio) each delivered the path to `handleOpenPath`. The cold-launch screenshot shows the app's "Make this folder a workspace?" dialog. A real Finder double-click and a Dock drop use the same Apple Event and were not driven by hand. | run 1, section 5; `shot-curl.png` |
+| Minimum macOS from `LC_BUILD_VERSION` | **The CLI is built for 15.0, not 13/14.** A plain `go build` (what `release.yml` runs for `vibe`) links with the runner SDK's default: `minos 15.0` on arm64 and amd64, so it will not start on macOS 13/14. Studio gets `minos 11.0` (arm64) and `LC_VERSION_MIN_MACOSX 10.13` (amd64) from Wails's `-mmacosx-version-min`, matching `LSMinimumSystemVersion 10.13.0`, but DuckDB's static libs are 14.0 (arm64) / 13.0 (amd64), so the linker emits 361 warnings per link and the claim is untrue. With `MACOSX_DEPLOYMENT_TARGET=13.0` and `CGO_CFLAGS`/`CGO_LDFLAGS=-mmacosx-version-min=13.0` all three binaries get `minos 13.0`; amd64 links with zero warnings, arm64 still warns (libs are 14.0). | runs 1 and 2, section 9 and `min13_*` |
+| Run on a macOS older than 15 | **Not tested.** The `macos-14` job was refused by GitHub ("recent account payments have failed or your spending limit needs to be increased"). `macos-13` is retired. | run 2 |
+
+### Recommendations
+
+- **`LSMinimumSystemVersion` (#44): `14.0` for arm64, `13.0` for amd64**, stamped per arch in CI (the archives are per arch), not the current `10.13.0`. Say "macOS 14 or later (Apple silicon), 13 or later (Intel)" in the README. Raising arm64 to 14.0 matches the DuckDB static library and removes the warnings; do not claim 13 on arm64 until a macOS 13 or 14 machine has run it.
+- **Set the deployment target in `release.yml` for the CLI too** (`MACOSX_DEPLOYMENT_TARGET` plus the cgo flags above, per arch); otherwise the CLI is `minos 15.0`. Add a check that fails the build if `vtool -show-build` reports a `minos` above the plist value.
+- **install.sh (#47):** downloading with `curl` and extracting with `tar` is the supported path, because it leaves no quarantine attribute. Never `xattr`, `chmod` inside the bundle, or `cp` files into it after the archive is extracted (the signature seals the bundle). Use `ditto` or `cp -R` to place the app, never a browser. On macOS 15 a browser-downloaded archive needs System Settings, Privacy & Security, **Open Anyway** (or `xattr -dr com.apple.quarantine`); put that on the release page. Check `uname -m` and map `x86_64` to `amd64`. After installing, run `codesign --verify --deep --strict` and `vibe --version`.
+- **Do not turn on the hardened runtime** for the unsigned release. It is not needed and is not what breaks extensions here, but it becomes the failure mode as soon as #77 signs with a Developer ID: then add `com.apple.security.cs.disable-library-validation`.
+- **Needs a human on a real Mac:** the first-use keychain dialog after an upgrade, TCC prompts, a Finder double-click on a `.vibe`, and macOS 13/14.
+
 ## 1. Where things stand
 
 | Finding | Consequence |
@@ -43,7 +66,9 @@ This supersedes the GoReleaser/signing plan in §5.3 and §7 for v0.1.0. `.gorel
 
 ## 1a. File opening, as built (#105 Slice 3)
 
-What the app does, whichever way the OS hands it a path. All of it is `studio/workspace.go` (`classifyLaunchArg`, `setInitialArg`, `handleOpenPath`, `GetInitialWorkspace`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
+What the app does, whichever way the OS hands it a path. All of it is `studio/workspace_launch.go` (`classifyLaunchArg`, `resolveLaunch`, `handleOpenPath`, `GetInitialWorkspace`, `MarkLaunchHandled`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
+
+The launch target is used once: `GetInitialWorkspace` only reads it, and the frontend calls `MarkLaunchHandled` after the open is handled (opened, failed or declined), so a later reload shows the Launcher instead of reopening it.
 
 | Path is | Studio does |
 |---|---|
@@ -179,8 +204,8 @@ the same, so switching later is cheap.
   before flipping visibility. A public repo exposes every past commit, not
   just `main`.
 - Review what's tracked that was written for internal use (`docs/archive/`,
-  `.claude/`, `landing/` with its
-  Cloudflare account ID) and decide keep, move, or delete.
+  `.claude/`, `landing/`) and decide keep, move, or delete. (Done for the
+  public repo; see `plans/open-source-launch.md`.)
 - `README.md` install section pointing at Releases and the tap, plus
   `CONTRIBUTING.md` and `SECURITY.md` (the credential-handling claims invite reports;
   give them a private channel).

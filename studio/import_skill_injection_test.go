@@ -24,7 +24,7 @@ import (
 // quoting — either alone is enough to block this, and this test proves
 // both together still do.
 //
-// The payload mirrors the reviewer's scratchpad/evil.csv and PoC files:
+// The payload mirrors the reviewer's malicious CSV proof of concept:
 // `a\,"a"") FROM evilcsv; COPY (SELECT 'pwned-by-csv') TO '<path>'; --`.
 func TestImportFile_MaliciousColumnName_CannotWriteFile(t *testing.T) {
 	app := newOpenApp(t)

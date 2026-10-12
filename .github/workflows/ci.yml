@@ -18,7 +18,7 @@ permissions:
 env:
   CGO_ENABLED: "1"
   # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
-  WAILS_GOTOOLCHAIN: go1.26.3
+  WAILS_GOTOOLCHAIN: go1.26.9
   WAILS_VERSION: v2.11.0
   # Build on 22.04 (glibc 2.35, webkit2gtk-4.1) so the Linux artifacts run on Ubuntu 22.04+, Debian 12+, Fedora 38+.
   LINUX_TAGS: webkit2_41,duckdb_arrow
@@ -134,25 +134,25 @@ jobs:
       - name: Thin bindings
         run: xvfb-run -a go test -count=1 -run TestExportedAppMethodsAreThinBindings ./studio/
 
-      # Blocking: the root sgconfig.yml rules at severity "error" (the ones already at zero:
+      # Blocking: the tools/ast-grep/sgconfig.yml rules at severity "error" (the ones already at zero:
       # one ParseScope, one path-containment helper, no find-connection-by-name loops, and from
       # slice 3 errors wrapped with %w, errors.Is not ==, no slog.Default().X calls). The
       # other rules are report-only until their slice lands.
       - name: ast-grep rules
         run: |
           npm install --global @ast-grep/cli@0.45.3
-          ast-grep scan cmd internal studio
+          ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.13.1
 
-      # Report-only for now: see #41 for making it blocking.
-      - name: govulncheck (report-only, #41)
-        continue-on-error: true
+      # Blocking (#41). A finding means a reachable vulnerability: bump the module or the Go patch
+      # release. A finding with no fix gets a documented exception here, never a continue-on-error.
+      - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
 
   build-smoke:

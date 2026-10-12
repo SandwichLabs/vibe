@@ -310,3 +310,19 @@ func TestApprovalQueue_ConcurrentWaitAndResolve(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestDescribeWrite_SchemaToolsShowColumnTypes(t *testing.T) {
+	ar := describeWrite(context.Background(), &Request{Method: "create_table", Params: map[string]any{
+		"name": "orders",
+		"columns": []any{
+			map[string]any{"name": "id", "type": "INTEGER PRIMARY KEY"},
+			map[string]any{"name": "cust", "type": "INTEGER REFERENCES customers(id)"},
+		},
+	}}, nil, sqlClassWrite)
+	assert.Equal(t, "Create table orders with id INTEGER PRIMARY KEY, cust INTEGER REFERENCES customers(id)", ar.Summary)
+
+	ar = describeWrite(context.Background(), &Request{Method: "add_column", Params: map[string]any{
+		"table": "orders", "name": "note", "type": "VARCHAR(20)",
+	}}, nil, sqlClassWrite)
+	assert.Equal(t, "Add column note VARCHAR(20) to orders", ar.Summary)
+}

@@ -130,13 +130,25 @@ func (a *App) handleOpenPath(path string) {
 
 // GetInitialWorkspace returns what was named on the command line (or opened
 // from the OS before the window was ready): a folder, a bundle, or a note when
-// the argument could not be used. Calling it marks the frontend ready, so later
+// the argument could not be used. Reading does not clear it; MarkLaunchHandled
+// does. Calling it marks the frontend ready, so later
 // OS open requests arrive as "app:open-path" events instead.
 func (a *App) GetInitialWorkspace() InitialWorkspace {
 	a.launchMu.Lock()
 	defer a.launchMu.Unlock()
 	a.frontendReady = true
 	return a.initial
+}
+
+// MarkLaunchHandled consumes the launch target (#33). The frontend calls it once
+// it has acted on what GetInitialWorkspace returned (opened, failed, or the
+// person declined a prompt). Until then a reload during the first open still
+// finds the target; afterwards a reload shows the Launcher, or whatever
+// workspace is open, instead of reopening the launch folder.
+func (a *App) MarkLaunchHandled() {
+	a.launchMu.Lock()
+	defer a.launchMu.Unlock()
+	a.initial = InitialWorkspace{}
 }
 
 // ChooseFolder opens the native folder picker.

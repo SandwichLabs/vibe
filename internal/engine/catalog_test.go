@@ -73,7 +73,8 @@ func TestAutoNumber_SecondCatalog(t *testing.T) {
 	gap, ok, err := AutoNumberGap(ctx, s.DB(), ref, "id", 50)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.EqualValues(t, 50-seen, gap)
+	// last_value == start_value is ambiguous (#19), so the gap may overshoot by one, never undershoot.
+	assert.EqualValues(t, 50-seen+1, gap)
 
 	require.NoError(t, BumpAutoNumber(ctx, s.DB(), ref, "id"))
 	var next int64
