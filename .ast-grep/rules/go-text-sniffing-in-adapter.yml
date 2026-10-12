@@ -1,0 +1,39 @@
+id: go-text-sniffing-in-adapter
+language: go
+severity: error
+message: A status, a lock or a changed server is typed data (session.Status.Kind/LockedByPID/ServerChanged, connections.TestResult.Code, errors.As), never read back out of message text. Use workspace.ConnectionStates / connections.Test, or add the typed field upstream (#54 slice 5, C2/C3/U8).
+rule:
+  any:
+    # strings.Contains(err.Error(), ..), (strings.ToLower(x.Message), ..), (fmt.Sprint(err), ..), re.MatchString(err.Error())
+    - kind: call_expression
+      all:
+        - has: {field: function, kind: selector_expression, regex: '^(strings\.(Contains|ContainsAny|ContainsRune|HasPrefix|HasSuffix|Index|EqualFold|Count)|\w+\.(MatchString|FindString|FindStringSubmatch|FindStringIndex))$'}
+        - has:
+            field: arguments
+            kind: argument_list
+            regex: '^\(\s*(strings\.To(Lower|Upper)\(\s*)?(\w+(\.\w+)*\.Error\(\)|fmt\.Sprint\w*\(|\w+(\.\w+)*\.(Message|Detail|Msg)\b)'
+    # msg := err.Error() / low := strings.ToLower(x.Message) ... then strings.Contains(msg, ..) in the same function
+    - kind: call_expression
+      all:
+        - has: {field: function, kind: selector_expression, regex: '^(strings\.(Contains|ContainsAny|HasPrefix|HasSuffix|Index|EqualFold|Count)|\w+\.(MatchString|FindString|FindStringSubmatch|FindStringIndex))$'}
+        - has: {field: arguments, kind: argument_list, regex: '^\(\s*(msg|message|low|lower|text|txt|detail|raw|errStr|errMsg|errText|reason|s)\s*[,)]'}
+        - inside:
+            stopBy: end
+            any:
+              - kind: function_declaration
+              - kind: method_declaration
+              - kind: func_literal
+            has:
+              stopBy: end
+              kind: short_var_declaration
+              has:
+                field: right
+                regex: '\.Error\(\)|fmt\.Sprint\w*\(|\w+\.(Message|Detail|Msg)\b'
+    - pattern: $E.Error() == $S
+    - pattern: $E.Error() != $S
+    - kind: function_declaration
+      has: {field: name, regex: '^(isLock\w*|classify\w*(Error|Err|Status)|\w*[Cc]hangedRE)$'}
+    - kind: var_spec
+      has: {field: name, regex: '^\w*(ChangedRE|LockRE|StatusRE)$'}
+files: ["cmd/**/*.go", "studio/*.go"]
+ignores: ["**/*_test.go"]

@@ -367,3 +367,19 @@ func ConnectionRisks(d workspace.ConnectionDef) []string {
 func wantsWrite(d workspace.ConnectionDef) bool { return d.ReadOnly != nil && !*d.ReadOnly }
 
 func sortStrings(s []string) { sort.Strings(s) }
+
+// PortableReason says in a sentence why SanitizeConnection refused a definition.
+// It is classified here, beside the validation that words the refusal, so no
+// adapter reads error text.
+func PortableReason(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "absolute"):
+		return "It points at a file path on this computer."
+	case strings.Contains(msg, "leaves the workspace"):
+		return "It points outside the workspace folder."
+	case strings.Contains(msg, "${"):
+		return "It reads a value from an environment variable."
+	}
+	return "It can't be shared as it is."
+}

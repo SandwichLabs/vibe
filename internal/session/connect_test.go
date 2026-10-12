@@ -93,6 +93,9 @@ func TestNeedsCredentialsIsDecidedBeforeDialling(t *testing.T) {
 		"changed": {func(context.Context) (secrets.Credential, error) {
 			return secrets.Credential{}, &secrets.ErrFingerprintChanged{Old: "a:1", New: "b:2"}
 		}, "server changed"},
+		"changed_unnamed": {func(context.Context) (secrets.Credential, error) {
+			return secrets.Credential{}, &secrets.ErrFingerprintChanged{New: "b:2"}
+		}, "server changed"},
 		"nokeys": {func(context.Context) (secrets.Credential, error) { return secrets.Credential{}, secrets.ErrUnavailable }, "unavailable"},
 	} {
 		require.NoError(t, s.Register(Spec{Name: name, Type: "stub", Credential: c.fn}))
@@ -101,6 +104,12 @@ func TestNeedsCredentialsIsDecidedBeforeDialling(t *testing.T) {
 		st := status(t, s, name)
 		assert.Equal(t, StatusNeedsCredentials, st.Kind, name)
 		assert.Contains(t, strings.ToLower(st.Message), strings.ToLower(c.want), name)
+		if name == "changed" {
+			require.NotNil(t, st.ServerChanged, "the changed server is typed data")
+			assert.Equal(t, ServerChange{Old: "a:1", New: "b:2"}, *st.ServerChanged)
+		} else {
+			assert.Nil(t, st.ServerChanged, name)
+		}
 		// Nothing was attached.
 		var n int
 		require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name = $1", name).Scan(&n))

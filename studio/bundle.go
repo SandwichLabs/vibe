@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -203,7 +202,7 @@ func (a *App) GetBundleContent() (*BundleContent, error) {
 			}
 			c := BundleContentConnection{Name: d.Name, Type: d.Type, Scope: scope, Portable: true}
 			if _, _, err := bundle.SanitizeConnection(d); err != nil {
-				c.Portable, c.Reason = false, portableReason(err)
+				c.Portable, c.Reason = false, bundle.PortableReason(err)
 			}
 			c.Summary = bundle.ConnSummary(d)
 			out.Connections = append(out.Connections, c)
@@ -481,17 +480,3 @@ type BundleImportOpened struct {
 func (a *App) DiscardBundleImport(handle string) { a.bundles.drop(handle) }
 
 type bundleDef = workspace.ConnectionDef
-
-// portableReason says in a sentence why a definition cannot go in a bundle.
-func portableReason(err error) string {
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "absolute"):
-		return "It points at a file path on this computer."
-	case strings.Contains(msg, "leaves the workspace"):
-		return "It points outside the workspace folder."
-	case strings.Contains(msg, "${"):
-		return "It reads a value from an environment variable."
-	}
-	return "It can't be shared as it is."
-}

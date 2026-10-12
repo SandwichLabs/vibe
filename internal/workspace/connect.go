@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -192,28 +191,6 @@ func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupF
 		}
 	}
 	return fmt.Errorf("the %s %q is not inside the scope of any S3, GCS, R2 or Azure connection of this workspace; add one whose scope contains it", what, url)
-}
-
-// ConnectionCredential resolves the person's credential for one connection of
-// ws by their sign-in method. It is a Go-level helper for Test and the CLI; it
-// is never bound across the Wails bridge, MCP or the agent (write-only). The
-// result is registered with the resolver's redactor.
-func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup LookupFunc) (secrets.Credential, ResolvedConnection, error) {
-	if c, ok := ws.Connection(name); ok {
-		rc, err := ResolveConnection(ws, c, lookup)
-		if err != nil {
-			return secrets.Credential{}, ResolvedConnection{}, err
-		}
-		if !connections.NeedsCredential(rc.Resolved.Type) {
-			return secrets.Credential{}, rc, nil
-		}
-		if err := signInGuard(c, rc.Resolved); err != nil {
-			return secrets.Credential{}, rc, err
-		}
-		cred, err := ws.Resolver().Resolve(ctx, credentialRef(ws.ID(), c.Scope, c.Name), c.SignIn, rc.Binding())
-		return cred, rc, err
-	}
-	return secrets.Credential{}, ResolvedConnection{}, fmt.Errorf("unknown connection %q", name)
 }
 
 // usesLocalPath reports whether the definition's path is a file or folder on

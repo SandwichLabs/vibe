@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
@@ -286,11 +285,12 @@ func TestServerChanged_CredentialsAreNotSentToANewServer(t *testing.T) {
 	require.NotNil(t, res.Error)
 	assertNoSecret(t, "TestConnection", res)
 
-	// The server-changed state parses out of the status text for the rail.
-	m := serverChangedRE.FindStringSubmatch("the server changed since you signed in (db.internal to db-new.internal). Sign in again")
-	require.Len(t, m, 3)
-	assert.Equal(t, "db.internal", m[1])
-	assert.Equal(t, "db-new.internal", m[2])
+	// The rail reads the server change as typed data, not from the status text.
+	info := app.infoOf("prod_pg")
+	require.NotNil(t, info.ServerChanged)
+	assert.Equal(t, "needs-credentials", info.Status)
+	assert.Contains(t, info.ServerChanged.Old, "db.internal")
+	assert.Contains(t, info.ServerChanged.New, "db-new.internal")
 }
 
 func TestExternalDefinitionEditReregistersAttachedFile(t *testing.T) {
@@ -372,28 +372,6 @@ func TestTableCapabilities_ReasonsForReadOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, c.Editable)
 	assert.Equal(t, "view", c.Reason)
-}
-
-func TestClassifyTestError(t *testing.T) {
-	def := workspace.ConnectionDef{Type: "postgres", Host: "db.staging.internal", Database: "app"}
-	cases := []struct{ raw, code string }{
-		{"password authentication failed for user", "bad-signin"},
-		{"timed out after 10s", "timeout"},
-		{`FATAL: database "app" does not exist`, "db-not-found"},
-		{"could not connect to server: Connection refused", "unreachable"},
-		{"server requires SSL", "ssl-required"},
-		{"weird", "error"},
-	}
-	for _, c := range cases {
-		e := classifyTestError(connections.TestResult{Error: c.raw}, def)
-		assert.Equal(t, c.code, e.Code, c.raw)
-		assert.NotEmpty(t, e.Message)
-	}
-	e := classifyTestError(connections.TestResult{Status: session.StatusExtensionMissing, InstallExtension: "postgres", Error: "x"}, def)
-	assert.Equal(t, "extension-missing", e.Code)
-	assert.Contains(t, e.Message, "postgres")
-	e = classifyTestError(connections.TestResult{Error: "password authentication failed"}, def)
-	assert.Contains(t, e.Message, "db.staging.internal")
 }
 
 func TestListExtensions_AndInstallRefusesUnknown(t *testing.T) {

@@ -245,28 +245,17 @@ func buildInfo(ctx context.Context, o *openedWorkspace) *infoReport {
 	ws := o.WS
 	rep := &infoReport{Root: ws.Root(), ID: ws.ID(), Name: ws.Name(), Warnings: ws.Warnings()}
 
-	statuses := map[string]session.Status{}
-	for _, s := range o.Sess.Connections() {
-		statuses[s.Name] = s
-	}
-	for _, c := range ws.Connections() {
+	for _, st := range o.States() {
 		ic := infoConnection{
-			Name: c.Name, Type: c.Type, Scope: string(c.Scope), ReadOnly: c.IsReadOnly(),
-			Default: c.Name == ws.DefaultConnection(), Status: string(session.StatusNotConnected),
+			Name: st.Name, Type: st.Type, Scope: string(st.Scope), ReadOnly: st.ReadOnly,
+			Default: st.Name == ws.DefaultConnection(), Status: string(st.Status), Message: st.Detail,
 		}
-		if st, ok := statuses[c.Name]; ok {
-			ic.Status, ic.Message = string(st.Kind), st.Message
-			if st.Kind == session.StatusOK {
-				if n, err := countTables(ctx, o.Sess, c.Name); err == nil {
-					ic.Tables = &n
-				}
-			}
-		}
-		if i, ok := o.issueFor(c.Name); ok {
-			ic.Status, ic.Message = "unavailable", i.Message
-			if isLockMessage(i.Message) {
-				ic.Status = string(session.StatusLockedBy)
-				ic.Message = lockedMessage(o.WS.Root())
+		switch {
+		case st.Locked():
+			ic.Message = lockedMessage(ws.Root())
+		case st.Status == session.StatusOK:
+			if n, err := countTables(ctx, o.Sess, st.Name); err == nil {
+				ic.Tables = &n
 			}
 		}
 		rep.Connections = append(rep.Connections, ic)

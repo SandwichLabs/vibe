@@ -40,6 +40,17 @@ type Status struct {
 	LockedByPID int        `json:"locked_by_pid,omitempty"`
 	ReadOnly    bool       `json:"read_only"`
 	Default     bool       `json:"default,omitempty"`
+	// ServerChanged is set on a needs-credentials status that is because the
+	// definition now points at a different server than the saved sign-in was
+	// made for. It carries host-level descriptions, never a secret.
+	ServerChanged *ServerChange `json:"server_changed,omitempty"`
+}
+
+// ServerChange names the server a saved sign-in was made for (Old) and the one
+// the connection points at now (New).
+type ServerChange struct {
+	Old string `json:"old"`
+	New string `json:"new"`
 }
 
 // ConnectionInfo is what the agent SQL policy (#116) and list_connections need to

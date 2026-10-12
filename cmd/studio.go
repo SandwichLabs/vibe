@@ -114,7 +114,7 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 
 	// A default database that is locked would leave an empty TUI: say so now.
 	if d := o.WS.DefaultConnection(); o.hasIssue(d) {
-		if i, _ := o.issueFor(d); isLockMessage(i.Message) {
+		if o.isLocked(d) {
 			return fmt.Errorf("connection %s is %s", d, lockedMessage(o.WS.Root()))
 		}
 	}
@@ -123,7 +123,7 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 	var notices []string
 	for _, i := range o.Issues {
 		msg := i.Message
-		if isLockMessage(msg) {
+		if o.isLocked(i.Connection) {
 			msg = lockedMessage(o.WS.Root())
 		}
 		notices = append(notices, fmt.Sprintf("-- connection %s is not available: %s", i.Connection, msg))

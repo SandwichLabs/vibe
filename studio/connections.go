@@ -28,8 +28,6 @@ import (
 // connTimeout bounds one connect, install or refresh. Test has its own 10 s.
 const connTimeout = 60 * time.Second
 
-var serverChangedRE = regexp.MustCompile(`\(([^()]+) to ([^()]+)\)`)
-
 // ---- types ----
 
 // ServerChange says a connection's server differs from the one the saved
@@ -1049,32 +1047,12 @@ func (a *App) TestConnection(req TestConnectionRequest) (*TestResultView, error)
 	}
 	rc, err := workspace.ResolveConnection(ws, workspace.Connection{ConnectionDef: def, Scope: scope}, nil)
 	if err != nil {
-		return fail("invalid", a.redact(err.Error()), err.Error()), nil
+		return fail(connections.CodeInvalid, a.redact(err.Error()), err.Error()), nil
 	}
-	cred, serverChanged := a.testBaseCredential(ws, rc, def, req.SignIn)
-	if serverChanged {
-		// P3: when the definition points somewhere other than the server the saved
-		// sign-in was made for, only credentials typed in this edit are used, never
-		// a stored one of any method (keychain, environment or prompt).
-		// A prefilled username is not a typed credential: the secret must be typed.
-		if connections.NeedsCredential(def.Type) && !typed.HasSecret() {
-			return fail("server-changed", "The server changed, so your saved sign-in won't be used. Enter it again to test.", ""), nil
-		}
-	}
-	if typed.User != "" {
-		cred.User = typed.User
-	}
-	if typed.KeyID != "" {
-		cred.KeyID = typed.KeyID
-	}
-	if typed.Password != "" {
-		cred.Password = typed.Password
-	}
-	if typed.Token != "" {
-		cred.Token = typed.Token
-	}
-	if typed.Secret != "" {
-		cred.Secret = typed.Secret
+	cred, err := workspace.TestCredential(a.ctxOrBackground(), ws, rc, req.SignIn, typed)
+	var changed *secrets.ErrFingerprintChanged
+	if errors.As(err, &changed) {
+		return fail(connections.CodeServerChanged, connections.ServerChangedMessage, ""), nil
 	}
 	a.secrets.Redactor().AddCredential(cred)
 	// The test never reads a read-only flag a person might have off.
@@ -1084,9 +1062,7 @@ func (a *App) TestConnection(req TestConnectionRequest) (*TestResultView, error)
 		out.Summary = a.redact(res.Detail)
 		return out, nil
 	}
-	out.Error = classifyTestError(res, rc.Resolved)
-	out.Error.Details = a.redact(res.Error)
-	out.Error.Message = a.redact(out.Error.Message)
+	out.Error = &TestError{Code: res.Code, Message: a.redact(res.Message), Details: a.redact(res.Error)}
 	return out, nil
 }
 
@@ -1165,7 +1141,7 @@ func listFailureMessage(res connections.MDDatabasesResult) string {
 		return "Vibe's database engine needs the motherduck extension, which isn't installed yet. Install it, then load again."
 	case res.Status == session.StatusNeedsCredentials:
 		return "MotherDuck turned down this token. Check it and try again."
-	case strings.Contains(strings.ToLower(res.Error), "timed out"):
+	case res.TimedOut:
 		return "No answer from MotherDuck after 10 seconds. Check your network connection."
 	}
 	return "Couldn't load your MotherDuck databases. You can still type the database name. " + res.Error
@@ -1213,110 +1189,6 @@ func (a *App) savedMotherDuckToken(ws workspace.Workspace, req ListMotherDuckDat
 		return cred, kind, true
 	}
 	return secrets.Credential{}, "", false
-}
-
-// testBaseCredential is the saved credential a test starts from: this person's
-// sign-in by the method in effect. It returns serverChanged (and no credential)
-// when the definition being tested differs, in any fingerprint field, from the
-// saved one, or when the saved sign-in is no longer bound to the saved
-// definition (a pull changed it): a stored credential is then never used, by any
-// method. A connection that does not exist yet has nothing stored, but an
-// environment sign-in the person chose for it is theirs to use.
-func (a *App) testBaseCredential(ws workspace.Workspace, rc workspace.ResolvedConnection, def workspace.ConnectionDef, signIn string) (secrets.Credential, bool) {
-	method := signIn
-	var saved *workspace.Connection
-	if c, ok := ws.Connection(def.Name); ok {
-		saved = &c
-		if method == "" {
-			method = c.SignIn
-		}
-	}
-	if method == "" {
-		method = "keychain"
-	}
-	kind, _, _ := secrets.ParseMethod(method)
-	if saved == nil && kind != "env" {
-		return secrets.Credential{}, false
-	}
-	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), keychainTimeout)
-	defer cancel()
-	if saved != nil {
-		savedResolved, err := saved.ConnectionDef.Resolve(nil, saved.Scope)
-		if err != nil || workspace.Fingerprint(savedResolved) != workspace.Fingerprint(rc.Resolved) {
-			return secrets.Credential{}, true
-		}
-		// The saved sign-in itself must still match its definition (the same guard
-		// the session applies): keychain and prompt carry their own fingerprint,
-		// an environment sign-in is bound by the choice.
-		if st, err := ws.CredentialStatus(ctx, def.Name); err != nil || !st.FingerprintMatches {
-			return secrets.Credential{}, true
-		}
-		if kind == "env" && saved.SignInFingerprint != workspace.Fingerprint(savedResolved) {
-			return secrets.Credential{}, true
-		}
-	}
-	ref := workspace.CredentialRef(ws.ID(), rc.Scope, def.Name)
-	cred, err := ws.Resolver().Resolve(ctx, ref, method, rc.Binding())
-	if err != nil {
-		return secrets.Credential{}, false
-	}
-	return cred, false
-}
-
-var (
-	reHostFor = regexp.MustCompile(`host='([^']+)'`)
-)
-
-// classifyTestError maps a failed Test to a plain-language line (SPEC 06).
-func classifyTestError(res connections.TestResult, def workspace.ConnectionDef) *TestError {
-	raw := res.Error
-	low := strings.ToLower(raw)
-	host := def.Host
-	if host == "" {
-		if m := reHostFor.FindStringSubmatch(raw); m != nil {
-			host = m[1]
-		}
-	}
-	if host == "" {
-		host = "the server"
-	}
-	e := &TestError{Code: "error", Message: "Vibe couldn't connect with these settings."}
-	switch {
-	case res.InstallExtension != "" || res.Status == session.StatusExtensionMissing:
-		e.Code = "extension-missing"
-		e.Message = fmt.Sprintf("Vibe's database engine needs the %s extension, which isn't installed yet. Install it, then test again.", orStr(res.InstallExtension, "missing"))
-	case strings.Contains(low, "timed out"):
-		e.Code = "timeout"
-		e.Message = "No answer after 10 seconds. Check the address and whether you need a VPN."
-	case strings.Contains(low, "password authentication failed") || strings.Contains(low, "authentication failed") ||
-		strings.Contains(low, "invalid token") || strings.Contains(low, "not authenticated") || res.Status == session.StatusNeedsCredentials:
-		e.Code = "bad-signin"
-		e.Message = fmt.Sprintf("The server turned down the username or password. Check them and try again. If you're sure they're right, ask whoever runs the database whether your account can reach %s.", host)
-		if def.Type == "motherduck" || strings.HasPrefix(def.Type, "s3") || def.Type == "gcs" || def.Type == "r2" || def.Type == "azure" {
-			e.Message = "The service turned down these keys or this token. Check them and try again."
-		}
-	case strings.Contains(low, "does not exist") && strings.Contains(low, "database"):
-		e.Code = "db-not-found"
-		e.Message = fmt.Sprintf("The server answered, but it has no database called %s.", orStr(def.Database, "that"))
-	case strings.Contains(low, "ssl") && (strings.Contains(low, "require") || strings.Contains(low, "not supported")):
-		e.Code = "ssl-required"
-		e.Message = "The server needs an encrypted connection. Open Advanced options and set SSL mode to require."
-	case strings.Contains(low, "keychain"):
-		e.Code = "keychain"
-		e.Message = "Vibe can't reach your keychain. Use environment variables for this connection instead."
-	case strings.Contains(low, "could not connect") || strings.Contains(low, "connection refused") || strings.Contains(low, "no such host") ||
-		strings.Contains(low, "could not translate host") || strings.Contains(low, "network is unreachable") || strings.Contains(low, "unable to connect"):
-		e.Code = "unreachable"
-		e.Message = fmt.Sprintf("Vibe couldn't reach %s. Is the VPN on?", host)
-	}
-	return e
-}
-
-func orStr(s, d string) string {
-	if s == "" {
-		return d
-	}
-	return s
 }
 
 // ---- extensions ----

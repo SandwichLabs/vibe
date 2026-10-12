@@ -38,6 +38,28 @@ func (c Credential) SecretValues() []string {
 // HasSecret reports whether any secret field is set.
 func (c Credential) HasSecret() bool { return len(c.SecretValues()) > 0 }
 
+// Overlay returns c with every field set in typed replacing the same field of
+// c: what a person typed in this edit wins over what was stored. The binding
+// (Fingerprint, Server) stays c's own; typed values are never bound to a server.
+func (c Credential) Overlay(typed Credential) Credential {
+	if typed.User != "" {
+		c.User = typed.User
+	}
+	if typed.KeyID != "" {
+		c.KeyID = typed.KeyID
+	}
+	if typed.Password != "" {
+		c.Password = typed.Password
+	}
+	if typed.Token != "" {
+		c.Token = typed.Token
+	}
+	if typed.Secret != "" {
+		c.Secret = typed.Secret
+	}
+	return c
+}
+
 // Marshal encodes the blob for a Store.
 func (c Credential) Marshal() ([]byte, error) {
 	b, err := json.Marshal(c)

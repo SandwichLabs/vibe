@@ -19,7 +19,7 @@ import (
 // component uses (same sandbox-gated classifier, same read-only-only gate).
 // Writes belong in the Query Explorer or the table browser, not in a
 // notebook cell; RunA2UIQuery already rejects a write with
-// errReadOnlyBindingDenied, and the frontend surfaces that as "Notebook
+// ErrReadOnlyBindingDenied, and the frontend surfaces that as "Notebook
 // cells are read-only queries — use the Query editor to change data."
 
 // NotebooksChangedEvent is the payload of every "notebooks:changed" Wails

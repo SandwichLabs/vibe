@@ -321,37 +321,23 @@ func runConnList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer o.Close()
-	status := map[string]session.Status{}
-	for _, s := range o.Sess.Connections() {
-		status[s.Name] = s
-	}
 	var rows []connRow
-	for _, c := range o.WS.Connections() {
-		r := connRow{Name: c.Name, Type: c.Type, Scope: string(c.Scope), Default: c.Default, ReadOnly: c.IsReadOnly()}
-		for _, s := range c.Shadows {
+	for _, st := range o.States() {
+		r := connRow{Name: st.Name, Type: st.Type, Scope: string(st.Scope), Default: st.Default, ReadOnly: st.ReadOnly, Status: string(st.Status), Message: st.Detail}
+		for _, s := range st.Shadows {
 			r.Shadows = append(r.Shadows, string(s))
 		}
-		if connections.NeedsCredential(c.Type) {
-			r.SignIn = c.SignIn
+		if connections.NeedsCredential(st.Type) {
+			r.SignIn = st.SignIn
 		}
-		if info, err := connections.TypeInfoFor(c.Type); err == nil && r.ReadOnly && !info.Capabilities.ReadOnlyAttach && info.Capabilities.Catalog {
+		if info, err := connections.TypeInfoFor(st.Type); err == nil && r.ReadOnly && !info.Capabilities.ReadOnlyAttach && info.Capabilities.Catalog {
 			r.ReadOnlyNote = "advisory"
-			if c.Type == "postgres" || c.Type == "mysql" {
+			if st.Type == "postgres" || st.Type == "mysql" {
 				r.ReadOnlyNote = "client-side; use a read-only role"
 			}
-			if c.Type == "motherduck" {
+			if st.Type == "motherduck" {
 				r.ReadOnlyNote = "not enforced; use a read-scaling token"
 			}
-		}
-		if s, ok := status[c.Name]; ok {
-			r.Status, r.Message = string(s.Kind), s.Message
-		} else if i, ok := o.issueFor(c.Name); ok {
-			r.Status, r.Message = "error", i.Message
-		} else {
-			r.Status = "not-connected"
-		}
-		if i, ok := o.issueFor(c.Name); ok && r.Message == "" {
-			r.Message = i.Message
 		}
 		rows = append(rows, r)
 	}
@@ -435,8 +421,16 @@ func runConnTest(cmd *cobra.Command, args []string) error {
 	}
 	defer ws.Close() //nolint:errcheck
 	ctx := cmdCtx(cmd)
-	cred, rc, err := workspace.ConnectionCredential(ctx, ws, args[0], nil)
+	c, ok := ws.Connection(args[0])
+	if !ok {
+		return fmt.Errorf("unknown connection %q", args[0])
+	}
+	rc, err := workspace.ResolveConnection(ws, c, nil)
+	if err != nil {
+		return errors.New(cliRedactor.Redact(err.Error()))
+	}
 	out := cmd.OutOrStdout()
+	cred, err := workspace.TestCredential(ctx, ws, rc, "", secrets.Credential{})
 	if err != nil {
 		var nc *secrets.ErrNeedsCredentials
 		var fp *secrets.ErrFingerprintChanged
