@@ -78,6 +78,10 @@ This appends `Signed-off-by: Your Name <you@example.com>`, which must match the 
 - Keep a PR to one concern. Describe what changed and why, and how you tested it.
 - Expect review on security invariants, tests, and docs before style.
 
+## Dependency updates
+
+Dependabot opens one grouped PR per ecosystem each week for minor and patch bumps; major versions are upgraded by hand in their own tested PR. A Dependabot PR cannot fix up generated files itself, so before merging one, check out its branch, run `task deps:refresh` (it regenerates `THIRD_PARTY_NOTICES.md`, which CI checks, and `studio/frontend/package.json.md5`, which `wails build` otherwise rewrites), and push the result as a signed-off commit.
+
 ## License
 
 Contributions are licensed under the [Apache License 2.0](LICENSE).

@@ -1,5 +1,6 @@
 # Version updates. Security updates are enabled separately in the repo settings.
-# Minor and patch bumps are grouped into one PR per ecosystem; majors arrive as individual PRs.
+# Minor and patch bumps are grouped into one PR per ecosystem. npm majors are not proposed:
+# they are upgraded by hand in their own tested PR (security updates are not affected by this ignore).
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -22,6 +23,9 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(npm)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
