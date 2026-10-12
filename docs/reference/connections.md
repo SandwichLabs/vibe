@@ -6,6 +6,10 @@ Definitions are plain settings in `vibe.yaml` (shared), your own `local.yaml` (t
 
 Manage them with `vibe conn add | list | test | connect | rm | move | credentials set|clear|status`. `vibe conn list` shows scope, shadowing, sign-in method and status. Status precedence: `extension-missing` > `needs-credentials` > `error` > `locked-by` > `not-connected` > `ok`.
 
+**One status vocabulary.** Studio's rail, `vibe conn list` and `vibe workspace info` all build their rows with `workspace.ConnectionStates`, from typed data: the session's status kind, `LockedByPID` for `locked-by`, and `ServerChanged{Old,New}` for a `needs-credentials` that is because the server changed. A connection whose definition could not even be registered (a missing `${ENV}`, a path outside the folder) reads `error` everywhere; `workspace info` used to say `unavailable`. Nothing reads a lock or a changed server back out of message text.
+
+**One test.** `vibe conn test` and Studio's Test share `workspace.TestCredential` (the saved sign-in, the typed values laid over it with `secrets.Credential.Overlay`, and the server-changed guard below) and `connections.Test`, which classifies a failure where it is produced: `TestResult.Code` (`bad-signin`, `timeout`, `unreachable`, `db-not-found`, `ssl-required`, `keychain`, `extension-missing`, `error`) and a plain-language `Message`.
+
 ## Rules every type follows
 
 - A DSN or credential never appears in an `ATTACH` string. Postgres is `ATTACH '' AS x (TYPE postgres, SECRET s)`; the secret is a `CREATE TEMPORARY SECRET` run on the session's non-logging path.

@@ -131,9 +131,7 @@ func connectionNames(o *openedWorkspace) string {
 // friendlyQueryError adds the one hint that is always right: a write against a
 // read-only attach.
 func friendlyQueryError(err error, readOnly bool) error {
-	msg := err.Error()
-	low := strings.ToLower(msg)
-	if strings.Contains(low, "read-only") || strings.Contains(low, "readonly") || strings.Contains(low, "read only") {
+	if engine.IsReadOnlyViolation(err) {
 		if readOnly {
 			return fmt.Errorf("%w\n(--read-only attaches every connection read-only)", err)
 		}

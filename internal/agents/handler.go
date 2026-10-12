@@ -696,7 +696,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 			return nil, false, connectErr
 		}
 		// The user/agent-facing error is one fixed, mode-agnostic message
-		// (see errReadOnlyBindingDenied) — it never surfaces the policy's
+		// (see ErrReadOnlyBindingDenied) — it never surfaces the policy's
 		// reason, which can name a tier requirement that is false for a
 		// full-tier caller. The reason is still useful for debugging a denial
 		// that looks surprising, so it's logged here at debug level only.

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
@@ -431,7 +430,7 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 // read-only: its own database is in use by another program, so the tables are
 // simply not reachable yet.
 func (a *App) explainReadOnlyDenial(err error) error {
-	if !strings.Contains(err.Error(), "live bindings are read-only") {
+	if !errors.Is(err, agents.ErrReadOnlyBindingDenied) {
 		return err
 	}
 	a.mu.RLock()

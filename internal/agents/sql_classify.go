@@ -371,11 +371,11 @@ func (sc *SandboxConfig) checkSQLClass(class sqlClass, reason string) error {
 	return nil
 }
 
-// errReadOnlyBindingDenied is the ONE message checkSQLClassReadOnly returns for
+// ErrReadOnlyBindingDenied is the ONE message checkSQLClassReadOnly returns for
 // a denial: the render-time gate is read-only in every tier, so the reason the
 // classifier gave (which can name a tier requirement) would be false for a
 // full-tier caller. Callers log the reason themselves.
-var errReadOnlyBindingDenied = errors.New("live bindings are read-only queries over this workspace's connections (no writes, and files only inside data/)")
+var ErrReadOnlyBindingDenied = errors.New("live bindings are read-only queries over this workspace's connections (no writes, and files only inside data/)")
 
 // checkSQLClassReadOnly is the render-time gate for a live A2UI binding or a
 // notebook cell: sqlClassRead regardless of the tier, because the statement
@@ -384,7 +384,7 @@ func (sc *SandboxConfig) checkSQLClassReadOnly(class sqlClass, _ string) error {
 	if class == sqlClassRead {
 		return nil
 	}
-	return errReadOnlyBindingDenied
+	return ErrReadOnlyBindingDenied
 }
 
 // classifySQL classifies raw (with its $name params) with no workspace context:

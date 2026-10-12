@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/llm/skills"
@@ -1046,58 +1045,19 @@ func orDefault(s, d string) string {
 }
 
 func (a *App) connectionInfosLocked() []ConnectionInfo {
-	status := map[string]session.Status{}
-	for _, s := range a.sess.Connections() {
-		status[s.Name] = s
-	}
-	issue := map[string]string{}
-	for _, i := range a.issues {
-		issue[i.Connection] = i.Message
-	}
-	infos := map[string]session.ConnectionInfo{}
-	for _, i := range a.sess.ConnectionInfos() {
-		infos[i.Name] = i
-	}
-	out := make([]ConnectionInfo, 0, len(a.ws.Connections()))
-	for _, c := range a.ws.Connections() {
+	states := workspace.ConnectionStates(a.ws, a.sess, a.issues)
+	out := make([]ConnectionInfo, 0, len(states))
+	for _, st := range states {
 		ci := ConnectionInfo{
-			Name: c.Name, Type: c.Type, Scope: string(c.Scope), ReadOnly: c.IsReadOnly(),
-			Default: c.Default, Status: string(session.StatusNotConnected), SignIn: c.SignIn,
-			Remote: connections.IsRemote(c.Type),
+			Name: st.Name, Type: st.Type, Scope: string(st.Scope), ReadOnly: st.EffectiveReadOnly,
+			Default: st.Default, Status: string(st.Status), Detail: st.Detail, LockedByPID: st.LockedByPID,
+			SignIn: st.SignIn, Remote: st.Remote, Catalogless: st.Catalogless, Extension: st.Extension,
 		}
-		if i, ok := infos[c.Name]; ok {
-			ci.Remote, ci.Catalogless = i.Remote, i.Catalogless
-		}
-		for _, sc := range c.Shadows {
+		for _, sc := range st.Shadows {
 			ci.Shadows = append(ci.Shadows, string(sc))
 		}
-		if s, ok := status[c.Name]; ok {
-			ci.Status, ci.Detail, ci.LockedByPID, ci.ReadOnly = string(s.Kind), s.Message, s.LockedByPID, s.ReadOnly
-		}
-		if msg, ok := issue[c.Name]; ok {
-			// The definition could not even be registered (a missing ${ENV},
-			// a path outside the folder, a file in use): say so.
-			if _, registered := status[c.Name]; !registered {
-				ci.Status, ci.Detail = string(session.StatusError), msg
-			} else if ci.Detail == "" {
-				ci.Detail = msg
-			}
-		}
-		if ci.Status == string(session.StatusError) && ci.Detail != "" {
-			// One plain line for the rail; the raw (redacted) text is in the editor's Test.
-			if e := classifyTestError(connections.TestResult{Error: ci.Detail}, c.ConnectionDef); e.Code != "error" {
-				ci.Detail = e.Message
-			}
-		}
-		switch ci.Status {
-		case string(session.StatusExtensionMissing):
-			if ti, err := connections.TypeInfoFor(c.Type); err == nil && len(ti.Extensions) > 0 {
-				ci.Extension = ti.Extensions[0]
-			}
-		case string(session.StatusNeedsCredentials):
-			if m := serverChangedRE.FindStringSubmatch(ci.Detail); m != nil {
-				ci.ServerChanged = &ServerChange{Old: m[1], New: m[2]}
-			}
+		if st.ServerChanged != nil {
+			ci.ServerChanged = &ServerChange{Old: st.ServerChanged.Old, New: st.ServerChanged.New}
 		}
 		out = append(out, ci)
 	}

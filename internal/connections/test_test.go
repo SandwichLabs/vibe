@@ -133,3 +133,39 @@ func TestChildEnvDropsAmbientTokens(t *testing.T) {
 	got := childEnv([]string{"A=1", "MOTHERDUCK_TOKEN=x", "motherduck_token=y", "PATH=/bin", "MotherDuck_Token=z", "MOTHERDUCK_HOME=/h"})
 	assert.Equal(t, []string{"A=1", "PATH=/bin", "MOTHERDUCK_HOME=/h"}, got)
 }
+
+func TestClassify(t *testing.T) {
+	def := Def{Type: "postgres", Host: "db.staging.internal", Database: "app"}
+	cases := []struct{ raw, code string }{
+		{"password authentication failed for user", CodeBadSignin},
+		{"timed out after 10s", CodeTimeout},
+		{`FATAL: database "app" does not exist`, CodeDBNotFound},
+		{"could not connect to server: Connection refused", CodeUnreachable},
+		{"server requires SSL", CodeSSLRequired},
+		{"weird", CodeError},
+	}
+	for _, c := range cases {
+		code, msg := Classify(Failure{Raw: c.raw, Def: def})
+		assert.Equal(t, c.code, code, c.raw)
+		assert.NotEmpty(t, msg)
+	}
+	code, msg := Classify(Failure{Status: session.StatusExtensionMissing, InstallExtension: "postgres", Raw: "x", Def: def})
+	assert.Equal(t, CodeExtensionMissing, code)
+	assert.Contains(t, msg, "postgres")
+	_, msg = Classify(Failure{Raw: "password authentication failed", Def: def})
+	assert.Contains(t, msg, "db.staging.internal")
+	// A deadline is a timeout whatever the message says.
+	code, _ = Classify(Failure{Raw: "weird", TimedOut: true, Def: def})
+	assert.Equal(t, CodeTimeout, code)
+	// A rejected key reads needs-credentials and gets the service wording.
+	code, msg = Classify(Failure{Raw: "403", Status: session.StatusNeedsCredentials, Def: Def{Type: "s3"}})
+	assert.Equal(t, CodeBadSignin, code)
+	assert.Contains(t, msg, "keys or this token")
+}
+
+func TestTest_FillsCodeAndMessageWhereTheErrorIsProduced(t *testing.T) {
+	res := Test(context.Background(), Def{Name: "x", Type: "postgres"}, secrets.Credential{})
+	require.False(t, res.OK)
+	assert.NotEmpty(t, res.Code)
+	assert.NotEmpty(t, res.Message)
+}

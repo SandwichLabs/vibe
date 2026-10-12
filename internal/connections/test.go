@@ -52,6 +52,21 @@ type TestResult struct {
 	Error string `json:"error,omitempty"`
 	// InstallHint names the extension the person can install and retry.
 	InstallExtension string `json:"installExtension,omitempty"`
+	// Code and Message classify a failure (Code* constants, plain-language
+	// Message), set where the error is produced. Empty on success.
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+	// timedOut records that the deadline, not a driver message, ended the attempt.
+	timedOut bool
+}
+
+// classified returns r with Code and Message filled from its own error.
+func (r TestResult) classified(def Def) TestResult {
+	if r.OK {
+		return r
+	}
+	r.Code, r.Message = Classify(Failure{Raw: r.Error, Status: r.Status, InstallExtension: r.InstallExtension, TimedOut: r.timedOut, Def: def})
+	return r
 }
 
 // TestOption tunes Test.
@@ -85,6 +100,20 @@ func WithTestRedactor(r *secrets.Redactor) TestOption { return func(o *testOpts)
 // probes it. It never touches the workspace's session. A MotherDuck definition
 // is tested in a subprocess because a process holds one MotherDuck token.
 func Test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOption) TestResult {
+	return runClassified(def, func() TestResult { return test(ctx, def, cred, opts...) })
+}
+
+// runClassified classifies a failed result against the definition tried. A
+// result that came from the MotherDuck child already carries its Code.
+func runClassified(def Def, run func() TestResult) TestResult {
+	res := run()
+	if res.OK || res.Code != "" {
+		return res
+	}
+	return res.classified(def)
+}
+
+func test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOption) TestResult {
 	o := testOpts{timeout: TestTimeout}
 	for _, f := range opts {
 		f(&o)
@@ -184,7 +213,7 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	spec.Credential = func(context.Context) (secrets.Credential, error) { return c, nil }
 	start := time.Now()
 	if err := sess.Attach(ctx, spec); err != nil {
-		kind, msg := session.StatusError, err.Error()
+		kind := session.StatusError
 		if st, ok := sess.Status(def.Name); ok {
 			kind = st.Kind
 		}
@@ -195,9 +224,11 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 			}
 		}
 		if ctx.Err() != nil {
-			msg = fmt.Sprintf("timed out after %s", o.timeout)
+			res := fail(kind, fmt.Errorf("timed out after %s", o.timeout), ext)
+			res.timedOut = true
+			return res
 		}
-		return fail(kind, errors.New(msg), ext)
+		return fail(kind, err, ext)
 	}
 	var (
 		n      int
@@ -209,15 +240,16 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 		n, detail, err = duckdbProbe(ctx, sess, spec)
 	}
 	if err != nil {
-		msg := err.Error()
-		if ctx.Err() != nil {
-			msg = fmt.Sprintf("timed out after %s", o.timeout)
-		}
 		kind := session.StatusError
 		if authFailure(err) {
 			kind = session.StatusNeedsCredentials
 		}
-		return fail(kind, errors.New(msg), "")
+		if ctx.Err() != nil {
+			res := fail(kind, fmt.Errorf("timed out after %s", o.timeout), "")
+			res.timedOut = true
+			return res
+		}
+		return fail(kind, err, "")
 	}
 	return TestResult{OK: true, Status: session.StatusOK, Latency: time.Since(start), Count: n, Detail: detail}
 }
@@ -260,7 +292,9 @@ func testInSubprocess(ctx context.Context, def Def, cred secrets.Credential, o t
 	}
 	line, err := runChildProcess(ctx, childRequest{Def: def, Cred: cred, Install: o.install, ExtensionDr: o.extDir, TimeoutMS: o.timeout.Milliseconds()}, o)
 	if err != nil {
-		return fail(err)
+		res := fail(err)
+		res.timedOut = ctx.Err() != nil
+		return res
 	}
 	var res TestResult
 	if err := json.Unmarshal(line, &res); err != nil {
@@ -268,6 +302,7 @@ func testInSubprocess(ctx context.Context, def Def, cred secrets.Credential, o t
 	}
 	res.Error = secrets.RedactPatterns(red.Redact(res.Error))
 	res.Detail = red.Redact(res.Detail)
+	res.Message = red.Redact(res.Message)
 	return res
 }
 
@@ -334,7 +369,7 @@ func RunChild(ctx context.Context, in io.Reader, out io.Writer) error {
 	} else {
 		res = runTest(ctx, req.Def, req.Cred, testOpts{extDir: req.ExtensionDr, install: req.Install, timeout: to}, red)
 	}
-	return json.NewEncoder(out).Encode(res)
+	return json.NewEncoder(out).Encode(runClassified(req.Def, func() TestResult { return res }))
 }
 
 func duckdbProbe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {

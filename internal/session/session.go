@@ -638,7 +638,7 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 	if ct, ok := t.(CredentialedType); ok {
 		cred, kind, msg, err := h.readyForConnect(ctx, conn, e, ct)
 		if err != nil {
-			h.setStatus(name, kind, msg, 0)
+			h.setStatusCause(name, kind, msg, err)
 			return fmt.Errorf("failed to connect %q: %s", name, msg)
 		}
 		steps, serr := ct.SecretSteps(e.spec, cred)
@@ -808,7 +808,7 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 	_, kind, msg, rerr := h.readyForConnect(ctx, conn, e, ct)
 	_ = conn.Close()
 	if rerr != nil {
-		h.setStatus(name, kind, msg, 0)
+		h.setStatusCause(name, kind, msg, rerr)
 		return
 	}
 	h.setStatus(name, StatusNotConnected, "", 0)
@@ -1038,10 +1038,25 @@ func (h *hub) SetDefaultCatalog(ctx context.Context, name string) error {
 }
 
 func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
+	h.setStatusFull(name, kind, msg, pid, nil)
+}
+
+// setStatusCause is setStatus for a failure whose cause is known: a changed
+// server is recorded as typed data, so no caller parses it back out of msg.
+func (h *hub) setStatusCause(name string, kind StatusKind, msg string, cause error) {
+	var fp *secrets.ErrFingerprintChanged
+	if errors.As(cause, &fp) && fp.Old != "" && fp.New != "" {
+		h.setStatusFull(name, kind, msg, 0, &ServerChange{Old: fp.Old, New: fp.New})
+		return
+	}
+	h.setStatusFull(name, kind, msg, 0, nil)
+}
+
+func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, sc *ServerChange) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if e := h.conns[name]; e != nil {
-		e.status.Kind, e.status.Message, e.status.LockedByPID = kind, msg, pid
+		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged = kind, msg, pid, sc
 	}
 }
 

@@ -32,6 +32,8 @@ type MDDatabasesResult struct {
 	Error     string             `json:"error,omitempty"`
 	// InstallExtension names the extension the person can install and retry.
 	InstallExtension string `json:"installExtension,omitempty"`
+	// TimedOut is set when the deadline, not a driver message, ended the call.
+	TimedOut bool `json:"timedOut,omitempty"`
 }
 
 // ListMotherDuckDatabases lists the databases (and shares) the token can
@@ -57,7 +59,9 @@ func ListMotherDuckDatabases(ctx context.Context, cred secrets.Credential, opts 
 	defer cancel()
 	line, err := runChildProcess(ctx, childRequest{Action: childActionListDatabases, Cred: cred, Install: o.install, ExtensionDr: o.extDir, TimeoutMS: o.timeout.Milliseconds()}, o)
 	if err != nil {
-		return fail(session.StatusError, err.Error())
+		res := fail(session.StatusError, err.Error())
+		res.TimedOut = ctx.Err() != nil
+		return res
 	}
 	var res MDDatabasesResult
 	if err := json.Unmarshal(line, &res); err != nil {
@@ -87,10 +91,11 @@ func runListChild(ctx context.Context, req childRequest, out io.Writer) error {
 func listDatabases(ctx context.Context, req childRequest, red *secrets.Redactor, to time.Duration) MDDatabasesResult {
 	fail := func(kind session.StatusKind, err error, ext string) MDDatabasesResult {
 		msg := err.Error()
-		if ctx.Err() != nil {
+		timedOut := ctx.Err() != nil
+		if timedOut {
 			msg = fmt.Sprintf("timed out after %s", to)
 		}
-		return MDDatabasesResult{Status: kind, Error: secrets.RedactPatterns(red.Redact(msg)), InstallExtension: ext}
+		return MDDatabasesResult{Status: kind, Error: secrets.RedactPatterns(red.Redact(msg)), InstallExtension: ext, TimedOut: timedOut}
 	}
 	o := testOpts{extDir: req.ExtensionDr, install: req.Install, timeout: to}
 	if o.install {

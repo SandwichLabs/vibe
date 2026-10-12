@@ -45,7 +45,7 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 
 	// RunReadOnlySQL is the SAME read-only classifier + row-cap/LIMIT
 	// push-down path RunA2UIQuery uses for a live A2UI binding (#67) — one
-	// policy, not a second hand-rolled gate. errReadOnlyBindingDenied is
+	// policy, not a second hand-rolled gate. ErrReadOnlyBindingDenied is
 	// returned unwrapped on a permission denial (see RunReadOnlySQL), so
 	// errors.Is distinguishes "not a read" (ErrPermission) from a genuine
 	// execution failure (ErrInternal) — the pre-fix code classified this
@@ -56,7 +56,7 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	}
 	rs, rowsTruncated, err := h.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, previewQueryRowCap)
 	if err != nil {
-		if errors.Is(err, errReadOnlyBindingDenied) {
+		if errors.Is(err, ErrReadOnlyBindingDenied) {
 			return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("preview_query only runs read-only statements: %v", err))
 		}
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query failed: %v", err))

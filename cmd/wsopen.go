@@ -91,12 +91,6 @@ func heldMessage(root string, err error, advise bool) error {
 	return &hubHeldError{msg: msg, err: err}
 }
 
-// isLockMessage reports whether a connection's issue is DuckDB's file lock.
-func isLockMessage(msg string) bool {
-	low := strings.ToLower(msg)
-	return strings.Contains(low, "conflicting lock") || strings.Contains(low, "could not set lock")
-}
-
 // lockedMessage is the plain-language form of DuckDB's lock error for a local
 // connection: who has it, and what that means.
 func lockedMessage(root string) string {
@@ -174,6 +168,22 @@ func (o *openedWorkspace) hasIssue(name string) bool {
 	return ok
 }
 
+// States is every connection as all surfaces show it (workspace.ConnectionStates).
+func (o *openedWorkspace) States() []workspace.ConnectionState {
+	return workspace.ConnectionStates(o.WS, o.Sess, o.Issues)
+}
+
+// isLocked reports whether the connection is held by another process, from its
+// typed status (never from a message).
+func (o *openedWorkspace) isLocked(name string) bool {
+	for _, st := range o.States() {
+		if st.Name == name {
+			return st.Locked()
+		}
+	}
+	return false
+}
+
 // issueFor returns the session issue recorded for a connection, if any.
 func (o *openedWorkspace) issueFor(name string) (workspace.SessionIssue, bool) {
 	for _, i := range o.Issues {
@@ -197,7 +207,7 @@ func (o *openedWorkspace) requireConnection(name string, errW io.Writer) error {
 		return nil
 	}
 	if i, ok := o.issueFor(name); ok {
-		if isLockMessage(i.Message) {
+		if o.isLocked(name) {
 			return fmt.Errorf("connection %s is %s", name, lockedMessage(o.WS.Root()))
 		}
 		return fmt.Errorf("connection %s is not available: %s", name, i.Message)

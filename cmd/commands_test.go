@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 	_ "github.com/marcboeker/go-duckdb/v2"
 	"github.com/spf13/cobra"
@@ -930,4 +931,40 @@ func TestGuiTarget(t *testing.T) {
 	assert.Equal(t, root, guiTarget(""), "no dir uses the workspace around cwd")
 	t.Chdir(plain)
 	assert.Equal(t, "", guiTarget(""), "outside any workspace: launcher")
+}
+
+// workspace info and conn list use the same status words as Studio's rail
+// (session.StatusKind): a connection that could not even be registered reads
+// "error" in both, never "unavailable".
+func TestConnStatusWords_InfoAndListAgree(t *testing.T) {
+	root := newWS(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "broken", Type: "sqlite", Path: "${NO_SUCH_VIBE_VAR}/x.sqlite"}))
+	require.NoError(t, ws.Close())
+
+	js, _, err := runVibe("workspace", "info", "--workspace", root, "--json")
+	require.NoError(t, err)
+	var rep infoReport
+	require.NoError(t, json.Unmarshal([]byte(js), &rep))
+	infoStatus := map[string]string{}
+	for _, c := range rep.Connections {
+		infoStatus[c.Name] = c.Status
+	}
+
+	lj, _, err := runVibe("conn", "list", "--json", "--workspace", root)
+	require.NoError(t, err)
+	var rows []connRow
+	require.NoError(t, json.Unmarshal([]byte(lj), &rows))
+	require.NotEmpty(t, rows)
+	for _, r := range rows {
+		assert.Equal(t, infoStatus[r.Name], r.Status, r.Name)
+		switch session.StatusKind(r.Status) {
+		case session.StatusOK, session.StatusNotConnected, session.StatusLockedBy, session.StatusError, session.StatusNeedsCredentials, session.StatusExtensionMissing:
+		default:
+			t.Errorf("%s: %q is not one of the status words Studio uses", r.Name, r.Status)
+		}
+	}
+	assert.Equal(t, "error", infoStatus["broken"])
+	assert.NotEqual(t, "unavailable", infoStatus["broken"])
 }

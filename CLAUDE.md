@@ -53,7 +53,8 @@ studio/              Wails app (one bound App): app.go (core) + app_{agent,impor
                      connections.go, secrets.go, bundle.go, dotenv.go, templates.go; frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
-  workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher
+  workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
+                     ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard)
   connections/       connection type registry and attach SQL
   session/           the DuckDB hub for a workspace; connection lifecycle and status
   secrets/           keychain + env credential store (write-only across every boundary)
