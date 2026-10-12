@@ -133,13 +133,26 @@ func Serve(ctx context.Context, opts ServeOptions) error {
 	deadline := time.Now().Add(startupWait)
 	var lastErr error
 	for {
-		hold, err := acquireAt(root, opts.App, WithReleaseHandler(onRelease), WithPendingMCP())
+		opened, err := Open(ctx, root, OpenOptions{
+			App: opts.App, Logger: opts.Logger,
+			HubOptions:    []Option{WithReleaseHandler(onRelease), WithPendingMCP()},
+			BeforeSession: func(ws workspace.Workspace) { serveNotices(ws, opts) },
+		})
 		if err == nil {
-			return serveOwner(ctx, root, hold, opts, releasing)
+			return serveOwner(ctx, opened, opts, releasing)
 		}
 		var held *HeldError
 		if !errors.As(err, &held) {
-			return err
+			var oe *OpenError
+			if !errors.As(err, &oe) || oe.Step != StepOpen {
+				return err
+			}
+			// A workspace that does not parse can still be proxied to: the
+			// holder has it open, and passing MCP through never reads the yaml.
+			if _, rerr := ReadHolder(root); rerr != nil {
+				return fmt.Errorf("failed to open the workspace: %w", oe.Err)
+			}
+			err = fmt.Errorf("failed to open the workspace: %w", oe.Err)
 		}
 		lastErr = err
 		holder, rerr := ReadHolder(root)
@@ -201,35 +214,24 @@ func noMCPMessage(h *Holder) string {
 	return fmt.Sprintf("%s has this workspace open and is not sharing MCP with other processes. Close it first.", h)
 }
 
-func serveOwner(ctx context.Context, root string, hold *Hold, opts ServeOptions, releasing <-chan struct{}) (err error) {
-	defer func() {
-		// The lock goes last: the next owner may open the DuckDB files the
-		// moment it is free.
-		if rerr := hold.Release(); rerr != nil && err == nil {
-			err = rerr
-		}
-	}()
-
-	ws, err := workspace.Open(root, workspace.WithLogger(opts.Logger))
-	if err != nil {
-		return fmt.Errorf("failed to open the workspace: %w", err)
-	}
-	defer ws.Close() //nolint:errcheck
+// serveNotices is what `mcp serve` says once it owns the hub, before it opens
+// the session: the workspace's warnings and the state of its .env.
+func serveNotices(ws workspace.Workspace, opts ServeOptions) {
 	for _, w := range ws.Warnings() {
 		fmt.Fprintln(opts.Err, "warning:", w)
 	}
-
 	if st := ws.DotEnv(); st.State != "none" && st.State != "allowed" {
 		// Headless: never prompt, use only a saved allow. Names only.
 		opts.Logger.Info("mcp serve: this workspace has a .env that is not allowed, so it is not loaded; run `vibe workspace env allow` to use it",
 			"state", st.State, "variables", st.Names)
 	}
+}
 
-	sess, issues, err := workspace.OpenSession(ctx, ws, opts.Logger)
-	if err != nil {
-		return err
-	}
-	defer sess.Close() //nolint:errcheck
+func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasing <-chan struct{}) (err error) {
+	// Session, then the lock (the next owner may open the DuckDB files the
+	// moment it is free), then the workspace.
+	defer opened.Close()
+	ws, sess, hold, issues := opened.WS, opened.Sess, opened.Hold, opened.Issues
 	for _, i := range issues {
 		fmt.Fprintf(opts.Err, "connection %s is not available: %s\n", i.Connection, i.Message)
 	}

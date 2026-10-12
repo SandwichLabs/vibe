@@ -1,0 +1,14 @@
+id: go-open-session-in-defaultsteps-elsewhere
+language: go
+severity: error
+message: A function named defaultSteps is exempt from go-open-session-outside-hub-open only in internal/hub/open.go. Use hub.Open.
+rule:
+  kind: selector_expression
+  regex: '^workspace\.OpenSession$'
+  inside:
+    stopBy: end
+    kind: function_declaration
+    has: {field: name, regex: '^defaultSteps$'}
+ignores:
+  - "**/*_test.go"
+  - "internal/hub/open.go"
