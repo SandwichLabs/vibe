@@ -432,7 +432,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	case errors.Is(err, ErrApprovalExpired):
 		return NewErrorResponse(req.ID, ErrApprovalNeeded, "No answer in time, so nothing was changed.")
 	case errors.Is(err, ErrApprovalCancelled):
-		return NewErrorResponse(req.ID, ErrApprovalNeeded, "The file was closed before this change was approved. Nothing was changed.")
+		return NewErrorResponse(req.ID, ErrApprovalNeeded, "Stopped before this change ran (the turn was cancelled or the workspace was closed). Nothing was changed.")
 	default:
 		return NewErrorResponse(req.ID, ErrApprovalNeeded, err.Error())
 	}

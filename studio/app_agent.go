@@ -107,8 +107,13 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 	for _, h := range history {
 		hist = append(hist, llm.Turn{Role: h.Role, Text: h.Text})
 	}
+	ctx, release, err := a.chat.begin(a.ctxOrBackground(), turnID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	runner := llm.NewRunner(handler, a.logger)
-	res, err := runner.ChatStream(a.ctx, cfg, message, pinnedContext, hist, a.streamEmitter(turnID))
+	res, err := runner.ChatStream(ctx, cfg, message, pinnedContext, hist, a.streamEmitter(turnID))
 	if err != nil {
 		return nil, err
 	}
@@ -497,6 +502,11 @@ func (h *agentToolHandler) enableApprovals(turnID string) {
 		// Resolve(true) that raced the swap would emit "approved" for a change
 		// that must never run on the new workspace.
 		if h.app.ws != h.ws || h.app.sess != sess {
+			err = agents.ErrApprovalCancelled
+		}
+		// A "Do it" racing a Stop: the turn was cancelled, so the approved
+		// write must not run.
+		if err == nil && ctx.Err() != nil {
 			err = agents.ErrApprovalCancelled
 		}
 

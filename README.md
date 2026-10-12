@@ -3,165 +3,113 @@
 # Vibe
 
 [![CI](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **An agentic workspace for the data you already have.**
 
-Connect to local DuckDB files, MotherDuck, Postgres, MySQL, SQLite, DuckLake, Iceberg and Delta tables and object storage (S3, GCS, R2, Azure);
-explore, join and edit across all of them; write live notebooks and skills that
-live in a folder you can share through git — with an AI agent that reads freely
-and asks before it writes. Credentials stay in your OS keychain.
-
-*by [sandwichlabs](https://github.com/SandwichLabs)*
+*by [Sandwich Labs](https://github.com/SandwichLabs)*
 
 </div>
 
 ---
 
-> **Status.** The workspaces-and-connections direction (epic
-> [#105](https://github.com/SandwichLabs/vibe-app/issues/105)) is built:
-> Studio, the command line and `vibe mcp serve` all work on workspace
-> **folders** with connections and keychain credentials. A `.vibe` file is a
-> sharing bundle, not a database. What is left is packaging and signing
-> ([#77](https://github.com/SandwichLabs/vibe-app/issues/77)) and the follow-ups
-> in [`docs/direction.md`](docs/direction.md#9-as-delivered-what-changed-from-the-plan).
-> Why and how: [`docs/direction.md`](docs/direction.md),
-> [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md).
+Vibe is a desktop data tool in the DataGrip / DBeaver mould, with an AI agent built in. Point it at the data where it already lives (local DuckDB, CSV and Parquet files, MotherDuck, Postgres, MySQL, SQLite, S3, GCS, R2, Azure, DuckLake, Iceberg, Delta), query and join across all of it with one embedded DuckDB, and keep your notebooks, saved queries and skills as plain files in a folder you can share through git. The agent reads freely and asks before it writes; the same tools are available to Claude Code, Claude Desktop and other agents over MCP. Credentials stay in your OS keychain. Everything works without AI, and nothing is sent to Sandwich Labs.
 
-## What is Vibe?
+<p align="center">
+  <a href="docs/assets/hero.mp4">
+    <img src="docs/assets/hero.gif" alt="Vibe Studio opening a notebook: stat cards and a bar chart render from live SQL, then a monthly revenue line chart and a result table as the notebook scrolls" width="880">
+  </a>
+</p>
 
-A desktop data tool in the DataGrip / DBeaver mould, built around an agent.
+<details>
+<summary>Still screenshot</summary>
 
-- **Workspaces** — a folder you open like an Obsidian vault, switchable at any
-  time. Notebooks, saved queries, skills and connection definitions are plain
-  files, so a workspace can be a git repo your team shares.
-- **Connections** — data stays where it lives. Every source is attached into
-  one embedded DuckDB, so you can join MotherDuck to Postgres to a Parquet file
-  in one query, using DuckDB's extension suite. Read-only by default.
-- **Credentials** — in the OS keychain (or env vars for CI/headless), never in
-  the workspace, never in the agent's reach.
-- **Notebooks** — cells of SQL, markdown, and live dashboards. Outputs are never
-  saved; every cell re-runs when you open the notebook, so the numbers are
-  always current.
-- **Skills** — markdown documents that tell the agent what your metrics mean,
-  which joins are canonical, and what to avoid. Loaded on demand.
-- **An agent** — sandboxed, reads freely, and asks before any write. The same
-  tools are exposed over **MCP**, so Claude Code, Claude Desktop, Cursor, or
-  your own agent can work in the workspace with Studio open or closed.
-- **`.vibe` files** — a portable bundle of notebooks, queries and skills (and,
-  if you choose, connection definitions) for sharing outside git: no data, no
-  credentials, optionally locked with a passphrase. `vibe export bundle`,
-  `vibe import <file.vibe>`, or **Import .vibe…** in Studio (opening a
-  `.vibe` file with Vibe starts it). The older data-holding `.vibe` container
-  is not supported.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-notebook-dark.png">
+  <img src="docs/assets/hero-notebook.png" alt="A Vibe Studio notebook with revenue stat cards, a bar chart of revenue by shop and a monthly revenue line chart" width="880">
+</picture>
 
-Everything works without AI. SQL and notebooks are first-class by hand.
+</details>
 
-## Command line
+## Install
 
-```bash
-vibe workspace init acme --template order-entry --git   # a folder with vibe.yaml, notebooks/, data/ ...
-cd acme
-vibe workspace info                                     # connections, counts, agent policy, who owns the hub
-vibe import customers.csv --into customers              # CSV / TSV / xlsx into a writable connection
-vibe conn add | list | test | connect | rm | move       # connections; credentials go to the keychain
-vibe conn credentials set|clear|status <name>           # write-only: set or clear, never read back
-vibe query "SELECT count(*) FROM customers"             # [-c conn] [--format table|csv|json] [--limit N]
-vibe export customers -o customers.parquet              # csv, parquet, json or xlsx; or --sql "..."
-vibe export bundle -o share.vibe [--encrypt]            # notebooks, queries, skills; no data, no credentials
-vibe import share.vibe [--on-conflict rename|overwrite|skip]
-vibe export notebook <id> -o nb.vnb                     # one notebook; vibe import notebook nb.vnb takes it back
-vibe config llm-key                                     # the agent's API key, kept in the keychain
-vibe studio                                             # terminal UI: SQL REPL, table browser, notebook list
-vibe studio --gui                                       # the desktop app (add a folder to open it: vibe studio --gui acme,
-                                                        #  or a .vibe file to start its import)
-vibe mcp serve                                          # let Claude and other MCP clients use the workspace
+```sh
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh
 ```
 
-Commands find the workspace the way git finds `.git` (or take `--workspace DIR`).
-One process owns a workspace's database at a time; if Studio or `vibe mcp serve`
-has it, a command says so. `--read-only` (on `query`, `export` and `studio`) reads without
-taking ownership, but the owner keeps the workspace's own `.duckdb` files locked, so it only
-reaches other connections such as MotherDuck or Postgres.
-Details in [`docs/reference/workspaces.md`](docs/reference/workspaces.md#command-line).
+macOS (Apple silicon 14+, Intel 13+) and Linux (x86-64, arm64). Installs `vibe` and Vibe Studio into your home folder, no `sudo`. Options, manual download, macOS notes and uninstall: [docs/install.md](docs/install.md).
 
-## Who it's for
+## 60-second quickstart
 
-| Persona | What they do | What they get |
-|---|---|---|
-| **Analyst / operator** | Asks questions of business data | Notebooks, live dashboards, an agent that grounds every number in a query |
-| **Data engineer / builder** | Curates sources and definitions for a team | Shared connection definitions in git, skills that encode the domain, cross-source joins |
-| **Agent developer** | Points an external agent at real data | `vibe mcp serve` in a workspace — one tool surface, read-mostly, approvals for writes |
-
-## Architecture
-
-- **Engine:** embedded **DuckDB** as a hub — local files, MotherDuck, Postgres, MySQL, SQLite and DuckLake attached as catalogs, and S3/GCS/R2/Azure storage plus Iceberg and Delta tables read in place.
-- **Workspace:** a folder (`vibe.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`); credentials in the OS keychain.
-- **Desktop app:** Wails v2 (Go backend + Vue 3 frontend, SchoolHouse design system).
-- **AI agent:** `charmbracelet/fantasy` runner over one tool registry; allow-list SQL policy, approval gate for writes; MCP server (SSE in-app, stdio headless).
-- **Artifacts:** A2UI pages — a validated, live-SQL-bound component spec the agent draws with.
-- **Language:** Go 1.24+ (`CGO_ENABLED=1` for the DuckDB bindings).
-
-```
-workspace/ (git) ── vibe.yaml · notebooks/ · queries/ · skills/ · data/
-       │
-Studio / vibe mcp serve ── DuckDB hub ─┬─ local   (data/local.duckdb)
-                                       ├─ prod_pg (Postgres, read-only)
-                                       ├─ md      (MotherDuck)
-                                       └─ lake    (S3 secret)
-                     credentials ◄── OS keychain / env
+```sh
+vibe workspace init sales-demo && cd sales-demo        # a folder with vibe.yaml, notebooks/, data/ ...
+printf 'customer,amount\nAcme,120.5\nBirch,80\nAcme,45.25\n' > data/orders.csv
+vibe import data/orders.csv --into orders                # load it into the workspace's DuckDB
+vibe query "SELECT customer, sum(amount) AS total FROM orders GROUP BY 1 ORDER BY 2 DESC"
+claude mcp add --scope user vibe-sales-demo -- "$(command -v vibe)" mcp serve --workspace "$PWD"   # Claude Code over MCP
+vibe studio --gui                                        # open the desktop app on this workspace
 ```
 
-## Status and what is next
+Studio holds a workspace's database while it is open, and its MCP server is off until you press **Start** in Settings, Workspace, Claude and other tools. If you want Claude Code and Studio at the same time, press Start (writes then show approval cards in Studio); otherwise quit Studio before Claude Code connects.
 
-Epic [#105](https://github.com/SandwichLabs/vibe-app/issues/105) (#106–#119) is merged: the design pass and spike, the session hub, workspaces and file stores, the launcher and switcher, MCP and the CLI on workspaces, the keychain, connection types (Postgres, MySQL, MotherDuck, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg and Delta), the agent's SQL allow-list, the connections UI ([`docs/reference/connections.md`](docs/reference/connections.md#in-vibe-studio)) and `.vibe` bundles.
+No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is the [Quickstart](docs/quickstart.md).
 
-Open: macOS and Linux packages, signing and CI ([#77](https://github.com/SandwichLabs/vibe-app/issues/77), [`docs/packaging.md`](docs/packaging.md)); a safe agent read path for Iceberg and Delta (#134); notebook export to HTML/PDF/xlsx (#73). Multi-user / Tailscale mesh remains deferred.
+## What you get
 
-> Full detail: [`docs/direction.md`](docs/direction.md).
+- **Workspaces.** A folder you open like a vault: `vibe.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`. Plain files, git-friendly, shareable with a team.
+- **Connections.** Data stays where it lives, attached on first use into one DuckDB hub. Read-only by default. [Recipes](docs/connections.md) for each type.
+- **Live notebooks.** SQL, Markdown and dashboard cells. Notebooks store questions, not answers: every cell re-runs when you open it.
+- **Skills.** Markdown documents that teach the agent what your metrics mean and which joins are canonical, loaded on demand.
+- **An agent with guardrails.** Sandbox tiers, an SQL allow-list, and an approval for every write that matters. Works with a local model, Ollama, OpenAI, Anthropic, Gemini or Cloudflare AI Gateway.
+- **MCP for your own agent.** `vibe mcp serve` gives Claude Code, Claude Desktop, Cursor and others the same tools with the same limits. [Setup](docs/mcp-clients.md).
+- **Credentials done properly.** OS keychain or environment variables, write-only across every boundary, never in the folder, a bundle or a log.
+- **Import, export and sharing.** CSV, TSV and Excel in; CSV, Parquet, JSON and Excel out; `.vibe` bundles of notebooks, queries and skills (no data, no credentials, optional passphrase).
+- **Three ways in.** The Studio desktop app, the `vibe` command line, and a terminal UI (`vibe studio`).
 
-## Build
+## Supported platforms
 
-Build automation uses **Taskfile.yml**:
+| Platform | Support |
+|---|---|
+| Linux x86-64 / arm64 | glibc 2.35+ (Ubuntu 22.04+, Debian 12+, Fedora 36+). Studio needs WebKitGTK 4.1 and GTK 3. |
+| macOS, Apple silicon | macOS 14 or later |
+| macOS, Intel | macOS 13 or later |
+| Windows | Not supported yet |
 
-```bash
-task              # Default: lint + test + build
-task build        # Build binary
-task test         # Run all tests (alias: task t)
-task lint         # Run golangci-lint
-task studio:dev   # Wails dev server for the Studio app
-```
+## Status
 
-Run a single package's tests:
+Vibe is **pre-1.0**. Studio, the command line and MCP all work on workspace folders with connections and keychain credentials. Known limits for 0.1.0:
 
-```bash
-go test -v ./internal/workspace/
-```
+- **macOS builds are unsigned** (ad-hoc signed, not notarised). The install script avoids the Gatekeeper prompt; a browser download needs **Open Anyway**. See [docs/install.md](docs/install.md#macos-and-gatekeeper).
+- No Windows build. Single-user: sharing is through shared backends and git.
+- The chat agent needs a model you configure; a local model is the default. DuckDB extensions download once, when you ask for a feature that needs one.
+
+See the [CHANGELOG](CHANGELOG.md) and [docs/direction.md](docs/direction.md) for what is next.
+
+## A note on the name
+
+Mistral Vibe, an unrelated coding agent, also installs a command named `vibe`. Our installer will not overwrite another program's `vibe`, and tells you how to proceed. If `vibe` starts the wrong program, see [Troubleshooting](docs/troubleshooting.md#vibe-starts-a-different-program). We are keeping the name for now and will revisit it before 1.0.
+
+## Privacy
+
+Vibe sends nothing to Sandwich Labs: no telemetry, no analytics, no update checks. Network traffic goes only to the data sources you connect, to the LLM provider you configure (which sees the prompts, schemas and query results the agent uses), and to `extensions.duckdb.org` when you ask for a feature that needs a DuckDB extension (Install, `--install`, or an Excel import or export). Details: [docs/privacy.md](docs/privacy.md).
 
 ## Documentation
 
-| Doc | Purpose |
+| | |
 |---|---|
-| [`docs/direction.md`](docs/direction.md) | **Current** north star: workspaces, connections, primitives, and what changed from the plan |
-| [`docs/plans/workspaces-and-connections.md`](docs/plans/workspaces-and-connections.md) | The implementation plan for epic #105 (implemented; "as built" summary at the top) |
-| [`CLAUDE.md`](CLAUDE.md) | Architecture, conventions, key concepts (also guidance for AI assistants) |
-| [`docs/reference/`](docs/reference/) | Shipped surface reference: [workspaces](docs/reference/workspaces.md), [connections](docs/reference/connections.md), [agent policy](docs/reference/agent-policy.md), [notebooks and A2UI](docs/reference/notebooks.md), [import and export](docs/reference/import-office.md), [templates](docs/reference/templates.md), [themes](docs/reference/themes.md) |
-| [`docs/README.md`](docs/README.md) | Index of all documentation |
-| [`docs/reference/mcp.md`](docs/reference/mcp.md) | `vibe mcp serve` (stdio/SSE), Claude Desktop config, SSE auth/security |
-| [`docs/reference/llm-config.md`](docs/reference/llm-config.md) | LLM provider configuration and the API key |
-| [`docs/packaging.md`](docs/packaging.md) | Packaging and release plan (#77), file association wiring, extensions |
-| [`docs/archive/`](docs/archive/README.md) | Superseded plans and research (original MVP spec, Access parity, MotherDuck research) — historical |
+| [Install](docs/install.md) | The installer, platforms, macOS, upgrade and uninstall |
+| [Quickstart](docs/quickstart.md) | Install to a query, a notebook and Claude Code |
+| [Connection recipes](docs/connections.md) | MotherDuck, Postgres, S3 and the rest |
+| [Use from Claude and other MCP clients](docs/mcp-clients.md) | Setup, sandbox tiers and approvals |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and how to report a bug |
+| [Privacy](docs/privacy.md) | What leaves your machine |
+| [Architecture](docs/architecture.md) | How the pieces fit |
+| [Reference](docs/reference/README.md) | The shipped surface in detail |
+| [Direction](docs/direction.md) | The north star and what changed from the plan |
+| [All docs](docs/README.md) | The full index |
 
-## Design principles
+## Contributing, security and licence
 
-- **Data stays where it lives** — Vibe reaches your data; it doesn't copy it into its own format.
-- **The workspace is the app** — a folder of plain files you can version and share.
-- **Credentials in the keychain** — never in the folder, a bundle, logs, or the agent's context.
-- **Read-only until asked** — connections default to read-only; agent writes need approval.
-- **One tool surface** — the built-in agent and external MCP clients see the same tools with the same gating.
-- **Live, not frozen** — notebooks store questions, not answers; outputs re-run on open.
-- **AI as collaborator, not dependency** — everything works without AI.
-- **Progressive disclosure** — skills advertise a line and load on demand; connections connect on first use.
-
-## License
-
-Vibe is licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Contributions are accepted under the same license with a [DCO](https://developercertificate.org/) sign-off; see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+- Build from source and contribute: [CONTRIBUTING.md](CONTRIBUTING.md) (DCO sign-off, no CLA). Be kind: [Code of Conduct](CODE_OF_CONDUCT.md).
+- Report a vulnerability privately through GitHub: [SECURITY.md](SECURITY.md).
+- Licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE).

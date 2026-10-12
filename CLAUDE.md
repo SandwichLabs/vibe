@@ -33,7 +33,8 @@ task test         # Go + Vitest tests (alias: task t); task test:frontend is Vit
 task lint         # golangci-lint (task lint:fix to auto-fix)
 task typecheck    # vue-tsc over studio/frontend (`npm run typecheck`); part of `task lint`, blocking in CI, 0 errors
 task studio:dev   # Wails dev server (NOT bare `wails dev`: needs -tags webkit2_41,duckdb_arrow)
-task build:studio # Studio desktop app (build:studio:linux on Linux)
+task build:studio # Studio desktop app (build:studio:linux on Linux); stamps the version, then restores wails.json
+scripts/gen-icons.sh  # regenerate appicon.png + Linux icons from studio/build/icon/vibe.svg
 go test -v ./internal/workspace/   # one package
 ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture rules (CI-blocking at error severity), incl. ts-window-go-outside-binding-layer
 ```
@@ -80,7 +81,9 @@ internal/
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
                      (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
+  buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
+legal.go            repo-root package embedding LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md (`task notices`)
 docs/                see docs/README.md
 ```
 

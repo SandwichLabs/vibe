@@ -23,8 +23,9 @@
     <string>{{.Info.ProductVersion}}</string>
     <key>CFBundleIconFile</key>
     <string>iconfile</string>
+    <!-- Lowest supported; scripts/package.sh stamps the per-arch value (14.0 arm64, 13.0 amd64). -->
     <key>LSMinimumSystemVersion</key>
-    <string>10.13.0</string>
+    <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <string>true</string>
     <key>NSHumanReadableCopyright</key>

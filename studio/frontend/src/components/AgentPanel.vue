@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
-import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useAgentChat } from '../composables/useAgentChat'
 import AgentTranscript from './AgentTranscript.vue'
 import AgentSandboxIntro from './AgentSandboxIntro.vue'
-import { hasWailsRuntime } from '../lib/wails'
 
 // AgentPanel is the slide-in right-docked wizard chat (W0/W0.5). It drives the
 // streaming AgentChatStream binding via the shared useAgentChat composable: the
@@ -17,7 +15,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const route = useRoute()
 const router = useRouter()
-const { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, resolveApproval } = useAgentChat()
+const { messages, sending, stoppable, pinnedContext, send, pin, unpin, reset, cancel, setScrollHandler, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
   router.push(`/notebooks/${id}`)
@@ -38,14 +36,8 @@ async function scrollToBottom() {
   await nextTick()
   if (streamEl.value) streamEl.value.scrollTop = streamEl.value.scrollHeight
 }
-// A conversation belongs to the workspace it was held in: a new workspace
-// starts a clean one.
-let unsubOpened: (() => void) | null = null
-onMounted(() => {
-  setScrollHandler(scrollToBottom)
-  if (hasWailsRuntime()) unsubOpened = EventsOn('workspace:opened', () => reset())
-})
-onUnmounted(() => unsubOpened?.())
+// The chat resets itself on workspace open/close (useAgentChat).
+setScrollHandler(scrollToBottom)
 
 async function submit() {
   const text = draft.value
@@ -105,9 +97,14 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
         ></textarea>
         <div class="row" style="display: flex; justify-content: space-between; align-items: center;">
           <span class="agent-hint">⏎ Send · ⇧⏎ Newline</span>
-          <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="submit">
-            <Icon name="send" :size="13" /> {{ sending ? 'Sending…' : 'Send' }}
-          </button>
+          <div class="agent-actions">
+            <button v-if="stoppable" class="btn btn-inverted" data-testid="agent-cancel" @click="cancel">
+              <Icon name="x" :size="13" /> Stop
+            </button>
+            <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="submit">
+              <Icon name="send" :size="13" /> {{ sending ? 'Sending…' : 'Send' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -190,4 +187,5 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.agent-actions { display: flex; gap: 8px; }
 </style>

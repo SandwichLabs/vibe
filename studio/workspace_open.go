@@ -87,14 +87,10 @@ func (a *App) open(path string, mode openMode) (*OpenWorkspaceResult, error) {
 	// instead of waiting out its timeout on a workspace that is being swapped.
 	// It runs again under the lock to close the window where a Wait registers
 	// between the first call and taking the lock.
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	return a.openLocked(path, mode)
 }
 
@@ -192,14 +188,10 @@ func holderInfo(h *hub.Holder) *HolderInfo {
 // CloseWorkspace closes the open workspace: MCP off, session closed, hub
 // released. The frontend flushes its pending notebook saves first.
 func (a *App) CloseWorkspace() error {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.closeWorkspaceLocked("closed")
 	return nil
 }
@@ -211,6 +203,8 @@ func (a *App) CloseWorkspace() error {
 func (a *App) closeWorkspaceLocked(reason string) {
 	// Previewed bundles were compared with this workspace: forget them.
 	a.bundles.clear()
+	// A running chat turn must not outlive the session it is writing to.
+	a.chat.cancelTurn("")
 	if a.ws == nil {
 		return
 	}
@@ -267,9 +261,7 @@ func (a *App) onReleaseRequested() {
 	if a.hold != hold {
 		return
 	}
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.closeWorkspaceLocked("released")
 }
 
@@ -277,9 +269,7 @@ func (a *App) onReleaseRequested() {
 // to let go, then reopens it with the database. On failure the workspace comes
 // back read-only and the error says why.
 func (a *App) TakeOverWorkspace() (*OpenWorkspaceResult, error) {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.requireWorkspace(); err != nil {
