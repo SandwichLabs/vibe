@@ -99,7 +99,8 @@ func AutoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column 
 	return maxVal - cur, true, nil
 }
 
-// sequencePosition reads a sequence's last dispensed value from
+// sequencePosition reads a sequence's last dispensed value (a
+// conservative lower bound, see below) from
 // duckdb_sequences() — its last_value column, or start_value - 1 when
 // last_value is still NULL (the sequence has never had nextval() called on
 // it in any session) — WITHOUT itself calling nextval(). found is false
@@ -107,13 +108,13 @@ func AutoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column 
 // auto-number column; a caller can treat !found the same as "nothing to
 // bump").
 func sequencePosition(ctx context.Context, q Querier, ref session.TableRef, seq string) (pos int64, found bool, err error) {
-	var lastVal, startVal sql.NullInt64
+	var lastVal, startVal, incr sql.NullInt64
 	seqRef := session.TableRef{Catalog: ref.Catalog, Schema: ref.Schema, Name: seq}
 	cond, args := session.RefFilter(seqRef, "database_name", "schema_name", "sequence_name", 1)
 	err = q.QueryRowContext(ctx,
-		`SELECT last_value, start_value FROM duckdb_sequences() WHERE `+cond,
+		`SELECT last_value, start_value, increment_by FROM duckdb_sequences() WHERE `+cond,
 		args...,
-	).Scan(&lastVal, &startVal)
+	).Scan(&lastVal, &startVal, &incr)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, false, nil
@@ -121,6 +122,20 @@ func sequencePosition(ctx context.Context, q Querier, ref session.TableRef, seq 
 		return 0, false, fmt.Errorf("failed to inspect sequence %q: %w", seq, err)
 	}
 	if lastVal.Valid {
+		// DuckDB rewrites a persisted sequence on checkpoint so that, after the
+		// file is reopened, start_value and last_value both hold the NEXT value
+		// to dispense, not the last one dispensed (#19). In-session, last_value
+		// equals start_value only right after the first nextval(), so equality
+		// is ambiguous. Read it conservatively as "next": the position may then
+		// be one too low (the caller bumps one extra value, a harmless gap) but
+		// never one too high (a default insert colliding with an existing key).
+		if startVal.Valid && lastVal.Int64 == startVal.Int64 {
+			step := int64(1)
+			if incr.Valid && incr.Int64 != 0 {
+				step = incr.Int64
+			}
+			return lastVal.Int64 - step, true, nil
+		}
 		return lastVal.Int64, true, nil
 	}
 	if startVal.Valid {
