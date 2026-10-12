@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -19,7 +16,6 @@ import (
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 var connCmd = &cobra.Command{
@@ -197,89 +193,6 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 
 func findConn(ws workspace.Workspace, name string) (workspace.Connection, bool) {
 	return ws.Connection(name)
-}
-
-// --- credential prompting ---
-
-// lineReader hands out lines from one buffered reader, so several prompts can
-// read a pipe without the first one swallowing the rest.
-type lineReader struct {
-	f  *os.File
-	br *bufio.Reader
-}
-
-func newLineReader(in io.Reader) *lineReader {
-	lr := &lineReader{}
-	if f, ok := in.(*os.File); ok {
-		lr.f = f
-	}
-	lr.br = bufio.NewReader(in)
-	return lr
-}
-
-func (l *lineReader) tty() bool { return l.f != nil && term.IsTerminal(int(l.f.Fd())) }
-
-func (l *lineReader) line(errW io.Writer, prompt string, secret bool) (string, error) {
-	if l.tty() {
-		fmt.Fprint(errW, prompt)
-		if secret {
-			b, err := term.ReadPassword(int(l.f.Fd()))
-			fmt.Fprintln(errW)
-			if err != nil {
-				return "", fmt.Errorf("failed to read input: %w", err)
-			}
-			return strings.TrimSpace(string(b)), nil
-		}
-	}
-	s, err := l.br.ReadString('\n')
-	if err != nil && (!errors.Is(err, io.EOF) || s == "") {
-		return "", nil //nolint:nilerr // end of input: the remaining fields stay empty
-	}
-	return strings.TrimRight(s, "\r\n"), nil
-}
-
-// promptCredentials asks for each credential field of the type. A blank answer
-// keeps what is already stored (empty fields mean "keep" in SetCredentials).
-func promptCredentials(in io.Reader, errW io.Writer, typ string, _ secrets.Credential) (secrets.Credential, error) {
-	info, err := connections.TypeInfoFor(typ)
-	if err != nil {
-		return secrets.Credential{}, err
-	}
-	lr := newLineReader(in)
-	var c secrets.Credential
-	for _, f := range info.Credentials {
-		label := f.Label
-		if !f.Required {
-			label += " (optional)"
-		}
-		v, err := lr.line(errW, label+": ", f.Secret)
-		if err != nil {
-			return secrets.Credential{}, err
-		}
-		if v != "" {
-			cliRedactor.Add(secretOnly(f, v)...)
-		}
-		switch f.Name {
-		case "user":
-			c.User = v
-		case "password":
-			c.Password = v
-		case "token":
-			c.Token = v
-		case "key_id":
-			c.KeyID = v
-		case "secret":
-			c.Secret = v
-		}
-	}
-	return c, nil
-}
-
-func secretOnly(f connections.Field, v string) []string {
-	if f.Secret {
-		return []string{v}
-	}
-	return nil
 }
 
 // --- list ---
@@ -633,134 +546,6 @@ func runConnMove(cmd *cobra.Command, args []string) error {
 }
 
 // --- credentials ---
-
-var connCredentialsCmd = &cobra.Command{
-	Use:   "credentials",
-	Short: "Set, clear or inspect a connection's credentials",
-}
-
-var connCredsSetCmd = &cobra.Command{
-	Use:   "set <name>",
-	Short: "Store credentials in the keychain (prompts without echo; reads stdin when piped)",
-	Long: `Ask for the connection's credential fields (user, password; token; key id,
-secret) and store them in the keychain, bound to the connection's server. A
-blank answer keeps the stored value. When input is piped, one line is read per
-field, in the order the prompts would appear.
-
---sign-in chooses the method for this connection first: keychain (default),
-prompt, or env:PREFIX, which reads PREFIX_USER, PREFIX_PASSWORD, PREFIX_TOKEN,
-PREFIX_KEY_ID and PREFIX_SECRET at connect time and stores nothing.`,
-	Args:         cobra.ExactArgs(1),
-	RunE:         runConnCredsSet,
-	SilenceUsage: true,
-}
-
-func runConnCredsSet(cmd *cobra.Command, args []string) error {
-	ws, err := openWS(cmd)
-	if err != nil {
-		return err
-	}
-	defer ws.Close() //nolint:errcheck
-	c, ok := findConn(ws, args[0])
-	if !ok {
-		return fmt.Errorf("unknown connection %q", args[0])
-	}
-	if !connections.NeedsCredential(c.Type) {
-		return fmt.Errorf("%s connections have no credentials", c.Type)
-	}
-	if m := flagString(cmd, "sign-in"); m != "" {
-		err := ws.SetSignIn(c.Name, m)
-		if errors.Is(err, workspace.ErrRebindNeedsConfirm) {
-			if yes, _ := cmd.Flags().GetBool("confirm-rebind"); !yes {
-				return fmt.Errorf("%w (run again with --confirm-rebind if %s should use %s for its new server)", err, c.Name, m)
-			}
-			err = ws.RebindSignIn(c.Name, m)
-		}
-		if err != nil {
-			return err
-		}
-		c, _ = findConn(ws, args[0])
-	}
-	out := cmd.OutOrStdout()
-	if kind, prefix, _ := secrets.ParseMethod(c.SignIn); kind == "env" {
-		fmt.Fprintf(out, "%s signs in from the environment: %s. Nothing is stored.\n", c.Name, strings.Join(secrets.EnvVarNames(prefix), ", "))
-		return nil
-	}
-	cred, err := promptCredentials(cmd.InOrStdin(), cmd.ErrOrStderr(), c.Type, secrets.Credential{})
-	if err != nil {
-		return err
-	}
-	if err := ws.SetCredentials(cmdCtx(cmd), c.Name, cred, false); err != nil {
-		return errors.New(cliRedactor.Redact(err.Error()))
-	}
-	fmt.Fprintf(out, "Credentials for %s saved (%s).\n", c.Name, c.SignIn)
-	return nil
-}
-
-var connCredsClearCmd = &cobra.Command{
-	Use:          "clear <name>",
-	Short:        "Remove the saved credentials of a connection",
-	Args:         cobra.ExactArgs(1),
-	RunE:         runConnCredsClear,
-	SilenceUsage: true,
-}
-
-func runConnCredsClear(cmd *cobra.Command, args []string) error {
-	ws, err := openWS(cmd)
-	if err != nil {
-		return err
-	}
-	defer ws.Close() //nolint:errcheck
-	if err := ws.ClearCredentials(cmdCtx(cmd), args[0]); err != nil {
-		return errors.New(cliRedactor.Redact(err.Error()))
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Cleared the saved credentials of %s.\n", args[0])
-	return nil
-}
-
-var connCredsStatusCmd = &cobra.Command{
-	Use:          "status <name>",
-	Short:        "Say whether credentials are set (never what they are)",
-	Args:         cobra.ExactArgs(1),
-	RunE:         runConnCredsStatus,
-	SilenceUsage: true,
-}
-
-func runConnCredsStatus(cmd *cobra.Command, args []string) error {
-	ws, err := openWS(cmd)
-	if err != nil {
-		return err
-	}
-	defer ws.Close() //nolint:errcheck
-	st, err := ws.CredentialStatus(cmdCtx(cmd), args[0])
-	if err != nil {
-		return err
-	}
-	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "method:        %s\n", st.Method)
-	if st.Username != "" {
-		fmt.Fprintf(out, "user:          %s\n", st.Username)
-	}
-	if st.KeyID != "" {
-		fmt.Fprintf(out, "key id:        %s\n", st.KeyID)
-	}
-	fmt.Fprintf(out, "secret set:    %t\n", st.SecretSet)
-	fmt.Fprintf(out, "server match:  %t\n", st.FingerprintMatches)
-	fmt.Fprintf(out, "available:     %t\n", st.Available)
-	if st.Detail != "" {
-		fmt.Fprintf(out, "note:          %s\n", st.Detail)
-	}
-	names := make([]string, 0, len(st.Env))
-	for _, e := range st.Env {
-		names = append(names, fmt.Sprintf("%s=%t", e.Name, e.Set))
-	}
-	sort.Strings(names)
-	if len(names) > 0 {
-		fmt.Fprintf(out, "env set:       %s\n", strings.Join(names, " "))
-	}
-	return nil
-}
-
 // --- hidden subprocess entry for the MotherDuck test ---
 
 var connChildCmd = &cobra.Command{

@@ -334,7 +334,6 @@ const vFocus = {
   padding: 6px 8px;
   font: inherit;
   color: var(--sh-ink);
-  outline: none;
 }
 .cell-checkbox {
   accent-color: var(--sh-teal);

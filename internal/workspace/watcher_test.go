@@ -152,7 +152,11 @@ func TestWatcher_AtomicRenameOverIsOneChange(t *testing.T) {
 
 func TestWatcher_BurstIsDebounced(t *testing.T) {
 	ws, root := newWorkspace(t)
-	w := startWatcher(t, ws)
+	// A wider window than startWatcher's: a loaded CI runner can stall longer
+	// than 40ms between two writes and split the burst into two changes.
+	w, err := ws.Watch(WithDebounce(300 * time.Millisecond))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
 	p := filepath.Join(root, "notebooks", "burst.vnb")
 	for i := 0; i < 10; i++ {
 		require.NoError(t, os.WriteFile(p, []byte(`{"schemaVersion":2,"title":"B`+string(rune('a'+i))+`","cells":[]}`), 0o644))
