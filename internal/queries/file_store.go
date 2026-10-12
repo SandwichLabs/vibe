@@ -54,8 +54,9 @@ const (
 // store never rewrites a file it could not fully read, so parameters it failed
 // to parse are never silently dropped or altered.
 type FileStore struct {
-	root string
-	obs  filestore.Observer
+	root   string
+	obs    filestore.Observer
+	logger *slog.Logger
 
 	mu   sync.Mutex
 	seen map[string]string
@@ -69,9 +70,18 @@ func WithObserver(o filestore.Observer) FileStoreOption {
 	return func(s *FileStore) { s.obs = o }
 }
 
+// WithLogger sets where the store reports files it skips (default slog.Default()).
+func WithLogger(l *slog.Logger) FileStoreOption {
+	return func(s *FileStore) {
+		if l != nil {
+			s.logger = l
+		}
+	}
+}
+
 // NewFileStore returns the file-backed Store rooted at a workspace folder.
 func NewFileStore(root string, opts ...FileStoreOption) *FileStore {
-	s := &FileStore{root: root, seen: map[string]string{}}
+	s := &FileStore{root: root, seen: map[string]string{}, logger: slog.Default()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -189,7 +199,7 @@ func (s *FileStore) List(ctx context.Context) ([]Query, error) {
 			if errors.Is(err, ErrNotFound) {
 				continue // vanished between ReadDir and Read
 			}
-			slog.Default().Warn("unreadable query file", "id", id, "error", err)
+			s.logger.Warn("unreadable query file", "id", id, "error", err)
 			out = append(out, Query{ID: id, Title: id, Engine: "duckdb", Parameters: []Param{}, Error: err.Error()})
 			continue
 		}

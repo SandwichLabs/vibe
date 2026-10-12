@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { errorText } from './errors'
+import { errorText, isConflict, isDeletedConflict, settingsError } from './errors'
 
 describe('errorText', () => {
   it('strips a triple-wrapped Go error down to the real root cause', () => {
@@ -36,5 +36,25 @@ describe('errorText', () => {
   it('does not strip "could not" / "unable to" root causes', () => {
     expect(errorText('could not connect to database')).toBe('could not connect to database')
     expect(errorText('unable to read file')).toBe('unable to read file')
+  })
+})
+
+describe('isConflict', () => {
+  it('recognises the bridge conflict marker on an Error or a string', () => {
+    expect(isConflict(new Error('conflict: notebooks/a.vnb changed on disk since it was loaded'))).toBe(true)
+    expect(isConflict('conflict: x')).toBe(true)
+  })
+  it('does not match other errors or a mid-message mention', () => {
+    expect(isConflict(new Error('failed to save: disk full'))).toBe(false)
+    expect(isConflict(new Error('there is a conflict: here'))).toBe(false)
+    expect(isConflict(null)).toBe(false)
+  })
+  it('tells a deleted file from a changed one', () => {
+    expect(isDeletedConflict(new Error('conflict: notebooks/a.vnb was deleted on disk since it was loaded'))).toBe(true)
+    expect(isDeletedConflict(new Error('conflict: notebooks/a.vnb changed on disk since it was loaded'))).toBe(false)
+    expect(isDeletedConflict(new Error('file was deleted'))).toBe(false)
+  })
+  it('settingsError drops the marker for a conflict', () => {
+    expect(settingsError(new Error('conflict: vibe.yaml changed'))).toEqual({ text: 'vibe.yaml changed', stale: true })
   })
 })

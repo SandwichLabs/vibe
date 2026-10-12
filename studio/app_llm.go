@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/SandwichLabs/vibe/internal/config"
@@ -73,5 +72,5 @@ func (a *App) ListLLMModels(provider, endpoint string) llm.ModelList {
 	if _, err := a.llmProviderFor(provider); err != nil {
 		return llm.ModelList{Error: fmt.Sprint(err)}
 	}
-	return llm.ListModels(context.Background(), provider, endpoint)
+	return llm.ListModels(a.ctxOrBackground(), provider, endpoint)
 }

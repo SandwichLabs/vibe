@@ -101,7 +101,7 @@ func Open(data []byte, passphrase string) (*Package, error) {
 func unpack(plain []byte) (*Package, error) {
 	zr, err := zip.NewReader(bytes.NewReader(plain), int64(len(plain)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: not a readable zip archive (%v)", ErrNotBundle, err)
+		return nil, fmt.Errorf("%w: not a readable zip archive (%w)", ErrNotBundle, err)
 	}
 	if len(zr.File) > MaxEntries {
 		return nil, corrupt("%d entries, over the %d entry limit", len(zr.File), MaxEntries)

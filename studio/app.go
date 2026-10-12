@@ -179,7 +179,7 @@ func NewApp(logger *slog.Logger) *App {
 		approvalTimeout: defaultApprovalTimeout,
 	}
 	app.setLLMSnapshot(app.llmCfg)
-	if dir, err := prefs.DefaultDir(); err == nil {
+	if dir, err := prefs.DefaultDir(logger); err == nil {
 		app.prefs = prefs.NewStore(dir)
 	} else {
 		logger.Warn("preferences disabled: no config dir", "error", err)

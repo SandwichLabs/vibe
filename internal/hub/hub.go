@@ -275,7 +275,7 @@ func ReadHolder(root string) (*Holder, error) {
 	held, err := filelock.ProbeAt(dir, LockFile)
 	if err != nil {
 		if errors.Is(err, filelock.ErrUnsafe) {
-			return nil, fmt.Errorf("%w: %v", ErrUntrusted, err)
+			return nil, fmt.Errorf("%w: %w", ErrUntrusted, err)
 		}
 		return nil, err
 	}

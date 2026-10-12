@@ -30,7 +30,7 @@ import { describeShape, viewFit, bestView, VIEWS, VIEW_LABELS, VIEW_COMPONENT, V
 import { cellsToMerge, pruneConfirmedTombstones } from '../lib/notebookMerge'
 import AiCellDialog from '../components/AiCellDialog.vue'
 import { useAiCellDialog, type EnvelopeCell } from '../composables/useAiCellDialog'
-import { errorText } from '../lib/errors'
+import { errorText, isConflict, isDeletedConflict } from '../lib/errors'
 import CellDrawer from '../components/CellDrawer.vue'
 import ConnectionSelect from '../components/ConnectionSelect.vue'
 import { defaultConnectionName } from '../composables/useConnections'
@@ -112,7 +112,6 @@ const conflict = ref<{ deleted: boolean } | null>(null)
 // The revision on disk when the banner was raised: "Keep mine" only overwrites that one.
 let conflictRev = ''
 const conflictBusy = ref(false)
-const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let suppressAutosave = true // true while loading, so the initial populate doesn't trigger a save
 
@@ -660,7 +659,7 @@ async function saveNow() {
   } catch (e: any) {
     saveState.value = 'idle'
     if (isConflict(e)) {
-      raiseConflict(/deleted/.test(errorText(e)))
+      raiseConflict(isDeletedConflict(e))
       return
     }
     errorMessage.value = 'Failed to save notebook: ' + errorText(e)
@@ -705,7 +704,7 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
     if (seq === saveSeq) lastPersisted = serialized
   } catch (e: any) {
     if (isConflict(e)) {
-      raiseConflict(/deleted/.test(errorText(e)))
+      raiseConflict(isDeletedConflict(e))
       throw new Error('This notebook changed on disk and your edit is not saved yet')
     }
     const message = 'Failed to save notebook: ' + errorText(e)

@@ -1395,7 +1395,7 @@ func (a *App) installedExtensions(names []string) map[string]bool {
 		return out
 	}
 	defer db.Close() //nolint:errcheck
-	return session.ExtensionsInstalled(context.Background(), session.FromDB(db), names)
+	return session.ExtensionsInstalled(a.ctxOrBackground(), session.FromDB(db), names)
 }
 
 // InstallExtensionRequest is the person's consent to download one extension.

@@ -157,7 +157,7 @@ func (k *KeyringStore) mapErr(err error) error {
 	default:
 		// The backend's message never contains the value, but it can be long
 		// and platform-specific; keep it as the detail.
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 }
 

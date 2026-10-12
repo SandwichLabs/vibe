@@ -160,7 +160,7 @@ func SaveLLMSettings(path string, s LLMSettings) error {
 
 	out, err := editLLMSettings(data, s)
 	if err != nil {
-		return fmt.Errorf("Vibe can't safely edit %s (%v); edit llm.* by hand", path, err)
+		return fmt.Errorf("Vibe can't safely edit %s (%w); edit llm.* by hand", path, err)
 	}
 	if err := writeFileAtomic(path, out, mode); err != nil {
 		return fmt.Errorf("failed to update %s: %w", path, err)

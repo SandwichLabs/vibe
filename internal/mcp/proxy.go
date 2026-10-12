@@ -124,7 +124,7 @@ func ProxyStdio(ctx context.Context, cfg ProxyConfig, in io.Reader, out io.Write
 		for {
 			frag, isPrefix, err := br.ReadLine()
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					scanErr <- err
 				} else {
 					scanErr <- nil

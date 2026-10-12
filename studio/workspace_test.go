@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/workspace"
@@ -975,4 +978,16 @@ func newWorkspaceDirAt(t *testing.T, dir string) string {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, workspace.ConfigFile), []byte("id: x\nname: x\n"), 0o644))
 	return dir
+}
+
+func TestConflictErrBridgeShape(t *testing.T) {
+	wrapped := fmt.Errorf("failed to save: %w", &filestore.ConflictError{Path: "notebooks/a.vnb"})
+	err := conflictErr(wrapped)
+	require.ErrorIs(t, err, filestore.ErrConflict, "the bridge error is still a conflict to Go callers")
+	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix))
+	assert.Contains(t, err.Error(), "changed on disk")
+
+	other := errors.New("disk full")
+	assert.Equal(t, other, conflictErr(other), "non-conflicts pass through")
+	assert.NoError(t, conflictErr(nil))
 }

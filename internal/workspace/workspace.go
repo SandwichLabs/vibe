@@ -223,7 +223,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 		w.opts.resolver = secrets.NewResolver(secrets.WithEnv(SnapshotEnv()), secrets.WithResolverLogger(o.logger))
 	}
 	if w.configDir == "" {
-		if d, err := prefs.DefaultDir(); err == nil {
+		if d, err := prefs.DefaultDir(o.logger); err == nil {
 			w.configDir = d
 		}
 	}
@@ -234,8 +234,8 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	filestore.SweepStaleTemps(root, w.tempDirs(), time.Minute)
 	obs := w.observe
 	w.nb = notebooks.NewFileStore(root, notebooks.WithObserver(obs))
-	w.qs = queries.NewFileStore(root, queries.WithObserver(obs))
-	w.sk = skills.NewFileStore(root, skills.WithObserver(obs))
+	w.qs = queries.NewFileStore(root, queries.WithObserver(obs), queries.WithLogger(w.logger))
+	w.sk = skills.NewFileStore(root, skills.WithObserver(obs), skills.WithLogger(w.logger))
 	return w, nil
 }
 

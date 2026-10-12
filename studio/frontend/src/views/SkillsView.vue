@@ -7,7 +7,7 @@ import ConflictBanner from '../components/ConflictBanner.vue'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from '../composables/usePendingSaves'
-import { errorText } from '../lib/errors'
+import { errorText, isConflict } from '../lib/errors'
 
 // SkillsView (#62): lists built-in + file (user/import) Skills, shows a
 // rendered/raw detail pane, and lets the user author or edit file skills.
@@ -39,7 +39,6 @@ const saving = ref(false)
 // another editor, the agent): ConflictBanner offers reload / keep mine / copy.
 const conflict = ref<{ deleted: boolean } | null>(null)
 const conflictBusy = ref(false)
-const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 // The revision on disk when the banner was raised: "Keep mine" only overwrites that one.
 let conflictRev = ''
 function raiseConflict(deleted: boolean) {

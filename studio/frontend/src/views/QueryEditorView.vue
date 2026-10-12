@@ -15,7 +15,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import ConflictBanner from '../components/ConflictBanner.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
-import { errorText } from '../lib/errors'
+import { errorText, isConflict } from '../lib/errors'
 import { formatCell, cellClass, isNumericType } from '../lib/formatCell'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from '../composables/usePendingSaves'
@@ -56,7 +56,6 @@ function raiseConflict(deleted: boolean) {
   if (deleted || !id) return
   window.go.main.App.GetQuery(id).then((q: any) => { if (conflict.value && selectedId.value === id) conflictRev = q?.rev ?? '' }).catch(() => { /* falls back to an unconditional keep */ })
 }
-const isConflict = (e: unknown) => errorText(e).startsWith('conflict:')
 
 // Run-status metadata (W5): success/error badge + wall-clock of the last run.
 const lastRunAt = ref('')

@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -152,7 +153,7 @@ func (s *Server) Start(addr string) error {
 	// when Start and Stop happen in quick succession, e.g. an MCP restart on a
 	// live mode flip).
 	go func() {
-		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error("MCP server error", "error", err)
 		}
 	}()
@@ -232,7 +233,7 @@ func (s *Server) Stop() error {
 	s.mcpServer = nil
 	s.sseServer = nil
 
-	if shutdownErr != nil && shutdownErr != context.DeadlineExceeded {
+	if shutdownErr != nil && !errors.Is(shutdownErr, context.DeadlineExceeded) {
 		return shutdownErr
 	}
 	return closeErr

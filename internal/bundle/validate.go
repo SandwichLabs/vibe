@@ -93,7 +93,7 @@ func validateItem(kind ItemKind, id string, data []byte) (string, []string, erro
 
 func validateSkill(name string, data []byte) (string, []string, error) {
 	p := entryPath(KindSkill, name)
-	st, err := skills.Decode(name, data)
+	st, err := skills.Decode(name, data, nil)
 	if err != nil {
 		return "", nil, corrupt("%s: %v", p, err)
 	}
@@ -119,6 +119,13 @@ func validateSkill(name string, data []byte) (string, []string, error) {
 	// Decode already turned a "built-in" claim into a plain user skill; say so.
 	if doc, ok := skills.ParseDocument(string(data)); ok && doc.Meta["source"] == skills.SourceBuiltin {
 		warnings = append(warnings, p+": claimed to be a built-in skill; it is imported as an ordinary skill")
+	} else if ok {
+		// Decode silently normalises any other unknown source to a user skill.
+		switch src := doc.Meta["source"]; src {
+		case "", skills.SourceUser, skills.SourceImport:
+		default:
+			warnings = append(warnings, fmt.Sprintf("%s: claims an unknown source %q; it is imported as an ordinary skill", p, src))
+		}
 	}
 	return st.Name, warnings, nil
 }
