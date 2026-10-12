@@ -5,6 +5,7 @@ set -uo pipefail
 ARCH="${ARCH:?}"
 ROOT="$(pwd)"
 W="$RUNNER_TEMP/spike"; rm -rf "$W"; mkdir -p "$W"
+to() { perl -e 'alarm shift; exec @ARGV' "$@"; } # macOS has no timeout(1)
 R() { echo "RESULT $ARCH $1: $2"; }
 G() { echo "::group::$*"; }
 E() { echo "::endgroup::"; }
@@ -95,10 +96,10 @@ xattr -wr com.apple.quarantine "$QV" "$W/q/Vibe Studio.app"
 xattr -l "$W/q/vibe"
 R quarantine_set_on_cli "$(xattr -l "$W/q/vibe" | tr '\n' ' ')"
 R spctl_quarantined_app "$(spctl -a -vv "$W/q/Vibe Studio.app" 2>&1 | tr '\n' ' ')"
-timeout 30 "$W/q/vibe" --version; R quarantined_cli_from_shell_rc "$?"
-timeout 30 "$W/q/Vibe Studio.app/Contents/MacOS/vibe-studio" --version; R quarantined_studio_binary_from_shell_rc "$?"
+to 30 "$W/q/vibe" --version; R quarantined_cli_from_shell_rc "$?"
+to 30 "$W/q/Vibe Studio.app/Contents/MacOS/vibe-studio" --version; R quarantined_studio_binary_from_shell_rc "$?"
 QERR="$W/q.err"; : >"$QERR"
-timeout 40 open -a "$W/q/Vibe Studio.app" --stderr "$QERR" "$W/ws2"; R open_quarantined_rc "$?"
+to 40 open -a "$W/q/Vibe Studio.app" --stderr "$QERR" "$W/ws2"; R open_quarantined_rc "$?"
 sleep 15
 R quarantined_app_running "$(pgrep -f 'q/Vibe Studio.app/Contents/MacOS/vibe-studio' | wc -l | tr -d ' ') process(es)"
 screencapture -x "$W/shot-quarantined.png" 2>&1

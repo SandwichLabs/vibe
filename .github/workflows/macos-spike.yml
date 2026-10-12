@@ -75,6 +75,16 @@ jobs:
         shell: bash
         run: bash spike/macos/run.sh 2>&1 | tee "$RUNNER_TEMP/spike.log"
 
+      - name: Rebuild with MACOSX_DEPLOYMENT_TARGET=13.0 (round 2)
+        shell: bash
+        run: bash spike/macos/minos.sh 2>&1 | tee -a "$RUNNER_TEMP/spike.log"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: min13-${{ matrix.arch }}
+          path: min13-${{ matrix.arch }}.tar.gz
+          retention-days: 1
+
       - name: Results
         if: always()
         shell: bash
@@ -88,3 +98,26 @@ jobs:
             ${{ runner.temp }}/spike.log
             ${{ runner.temp }}/spike/*.png
           retention-days: 7
+
+  old-os:
+    name: run the min-13 build on macOS 14 (arm64)
+    needs: spike
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: min13-arm64
+      - name: Run
+        shell: bash
+        run: bash spike/macos/run14.sh 2>&1 | tee "$RUNNER_TEMP/old.log"; grep '^RESULT' "$RUNNER_TEMP/old.log" || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: old-os
+          path: shot-old.png
+          if-no-files-found: ignore
+          retention-days: 3
