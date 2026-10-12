@@ -31,14 +31,16 @@ task              # default: lint + test + build
 task build        # build the vibe binary (./cmd/vibe; also `go install github.com/SandwichLabs/vibe/cmd/vibe@latest`)
 task test         # Go + Vitest tests (alias: task t); task test:frontend is Vitest only
 task lint         # golangci-lint (task lint:fix to auto-fix)
+task typecheck    # vue-tsc over studio/frontend (`npm run typecheck`); part of `task lint`, blocking in CI, 0 errors
 task studio:dev   # Wails dev server (NOT bare `wails dev`: needs -tags webkit2_41,duckdb_arrow)
 task build:studio # Studio desktop app (build:studio:linux on Linux)
 go test -v ./internal/workspace/   # one package
+ast-grep scan cmd internal studio  # architecture rules (CI-blocking at error severity), incl. ts-window-go-outside-binding-layer
 ```
 
 **Release**: `task release` prints the procedure; a release is just pushing a `v*` tag (`-rc`/`-test` tags are prereleases; every release is a draft until a human publishes it). See `docs/packaging.md`, "v0.1.0 unsigned pipeline, as built".
 
-**CI** (`.github/workflows/ci.yml`): every PR runs the Linux `test` job (vet, `xvfb-run go test`, golangci-lint, vitest, frontend build, shellcheck) and a Linux amd64/arm64 build smoke on ubuntu-22.04 (CLI round trip + `wails build`). macOS runs only on push to main and `workflow_dispatch` (10x minutes). govulncheck (#41) and vue-tsc (#34/#35) are report-only. Actions are pinned to commit SHAs; the golangci-lint version is pinned in the workflow, so bump it with the local one.
+**CI** (`.github/workflows/ci.yml`): every PR runs the Linux `test` job (vet, `xvfb-run go test`, golangci-lint, vitest, frontend build, shellcheck) and a Linux amd64/arm64 build smoke on ubuntu-22.04 (CLI round trip + `wails build`). macOS runs only on push to main and `workflow_dispatch` (10x minutes). vue-tsc (`npm run typecheck`) is blocking, and build-smoke also checks `AppApi` arities against the regenerated bindings (`check-arity.mjs`); only govulncheck (#41) is report-only. Actions are pinned to commit SHAs; the golangci-lint version is pinned in the workflow, so bump it with the local one.
 
 Wails tasks pin `GOTOOLCHAIN` via `WAILS_GOTOOLCHAIN` in Taskfile.yml (Wails v2.11 can't load newer Go, #92). Run `wails` through `task`, or prefix `GOTOOLCHAIN=<that value>`.
 
@@ -55,7 +57,7 @@ studio/              Wails app (one bound App): app.go (core) + app_{agent,impor
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
-                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (views: Launcher, Dashboard, Notebooks/Notebook,
+                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Notebooks/Notebook,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;

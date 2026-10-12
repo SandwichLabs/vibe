@@ -12,7 +12,7 @@ import { askConfirm } from '../composables/useConfirm'
 const SECRET = 'sk-ant-NEEDLE-should-never-render'
 
 function status(over: Partial<LLMKeyStatus> = {}): LLMKeyStatus {
-  return { provider: 'anthropic', source: 'none', set: false, fileKey: false, canMigrate: false, keychainAvailable: true, ...over }
+  return { provider: 'anthropic', source: 'none', set: false, fileKey: false, canMigrate: false, keychainAvailable: true, keychainHasKey: false, ...over }
 }
 
 const PROVIDERS = [

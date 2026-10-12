@@ -13,6 +13,7 @@ import { flushAll } from './usePendingSaves'
 import { askConfirm } from './useConfirm'
 import { errorText } from '../lib/errors'
 import { hasWailsRuntime } from '../lib/wails'
+import { App } from '../lib/bindings'
 
 export const workspaceInfo = ref<WorkspaceInfo | null>(null)
 export const workspaceOpen = computed(() => workspaceInfo.value !== null)
@@ -63,7 +64,7 @@ export function startWorkspaceTracking(): void {
 
 export async function refreshWorkspaceInfo(): Promise<void> {
   try {
-    workspaceInfo.value = await window.go.main.App.GetWorkspaceInfo()
+    workspaceInfo.value = await App.GetWorkspaceInfo()
   } catch {
     workspaceInfo.value = null
   }
@@ -73,7 +74,7 @@ export async function refreshWorkspaceInfo(): Promise<void> {
 // keeps the workspace open on the Go side).
 export async function syncWorkspaceState(): Promise<void> {
   try {
-    if (await window.go.main.App.IsWorkspaceOpen()) await refreshWorkspaceInfo()
+    if (await App.IsWorkspaceOpen()) await refreshWorkspaceInfo()
     else workspaceInfo.value = null
   } catch {
     workspaceInfo.value = null
@@ -117,7 +118,7 @@ async function finishOpen(res: OpenWorkspaceResult): Promise<FlowResult> {
       confirmLabel: 'Make it a workspace',
     })
     if (!yes) return { ok: false }
-    const created = await window.go.main.App.CreateWorkspace({
+    const created = await App.CreateWorkspace({
       name: '', dir: res.path, parentDir: '', git: false, template: '', inPlace: true,
     })
     if (created.info) workspaceInfo.value = created.info
@@ -132,7 +133,7 @@ async function finishOpen(res: OpenWorkspaceResult): Promise<FlowResult> {
 export async function openWorkspacePath(path: string): Promise<FlowResult> {
   try {
     if (workspaceOpen.value && !(await flushOrConfirm('Switch'))) return { ok: false }
-    return await finishOpen(await window.go.main.App.OpenWorkspace(path))
+    return await finishOpen(await App.OpenWorkspace(path))
   } catch (e: unknown) {
     await syncWorkspaceState() // the old workspace is closed even when the new one failed
     return { ok: false, error: errorText(e) }
@@ -142,7 +143,7 @@ export async function openWorkspacePath(path: string): Promise<FlowResult> {
 // openFolderDialog is "Open folder…": the native picker, then the open flow.
 export async function openFolderDialog(): Promise<FlowResult> {
   try {
-    const path = await window.go.main.App.SelectWorkspaceFolder()
+    const path = await App.SelectWorkspaceFolder()
     if (!path) return { ok: false }
     return await openWorkspacePath(path)
   } catch (e: unknown) {
@@ -153,7 +154,7 @@ export async function openFolderDialog(): Promise<FlowResult> {
 export async function createWorkspace(req: CreateWorkspaceRequest): Promise<FlowResult> {
   try {
     if (workspaceOpen.value && !(await flushOrConfirm('Switch'))) return { ok: false }
-    const res = await window.go.main.App.CreateWorkspace(req)
+    const res = await App.CreateWorkspace(req)
     if (res.info) workspaceInfo.value = res.info
     return { ok: true, warnings: res.warnings }
   } catch (e: unknown) {
@@ -166,7 +167,7 @@ export async function createWorkspace(req: CreateWorkspaceRequest): Promise<Flow
 export async function closeWorkspace(): Promise<FlowResult> {
   try {
     if (!(await flushOrConfirm('Close'))) return { ok: false }
-    await window.go.main.App.CloseWorkspace()
+    await App.CloseWorkspace()
     workspaceInfo.value = null
     return { ok: true }
   } catch (e: unknown) {
@@ -177,7 +178,7 @@ export async function closeWorkspace(): Promise<FlowResult> {
 // takeOverWorkspace asks the program that has the workspace open to let go.
 export async function takeOverWorkspace(): Promise<FlowResult> {
   try {
-    const res = await window.go.main.App.TakeOverWorkspace()
+    const res = await App.TakeOverWorkspace()
     if (res.info) workspaceInfo.value = res.info
     return { ok: true }
   } catch (e: unknown) {

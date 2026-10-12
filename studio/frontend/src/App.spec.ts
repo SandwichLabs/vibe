@@ -1,6 +1,7 @@
 // App.vue: the launcher vs the shell, the workspace shortcuts (they work on the
 // launcher too), the startup folder, and the quit flow. There is no Save / Don't
 // save prompt any more: quitting flushes open notebooks and quits.
+type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from './router/index'
@@ -19,8 +20,8 @@ import { resolveConfirm, resolveConfirmChoice, confirmVisible } from './composab
 import { bundleImportRequest } from './composables/useBundle'
 import { workspaceInfo, newWorkspaceOpen, launcherNotice, switcherOpen, _resetForTests } from './composables/useWorkspace'
 
-function makeApp(over: Record<string, any> = {}) {
-  const app = {
+function makeApp(over: MockApp = {}) {
+  const app: MockApp = {
     IsWorkspaceOpen: vi.fn(async () => false),
     GetWorkspaceInfo: vi.fn(async () => ({ root: '/w/a', name: 'A', sessionId: 's', policy: { sandbox: 'read-write', askBeforeWrites: true } })),
     GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '' })),

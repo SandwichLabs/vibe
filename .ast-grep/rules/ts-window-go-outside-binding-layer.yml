@@ -1,18 +1,36 @@
 id: ts-window-go-outside-binding-layer
 language: ts
-severity: warning
-message: Direct Wails binding access (window.go...) outside the binding layer; call through src/lib/bindings.ts so names/types are checked in one place.
+severity: error
+message: Direct Wails binding access (window.go) outside the binding layer; import App / hasBinding from src/lib/bindings.ts so binding names and types are checked in one place.
 note: |
-  Survey rule for #54. There is no binding layer yet: every hit is a candidate
-  to route through a typed module (lib/bindings.ts, generated or hand-written).
-  .vue files are not parsed by ast-grep; scan extracted <script> blocks too.
+  #54 slice 9a. src/lib/bindings.ts is the ONE place that reads window.go; its
+  typed `App` (AppApi in env.d.ts) is what views, components and composables
+  call. Specs may still install mocks on window.go. ast-grep does not parse
+  .vue, so the .vue <script> blocks are scanned through the languageInjections
+  in sgconfig.yml.
 rule:
   any:
-    - pattern: window.go.main.App.$M
-    - pattern: window.go?.main?.App?.$M
+    - pattern: window.go
+    - pattern: window?.go
+    - pattern: globalThis.go
+    - pattern: globalThis.window.go
     - pattern: (window as any).go
-    - pattern: (globalThis as any)?.window?.go
+    - pattern: (window as unknown as $T).go
     - pattern: (globalThis as any).window.go
+    - pattern: (globalThis as $T).go
+    - pattern: "($W as $T)['go']"
+    - pattern: "$W['go']"
+    - pattern: "const { go } = $W"
+    - pattern: "const { go: $A } = $W"
+    - pattern: "const { $$$P, go } = $W"
+    - pattern: "const { $$$P, go: $A } = $W"
+    - pattern: "const { go, $$$P } = $W"
+    - pattern: "const { go: $A, $$$P } = $W"
+    - pattern: "const { go } = window as $T"
+    - pattern: "const { go } = globalThis as $T"
+    - pattern: $W.go
+    - pattern: $W?.go
+    - pattern: (globalThis as any)?.window?.go
 ignores:
   - "**/lib/bindings.ts"
   - "**/*.spec.ts"

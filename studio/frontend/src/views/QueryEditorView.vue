@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // QueryEditorView — the Query Explorer (parity W5; mockup #8 hifi-power).
 //
 // Left rail: the saved-query list (the schema tree moved to the global
@@ -54,7 +55,7 @@ function raiseConflict(deleted: boolean) {
   conflictRev = ''
   const id = selectedId.value
   if (deleted || !id) return
-  window.go.main.App.GetQuery(id).then((q: any) => { if (conflict.value && selectedId.value === id) conflictRev = q?.rev ?? '' }).catch(() => { /* falls back to an unconditional keep */ })
+  App.GetQuery(id).then((q: any) => { if (conflict.value && selectedId.value === id) conflictRev = q?.rev ?? '' }).catch(() => { /* falls back to an unconditional keep */ })
 }
 
 // Run-status metadata (W5): success/error badge + wall-clock of the last run.
@@ -90,7 +91,7 @@ const formattedRows = computed(() => {
 async function loadQueries() {
   loading.value = true
   try {
-    queries.value = await window.go.main.App.ListQueries()
+    queries.value = await App.ListQueries()
   } catch { /* ignore */ }
   loading.value = false
 }
@@ -98,7 +99,7 @@ async function loadQueries() {
 async function selectQuery(id: string) {
   selectedId.value = id
   try {
-    const q = await window.go.main.App.GetQuery(id)
+    const q = await App.GetQuery(id)
     selectedRev.value = q.rev ?? ''
     sqlText.value = q.sql
     savedSQL.value = q.sql
@@ -117,7 +118,7 @@ async function runQuery() {
   result.value = null
   try {
     ranOn.value = ranOnText(sqlText.value)
-    result.value = await window.go.main.App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId })
+    result.value = await App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId })
     lastRunOk.value = true
   } catch (e: any) {
     error.value = errorText(e)
@@ -148,7 +149,7 @@ function ranOnText(sql: string): string {
 async function saveQuery() {
   if (!saveTitle.value.trim()) return
   try {
-    const saved = await window.go.main.App.SaveQueryOn({ id: selectedId.value || '', title: saveTitle.value, sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
+    const saved = await App.SaveQueryOn({ id: selectedId.value || '', title: saveTitle.value, sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
     savedConn.value = conn.value
     selectedId.value = saved.id
     // The save changed the file: its new revision goes with the next save.
@@ -179,7 +180,7 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
   }
   conflictBusy.value = true
   try {
-    const res = await window.go.main.App.ResolveConflict({
+    const res = await App.ResolveConflict({
       kind: 'query', id, action,
       data: { title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '' },
       rev: conflictRev,
@@ -216,7 +217,7 @@ async function flushPending() {
   const id = selectedId.value
   if (!id) throw new Error('this query was never saved (use Save query)')
   try {
-    const saved = await window.go.main.App.SaveQueryOn({ id, title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
+    const saved = await App.SaveQueryOn({ id, title: saveTitle.value || currentTitle.value.replace('.sql', ''), sql: sqlText.value, description: '', rev: selectedRev.value, connection: conn.value })
     selectedRev.value = saved.rev ?? ''
     savedSQL.value = sqlText.value
     savedConn.value = conn.value
@@ -247,7 +248,7 @@ function onDiskChange(p: { kind: string; id: string; op: string }) {
 async function exportResults(format: 'csv' | 'parquet') {
   if (!sqlText.value.trim()) return
   try {
-    const path = await window.go.main.App.ExportQueryResults(sqlText.value, format, '')
+    const path = await App.ExportQueryResults(sqlText.value, format, '')
     if (path) statusMessage.value = `Exported ${format.toUpperCase()} → ${path}`
   } catch (e: any) {
     errorMessage.value = 'Export failed: ' + errorText(e)
@@ -271,7 +272,7 @@ async function confirmDeleteQuery() {
   pendingDeleteId.value = null
   if (!id) return
   try {
-    await window.go.main.App.DeleteQuery(id)
+    await App.DeleteQuery(id)
     if (selectedId.value === id) {
       selectedId.value = null
       sqlText.value = ''

@@ -1,3 +1,4 @@
+type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -10,8 +11,8 @@ import { workspaceInfo, takeOverOpen, _resetForTests } from '../composables/useW
 const base = { root: '/w/a', name: 'Acme Analytics', sessionId: 's', duplicateIds: [], localUntrusted: false } as unknown as WorkspaceInfo
 const held = { ...base, readOnly: true, holder: { app: 'vibe mcp serve', pid: 4182, servesMcp: false, text: 'vibe mcp serve (pid 4182)' } } as WorkspaceInfo
 
-function makeApp(over: Record<string, any> = {}) {
-  const app = {
+function makeApp(over: MockApp = {}) {
+  const app: MockApp = {
     TakeOverWorkspace: vi.fn(async () => ({ status: 'opened', path: '/w/a', info: { ...base, readOnly: false } })),
     RegenerateWorkspaceID: vi.fn(async () => ({ ...base, duplicateIds: [] })),
     TrustLocalSettings: vi.fn(async () => ({ ...base, localUntrusted: false })),

@@ -16,7 +16,7 @@ const PG: ConnTypeSpec = {
   capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true },
 }
 const detail = (over: Partial<ConnectionDetail> = {}): ConnectionDetail => ({
-  name: 'prod_pg', scope: 'shared', def: { name: 'prod_pg', type: 'postgres' }, shadows: [], signIn: 'keychain',
+  name: 'prod_pg', scope: 'shared', def: { name: 'prod_pg', type: 'postgres' }, fingerprint: '', shadows: [], signIn: 'keychain',
   credential: { method: 'keychain', username: 'rosa', secretSet: true, fingerprintMatches: false, available: true },
   info: { name: 'prod_pg', type: 'postgres', scope: 'shared', readOnly: true, default: false, status: 'needs-credentials', remote: true, serverChanged: { old: 'db.internal', new: 'db-new.internal' } }, ...over,
 })

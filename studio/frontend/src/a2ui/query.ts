@@ -10,6 +10,7 @@
 // container now, rather than freezing the values the agent saw when it wrote
 // the component.
 import { errorText } from '../lib/errors'
+import { App } from '../lib/bindings'
 
 interface LiveQueryResult {
   columns: string[]
@@ -101,8 +102,8 @@ export async function runLiveQuery(sql: string, signal?: AbortSignal, priority: 
     // default catalog for the statement's unqualified names. Unset keeps the
     // original binding (the session default).
     const res = connection
-      ? await window.go.main.App.RunA2UIQueryIn(sql, connection)
-      : await window.go.main.App.RunA2UIQuery(sql)
+      ? await App.RunA2UIQueryIn(sql, connection)
+      : await App.RunA2UIQuery(sql)
     if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
     return { columns: res?.columns ?? [], types: res?.types ?? [], rows: res?.rows ?? [] }
   } catch (e: any) {

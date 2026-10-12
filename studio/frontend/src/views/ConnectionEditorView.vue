@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // ConnectionEditorView — add or edit a connection (SPEC 06). A full-page route
 // (#/connections/new, #/connections/<name>) so there is room to explain and the
 // rail stays visible. The form is generated from the type registry; only the
@@ -146,7 +147,7 @@ async function refreshDraftFingerprint(): Promise<void> {
   const seq = ++fpSeq
   if (isNew.value || !detail.value || !typeId.value) { draftFingerprint.value = ''; return }
   try {
-    const fp = await window.go.main.App.ConnectionFingerprint(buildDef())
+    const fp = await App.ConnectionFingerprint(buildDef())
     if (seq === fpSeq) draftFingerprint.value = fp
   } catch {
     if (seq === fpSeq) draftFingerprint.value = ''
@@ -205,7 +206,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    types.value = await window.go.main.App.ListConnectionTypes()
+    types.value = await App.ListConnectionTypes()
     saved.value = false
     result.value = null
     saveError.value = ''
@@ -213,7 +214,7 @@ async function load() {
     if (isNew.value) {
       const from = typeof route.query.from === 'string' ? route.query.from : ''
       if (from) {
-        const d = await window.go.main.App.GetConnection(from)
+        const d = await App.GetConnection(from)
         typeId.value = d.def.type
         applyDef({ ...d.def, name: `${d.def.name}_copy` })
         // A duplicate never inherits a sign-in method: it starts at the keychain,
@@ -239,7 +240,7 @@ async function load() {
       }
     } else {
       const scope = typeof route.query.scope === 'string' ? (route.query.scope as ConnScope) : ('' as const)
-      const d = await window.go.main.App.GetConnectionInScope({ name: editName.value, scope })
+      const d = await App.GetConnectionInScope({ name: editName.value, scope })
       detail.value = d
       typeId.value = d.def.type
       applyDef(d.def)
@@ -270,7 +271,7 @@ async function runTest() {
   testing.value = true
   result.value = null
   try {
-    result.value = await window.go.main.App.TestConnection({
+    result.value = await App.TestConnection({
       scope: connScope.value,
       def: { ...buildDef(), name: f.name.trim() || 'test' },
       signIn: methodString.value,
@@ -305,7 +306,7 @@ async function loadDatabases() {
   mdError.value = ''
   mdInstall.value = ''
   try {
-    const r = await window.go.main.App.ListMotherDuckDatabases({
+    const r = await App.ListMotherDuckDatabases({
       name: isNew.value ? '' : f.name,
       scope: connScope.value,
       signIn: methodString.value,
@@ -378,27 +379,27 @@ async function save() {
   const wantsSecret = method.value !== 'env' && !!(typed.password || typed.token || typed.secret)
   const credsChanged = method.value !== 'env' && (wantsSecret || typed.username !== (status.value?.username ?? '') || typed.keyId !== (status.value?.keyId ?? ''))
   if (method.value === 'keychain' && wantsSecret) {
-    const probe = await window.go.main.App.ProbeKeychain()
+    const probe = await App.ProbeKeychain()
     if (!probe.available) { keychainDetail.value = probe.detail ?? ''; keychainBlocked.value = true; return }
   }
   saving.value = true
   try {
     if (!isNew.value && connScope.value !== origScope.value) {
-      await window.go.main.App.MoveConnection({ name, to: connScope.value })
+      await App.MoveConnection({ name, to: connScope.value })
     }
     const saveReq = { scope: connScope.value, def: buildDef(), isNew: isNew.value, signIn: needsSignIn.value ? methodString.value : '', confirmRebind }
     let d: ConnectionDetail
     try {
-      d = await window.go.main.App.SaveConnection(saveReq)
+      d = await App.SaveConnection(saveReq)
     } catch (e: unknown) {
       // The backend refuses to re-bind an environment sign-in without a yes, whatever
       // the screen thought: ask now and send it again.
       if (!errorText(e).startsWith('confirm-rebind:') || !(await askRebind(name))) throw e
       confirmRebind = true
-      d = await window.go.main.App.SaveConnection({ ...saveReq, confirmRebind })
+      d = await App.SaveConnection({ ...saveReq, confirmRebind })
     }
     if (needsSignIn.value && credsChanged && (typed.username || typed.keyId || wantsSecret)) {
-      await window.go.main.App.SetConnectionCredentials({ name, method: methodString.value, ...typed, remember: false, confirmRebind })
+      await App.SetConnectionCredentials({ name, method: methodString.value, ...typed, remember: false, confirmRebind })
     }
     Object.assign(typed, { password: '', token: '', secret: '' })
     // Switching away from the keychain leaves its saved sign-in unused: offer to
@@ -410,7 +411,7 @@ async function save() {
         variant: 'destructive',
         confirmLabel: 'Delete it',
       })
-      if (del) await window.go.main.App.ClearConnectionCredentials({ name, field: '' })
+      if (del) await App.ClearConnectionCredentials({ name, field: '' })
     }
     saved.value = true
     savedNote.value = `Saved to ${scopeLabel(connScope.value)}.`
@@ -436,8 +437,8 @@ async function clearSecret(field: string) {
   })
   if (!ok) return
   try {
-    await window.go.main.App.ClearConnectionCredentials({ name: f.name, field })
-    status.value = await window.go.main.App.GetConnectionCredentialStatus(f.name)
+    await App.ClearConnectionCredentials({ name: f.name, field })
+    status.value = await App.GetConnectionCredentialStatus(f.name)
     await refreshConnections()
   } catch (e: unknown) { saveError.value = errorText(e) }
 }
@@ -455,7 +456,7 @@ const shadowedBy = computed(() => detail.value?.shadowedBy ?? '')
 
 async function removeMine() {
   try {
-    await window.go.main.App.DeleteConnection({ name: f.name, scope: 'local' })
+    await App.DeleteConnection({ name: f.name, scope: 'local' })
     await refreshConnections()
     saved.value = true
     await router.replace(`/connections/${f.name}`)
@@ -471,7 +472,7 @@ async function remove() {
   })
   if (!ok) return
   try {
-    await window.go.main.App.DeleteConnection({ name: f.name, scope: connScope.value })
+    await App.DeleteConnection({ name: f.name, scope: connScope.value })
     await refreshConnections()
     saved.value = true
     await router.replace('/')

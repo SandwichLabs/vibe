@@ -11,6 +11,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import type { A2UIPageT } from '../a2ui/types'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { errorText } from '../lib/errors'
+import { App } from '../lib/bindings'
 
 // PendingApproval mirrors internal/agents.ApprovalRequest (#79), plus a
 // client-only `state` this composable drives as the user answers the card
@@ -41,7 +42,7 @@ export interface PendingApproval {
 // running; a cloud provider usually needs its key or model checked.
 async function errorHint(): Promise<string> {
   try {
-    const s = await window.go.main.App.GetLLMSettings()
+    const s = await App.GetLLMSettings()
     if (s.provider === 'local' || s.provider === 'ollama') return `Is the model server at ${s.endpoint} running?`
     return 'Check the API key and model in Settings \u2192 App.'
   } catch {
@@ -50,7 +51,7 @@ async function errorHint(): Promise<string> {
 }
 
 // The Go side already prefixes "agent error: "; the panel adds its own.
-function stripPrefix(t: string): string { return String(t ?? '').replace(/^agent error:\s*/i, '') }
+function stripPrefix(t: string | undefined): string { return String(t ?? '').replace(/^agent error:\s*/i, '') }
 
 async function addHint(msg: { role: string; text: string }) {
   const hint = await errorHint()
@@ -297,7 +298,7 @@ export function useAgentChat() {
     })
 
     try {
-      const res = await window.go.main.App.AgentChatStream(turnId, msg, pinnedContext.value, history)
+      const res = await App.AgentChatStream(turnId, msg, pinnedContext.value, history)
       // Authoritative final result (covers non-streaming servers / missed events).
       if (agentMsg.role !== 'error') {
         agentMsg.text = res?.text || agentMsg.text || '(no response)'
@@ -343,7 +344,7 @@ export function useAgentChat() {
     step.approval.state = 'sending'
     step.approval.error = undefined
     try {
-      await window.go.main.App.ResolveAgentApproval(step.approval.id, approved)
+      await App.ResolveAgentApproval(step.approval.id, approved)
     } catch {
       // Keep a specific 'cancelled'/'expired' that arrived first.
       if (step.approval.state === 'sending') step.approval.state = 'gone'

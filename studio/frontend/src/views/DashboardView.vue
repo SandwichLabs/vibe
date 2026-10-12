@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // Studio Home. Backed directly by GetDashboard's live counts and the workspace's
 // own tables (the default connection's, design #106 item 8), refreshed on
 // "data:changed". Titled with the workspace's name.
@@ -28,7 +29,7 @@ async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const d = await window.go.main.App.GetDashboard()
+    const d = await App.GetDashboard()
     if (gen !== loadGen) return
     title.value = d?.title || 'Home'
     description.value = d?.description || ''

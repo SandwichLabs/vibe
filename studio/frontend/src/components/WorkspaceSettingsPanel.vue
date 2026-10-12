@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // Settings > Workspace (SPEC 09 A): what belongs to the folder and travels with
 // git (name, default connection, the team's agent limit), what is just yours
 // (your own agent choice), and Studio's MCP switch for Claude and other tools.
@@ -43,7 +44,7 @@ async function save() {
   message.value = ''
   stale.value = false
   try {
-    workspaceInfo.value = await window.go.main.App.SetWorkspaceSettings({
+    workspaceInfo.value = await App.SetWorkspaceSettings({
       name: name.value.trim(),
       defaultConnection: defaultConnection.value,
       teamSandbox: i.teamSandboxSet ? i.team.sandbox : '',
@@ -69,14 +70,14 @@ const mcpBusy = ref(false)
 const copied = ref('')
 
 async function loadMCP() {
-  try { mcp.value = await window.go.main.App.GetMCPStatus() } catch { mcp.value = null }
+  try { mcp.value = await App.GetMCPStatus() } catch { mcp.value = null }
 }
 
 async function toggleMCP() {
   mcpBusy.value = true
   try {
-    if (mcp.value?.running) await window.go.main.App.StopMCP()
-    else await window.go.main.App.StartMCP()
+    if (mcp.value?.running) await App.StopMCP()
+    else await App.StartMCP()
     await loadMCP()
   } catch (e: unknown) {
     message.value = 'Error: ' + errorText(e)
@@ -95,7 +96,7 @@ async function copy(text: string, what: string) {
 
 async function copyConfig(kind: 'desktop' | 'code') {
   try {
-    const cfg = await window.go.main.App.GetClaudeConfig()
+    const cfg = await App.GetClaudeConfig()
     await copy(kind === 'desktop' ? cfg.desktop : cfg.code, kind)
   } catch (e: unknown) {
     message.value = 'Error: ' + errorText(e)

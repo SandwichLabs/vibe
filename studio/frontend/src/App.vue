@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from './lib/bindings'
 import { onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { EventsOn } from './wailsjs/runtime/runtime'
@@ -39,7 +40,7 @@ async function handleBeforeClose() {
     // conflict is unresolved) must not vanish silently with the window.
     // A frontend that can ask a question is not hung: stop the quit watchdog so
     // it cannot quit the app while the person is deciding.
-    try { await window.go.main.App.HoldQuit() } catch { /* an older backend */ }
+    try { await App.HoldQuit() } catch { /* an older backend */ }
     const quit = await askConfirm({
       title: 'Unsaved changes',
       message: `${res.failed[0].label} couldn't be saved: ${res.failed[0].error}. Quit anyway?`,
@@ -47,12 +48,12 @@ async function handleBeforeClose() {
       confirmLabel: 'Quit anyway',
     })
     if (!quit) {
-      try { await window.go.main.App.CancelQuit() } catch { /* nothing to undo */ }
+      try { await App.CancelQuit() } catch { /* nothing to undo */ }
       return
     }
   }
   try {
-    await window.go.main.App.Quit()
+    await App.Quit()
   } catch {
     // Nothing left to do — the window is on its way down either way.
   }
@@ -127,14 +128,14 @@ onMounted(async () => {
       // A folder or .vibe bundle passed on the command line (`vibe studio --gui <dir>`,
       // or the OS opening one with Vibe before the window was ready).
       try {
-        await handleOpenRequest(await window.go.main.App.GetInitialWorkspace())
+        await handleOpenRequest(await App.GetInitialWorkspace())
       } catch {
         // ignore
       }
     } else {
       launching.value = false
       // Still tells the backend it can send open requests as events.
-      try { await window.go.main.App.GetInitialWorkspace() } catch { /* ignore */ }
+      try { await App.GetInitialWorkspace() } catch { /* ignore */ }
     }
     // EventsOn returns an unsubscribe function scoped to THIS listener; the global
     // EventsOff(name) would remove every listener for the event name.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // Settings > App > The agent's model. App-global (every workspace): the
 // provider picker, model, endpoint and Cloudflare account are saved to
 // ~/.vibe.yaml (never the key; docs/reference/llm-config.md). A field set by a
@@ -35,12 +36,12 @@ const env = computed(() => view.value?.envOverrides ?? {})
 async function refreshKey() {
   const asked = keyProviderId.value
   try {
-    const st = await window.go.main.App.GetLLMKeyStatus(keyProviderArg.value)
+    const st = await App.GetLLMKeyStatus(keyProviderArg.value)
     if (asked === keyProviderId.value) keyStatus.value = st // a newer pick wins over a late answer
   } catch { if (asked === keyProviderId.value) keyStatus.value = null }
 }
 async function loadView() {
-  try { view.value = await window.go.main.App.GetLLMSettings() } catch { view.value = null }
+  try { view.value = await App.GetLLMSettings() } catch { view.value = null }
 }
 onMounted(async () => {
   await loadView()
@@ -114,7 +115,7 @@ async function loadModels() {
   const prov = form.value.provider
   models.value = { ...models.value, loading: true }
   try {
-    const r = await window.go.main.App.ListLLMModels(prov, form.value.endpoint)
+    const r = await App.ListLLMModels(prov, form.value.endpoint)
     if (prov !== form.value.provider) return // the person moved on
     models.value = { loading: false, list: r.models ?? [], error: r.error ?? '', unreachable: !!r.unreachable, loaded: true }
   } catch (e: any) {
@@ -170,7 +171,7 @@ async function saveSettings() {
   settingsErr.value = ''
   settingsMsg.value = ''
   try {
-    await window.go.main.App.SetLLMSettings({
+    await App.SetLLMSettings({
       provider: form.value.provider,
       model: form.value.model.trim(),
       endpoint: formInfo.value?.hasEndpoint ? form.value.endpoint.trim() : keptEndpoint(),
@@ -199,7 +200,7 @@ async function save() {
   busy.value = true
   message.value = ''
   try {
-    await window.go.main.App.SetLLMKey(keyProviderArg.value, key)
+    await App.SetLLMKey(keyProviderArg.value, key)
     draft.value = ''
     editing.value = false
     message.value = 'Saved to your keychain.'
@@ -215,7 +216,7 @@ async function clearKey() {
   busy.value = true
   message.value = ''
   try {
-    await window.go.main.App.ClearLLMKey(keyProviderArg.value)
+    await App.ClearLLMKey(keyProviderArg.value)
     editing.value = false
     message.value = 'Removed from your keychain.'
     await refreshKey()
@@ -234,7 +235,7 @@ async function migrate() {
   busy.value = true
   message.value = ''
   try {
-    await window.go.main.App.MigrateLLMKeyToKeychain(overwrite)
+    await App.MigrateLLMKeyToKeychain(overwrite)
     message.value = 'Moved to your keychain, and blanked in ~/.vibe.yaml.'
     await refreshKey()
   } catch (e: any) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -171,14 +172,14 @@ const formattedRows = computed(() => {
 async function loadTables() {
   loading.value = true
   try {
-    groups.value = (await window.go.main.App.ListCatalogGroups()) || []
+    groups.value = (await App.ListCatalogGroups()) || []
     // A deep link (/tables?table=prod_pg.public.orders) to a connection that has
     // not been used yet connects it first (the rail does the same on expand).
     const want = route.query.table
     const cn = typeof want === 'string' && want.includes('.') ? want.split('.')[0] : ''
     if (cn && groups.value.some((g) => g.connection === cn && g.status === 'not-connected')) {
       await connect(cn)
-      groups.value = (await window.go.main.App.ListCatalogGroups()) || []
+      groups.value = (await App.ListCatalogGroups()) || []
     }
     tables.value = groups.value.flatMap((g) => g.tables.map((t) => t.qualified))
   } catch { /* ignore */ }
@@ -229,10 +230,10 @@ async function selectTable(name: string) {
   cellError.value = null
   clearFilter()
   try {
-    tableInfo.value = await window.go.main.App.DescribeTable(name)
+    tableInfo.value = await App.DescribeTable(name)
   } catch { tableInfo.value = null }
   try {
-    caps.value = await window.go.main.App.GetTableCapabilities(name)
+    caps.value = await App.GetTableCapabilities(name)
   } catch { caps.value = null }
   await loadData()
 }
@@ -242,12 +243,12 @@ async function loadData() {
   dataLoading.value = true
   try {
     if (activeFilter.value) {
-      tableData.value = await window.go.main.App.GetTableDataFiltered(
+      tableData.value = await App.GetTableDataFiltered(
         selectedTable.value, activeFilter.value, currentPage.value, pageSize.value, sortCol.value, sortDir.value
       )
       filteredTotal.value = tableData.value?.total_rows ?? null
     } else {
-      tableData.value = await window.go.main.App.GetTableData(
+      tableData.value = await App.GetTableData(
         selectedTable.value, currentPage.value, pageSize.value, sortCol.value, sortDir.value
       )
     }
@@ -317,7 +318,7 @@ async function saveFilterAsQuery() {
   const columns = tableData.value?.columns ?? []
   const title = `${selectedTable.value} (filtered)`
   try {
-    await window.go.main.App.SaveFilterAsQuery(
+    await App.SaveFilterAsQuery(
       selectedTable.value, activeFilter.value, columns, title
     )
     statusMessage.value = `Saved query "${title}". Find it under Queries.`
@@ -354,7 +355,7 @@ async function createTable() {
   const cols = newTableCols.value.filter(c => c.name.trim())
   if (!newTableName.value.trim() || cols.length === 0) return
   try {
-    await window.go.main.App.CreateTable(newTableName.value, cols)
+    await App.CreateTable(newTableName.value, cols)
     showNewTableModal.value = false
     newTableName.value = ''
     newTableCols.value = [{ name: '', type: 'TEXT', not_null: false, pk: false }]
@@ -379,7 +380,7 @@ async function confirmDropTable() {
   pendingDropTable.value = null
   if (!name) return
   try {
-    await window.go.main.App.DropTable(name)
+    await App.DropTable(name)
     if (selectedTable.value === name) {
       selectedTable.value = null
       tableData.value = null
@@ -407,7 +408,7 @@ async function insertRow() {
     if (v !== '') vals[k] = v
   }
   try {
-    await window.go.main.App.InsertRow(selectedTable.value, vals)
+    await App.InsertRow(selectedTable.value, vals)
     showAddRowModal.value = false
     await loadData()
   } catch (e: any) {
@@ -436,7 +437,7 @@ async function confirmDeleteRow() {
   const pkIdx = tableData.value?.columns.indexOf(pkCol.name) ?? -1
   if (pkIdx < 0) return
   try {
-    await window.go.main.App.DeleteRow(selectedTable.value, pkCol.name, row[pkIdx])
+    await App.DeleteRow(selectedTable.value, pkCol.name, row[pkIdx])
     await loadData()
   } catch (e: any) {
     errorMessage.value = 'Failed: ' + errorText(e)
@@ -504,7 +505,7 @@ async function saveEdit() {
   row[cur.col] = next === '' ? null : next
   editing.value = null
   try {
-    await window.go.main.App.UpdateRow(
+    await App.UpdateRow(
       selectedTable.value, pk.name, row[pkIdx], { [colName]: next }
     )
     await loadData()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // BundleImportDialog — "Import .vibe…" (#118), from the workspace menu (into the
 // open workspace) and from the launcher (into a new one). The file is verified
 // and previewed before anything is written; each item that already exists gets
@@ -38,7 +39,7 @@ const LAST_PARENT_KEY = 'vibe.newWorkspace.parentDir'
 
 async function discard() {
   const h = preview.value?.handle
-  if (h) { try { await window.go.main.App.DiscardBundleImport(h) } catch { /* expired */ } }
+  if (h) { try { await App.DiscardBundleImport(h) } catch { /* expired */ } }
 }
 
 function close() {
@@ -64,12 +65,12 @@ watch(bundleImportRequest, async (req) => {
   connIncluded.value = {}
   if (req.mode === 'new') {
     try { parentDir.value = localStorage.getItem(LAST_PARENT_KEY) || '' } catch { parentDir.value = '' }
-    try { gitAvailable.value = await window.go.main.App.CheckGitAvailable() } catch { gitAvailable.value = false }
+    try { gitAvailable.value = await App.CheckGitAvailable() } catch { gitAvailable.value = false }
     git.value = gitAvailable.value
   }
   if (!path.value) {
     try {
-      path.value = await window.go.main.App.SelectBundleFile()
+      path.value = await App.SelectBundleFile()
     } catch (e: unknown) {
       error.value = errorText(e)
     }
@@ -82,7 +83,7 @@ async function load() {
   busy.value = true
   error.value = ''
   try {
-    const pv = await window.go.main.App.PreviewBundleImport(path.value, passphrase.value)
+    const pv = await App.PreviewBundleImport(path.value, passphrase.value)
     if (pv.needsPassphrase) {
       stage.value = 'passphrase'
       if (pv.wrongPassphrase) error.value = "That passphrase doesn't open this bundle. Check it and try again."
@@ -132,7 +133,7 @@ function decisions(): BundleDecisions {
 
 async function choose() {
   try {
-    const p = await window.go.main.App.ChooseFolder('Where should the new workspace go?')
+    const p = await App.ChooseFolder('Where should the new workspace go?')
     if (p) parentDir.value = p
   } catch (e: unknown) {
     error.value = errorText(e)
@@ -145,7 +146,7 @@ async function submit() {
   error.value = ''
   try {
     if (mode.value === 'new') {
-      const out = await window.go.main.App.ImportBundleIntoNewWorkspace(preview.value.handle, {
+      const out = await App.ImportBundleIntoNewWorkspace(preview.value.handle, {
         name: wsName.value.trim(), dir: '', parentDir: parentDir.value.trim(),
         git: git.value && gitAvailable.value, template: '', inPlace: false,
       }, decisions())
@@ -154,7 +155,7 @@ async function submit() {
       result.value = out.result
     } else {
       if (!(await flushOrConfirm('Import'))) { busy.value = false; return }
-      result.value = await window.go.main.App.CommitBundleImport(preview.value.handle, decisions())
+      result.value = await App.CommitBundleImport(preview.value.handle, decisions())
     }
     preview.value = { ...preview.value, handle: '' }
     stage.value = 'done'

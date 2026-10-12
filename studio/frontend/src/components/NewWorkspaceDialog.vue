@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // NewWorkspaceDialog — SPEC 02. Name, where to put it, git, starter template.
 // Opened from the launcher and from the switcher menu (Ctrl/Cmd+N). Enter in a
 // text field submits when valid; Escape cancels; focus lands in Name.
@@ -49,9 +50,9 @@ watch(newWorkspaceOpen, async (open) => {
   dirTaken.value = false
   busy.value = false
   try { parentDir.value = localStorage.getItem(LAST_PARENT_KEY) || '' } catch { parentDir.value = '' }
-  try { gitAvailable.value = await window.go.main.App.CheckGitAvailable() } catch { gitAvailable.value = false }
+  try { gitAvailable.value = await App.CheckGitAvailable() } catch { gitAvailable.value = false }
   git.value = gitAvailable.value
-  try { templates.value = (await window.go.main.App.ListTemplates()) || [] } catch { templates.value = [] }
+  try { templates.value = (await App.ListTemplates()) || [] } catch { templates.value = [] }
 })
 
 let checkSeq = 0
@@ -60,7 +61,7 @@ async function checkDir() {
   dirTaken.value = false
   if (!name.value.trim() || !parentDir.value.trim()) return
   try {
-    const chk = await window.go.main.App.CheckWorkspaceDir(parentDir.value, name.value)
+    const chk = await App.CheckWorkspaceDir(parentDir.value, name.value)
     if (seq === checkSeq) dirTaken.value = chk.exists && chk.notEmpty
   } catch { /* the create call reports it */ }
 }
@@ -68,7 +69,7 @@ watch([name, parentDir], () => { error.value = ''; void checkDir() })
 
 async function choose() {
   try {
-    const p = await window.go.main.App.ChooseFolder('Where should the new workspace go?')
+    const p = await App.ChooseFolder('Where should the new workspace go?')
     if (p) parentDir.value = p
   } catch (e: unknown) {
     error.value = errorText(e)

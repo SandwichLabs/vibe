@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // CredentialsPromptDialog — SPEC 07 A, A2, A3: sign in to a connection that has
 // no usable sign-in on this computer (first use, "ask each time", or a server
 // that changed since the saved sign-in). Secrets are typed here and sent to the
@@ -40,7 +41,7 @@ watch(signInFor, async (n) => {
   values.value = {}
   if (!n) return
   try {
-    const [d, types] = await Promise.all([window.go.main.App.GetConnection(n), window.go.main.App.ListConnectionTypes()])
+    const [d, types] = await Promise.all([App.GetConnection(n), App.ListConnectionTypes()])
     detail.value = d
     spec.value = types.find((t) => t.id === d.def.type) ?? null
     remember.value = !d.signIn.startsWith('prompt')
@@ -74,7 +75,7 @@ async function submit() {
     if (k) (req as any)[k] = f.secret ? raw : raw.trim()
   }
   try {
-    await window.go.main.App.ConnectWithCredentials(req)
+    await App.ConnectWithCredentials(req)
     values.value = {} // drop the typed secrets from memory
     signInFor.value = null
     await refreshConnections()

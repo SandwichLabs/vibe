@@ -4,3 +4,11 @@
 # (Survey rules from the earlier cleanup live in docs/reviews/cleanup-2026-10/.)
 ruleDirs:
   - .ast-grep/rules
+# .vue single-file components: scan their <script> blocks as TypeScript (ts rules apply to them).
+languageGlobs:
+  html: ["*.vue"]
+languageInjections:
+  - hostLanguage: html
+    rule:
+      pattern: <script $$$ATTRS>$CONTENT</script>
+    injected: ts

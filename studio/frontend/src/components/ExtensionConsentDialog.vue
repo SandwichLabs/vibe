@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 // ExtensionConsentDialog — SPEC 07 B. The one place Vibe downloads something:
 // a DuckDB extension a connection type needs. Nothing downloads without a yes.
 import { ref, computed, watch } from 'vue'
@@ -40,7 +41,7 @@ async function install() {
   busy.value = true
   error.value = ''
   try {
-    await window.go.main.App.InstallExtension({ name: ext.value })
+    await App.InstallExtension({ name: ext.value })
     extensionFor.value = null
     await refreshConnections()
   } catch (e: unknown) {

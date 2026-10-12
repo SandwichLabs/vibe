@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App, hasBinding } from '../lib/bindings'
 // NotebookView — the notebook editor (#66 part A): cells rendered in order,
 // each an sql / markdown / a2ui cell. SQL cells synthesize a one-component
 // A2UI page from their result and render it through A2UIPage — the SAME
@@ -16,7 +17,7 @@
 // its click handler to open the AI-cell dialog — no other change to this
 // file should be required, since cells are added the same way (insertCell)
 // whether typed by hand or proposed by the agent.
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch, type Ref } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import A2UIPage from '../a2ui/A2UIPage.vue'
@@ -92,7 +93,8 @@ const router = useRouter()
 const loadedNotebookIdForView = computed(() => String(route.params.id))
 
 const title = ref('')
-const cells = ref<CellState[]>([])
+// Cast: ref() would unwrap the CodeMirror EditorView type inside each cell's editor handle.
+const cells = ref<CellState[]>([]) as Ref<CellState[]>
 const loading = ref(true)
 const notFound = ref(false)
 const errorMessage = ref('')
@@ -249,9 +251,9 @@ async function loadNotebook(id: string) {
   pendingNotebooksChangedQueue = []
   try {
     const [nb, sessionId] = await Promise.all([
-      window.go.main.App.GetNotebook(id),
-      typeof window.go.main.App.GetSessionID === 'function'
-        ? window.go.main.App.GetSessionID().catch(() => '')
+      App.GetNotebook(id),
+      hasBinding('GetSessionID')
+        ? App.GetSessionID().catch(() => '')
         : Promise.resolve(''),
     ])
     if (loadedNotebookId !== id) return // superseded by another load before this one resolved
@@ -268,7 +270,7 @@ async function loadNotebook(id: string) {
     await nextTick()
     mountEditors()
     setupCellObserver()
-    if (hasWailsRuntime()) window.go.main.App.SetActiveNotebook(id)
+    if (hasWailsRuntime()) App.SetActiveNotebook(id)
     await runAll()
     await replayPendingNotebooksChanged(id)
   } catch (e: any) {
@@ -506,7 +508,7 @@ function snapshotAiCell(id: string) {
 async function loadAiCellTables(): Promise<string[]> {
   if (!hasWailsRuntime()) return []
   try {
-    return (await window.go.main.App.ListTables()) || []
+    return (await App.ListTables()) || []
   } catch {
     return []
   }
@@ -648,7 +650,7 @@ async function saveNow() {
   const seq = ++saveSeq
   saveState.value = 'saving'
   try {
-    const result = await window.go.main.App.SaveNotebook({ ...payload, rev: loadedRev }, loadedSessionId)
+    const result = await App.SaveNotebook({ ...payload, rev: loadedRev }, loadedSessionId)
     loadedRev = result?.notebook?.rev ?? loadedRev
     if (result?.warnings?.length) {
       errorMessage.value = `Saved with ${result.warnings.length} warning(s): ${result.warnings[0]}`
@@ -698,7 +700,7 @@ async function doFlush(payload?: ReturnType<typeof buildSavePayload> | null) {
   if (serialized === lastPersisted) return
   const seq = ++saveSeq
   try {
-    const saved = await window.go.main.App.SaveNotebook({ ...p, rev: loadedRev }, loadedSessionId)
+    const saved = await App.SaveNotebook({ ...p, rev: loadedRev }, loadedSessionId)
     loadedRev = saved?.notebook?.rev ?? loadedRev
     tombstones = pruneConfirmedTombstones(tombstones, new Set(p.cells.map((c) => c.id)))
     if (seq === saveSeq) lastPersisted = serialized
@@ -772,7 +774,7 @@ function backToList() {
 async function exportNotebook() {
   if (!loadedNotebookId) return
   try {
-    const path = await window.go.main.App.ExportNotebook(loadedNotebookId, '')
+    const path = await App.ExportNotebook(loadedNotebookId, '')
     if (path) statusMessage.value = `Exported to ${path}`
   } catch (e: any) {
     errorMessage.value = 'Failed to export notebook: ' + errorText(e)
@@ -856,7 +858,7 @@ async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
   const requestedId = loadedNotebookId
   let remote: { title?: string; cells?: RawCell[]; rev?: string } | null = null
   try {
-    remote = await window.go.main.App.GetNotebook(requestedId)
+    remote = await App.GetNotebook(requestedId)
   } catch {
     return // notebook deleted, or a transient error — nothing safe to merge
   }
@@ -958,7 +960,7 @@ function raiseConflict(deleted: boolean) {
   conflictRev = ''
   const id = loadedNotebookId
   if (deleted || !id) return
-  window.go.main.App.GetNotebook(id).then((nb: any) => { if (conflict.value && loadedNotebookId === id) conflictRev = nb?.rev ?? '' }).catch(() => { /* no rev: falls back to an unconditional keep */ })
+  App.GetNotebook(id).then((nb: any) => { if (conflict.value && loadedNotebookId === id) conflictRev = nb?.rev ?? '' }).catch(() => { /* no rev: falls back to an unconditional keep */ })
 }
 
 async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
@@ -974,7 +976,7 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
   try {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
     const payload = captureSavePayload()
-    const res = await window.go.main.App.ResolveConflict({ kind: 'notebook', id, action, data: (payload ?? {}) as Record<string, any>, rev: conflictRev })
+    const res = await App.ResolveConflict({ kind: 'notebook', id, action, data: (payload ?? {}) as Record<string, any>, rev: conflictRev })
     conflict.value = null
     if (action === 'overwrite') {
       loadedRev = res.rev
@@ -1040,7 +1042,7 @@ onBeforeUnmount(() => {
   unsubNotebooksChanged?.()
   unregisterPendingSave?.()
   aiCellDialog.close()
-  if (hasWailsRuntime()) window.go.main.App.SetActiveNotebook('')
+  if (hasWailsRuntime()) App.SetActiveNotebook('')
   flushSave(payload)
 })
 

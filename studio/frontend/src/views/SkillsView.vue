@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { App } from '../lib/bindings'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import { useModalKeys } from '../composables/useModal'
@@ -46,7 +47,7 @@ function raiseConflict(deleted: boolean) {
   conflictRev = ''
   const id = editingOriginalName.value ?? formName.value
   if (deleted || !id) return
-  window.go.main.App.ListSkills().then((all: SkillSummary[]) => {
+  App.ListSkills().then((all: SkillSummary[]) => {
     if (conflict.value && (editingOriginalName.value ?? formName.value) === id) conflictRev = all.find((x) => x.name === id)?.rev ?? ''
   }).catch(() => { /* falls back to an unconditional keep */ })
 }
@@ -74,7 +75,7 @@ function sourceBadgeClass(source: string) {
 async function loadSkills() {
   loading.value = true
   try {
-    skills.value = (await window.go.main.App.ListSkills()) || []
+    skills.value = (await App.ListSkills()) || []
     if (skills.value.length > 0 && !selectedName.value) {
       selectedName.value = skills.value[0].name
     }
@@ -126,7 +127,7 @@ async function submitEditor() {
   }
   saving.value = true
   try {
-    await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
+    await App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
     showEditor.value = false
     await loadSkills()
     selectedName.value = formName.value
@@ -152,7 +153,7 @@ async function flushPending() {
     throw new Error('the skill being edited is not finished (it needs a name, description and instructions)')
   }
   try {
-    await window.go.main.App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
+    await App.SaveSkill(formName.value, formDescription.value, formInstructions.value, formTableName.value, editingRev.value)
   } catch (e: any) {
     if (isConflict(e)) raiseConflict(false)
     throw new Error(errorText(e))
@@ -177,7 +178,7 @@ async function resolveConflict(action: 'reload' | 'overwrite' | 'saveCopy') {
   }
   conflictBusy.value = true
   try {
-    const res = await window.go.main.App.ResolveConflict({
+    const res = await App.ResolveConflict({
       kind: 'skill', id, action, rev: conflictRev,
       data: { description: formDescription.value, instructions: formInstructions.value, tableName: formTableName.value },
     })
@@ -245,7 +246,7 @@ async function confirmDelete() {
   pendingDeleteName.value = null
   if (!name) return
   try {
-    await window.go.main.App.DeleteSkill(name)
+    await App.DeleteSkill(name)
     if (selectedName.value === name) selectedName.value = null
     await loadSkills()
   } catch (e: any) {
