@@ -1,16 +1,12 @@
----
-name: rodney
-description: Use the Rodney CLI to automate a headless Chrome browser. Invoke this skill when the user asks to browse a website, scrape content, take screenshots, test accessibility, interact with web pages, or perform any browser automation task.
-allowed-tools: Bash, Read, Write, Grep, Glob
----
-
-# Rodney — Chrome automation from the command line
+# Rodney: browser QA for Studio
 
 Rodney is a Go CLI that drives a **persistent headless Chrome** instance. Each
 command is a short-lived process that connects to the same long-running browser
 over WebSocket, so tabs, cookies, and page state persist between calls.
 
-The `rodney` binary is installed globally on PATH. Run commands as `rodney <command>`.
+[Rodney](https://github.com/simonw/rodney) is the headless Chrome CLI we use for QA. Install it with
+`go install github.com/simonw/rodney@latest` (Chrome or Chromium must be installed), then run
+commands as `rodney <command>`. The Vibe-specific recipe is at the end of this page.
 
 ---
 

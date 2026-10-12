@@ -252,8 +252,7 @@ func TestWriteImportSkill_DroppedTableGatesSkillHiddenNotDeleted(t *testing.T) {
 
 // --- CRITICAL: SQL-injection / arbitrary-file-write regression tests ---
 //
-// These mirror the reviewer's scratchpad/poc/{poc_test.go,poc2_test.go} and
-// scratchpad/evil.csv PoCs: a crafted table or column name containing a
+// These mirror a reviewer's proofs of concept, including a malicious CSV: a crafted table or column name containing a
 // double quote, when rendered with Go's `%q` verb (a Go string-literal
 // quoter, not a SQL identifier quoter — DuckDB has no backslash escapes in
 // identifiers), could break out of the quoted identifier and splice an
@@ -570,7 +569,7 @@ func TestWriteImportSkill_FirstImportUsesDefaultProse(t *testing.T) {
 }
 
 // --- Round 3 review: text after END, deleted markers, column-name
-// injection into the generated body (mirrors scratchpad/poc/poc3_test.go). ---
+// injection into the generated body (mirrors a reviewer's proof of concept). ---
 
 // TestWriteImportSkill_NoteAfterEndSurvivesReimport is the fix for finding
 // #4's first half: a user appending notes AFTER the END marker used to be
@@ -632,7 +631,7 @@ func TestWriteImportSkill_DeletedMarkers_NeverLosesText(t *testing.T) {
 }
 
 // TestSplitImportSkillBody_PoC7Layouts is table-driven coverage for every
-// layout scratchpad/poc/poc7_test.go's TestPOC7_Split logs (without
+// layout the reviewer's split proof of concept logs (without
 // asserting anything, by design — it was written to show the OLD bug's
 // output). Each case's user text (marked with a distinctive token) must
 // appear somewhere in before+after — i.e. splitImportSkillBody may decline

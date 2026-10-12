@@ -111,7 +111,7 @@ describe('renderSafeMarkdown (allow-list)', () => {
     expect(html).toContain('<ol>')
   })
 
-  it('renders scratchpad/xss2.md content with no element carrying a remote URL attribute', () => {
+  it('renders the full XSS payload document with no element carrying a remote URL attribute', () => {
     // The reviewer's full attack payload in one document: plain link, an
     // image-map (img usemap + map + area), an inline SVG with xlink:href/
     // href links, video/audio/picture zero-click fetches, and a table

@@ -7,5 +7,5 @@
 - `JUDGE-4.md`: the clean ruling at 0e89fbd (34/36).
 - `arch-2026-10-final.md`: final scores, waivers with reasons, and the guard rails that keep it clean.
 
-The ast-grep rules live at the repo root (`sgconfig.yml` and `.ast-grep/rules/`) so their `files:` and
-`ignores:` globs resolve. Run `ast-grep scan cmd internal studio` from the root.
+The ast-grep rules live in `tools/ast-grep/` (`sgconfig.yml` and `rules/`). Run
+`ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio` from the repo root (the rules' globs are relative to it).

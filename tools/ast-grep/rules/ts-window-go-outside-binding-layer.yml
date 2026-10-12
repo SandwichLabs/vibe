@@ -7,7 +7,7 @@ note: |
   typed `App` (AppApi in env.d.ts) is what views, components and composables
   call. Specs may still install mocks on window.go. ast-grep does not parse
   .vue, so the .vue <script> blocks are scanned through the languageInjections
-  in sgconfig.yml.
+  in tools/ast-grep/sgconfig.yml.
 rule:
   any:
     - pattern: window.go
