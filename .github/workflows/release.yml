@@ -85,6 +85,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 
+      # The runner SDK's default is minos 15.0, which would not start on the macOS the app claims
+      # (spike #43). Pin the deployment target per arch (scripts/macos-target.sh: 14.0 arm64, 13.0
+      # amd64) for both CLI and Studio; Wails keeps CGO flags that already carry -mmacosx-version-min.
+      - name: macOS deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          min="$(scripts/macos-target.sh "$ARCH")"
+          {
+            echo "MACOSX_DEPLOYMENT_TARGET=$min"
+            echo "CGO_CFLAGS=-O2 -g -mmacosx-version-min=$min"
+            echo "CGO_LDFLAGS=-mmacosx-version-min=$min"
+          } >>"$GITHUB_ENV"
+
       # Same flags as CLI_LDFLAGS / STUDIO_LDFLAGS in Taskfile.yml, with the tag as the version.
       - name: Build the CLI
         shell: bash
@@ -104,13 +118,8 @@ jobs:
           GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
         run: go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
 
-      # Stamped in the CI checkout only (never committed). Becomes CFBundleShortVersionString.
-      - name: Stamp wails.json productVersion
-        shell: bash
-        run: |
-          jq --arg v "$VER" '.info.productVersion = $v' studio/wails.json >"$RUNNER_TEMP/wails.json"
-          mv "$RUNNER_TEMP/wails.json" studio/wails.json
-
+      # productVersion is stamped for the build only (CFBundleVersion / CFBundleShortVersionString) and
+      # wails.json is restored afterwards; the build uses the tag as version, like Taskfile.yml.
       - name: Build Studio
         working-directory: studio
         shell: bash
@@ -118,7 +127,7 @@ jobs:
           GOTOOLCHAIN: ${{ env.WAILS_GOTOOLCHAIN }}
         run: |
           if [ "$RUNNER_OS" = Linux ]; then tags=webkit2_41,duckdb_arrow; else tags=duckdb_arrow; fi
-          wails build -tags "$tags" -ldflags "-s -w \
+          ../scripts/stamp-wails-version.sh "$VER" wails build -tags "$tags" -ldflags "-s -w \
             -X main.version=$VER \
             -X main.commit=$COMMIT \
             -X main.date=$DATE"
@@ -126,6 +135,16 @@ jobs:
       - name: Package (and ad-hoc sign on macOS)
         shell: bash
         run: scripts/package.sh "$OS_NAME" "$ARCH" "$VER" dist
+
+      # The packaged plist minimum (14.0 arm64, 13.0 amd64) must not be lower than any binary's minos.
+      - name: Check minimum macOS (LSMinimumSystemVersion vs minos)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          d="$(mktemp -d)"
+          tar -xzf "dist/vibe-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          scripts/check-macos-minos.sh "$d/Vibe Studio.app/Contents/Info.plist" \
+            "$d/vibe" "$d/Vibe Studio.app/Contents/MacOS/vibe-studio"
 
       - name: Smoke test the packaged binaries
         shell: bash
@@ -186,9 +205,9 @@ jobs:
       - name: checksums.txt
         shell: bash
         run: |
-          [ -f install.sh ] && cp install.sh dist/install.sh
+          cp install.sh dist/install.sh
           cd dist
-          sha256sum -- *.tar.gz $([ -f install.sh ] && echo install.sh) >checksums.txt
+          sha256sum -- *.tar.gz install.sh >checksums.txt
           cat checksums.txt
 
       # Artifact attestations on a private repo need GitHub Enterprise Cloud; this org is on the free

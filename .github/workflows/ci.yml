@@ -20,7 +20,7 @@ env:
   # Wails v2.11 cannot load newer Go (see WAILS_GOTOOLCHAIN in Taskfile.yml). Keep >= the go line in go.mod.
   WAILS_GOTOOLCHAIN: go1.26.9
   WAILS_VERSION: v2.11.0
-  # Build on 22.04 (glibc 2.35, webkit2gtk-4.1) so the Linux artifacts run on Ubuntu 22.04+, Debian 12+, Fedora 38+.
+  # Build on 22.04 (glibc 2.35, webkit2gtk-4.1) so the Linux artifacts run on Ubuntu 22.04+, Debian 12+, Fedora 36+ (see docs/install.md).
   LINUX_TAGS: webkit2_41,duckdb_arrow
 
 jobs:
@@ -100,6 +100,11 @@ jobs:
       - name: shellcheck
         run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck --severity=warning
 
+      # The installer suite (#47) against fake archives built by the real scripts/package.sh, so a
+      # packaging change can't silently break install.sh's tests.
+      - name: Installer tests
+        run: bash scripts/test-install.sh --native
+
       - name: go vet
         run: go vet ./...
 
@@ -147,6 +152,13 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.13.1
+
+      # Blocking (#40). THIRD_PARTY_NOTICES.md is generated (task notices): go-licenses v2 over the CLI and
+      # Studio for every release platform plus the production npm packages. Fails when a licence is not on the
+      # permissive allow-list (the go-licenses check) or when the committed file is stale. Needs the frontend
+      # install above (node_modules) and the build (the Studio embeds frontend/dist).
+      - name: Third-party notices
+        run: node scripts/gen-notices.mjs --check
 
       # Blocking (#41). A finding means a reachable vulnerability: bump the module or the Go patch
       # release. A finding with no fix gets a documented exception here, never a continue-on-error.

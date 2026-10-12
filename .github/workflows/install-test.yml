@@ -1,0 +1,78 @@
+name: Install test
+
+# Runs install.sh against a release's real assets after it is published (or on demand against a draft).
+# Read-only token: it can fetch assets of a PUBLISHED release (publish the draft first; a draft's assets
+# need contents: write, which this workflow deliberately does not hold).
+# Linux: unprivileged containers on a runner. macOS: the runner itself (Apple silicon, then Intel).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag whose assets to test (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+
+jobs:
+  linux:
+    name: linux (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:22.04", "ubuntu:24.04", "debian:12", "fedora:latest"]
+    steps:
+      - name: Validate the tag
+        shell: bash
+        run: |
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "invalid tag: $TAG"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Download the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --dir dist --pattern '*.tar.gz' --pattern checksums.txt --pattern install.sh
+
+      - name: Install, upgrade in place, uninstall
+        run: bash scripts/test-install.sh --assets dist --tag "$TAG" --images "${{ matrix.image }}"
+
+  macos:
+    name: macos (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    steps:
+      - name: Validate the tag
+        shell: bash
+        run: |
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "invalid tag: $TAG"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Download the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --dir dist --pattern '*.tar.gz' --pattern checksums.txt --pattern install.sh
+
+      # The smoke checks the app is signed after install and gone after uninstall. The refusal of
+      # symlink/special archive entries must also be verified against real darwin archives on rc1.
+      - name: Install, upgrade in place, uninstall
+        run: bash scripts/test-install.sh --assets dist --tag "$TAG" --native

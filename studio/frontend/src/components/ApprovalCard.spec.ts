@@ -47,9 +47,9 @@ describe('ApprovalCard', () => {
 
   it('shows the outcome line for each terminal state', () => {
     for (const [state, text] of [
-      ['declined', 'Cancelled, nothing changed.'],
+      ['declined', 'Declined, nothing changed.'],
       ['expired', 'No answer in time, nothing changed.'],
-      ['cancelled', 'The workspace was closed, nothing changed.'],
+      ['cancelled', 'Stopped before it ran, nothing changed.'],
       ['gone', 'No longer waiting, nothing changed.'],
       ['approved', 'Approved, running…'],
     ] as const) {

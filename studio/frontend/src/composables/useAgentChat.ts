@@ -6,12 +6,13 @@
 // that we render live (typing text + tool-use chips that go running -> done),
 // while the binding's resolved result is treated as the authoritative final.
 // Conversation history is threaded back to the backend for multi-turn memory.
-import { ref } from 'vue'
+import { ref, computed, getCurrentScope, onScopeDispose } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import type { A2UIPageT } from '../a2ui/types'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { errorText } from '../lib/errors'
 import { App } from '../lib/bindings'
+import { hasWailsRuntime } from '../lib/wails'
 
 // PendingApproval mirrors internal/agents.ApprovalRequest (#79), plus a
 // client-only `state` this composable drives as the user answers the card
@@ -92,6 +93,9 @@ export interface ChatMessage {
   // "Verifying…" state instead of leaving the first (about-to-be-replaced)
   // answer sitting there looking finished.
   verifying?: boolean
+  // cancelled marks a turn the person (or a workspace close) stopped: its end
+  // state, shown as "Cancelled" instead of an error.
+  cancelled?: boolean
 }
 
 // ApprovalRequestPayload is what "agent:approval" carries under its
@@ -124,7 +128,7 @@ interface ApprovalDonePayload {
 
 interface StreamPayload {
   turnId: string
-  kind: 'delta' | 'tool' | 'tool_done' | 'final' | 'error' | 'verifying'
+  kind: 'delta' | 'tool' | 'tool_done' | 'final' | 'error' | 'verifying' | 'cancelled'
   text?: string
   id?: string
   tool?: string
@@ -191,16 +195,73 @@ function nextTurnId(): string {
   return `turn-${turnSeq}-${turnSeq * 2654435761 % 1000000}`
 }
 
-export function useAgentChat() {
-  const messages = ref<ChatMessage[]>([])
-  const sending = ref(false)
-  const pinnedContext = ref('')
+// The conversation is a module singleton (SandwichLabs/vibe#2): the slide-in
+// panel and the Agent page share ONE chat, and it outlives whichever view is
+// mounted. The per-turn Wails listeners live in send()'s closure, not in a
+// view, so a turn keeps streaming into this state while the person is on
+// another screen and returning shows it live.
+const messages = ref<ChatMessage[]>([])
+const sending = ref(false)
+const pinnedContext = ref('')
+// busyElsewhere: Go refused a send because another turn is still running that this
+// page has no handle on (e.g. after a webview reload). Offers Stop with no turn id.
+const busyElsewhere = ref(false)
 
-  // onScroll is invoked after each mutation so the host can keep the view
-  // pinned to the latest message.
-  let onScroll: (() => void) | null = null
-  function setScrollHandler(fn: () => void) { onScroll = fn }
-  function scroll() { if (onScroll) onScroll() }
+// epoch bumps whenever the chat is wiped for a workspace change. A turn
+// started in an earlier epoch still finishes on the Go side, but it must not
+// touch the new workspace's state (it would otherwise unlock `sending` early).
+let epoch = 0
+
+// The in-flight turn's id and message, for cancel().
+let activeTurn: { id: string; msg: ChatMessage; epoch: number } | null = null
+
+// Hosts register a scroll callback so the view stays pinned to the latest
+// message; several views may be mounted at once (panel + page).
+const scrollHandlers = new Set<() => void>()
+function scroll() { scrollHandlers.forEach((fn) => fn()) }
+
+// resetAll wipes the conversation for a workspace change: the transcript, the
+// pinned context and the in-flight flag. Pending approval cards go with the
+// transcript (their Go-side requests are cancelled by the workspace close).
+function resetAll() {
+  epoch += 1
+  activeTurn = null
+  messages.value = []
+  pinnedContext.value = ''
+  sending.value = false
+  busyElsewhere.value = false
+}
+
+// A conversation belongs to the workspace it was held in. Listen once for the
+// workspace events, independent of any mounted view.
+let tracking = false
+function startTracking() {
+  if (tracking || !hasWailsRuntime()) return
+  tracking = true
+  EventsOn('workspace:opened', resetAll)
+  EventsOn('workspace:closed', resetAll)
+}
+
+// markCancelled ends a turn as "Cancelled": running chips stop, and any
+// approval card that was still waiting is closed (Go answers it "cancelled").
+function markCancelled(msg: ChatMessage) {
+  msg.cancelled = true
+  msg.verifying = false
+  msg.steps.forEach((st) => {
+    if (st.status === 'running') st.status = 'error'
+    if (st.approval && (st.approval.state === 'pending' || st.approval.state === 'sending')) st.approval.state = 'cancelled'
+  })
+}
+
+export function useAgentChat() {
+  startTracking()
+
+  // setScrollHandler registers the host's callback and unregisters it when the
+  // calling component's scope is disposed.
+  function setScrollHandler(fn: () => void) {
+    scrollHandlers.add(fn)
+    if (getCurrentScope()) onScopeDispose(() => scrollHandlers.delete(fn))
+  }
 
   function pin(context: string) { pinnedContext.value = context }
   function unpin() { pinnedContext.value = '' }
@@ -210,6 +271,8 @@ export function useAgentChat() {
     const msg = text.trim()
     if (!msg || sending.value) return
     sending.value = true
+    busyElsewhere.value = false
+    const myEpoch = epoch
 
     // History = the transcript so far (before this turn), for multi-turn memory.
     const history = messages.value
@@ -227,6 +290,7 @@ export function useAgentChat() {
     scroll()
 
     const turnId = nextTurnId()
+    activeTurn = { id: turnId, msg: agentMsg, epoch: myEpoch }
 
     // agent:approval / agent:approval_done (#79) run alongside agent:stream,
     // filtered on the same turnId. Merge-by-id (same reasoning as the 'tool'
@@ -271,7 +335,9 @@ export function useAgentChat() {
           const status = p.isError ? 'error' : 'done'
           const page = parsePresentDataPage(p.tool, p.output, p.isError)
           const notebookLink = parseNotebookLink(p.tool, p.output, p.isError)
-          const step = agentMsg.steps.find((s) => s.id === p.id && s.status === 'running')
+          // By id alone: a cancel may already have flipped the chip, and fantasy still
+          // reports the call's result afterwards.
+          const step = agentMsg.steps.find((s) => s.id === p.id)
           if (step) { step.status = status; step.output = p.output; step.page = page; step.notebookLink = notebookLink }
           else agentMsg.steps.push({ id: p.id, tool: p.tool || '?', output: p.output, status, page, notebookLink })
           break
@@ -280,7 +346,11 @@ export function useAgentChat() {
           if (p.text) agentMsg.text = p.text
           agentMsg.verifying = false
           break
+        case 'cancelled':
+          markCancelled(agentMsg)
+          break
         case 'error':
+          if (agentMsg.cancelled) break
           agentMsg.role = 'error'
           agentMsg.text = `Agent error: ${stripPrefix(p.text)}.`
           void addHint(agentMsg)
@@ -300,17 +370,22 @@ export function useAgentChat() {
     try {
       const res = await App.AgentChatStream(turnId, msg, pinnedContext.value, history)
       // Authoritative final result (covers non-streaming servers / missed events).
-      if (agentMsg.role !== 'error') {
+      if (agentMsg.cancelled) {
+        // Stopped by the person: whatever streamed so far stays, nothing is overwritten.
+      } else if (agentMsg.role !== 'error') {
         agentMsg.text = res?.text || agentMsg.text || '(no response)'
         // Mark any still-"running" chips as done now that the turn finished.
         agentMsg.steps.forEach((s) => { if (s.status === 'running') s.status = 'done' })
       }
     } catch (e: any) {
+      if (agentMsg.cancelled) return
       const m = errorText(e)
       agentMsg.role = 'error'
       agentMsg.text = `Agent error: ${stripPrefix(m)}.`
-      await addHint(agentMsg)
+      if (/already running/i.test(m)) busyElsewhere.value = true
+      else await addHint(agentMsg)
     } finally {
+      if (activeTurn?.id === turnId) activeTurn = null
       agentMsg.streaming = false
       // Belt-and-suspenders (review fix, round 2): the "final"/"error" event
       // handlers above already clear verifying, but both are events that
@@ -326,8 +401,28 @@ export function useAgentChat() {
       unsub()
       unsubApproval()
       unsubApprovalDone()
-      sending.value = false
+      if (myEpoch === epoch) sending.value = false
       scroll()
+    }
+  }
+
+  // cancel stops the in-flight turn: Go cancels its context (no further tool
+  // runs, pending approval cards are answered "cancelled") and the transcript
+  // ends the turn as "Cancelled" right away. The flag also makes the binding's
+  // rejection that follows a non-error.
+  async function cancel() {
+    const turn = activeTurn
+    if (!turn && busyElsewhere.value) {
+      busyElsewhere.value = false
+      try { await App.CancelAgentQuery('') } catch { /* nothing running */ }
+      return
+    }
+    if (!turn || !sending.value) return
+    markCancelled(turn.msg)
+    try {
+      await App.CancelAgentQuery(turn.id)
+    } catch {
+      // Nothing to cancel (the turn just finished): the send() result wins.
     }
   }
 
@@ -351,5 +446,7 @@ export function useAgentChat() {
     }
   }
 
-  return { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, renderMarkdown, resolveApproval }
+  const stoppable = computed(() => sending.value || busyElsewhere.value)
+
+  return { messages, sending, stoppable, pinnedContext, send, pin, unpin, reset, resetAll, cancel, setScrollHandler, renderMarkdown, resolveApproval }
 }

@@ -5,6 +5,7 @@
 #
 # Expects ./vibe (CLI) and studio/build/bin/vibe-studio (Linux) or
 # studio/build/bin/vibe-studio.app (macOS) to be built already. <version> has no leading "v".
+# macOS: the bundle is renamed to "Vibe Studio.app" and LSMinimumSystemVersion is set for <arch>.
 # Writes <outdir>/vibe_<ver>_<os>_<arch>.tar.gz (CLI only) and
 # <outdir>/vibe-studio_<ver>_<os>_<arch>.tar.gz (CLI plus Studio).
 set -euo pipefail
@@ -20,9 +21,12 @@ export COPYFILE_DISABLE=1 # keep AppleDouble (._*) files out of macOS tarballs
 docs() { # $1 = dir to receive the shared text files
 	printf '%s\n' "$ver" >"$1/VERSION"
 	local f
-	for f in LICENSE THIRD_PARTY_NOTICES.md; do
-		[ -f "$root/$f" ] && cp "$root/$f" "$1/$f"
+	# --- notices (#40): NOTICE and the generated third-party notices ship in every archive ---
+	for f in LICENSE NOTICE THIRD_PARTY_NOTICES.md; do
+		[ -f "$root/$f" ] || { echo "package.sh: $f is missing" >&2; exit 1; }
+		cp "$root/$f" "$1/$f"
 	done
+	# --- end notices ---
 	[ -f "$root/README.md" ] && cp "$root/README.md" "$1/README.md"
 	return 0
 }
@@ -65,22 +69,18 @@ linux)
 	cp "$root/studio/build/bin/vibe-studio" "$st/bin/vibe-studio"
 	cp "$root/studio/build/linux/vibe-studio.desktop" "$st/share/applications/vibe-studio.desktop"
 	cp "$root/studio/build/linux/vibe-mime.xml" "$st/share/mime/packages/vibe-bundle.xml"
-	# Icons: none are committed yet (appicon.png is missing, see the release audit). Ship whatever exists.
-	for png in "$root"/studio/build/linux/*.png; do
-		[ -f "$png" ] || continue
-		mkdir -p "$st/share/icons/hicolor/512x512/apps"
-		cp "$png" "$st/share/icons/hicolor/512x512/apps/vibe-studio.png"
-	done
-	for svg in "$root"/studio/build/linux/*.svg; do
-		[ -f "$svg" ] || continue
-		mkdir -p "$st/share/icons/hicolor/scalable/apps"
-		cp "$svg" "$st/share/icons/hicolor/scalable/apps/vibe-studio.svg"
-	done
+	# Icons: the hicolor tree from scripts/gen-icons.sh (name "vibe-studio", matching Icon= in the .desktop file).
+	mkdir -p "$st/share/icons"
+	cp -R "$root/studio/build/linux/icons/hicolor" "$st/share/icons/hicolor"
 	chmod 755 "$st/bin/vibe" "$st/bin/vibe-studio"
 	;;
 darwin)
 	cp -R "$root/studio/build/bin/vibe-studio.app" "$st/Vibe Studio.app"
 	cp "$root/vibe" "$st/vibe"
+	# The plist template says the lowest macOS we support; the archive is per arch, so stamp this arch's
+	# minimum (scripts/macos-target.sh) before signing. release.yml then checks the binaries' minos against it.
+	plutil -replace LSMinimumSystemVersion -string "$("$root/scripts/macos-target.sh" "$arch")" \
+		"$st/Vibe Studio.app/Contents/Info.plist"
 	# Ad-hoc sign once every file is in place; nothing may touch the bundle afterwards.
 	# No --options runtime: without the hardened runtime, library validation is not enforced, so
 	# DuckDB extension dylibs downloaded at run time still load.

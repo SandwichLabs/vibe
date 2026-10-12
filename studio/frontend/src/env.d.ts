@@ -13,6 +13,9 @@ declare module '*.vue' {
 // the wails-generated App.d.ts). The ONLY runtime access to window.go is
 // src/lib/bindings.ts.
 interface AppApi {
+  // About (#40)
+  GetBuildInfo(): Promise<BuildInfo>
+  GetThirdPartyNotices(): Promise<string>
   GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
   SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
   ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
@@ -121,6 +124,7 @@ interface AppApi {
   AgentChatStream(turnId: string, message: string, pinnedContext: string, history: { role: string; text: string }[]): Promise<AgentChatResult>
   AgentTask(req: { taskId: string; mode: string; description: string; cell?: import('./composables/useAiCellDialog').TaskCellArg; followUp?: { role: string; text: string }[]; tables?: string[]; notebookSummary?: string[] }): Promise<import('./composables/useAiCellDialog').TaskEnvelope>
   CancelAgentTask(taskId: string): Promise<void>
+  CancelAgentQuery(turnId: string): Promise<void>
   // Notebooks (#66)
   ListNotebooks(): Promise<WailsNotebookSummary[]>
   GetNotebook(id: string): Promise<WailsNotebook>
@@ -701,3 +705,6 @@ interface BundlePreview {
 interface BundleDecisions { onConflict: BundleAction; items: Record<string, BundleAction>; connections: string[] }
 interface BundleOutcome { key: string; kind: string; id: string; finalId?: string; result: string; error?: string }
 interface BundleResult { outcomes: BundleOutcome[]; dryRun: boolean; warnings: string[] }
+
+// Settings > About (#40): what GetBuildInfo returns.
+interface BuildInfo { version: string; commit: string; date: string; goVersion: string; duckdbVersion: string; platform: string }

@@ -39,7 +39,7 @@ const rowNote = computed(() => {
   return props.approval.destructive && typeof n === 'number' && n >= 0 ? `It affects about ${n.toLocaleString()} row${n === 1 ? '' : 's'}. Check that is what you expect before you allow it.` : ''
 })
 
-// Focus starts on Cancel, the safe default, never on Allow. Escape cancels.
+// Focus starts on Decline, the safe default, never on Allow. Escape declines.
 const cancelBtn = ref<HTMLButtonElement | null>(null)
 onMounted(() => {
   if (props.approval.state === 'pending') void nextTick(() => cancelBtn.value?.focus({ preventScroll: true }))
@@ -72,7 +72,7 @@ function onKey(e: KeyboardEvent) {
         data-testid="approval-cancel"
         @click="emit('resolve', false)"
       >
-        Cancel
+        Decline
       </button>
       <button
         type="button"
@@ -88,9 +88,9 @@ function onKey(e: KeyboardEvent) {
 
     <p class="approval-card__state" role="status" aria-live="polite">
       <template v-if="props.approval.state === 'approved'">{{ props.done ? 'Approved.' : 'Approved, running…' }}</template>
-      <template v-else-if="props.approval.state === 'declined'">Cancelled, nothing changed.</template>
+      <template v-else-if="props.approval.state === 'declined'">Declined, nothing changed.</template>
       <template v-else-if="props.approval.state === 'expired'">No answer in time, nothing changed.</template>
-      <template v-else-if="props.approval.state === 'cancelled'">The workspace was closed, nothing changed.</template>
+      <template v-else-if="props.approval.state === 'cancelled'">Stopped before it ran, nothing changed.</template>
       <template v-else-if="props.approval.state === 'gone'">No longer waiting, nothing changed.</template>
       <template v-else-if="props.approval.error">{{ props.approval.error }}</template>
     </p>

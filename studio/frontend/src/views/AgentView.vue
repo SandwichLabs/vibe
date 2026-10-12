@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
@@ -10,7 +10,7 @@ import AgentSandboxIntro from '../components/AgentSandboxIntro.vue'
 // as the slide-in AgentPanel (shared useAgentChat composable), given room for
 // longer sessions, schema work, and report/query building.
 const router = useRouter()
-const { messages, sending, send, reset, setScrollHandler, resolveApproval } = useAgentChat()
+const { messages, sending, stoppable, send, reset, cancel, setScrollHandler, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
   router.push(`/notebooks/${id}`)
@@ -23,7 +23,7 @@ async function scrollToBottom() {
   await nextTick()
   if (streamEl.value) streamEl.value.scrollTop = streamEl.value.scrollHeight
 }
-onMounted(() => setScrollHandler(scrollToBottom))
+setScrollHandler(scrollToBottom)
 
 async function submit() {
   const text = draft.value
@@ -71,9 +71,14 @@ function onKeydown(e: KeyboardEvent) {
       ></textarea>
       <div class="agent-view__inputrow">
         <span class="agent-hint">⏎ Send · ⇧⏎ Newline</span>
-        <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="submit">
-          <Icon name="send" :size="14" /> {{ sending ? 'Sending…' : 'Send' }}
-        </button>
+        <div class="agent-actions">
+          <button v-if="stoppable" class="btn btn-inverted" data-testid="agent-cancel" @click="cancel">
+            <Icon name="x" :size="14" /> Stop
+          </button>
+          <button class="btn btn-primary" :disabled="sending || !draft.trim()" data-testid="agent-send" @click="submit">
+            <Icon name="send" :size="14" /> {{ sending ? 'Sending…' : 'Send' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -170,4 +175,5 @@ function onKeydown(e: KeyboardEvent) {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.agent-actions { display: flex; gap: 8px; }
 </style>
