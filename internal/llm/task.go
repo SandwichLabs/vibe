@@ -632,3 +632,16 @@ func (d connectionDefaulter) Handle(ctx context.Context, req *agents.Request) *a
 	}
 	return d.inner.Handle(ctx, req)
 }
+
+// TaskConfig is base pinned to what task mode may do. Task mode ALWAYS runs
+// read-only with no write gate, whatever sandbox the workspace's own
+// agent_sandbox setting says (a task turn once ran drop_table from prompt text
+// because it used the file's tier): its whole contract is "propose, never
+// mutate" (write_cell only records a proposal the person must still Apply), so
+// nothing it does needs more than read access. The handler that serves the
+// turn must be capped at the same tier, agents.TaskSandbox, as its ceiling.
+func TaskConfig(base Config) Config {
+	base.Sandbox = string(agents.TaskSandbox)
+	base.AskBeforeWrites = false
+	return base
+}

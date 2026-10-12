@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 
@@ -13,8 +11,6 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/bundle"
 	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // .vibe bundles (#118). A bundle is something the person exports and imports;
@@ -132,32 +128,13 @@ var errBundleGone = errors.New("This import has expired. Choose the file again."
 
 // ---- what can be exported ----
 
-// BundleContentItem is one notebook, query or skill that can go in a bundle.
-type BundleContentItem struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-}
-
-// BundleContentConnection is one connection definition that could go in a
-// bundle. Portable is false (with Reason) for one that cannot leave this
-// computer, such as a file path outside the workspace.
-type BundleContentConnection struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Summary  string `json:"summary"`
-	Scope    string `json:"scope"` // "team" or "this computer"
-	Portable bool   `json:"portable"`
-	Reason   string `json:"reason,omitempty"`
-}
-
-// BundleContent is everything the Export dialog can offer.
-type BundleContent struct {
-	WorkspaceName string                    `json:"workspaceName"`
-	Notebooks     []BundleContentItem       `json:"notebooks"`
-	Queries       []BundleContentItem       `json:"queries"`
-	Skills        []BundleContentItem       `json:"skills"`
-	Connections   []BundleContentConnection `json:"connections"`
-}
+// BundleContentItem, BundleContentConnection and BundleContent are what the
+// Export dialog can offer; bundle.ContentsOf builds them.
+type (
+	BundleContentItem       = bundle.ContentItem
+	BundleContentConnection = bundle.ContentConnection
+	BundleContent           = bundle.Contents
+)
 
 // GetBundleContent lists what the open workspace could export.
 func (a *App) GetBundleContent() (*BundleContent, error) {
@@ -166,52 +143,7 @@ func (a *App) GetBundleContent() (*BundleContent, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return nil, err
 	}
-	ctx := a.ctxOrBackground()
-	out := &BundleContent{WorkspaceName: a.ws.Name(), Notebooks: []BundleContentItem{}, Queries: []BundleContentItem{}, Skills: []BundleContentItem{}, Connections: []BundleContentConnection{}}
-	nbs, err := a.ws.Notebooks().List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list notebooks: %w", err)
-	}
-	for _, n := range nbs {
-		if n.Error == "" {
-			out.Notebooks = append(out.Notebooks, BundleContentItem{ID: n.ID, Title: n.Title})
-		}
-	}
-	qs, err := a.ws.Queries().List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list queries: %w", err)
-	}
-	for _, q := range qs {
-		if q.Error == "" {
-			out.Queries = append(out.Queries, BundleContentItem{ID: q.ID, Title: q.Title})
-		}
-	}
-	sks, err := a.ws.Skills().List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list skills: %w", err)
-	}
-	for _, s := range sks {
-		if s.Error == "" && s.Source != skills.SourceBuiltin {
-			out.Skills = append(out.Skills, BundleContentItem{ID: s.Name, Title: s.Description})
-		}
-	}
-	add := func(scope string, defs []bundleDef) {
-		for _, d := range defs {
-			if d.Name == workspace.DefaultConnectionName && d.Path == workspace.DefaultConnectionPath {
-				continue // every workspace has its own; a bundle has no data to go with it
-			}
-			c := BundleContentConnection{Name: d.Name, Type: d.Type, Scope: scope, Portable: true}
-			if _, _, err := bundle.SanitizeConnection(d); err != nil {
-				c.Portable, c.Reason = false, bundle.PortableReason(err)
-			}
-			c.Summary = bundle.ConnSummary(d)
-			out.Connections = append(out.Connections, c)
-		}
-	}
-	add("team", a.ws.Config().Connections)
-	add("this computer", a.ws.Local().Connections)
-	sort.SliceStable(out.Connections, func(i, j int) bool { return out.Connections[i].Name < out.Connections[j].Name })
-	return out, nil
+	return bundle.ContentsOf(a.ctxOrBackground(), a.ws)
 }
 
 // ---- export ----
@@ -289,32 +221,21 @@ func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error)
 		}
 		path = p
 	}
-	if filepath.Ext(path) == "" {
-		path += ".vibe"
-	}
+	path = bundle.WithExt(path)
 	res, err := bundle.Export(a.ctxOrBackground(), ws, bundle.ExportOptions{Selection: req.Selection, Passphrase: req.Passphrase, AppVersion: bundleCreatedBy})
 	if err != nil {
 		return nil, errors.New(a.redact(err.Error()))
 	}
 	// The file dialog already asked about replacing; a typed-in path is the
 	// person's own choice too.
-	if err := filestore.WriteFileAtomic(path, res.Data, 0o644); err != nil {
-		return nil, fmt.Errorf("failed to write %s: %w", path, err)
+	if err := bundle.WriteFile(path, res.Data); err != nil {
+		return nil, err
 	}
-	out := &BundleExportResult{Path: path, Encrypted: res.Encrypted, Bytes: len(res.Data), Warnings: append([]string{}, res.Manifest.Warnings...)}
-	for _, e := range res.Manifest.Contents {
-		switch e.Kind {
-		case bundle.KindNotebook:
-			out.Notebooks++
-		case bundle.KindQuery:
-			out.Queries++
-		case bundle.KindSkill:
-			out.Skills++
-		case bundle.KindConnections:
-			out.Connected = 1
-		}
-	}
-	return out, nil
+	n := res.Manifest.Counts()
+	return &BundleExportResult{
+		Path: path, Encrypted: res.Encrypted, Bytes: len(res.Data), Warnings: append([]string{}, res.Manifest.Warnings...),
+		Notebooks: n.Notebooks, Queries: n.Queries, Skills: n.Skills, Connected: n.Connections,
+	}, nil
 }
 
 // ---- import ----
@@ -478,5 +399,3 @@ type BundleImportOpened struct {
 
 // DiscardBundleImport forgets a previewed bundle (the dialog was closed).
 func (a *App) DiscardBundleImport(handle string) { a.bundles.drop(handle) }
-
-type bundleDef = workspace.ConnectionDef

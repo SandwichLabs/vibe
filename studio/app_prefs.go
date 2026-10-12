@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/SandwichLabs/vibe/internal/prefs"
@@ -36,32 +35,10 @@ func (a *App) GetPreferences() (prefs.Preferences, error) {
 
 // SetPreferences persists the user's app-level preferences.
 func (a *App) SetPreferences(p prefs.Preferences) error {
-	s, err := a.prefsStore()
-	if err != nil {
-		return err
-	}
-	// The frontend round-trips only the fields it knows (theme, appearance);
-	// the recent-workspaces list lives beside them in the same document and must
-	// survive a theme change.
-	recentsMu.Lock()
-	defer recentsMu.Unlock()
-	cur, _ := s.Load()
-	extra := map[string]json.RawMessage{}
-	for k, v := range p.Extra {
-		extra[k] = v
-	}
-	// Recents always come from disk: a stale copy round-tripped by the frontend
-	// must never roll them back.
-	if raw, ok := cur.Extra[prefsRecentKey]; ok {
-		extra[prefsRecentKey] = raw
-	} else {
-		delete(extra, prefsRecentKey)
-	}
-	p.Extra = extra
-	if err := s.Save(p); err != nil {
-		return fmt.Errorf("failed to save preferences: %w", err)
-	}
-	return nil
+	// The frontend round-trips only the fields it knows (theme, appearance); the
+	// recent-workspaces list lives beside them in the same document and always
+	// comes from disk, so a stale copy never rolls it back.
+	return a.recents.SavePreferences(p)
 }
 
 // UserThemesResult is what ListUserThemes returns: every readable theme file

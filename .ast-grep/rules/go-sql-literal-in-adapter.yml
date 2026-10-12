@@ -1,7 +1,7 @@
 id: go-sql-literal-in-adapter
 language: go
 severity: error
-message: SQL text written in an adapter (studio/ or cmd/). SQL belongs in internal/ (session, engine, crud, connections) so the CLI, Studio and MCP share it.
+message: SQL text written in an adapter (studio/, cmd/ or the TUI). SQL belongs in internal/ (session, engine, crud, connections) so the CLI, Studio and MCP share it.
 rule:
   any:
     - kind: interpreted_string_literal
@@ -10,4 +10,5 @@ rule:
 files:
   - "studio/*.go"
   - "cmd/*.go"
+  - "internal/tui/*.go"
 ignores: ["**/*_test.go"]

@@ -118,6 +118,17 @@ jobs:
       - name: Wails binding usage
         run: scripts/check-bindings.sh
 
+      # Blocking: no non-test Go file over 800 lines in studio/, cmd/ or internal/ unless it is on
+      # scripts/filesize-waivers.txt (with a reason).
+      - name: File size
+        run: scripts/check-filesize.sh
+
+      # Blocking: every exported App method is a thin binding (at most 25 statements counting nested
+      # ones, no file, process, filestore-write or database/sql work of its own, no dot imports). The I/O half is also the ast-grep
+      # rule thin-binding below; ast-grep cannot count statements, so this is a go/ast test.
+      - name: Thin bindings
+        run: xvfb-run -a go test -count=1 -run TestExportedAppMethodsAreThinBindings ./studio/
+
       # Blocking: the root sgconfig.yml rules at severity "error" (the ones already at zero:
       # one ParseScope, one path-containment helper, no find-connection-by-name loops, and from
       # slice 3 errors wrapped with %w, errors.Is not ==, no slog.Default().X calls). The

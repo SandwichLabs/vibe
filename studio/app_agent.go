@@ -99,22 +99,35 @@ type AgentTurn struct {
 // tool_done | final | error) so the panel can show live progress and tool use.
 // history is the prior transcript for multi-turn memory. Studio-only.
 func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []AgentTurn) (*AgentChatResult, error) {
-	a.mu.RLock()
-	if err := a.requireWorkspace(); err != nil {
-		a.mu.RUnlock()
+	cfg, handler, err := a.chatSetup(turnID)
+	if err != nil {
 		return nil, err
 	}
-	policy := a.agentPolicy()
-	cfg := llm.Config{
-		Provider:        a.llmCfg.Provider,
-		Endpoint:        a.llmCfg.Endpoint,
-		AccountID:       a.llmCfg.AccountID,
-		Gateway:         a.llmCfg.Gateway,
-		Model:           a.llmCfg.Model,
-		APIKey:          a.llmAPIKey(),
-		Sandbox:         string(policy.Mode),
-		AskBeforeWrites: policy.AskBeforeWrites,
+	hist := make([]llm.Turn, 0, len(history))
+	for _, h := range history {
+		hist = append(hist, llm.Turn{Role: h.Role, Text: h.Text})
 	}
+	runner := llm.NewRunner(handler, a.logger)
+	res, err := runner.ChatStream(a.ctx, cfg, message, pinnedContext, hist, a.streamEmitter(turnID))
+	if err != nil {
+		return nil, err
+	}
+	out := &AgentChatResult{Text: res.Text}
+	for _, s := range res.Steps {
+		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output, IsError: s.IsError})
+	}
+	return out, nil
+}
+
+// chatSetup is the provider config and tool handler for one streamed chat turn.
+func (a *App) chatSetup(turnID string) (llm.Config, *agentToolHandler, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return llm.Config{}, nil, err
+	}
+	policy := a.agentPolicy()
+	cfg := a.llmConfig(string(policy.Mode), policy.AskBeforeWrites)
 	// Chat has no cap of its own beyond whatever the file's agent_sandbox
 	// setting allows — see AgentChat's identical comment.
 	handler := a.newAgentToolHandler(agents.ModeFull)
@@ -124,14 +137,28 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 	// inline "agent:approval" card instead of running (or, absent this,
 	// being refused outright the way MCP/AgentChat are).
 	handler.enableApprovals(turnID)
-	a.mu.RUnlock()
+	return cfg, handler, nil
+}
 
-	hist := make([]llm.Turn, 0, len(history))
-	for _, h := range history {
-		hist = append(hist, llm.Turn{Role: h.Role, Text: h.Text})
+// llmConfig is the app-wide provider config with the given sandbox tier and
+// write gate. The caller holds a.mu.
+func (a *App) llmConfig(sandbox string, askBeforeWrites bool) llm.Config {
+	return llm.Config{
+		Provider:        a.llmCfg.Provider,
+		Endpoint:        a.llmCfg.Endpoint,
+		AccountID:       a.llmCfg.AccountID,
+		Gateway:         a.llmCfg.Gateway,
+		Model:           a.llmCfg.Model,
+		APIKey:          a.llmAPIKey(),
+		Sandbox:         sandbox,
+		AskBeforeWrites: askBeforeWrites,
 	}
+}
 
-	emit := func(ev llm.StreamEvent) {
+// streamEmitter publishes a chat turn's progress as "agent:stream" events
+// tagged with turnID.
+func (a *App) streamEmitter(turnID string) func(llm.StreamEvent) {
+	return func(ev llm.StreamEvent) {
 		a.emitEvent("agent:stream", map[string]any{
 			"turnId":  turnID,
 			"kind":    ev.Kind,
@@ -143,17 +170,6 @@ func (a *App) AgentChatStream(turnID, message, pinnedContext string, history []A
 			"isError": ev.IsError,
 		})
 	}
-
-	runner := llm.NewRunner(handler, a.logger)
-	res, err := runner.ChatStream(a.ctx, cfg, message, pinnedContext, hist, emit)
-	if err != nil {
-		return nil, err
-	}
-	out := &AgentChatResult{Text: res.Text}
-	for _, s := range res.Steps {
-		out.Steps = append(out.Steps, AgentToolStep{Tool: s.Tool, Input: s.Input, Output: s.Output, IsError: s.IsError})
-	}
-	return out, nil
 }
 
 // TaskCellArg / TaskTurnArg / AgentTaskRequest mirror internal/llm's
@@ -217,58 +233,16 @@ func taskCellFrom(c *TaskCellArg) (*llm.TaskCell, error) {
 // own cancellation (taskCancel, keyed by TaskID — closing the dialog calls
 // CancelAgentTask, not anything that could also cancel a chat turn).
 func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
-	a.mu.RLock()
-	if err := a.requireWorkspace(); err != nil {
-		a.mu.RUnlock()
+	cfg, handler, err := a.taskSetup()
+	if err != nil {
 		return nil, err
 	}
-	cfg := llm.Config{
-		Provider:  a.llmCfg.Provider,
-		Endpoint:  a.llmCfg.Endpoint,
-		AccountID: a.llmCfg.AccountID,
-		Gateway:   a.llmCfg.Gateway,
-		Model:     a.llmCfg.Model,
-		APIKey:    a.llmAPIKey(),
-		// Task mode ALWAYS runs read-only, regardless of the file's own
-		// agent_sandbox setting (review fix, CRITICAL: previously this used
-		// the file's sandbox — often "full" — which combined with
-		// ListToolsForMode(ModeTask) exposing every unrestricted tool let a
-		// task turn call drop_table directly from prompt text). Task mode's
-		// whole contract is "propose, never mutate" — write_cell only
-		// records a proposal the user must still click Apply on — so nothing
-		// it does should ever need more than read access, and forcing
-		// read-only here is defense in depth even though
-		// agents.TaskAllowedToolNames already excludes every write tool by
-		// name.
-		Sandbox: llm.SandboxReadOnly,
-	}
-	// ceiling = ModeReadOnly, NOT cfg.Sandbox/agents.SandboxMode(cfg.Sandbox)
-	// — this is the ceiling that must survive every later per-dispatch
-	// SetFilePolicy refresh in agentToolHandler.Handle (see its doc
-	// comment). Passing anything file-mode-derived here would let that
-	// refresh overwrite task mode's "always read-only" contract on the
-	// handler's very first tool call, exactly the regression a reviewer
-	// caught (a task turn against a "full" file ran CREATE TABLE again).
-	handler := a.newAgentToolHandler(agents.ModeReadOnly)
-	a.mu.RUnlock()
-
 	taskID := strings.TrimSpace(req.TaskID)
 	if taskID == "" {
 		return nil, fmt.Errorf("taskId is required")
 	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	a.taskCancelMu.Lock()
-	if a.taskCancel == nil {
-		a.taskCancel = make(map[string]context.CancelFunc)
-	}
-	a.taskCancel[taskID] = cancel
-	a.taskCancelMu.Unlock()
-	defer func() {
-		a.taskCancelMu.Lock()
-		delete(a.taskCancel, taskID)
-		a.taskCancelMu.Unlock()
-		cancel()
-	}()
+	ctx, release := a.trackTask(taskID)
+	defer release()
 
 	cell, err := taskCellFrom(req.Cell)
 	if err != nil {
@@ -278,8 +252,55 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 	for _, t := range req.FollowUp {
 		followUp = append(followUp, llm.TaskTurn{Role: t.Role, Text: t.Text})
 	}
+	runner := llm.NewRunner(handler, a.logger)
+	envelope, err := runner.Task(ctx, cfg, llm.TaskRequest{
+		Mode: req.Mode, Description: req.Description, Cell: cell,
+		Tables: req.Tables, NotebookSummary: req.NotebookSummary, FollowUp: followUp,
+	}, a.taskEmitter(taskID))
+	if err != nil {
+		return nil, err
+	}
+	return &envelope, nil
+}
 
-	emit := func(ev llm.TaskEvent) {
+// taskSetup is the provider config and tool handler for one task-mode turn.
+func (a *App) taskSetup() (llm.Config, *agentToolHandler, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return llm.Config{}, nil, err
+	}
+	// Task mode is always read-only (llm.TaskConfig), and its handler is capped
+	// at the same tier: the ceiling must survive every later per-dispatch
+	// SetFilePolicy refresh in agentToolHandler.Handle (see its doc comment).
+	cfg := llm.TaskConfig(a.llmConfig("", false))
+	return cfg, a.newAgentToolHandler(agents.TaskSandbox), nil
+}
+
+// trackTask registers the cancel func of the task running under taskID, so
+// CancelAgentTask can stop it without touching a.ctx (the whole app's lifecycle
+// context) or a concurrent chat turn. release unregisters it and cancels the
+// context.
+func (a *App) trackTask(taskID string) (ctx context.Context, release func()) {
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.taskCancelMu.Lock()
+	if a.taskCancel == nil {
+		a.taskCancel = make(map[string]context.CancelFunc)
+	}
+	a.taskCancel[taskID] = cancel
+	a.taskCancelMu.Unlock()
+	return ctx, func() {
+		a.taskCancelMu.Lock()
+		delete(a.taskCancel, taskID)
+		a.taskCancelMu.Unlock()
+		cancel()
+	}
+}
+
+// taskEmitter publishes a task turn's progress as "agent:task" events tagged
+// with taskID.
+func (a *App) taskEmitter(taskID string) func(llm.TaskEvent) {
+	return func(ev llm.TaskEvent) {
 		a.emitEvent("agent:task", map[string]any{
 			"taskId":  taskID,
 			"kind":    ev.Kind,
@@ -291,16 +312,6 @@ func (a *App) AgentTask(req AgentTaskRequest) (*llm.TaskEnvelope, error) {
 			"isError": ev.IsError,
 		})
 	}
-
-	runner := llm.NewRunner(handler, a.logger)
-	envelope, err := runner.Task(ctx, cfg, llm.TaskRequest{
-		Mode: req.Mode, Description: req.Description, Cell: cell,
-		Tables: req.Tables, NotebookSummary: req.NotebookSummary, FollowUp: followUp,
-	}, emit)
-	if err != nil {
-		return nil, err
-	}
-	return &envelope, nil
 }
 
 // CancelAgentTask stops the AgentTask call running under taskID, if any —

@@ -25,7 +25,7 @@ layer_of() {
     internal/tui|internal/tui/*) echo tui;;
     internal/docsref|internal/docsref/*) echo docs;;
     internal/workspace|internal/workspace/*|internal/connections|internal/connections/*|internal/connname|internal/connname/*|\
-    internal/session|internal/session/*|internal/engine|internal/engine/*|internal/crud|internal/crud/*|\
+    internal/sandbox|internal/sandbox/*|internal/session|internal/session/*|internal/engine|internal/engine/*|internal/crud|internal/crud/*|\
     internal/importer|internal/importer/*|internal/notebooks|internal/notebooks/*|internal/queries|internal/queries/*|\
     internal/bundle|internal/bundle/*|internal/skills|internal/skills/*|internal/filestore|internal/filestore/*|\
     internal/filelock|internal/filelock/*|internal/storageurl|internal/storageurl/*|internal/jsonenc|internal/jsonenc/*|\

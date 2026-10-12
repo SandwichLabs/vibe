@@ -3,16 +3,26 @@ package agents
 import (
 	"context"
 	"fmt"
+
+	"github.com/SandwichLabs/vibe/internal/sandbox"
 )
 
-// SandboxMode defines the permission level for agent operations.
-type SandboxMode string
+// SandboxMode defines the permission level for agent operations. The tiers,
+// their parser and their order live in internal/sandbox, shared with the
+// workspace policy.
+type SandboxMode = sandbox.Mode
 
 const (
-	ModeReadOnly  SandboxMode = "read-only"
-	ModeReadWrite SandboxMode = "read-write"
-	ModeFull      SandboxMode = "full"
+	ModeReadOnly  = sandbox.ReadOnly
+	ModeReadWrite = sandbox.ReadWrite
+	ModeFull      = sandbox.Full
 )
+
+// TaskSandbox is the tier task mode ALWAYS runs at, whatever the workspace's
+// own agent setting: task mode proposes and never mutates (write_cell only
+// records a proposal the person must still Apply), so it never needs more than
+// read access.
+const TaskSandbox = ModeReadOnly
 
 // DefaultSandboxMode is the sandbox mode of a source that states none (no
 // PolicySource, or an empty one).
@@ -60,50 +70,15 @@ type FilePolicy struct {
 // strings, for callers that must reject anything else outright (SetAgentConfig,
 // the --sandbox flag) rather than fail closed the way PolicyFrom does for
 // a possibly-stale value.
-func ParseSandboxMode(s string) (SandboxMode, error) {
-	switch SandboxMode(s) {
-	case ModeReadOnly, ModeReadWrite, ModeFull:
-		return SandboxMode(s), nil
-	default:
-		return "", fmt.Errorf("unknown sandbox mode: %q (want read-only, read-write, or full)", s)
-	}
-}
-
-// modeStrictness ranks the three sandbox modes from most to least
-// permissive-restricted (read-only is the MOST restrictive, full the LEAST),
-// so Tighter can compare two modes without hand-rolling a switch at every
-// call site. An unrecognized mode ranks as read-only (the safe default) —
-// see Tighter's doc comment.
-var modeStrictness = map[SandboxMode]int{
-	ModeReadOnly:  0,
-	ModeReadWrite: 1,
-	ModeFull:      2,
-}
+func ParseSandboxMode(s string) (SandboxMode, error) { return sandbox.Parse(s) }
 
 // Tighter returns whichever of a/b is the MORE restrictive sandbox mode
 // (read-only < read-write < full). Used to combine a caller-fixed ceiling
 // (e.g. AgentTask's "always read-only, regardless of the file's own
 // setting" contract) with the file's live "agent_sandbox" setting: the
 // effective mode a dispatch runs at is never more permissive than either
-// one. An unrecognized SandboxMode value (not one of the three constants)
-// is returned immediately, without being ranked — SandboxConfig.Check
-// already fails closed on an unknown mode ("unknown sandbox mode"), so
-// propagating a bad/empty value as-is can only ever deny more, never grant
-// access Tighter's caller didn't intend.
-func Tighter(a, b SandboxMode) SandboxMode {
-	ra, ok := modeStrictness[a]
-	if !ok {
-		return a
-	}
-	rb, ok := modeStrictness[b]
-	if !ok {
-		return b
-	}
-	if ra <= rb {
-		return a
-	}
-	return b
-}
+// one. An unrecognized value is returned as is (see sandbox.Tighter).
+func Tighter(a, b SandboxMode) SandboxMode { return sandbox.Tighter(a, b) }
 
 // SandboxConfig defines permission boundaries for an agent session.
 type SandboxConfig struct {

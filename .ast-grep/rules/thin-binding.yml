@@ -1,0 +1,38 @@
+id: thin-binding
+language: go
+severity: error
+message: An exported App method (a Wails binding) touches the file system (os, or a filestore read/write helper), a subprocess or database/sql itself. A binding calls internal/ and shapes the result; I/O belongs in an internal/ package so the CLI and MCP share it. (The statement-count half of the rule is TestExportedAppMethodsAreThinBindings in studio/.)
+rule:
+  kind: call_expression
+  any:
+    - has:
+        field: function
+        kind: selector_expression
+        has:
+          field: operand
+          kind: identifier
+          regex: '^(os|ioutil|exec|sql)$'
+    - has:
+        field: function
+        kind: selector_expression
+        all:
+          - has:
+              field: operand
+              kind: identifier
+              regex: '^filestore$'
+          - has:
+              field: field
+              kind: field_identifier
+              regex: '^(Write|Remove|Sweep|Read|List|Resolve|StatStamp)'
+  inside:
+    kind: method_declaration
+    stopBy: end
+    all:
+      - has:
+          field: receiver
+          regex: '\*App\b'
+      - has:
+          field: name
+          regex: '^[A-Z]'
+files: ["studio/*.go"]
+ignores: ["**/*_test.go"]

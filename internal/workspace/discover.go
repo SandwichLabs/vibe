@@ -6,7 +6,19 @@ import (
 	"path/filepath"
 
 	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/vibe/internal/prefs"
 )
+
+// ExactRoot returns the workspace root for path when path itself is that root (a
+// folder holding a vibe.yaml, not one inside a workspace). ok is false for
+// anything else, including a folder that merely sits inside a workspace.
+func ExactRoot(path string) (root string, ok bool) {
+	root, err := Discover(path)
+	if err != nil || !prefs.SamePath(root, path) {
+		return "", false
+	}
+	return root, true
+}
 
 // Discover walks up from start to the nearest directory holding a vibe.yaml,
 // like git finds .git, and returns that directory (absolute, symlinks

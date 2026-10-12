@@ -27,46 +27,43 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 		return "", fmt.Errorf("no query to export")
 	}
 
-	var ext, copyOpts string
-	switch strings.ToLower(strings.TrimSpace(format)) {
-	case "csv":
-		ext, copyOpts = ".csv", "FORMAT csv, HEADER true"
-	case "parquet":
-		ext, copyOpts = ".parquet", "FORMAT parquet"
-	default:
-		return "", fmt.Errorf("unsupported export format %q (want csv or parquet)", format)
+	ext, copyOpts, err := session.CopyFormat(format)
+	if err != nil {
+		return "", err
 	}
-
 	if dst == "" {
-		path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-			Title:           "Export query results",
-			DefaultFilename: "query" + ext,
-			Filters: []runtime.FileFilter{
-				{DisplayName: strings.ToUpper(format) + " Files (*" + ext + ")", Pattern: "*" + ext},
-			},
-		})
-		if err != nil {
-			return "", fmt.Errorf("failed to open save dialog: %w", err)
+		if dst, err = a.saveDialog("Export query results", "query"+ext, format, ext); err != nil || dst == "" {
+			return "", err
 		}
-		if path == "" {
-			return "", nil
-		}
-		dst = path
 	}
 	if !strings.HasSuffix(strings.ToLower(dst), ext) {
 		dst += ext
 	}
-
 	ddb := a.sess.DB()
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
-	copySQL := session.CopyToSQL(sqlStr, dst, copyOpts)
-	if _, err := ddb.Exec(copySQL); err != nil {
+	if err := session.CopyQueryTo(ddb, sqlStr, dst, copyOpts); err != nil {
 		return "", fmt.Errorf("failed to export query results: %w", err)
 	}
 	a.logger.Info("exported query results", "format", format, "path", dst)
 	return dst, nil
+}
+
+// saveDialog asks where to save a file of the given format and extension. It
+// returns "" with no error when the dialog was cancelled.
+func (a *App) saveDialog(title, filename, format, ext string) (string, error) {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           title,
+		DefaultFilename: filename,
+		Filters: []runtime.FileFilter{
+			{DisplayName: strings.ToUpper(format) + " Files (*" + ext + ")", Pattern: "*" + ext},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to open save dialog: %w", err)
+	}
+	return path, nil
 }
 
 // --- Import/Export ---

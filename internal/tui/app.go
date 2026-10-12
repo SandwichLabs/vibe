@@ -14,7 +14,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/engine"
@@ -333,22 +332,7 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 // subquery), a statement that already has its own LIMIT, a multi-statement
 // input, and any write statement.
 func capRowsIfSafe(query string, readOnly bool) string {
-	if !readOnly {
-		return query
-	}
-	trimmed := strings.TrimSpace(query)
-	trimmed = strings.TrimSuffix(strings.TrimSpace(trimmed), ";")
-	if trimmed == "" || strings.Contains(trimmed, ";") {
-		return query // empty, or genuinely multi-statement — leave untouched.
-	}
-	upper := strings.ToUpper(trimmed)
-	if !strings.HasPrefix(upper, "SELECT") && !strings.HasPrefix(upper, "WITH") {
-		return query
-	}
-	if strings.Contains(upper, "LIMIT") {
-		return query // respect the caller's own LIMIT rather than double-wrapping.
-	}
-	return fmt.Sprintf("SELECT * FROM (%s) AS _vibe_repl_cap LIMIT %d", trimmed, replRowCap+1)
+	return engine.CapRowsIfSafe(query, readOnly, replRowCap+1)
 }
 
 // quit leaves the TUI. Writes already landed in their connections as they

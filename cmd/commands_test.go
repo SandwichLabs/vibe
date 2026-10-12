@@ -775,6 +775,7 @@ func TestStudio_GuiAcceptsAFolder(t *testing.T) {
 func TestStudio_GuiPassesAVibeBundleToTheApp(t *testing.T) {
 	// The desktop app opens its Import dialog for a .vibe; only the terminal UI
 	// (which has no import flow) refuses one.
+	t.Setenv("PATH", t.TempDir()) // no vibe-studio to exec (not even one in ~/go/bin)
 	_, _, err := runVibe("studio", "--gui", filepath.Join(t.TempDir(), "x.vibe"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "vibe-studio binary not found")

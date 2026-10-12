@@ -101,6 +101,9 @@ type App struct {
 	// workspaces list) outside any workspace — see internal/prefs. nil in tests
 	// that don't need it.
 	prefs *prefs.Store
+	// recents is the launcher's recent-workspaces list inside the same document;
+	// nil-safe when prefs is nil.
+	recents *prefs.Recents
 
 	// llmCfg is the app-global, viper-driven LLM provider/model configuration
 	// for the wizard agent (loaded at startup from ~/.vibe.yaml + VIBE_* env).
@@ -181,6 +184,7 @@ func NewApp(logger *slog.Logger) *App {
 	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(logger); err == nil {
 		app.prefs = prefs.NewStore(dir)
+		app.recents = prefs.NewRecents(app.prefs, logger)
 	} else {
 		logger.Warn("preferences disabled: no config dir", "error", err)
 	}

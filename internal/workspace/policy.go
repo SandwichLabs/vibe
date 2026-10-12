@@ -1,7 +1,10 @@
 package workspace
 
-// tierRank orders sandbox tiers from most to least restrictive.
-var tierRank = map[string]int{SandboxReadOnly: 0, SandboxReadWrite: 1, SandboxFull: 2}
+import "github.com/SandwichLabs/vibe/internal/sandbox"
+
+// tierRank orders sandbox tiers from most to least restrictive (internal/sandbox
+// owns the order); ok is false for an unknown tier.
+func tierRank(tier string) (int, bool) { return sandbox.Rank(sandbox.Mode(tier)) }
 
 // DefaultSandbox is what the agent runs at when nothing says otherwise; it
 // matches the legacy container's default (#79).
@@ -42,7 +45,7 @@ func CeilingOf(c Config) Ceiling {
 // rank returns the tier's rank, failing closed: an unknown non-empty value
 // ranks as read-only.
 func rank(tier string) int {
-	if r, ok := tierRank[tier]; ok {
+	if r, ok := tierRank(tier); ok {
 		return r
 	}
 	return 0
@@ -77,13 +80,13 @@ func EffectivePolicy(c Ceiling, l LocalAgent) Policy {
 // minTier returns the more restrictive of want and ceiling; an empty ceiling
 // is no limit and an unknown value on either side is read-only.
 func minTier(want, ceiling string) string {
-	if _, ok := tierRank[want]; !ok {
+	if _, ok := tierRank(want); !ok {
 		return SandboxReadOnly
 	}
 	if ceiling == "" {
 		return want
 	}
-	if _, ok := tierRank[ceiling]; !ok {
+	if _, ok := tierRank(ceiling); !ok {
 		return SandboxReadOnly
 	}
 	if rank(ceiling) < rank(want) {
