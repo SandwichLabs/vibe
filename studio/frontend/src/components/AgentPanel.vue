@@ -4,8 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useAgentChat } from '../composables/useAgentChat'
-import A2UIPage from '../a2ui/A2UIPage.vue'
-import ToolStepChip from './ToolStepChip.vue'
+import AgentTranscript from './AgentTranscript.vue'
 import AgentSandboxIntro from './AgentSandboxIntro.vue'
 import { hasWailsRuntime } from '../lib/wails'
 
@@ -18,7 +17,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const route = useRoute()
 const router = useRouter()
-const { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, renderMarkdown, resolveApproval } = useAgentChat()
+const { messages, sending, pinnedContext, send, pin, unpin, reset, setScrollHandler, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
   router.push(`/notebooks/${id}`)
@@ -84,33 +83,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
           <AgentSandboxIntro />
         </div>
 
-        <div v-for="(m, i) in messages" :key="i" class="amsg">
-          <div class="av" :class="m.role === 'user' ? 'user' : 'bot'">
-            {{ m.role === 'user' ? 'You' : 'AI' }}
-          </div>
-          <div class="body">
-            <div class="who">
-              {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Agent · error' : (m.verifying ? 'Agent · verifying' : m.streaming ? 'Agent · streaming' : 'Agent') }}
-            </div>
-            <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
-            <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>
-            <div v-else-if="m.text" class="agent-text agent-md vibe-content vibe-md-content" v-html="renderMarkdown(m.text)"></div>
-            <p v-else-if="m.streaming" class="agent-text agent-dim">Thinking…</p>
-            <p v-if="m.verifying" class="agent-text agent-dim" data-testid="agent-verifying">Verifying that answer against the data…</p>
-
-            <template v-for="(s, si) in m.steps" :key="si">
-              <ToolStepChip :step="s" :preview-len="48" @resolve="(ok) => resolveApproval(s, ok)" />
-              <A2UIPage v-if="s.page" :page="s.page" class="agent-a2ui-embed" data-testid="agent-a2ui" />
-              <button
-                v-if="s.notebookLink"
-                class="agent-pinbtn"
-                style="margin: 4px 0;"
-                data-testid="agent-open-notebook"
-                @click="openNotebook(s.notebookLink.id)"
-              ><Icon name="fileText" :size="13" /> Open notebook — {{ s.notebookLink.title }}</button>
-            </template>
-          </div>
-        </div>
+        <AgentTranscript :messages="messages" compact @resolve="resolveApproval" @open-notebook="openNotebook" />
       </div>
 
       <div class="input">
@@ -185,35 +158,6 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   flex-direction: column;
   gap: 8px;
 }
-.agent-text { white-space: pre-wrap; }
-.agent-md { white-space: normal; }
-.agent-md :deep(p) { margin: 0 0 6px; }
-.agent-md :deep(pre) {
-  background: var(--vibe-code-bg);
-  color: var(--vibe-code-fg);
-  padding: 8px 10px;
-  border-radius: var(--sh-radius-sm);
-  overflow-x: auto;
-  font-family: var(--sh-font-mono);
-  font-size: 12px;
-}
-.agent-md :deep(code) { font-family: var(--sh-font-mono); font-size: 12px; }
-/* The global `.sh code` rule (schoolhouse/colors_and_type.css) gives inline
-   code its own light --sh-paper-2 background + ink border. Inside a fenced
-   block that collides with the dark --sh-ink/--sh-paper <pre> above: the
-   <code> painted its own near-white box, and the near-white text inherited
-   from <pre> sat on top of it — a near-illegible light-on-light block.
-   Reset it exactly like the Pages renderer already does (vibe-content pre
-   code in style.css) so fenced code reads as light text on the dark pre. */
-.agent-md :deep(pre code) {
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: inherit;
-}
-.agent-md :deep(ul), .agent-md :deep(ol) { margin: 4px 0; padding-left: 20px; }
-.agent-error { color: var(--sh-error); }
-.agent-dim { color: var(--sh-graphite); font-style: italic; }
 .agent-textarea {
   width: 100%;
   resize: vertical;
@@ -245,14 +189,5 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   color: var(--sh-graphite);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-/* present_data's inline A2UI result (#67) — a compact card in the transcript,
-   distinct from the plain-text agent bubble above it. */
-.agent-a2ui-embed {
-  border: var(--sh-border-thin);
-  border-radius: var(--sh-radius);
-  background: var(--sh-surface);
-  padding: 10px 12px;
-  margin: 4px 0 8px;
 }
 </style>

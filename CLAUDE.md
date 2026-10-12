@@ -106,6 +106,7 @@ docs/                see docs/README.md
 - **One tool surface**: new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`.
 - **Model output never reaches a style attribute**: A2UI colors are a closed enum; validators reject unknown fields.
 - **No hex in stylesheets**: use `--vibe-*` roles (or bridged `--sh-*`); translucent variants via `color-mix()`. Themes are validated by `theme/schema.ts` and must pass the AA contrast spec.
+- **Thin views**: a `.vue` file is at most 600 lines and 150 script lines. A view wires composables (`composables/use*.ts`, one per job: `useNotebookSave`, `useTableCrud`, …) and renders; the conflict banner flow is `useConflict`, popup-menu keys `useMenuKeys`, the A2UI live `sql` binding `a2ui/useLiveQuery`. `studio/frontend/scripts/check-vue-size.mjs` enforces it in CI.
 - **Focus is visible**: `theme/bridge.css` owns the `:focus-visible` ring; never `outline: none` without it. Ad-hoc modals use `composables/useModal.ts`.
 - **QA in a real browser**: Rodney against the Wails-bound dev server at `:34115` (see `RODNEY.md`); Vitest specs are supplementary, never the acceptance criterion. The older Rodney verification protocol is in `docs/archive/parity-remediation-plan.md` §1.
 - **Docs move with code**: keep `docs/reference/` and the architecture tree above current; `internal/docsref` fails when they drift.

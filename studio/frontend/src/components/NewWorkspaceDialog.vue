@@ -6,8 +6,8 @@ import { App } from '../lib/bindings'
 import { ref, computed, watch } from 'vue'
 import Icon from './Icon.vue'
 import { useModalKeys } from '../composables/useModal'
-import { newWorkspaceOpen, createWorkspace, slugify } from '../composables/useWorkspace'
-import { errorText } from '../lib/errors'
+import { newWorkspaceOpen, createWorkspace } from '../composables/useWorkspace'
+import { useNewWorkspaceFields } from '../composables/useNewWorkspaceFields'
 
 const TEMPLATE_COPY: Record<string, { title: string; text: string }> = {
   contacts: { title: 'Contacts', text: 'People and their notes. A small table to try things on.' },
@@ -20,9 +20,6 @@ const root = ref<HTMLElement | null>(null)
 useModalKeys(newWorkspaceOpen, () => close(), root)
 
 const name = ref('')
-const parentDir = ref('')
-const git = ref(true)
-const gitAvailable = ref(true)
 const template = ref('')
 const templates = ref<TemplateInfo[]>([])
 const busy = ref(false)
@@ -31,10 +28,7 @@ const dirTaken = ref(false)
 const nameEl = ref<HTMLInputElement | null>(null)
 const whereEl = ref<HTMLInputElement | null>(null)
 
-const LAST_PARENT_KEY = 'vibe.newWorkspace.parentDir'
-
-const slug = computed(() => slugify(name.value))
-const willCreate = computed(() => `${parentDir.value.replace(/[\\/]+$/, '')}/${slug.value}`)
+const { parentDir, git, gitAvailable, slug, reset, remember, choose: chooseFolder } = useNewWorkspaceFields(name)
 const valid = computed(() => name.value.trim() !== '' && parentDir.value.trim() !== '' && !dirTaken.value)
 
 function close() {
@@ -49,9 +43,7 @@ watch(newWorkspaceOpen, async (open) => {
   error.value = ''
   dirTaken.value = false
   busy.value = false
-  try { parentDir.value = localStorage.getItem(LAST_PARENT_KEY) || '' } catch { parentDir.value = '' }
-  try { gitAvailable.value = await App.CheckGitAvailable() } catch { gitAvailable.value = false }
-  git.value = gitAvailable.value
+  await reset()
   try { templates.value = (await App.ListTemplates()) || [] } catch { templates.value = [] }
 })
 
@@ -67,14 +59,7 @@ async function checkDir() {
 }
 watch([name, parentDir], () => { error.value = ''; void checkDir() })
 
-async function choose() {
-  try {
-    const p = await App.ChooseFolder('Where should the new workspace go?')
-    if (p) parentDir.value = p
-  } catch (e: unknown) {
-    error.value = errorText(e)
-  }
-}
+const choose = () => chooseFolder((m) => { error.value = m })
 
 async function submit() {
   if (!valid.value || busy.value) return
@@ -86,7 +71,7 @@ async function submit() {
   })
   busy.value = false
   if (res.ok) {
-    try { localStorage.setItem(LAST_PARENT_KEY, parentDir.value.trim()) } catch { /* private window */ }
+    remember()
     newWorkspaceOpen.value = false
     return
   }

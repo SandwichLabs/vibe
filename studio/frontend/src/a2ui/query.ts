@@ -12,7 +12,7 @@
 import { errorText } from '../lib/errors'
 import { App } from '../lib/bindings'
 
-interface LiveQueryResult {
+export interface LiveQueryResult {
   columns: string[]
   types: string[]
   rows: any[][]

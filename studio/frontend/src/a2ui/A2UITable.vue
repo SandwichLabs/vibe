@@ -1,42 +1,21 @@
 <script setup lang="ts">
 // A2UITable — inline rows/columns, or a live "sql" binding. Ported from
 // renderer.js's renderTable/buildTable.
-import { ref, onMounted, computed, inject } from 'vue'
+import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { runLiveQuery } from './query'
+import { useLiveQuery } from './useLiveQuery'
 import { formatCell, cellClass, isNumericType } from '../lib/formatCell'
 
 const props = defineProps<{ component: A2UIComponentT }>()
-const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)
+const { loading, error, data } = useLiveQuery(() => props.component)
 
-const loading = ref(false)
-const error = ref('')
-const liveColumns = ref<string[]>([])
-const liveTypes = ref<string[]>([])
-const liveRows = ref<any[][]>([])
-
-onMounted(async () => {
-  if (!props.component.sql) return
-  loading.value = true
-  const { columns, types, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal, 'low', props.component.connection || undefined)
-  if (aborted) return // caller stopped caring (unmounted/reloaded) — never apply a stale result
-  loading.value = false
-  if (err) {
-    error.value = err
-    return
-  }
-  liveColumns.value = columns
-  liveTypes.value = types
-  liveRows.value = rows
-})
-
-const columns = computed<string[]>(() => (props.component.sql ? liveColumns.value : (props.component.columns ?? [])))
-const rows = computed<any[][]>(() => (props.component.sql ? liveRows.value : (props.component.rows ?? [])))
+const columns = computed<string[]>(() => (props.component.sql ? (data.value?.columns ?? []) : (props.component.columns ?? [])))
+const rows = computed<any[][]>(() => (props.component.sql ? (data.value?.rows ?? []) : (props.component.rows ?? [])))
 // types is client-only (§4b): live queries get it from RunA2UIQuery; inline
 // (model-authored) data has no column type, and synthesized notebook pages
 // stamp it onto the component before render (never saved, never validated —
 // see a2ui/types.ts).
-const types = computed<string[]>(() => (props.component.sql ? liveTypes.value : (props.component.types ?? [])))
+const types = computed<string[]>(() => (props.component.sql ? (data.value?.types ?? []) : (props.component.types ?? [])))
 
 // One formatCell call per cell: precomputed once here rather than called
 // 3x per cell (class/title/text) from the template.

@@ -1,39 +1,20 @@
 <script setup lang="ts">
 // A2UIStat — a single labeled number, optionally live via "sql" (the query's
 // first column of its first row). Ported from renderer.js's renderStat.
-import { ref, onMounted, computed, inject } from 'vue'
+import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { runLiveQuery, colorClass } from './query'
+import { colorClass } from './query'
+import { useLiveQuery } from './useLiveQuery'
 import { formatCell } from '../lib/formatCell'
 
 const props = defineProps<{ component: A2UIComponentT }>()
-const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)
-
-const loading = ref(false)
-const error = ref('')
-const liveValue = ref<any>(undefined)
-const liveType = ref<string | undefined>(undefined)
-const liveFetched = ref(false)
-
-onMounted(async () => {
-  if (!props.component.sql) return
-  loading.value = true
-  const { columns, types, rows, error: err, aborted } = await runLiveQuery(props.component.sql, abortSignal, 'low', props.component.connection || undefined)
-  if (aborted) return // caller stopped caring (unmounted/reloaded) — never apply a stale result
-  loading.value = false
-  liveFetched.value = true
-  if (err) {
-    error.value = err
-    return
-  }
-  const first = rows[0]
-  if (!first) {
-    liveValue.value = null
-    return
-  }
-  liveValue.value = first[0] ?? (columns.length ? first[0] : undefined)
-  liveType.value = types[0]
+const { loading, error, fetched, data } = useLiveQuery(() => props.component)
+const liveValue = computed(() => {
+  const first = data.value?.rows[0]
+  if (!first) return data.value ? null : undefined
+  return first[0] ?? (data.value!.columns.length ? first[0] : undefined)
 })
+const liveType = computed(() => data.value?.types[0])
 
 // component.types[0] is the client-only type Studio's sql-cell
 // synthesizer stamps on a synthesized stat component — never part of the
@@ -42,7 +23,7 @@ const displayValue = computed(() => {
   if (props.component.sql) {
     if (loading.value) return '…'
     if (error.value) return '!'
-    if (!liveFetched.value) return ''
+    if (!fetched.value) return ''
     if (liveValue.value === null || liveValue.value === undefined) return '—'
     return formatCell(liveValue.value, liveType.value, { context: 'report' }).text
   }
