@@ -145,7 +145,7 @@ and `vibe mcp serve` work without a second download.
 | All | `checksums.txt`, plus SBOM and build provenance attestation | | GitHub Release |
 
 Linux baseline: built on **Ubuntu 22.04** (glibc 2.35), against
-**webkit2gtk-4.1**. That covers Ubuntu 22.04+, Debian 12+, and Fedora 38+.
+**webkit2gtk-4.1**. That covers Ubuntu 22.04+, Debian 12+, and Fedora 36+.
 RHEL 8 / Debian 11 have no webkit2gtk-4.1 and are out.
 
 Deferred, not rejected:

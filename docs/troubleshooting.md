@@ -100,6 +100,6 @@ Vibe writes no log file. The command line and Studio log structured JSON lines t
 1. In Studio open **Settings, About** (version, commit, build date, platform), press **Copy build info**, and paste it into the report. From a terminal, `vibe --version` prints the version, commit and build date.
 2. Press **Report a bug** (it opens GitHub's issue chooser in your browser, with nothing prefilled), or go to <https://github.com/SandwichLabs/vibe/issues/new/choose>.
 3. Say what you did, what you expected and what happened. Add stderr output if there is any.
-4. **Do not paste credentials, tokens, connection strings or private data.** Vibe redacts known secrets from its logs, but check before you post.
+4. **Do not paste credentials, tokens, connection strings or private data.** The command line redacts known secrets from its logs (Studio does not yet, #97), so check before you post.
 
 For security problems, do not open a public issue: use GitHub private vulnerability reporting as described in [SECURITY.md](../SECURITY.md).
