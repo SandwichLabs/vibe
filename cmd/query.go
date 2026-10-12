@@ -153,63 +153,77 @@ func validateFormat(f string) error {
 func writeResult(out io.Writer, rs *engine.ResultSet, format string) error {
 	switch format {
 	case "csv":
-		w := csv.NewWriter(out)
-		names := make([]string, len(rs.Columns))
-		for i, c := range rs.Columns {
-			names[i] = c.Name
-		}
-		if err := w.Write(names); err != nil {
-			return fmt.Errorf("failed to write CSV: %w", err)
-		}
-		for _, row := range rs.Rows {
-			rec := make([]string, len(rs.Columns))
-			for i := range rec {
-				if i < len(row) && row[i] != nil {
-					rec[i] = cellText(row[i])
-				}
-			}
-			if err := w.Write(rec); err != nil {
-				return fmt.Errorf("failed to write CSV: %w", err)
-			}
-		}
-		w.Flush()
-		return w.Error()
+		return writeCSV(out, rs)
 	case "json":
-		var b bytes.Buffer
-		b.WriteString("[")
-		for ri, row := range rs.Rows {
-			if ri > 0 {
-				b.WriteString(",")
-			}
-			b.WriteString("\n  {")
-			for i, c := range rs.Columns {
-				if i > 0 {
-					b.WriteString(", ")
-				}
-				k, _ := json.Marshal(c.Name)
-				var v any
-				if i < len(row) {
-					v = row[i]
-				}
-				vb, err := json.Marshal(v)
-				if err != nil {
-					vb, _ = json.Marshal(cellText(v))
-				}
-				b.Write(k)
-				b.WriteString(": ")
-				b.Write(vb)
-			}
-			b.WriteString("}")
-		}
-		if len(rs.Rows) > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString("]\n")
-		_, err := out.Write(b.Bytes())
-		return err
+		return writeJSON(out, rs)
 	default:
 		return writeTable(out, rs)
 	}
+}
+
+func writeCSV(out io.Writer, rs *engine.ResultSet) error {
+	w := csv.NewWriter(out)
+	names := make([]string, len(rs.Columns))
+	for i, c := range rs.Columns {
+		names[i] = c.Name
+	}
+	if err := w.Write(names); err != nil {
+		return fmt.Errorf("failed to write CSV: %w", err)
+	}
+	for _, row := range rs.Rows {
+		rec := make([]string, len(rs.Columns))
+		for i := range rec {
+			if i < len(row) && row[i] != nil {
+				rec[i] = cellText(row[i])
+			}
+		}
+		if err := w.Write(rec); err != nil {
+			return fmt.Errorf("failed to write CSV: %w", err)
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
+// writeJSON prints the rows as an array of objects with the columns in order.
+func writeJSON(out io.Writer, rs *engine.ResultSet) error {
+	var b bytes.Buffer
+	b.WriteString("[")
+	for ri, row := range rs.Rows {
+		if ri > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString("\n  ")
+		writeJSONRow(&b, rs.Columns, row)
+	}
+	if len(rs.Rows) > 0 {
+		b.WriteString("\n")
+	}
+	b.WriteString("]\n")
+	_, err := out.Write(b.Bytes())
+	return err
+}
+
+func writeJSONRow(b *bytes.Buffer, cols []engine.Column, row []any) {
+	b.WriteString("{")
+	for i, c := range cols {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		k, _ := json.Marshal(c.Name)
+		var v any
+		if i < len(row) {
+			v = row[i]
+		}
+		vb, err := json.Marshal(v)
+		if err != nil {
+			vb, _ = json.Marshal(cellText(v))
+		}
+		b.Write(k)
+		b.WriteString(": ")
+		b.Write(vb)
+	}
+	b.WriteString("}")
 }
 
 func cellText(v any) string { return engine.CellText(v, "") }

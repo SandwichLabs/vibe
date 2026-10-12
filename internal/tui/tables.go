@@ -184,35 +184,42 @@ func (m TablesModel) loadTableData(item TableInfo) tea.Cmd {
 		if len(pg.Columns) == 0 {
 			return tableDataMsg{tableName: tableName}
 		}
-		cols := make([]table.Column, len(pg.Columns))
-		for i, c := range pg.Columns {
-			width := len(c)
-			if width < 8 {
-				width = 8
-			}
-			for _, row := range pg.Rows {
-				if i < len(row) {
-					if cw := len(formatCellValue(row[i])); cw > width {
-						width = cw
-					}
-				}
-			}
-			if width > 40 {
-				width = 40
-			}
-			cols[i] = table.Column{Title: c, Width: width}
-		}
-
-		rows := make([]table.Row, len(pg.Rows))
-		for i, row := range pg.Rows {
-			r := make(table.Row, len(row))
-			for j, v := range row {
-				r[j] = formatCellValue(v)
-			}
-			rows[i] = r
-		}
+		cols, rows := tuiTableData(pg)
 		return tableDataMsg{tableName: tableName, columns: cols, rows: rows}
 	}
+}
+
+// tuiTableData turns a page of rows into table columns (sized to the content,
+// 8 to 40 wide) and rows of display text.
+func tuiTableData(pg *crud.PageResult) ([]table.Column, []table.Row) {
+	cols := make([]table.Column, len(pg.Columns))
+	for i, c := range pg.Columns {
+		width := len(c)
+		if width < 8 {
+			width = 8
+		}
+		for _, row := range pg.Rows {
+			if i < len(row) {
+				if cw := len(formatCellValue(row[i])); cw > width {
+					width = cw
+				}
+			}
+		}
+		if width > 40 {
+			width = 40
+		}
+		cols[i] = table.Column{Title: c, Width: width}
+	}
+
+	rows := make([]table.Row, len(pg.Rows))
+	for i, row := range pg.Rows {
+		r := make(table.Row, len(row))
+		for j, v := range row {
+			r[j] = formatCellValue(v)
+		}
+		rows[i] = r
+	}
+	return cols, rows
 }
 
 // View renders the table list, or the row browser when a table is open.

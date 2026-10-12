@@ -31,6 +31,7 @@ type sessionOpts struct {
 	lookup    LookupFunc
 	session   []session.Option
 	readOnly  bool
+	preparers map[string]preparer
 }
 
 // WithForceReadOnly attaches every connection read-only whatever its
@@ -75,176 +76,194 @@ func WithSessionOptions(opts ...session.Option) SessionOption {
 // out; the workspace still opens with the rest. The error return is for
 // failures of the hub itself.
 func OpenSession(ctx context.Context, ws Workspace, logger *slog.Logger, opts ...SessionOption) (session.Session, []SessionIssue, error) {
-	var o sessionOpts
+	o := sessionOpts{preparers: defaultPreparers()}
 	for _, f := range opts {
 		f(&o)
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	resolver := ws.Resolver()
-
-	conns := ws.Connections()
-	def := ws.DefaultConnection()
-	sort.SliceStable(conns, func(i, j int) bool { // default first
-		return conns[i].Name == def && conns[j].Name != def
-	})
-
-	var issues []SessionIssue
-	failMsg := func(name, msg string) {
-		logger.Warn("connection not available", "name", name, "reason", msg)
-		issues = append(issues, SessionIssue{Connection: name, Message: msg})
-	}
+	b := &sessionBuild{ws: ws, o: o, logger: logger, resolver: ws.Resolver()}
 
 	// Pass 1: resolve every definition (no network, no dialling). The one
-	// MotherDuck token the hub opens with is resolved here, because it must be
+	// MotherDuck token the hub opens with is claimed here, because it must be
 	// SET before the configuration is locked (spike #107).
-	type item struct {
-		rc   ResolvedConnection
-		spec session.Spec
-	}
-	var items []item
-	mdToken, mdOwner := "", ""
-	for _, c := range conns {
-		rc, err := ResolveConnection(ws, c, o.lookup)
-		if err != nil {
-			failMsg(c.Name, secrets.RedactPatterns(err.Error()))
-			continue
-		}
-		resolved := rc.Resolved
-		readOnly := resolved.IsReadOnly() || o.readOnly
-		if resolved.Type == "motherduck" && resolved.ReadOnly != nil && *resolved.ReadOnly {
-			failMsg(c.Name, connections.ErrMotherDuckReadOnly)
-			continue
-		}
-		if resolved.Type == "motherduck" {
-			// Cannot be attached read-only: a read-only command leaves it
-			// registered but unconnectable (status shows why on Connect).
-			readOnly = false
-		}
-		cdef := rc.Def(readOnly)
-		spec := cdef.Spec()
-		if resolved.Type == "motherduck" && o.readOnly {
-			spec.Params["forced_read_only"] = "true"
-		}
-		if resolved.Type == "duckdb" {
-			spec.Path = rc.Path
-			if o.skipLocal {
-				items = append(items, item{rc: rc, spec: spec})
-				continue
-			}
-			if o.readOnly {
-				if _, err := os.Stat(rc.Path); err != nil {
-					failMsg(c.Name, fmt.Sprintf("connection %q has no data file yet; it is created the first time something writes to it", c.Name))
-					continue
-				}
-			}
-			// Only ever create folders inside the workspace; a path the user
-			// pointed elsewhere must already have its folder.
-			if !spec.ReadOnly && insideRoot(ws.Root(), rc.Path) {
-				if err := os.MkdirAll(filepath.Dir(rc.Path), 0o755); err != nil {
-					failMsg(c.Name, fmt.Sprintf("connection %q: failed to create its folder: %v", c.Name, err))
-					continue
-				}
-			}
-		} else if resolved.Type != "" {
-			if err := connections.Validate(cdef); err != nil {
-				failMsg(c.Name, secrets.RedactPatterns(err.Error()))
-				continue
-			}
-			if resolved.Type == "ducklake" && !spec.ReadOnly {
-				// A new lake: its folders are created inside the workspace
-				// only; a path elsewhere must already have its folder.
-				dirs := []string{filepath.Dir(rc.Path)}
-				if dp := cdef.Options["data_path"]; dp != "" && !connections.IsDataURL(dp) {
-					dirs = append(dirs, dp)
-				}
-				for _, d := range dirs {
-					if insideRoot(ws.Root(), d) {
-						if err := os.MkdirAll(d, 0o755); err != nil {
-							failMsg(c.Name, fmt.Sprintf("connection %q: failed to create its folder: %v", c.Name, err))
-						}
-					}
-				}
-			}
-		}
-		if connections.NeedsCredential(resolved.Type) {
-			ref := credentialRef(ws.ID(), c.Scope, c.Name)
-			b, method := rc.Binding(), c.SignIn
-			guard := signInGuard(c, rc.Resolved)
-			spec.Credential = func(ctx context.Context) (secrets.Credential, error) {
-				if guard != nil {
-					return secrets.Credential{}, guard
-				}
-				return resolver.Resolve(ctx, ref, method, b)
-			}
-			if resolved.Type == "motherduck" {
-				// Keychain / env read only; a failure is reported by Preflight.
-				if cred, err := spec.Credential(ctx); err == nil && cred.Token != "" {
-					switch {
-					case mdToken == "":
-						mdToken, mdOwner = cred.Token, c.Name
-					case cred.Token != mdToken:
-						failMsg(c.Name, fmt.Sprintf("this workspace already uses the MotherDuck account of %q, and one workspace uses one account; sign this connection in with the same account or remove it", mdOwner))
-						continue
-					}
-				}
-			}
-		}
-		items = append(items, item{rc: rc, spec: spec})
-	}
+	items := b.resolveAll(ctx, defaultFirst(ws.Connections(), ws.DefaultConnection()))
 
-	sopts := []session.Option{
-		session.WithLogger(logger),
-		session.WithConnectionTypes(connections.Types()...),
-		session.WithRedactor(resolver.Redactor()),
-	}
-	if mdToken != "" {
-		sopts = append(sopts, session.WithMotherDuckToken(mdToken))
-	}
-	sess, err := session.New(append(sopts, o.session...)...)
+	sess, err := b.openHub()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open the workspace session: %w", err)
+		return nil, nil, err
 	}
-	fail := func(name string, err error) { failMsg(name, sess.Redact(err.Error())) }
+	// Pass 2: register everything; attach the eager (local file) connections;
+	// leave the rest to connect on first use (lazy attach).
+	attached := b.registerAll(ctx, sess, items)
+	b.applyDefault(ctx, sess, ws.DefaultConnection(), attached)
+	return sess, b.issues, nil
+}
 
-	// Pass 2: register everything; attach local files eagerly; leave the rest
-	// to connect on first use (lazy attach).
+// defaultFirst orders conns with the default connection first (stable).
+func defaultFirst(conns []Connection, def string) []Connection {
+	sort.SliceStable(conns, func(i, j int) bool {
+		return conns[i].Name == def && conns[j].Name != def
+	})
+	return conns
+}
+
+// sessionItem is one connection that passed pass 1.
+type sessionItem struct {
+	rc   ResolvedConnection
+	spec session.Spec
+	prep preparer
+}
+
+// sessionBuild carries the state of one OpenSession call across its steps.
+type sessionBuild struct {
+	ws       Workspace
+	o        sessionOpts
+	logger   *slog.Logger
+	resolver *secrets.Resolver
+	issues   []SessionIssue
+	// mdToken and mdOwner are the one MotherDuck token the hub opens with and
+	// the connection that supplied it.
+	mdToken, mdOwner string
+}
+
+func (b *sessionBuild) failMsg(name, msg string) {
+	b.logger.Warn("connection not available", "name", name, "reason", msg)
+	b.issues = append(b.issues, SessionIssue{Connection: name, Message: msg})
+}
+
+// claimHubToken records the MotherDuck token a connection resolved. One
+// workspace uses one account, so a second, different token is refused.
+func (b *sessionBuild) claimHubToken(name, token string) error {
+	switch {
+	case b.mdToken == "":
+		b.mdToken, b.mdOwner = token, name
+	case token != b.mdToken:
+		return fmt.Errorf("this workspace already uses the MotherDuck account of %q, and one workspace uses one account; sign this connection in with the same account or remove it", b.mdOwner)
+	}
+	return nil
+}
+
+func (b *sessionBuild) env() prepareEnv {
+	return prepareEnv{
+		Root:          b.ws.Root(),
+		ForceReadOnly: b.o.readOnly,
+		SkipLocal:     b.o.skipLocal,
+		Fail:          b.failMsg,
+		ClaimHubToken: b.claimHubToken,
+	}
+}
+
+// resolveAll runs pass 1 over conns; a connection that cannot be set up is
+// recorded as an issue and left out.
+func (b *sessionBuild) resolveAll(ctx context.Context, conns []Connection) []sessionItem {
+	var items []sessionItem
+	for _, c := range conns {
+		it, err := b.resolveOne(ctx, c)
+		if err != nil {
+			b.failMsg(c.Name, secrets.RedactPatterns(err.Error()))
+			continue
+		}
+		items = append(items, it)
+	}
+	return items
+}
+
+// resolveOne resolves one connection, then lets its type's preparer adjust the
+// spec (validation, folders, hub token).
+func (b *sessionBuild) resolveOne(ctx context.Context, c Connection) (sessionItem, error) {
+	rc, err := ResolveConnection(b.ws, c, b.o.lookup)
+	if err != nil {
+		return sessionItem{}, err
+	}
+	prep := b.o.preparerFor(rc.Resolved.Type)
+	readOnly, err := prep.ReadOnly(rc, b.o.readOnly)
+	if err != nil {
+		return sessionItem{}, err
+	}
+	def := rc.Def(readOnly)
+	spec := def.Spec()
+	if connections.NeedsCredential(rc.Resolved.Type) {
+		b.attachCredential(&spec, rc)
+	}
+	if err := prep.Prepare(ctx, b.env(), rc, def, &spec); err != nil {
+		return sessionItem{}, err
+	}
+	return sessionItem{rc: rc, spec: spec, prep: prep}, nil
+}
+
+// attachCredential gives spec the lazy credential lookup for rc.
+func (b *sessionBuild) attachCredential(spec *session.Spec, rc ResolvedConnection) {
+	ref := credentialRef(b.ws.ID(), rc.Scope, rc.Name)
+	binding, method := rc.Binding(), rc.SignIn
+	guard := signInGuard(rc.Connection, rc.Resolved)
+	resolver := b.resolver
+	spec.Credential = func(ctx context.Context) (secrets.Credential, error) {
+		if guard != nil {
+			return secrets.Credential{}, guard
+		}
+		return resolver.Resolve(ctx, ref, method, binding)
+	}
+}
+
+// openHub creates the session with the types, redactor and MotherDuck token.
+func (b *sessionBuild) openHub() (session.Session, error) {
+	sopts := []session.Option{
+		session.WithLogger(b.logger),
+		session.WithConnectionTypes(connections.Types()...),
+		session.WithRedactor(b.resolver.Redactor()),
+	}
+	if b.mdToken != "" {
+		sopts = append(sopts, session.WithMotherDuckToken(b.mdToken))
+	}
+	sess, err := session.New(append(sopts, b.o.session...)...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the workspace session: %w", err)
+	}
+	return sess, nil
+}
+
+// registerAll runs pass 2 and returns the names that were attached.
+func (b *sessionBuild) registerAll(ctx context.Context, sess session.Session, items []sessionItem) map[string]bool {
 	attached := map[string]bool{}
+	fail := func(name string, err error) { b.failMsg(name, sess.Redact(err.Error())) }
 	for _, it := range items {
 		name := it.rc.Name
 		if err := sess.Register(it.spec); err != nil {
 			fail(name, err)
 			continue
 		}
-		switch it.rc.Resolved.Type {
-		case "duckdb", "sqlite":
-			if o.skipLocal {
-				continue
-			}
-			if err := sess.Connect(ctx, name); err != nil {
-				fail(name, err)
-				continue
-			}
-			attached[name] = true
-		default:
+		if !it.prep.Eager() {
 			sess.Preflight(ctx, name)
+			continue
 		}
+		if b.o.skipLocal {
+			continue
+		}
+		if err := sess.Connect(ctx, name); err != nil {
+			fail(name, err)
+			continue
+		}
+		attached[name] = true
 	}
+	return attached
+}
 
-	if def != "" {
-		switch {
-		case attached[def]:
-			if err := sess.SetDefaultCatalog(ctx, def); err != nil {
-				fail(def, err)
-			}
-		default:
-			if !hasIssue(issues, def) {
-				fail(def, fmt.Errorf("default connection %q is not attached, so unqualified table names use the in-memory catalog", def))
-			}
-		}
+// applyDefault makes def the session's default catalog once it is attached.
+func (b *sessionBuild) applyDefault(ctx context.Context, sess session.Session, def string, attached map[string]bool) {
+	if def == "" {
+		return
 	}
-	return sess, issues, nil
+	if attached[def] {
+		if err := sess.SetDefaultCatalog(ctx, def); err != nil {
+			b.failMsg(def, sess.Redact(err.Error()))
+		}
+		return
+	}
+	if !hasIssue(b.issues, def) {
+		b.failMsg(def, sess.Redact(fmt.Sprintf("default connection %q is not attached, so unqualified table names use the in-memory catalog", def)))
+	}
 }
 
 func hasIssue(issues []SessionIssue, name string) bool {

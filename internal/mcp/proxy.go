@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -75,21 +76,38 @@ func ProxyStdio(ctx context.Context, cfg ProxyConfig, in io.Reader, out io.Write
 	defer cancel()
 
 	p := &proxy{cfg: cfg, base: base, out: out, logger: logger, pending: map[string]json.RawMessage{}, client: &http.Client{}}
-
-	// Open the stream and wait for the server to name its message endpoint.
-	streamReq, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.Endpoint, nil)
+	streamDone, err := p.openStream(ctx)
 	if err != nil {
-		return errors.New("invalid MCP endpoint")
+		if errors.Is(err, errProxyCancelled) {
+			return nil
+		}
+		return err
+	}
+	lines, scanErr := scanLines(ctx, in)
+	return p.serve(ctx, cancel, lines, scanErr, streamDone)
+}
+
+// errProxyCancelled marks a context cancelled while the proxy was still
+// connecting: ProxyStdio returns nil for it.
+var errProxyCancelled = errors.New("cancelled")
+
+// openStream opens the SSE stream, waits for the server to name its message
+// endpoint (stored in p.postURL), and returns a channel closed when the stream
+// ends.
+func (p *proxy) openStream(ctx context.Context) (<-chan struct{}, error) {
+	streamReq, err := http.NewRequestWithContext(ctx, http.MethodGet, p.cfg.Endpoint, nil)
+	if err != nil {
+		return nil, errors.New("invalid MCP endpoint")
 	}
 	p.authorize(streamReq)
 	streamReq.Header.Set("Accept", "text/event-stream")
 	resp, err := p.client.Do(streamReq)
 	if err != nil {
-		return fmt.Errorf("failed to connect to the workspace's MCP server: %s", scrub(err, cfg.Token))
+		return nil, fmt.Errorf("failed to connect to the workspace's MCP server: %s", scrub(err, p.cfg.Token))
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return fmt.Errorf("the workspace's MCP server refused the connection (HTTP %d)", resp.StatusCode)
+		return nil, fmt.Errorf("the workspace's MCP server refused the connection (HTTP %d)", resp.StatusCode)
 	}
 
 	endpointCh := make(chan string, 1)
@@ -103,18 +121,24 @@ func ProxyStdio(ctx context.Context, cfg ProxyConfig, in io.Reader, out io.Write
 	select {
 	case postURL = <-endpointCh:
 	case <-streamDone:
-		return fmt.Errorf("the workspace's MCP server closed the connection before it was ready: %w", ErrUpstreamLost)
+		return nil, fmt.Errorf("the workspace's MCP server closed the connection before it was ready: %w", ErrUpstreamLost)
 	case <-time.After(10 * time.Second):
-		return errors.New("the workspace's MCP server did not answer in time")
+		return nil, errors.New("the workspace's MCP server did not answer in time")
 	case <-ctx.Done():
-		return nil
+		return nil, errProxyCancelled
 	}
-	target, err := base.Parse(postURL)
-	if err != nil || target.Host != base.Host {
-		return errors.New("the workspace's MCP server named an unexpected message endpoint")
+	target, err := p.base.Parse(postURL)
+	if err != nil || target.Host != p.base.Host {
+		return nil, errors.New("the workspace's MCP server named an unexpected message endpoint")
 	}
 	p.postURL = target.String()
+	return streamDone, nil
+}
 
+// scanLines reads in line by line on a goroutine. A line over maxLineBytes is
+// reported with tooLong set instead of its bytes. lines is closed at the end
+// of in; scanErr then carries the read error (nil for a clean EOF).
+func scanLines(ctx context.Context, in io.Reader) (<-chan inLine, <-chan error) {
 	lines := make(chan inLine)
 	scanErr := make(chan error, 1)
 	go func() {
@@ -154,7 +178,14 @@ func ProxyStdio(ctx context.Context, cfg ProxyConfig, in io.Reader, out io.Write
 			}
 		}
 	}()
+	return lines, scanErr
+}
 
+const upstreamLostMessage = "Vibe stopped serving this workspace over MCP (Studio quit or turned MCP off). Reconnect to continue."
+
+// serve forwards the client's lines until stdin ends, ctx is cancelled or the
+// upstream is lost.
+func (p *proxy) serve(ctx context.Context, cancel context.CancelFunc, lines <-chan inLine, scanErr <-chan error, streamDone <-chan struct{}) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -164,33 +195,37 @@ func ProxyStdio(ctx context.Context, cfg ProxyConfig, in io.Reader, out io.Write
 				return nil
 			}
 			// The upstream went away. Answer what is still waiting.
-			p.failPending("Vibe stopped serving this workspace over MCP (Studio quit or turned MCP off). Reconnect to continue.")
+			p.failPending(upstreamLostMessage)
 			return ErrUpstreamLost
 		case line, ok := <-lines:
 			if !ok {
 				// The client went away: give in-flight replies a moment.
-				p.drain(ctx, streamDone, cfg.DrainTimeout)
+				p.drain(ctx, streamDone, p.cfg.DrainTimeout)
 				cancel()
 				<-streamDone
 				return <-scanErr
 			}
-			if line.tooLong {
-				p.writeParseError("The message is larger than 16 MB and was not sent.")
-				continue
-			}
-			if !json.Valid(line.data) {
-				p.writeParseError("The message is not valid JSON.")
-				continue
-			}
-			if err := p.forward(ctx, line.data); err != nil {
-				if errors.Is(err, ErrUpstreamLost) {
-					p.failPending("Vibe stopped serving this workspace over MCP (Studio quit or turned MCP off). Reconnect to continue.")
-					cancel()
-					return ErrUpstreamLost
-				}
+			if p.forwardLine(ctx, line) {
+				p.failPending(upstreamLostMessage)
+				cancel()
+				return ErrUpstreamLost
 			}
 		}
 	}
+}
+
+// forwardLine sends one client line upstream, answering a bad line itself. It
+// reports whether the upstream was lost.
+func (p *proxy) forwardLine(ctx context.Context, line inLine) bool {
+	if line.tooLong {
+		p.writeParseError("The message is larger than 16 MB and was not sent.")
+		return false
+	}
+	if !json.Valid(line.data) {
+		p.writeParseError("The message is not valid JSON.")
+		return false
+	}
+	return errors.Is(p.forward(ctx, line.data), ErrUpstreamLost)
 }
 
 // maxLineBytes bounds one client message. A longer line is skipped (and
@@ -427,8 +462,12 @@ func (p *proxy) drain(ctx context.Context, streamDone <-chan struct{}, d time.Du
 	}
 }
 
+// wsaeConnRefused is Windows' WSAECONNREFUSED, which syscall.ECONNREFUSED does
+// not match there.
+const wsaeConnRefused = syscall.Errno(10061)
+
 func isConnRefused(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "connection refused")
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, wsaeConnRefused)
 }
 
 // scrub removes the token from an error text (net/http does not include

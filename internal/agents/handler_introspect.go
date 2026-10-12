@@ -2,8 +2,8 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -55,7 +55,7 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 	desc, err := sess.DescribeTable(ctx, table)
 	if err != nil {
 		// A missing table was an empty column list before; keep that shape.
-		if strings.Contains(err.Error(), "does not exist") {
+		if errors.Is(err, session.ErrNoSuchTable) {
 			return NewResponse(req.ID, map[string]any{"table": table, "columns": []map[string]any(nil)})
 		}
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", err))

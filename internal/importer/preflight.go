@@ -304,6 +304,46 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 		return nil
 	}
 
+	if err := scanValueProblems(ctx, conn, sum, existing, target); err != nil {
+		return err
+	}
+
+	var keyTarget *targetCol
+	for i := range target {
+		if target[i].Name == existing.pkCol {
+			keyTarget = &target[i]
+			break
+		}
+	}
+
+	if keyTarget == nil || keyTarget.Staged == nil {
+		// upsert always has a matched key (see doc comment); append
+		// without a matched key — whether the table has no PK at all, OR
+		// it has one but the file doesn't supply it (an auto-number
+		// table, which is exactly the case a re-import of the same
+		// no-id file hits) — falls back to the exact-duplicate warning.
+		// Checking this ONLY for existing.pkCol == "" (the original
+		// version) silently duplicated every row of an auto-key table on
+		// re-import: nothing else here would ever catch it, since there
+		// is no key at all to collide on.
+		if !upsert {
+			var err error
+			sum.ExactDupes, err = exactDupeCount(ctx, conn, sum.Table, target)
+			if err != nil {
+				return err
+			}
+		}
+	} else if err := preflightKey(ctx, conn, sum, existing, keyTarget, upsert); err != nil {
+		return err
+	}
+
+	sum.OK = sum.BadCount == 0 && sum.Blocked == ""
+	return nil
+}
+
+// scanValueProblems records the values that do not fit their column and the
+// rows whose foreign key points at nothing.
+func scanValueProblems(ctx context.Context, conn *sql.Conn, sum *Summary, existing *existingTable, target []targetCol) error {
 	bad, badCount, err := fitsScan(ctx, conn, target)
 	if err != nil {
 		return err
@@ -317,34 +357,15 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 	}
 	sum.BadValues = append(sum.BadValues, fkRows...)
 	sum.BadCount += fkCount
+	return nil
+}
 
-	var keyTarget *targetCol
-	for i := range target {
-		if target[i].Name == existing.pkCol {
-			keyTarget = &target[i]
-			break
-		}
-	}
-
-	switch {
-	case keyTarget == nil || keyTarget.Staged == nil:
-		// upsert always has a matched key (see doc comment); append
-		// without a matched key — whether the table has no PK at all, OR
-		// it has one but the file doesn't supply it (an auto-number
-		// table, which is exactly the case a re-import of the same
-		// no-id file hits) — falls back to the exact-duplicate warning.
-		// Checking this ONLY for existing.pkCol == "" (the original
-		// version) silently duplicated every row of an auto-key table on
-		// re-import: nothing else here would ever catch it, since there
-		// is no key at all to collide on.
-		if !upsert {
-			sum.ExactDupes, err = exactDupeCount(ctx, conn, sum.Table, target)
-			if err != nil {
-				return err
-			}
-		}
-
-	case !upsert:
+// preflightKey checks the table's key as the file supplies it: an append is
+// blocked by any key already in the table, then both modes are blocked by
+// missing or duplicate keys in the file and by an auto-number gap too large to
+// re-seed. A block lands in sum.Blocked.
+func preflightKey(ctx context.Context, conn *sql.Conn, sum *Summary, existing *existingTable, keyTarget *targetCol, upsert bool) error {
+	if !upsert {
 		// append: an existing-row collision blocks outright, pointing at
 		// upsert instead — duplicates further down the SAME file are a
 		// separate, secondary problem only worth reporting once the
@@ -358,51 +379,52 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 		}
 		if collide > 0 {
 			sum.Blocked = fmt.Sprintf("%d row(s) use a %s that's already in the table. Use Update matching rows.", collide, existing.pkCol)
-			break
-		}
-		fallthrough
-
-	default:
-		keyExpr, displayExpr := keyCastExpr(keyTarget)
-		remaining = maxBadValues - len(sum.BadValues)
-		krows, kcount, err := keyProblems(ctx, conn, keyExpr, displayExpr, existing.pkCol, remaining)
-		if err != nil {
-			return err
-		}
-		if kcount > 0 {
-			sum.BadValues = append(sum.BadValues, krows...)
-			sum.BadCount += kcount
-			sum.Blocked = fmt.Sprintf("the %q column has missing or duplicate values in the file", existing.pkCol)
-			break
-		}
-		if keyTarget.HasFriendly && keyTarget.Friendly.Type == TypeInteger {
-			// Pre-flight the auto-number sequence gap BEFORE writing
-			// anything: BumpAutoNumber itself would refuse a gap this
-			// large too, but only after the INSERT already ran (inside
-			// the write transaction), rolling the whole write back with
-			// a thrown error instead of a clean, up-front Blocked
-			// message. AutoNumberGap never touches the sequence, so a
-			// block here (or an OK) has zero side effects either way.
-			var maxFileKey sql.NullInt64
-			q := fmt.Sprintf("SELECT MAX(%s) FROM %s", keyExpr, stageTable)
-			if err := conn.QueryRowContext(ctx, q).Scan(&maxFileKey); err != nil {
-				return fmt.Errorf("failed to check the new key range: %w", err)
-			}
-			if maxFileKey.Valid {
-				gap, ok, err := engine.AutoNumberGap(ctx, conn, session.TableRef{Name: sum.Table}, existing.pkCol, maxFileKey.Int64)
-				if err != nil {
-					return err
-				}
-				if ok && gap > engine.MaxAutoNumberGap {
-					sum.Blocked = fmt.Sprintf(
-						"row(s) use a %s far beyond the table's auto-number sequence (gap of %d) — this can't be re-seeded safely; use a plain Integer column instead of auto-number for ids this large",
-						existing.pkCol, gap)
-				}
-			}
+			return nil
 		}
 	}
 
-	sum.OK = sum.BadCount == 0 && sum.Blocked == ""
+	keyExpr, displayExpr := keyCastExpr(keyTarget)
+	remaining := maxBadValues - len(sum.BadValues)
+	krows, kcount, err := keyProblems(ctx, conn, keyExpr, displayExpr, existing.pkCol, remaining)
+	if err != nil {
+		return err
+	}
+	if kcount > 0 {
+		sum.BadValues = append(sum.BadValues, krows...)
+		sum.BadCount += kcount
+		sum.Blocked = fmt.Sprintf("the %q column has missing or duplicate values in the file", existing.pkCol)
+		return nil
+	}
+	if keyTarget.HasFriendly && keyTarget.Friendly.Type == TypeInteger {
+		return preflightAutoNumberGap(ctx, conn, sum, existing, keyExpr)
+	}
+	return nil
+}
+
+// preflightAutoNumberGap blocks a file whose keys sit far beyond the table's
+// auto-number sequence. It runs BEFORE writing anything: BumpAutoNumber itself
+// would refuse a gap this large too, but only after the INSERT already ran
+// (inside the write transaction), rolling the whole write back with a thrown
+// error instead of a clean, up-front Blocked message. AutoNumberGap never
+// touches the sequence, so a block here (or an OK) has zero side effects.
+func preflightAutoNumberGap(ctx context.Context, conn *sql.Conn, sum *Summary, existing *existingTable, keyExpr string) error {
+	var maxFileKey sql.NullInt64
+	q := fmt.Sprintf("SELECT MAX(%s) FROM %s", keyExpr, stageTable)
+	if err := conn.QueryRowContext(ctx, q).Scan(&maxFileKey); err != nil {
+		return fmt.Errorf("failed to check the new key range: %w", err)
+	}
+	if !maxFileKey.Valid {
+		return nil
+	}
+	gap, ok, err := engine.AutoNumberGap(ctx, conn, session.TableRef{Name: sum.Table}, existing.pkCol, maxFileKey.Int64)
+	if err != nil {
+		return err
+	}
+	if ok && gap > engine.MaxAutoNumberGap {
+		sum.Blocked = fmt.Sprintf(
+			"row(s) use a %s far beyond the table's auto-number sequence (gap of %d) — this can't be re-seeded safely; use a plain Integer column instead of auto-number for ids this large",
+			existing.pkCol, gap)
+	}
 	return nil
 }
 

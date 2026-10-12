@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -461,4 +464,19 @@ func TestProxyStdio_RequestIdsMatchAfterNormalisation(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("the reply did not clear the pending request: the drain waited its full timeout")
 	}
+}
+
+func TestIsConnRefused(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+	_, err = net.Dial("tcp", addr)
+	require.Error(t, err)
+	assert.True(t, isConnRefused(err), "a real refused dial: %v", err)
+	assert.True(t, isConnRefused(&url.Error{Op: "Post", Err: err}), "wrapped as net/http returns it")
+
+	assert.False(t, isConnRefused(nil))
+	assert.False(t, isConnRefused(errors.New("connection refused")), "message text is not the signal")
+	assert.False(t, isConnRefused(context.DeadlineExceeded))
 }

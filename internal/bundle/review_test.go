@@ -303,3 +303,35 @@ connections:
 		assert.NotContains(t, []string{"tbl", "ice", "lake", "smuggle"}, c.Name)
 	}
 }
+
+func TestDeclaredWorkFactorReadsArmoredAndIgnoresMalformedHeaders(t *testing.T) {
+	zipBytes := build(t, map[string][]byte{"notebooks/a.vnb": goodNotebook(t)}, nil)
+	sealArmored := func(logN int) []byte {
+		r, err := age.NewScryptRecipient("pw")
+		require.NoError(t, err)
+		r.SetWorkFactor(logN)
+		var out bytes.Buffer
+		aw := armor.NewWriter(&out)
+		w, err := age.Encrypt(aw, r)
+		require.NoError(t, err)
+		_, _ = w.Write(zipBytes)
+		require.NoError(t, w.Close())
+		require.NoError(t, aw.Close())
+		return out.Bytes()
+	}
+	assert.Equal(t, 19, declaredWorkFactor(sealArmored(19)))
+	_, err := Open(sealArmored(19), "pw")
+	require.ErrorIs(t, err, ErrUnsupportedKDF, "an armored envelope is judged by its header too")
+	_, err = Open(sealArmored(18), "pw")
+	require.NoError(t, err)
+
+	for name, data := range map[string][]byte{
+		"not a number":  []byte("age-encryption.org/v1\n-> scrypt c2FsdA abc\nbody"),
+		"missing field": []byte("age-encryption.org/v1\n-> scrypt c2FsdA\nbody"),
+		"no scrypt":     []byte("age-encryption.org/v1\n-> X25519 abc\nbody"),
+		"garbage":       []byte("\x00\x01\x02"),
+		"empty":         nil,
+	} {
+		assert.Equal(t, 0, declaredWorkFactor(data), name)
+	}
+}

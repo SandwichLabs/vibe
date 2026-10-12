@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -301,6 +302,10 @@ func (h *hub) ListTables(ctx context.Context, catalog, schema string) ([]TableIn
 	return append([]TableInfo(nil), out...), nil
 }
 
+// ErrNoSuchTable is why DescribeTable found nothing: the table is not there,
+// or has no columns.
+var ErrNoSuchTable = errors.New("does not exist or has no columns")
+
 func (h *hub) DescribeTable(ctx context.Context, qualified string) (*TableDescription, error) {
 	ref, err := ParseTableRef(qualified)
 	if err != nil {
@@ -325,7 +330,7 @@ func (h *hub) DescribeTable(ctx context.Context, qualified string) (*TableDescri
 		return nil, err
 	}
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("table %q does not exist or has no columns", ref.String())
+		return nil, fmt.Errorf("table %q %w", ref.String(), ErrNoSuchTable)
 	}
 	d := &TableDescription{Ref: ref, Columns: cols}
 	h.cache.put(key, fp, d)

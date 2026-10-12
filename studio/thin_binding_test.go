@@ -189,42 +189,50 @@ func fileProblems(file string, af *ast.File, imports map[string]string) []string
 		}
 	}
 	for _, d := range af.Decls {
-		var root ast.Node
-		switch d := d.(type) {
-		case *ast.GenDecl:
-			if d.Tok == token.VAR {
-				root = d
-			}
-		case *ast.FuncDecl:
-			// init() can assign an I/O function to a package-level func var.
-			if d.Recv == nil && d.Name.Name == "init" && d.Body != nil {
-				root = d.Body
-			}
+		out = append(out, declAliasProblems(file, d, imports)...)
+	}
+	return out
+}
+
+// declAliasProblems reports I/O functions aliased by one package-level
+// declaration: a var, or the body of init().
+func declAliasProblems(file string, d ast.Decl, imports map[string]string) []string {
+	var root ast.Node
+	switch d := d.(type) {
+	case *ast.GenDecl:
+		if d.Tok == token.VAR {
+			root = d
 		}
-		if root == nil {
-			continue
+	case *ast.FuncDecl:
+		// init() can assign an I/O function to a package-level func var.
+		if d.Recv == nil && d.Name.Name == "init" && d.Body != nil {
+			root = d.Body
 		}
-		_, inInit := root.(*ast.BlockStmt)
-		ast.Inspect(root, func(n ast.Node) bool {
-			if as, ok := n.(*ast.AssignStmt); ok && inInit {
-				// In init() only an assignment of the function value itself
-				// (f = os.ReadFile) is an alias; calling os.Setenv there is fine.
-				for _, rhs := range as.Rhs {
-					if sel, ok := rhs.(*ast.SelectorExpr); ok {
-						if what := forbiddenUse(sel, imports); what != "" {
-							out = append(out, fmt.Sprintf("%s: init() aliases %s (an alias of an I/O function dodges the binding check)", file, what))
-						}
+	}
+	if root == nil {
+		return nil
+	}
+	var out []string
+	_, inInit := root.(*ast.BlockStmt)
+	ast.Inspect(root, func(n ast.Node) bool {
+		if as, ok := n.(*ast.AssignStmt); ok && inInit {
+			// In init() only an assignment of the function value itself
+			// (f = os.ReadFile) is an alias; calling os.Setenv there is fine.
+			for _, rhs := range as.Rhs {
+				if sel, ok := rhs.(*ast.SelectorExpr); ok {
+					if what := forbiddenUse(sel, imports); what != "" {
+						out = append(out, fmt.Sprintf("%s: init() aliases %s (an alias of an I/O function dodges the binding check)", file, what))
 					}
-				}
-				return true
-			}
-			if sel, ok := n.(*ast.SelectorExpr); ok && !inInit {
-				if what := forbiddenUse(sel, imports); what != "" {
-					out = append(out, fmt.Sprintf("%s: package-level var or init() uses %s (an alias of an I/O function dodges the binding check)", file, what))
 				}
 			}
 			return true
-		})
-	}
+		}
+		if sel, ok := n.(*ast.SelectorExpr); ok && !inInit {
+			if what := forbiddenUse(sel, imports); what != "" {
+				out = append(out, fmt.Sprintf("%s: package-level var or init() uses %s (an alias of an I/O function dodges the binding check)", file, what))
+			}
+		}
+		return true
+	})
 	return out
 }

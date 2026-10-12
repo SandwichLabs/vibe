@@ -25,10 +25,6 @@ import (
 	"sync"
 
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
-	"charm.land/fantasy/providers/openaicompat"
 
 	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/SandwichLabs/vibe/internal/agents"
@@ -315,98 +311,9 @@ func (r *Runner) languageModel(ctx context.Context, cfg Config) (fantasy.Languag
 		return nil, fmt.Errorf("%s has no default model: pick a model in Settings → App", provider)
 	}
 
-	var (
-		p   fantasy.Provider
-		err error
-	)
-	switch provider {
-	case ProviderAnthropic:
-		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("anthropic provider requires an API key (set ANTHROPIC_API_KEY, or save a key in Settings > App)")
-		}
-		p, err = anthropic.New(anthropic.WithAPIKey(cfg.APIKey))
-	case ProviderOpenAI:
-		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("openai provider requires an API key (set OPENAI_API_KEY, or save a key in Settings > App)")
-		}
-		opts := []openai.Option{
-			openai.WithAPIKey(cfg.APIKey),
-			// The Responses API for every model: it is OpenAI's current
-			// tool-calling surface, and an id fantasy's built-in list does
-			// not know yet (a new release, a fine-tune) must not silently
-			// fall back to Chat Completions.
-			openai.WithUseResponsesAPI(),
-			openai.WithResponsesAPIFunc(func(string) bool { return true }),
-		}
-		if r.openAIBaseURL != "" {
-			opts = append(opts, openai.WithBaseURL(r.openAIBaseURL))
-		}
-		p, err = openai.New(opts...)
-	case ProviderGemini:
-		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("gemini provider requires an API key (set GEMINI_API_KEY, or save a key in Settings > App)")
-		}
-		p, err = google.New(google.WithGeminiAPIKey(cfg.APIKey))
-	case ProviderLocal:
-		endpoint := strings.TrimSpace(cfg.Endpoint)
-		if endpoint == "" {
-			return nil, fmt.Errorf("local provider requires an endpoint (llm.endpoint)")
-		}
-		apiKey := cfg.APIKey
-		if strings.TrimSpace(apiKey) == "" {
-			// Local OpenAI-compatible servers usually accept any non-empty key;
-			// the underlying SDK rejects an empty one.
-			apiKey = "sk-local"
-		}
-		p, err = openaicompat.New(
-			openaicompat.WithBaseURL(endpoint),
-			openaicompat.WithAPIKey(apiKey),
-		)
-	case ProviderOllama:
-		endpoint := strings.TrimSpace(cfg.Endpoint)
-		if endpoint == "" || endpoint == config.DefaultLLMEndpoint {
-			endpoint = config.DefaultOllamaEndpoint
-		}
-		apiKey := cfg.APIKey
-		if strings.TrimSpace(apiKey) == "" {
-			apiKey = "ollama" // a local Ollama needs none; the SDK rejects an empty one
-		}
-		p, err = openaicompat.New(
-			openaicompat.WithName(ProviderOllama),
-			openaicompat.WithBaseURL(endpoint),
-			openaicompat.WithAPIKey(apiKey),
-		)
-	case ProviderCloudflare:
-		if strings.TrimSpace(cfg.APIKey) == "" {
-			return nil, fmt.Errorf("cloudflare provider requires a Cloudflare API token (set CLOUDFLARE_API_TOKEN, or save one in Settings → App)")
-		}
-		base := r.cloudflareBaseURL
-		if base == "" {
-			if strings.TrimSpace(cfg.AccountID) == "" {
-				return nil, fmt.Errorf("cloudflare provider requires an account ID (set it in Settings → App, or CLOUDFLARE_ACCOUNT_ID)")
-			}
-			var berr error
-			if base, berr = config.CloudflareBaseURL(strings.TrimSpace(cfg.AccountID)); berr != nil {
-				return nil, fmt.Errorf("invalid Cloudflare account ID: %w", berr)
-			}
-		}
-		opts := []openaicompat.Option{
-			openaicompat.WithName(ProviderCloudflare),
-			openaicompat.WithBaseURL(base),
-			openaicompat.WithAPIKey(cfg.APIKey),
-		}
-		if gw := strings.TrimSpace(cfg.Gateway); gw != "" {
-			if gerr := config.ValidateGatewayID(gw); gerr != nil {
-				return nil, fmt.Errorf("invalid Cloudflare gateway ID: %w", gerr)
-			}
-			opts = append(opts, openaicompat.WithHeaders(map[string]string{"cf-aig-gateway-id": gw}))
-		}
-		p, err = openaicompat.New(opts...)
-	default:
-		return nil, fmt.Errorf("unknown LLM provider %q (want %s)", provider, strings.Join(config.LLMProviderIDs(), ", "))
-	}
+	p, err := r.newProvider(provider, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create %s provider: %w", provider, err)
+		return nil, err
 	}
 
 	languageModel, err := p.LanguageModel(ctx, model)

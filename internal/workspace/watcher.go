@@ -299,17 +299,7 @@ func (w *Watcher) loop() {
 				return
 			}
 			if w.handle(ev) {
-				if timer == nil {
-					timer = time.NewTimer(w.debounce)
-				} else {
-					if !timer.Stop() {
-						select {
-						case <-timer.C:
-						default:
-						}
-					}
-					timer.Reset(w.debounce)
-				}
+				timer = rearm(timer, w.debounce)
 				timerC = timer.C
 			}
 		case <-timerC:
@@ -317,6 +307,21 @@ func (w *Watcher) loop() {
 			w.flush()
 		}
 	}
+}
+
+// rearm starts the debounce timer, or restarts it (draining a fired tick).
+func rearm(timer *time.Timer, d time.Duration) *time.Timer {
+	if timer == nil {
+		return time.NewTimer(d)
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(d)
+	return timer
 }
 
 // handle queues the event's path and registers newly created directories.
@@ -332,28 +337,7 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 	}
 	if ev.Has(fsnotify.Create) {
 		if fi, err := os.Lstat(ev.Name); err == nil && fi.IsDir() {
-			parts := strings.Split(rel, "/")
-			isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir)) ||
-				(len(parts) == 2 && parts[0] == skills.Dir && !filestore.IsTemp(parts[1]))
-			if isWatchedDir && w.addDir(ev.Name) {
-				// Directories and files may already be inside by the time the
-				// watch exists (mkdir -p, a git checkout): register the
-				// skills/<name>/ levels and report what is there.
-				if len(parts) == 1 && parts[0] == skills.Dir {
-					if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
-						for _, s := range subs {
-							w.addDir(filepath.Join(ev.Name, s))
-						}
-					}
-				}
-				for _, p := range w.relevant() {
-					if strings.HasPrefix(p, ev.Name+string(filepath.Separator)) {
-						w.queue(p)
-						queued = true
-					}
-				}
-			}
-			return queued
+			return w.handleNewDir(ev.Name, rel) || queued
 		}
 	}
 	if _, _, ok := classify(rel); !ok {
@@ -361,6 +345,36 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 	}
 	w.queue(ev.Name)
 	return true
+}
+
+// handleNewDir registers a directory that appeared, when it is one of the
+// watched levels, and queues the files already inside it. It reports whether
+// anything was queued.
+func (w *Watcher) handleNewDir(abs, rel string) bool {
+	parts := strings.Split(rel, "/")
+	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir)) ||
+		(len(parts) == 2 && parts[0] == skills.Dir && !filestore.IsTemp(parts[1]))
+	if !isWatchedDir || !w.addDir(abs) {
+		return false
+	}
+	// Directories and files may already be inside by the time the
+	// watch exists (mkdir -p, a git checkout): register the
+	// skills/<name>/ levels and report what is there.
+	if len(parts) == 1 && parts[0] == skills.Dir {
+		if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
+			for _, s := range subs {
+				w.addDir(filepath.Join(abs, s))
+			}
+		}
+	}
+	queued := false
+	for _, p := range w.relevant() {
+		if strings.HasPrefix(p, abs+string(filepath.Separator)) {
+			w.queue(p)
+			queued = true
+		}
+	}
+	return queued
 }
 
 // dropDir forgets a watched directory that was removed or renamed away (a git

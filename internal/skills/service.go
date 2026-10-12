@@ -528,25 +528,46 @@ func WriteImportSkill(store Store, sess session.Session, table string) error {
 	if err := duckDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&rowCount); err != nil {
 		return fmt.Errorf("failed to count rows in %q: %w", table, err)
 	}
+	facts, err := importColumnFacts(duckDB, tref, table, quotedTable)
+	if err != nil {
+		return err
+	}
 
+	before, after, hadExisting := existingImportSkillParts(store, name)
+	if !hadExisting {
+		before = defaultImportProse(table)
+	}
+	body := before + "\n\n" + importGeneratedBlock(rowCount, facts)
+	if after != "" {
+		body += "\n\n" + after
+	}
+	return putImportSkill(store, name, table, body)
+}
+
+// importColFacts is what the generated block says about one column.
+type importColFacts struct {
+	name, dtype          string
+	nullCount, distinctN int
+	samples              []string
+}
+
+// importColumnFacts reads each column's type, null count, distinct estimate
+// and a few sample values from the live table. The stats are best effort: one
+// that cannot be computed is just omitted.
+func importColumnFacts(duckDB *sql.DB, tref session.TableRef, table, quotedTable string) ([]importColFacts, error) {
 	colCond, colArgs := session.RefFilter(tref, "table_catalog", "table_schema", "table_name", 1)
 	cols, err := duckDB.Query(
 		`SELECT column_name, data_type FROM information_schema.columns
 		 WHERE `+colCond+` ORDER BY ordinal_position`, colArgs...)
 	if err != nil {
-		return fmt.Errorf("failed to describe %q: %w", table, err)
+		return nil, fmt.Errorf("failed to describe %q: %w", table, err)
 	}
-	type colFacts struct {
-		name, dtype          string
-		nullCount, distinctN int
-		samples              []string
-	}
-	var facts []colFacts
+	var facts []importColFacts
 	for cols.Next() {
-		var c colFacts
+		var c importColFacts
 		if err := cols.Scan(&c.name, &c.dtype); err != nil {
 			cols.Close()
-			return fmt.Errorf("failed to scan column: %w", err)
+			return nil, fmt.Errorf("failed to scan column: %w", err)
 		}
 		facts = append(facts, c)
 	}
@@ -559,31 +580,39 @@ func WriteImportSkill(store Store, sess session.Session, table string) error {
 		duckDB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) - COUNT(%s) FROM %s`, quotedCol, quotedTable)).Scan(&c.nullCount)
 		//nolint:errcheck
 		duckDB.QueryRow(fmt.Sprintf(`SELECT approx_count_distinct(%s) FROM %s`, quotedCol, quotedTable)).Scan(&c.distinctN)
+		c.samples = columnSamples(duckDB, quotedCol, quotedTable)
+	}
+	return facts, nil
+}
 
-		// CAST ... AS VARCHAR, not a bare %s scanned with %v: DuckDB's own
-		// text rendering is the source of truth for what a sample "looks
-		// like as stored" (DATE gives "2025-04-06", DECIMAL keeps its
-		// scale, UUID gives text), matching CSV export. This is
-		// deliberately not engine.NormalizeColumnValue — skill text should
-		// be exactly what DuckDB prints, not the JSON-friendly Go value.
-		sampleRows, err := duckDB.Query(fmt.Sprintf(
-			`SELECT DISTINCT CAST(%s AS VARCHAR) FROM %s WHERE %s IS NOT NULL LIMIT 5`, quotedCol, quotedTable, quotedCol))
-		if err == nil {
-			for sampleRows.Next() {
-				var v any
-				if err := sampleRows.Scan(&v); err == nil {
-					c.samples = append(c.samples, truncateSample(fmt.Sprintf("%v", v)))
-				}
-			}
-			sampleRows.Close()
+// columnSamples returns up to five distinct values of a column.
+//
+// CAST ... AS VARCHAR, not a bare %s scanned with %v: DuckDB's own text
+// rendering is the source of truth for what a sample "looks like as stored"
+// (DATE gives "2025-04-06", DECIMAL keeps its scale, UUID gives text),
+// matching CSV export. This is deliberately not engine.NormalizeColumnValue —
+// skill text should be exactly what DuckDB prints, not the JSON-friendly Go
+// value.
+func columnSamples(duckDB *sql.DB, quotedCol, quotedTable string) []string {
+	sampleRows, err := duckDB.Query(fmt.Sprintf(
+		`SELECT DISTINCT CAST(%s AS VARCHAR) FROM %s WHERE %s IS NOT NULL LIMIT 5`, quotedCol, quotedTable, quotedCol))
+	if err != nil {
+		return nil
+	}
+	defer sampleRows.Close()
+	var samples []string
+	for sampleRows.Next() {
+		var v any
+		if err := sampleRows.Scan(&v); err == nil {
+			samples = append(samples, truncateSample(fmt.Sprintf("%v", v)))
 		}
 	}
+	return samples
+}
 
-	before, after, hadExisting := existingImportSkillParts(store, name)
-	if !hadExisting {
-		before = defaultImportProse(table)
-	}
-
+// importGeneratedBlock renders the block a re-import replaces: the row count
+// and "## Columns as stored", between importSkillGenBegin and importSkillGenEnd.
+func importGeneratedBlock(rowCount int, facts []importColFacts) string {
 	var gen strings.Builder
 	gen.WriteString(importSkillGenBegin)
 	gen.WriteString("\n\n")
@@ -616,11 +645,11 @@ func WriteImportSkill(store Store, sess session.Session, table string) error {
 	}
 	gen.WriteString("\n")
 	gen.WriteString(importSkillGenEnd)
+	return gen.String()
+}
 
-	body := before + "\n\n" + gen.String()
-	if after != "" {
-		body += "\n\n" + after
-	}
+// putImportSkill stores the skill and removes the pre-#91 leftover name.
+func putImportSkill(store Store, name, table, body string) error {
 	description := fmt.Sprintf("Facts about the %q table: row count, column types, and sample values — generated when it was imported.", table)
 	// Note what an update does NOT touch: description and source. A brand-new
 	// skill gets source='import' and the generated description; re-running

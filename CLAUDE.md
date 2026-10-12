@@ -101,6 +101,7 @@ docs/                see docs/README.md
 ## Conventions
 
 - **`internal/` not `pkg/`**; Cobra + Viper; `log/slog` passed by dependency injection; services created in `cmd/vibe/main.go`/`cmd/` and passed down, no globals.
+- **Complexity is linted**: `gocognit` (min 30) runs in `golangci-lint`; only the named waivers in `.golangci.yml` (tokenizers, wire-format decoders) may exceed it. Split a long function into named steps instead of adding a waiver.
 - **Wrap errors** with context: `fmt.Errorf("failed to open workspace: %w", err)`.
 - **Interfaces for testability**; a `mock.go` only when a test needs it. Co-located tests with testify. Functional options for complex constructors.
 - **One tool surface**: new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke `fantasy` tools in `internal/llm`.
