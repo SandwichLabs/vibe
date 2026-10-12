@@ -148,6 +148,13 @@ jobs:
         with:
           version: v2.13.1
 
+      # Blocking (#40). THIRD_PARTY_NOTICES.md is generated (task notices): go-licenses v2 over the CLI and
+      # Studio for every release platform plus the production npm packages. Fails when a licence is not on the
+      # permissive allow-list (the go-licenses check) or when the committed file is stale. Needs the frontend
+      # install above (node_modules) and the build (the Studio embeds frontend/dist).
+      - name: Third-party notices
+        run: node scripts/gen-notices.mjs --check
+
       # Blocking (#41). A finding means a reachable vulnerability: bump the module or the Go patch
       # release. A finding with no fix gets a documented exception here, never a continue-on-error.
       - name: govulncheck

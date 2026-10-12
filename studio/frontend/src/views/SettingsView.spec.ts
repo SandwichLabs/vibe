@@ -1,10 +1,10 @@
 // SettingsView is split in two (SPEC 09): Workspace (this folder, the team's
 // agent limit, MCP) and App (theme, the agent's model). The tab is in the URL.
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
-vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {}, EventsOff: () => {} }))
+vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {}, EventsOff: () => {}, BrowserOpenURL: vi.fn() }))
 
 import SettingsView from './SettingsView.vue'
 import { workspaceInfo, _resetForTests } from '../composables/useWorkspace'
@@ -35,11 +35,15 @@ function makeApp(mcp: Partial<MCPStatus> = {}) {
   return app
 }
 
+const wrappers: Array<{ unmount(): void }> = []
+afterEach(() => { wrappers.splice(0).forEach((w) => w.unmount()) })
+
 async function mountAt(path = '/settings') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: SettingsView }] })
   await router.push(path)
   await router.isReady()
-  const w = mount(SettingsView, { global: { plugins: [router], stubs: { Icon: true, AppearanceSettings: true } } })
+  const w = mount(SettingsView, { attachTo: document.body, global: { plugins: [router], stubs: { Icon: true, AppearanceSettings: true } } })
+  wrappers.push(w)
   await flushPromises()
   return { w, router }
 }
@@ -47,11 +51,11 @@ async function mountAt(path = '/settings') {
 describe('SettingsView', () => {
   beforeEach(() => { _resetForTests(); workspaceInfo.value = INFO })
 
-  it('has Workspace and App tabs wired with aria; Workspace is selected by default', async () => {
+  it('has Workspace, App and About tabs wired with aria; Workspace is selected by default', async () => {
     makeApp()
     const { w } = await mountAt()
     const tabs = w.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(2)
+    expect(tabs).toHaveLength(3)
     expect(tabs[0].attributes('aria-selected')).toBe('true')
     expect(tabs[0].attributes('aria-controls')).toBe('settings-panel-workspace')
     expect(w.find('#settings-panel-workspace').attributes('aria-labelledby')).toBe('settings-tab-workspace')
@@ -77,6 +81,17 @@ describe('SettingsView', () => {
     await w.find('[role="tablist"]').trigger('keydown', { key: 'ArrowRight' })
     await flushPromises()
     expect(router.currentRoute.value.query.tab).toBe('app')
+  })
+
+  it('arrow keys move focus to the newly selected tab (not the old one)', async () => {
+    makeApp()
+    const { w } = await mountAt()
+    await w.find('[role="tablist"]').trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(document.activeElement?.id).toBe('settings-tab-about')
+    await w.find('[role="tablist"]').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+    expect(document.activeElement?.id).toBe('settings-tab-workspace')
   })
 
   it('saves the name and default connection', async () => {
