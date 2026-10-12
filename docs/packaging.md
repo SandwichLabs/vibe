@@ -179,8 +179,8 @@ the same, so switching later is cheap.
   before flipping visibility. A public repo exposes every past commit, not
   just `main`.
 - Review what's tracked that was written for internal use (`docs/archive/`,
-  `.claude/`, `landing/` with its
-  Cloudflare account ID) and decide keep, move, or delete.
+  `.claude/`, `landing/`) and decide keep, move, or delete. (Done for the
+  public repo; see `plans/open-source-launch.md`.)
 - `README.md` install section pointing at Releases and the tap, plus
   `CONTRIBUTING.md` and `SECURITY.md` (the credential-handling claims invite reports;
   give them a private channel).
