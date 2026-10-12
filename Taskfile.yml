@@ -95,6 +95,13 @@ tasks:
     cmds:
       - node scripts/gen-notices.mjs --check
 
+  deps:refresh:
+    desc: After a dependency bump (e.g. a Dependabot PR) — regenerate THIRD_PARTY_NOTICES.md and studio/frontend/package.json.md5
+    cmds:
+      - task: notices
+      # The digest wails writes (no trailing newline); node, so it runs the same on macOS.
+      - node -e "process.stdout.write(require('crypto').createHash('md5').update(require('fs').readFileSync('studio/frontend/package.json')).digest('hex'))" > studio/frontend/package.json.md5
+
   clean:
     desc: Remove build artifacts
     cmds:
