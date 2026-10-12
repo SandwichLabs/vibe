@@ -1,6 +1,22 @@
 # Vibe documentation
 
-Start with [`direction.md`](direction.md), then the reference for the surface you are touching. Architecture and conventions for contributors are in [`../CLAUDE.md`](../CLAUDE.md).
+New here? Start with [Install](install.md) and the [Quickstart](quickstart.md). To understand why Vibe is shaped the way it is, read [`direction.md`](direction.md), then the reference for the surface you are touching. Architecture and conventions for contributors are in [`../CLAUDE.md`](../CLAUDE.md).
+
+## Using Vibe
+
+Task-oriented guides for people who use Vibe. They are written to be linkable by heading.
+
+| Doc | What it is |
+|---|---|
+| [`install.md`](install.md) | The install script and its options, supported platforms, macOS and Gatekeeper, upgrade, uninstall |
+| [`quickstart.md`](quickstart.md) | Install to a first query, a notebook and Claude Code over MCP, with no accounts |
+| [`connections.md`](connections.md) | Recipes for every connection type and sign-in method (the field-level reference is [`reference/connections.md`](reference/connections.md)) |
+| [`mcp-clients.md`](mcp-clients.md) | Claude Code, Claude Desktop and other MCP clients; sandbox tiers and approvals in plain words |
+| [`troubleshooting.md`](troubleshooting.md) | Symptom-to-fix list, where the logs are, how to report a bug |
+| [`privacy.md`](privacy.md) | What leaves your machine (nothing goes to Sandwich Labs) |
+| [`architecture.md`](architecture.md) | An outsider-level overview of how the pieces fit |
+
+> **The "using Vibe Studio" agent skill derives from these pages.** [SandwichLabs/agent-marketplace#1](https://github.com/SandwichLabs/agent-marketplace/issues/1) builds a skill for agents and support from `install.md`, `quickstart.md`, `connections.md`, `mcp-clients.md`, `troubleshooting.md` and `reference/`. These docs are the single source: change them here, keep headings stable (other docs and the skill link to them), and the skill follows.
 
 ## Product
 
@@ -46,7 +62,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 
 | Doc | What it is |
 |---|---|
-| [`packaging.md`](packaging.md) | Packaging and release plan (epic #77), file association wiring, extensions |
+| [`packaging.md`](packaging.md) | How v0.1.0 ships (unsigned tarballs and `install.sh`), the macOS spike findings, file association wiring, and the later signed-distribution plan (epic #77) |
 
 ## Reviews
 
