@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 func sqlOpenDuck(path string) (*sql.DB, error) { return sql.Open("duckdb", path) }
@@ -513,7 +514,7 @@ func TestSkills_GateOnQualifiedNamesWithoutDialling(t *testing.T) {
 	insertSkill(t, st, "lazy-skill", "d", "i", "lazy.main.tracked", "user")
 	insertSkill(t, st, "missing-skill", "d", "i", "nope.main.x", "user")
 
-	entries, err := LoadSkills(st, fx.sess, nil)
+	entries, err := skills.LoadSkills(st, fx.sess, nil)
 	require.NoError(t, err)
 	names := map[string]bool{}
 	for _, e := range entries {

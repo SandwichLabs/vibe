@@ -43,7 +43,7 @@ export function statusKey(status: string): StatusKey {
   }
 }
 
-export type RowAction = 'fix' | 'signin' | 'install' | 'takeover'
+type RowAction = 'fix' | 'signin' | 'install' | 'takeover'
 
 export interface DetailLine {
   text: string

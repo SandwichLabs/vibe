@@ -86,7 +86,7 @@ clear one (for example --model "" to use the provider's default).`,
 		if !(fl.Changed("provider") || fl.Changed("model") || fl.Changed("endpoint") || fl.Changed("account-id") || fl.Changed("gateway")) {
 			return fmt.Errorf("nothing to change: pass --provider, --model, --endpoint, --account-id or --gateway")
 		}
-		path := config.LegacyConfigPath()
+		path := config.LLMConfigPath()
 		s := config.ReadLLMSettings(path)
 		if fl.Changed("provider") {
 			s.Provider = llmSet.provider
@@ -141,7 +141,7 @@ func checkFileKeyHazard(cmd *cobra.Command, provider string) error {
 		label = p.Label
 	}
 	return fmt.Errorf("the plaintext key in %s would be sent to %s. Move it to the keychain first with \"vibe config llm-key migrate\", save a key for %s with \"vibe config llm-key set --provider %s\", or pass --yes to use it anyway",
-		config.LegacyConfigPath(), label, label, provider)
+		config.LLMConfigPath(), label, label, provider)
 }
 
 var llmModelsCmd = &cobra.Command{

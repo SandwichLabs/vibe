@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // explainEmptyResult is ported from schoolwork-workspace's
@@ -25,7 +25,7 @@ import (
 // internally-constructed SELECT DISTINCT probes against real
 // (information_schema-verified) columns — never the caller's SQL text
 // itself beyond regex-extracted identifiers, and every identifier is
-// quoted via engine.QuoteIdent before it reaches a query string.
+// quoted via session.QuoteIdent before it reaches a query string.
 const emptyResultMaxDistinctValues = 40
 const emptyResultMaxValuesShown = 25
 
@@ -85,7 +85,7 @@ func literalPredicates(sqlText string) []literalPredicate {
 // comparisons found, every literal is actually present, or a column can't
 // be resolved). userDB is queried read-only, using only
 // information_schema-verified table/column names, quoted via
-// engine.QuoteIdent.
+// session.QuoteIdent.
 func explainEmptyResult(ctx context.Context, userDB *sql.DB, sqlText string) string {
 	preds := literalPredicates(sqlText)
 	if len(preds) == 0 || userDB == nil {
@@ -171,8 +171,8 @@ func resolveColumnTable(ctx context.Context, db *sql.DB, column string) (string,
 // ok=false when the column has too many distinct values to be a useful
 // hint (an id or free-text column) or the probe query fails.
 func distinctValues(ctx context.Context, db *sql.DB, table, column string) ([]string, bool) {
-	qCol := engine.QuoteIdent(column)
-	qTable := engine.QuoteIdent(table)
+	qCol := session.QuoteIdent(column)
+	qTable := session.QuoteIdent(table)
 
 	var n int
 	err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(DISTINCT %s) FROM %s", qCol, qTable)).Scan(&n)

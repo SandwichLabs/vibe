@@ -16,9 +16,9 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/dotenv"
 	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // ChangeKind is what changed on disk.

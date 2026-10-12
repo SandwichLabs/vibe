@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // noUser isolates a workspace from the host: no user-scope connections, and a
@@ -844,7 +844,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	require.NoError(t, saveSkill(store, nil, "foo", "first", "v1 body", ""))
 
 	// Studio lists skills (and so learns each one's revision).
-	entries, err := agents.LoadSkills(store, nil, nil)
+	entries, err := skills.LoadSkills(store, nil, nil)
 	require.NoError(t, err)
 	var loadedRev string
 	for _, e := range entries {
@@ -860,7 +860,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, []byte(teammate), 0o644))
 
 	// The editor saves with the revision it loaded.
-	_, err = agents.SaveUserSkillAt(store, nil, "foo", "first", "v1 body edited", "", loadedRev)
+	_, err = skills.SaveUserSkillAt(store, nil, "foo", "first", "v1 body edited", "", loadedRev)
 	require.ErrorIs(t, err, skills.ErrConflict)
 	data, _ := os.ReadFile(p)
 	assert.Equal(t, teammate, string(data), "nothing was written")
@@ -871,7 +871,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	assert.ErrorIs(t, err, skills.ErrConflict)
 
 	// The agent path: it listed the skill, then a pull changed it, then it saves.
-	entries, err = agents.LoadSkills(store, nil, nil)
+	entries, err = skills.LoadSkills(store, nil, nil)
 	require.NoError(t, err)
 	_ = entries
 	require.NoError(t, os.WriteFile(p, []byte(strings.Replace(teammate, "TEAMMATE WORK", "SECOND PULL", 1)), 0o644))
@@ -879,7 +879,7 @@ func TestSkillSaveFromStaleCopyIsAConflict(t *testing.T) {
 	assert.ErrorIs(t, err, skills.ErrConflict, "the store's last-seen revision is used without a refresh")
 
 	// Reload (list again) and the same save goes through, keeping unknown keys.
-	_, err = agents.LoadSkills(store, nil, nil)
+	_, err = skills.LoadSkills(store, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, saveSkill(store, nil, "foo", "agent", "agent body", ""))
 	data, _ = os.ReadFile(p)
@@ -1142,9 +1142,9 @@ func TestOpenNeverRewritesTheNonce(t *testing.T) {
 	}
 }
 
-// saveSkill is agents.SaveUserSkillAt with no revision check.
+// saveSkill is skills.SaveUserSkillAt with no revision check.
 func saveSkill(store skills.Store, sess session.Session, name, description, instructions, tableName string) error {
-	_, err := agents.SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
+	_, err := skills.SaveUserSkillAt(store, sess, name, description, instructions, tableName, "")
 	return err
 }
 

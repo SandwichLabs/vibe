@@ -104,7 +104,7 @@ func FromDuckDB(t string) (ColType, bool) {
 // castExpr is the single place that decides whether a source column's values
 // fit losslessly into a target friendly type, and how to convert them.
 //
-// col is the quoted reference to the source column (e.g. engine.QuoteIdent
+// col is the quoted reference to the source column (e.g. session.QuoteIdent
 // applied to the staged column name). srcDuckType is that column's DuckDB
 // type as staged (VARCHAR for CSV text, or the sniffed/native type).
 //

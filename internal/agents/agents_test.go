@@ -4,21 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/vibe/internal/skills"
+
 	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // --- Protocol tests ---

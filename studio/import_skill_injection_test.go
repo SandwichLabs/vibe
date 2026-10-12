@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/importer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SandwichLabs/vibe/internal/importer"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 // TestImportFile_MaliciousColumnName_CannotWriteFile is the end-to-end
@@ -94,7 +95,7 @@ func TestTableHasRows_MaliciousStoredTableName(t *testing.T) {
 	_, err = app.sess.DB().Exec(`INSERT INTO ` + quoted + ` VALUES (1)`)
 	require.NoError(t, err)
 
-	_, err = agents.SaveUserSkillAt(app.ws.Skills(), app.sess, "evil", "d", "i", evil, "")
+	_, err = skills.SaveUserSkillAt(app.ws.Skills(), app.sess, "evil", "d", "i", evil, "")
 	require.NoError(t, err)
 
 	_, err = app.ListSkills()

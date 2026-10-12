@@ -63,6 +63,12 @@ jobs:
         working-directory: studio/frontend
         run: npm test
 
+      # Blocking: no unused export/type/file under src/{lib,composables,components,a2ui}
+      # (knip pinned in package.json).
+      - name: Frontend unused exports (knip)
+        working-directory: studio/frontend
+        run: npm run check:exports
+
       # Non-blocking until the ~315 known type errors are cleared: see #34 and #35.
       - name: vue-tsc (non-blocking, #34/#35)
         continue-on-error: true
@@ -102,6 +108,11 @@ jobs:
         run: |
           go install golang.org/x/tools/cmd/deadcode@v0.52.0
           scripts/check-deadcode.sh
+
+      # Blocking: import-graph layering (internal never imports cmd/studio; domain packages stay
+      # below agents/llm/mcp/hub/tui; no cycles).
+      - name: Layering
+        run: scripts/check-layering.sh
 
       # Blocking: every exported App method needs a non-test frontend caller.
       - name: Wails binding usage

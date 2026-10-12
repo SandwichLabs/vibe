@@ -1,5 +1,5 @@
 // Package skills embeds Vibe's built-in Skills (#62): SKILL.md documents
-// bundled into the binary from internal/llm/skills/<name>/SKILL.md, one
+// bundled into the binary from internal/skills/<name>/SKILL.md, one
 // directory per skill, agentskills.io-style. This package has no dependency
 // on internal/agents or internal/llm — it just parses frontmatter and
 // exposes a Skill list — so internal/agents can import it (to merge built-ins

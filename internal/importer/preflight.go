@@ -46,7 +46,7 @@ func fitsScan(ctx context.Context, conn *sql.Conn, target []targetCol) ([]BadVal
 		if tc.Staged == nil {
 			continue
 		}
-		col := engine.QuoteIdent(tc.Staged.SourceName)
+		col := session.QuoteIdent(tc.Staged.SourceName)
 		var fits string
 		if tc.HasFriendly {
 			_, fits = castExpr(col, tc.Staged.StagedType, tc.Friendly)
@@ -105,7 +105,7 @@ func fitsScan(ctx context.Context, conn *sql.Conn, target []targetCol) ([]BadVal
 // an integer table column at all without an explicit cast (a raw
 // "Cannot compare VARCHAR and BIGINT" error otherwise).
 func keyCastExpr(tc *targetCol) (valueExpr, displayExpr string) {
-	col := engine.QuoteIdent(tc.Staged.SourceName)
+	col := session.QuoteIdent(tc.Staged.SourceName)
 	if tc.HasFriendly {
 		valueExpr, _ = castExpr(col, tc.Staged.StagedType, tc.Friendly)
 	} else {
@@ -194,11 +194,11 @@ func fkOrphans(ctx context.Context, conn *sql.Conn, target []targetCol, fks []fk
 		if tc == nil {
 			continue
 		}
-		srcCol := engine.QuoteIdent(tc.Staged.SourceName)
-		refExpr := fmt.Sprintf("%s.%s", engine.QuoteIdent(fk.RefTable), engine.QuoteIdent(fk.RefColumn))
+		srcCol := session.QuoteIdent(tc.Staged.SourceName)
+		refExpr := fmt.Sprintf("%s.%s", session.QuoteIdent(fk.RefTable), session.QuoteIdent(fk.RefColumn))
 		orphanWhere := fmt.Sprintf(
 			"%s IS NOT NULL AND NOT EXISTS (SELECT 1 FROM %s WHERE %s = %s)",
-			srcCol, engine.QuoteIdent(fk.RefTable), refExpr, srcCol)
+			srcCol, session.QuoteIdent(fk.RefTable), refExpr, srcCol)
 
 		var n int
 		if err := conn.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", stageTable, orphanWhere)).Scan(&n); err != nil {
@@ -352,7 +352,7 @@ func preflightAppendOrUpsert(ctx context.Context, conn *sql.Conn, sum *Summary, 
 		keyExpr, _ := keyCastExpr(keyTarget)
 		var collide int
 		q := fmt.Sprintf("SELECT COUNT(*) FROM %s s WHERE %s IN (SELECT %s FROM %s)",
-			stageTable, keyExpr, engine.QuoteIdent(existing.pkCol), tableSQL(ctx, sum.Table))
+			stageTable, keyExpr, session.QuoteIdent(existing.pkCol), tableSQL(ctx, sum.Table))
 		if err := conn.QueryRowContext(ctx, q).Scan(&collide); err != nil {
 			return fmt.Errorf("failed to check existing keys: %w", err)
 		}
@@ -415,8 +415,8 @@ func exactDupeCount(ctx context.Context, conn *sql.Conn, table string, target []
 		if tc.Staged == nil {
 			continue
 		}
-		stageCols = append(stageCols, fmt.Sprintf("CAST(%s AS VARCHAR)", engine.QuoteIdent(tc.Staged.SourceName)))
-		tableCols = append(tableCols, fmt.Sprintf("CAST(%s AS VARCHAR)", engine.QuoteIdent(tc.Name)))
+		stageCols = append(stageCols, fmt.Sprintf("CAST(%s AS VARCHAR)", session.QuoteIdent(tc.Staged.SourceName)))
+		tableCols = append(tableCols, fmt.Sprintf("CAST(%s AS VARCHAR)", session.QuoteIdent(tc.Name)))
 	}
 	if len(stageCols) == 0 {
 		return 0, nil

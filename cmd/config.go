@@ -121,8 +121,8 @@ var llmKeyStatusCmd = &cobra.Command{
 		_, src := config.ResolveLLMKey(ctx, llmKeyStore(), cfg.LLM)
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "provider: %s\nsource:   %s\n", cfg.LLM.Provider, src)
-		if config.HasFileKey(config.LegacyConfigPath()) {
-			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LegacyConfigPath()+"; run \"vibe config llm-key migrate\"")
+		if config.HasFileKey(config.LLMConfigPath()) {
+			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LLMConfigPath()+"; run \"vibe config llm-key migrate\"")
 		}
 		return nil
 	},
@@ -136,7 +136,7 @@ var llmKeyMigrateCmd = &cobra.Command{
 		provider := resolveLLMKeyProvider()
 		ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 		defer cancel()
-		path := config.LegacyConfigPath()
+		path := config.LLMConfigPath()
 		if err := config.MigrateFileKey(ctx, llmKeyStore(), path, provider, llmKeyForce); err != nil {
 			if errors.Is(err, config.ErrKeychainHasKey) {
 				return fmt.Errorf("%w; re-run with --force to replace it", err)

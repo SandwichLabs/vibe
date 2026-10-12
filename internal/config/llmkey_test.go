@@ -32,13 +32,13 @@ func cfgFile(t *testing.T, body string) string {
 	return p
 }
 
-func TestLegacyConfigPath(t *testing.T) {
+func TestLLMConfigPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("VIBE_CONFIG_FILE", "")
-	assert.Equal(t, filepath.Join(home, ".vibe.yaml"), LegacyConfigPath())
+	assert.Equal(t, filepath.Join(home, ".vibe.yaml"), LLMConfigPath())
 	t.Setenv("VIBE_CONFIG_FILE", "/x/y.yaml")
-	assert.Equal(t, "/x/y.yaml", LegacyConfigPath())
+	assert.Equal(t, "/x/y.yaml", LLMConfigPath())
 }
 
 func TestResolveLLMKeyOrder(t *testing.T) {

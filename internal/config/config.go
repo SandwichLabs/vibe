@@ -129,7 +129,7 @@ func Load() Config {
 	v.SetDefault("llm.gateway", cfg.LLM.Gateway)
 	v.SetDefault("llm.api_key", cfg.LLM.APIKey)
 
-	path := LegacyConfigPath()
+	path := LLMConfigPath()
 	if path != "" {
 		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
@@ -182,9 +182,11 @@ func (l *LLMConfig) resolve() {
 	}
 }
 
-// LegacyConfigPath is the app config file: $VIBE_CONFIG_FILE if set, else
-// ~/.vibe.yaml. "" when neither can be determined.
-func LegacyConfigPath() string {
+// LLMConfigPath is the app config file: $VIBE_CONFIG_FILE if set, else
+// ~/.vibe.yaml. "" when neither can be determined. It holds the live LLM
+// settings (llm.*); the other per-user home is prefs.DefaultDir() (themes,
+// recents), which is a different file on purpose.
+func LLMConfigPath() string {
 	if p := strings.TrimSpace(os.Getenv("VIBE_CONFIG_FILE")); p != "" {
 		return p
 	}

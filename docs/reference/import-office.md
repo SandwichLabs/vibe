@@ -84,7 +84,7 @@ get a deterministic disambiguating suffix. An unbound user skill already
 sitting at that exact name (not one this importer wrote) is never
 overwritten in place — it keeps its name, and the import skill lands at the
 hashed-suffix name instead. Writing the skill is best-effort: a failure logs
-a warning but never fails the import itself. See `internal/llm/skills/` and
+a warning but never fails the import itself. See `internal/skills/` and
 the Skills view for how skills load.
 
 Foreign keys are not part of import — declare them with plain SQL (an inline

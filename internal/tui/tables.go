@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/SandwichLabs/vibe/internal/crud"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // TableInfo is one entry in the table list.
@@ -22,6 +23,8 @@ type TableInfo struct {
 	// session's listing, so a table whose stored name contains dots is not
 	// re-parsed as a path.
 	SQL string
+	// Ref is the same reference as parts, handed to crud.Page to read rows.
+	Ref session.TableRef
 }
 
 // TablesModel is the read-only table browser (#69): a list of tables, and
@@ -32,6 +35,7 @@ type TablesModel struct {
 	cursor   int
 	browsing bool
 	browser  TableBrowserModel
+	sess     session.Session
 	width    int
 	height   int
 }
@@ -53,6 +57,7 @@ func (m *TablesModel) LoadTables(sess session.Session) {
 	if sess == nil {
 		return
 	}
+	m.sess = sess
 	ctx := context.Background()
 	catalogs, err := sess.ListCatalogs(ctx)
 	if err != nil {
@@ -69,13 +74,15 @@ func (m *TablesModel) LoadTables(sess session.Session) {
 		}
 		est := session.EstimatedRows(ctx, sess.DB(), cat.Name)
 		for _, ti := range tables {
-			t := TableInfo{Name: displayTableName(ti, defCat, defSchema), SQL: ti.Ref().SQL(), RowCount: -1}
+			t := TableInfo{Name: displayTableName(ti, defCat, defSchema), SQL: ti.Ref().SQL(), Ref: ti.Ref(), RowCount: -1}
 			n, ok := est[session.TableKey{Schema: ti.Schema, Name: ti.Name}]
 			small := n < exactCountBelow
 			if ok && ti.Type == "BASE TABLE" && !(small && cat.Type == "duckdb") {
 				t.RowCount, t.Approx = int(n), true
 			} else if cat.Type == "duckdb" {
-				sess.DB().QueryRow("SELECT COUNT(*) FROM " + t.SQL).Scan(&t.RowCount) //nolint:errcheck
+				if n, err := crud.Count(ctx, sess.DB(), t.Ref); err == nil {
+					t.RowCount = n
+				}
 			}
 			items = append(items, t)
 		}
@@ -120,7 +127,7 @@ func (m *TablesModel) SetData(msg tableDataMsg) {
 }
 
 // Update handles input for the tables view.
-func (m TablesModel) Update(msg tea.Msg, eng EngineAccess) (TablesModel, tea.Cmd) {
+func (m TablesModel) Update(msg tea.Msg) (TablesModel, tea.Cmd) {
 	if m.browsing {
 		keyMsg, ok := msg.(tea.KeyMsg)
 		if ok && keyMsg.String() == "esc" {
@@ -151,35 +158,39 @@ func (m TablesModel) Update(msg tea.Msg, eng EngineAccess) (TablesModel, tea.Cmd
 			m.browsing = true
 			m.browser.SetLoading(sel.Name, sel.RowCount, sel.Approx)
 			m.browser.SetFocused(true)
-			return m, m.loadTableData(eng, sel.Name, sel.SQL)
+			return m, m.loadTableData(sel)
 		}
 	}
 	return m, nil
 }
 
-// loadTableData asynchronously loads up to 1000 rows of a table.
-func (m TablesModel) loadTableData(eng EngineAccess, tableName, tableSQL string) tea.Cmd {
+// loadTableData asynchronously loads up to 1000 rows of a table (crud.Page's
+// MaxPageSize), the same reader Studio's table browser uses.
+func (m TablesModel) loadTableData(item TableInfo) tea.Cmd {
+	sess := m.sess
+	tableName := item.Name
+	ref := item.Ref
+	if ref.Name == "" {
+		ref = session.TableRef{Name: tableName}
+	}
 	return func() tea.Msg {
-		if eng == nil {
-			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no engine available")}
+		if sess == nil {
+			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no session available")}
 		}
-		ctx := context.Background()
-		query := fmt.Sprintf("SELECT * FROM %s LIMIT 1000", sqlOrQuoted(tableSQL, tableName))
-		rs, err := eng.Execute(ctx, query, nil)
+		pg, err := crud.Page(context.Background(), sess.DB(), ref, crud.PageRequest{Page: 1, PageSize: crud.MaxPageSize, SkipCount: true})
 		if err != nil {
 			return tableDataMsg{tableName: tableName, err: err}
 		}
-		if rs == nil || len(rs.Columns) == 0 {
+		if len(pg.Columns) == 0 {
 			return tableDataMsg{tableName: tableName}
 		}
-
-		cols := make([]table.Column, len(rs.Columns))
-		for i, c := range rs.Columns {
-			width := len(c.Name)
+		cols := make([]table.Column, len(pg.Columns))
+		for i, c := range pg.Columns {
+			width := len(c)
 			if width < 8 {
 				width = 8
 			}
-			for _, row := range rs.Rows {
+			for _, row := range pg.Rows {
 				if i < len(row) {
 					if cw := len(formatCellValue(row[i])); cw > width {
 						width = cw
@@ -189,11 +200,11 @@ func (m TablesModel) loadTableData(eng EngineAccess, tableName, tableSQL string)
 			if width > 40 {
 				width = 40
 			}
-			cols[i] = table.Column{Title: c.Name, Width: width}
+			cols[i] = table.Column{Title: c, Width: width}
 		}
 
-		rows := make([]table.Row, len(rs.Rows))
-		for i, row := range rs.Rows {
+		rows := make([]table.Row, len(pg.Rows))
+		for i, row := range pg.Rows {
 			r := make(table.Row, len(row))
 			for j, v := range row {
 				r[j] = formatCellValue(v)
@@ -234,15 +245,6 @@ func (m TablesModel) View(width, height int) string {
 		out += l + "\n"
 	}
 	return out
-}
-
-// sqlOrQuoted prefers the listing's reference and only falls back to quoting
-// the bare name when none was recorded.
-func sqlOrQuoted(tableSQL, name string) string {
-	if tableSQL != "" {
-		return tableSQL
-	}
-	return engine.QuoteIdent(name)
 }
 
 // formatRowCount renders "1,234 rows", or "~1,234 rows" for an estimate.

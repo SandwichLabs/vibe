@@ -25,19 +25,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/templates"
 	"github.com/SandwichLabs/vibe/internal/workspace"
-	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // maxRecentWorkspaces caps the launcher's list.
@@ -1551,7 +1552,7 @@ func (a *App) resolveSkillConflict(ctx context.Context, req ConflictRequest) (*C
 			name = fmt.Sprintf("%s-copy-%d", req.ID, n)
 		}
 	}
-	newRev, err := agents.SaveUserSkillAt(store, a.sess, name,
+	newRev, err := skills.SaveUserSkillAt(store, a.sess, name,
 		str(req.Data, "description"), str(req.Data, "instructions"), str(req.Data, "tableName"), rev, putOpts...)
 	if err != nil {
 		return nil, err

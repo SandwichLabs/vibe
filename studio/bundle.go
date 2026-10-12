@@ -13,7 +13,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/bundle"
 	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/llm/skills"
+	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 

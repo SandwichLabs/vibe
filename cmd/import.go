@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/importer"
 	"github.com/spf13/cobra"
+
+	"github.com/SandwichLabs/vibe/internal/importer"
+	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
 var importCmd = &cobra.Command{
@@ -112,7 +113,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 		// sum.Table, not into: for append/upsert/replace the importer returns
 		// the catalog's own spelling of an existing table, which the skill
 		// must be written under.
-		if err := agents.WriteImportSkill(o.WS.Skills(), o.Sess, sum.Table); err != nil {
+		if err := skills.WriteImportSkill(o.WS.Skills(), o.Sess, sum.Table); err != nil {
 			logger.Warn("failed to write import skill", "table", sum.Table, "error", err)
 		}
 	}

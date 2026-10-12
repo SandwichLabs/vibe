@@ -15,7 +15,7 @@ const (
 
 // Stored is one user or import skill as a Store holds it. Built-ins are
 // embedded, never stored. Validation (name rule, size caps, shadowing a
-// built-in) belongs to the caller (agents.SaveUserSkillAt); a Store only
+// built-in) belongs to the caller (skills.SaveUserSkillAt); a Store only
 // refuses what it cannot represent safely.
 type Stored struct {
 	Name         string

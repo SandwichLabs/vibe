@@ -56,16 +56,18 @@ internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
                      ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard)
   connections/       connection type registry and attach SQL
+  connname/          the connection-name rule (catalog alias), a dependency-free leaf
   session/           the DuckDB hub for a workspace; connection lifecycle and status
   secrets/           keychain + env credential store (write-only across every boundary)
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
-  agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler
-  llm/               in-app agent runner (fantasy), task mode, grounding; llm/skills = SKILL.md loading
+  agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
+  skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)
+  llm/               in-app agent runner (fantasy), task mode, grounding
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   a2ui/              component schema + validator (Go validates, Vue renders)
   bundle/            .vibe bundle v2 export/import, optional age encryption
-  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec, courtesy SQL checks
+  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
                      (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
