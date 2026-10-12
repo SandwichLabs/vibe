@@ -429,6 +429,12 @@ func (r *Runner) ChatStream(ctx context.Context, cfg Config, message, pinnedCont
 		result, streamed, err = streamOnce(false)
 	}
 	if err != nil {
+		if ctx.Err() != nil {
+			// The person (or a workspace close) cancelled the turn: that is an
+			// end state, not a model failure.
+			emit(StreamEvent{Kind: "cancelled"})
+			return nil, fmt.Errorf("agent turn cancelled: %w", ctx.Err())
+		}
 		emit(StreamEvent{Kind: "error", Text: scrubKey(err, cfg.APIKey).Error()})
 		return nil, scrubKey(fmt.Errorf("agent error: %w", err), cfg.APIKey)
 	}
@@ -724,6 +730,10 @@ func (t *handlerTool) ProviderOptions() fantasy.ProviderOptions { return t.opts 
 func (t *handlerTool) SetProviderOptions(opts fantasy.ProviderOptions) { t.opts = opts }
 
 func (t *handlerTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	// A cancelled turn runs no further tool: this is the "between steps" stop.
+	if err := ctx.Err(); err != nil {
+		return fantasy.ToolResponse{}, err
+	}
 	params := map[string]any{}
 	if strings.TrimSpace(call.Input) != "" {
 		if err := json.Unmarshal([]byte(call.Input), &params); err != nil {

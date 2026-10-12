@@ -88,6 +88,7 @@ type App struct {
 	// keyed by the frontend-generated taskID — so closing the AI-cell dialog
 	// (CancelAgentTask) can stop a task turn without touching a.ctx (the
 	// whole app's lifecycle context) or any concurrently running chat turn.
+	chat         chatTurns
 	taskCancelMu sync.Mutex
 	taskCancel   map[string]context.CancelFunc
 
@@ -223,9 +224,7 @@ func (a *App) emitEvent(event string, data ...any) {
 // lock released last, so the next owner can open the DuckDB files the moment
 // the lock is free.
 func (a *App) shutdown(_ context.Context) {
-	if a.approvals != nil {
-		a.approvals.CancelAll()
-	}
+	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.closeWorkspaceLocked("")
