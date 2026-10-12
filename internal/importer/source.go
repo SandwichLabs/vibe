@@ -195,7 +195,7 @@ func dropStage(ctx context.Context, conn *sql.Conn) {
 // original text).
 func csvExpr(path string, hasHeader bool, overrides map[string]string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "read_csv('%s', header=%t, sample_size=-1", escapeSQLString(path), hasHeader)
+	fmt.Fprintf(&b, "read_csv(%s, header=%t, sample_size=-1", session.QuoteLiteral(path), hasHeader)
 	if len(overrides) > 0 {
 		b.WriteString(", types={")
 		first := true
@@ -204,7 +204,7 @@ func csvExpr(path string, hasHeader bool, overrides map[string]string) string {
 				b.WriteString(", ")
 			}
 			first = false
-			fmt.Fprintf(&b, "'%s': '%s'", escapeSQLString(name), typ)
+			fmt.Fprintf(&b, "%s: '%s'", session.QuoteLiteral(name), typ)
 		}
 		b.WriteString("}")
 	}
@@ -217,13 +217,7 @@ func csvExpr(path string, hasHeader bool, overrides map[string]string) string {
 // entirely — the fallback used when the sniffer can't settle on one
 // consistent type/format for a column across the whole file.
 func csvExprAllVarchar(path string, hasHeader bool) string {
-	return fmt.Sprintf("read_csv('%s', header=%t, all_varchar=true)", escapeSQLString(path), hasHeader)
-}
-
-// escapeSQLString escapes a value for interpolation inside a single-quoted
-// SQL string literal.
-func escapeSQLString(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
+	return fmt.Sprintf("read_csv(%s, header=%t, all_varchar=true)", session.QuoteLiteral(path), hasHeader)
 }
 
 // describeCol is one row of a DESCRIBE result, in the query's own column

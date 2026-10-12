@@ -112,7 +112,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		source = "SELECT * FROM " + ref.SQL()
+		source = ref.SelectAllSQL()
 		conn = ""
 	} else {
 		catalog := conn
@@ -148,8 +148,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if conn != "" {
 		qopts = append(qopts, session.WithCatalog(conn))
 	}
-	copySQL := fmt.Sprintf("COPY (%s\n) TO %s WITH (%s)",
-		strings.TrimRight(source, " \t\r\n;"), session.QuoteLiteral(outFile), copyOpts)
+	copySQL := session.CopyToSQL(source, outFile, copyOpts)
 	if _, err := o.Sess.ExecWith(ctx, copySQL, nil, qopts...); err != nil {
 		return fmt.Errorf("failed to export: %w", err)
 	}

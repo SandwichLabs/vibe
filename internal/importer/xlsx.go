@@ -11,6 +11,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // readXLSXExpr builds a read_xlsx(...) table expression for the given path and
@@ -18,9 +20,9 @@ import (
 // sheet selects the workbook's default/first sheet.
 func readXLSXExpr(path, sheet string, hasHeader bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "read_xlsx('%s'", strings.ReplaceAll(path, "'", "''"))
+	fmt.Fprintf(&b, "read_xlsx(%s", session.QuoteLiteral(path))
 	if sheet != "" {
-		fmt.Fprintf(&b, ", sheet='%s'", strings.ReplaceAll(sheet, "'", "''"))
+		fmt.Fprintf(&b, ", sheet=%s", session.QuoteLiteral(sheet))
 	}
 	fmt.Fprintf(&b, ", header=%t)", hasHeader)
 	return b.String()

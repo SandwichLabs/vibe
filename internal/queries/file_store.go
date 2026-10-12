@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/connname"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/jsonenc"
-	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // Extension is the query file extension; Dir the workspace directory.
@@ -235,7 +235,7 @@ func validate(q *Query) error {
 		return fmt.Errorf("query title is required")
 	}
 	if q.Connection != "" {
-		if err := session.ValidateName(q.Connection); err != nil {
+		if err := connname.Validate(q.Connection); err != nil {
 			return err
 		}
 	}

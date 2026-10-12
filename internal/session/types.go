@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/SandwichLabs/vibe/internal/connname"
 	"regexp"
 	"strings"
 	"time"
@@ -98,15 +99,9 @@ type Spec struct {
 // CredentialFunc resolves a connection's credential on demand.
 type CredentialFunc func(ctx context.Context) (secrets.Credential, error)
 
-var nameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
-
-// ValidateName enforces the catalog-alias rule from plan §4.2.
-func ValidateName(name string) error {
-	if !nameRE.MatchString(name) {
-		return fmt.Errorf("invalid connection name %q: must match %s", name, nameRE.String())
-	}
-	return nil
-}
+// ValidateName enforces the catalog-alias rule from plan §4.2 (the rule itself
+// lives in the dependency-free internal/connname).
+func ValidateName(name string) error { return connname.Validate(name) }
 
 // CatalogInfo is one attached catalog.
 type CatalogInfo struct {

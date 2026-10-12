@@ -1,6 +1,6 @@
 id: go-sql-literal-in-adapter
 language: go
-severity: warning
+severity: error
 message: SQL text written in an adapter (studio/ or cmd/). SQL belongs in internal/ (session, engine, crud, connections) so the CLI, Studio and MCP share it.
 rule:
   any:

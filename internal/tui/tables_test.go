@@ -65,3 +65,47 @@ func TestDisplayTableName(t *testing.T) {
 	assert.Equal(t, "sales.archive.orders", displayTableName(ti("sales", "archive", "orders"), "local", "main"))
 	assert.Equal(t, "local.archive.orders", displayTableName(ti("local", "archive", "orders"), "local", "main"))
 }
+
+func TestFormatRowCount(t *testing.T) {
+	assert.Equal(t, "0 rows", formatRowCount(0, false))
+	assert.Equal(t, "999 rows", formatRowCount(999, false))
+	assert.Equal(t, "~1,234 rows", formatRowCount(1234, true))
+	assert.Equal(t, "1,234,567 rows", formatRowCount(1234567, false))
+}
+
+// A table with statistics lists as an estimate ("~"); an empty one has none and
+// is counted exactly.
+func TestTablesModel_EstimateAndExactFallback(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE big AS SELECT range AS id FROM range(20000); CREATE TABLE empty_t (id INTEGER);`)
+	require.NoError(t, err)
+
+	m := NewTablesModel()
+	m.LoadTables(sessiontest.ForTests(db))
+	byName := map[string]TableInfo{}
+	for _, it := range m.items {
+		byName[it.Name] = it
+	}
+	assert.True(t, byName["big"].Approx)
+	assert.Equal(t, 20000, byName["big"].RowCount)
+	assert.False(t, byName["empty_t"].Approx)
+	assert.Equal(t, 0, byName["empty_t"].RowCount)
+	assert.Contains(t, m.View(80, 20), "~20,000 rows")
+	assert.Contains(t, m.View(80, 20), "0 rows")
+}
+
+// A small local table is counted exactly, not estimated.
+func TestTablesModel_SmallLocalTableIsExact(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE small AS SELECT range AS id FROM range(50)`)
+	require.NoError(t, err)
+	m := NewTablesModel()
+	m.LoadTables(sessiontest.ForTests(db))
+	require.Len(t, m.items, 1)
+	assert.False(t, m.items[0].Approx)
+	assert.Equal(t, 50, m.items[0].RowCount)
+}

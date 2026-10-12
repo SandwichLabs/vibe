@@ -6,6 +6,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/importer"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -59,7 +60,7 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
-	copySQL := buildCopySQL(sqlStr, dst, copyOpts)
+	copySQL := session.CopyToSQL(sqlStr, dst, copyOpts)
 	if _, err := ddb.Exec(copySQL); err != nil {
 		return "", fmt.Errorf("failed to export query results: %w", err)
 	}
@@ -163,20 +164,3 @@ func (a *App) ImportFile(o importer.Options) (*importer.Summary, error) {
 }
 
 // --- Helpers ---
-
-// buildCopySQL wraps a user/saved query in COPY (…) TO '<dst>' WITH
-// (<opts>). Trailing whitespace and semicolons are stripped (a query that
-// runs fine with a trailing ";" must export too — DuckDB rejects a second
-// statement inside the COPY's parenthesized subquery), and the closing
-// paren goes on its own line so a trailing "-- comment" in query can't
-// swallow it. dst's single quotes are doubled so a path containing one
-// stays a single, well-formed string literal.
-//
-// This does not try to parse comments out of query: a "SELECT 1; -- x"
-// still fails, and DuckDB's own parser error says so — good enough, and
-// safer than attempting to strip comments ourselves.
-func buildCopySQL(query, dst, opts string) string {
-	query = strings.TrimRight(query, " \t\r\n;")
-	return fmt.Sprintf("COPY (%s\n) TO '%s' WITH (%s)",
-		query, strings.ReplaceAll(dst, "'", "''"), opts)
-}

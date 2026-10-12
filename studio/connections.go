@@ -13,11 +13,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/secrets"
@@ -708,7 +708,7 @@ func (a *App) ListCatalog(req CatalogRequest) (*CatalogListing, error) {
 	if err != nil {
 		return fail(err)
 	}
-	est := a.estimatedRows(ctx, sess, req.Connection, req.Schema)
+	est := session.EstimatedRows(ctx, sess.DB(), req.Connection)
 	out := &CatalogListing{Kind: "tables", Schema: req.Schema, Flattened: len(schemas) == 1 && schemas[0] == "main", Nodes: []CatalogNode{}}
 	for _, t := range tabs {
 		kind := "table"
@@ -716,32 +716,12 @@ func (a *App) ListCatalog(req CatalogRequest) (*CatalogListing, error) {
 			kind = "view"
 		}
 		n := CatalogNode{Kind: kind, Name: t.Name, Qualified: t.Ref().String(), Rows: -1}
-		if r, ok := est[t.Name]; ok && kind == "table" {
+		if r, ok := est[session.TableKey{Schema: req.Schema, Name: t.Name}]; ok && kind == "table" {
 			n.Rows = r
 		}
 		out.Nodes = append(out.Nodes, n)
 	}
 	return out, nil
-}
-
-// estimatedRows reads DuckDB's table statistics (free, approximate) for the
-// tables of one schema. Remote catalogs often have none: the map is then empty.
-func (a *App) estimatedRows(ctx context.Context, sess session.Session, catalog, schema string) map[string]int64 {
-	out := map[string]int64{}
-	rows, err := sess.DB().QueryContext(ctx,
-		`SELECT table_name, estimated_size FROM duckdb_tables() WHERE database_name = $1 AND schema_name = $2`, catalog, schema)
-	if err != nil {
-		return out
-	}
-	defer rows.Close() //nolint:errcheck
-	for rows.Next() {
-		var n string
-		var sz int64
-		if rows.Scan(&n, &sz) == nil && sz > 0 {
-			out[n] = sz
-		}
-	}
-	return out
 }
 
 // TableCapabilities says whether a table can be edited and, when not, why.
@@ -1303,26 +1283,6 @@ func (a *App) InstallExtension(req InstallExtensionRequest) error {
 
 // ---- after a run ----
 
-var leadingNoise = regexp.MustCompile(`^(?:\s+|--[^\n]*(?:\n|$)|/\*(?s:.*?)\*/)+`)
-
-// isReadOnlyStatement reports whether sqlText starts like a statement that
-// cannot change a catalog (SELECT, WITH, FROM, EXPLAIN, DESCRIBE, SHOW, VALUES,
-// SUMMARIZE). Anything else (CREATE, DROP, ALTER, INSERT, ATTACH, ...) may change
-// what the rail lists.
-func isReadOnlyStatement(sqlText string) bool {
-	t := leadingNoise.ReplaceAllString(sqlText, "")
-	t = strings.TrimLeft(t, "( \t\r\n")
-	end := strings.IndexFunc(t, func(r rune) bool { return r == ' ' || r == '\t' || r == '\r' || r == '\n' || r == '(' || r == ';' })
-	if end < 0 {
-		end = len(t)
-	}
-	switch strings.ToLower(t[:end]) {
-	case "select", "with", "from", "explain", "describe", "show", "values", "summarize":
-		return true
-	}
-	return false
-}
-
 // statusSnapshot records every connection's state, to tell after a run which
 // ones a statement dialled (lazy attach) or changed.
 func statusSnapshot(sess session.Session) map[string]session.StatusKind {
@@ -1344,7 +1304,7 @@ func (a *App) afterRun(sess session.Session, before map[string]session.StatusKin
 			a.emitStatus(sess, st.Name)
 		}
 	}
-	if changed || !isReadOnlyStatement(sqlText) {
+	if changed || !agents.IsReadOnlyStatement(a.ctxOrBackground(), sess.DB(), sqlText, nil) {
 		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
 	}
 }

@@ -65,7 +65,7 @@ internal/
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   a2ui/              component schema + validator (Go validates, Vue renders)
   bundle/            .vibe bundle v2 export/import, optional age encryption
-  crud/, importer/, engine/, usersql/  datasheet CRUD, CSV/xlsx import, query exec, courtesy SQL checks
+  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec, courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
                      (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys

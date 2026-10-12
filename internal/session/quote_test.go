@@ -78,3 +78,24 @@ func TestResolveStatusPrecedence(t *testing.T) {
 	assert.Equal(t, StatusNotConnected, ResolveStatus(StatusOK, StatusNotConnected))
 	assert.Equal(t, StatusOK, ResolveStatus(StatusOK))
 }
+
+// TestCopyToSQL covers the trailing-semicolon / trailing-comment /
+// embedded-quote cases: CopyToSQL strips a trailing ";" (with surrounding
+// whitespace) but does not try to parse a trailing "-- comment" out of the query.
+func TestCopyToSQL(t *testing.T) {
+	cases := []struct {
+		name, query, dst, opts, want string
+	}{
+		{"plain", "SELECT 1", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing semicolon", "SELECT 1;", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing semicolon + blank lines", "SELECT 1 ;\n\n", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"trailing comment kept", "SELECT 1 -- note", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT 1 -- note\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"semicolon inside a string literal kept", "SELECT ';' AS x", "/tmp/out.csv", "FORMAT csv", "COPY (SELECT ';' AS x\n) TO '/tmp/out.csv' WITH (FORMAT csv)"},
+		{"quote in path doubled", "SELECT 1", "/tmp/o'brien.csv", "FORMAT csv", "COPY (SELECT 1\n) TO '/tmp/o''brien.csv' WITH (FORMAT csv)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, CopyToSQL(tc.query, tc.dst, tc.opts))
+		})
+	}
+}

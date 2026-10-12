@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/llm/skills"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
@@ -1076,34 +1077,6 @@ func (h *Handler) handleBulkInsert(ctx context.Context, req *Request) *Response 
 
 // --- Schema handlers ---
 
-// validColumnTypeText allow-lists what a DDL column-type string may
-// contain before it's concatenated into CREATE TABLE / ALTER TABLE DDL:
-// letters, digits, spaces, parens and commas — enough for "VARCHAR(64)",
-// "DECIMAL(10,2)", or a friendly-type-plus-constraint like "INTEGER PRIMARY
-// KEY" (create_table's ToolDef explicitly documents embedding constraints
-// this way), while rejecting quotes, semicolons, and comment sequences.
-// DuckDB still validates the type semantically at Exec time. Mirrors
-// studio/schema_designer.go's isValidColumnType (kept separate: that file
-// is package main and can't be imported from here).
-func validColumnTypeText(t string) bool {
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return false
-	}
-	hasAlpha := false
-	for _, c := range t {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
-			hasAlpha = true
-		case c >= '0' && c <= '9':
-		case c == ' ' || c == '(' || c == ')' || c == ',':
-		default:
-			return false
-		}
-	}
-	return hasAlpha
-}
-
 func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
 	columns, ok := req.Params["columns"].([]any)
@@ -1119,7 +1092,7 @@ func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response
 		}
 		colName := fmt.Sprintf("%v", colMap["name"])
 		colType := fmt.Sprintf("%v", colMap["type"])
-		if !validColumnTypeText(colType) {
+		if !crud.ValidColumnType(colType) {
 			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid column type %q", colType))
 		}
 		colDefs = append(colDefs, fmt.Sprintf("%s %s", engine.QuoteIdent(colName), colType))
@@ -1145,7 +1118,7 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 	table, _ := req.Params["table"].(string)
 	name, _ := req.Params["name"].(string)
 	colType, _ := req.Params["type"].(string)
-	if !validColumnTypeText(colType) {
+	if !crud.ValidColumnType(colType) {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid column type %q", colType))
 	}
 

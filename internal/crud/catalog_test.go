@@ -92,3 +92,15 @@ func TestWriteCore_OnSecondCatalog(t *testing.T) {
 	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'items'").Scan(&n))
 	assert.Equal(t, 2, n)
 }
+
+// DuckDB reports estimated_size for a table of an attached DuckDB catalog (the
+// TUI and the Studio rail show it as an approximate count); a table with no rows
+// has no estimate.
+func TestEstimatedRows_AttachedCatalog(t *testing.T) {
+	db := hubWithOther(t)
+	_, err := db.Exec(`INSERT INTO other.main.items SELECT range, range FROM range(3000)`)
+	require.NoError(t, err)
+	est := session.EstimatedRows(context.Background(), db, "other")
+	assert.Equal(t, int64(3000), est[session.TableKey{Schema: "main", Name: "items"}])
+	assert.NotContains(t, session.EstimatedRows(context.Background(), db, "nope"), session.TableKey{Schema: "main", Name: "items"})
+}

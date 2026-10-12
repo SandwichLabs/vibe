@@ -1101,7 +1101,7 @@ func TestHandler_RecordTools_HostileIdentifiers_CannotWriteFile(t *testing.T) {
 }
 
 // TestHandler_CreateTable_InvalidColumnType_Rejected proves the column-type
-// text allow-list (validColumnTypeText) rejects an attempt to smuggle SQL
+// text allow-list (crud.ValidColumnType) rejects an attempt to smuggle SQL
 // via the type field.
 func TestHandler_CreateTable_InvalidColumnType_Rejected(t *testing.T) {
 	handler, duckDB := newRealDuckDBHandler(t, ModeFull)

@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // Check refuses the statements Vibe manages for you: ATTACH/DETACH,
@@ -63,7 +65,7 @@ func Check(sqlText string, readOnly bool) error {
 // only a single SELECT. Callers use it before placing text inside COPY (...).
 func RequireSelect(ctx context.Context, db *sql.DB, sqlText string) error {
 	var out string
-	if err := db.QueryRowContext(ctx, "SELECT CAST(json_serialize_sql('"+strings.ReplaceAll(sqlText, "'", "''")+"') AS VARCHAR)").Scan(&out); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT CAST(json_serialize_sql("+session.QuoteLiteral(sqlText)+") AS VARCHAR)").Scan(&out); err != nil {
 		return fmt.Errorf("the query is not a single SELECT statement: %w", err)
 	}
 	var res struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/SandwichLabs/vibe/internal/connname"
 )
 
 // Execer is the write surface shared by *sql.DB, *sql.Conn and *sql.Tx.
@@ -20,7 +21,7 @@ var extensionSizeHint = map[string]string{"excel": "about 2 MB"}
 // the first use downloads it once. A failure is returned with a message fit
 // for the UI, never swallowed, so callers cannot silently degrade.
 func EnsureExtension(ctx context.Context, db Execer, name, feature string) error {
-	if !nameRE.MatchString(name) {
+	if !connname.Valid(name) {
 		return fmt.Errorf("invalid extension name %q", name)
 	}
 	q := name

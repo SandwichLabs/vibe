@@ -506,15 +506,6 @@ func TestRun_EmitsCatalogChangedAfterDDLAndAttach(t *testing.T) {
 	assert.GreaterOrEqual(t, ev.count("catalog:changed"), 2)
 }
 
-func TestIsReadOnlyStatement(t *testing.T) {
-	for _, s := range []string{"select 1", "  WITH x AS (select 1) select * from x", "-- c\nSELECT 1", "/* c */ from t", "(select 1)", "EXPLAIN select 1", "show tables", "describe t"} {
-		assert.True(t, isReadOnlyStatement(s), s)
-	}
-	for _, s := range []string{"CREATE TABLE t(a int)", "drop table t", "INSERT INTO t VALUES (1)", "ATTACH 'x' AS y", "-- c\nALTER TABLE t ADD COLUMN b int", "", "USE x"} {
-		assert.False(t, isReadOnlyStatement(s), s)
-	}
-}
-
 func TestClearCredentials_DetachesAnAttachedConnection(t *testing.T) {
 	app, _ := connApp(t)
 	p := filepath.Join(t.TempDir(), "c.duckdb")
@@ -558,4 +549,30 @@ func TestConnectWithCredentials_RememberOffIsSessionOnly(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, sets)
+}
+
+// afterRun decides whether a run may have changed what the rail lists with the
+// shared agents classifier (not a prefix guess): reads leave the rail alone;
+// anything that writes, is multi-statement or fails to classify refreshes it.
+func TestAfterRun_RefreshesTheRailOnlyForNonReads(t *testing.T) {
+	app, _ := connApp(t)
+	var ev eventLog
+	app.emit = ev.sink
+	_, err := app.sess.DB().Exec(`CREATE TABLE t (a INTEGER)`)
+	require.NoError(t, err)
+
+	for _, s := range []string{"select 1", "  WITH x AS (select 1) select * from x", "-- c\nSELECT 1", "/* c */ from t", "(select 1)", "EXPLAIN select 1", "show tables", "describe t", "PRAGMA table_info('t')"} {
+		before := ev.count("catalog:changed")
+		app.afterRun(app.sess, statusSnapshot(app.sess), s)
+		assert.Equal(t, before, ev.count("catalog:changed"), "read must not refresh the rail: %s", s)
+	}
+	for _, s := range []string{
+		"CREATE TABLE t2(a int)", "drop table t", "INSERT INTO t VALUES (1)", "ATTACH 'x' AS y", "-- c\nALTER TABLE t ADD COLUMN b int", "", "USE x",
+		// The old prefix guess called these reads and skipped the refresh.
+		"select 1; create table z(a int)", "WITH x AS (INSERT INTO t VALUES (1) RETURNING *) SELECT * FROM x", "EXPLAIN ANALYZE INSERT INTO t VALUES (1)",
+	} {
+		before := ev.count("catalog:changed")
+		app.afterRun(app.sess, statusSnapshot(app.sess), s)
+		assert.Equal(t, before+1, ev.count("catalog:changed"), "non-read must refresh the rail: %s", s)
+	}
 }
