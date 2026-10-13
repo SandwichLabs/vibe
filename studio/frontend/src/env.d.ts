@@ -20,6 +20,14 @@ interface AppApi {
   SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
   ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
   OpenThemesDir(): Promise<string>
+  // Updates (Settings > About > Updates, the first-run prompt)
+  GetUpdateState(): Promise<UpdateState>
+  SetUpdateCheck(mode: string): Promise<void>
+  CheckForUpdate(): Promise<UpdateResult>
+  AutoCheckForUpdate(): Promise<UpdateResult | null>
+  SkipUpdate(tag: string): Promise<void>
+  ApplyUpdate(tag: string): Promise<UpdateApplyResult>
+  RestartAfterUpdate(): Promise<void>
   // Workspaces (#111)
   GetInitialWorkspace(): Promise<{ path: string; message: string; bundlePath: string }>
   MarkLaunchHandled(): Promise<void>
@@ -705,6 +713,18 @@ interface BundlePreview {
 interface BundleDecisions { onConflict: BundleAction; items: Record<string, BundleAction>; connections: string[] }
 interface BundleOutcome { key: string; kind: string; id: string; finalId?: string; result: string; error?: string }
 interface BundleResult { outcomes: BundleOutcome[]; dryRun: boolean; warnings: string[] }
+
+// Updates: the saved choice and install kind (no network), one check's result, and a finished upgrade.
+interface UpdateState {
+  check: '' | 'off' | 'weekly'; lastChecked: string; skippedVersion: string
+  version: string; isDev: boolean; needsConsent: boolean; managed: string; updatable: boolean; managedNote: string
+  appliedVersion: string; canRestart: boolean
+}
+interface UpdateResult {
+  current: string; latest: string; updateAvailable: boolean; skipped: boolean; releaseUrl: string
+  notes: string; managed: string; updatable: boolean; managedNote: string; checkedAt: string
+}
+interface UpdateApplyResult { from: string; to: string; output: string; studio: boolean; restart: string }
 
 // Settings > About (#40): what GetBuildInfo returns.
 interface BuildInfo { version: string; commit: string; date: string; goVersion: string; duckdbVersion: string; platform: string }

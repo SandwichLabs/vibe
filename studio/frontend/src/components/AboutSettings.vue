@@ -3,6 +3,7 @@
 import { onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import NoticesDialog from './NoticesDialog.vue'
+import UpdatesSettings from './UpdatesSettings.vue'
 import { useAbout } from '../composables/useAbout'
 
 const about = useAbout()
@@ -41,10 +42,12 @@ onMounted(about.load)
       <p v-if="about.error.value" class="sh-meta" role="alert" data-testid="about-error">{{ about.error.value }}</p>
     </div>
 
+    <UpdatesSettings />
+
     <div class="card card-pad col" style="gap: var(--sh-space-3);">
       <div style="font-weight: 600;">Licence and privacy</div>
       <p class="sh-meta" style="margin: 0;">
-        Vibe is open source under the Apache License 2.0. It sends no telemetry: it only talks to the services you connect it to.
+        Vibe is open source under the Apache License 2.0. It sends no telemetry: it only talks to the services you connect it to, plus an opt-in check for new releases on github.com.
       </p>
       <div class="row" style="gap: var(--sh-space-2); flex-wrap: wrap;">
         <button type="button" class="btn btn-sm" data-testid="about-license" @click="about.openLicense">

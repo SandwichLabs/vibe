@@ -97,6 +97,14 @@ Why unsigned: see [Packaging](packaging.md#macos-unsigned-path-spike-43). Signin
 
 Run the installer again. It replaces the files, removes any file the new version no longer ships, and prints the old and new version. Quit Studio first (or restart it afterwards).
 
+Or let Vibe do exactly that for you, after you confirm:
+
+- **`vibe update`** looks up the latest stable release on GitHub, prints the notes link and, on a terminal, asks `Install vX? [y/N]`. `--check` only checks; `--yes` installs without asking (no terminal and no `--yes` means check only). It exits 0 when the check worked (up to date or not) and any requested install succeeded, 1 on an error.
+- **Studio, Settings, About, Updates** has **Check now** and, when a newer release exists, **Update to vX** (with a confirmation), then **Restart now** (the old Studio keeps running until you use it). Restart now quits through the usual path (pending saves are flushed and the unsaved-work question is asked) and starts the new Studio, reopening your workspace, once the old one has let go. A running Studio or `vibe mcp serve` keeps its old version until restarted.
+- **Weekly checks are opt-in.** Studio asks once; `vibe config updates [off|weekly]` is the same switch. Vibe never checks or installs in the background without it. What is sent is in [Privacy](privacy.md).
+
+Applying an update runs the target release's own `install.sh` (downloaded from the release, verified against that release's `checksums.txt`, never with `--force`), so it behaves exactly like re-running the installer. It only works for a Vibe that the installer put there (the running program must be listed in the install manifest); a build from source, `go install` or a package manager is told to update the way you installed it. A prerelease channel and signed checksums are not part of this yet.
+
 To pin a version: `curl -fsSL https://sandwichlabs.dev/vibe/install.sh | VIBE_VERSION=v0.1.0 sh`.
 
 ## Uninstall

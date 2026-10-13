@@ -254,3 +254,14 @@ rodney js 'window.go.main.App.OpenWorkspace("/tmp/qa/qa").then(r => r.status)'  
 - Qualified table names flow to the datasheet: `rodney js 'location.hash = "#/tables?table=local.main.customers"'`.
 - Read-only / Take over: start `sleep 300 | vibe mcp serve --workspace DIR &` first, then `OpenWorkspace(DIR)`; the banner (`[data-testid=readonly-banner]`) offers Take over. Never `pkill -f` for cleanup.
 - A change on disk (conflict banner): edit a `notebooks/*.vnb` file in a shell while the notebook is open; an unsaved edit in the title field shows `[data-testid=conflict-banner]`, no edit reloads quietly.
+
+## Update checks without GitHub (dev builds only)
+
+A `dev` binary (`task studio:dev`, `go run`) honours two environment variables that a release build ignores, so the update UI can be driven against a fake release server:
+
+- `VIBE_UPDATE_BASE_URL=http://127.0.0.1:PORT` serves everything `internal/selfupdate` would ask github.com and api.github.com for: `/SandwichLabs/vibe/releases/latest` (a 302 to `/SandwichLabs/vibe/releases/tag/vX.Y.Z`), `/api/repos/SandwichLabs/vibe/releases/tags/vX.Y.Z` (JSON `body`, `html_url`) and `/SandwichLabs/vibe/releases/download/vX.Y.Z/{install.sh,checksums.txt}`. `http://` is allowed only through this hook, and the installer is told to fetch its archive from the same server (`VIBE_DOWNLOAD_BASE`).
+- `VIBE_UPDATE_PRETEND_VERSION=v0.1.0` makes the check compare against that version instead of `dev` (and makes Studio ask the first-run question, which a plain dev build never does).
+
+The hooks apply to any binary whose version is `dev`, so a `go install` build honours them too; such a build is never manifest-managed (it is not listed in an install manifest), so it can check but not apply unless you fake a manifest as below.
+
+Applying needs the running binary to be listed in an install manifest: point `XDG_DATA_HOME` at a temp dir and write `vibe/install-manifest` there (`version=0.1.0` plus `F <64 hex> /abs/path/to/the/running/binary`). Use a temp `HOME`, `XDG_CONFIG_HOME` (or `VIBE_CONFIG_DIR`) and `XDG_DATA_HOME` so your real preferences and install are untouched, and a fake `install.sh` that only rewrites the temp manifest's `version=` line. Never run the real `install.sh` against your own `~/.local`.
