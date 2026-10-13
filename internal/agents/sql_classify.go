@@ -93,12 +93,25 @@ var plainIdentifierRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // unresolvedTableDeniedMsg is the refusal for a table reference that did not
 // resolve. An unqualified plain identifier is the ordinary "that table does
 // not exist" typo and says so plainly, without suggesting a privilege problem.
+//
+// A three-part name whose first part is not an attached catalog names a
+// connection that does not exist (#111: a MotherDuck database other than the
+// one the connection attaches), which says so instead of blaming file access.
 func unresolvedTableDeniedMsg(catalogName, schema, table string) string {
 	if catalogName == "" && schema == "" && plainIdentifierRe.MatchString(table) {
 		return fmt.Sprintf("table %q not found", table)
 	}
+	if catalogName != "" && !strings.EqualFold(catalogName, "system") {
+		return fmt.Sprintf("there is no connection named %q, so %q can't be read (see list_connections; %s)",
+			catalogName, dotJoin(catalogName, schema, table), oneDatabasePerConnectionHint)
+	}
 	return fmt.Sprintf("%s (%q)", externalAccessDeniedMsg, dotJoin(catalogName, schema, table))
 }
+
+// oneDatabasePerConnectionHint explains how to reach a database a connection
+// does not attach. A table name has at most three parts, so a database inside
+// a connection (motherduck.newsroom.raw.t) cannot be named.
+const oneDatabasePerConnectionHint = "a connection reaches one database, so a MotherDuck database other than the connection's own needs a connection of its own, which the person adds with the same token"
 
 func dotJoin(parts ...string) string {
 	var keep []string

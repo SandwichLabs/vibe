@@ -58,6 +58,7 @@ vibe conn test md --install
 Or leave out `--sign-in` on a terminal and paste the token when asked, to keep it in the keychain. In Studio the editor has a database picker once the token is entered. Things to know:
 
 - A named database attaches as one catalog: `md.main.table`.
+- To reach several databases of the account, add one connection per database with the same sign-in (`vibe conn add newsroom --type motherduck --database newsroom --sign-in env:MOTHERDUCK`); each is its own catalog (`newsroom.raw.table`). A four-part name such as `md.newsroom.raw.table` does not work in DuckDB.
 - It cannot be attached read-only. For read-only access use a MotherDuck read-scaling token.
 - A stray `MOTHERDUCK_TOKEN` in your environment is **not** used unless the connection's sign-in is `env:MOTHERDUCK`.
 - One MotherDuck account per workspace.

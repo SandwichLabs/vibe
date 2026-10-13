@@ -185,7 +185,7 @@ func (a *analyzer) script(bound string, args []any) *sqlVerdict {
 	}
 	n, err := countStatements(bound)
 	if err != nil {
-		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, firstLine(err.Error())))
+		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err)))
 	}
 	if n != len(stmts) {
 		for _, toks := range stmts {
@@ -259,6 +259,18 @@ func preScreen(toks []lexTok) *sqlVerdict {
 	return nil
 }
 
+// parseFailure is the reason for a statement DuckDB's parser rejected. A name
+// with four or more parts (motherduck.newsroom.raw.t) fails deep in the
+// serializer with "NameListToString NOT IMPLEMENTED", which says nothing to
+// the agent, so it is explained (#111).
+func parseFailure(err error) string {
+	msg := firstLine(err.Error())
+	if strings.Contains(msg, "NameListToString") {
+		return "a table name has at most three parts (connection.schema.table); " + oneDatabasePerConnectionHint
+	}
+	return msg
+}
+
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i]
@@ -308,7 +320,7 @@ func (a *analyzer) readOrWith(toks []lexTok, args []any) *sqlVerdict {
 	text := a.textOf(toks)
 	doc, err := serializeSQL(a.ctx, text)
 	if err != nil {
-		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, firstLine(err.Error())))
+		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err)))
 	}
 	if !doc.Error && len(doc.Statements) == 1 {
 		return a.read(doc.Statements[0], toks, text, args)

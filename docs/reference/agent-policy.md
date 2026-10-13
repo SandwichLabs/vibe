@@ -20,6 +20,7 @@ The tier is the person's `sandbox` setting, clamped to the team limit in `vibe.y
 | `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INSERT ... ON CONFLICT` into a writable catalog | no | yes | yes |
 | `CREATE`, `DROP`, `ALTER` of tables, views, sequences, schemas, indexes, macros, types on a writable catalog | no | no | yes |
 | `COPY (...) TO '<literal path in data/>'` | no | no | yes |
+| Content tools: `add_query_cell`, `create_dashboard`, `create_or_update_skill` (workspace files, not data; #111) | no | yes | yes |
 | Everything in the never-list | no | no | **no** |
 
 Record tools follow the same tiers (`create_record`, `update_record`, `delete_record`, `bulk_insert`, `import_csv` are data tools; `create_table`, `add_column`, `drop_table` are schema tools).
@@ -113,7 +114,8 @@ An introspect tool, visible in every tier, over MCP too: for each registered con
 - **Unqualified or schema-only names** cost one listing of the catalogs (two round trips for an attached Postgres); a fully qualified name in a Postgres catalog does not.
 - **Files can change between the check and the read.** A symlink swapped into `data/` in that window is not caught; the folder is yours.
 - **`read_only` is a client-side guard.** Use a read-only database role for anything the agent must not change; the policy refuses `postgres_execute`, but a role that can write can be reached by other means.
-- Remote scan and write plan operators are matched by name pattern (`*_SCAN` over a table, `PG_INSERT`, `MYSQL_INSERT`, `DUCKLAKE_UPDATE`, ...). MySQL's (`MYSQL_SCAN`, `MYSQL_INSERT`, `MYSQL_CREATE_TABLE_AS`) and DuckLake's (`DUCKLAKE_SCAN`, `DUCKLAKE_INSERT`, `DUCKLAKE_UPDATE`, `DUCKLAKE_DELETE`) were taken from a real server and a real lake on DuckDB 1.4.1. MotherDuck's were taken from the extension's binary (`DOWNLOAD_BRIDGE`, `UPLOAD_SOURCE`, ...), not verified against a real account; a MotherDuck read that this layer refuses names the operator in the error.
+- Remote scan and write plan operators are matched by name pattern (`*_SCAN` over a table, `PG_INSERT`, `MYSQL_INSERT`, `DUCKLAKE_UPDATE`, ...). MySQL's (`MYSQL_SCAN`, `MYSQL_INSERT`, `MYSQL_CREATE_TABLE_AS`) and DuckLake's (`DUCKLAKE_SCAN`, `DUCKLAKE_INSERT`, `DUCKLAKE_UPDATE`, `DUCKLAKE_DELETE`) were taken from a real server and a real lake on DuckDB 1.4.1. MotherDuck's were taken from the extension's binary (`DOWNLOAD_BRIDGE`, `UPLOAD_SOURCE`, ...). With an `md:` catalog attached, hybrid execution marks **every** operator of every plan with where it runs (`HASH_GROUP_BY (L)` here, `SEQ_SCAN (R)` on MotherDuck's server); the marker is stripped before the name is checked (#111: before that, every read was refused while MotherDuck was attached, `count(*)` over a `data/` CSV included). A read that this layer refuses names the operator in the error.
+- A three-part name whose first part is not a connection (`newsroom.raw.t`) is refused as "no connection named ...", and a four-part name (`motherduck.newsroom.raw.t`) as "a table name has at most three parts". A MotherDuck connection attaches one database; another database of the same account needs its own connection (same token).
 
 ## Where it lives
 

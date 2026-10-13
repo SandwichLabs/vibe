@@ -84,8 +84,10 @@ statement — as long as the statement itself only reads.
 ## AI authoring
 
 The in-app agent and MCP clients share one tool surface (`internal/agents`).
-Two tools write notebook content (category `content`, gated the same as any
-other write — denied under `read-only`/`read-write`, allowed under `full`):
+Two tools write notebook content (category `content`, with
+`create_or_update_skill`: denied under `read-only`, allowed under
+`read-write` and `full`, and asked for like any change when "Ask before
+changes" is on; #111):
 
 - **`add_query_cell`** — appends a single sql cell. `notebook_id` is
   optional: it appends to that notebook, else to the notebook currently open

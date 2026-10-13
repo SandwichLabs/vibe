@@ -94,9 +94,12 @@ var categoryPermissions = map[SandboxMode]map[string]bool{
 	ModeReadOnly: {
 		"introspect": true,
 	},
+	// Content (notebook cells, skills) is workspace files, not data: a
+	// read-write agent can write up what it finds (#111). Schema stays full.
 	ModeReadWrite: {
 		"introspect": true,
 		"data":       true,
+		"content":    true,
 	},
 	ModeFull: {
 		"introspect": true,

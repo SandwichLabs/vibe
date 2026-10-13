@@ -546,3 +546,47 @@ func TestUnpivotFileReadIsRefused(t *testing.T) {
 	}
 	assert.Equal(t, 0, fx.count("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'stolen'"))
 }
+
+// #111: introspect_schema and describe_table connect a registered connection
+// on first use, as run_query does, instead of calling it unknown.
+func TestIntrospectionConnectsOnFirstUse(t *testing.T) {
+	for _, tc := range []struct {
+		name, method string
+		params       map[string]any
+	}{
+		{"introspect_schema", "introspect_schema", map[string]any{"connection": "lazy"}},
+		{"describe_table", "describe_table", map[string]any{"table": "lazy.main.tracked"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newPolicyFixture(t, ModeReadOnly)
+			lazyPath := filepath.Join(fx.dir, "lazy.duckdb")
+			f, err := sqlOpenDuck(lazyPath)
+			require.NoError(t, err)
+			_, err = f.Exec("CREATE TABLE tracked (a INTEGER, b VARCHAR)")
+			require.NoError(t, err)
+			require.NoError(t, f.Close())
+			require.NoError(t, fx.sess.Register(session.Spec{Name: "lazy", Type: "duckdb", Path: lazyPath}))
+
+			resp := fx.call(tc.method, tc.params)
+			require.Nil(t, resp.Error, errMsg(resp))
+			if tc.method == "introspect_schema" {
+				tables, _ := mapOf(t, resp.Result)["tables"].([]string)
+				assert.Equal(t, []string{"lazy.main.tracked"}, tables)
+			} else {
+				cols, _ := mapOf(t, resp.Result)["columns"].([]map[string]any)
+				assert.Len(t, cols, 2)
+			}
+		})
+	}
+}
+
+// #111: a connection that fails to connect reports its own error, not
+// "unknown connection" or an empty column list.
+func TestIntrospectionReportsConnectFailure(t *testing.T) {
+	fx := newPolicyFixture(t, ModeReadOnly)
+	missing := filepath.Join(fx.dir, "nope", "missing.duckdb")
+	require.NoError(t, fx.sess.Register(session.Spec{Name: "gone", Type: "duckdb", Path: missing, ReadOnly: true}))
+	resp := fx.call("describe_table", map[string]any{"table": "gone.main.t"})
+	require.NotNil(t, resp.Error, "a failed connect is an error, not an empty table")
+	assert.NotContains(t, resp.Error.Message, "unknown connection")
+}
