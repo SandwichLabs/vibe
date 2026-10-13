@@ -9,7 +9,7 @@ Contents: [Go modules](#go-modules) Â· [Frontend packages](#frontend-packages) Â
 ## Go modules
 
 Every module linked into the `vibe` CLI or Vibe Studio on linux and macOS (amd64 and arm64), found with go-licenses v2.
-139 module/licence-file pairs: Apache-2.0 43, BSD-2-Clause 5, BSD-3-Clause 27, ISC 1, MIT 63.
+140 module/licence-file pairs: Apache-2.0 43, BSD-2-Clause 5, BSD-3-Clause 28, ISC 1, MIT 63.
 
 #### Apache-2.0
 
@@ -2588,6 +2588,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - filippo.io/hpke v0.4.0
 - golang.org/x/crypto v0.58.0
 - golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
+- golang.org/x/mod v0.41.0
 - golang.org/x/net v0.61.0
 - golang.org/x/oauth2 v0.36.0
 - golang.org/x/sync v0.24.0
