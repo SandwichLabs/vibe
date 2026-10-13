@@ -143,7 +143,7 @@ func TestSandbox_ReadOnlyBlocksWrite(t *testing.T) {
 	assert.Error(t, sc.Check("import_csv"))
 }
 
-func TestSandbox_ReadWriteAllowsDataButBlocksContentSchema(t *testing.T) {
+func TestSandbox_ReadWriteAllowsDataAndContentButBlocksSchema(t *testing.T) {
 	sc := SandboxConfig{Mode: ModeReadWrite}
 
 	// Introspect and data should be allowed.
@@ -153,9 +153,13 @@ func TestSandbox_ReadWriteAllowsDataButBlocksContentSchema(t *testing.T) {
 	assert.NoError(t, sc.Check("update_record"))
 	assert.NoError(t, sc.Check("delete_record"))
 
-	// Content and schema should be blocked.
-	assert.Error(t, sc.Check("add_query_cell"))
-	assert.Error(t, sc.Check("create_dashboard"))
+	// Content (notebook cells, skills) is allowed, so a read-write agent can
+	// write up what it finds (#111).
+	assert.NoError(t, sc.Check("add_query_cell"))
+	assert.NoError(t, sc.Check("create_dashboard"))
+	assert.NoError(t, sc.Check("create_or_update_skill"))
+
+	// Schema stays blocked.
 	assert.Error(t, sc.Check("create_table"))
 	assert.Error(t, sc.Check("drop_table"))
 }

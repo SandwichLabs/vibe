@@ -23,9 +23,12 @@ func (h *Handler) handleIntrospectSchema(ctx context.Context, req *Request) *Res
 	if catalog == "" {
 		catalog = sess.DefaultCatalog()
 	}
+	// A registered connection that is not connected yet connects on first use,
+	// as it does for run_query (#111).
+	connectErr := h.connectReferenced(ctx, connection, "")
 	tabs, err := h.listCatalogTables(ctx, sess, catalog)
 	if err != nil {
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to query schema: %v", err))
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to query schema: %v", withConnectError(err, connectErr)))
 	}
 	tables := make([]string, 0, len(tabs))
 	for _, t := range tabs {
@@ -51,14 +54,16 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 	}
 
 	// table may be qualified (catalog.schema.table); an unqualified name
-	// resolves against the default catalog.
+	// resolves against the default catalog. A connection it names connects on
+	// first use (#111).
+	connectErr := h.connectReferenced(ctx, "", table)
 	desc, err := sess.DescribeTable(ctx, table)
 	if err != nil {
 		// A missing table was an empty column list before; keep that shape.
-		if errors.Is(err, session.ErrNoSuchTable) {
+		if errors.Is(err, session.ErrNoSuchTable) && connectErr == nil {
 			return NewResponse(req.ID, map[string]any{"table": table, "columns": []map[string]any(nil)})
 		}
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", err))
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", withConnectError(err, connectErr)))
 	}
 
 	var columns []map[string]any

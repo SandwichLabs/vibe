@@ -311,3 +311,51 @@ type protectedAccess struct {
 }
 
 func (c *protectedAccess) ProtectedPaths() []string { return c.prot }
+
+// #111: with a MotherDuck catalog attached, hybrid execution suffixes every
+// plan operator with where it runs, " (L)" or " (R)". The suffix must not turn
+// an allowed operator into an unknown one, nor hide a reader.
+func TestPolicy_MotherDuckLocationSuffix(t *testing.T) {
+	assert.Equal(t, "DOWNLOAD_SOURCE", planOpName("DOWNLOAD_SOURCE (L)"))
+	assert.Equal(t, "SEQ_SCAN", planOpName(" seq_scan (R) "))
+	assert.Equal(t, "HASH_GROUP_BY", planOpName("HASH_GROUP_BY"))
+	assert.Equal(t, "X(L)", planOpName("X(L)"), "only a separated marker is a location")
+
+	var readers int
+	plan := planNode{Name: "UNGROUPED_AGGREGATE (L)", Children: []planNode{
+		{Name: "DOWNLOAD_SOURCE (L)", Children: []planNode{
+			{Name: "DOWNLOAD_SINK (R)", Children: []planNode{
+				{Name: "SEQ_SCAN  (R)", ExtraInfo: map[string]any{"Table": "pulls"}},
+			}},
+		}},
+	}}
+	for _, n := range []string{"ORDER_BY (L)", "TOP_N (L)", "HASH_GROUP_BY (R)"} {
+		plan.Children = append(plan.Children, planNode{Name: n})
+	}
+	assert.Empty(t, checkPlanNode(&plan, &readers), "a MotherDuck read is allowed")
+	assert.Equal(t, 0, readers)
+
+	r := planNode{Name: "READ_CSV (R)", ExtraInfo: map[string]any{"Function": "READ_CSV"}}
+	assert.Empty(t, checkPlanNode(&r, &readers))
+	assert.Equal(t, 1, readers, "a suffixed reader still counts, so it must be vetted")
+
+	unknown := planNode{Name: "MD_SOMETHING_NEW (R)"}
+	reason := checkPlanNode(&unknown, &readers)
+	assert.Contains(t, reason, "MD_SOMETHING_NEW is not on the allow-list")
+	assert.NotContains(t, reason, "files and URLs", "an unknown operator is not blamed on file access")
+}
+
+// #111: names that reach a database no connection attaches say so.
+func TestPolicy_UnattachedCatalogNames(t *testing.T) {
+	fx := newPolicyFixture(t, ModeReadOnly)
+	v := fx.classify("SELECT count(*) FROM newsroom.raw.cameras")
+	assert.Equal(t, sqlClassOther, v.Class)
+	assert.Contains(t, v.Reason, `no connection named "newsroom"`)
+	assert.Contains(t, v.Reason, "connection of its own")
+	assert.NotContains(t, v.Reason, "files and URLs")
+
+	v = fx.classify("SELECT count(*) FROM other.newsroom.raw.cameras")
+	assert.Equal(t, sqlClassOther, v.Class)
+	assert.Contains(t, v.Reason, "at most three parts")
+	assert.NotContains(t, v.Reason, "NameListToString")
+}

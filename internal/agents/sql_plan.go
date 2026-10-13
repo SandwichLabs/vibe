@@ -81,8 +81,23 @@ func planCheck(ctx context.Context, userDB queryDB, stmt string, args []any, vet
 	return ""
 }
 
+// planOpName is an operator's name without MotherDuck's location marker. With
+// an md: catalog attached, hybrid execution labels every operator in every
+// plan with where it runs: "HASH_GROUP_BY (L)" on this computer, "SEQ_SCAN (R)"
+// on MotherDuck's server (#111). The marker says nothing about what the
+// operator reads, so the operator is judged by its name alone.
+func planOpName(raw string) string {
+	name := strings.ToUpper(strings.TrimSpace(raw))
+	for _, loc := range []string{"(L)", "(R)"} {
+		if base, ok := strings.CutSuffix(name, loc); ok && strings.HasSuffix(base, " ") {
+			return strings.TrimSpace(base)
+		}
+	}
+	return name
+}
+
 func checkPlanNode(n *planNode, readers *int) string {
-	name := strings.ToUpper(strings.TrimSpace(n.Name))
+	name := planOpName(n.Name)
 	table, hasTable := n.ExtraInfo["Table"].(string)
 	_, hasFunc := n.ExtraInfo["Function"]
 	switch {
@@ -92,7 +107,7 @@ func checkPlanNode(n *planNode, readers *int) string {
 		// A scan of a catalog table: SEQ_SCAN, TABLE_SCAN, POSTGRES_SCAN, ...
 	case allowedPlanOperators[name], isRemoteWriteOp(name):
 	default:
-		return fmt.Sprintf("%s (plan operator %s is not on the allow-list)", externalAccessDeniedMsg, name)
+		return fmt.Sprintf("this query uses a plan operator the agent's policy does not know (%s is not on the allow-list), so it can't be verified", name)
 	}
 	for i := range n.Children {
 		if reason := checkPlanNode(&n.Children[i], readers); reason != "" {

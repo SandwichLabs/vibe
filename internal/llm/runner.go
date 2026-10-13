@@ -155,19 +155,21 @@ func systemPromptFor(sandbox string, ask bool, skillsBlock string) string {
 	// Three-tier capability framing (review fix for #63: the old binary
 	// writeCapable/else conflated "full" with "any write access at all" and
 	// told a read-write agent it had "FULL WRITE ACCESS" to schema/content it
-	// cannot actually touch). create_table stands in for the whole
-	// "schema"/"content" category gate (they're gated identically);
-	// create_record stands in for the "data" category gate.
+	// cannot actually touch). create_table stands in for the "schema"
+	// category gate; create_record stands in for the "data" and "content"
+	// gates, which read-write and full both allow (#111).
 	fullAccess := sc.Check("create_table") == nil
 	dataWrite := sc.Check("create_record") == nil
 	switch {
 	case fullAccess:
 		b.WriteString("\nYOU HAVE FULL WRITE ACCESS to this database — you can build whole workspaces: tables, queries, notebooks, and skills. When the user asks you to build or create something, DO IT by calling the matching tool directly — do NOT say you are read-only and do NOT ask the user to run SQL themselves. Never try to run CREATE/INSERT/UPDATE/DELETE through introspect tools; use create_table for schema changes.\n")
-		b.WriteString("\nA NOTEBOOK is a JSON document of sql/markdown/a2ui cells; there are no directives or page markup anymore. Use add_query_cell to append a single read-only SQL statement as a new cell (it auto-fits a table/bar/line/stat view the first time it runs). Use create_dashboard to append a full A2UI page (multiple components in one cell) — see the <a2ui> block below for the component schema. Use these for ANY request for a \"page\", \"dashboard\", \"screen\", \"overview\", \"notebook\", or interactive view; there is no create_page tool.\n")
 	case dataWrite:
-		b.WriteString("\nYou currently have READ-WRITE access to DATA ONLY: you can run_query freely — including INSERT/UPDATE/DELETE — and use create_record/update_record/delete_record/bulk_insert to add, change, or remove rows. You CANNOT change the schema or author notebook content — create_table, add_column, drop_table, add_query_cell, and create_dashboard will all be denied if you call them. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox; tell the user so and offer the plan/SQL, or tell them to switch the sandbox to full. If the user asks you to change the schema or build a notebook/dashboard, say so plainly and offer the SQL or plan they could apply themselves, or tell them to switch the sandbox to full.\n")
+		b.WriteString("\nYou currently have READ-WRITE access to DATA AND CONTENT: you can run_query freely — including INSERT/UPDATE/DELETE — use create_record/update_record/delete_record/bulk_insert to add, change, or remove rows, and write up what you find with add_query_cell, create_dashboard and create_or_update_skill. You CANNOT change the schema — create_table, add_column and drop_table will be denied if you call them. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox; tell the user so and offer the plan/SQL, or tell them to switch the sandbox to full.\n")
 	default:
 		b.WriteString("\nYou currently have READ-ONLY access: you can inspect the schema and run read-only queries (SELECT, WITH…SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE via run_query) but cannot write or modify anything — INSERT/UPDATE/DELETE and every schema/content tool will be denied. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox. If the user asks to change data or the schema, explain that they can enable more access in the agent settings, and offer the SQL they could run themselves.\n")
+	}
+	if dataWrite {
+		b.WriteString("\nA NOTEBOOK is a JSON document of sql/markdown/a2ui cells; there are no directives or page markup anymore. Use add_query_cell to append a single read-only SQL statement as a new cell (it auto-fits a table/bar/line/stat view the first time it runs). Use create_dashboard to append a full A2UI page (multiple components in one cell) — see the <a2ui> block below for the component schema. Use these for ANY request for a \"page\", \"dashboard\", \"screen\", \"overview\", \"notebook\", or interactive view; there is no create_page tool.\n")
 	}
 	if ask && sc.Mode != agents.ModeReadOnly {
 		b.WriteString("\nEvery change you make (rows, tables, saved queries, notebooks, skills) is shown to the user for approval before it runs. Call the tool normally. If it comes back declined, nothing changed: say so, and don't retry unless the user asks again.\n")

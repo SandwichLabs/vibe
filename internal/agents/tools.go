@@ -342,8 +342,8 @@ var Tools = []ToolDef{
 	// Unlike write_cell (task-only, proposal-and-apply), these persist
 	// directly — the agent panel's chat surface has no proposal dialog, so
 	// the user's ask ("add a dashboard of X to my notebook") is the
-	// confirmation. Category "content" (full sandbox only): both write a new
-	// notebook cell to _vibe_notebooks.
+	// confirmation. Category "content" (read-write and full): both append a
+	// cell to a notebook file.
 
 	{
 		Name:        "add_query_cell",

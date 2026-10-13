@@ -463,7 +463,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	assert.Contains(t, full, "create_table")
 	assert.Contains(t, full, "FULL WRITE ACCESS")
 	assert.NotContains(t, full, "READ-ONLY access:")
-	assert.NotContains(t, full, "READ-WRITE access to DATA ONLY")
+	assert.NotContains(t, full, "READ-WRITE access to DATA AND CONTENT")
 	assert.NotContains(t, full, "NOT PERMITTED", "every tool must be permitted under full sandbox")
 
 	rw := systemPromptFor(SandboxReadWrite, false, "")
@@ -476,8 +476,9 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	// describe exactly what it can do (data reads/writes) and can't
 	// (schema/pages).
 	assert.NotContains(t, rw, "FULL WRITE ACCESS")
-	assert.Contains(t, rw, "READ-WRITE access to DATA ONLY")
+	assert.Contains(t, rw, "READ-WRITE access to DATA AND CONTENT")
 	assert.Contains(t, rw, "CANNOT change the schema")
+	assert.Contains(t, rw, "A NOTEBOOK is", "read-write can write notebook cells (#111)")
 	// run_query itself is never blanket-denied — its gating is per-statement,
 	// documented in the tool's own description below.
 	assert.False(t, runQueryLineDenied(rw), "run_query must never be flagged NOT PERMITTED — gating is per-statement")
@@ -486,7 +487,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	assert.Contains(t, ro, "READ-ONLY access:")
 	assert.Contains(t, ro, "create_table: Create a new table in a writable connection (the default connection unless the name is qualified) [NOT PERMITTED")
 	assert.NotContains(t, ro, "FULL WRITE ACCESS")
-	assert.NotContains(t, ro, "READ-WRITE access to DATA ONLY")
+	assert.NotContains(t, ro, "READ-WRITE access to DATA AND CONTENT")
 
 	// propose_schema and the friendly-type vocabulary are advertised in every
 	// sandbox — drafting never mutates. run_query is likewise never flagged
