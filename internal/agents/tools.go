@@ -303,7 +303,7 @@ var Tools = []ToolDef{
 
 	{
 		Name:        "preview_query",
-		Description: "Run a SELECT (read-only) query and preview its shape before committing it as a notebook cell: row count, columns with types, a sample of rows (budgeted to fit the response), and a suggestedView (table/bar/line/stat) computed from the actual result shape. ALWAYS preview a query before calling write_cell with cell_type \"sql\" — write_cell rejects sql it has not been shown working.",
+		Description: "Run a SELECT (read-only) query and preview its shape before committing it as a notebook cell: row count, columns with types, a sample of rows (budgeted to fit the response), and a suggestedView (table/bar/line/stat; area/columns/rings/radar/sankey/heatmap also listed in viewFit) computed from the actual result shape. ALWAYS preview a query before calling write_cell with cell_type \"sql\" — write_cell rejects sql it has not been shown working.",
 		Category:    "introspect",
 		Modes:       []string{"task"},
 		Params: []ParamDef{
@@ -320,7 +320,7 @@ var Tools = []ToolDef{
 			{Name: "cell_type", Type: "string", Required: true, Desc: "\"sql\" or \"markdown\""},
 			{Name: "sql", Type: "string", Required: false, Desc: "The previewed SQL (sql cells only)"},
 			{Name: "connection", Type: "string", Required: false, Desc: "The connection the SQL was previewed on (sql cells only); must match preview_query's connection"},
-			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (sql cells only; defaults to preview_query's suggestedView)"},
+			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat | area | columns | rings | radar | sankey | heatmap (sql cells only; defaults to preview_query's suggestedView)"},
 			{Name: "label", Type: "string", Required: false, Desc: "Short, specific label — a chart title, not \"Query 1\" (sql cells only)"},
 			{Name: "markdown", Type: "string", Required: false, Desc: "The cell's markdown text (markdown cells only)"},
 			{Name: "explanation", Type: "string", Required: false, Desc: "One or two sentences explaining the proposal, shown alongside it — never the cell's own content"},
@@ -353,7 +353,7 @@ var Tools = []ToolDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
 			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only SQL statement"},
 			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the cell runs on; must be a registered connection (see list_connections). Defaults to the workspace default."},
-			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat (default: auto-fit to the result shape the first time it runs)"},
+			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat | area | columns | rings | radar | sankey | heatmap (default: auto-fit to the result shape the first time it runs)"},
 			{Name: "label", Type: "string", Required: false, Desc: "Short label for the cell (also used as the new notebook's title, if one is created)"},
 		},
 	},

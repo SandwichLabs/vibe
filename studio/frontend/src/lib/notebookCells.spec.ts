@@ -127,3 +127,25 @@ describe('titles', () => {
     expect(summaryOf(sql({ source: 'SELECT 1' }))).toBe('Show SQL · 1 line · SELECT 1')
   })
 })
+
+describe('KINETIC views and motion', () => {
+  it('a chart view hands the result over as columns + rows, with the cell motion', () => {
+    const c = sql({ view: 'sankey', label: 'Routing', motion: { easing: 'expo', speed: 2 } })
+    c.result = { columns: ['src', 'dst', 'w'], types: ['VARCHAR', 'VARCHAR', 'INTEGER'], rows: [['a', 'b', 3]] }
+    expect(synthesizedPage(c)!.components[0]).toEqual({
+      id: 'c', type: 'sankeyChart', label: 'Routing', columns: ['src', 'dst', 'w'], rows: [['a', 'b', 3]], motion: { easing: 'expo', speed: 2 },
+    })
+  })
+  it('table and stat views never carry motion; bar does', () => {
+    const c = sql({ motion: { easing: 'steps' } })
+    c.result = { columns: ['k', 'v'], types: ['VARCHAR', 'INTEGER'], rows: [['a', 1]] }
+    expect(synthesizedPage(c)!.components[0]).not.toHaveProperty('motion')
+    c.view = 'bar'
+    expect(synthesizedPage(c)!.components[0]).toMatchObject({ type: 'barChart', motion: { easing: 'steps' } })
+  })
+  it('saves motion when set and leaves it out otherwise', () => {
+    const withMotion = buildSavePayload('nb', 't', [sql({ view: 'radar', motion: { easing: 'none' } })])
+    expect(withMotion.cells[0]).toMatchObject({ view: 'radar', motion: { easing: 'none' } })
+    expect(buildSavePayload('nb', 't', [sql()]).cells[0]).not.toHaveProperty('motion')
+  })
+})

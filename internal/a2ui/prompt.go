@@ -2,6 +2,7 @@ package a2ui
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 )
@@ -16,6 +17,7 @@ import (
 var typeOrder = []string{
 	"heading", "text", "divider", "callout", "badge", "list", "code", "container",
 	"statRow", "stat", "table", "barChart", "lineChart",
+	"areaChart", "columnChart", "ringChart", "radarChart", "sankeyChart", "heatmap", "streamChart",
 }
 
 func init() {
@@ -63,6 +65,13 @@ func hintInner(spec fieldSpec) string {
 		return "string[]"
 	case kindRows:
 		return "array of cell arrays"
+	case kindMotion:
+		return "{easing, speed, stagger, stiffness, damping, mass}"
+	case kindRange:
+		if spec.max == math.MaxFloat64 {
+			return "number > 0"
+		}
+		return fmt.Sprintf("number %v-%v", spec.min, spec.max)
 	default:
 		return ""
 	}
@@ -125,7 +134,7 @@ func PromptBlock() string {
 	b.WriteString("\"parent\" to its parent's id. Every component needs a unique \"id\".\n\n")
 	b.WriteString("Types and their fields (optional unless marked required):\n")
 	for _, t := range typeOrder {
-		fmt.Fprintf(&b, "  %-10s %s\n", t, fieldList(Components[t]))
+		fmt.Fprintf(&b, "  %-12s %s\n", t, fieldList(Components[t]))
 	}
 	fmt.Fprintf(&b, "\ncolor must be one of: %s.\n\n", quotedList(ColorTokens))
 	b.WriteString("Data binding: " + strings.Join(DataBound, ", ") + " accept either inline data or\n")
@@ -140,7 +149,19 @@ func PromptBlock() string {
 	b.WriteString("unqualified table names; omit it for the workspace default.\n\n")
 	b.WriteString("SQL result shape: barChart and lineChart want a label column then a numeric\n")
 	b.WriteString("column (SELECT school, AVG(score) ...). stat wants a single number in the first\n")
-	b.WriteString("column of the first row. table renders whatever columns come back.\n\n")
+	b.WriteString("column of the first row. table renders whatever columns come back.\n")
+	b.WriteString("The other charts take inline \"columns\" + \"rows\" in exactly the shape their\n")
+	b.WriteString("sql returns:\n")
+	b.WriteString("  areaChart, columnChart, radarChart: a label column, then one numeric column per\n")
+	b.WriteString("    series (SELECT month, revenue, cost ...); columnChart mode stacked|grouped.\n")
+	b.WriteString("  ringChart: label, value[, max] per ring (max defaults to the \"max\" field, else 100).\n")
+	b.WriteString("  sankeyChart: source, target, weight per flow.\n")
+	b.WriteString("  heatmap: row label, column label, value per cell (SELECT node, hour, load ...).\n")
+	b.WriteString("  streamChart: label, value in time order; \"refresh\" (seconds) re-runs its sql\n")
+	b.WriteString("    while visible and keeps the last \"window\" points; values above \"threshold\" flag.\n\n")
+	b.WriteString("Every chart (" + strings.Join(Charts, ", ") + ") animates in; \"motion\" tunes it:\n")
+	b.WriteString("easing one of " + quotedList(Easings) + " (\"custom\" uses stiffness/damping/mass),\n")
+	b.WriteString("speed 0.25-4, stagger true|false. Omit motion for the default spring.\n\n")
 	b.WriteString("Do not add a heading component that just repeats the page's own \"title\" — the\n")
 	b.WriteString("title already renders above the components, so a duplicate heading is redundant\n")
 	b.WriteString("and, in the narrow panel this renders in, competes with it for space.\n")

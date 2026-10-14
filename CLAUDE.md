@@ -98,7 +98,7 @@ docs/                see docs/README.md
 
 **Skills (#62).** `SKILL.md` documents (`name`, `description` + markdown). The prompt advertises name and description; the agent fetches bodies with `read_skill`. Built-ins are embedded. Table-bound skills load only when the table has rows.
 
-**A2UI artifacts (#67).** `{ title, components[] }`, thirteen component types, closed color enum, unknown fields rejected. `stat` / `table` / `barChart` / `lineChart` take inline data or a live `sql` binding.
+**A2UI artifacts (#67).** `{ title, components[] }`, twenty component types (the original thirteen plus the KINETIC charts `areaChart`, `columnChart`, `ringChart`, `radarChart`, `sankeyChart`, `heatmap`, `streamChart`), closed color enum, unknown fields rejected. `stat` / `table` / every chart take inline data or a live `sql` binding; every chart takes a closed `motion` object (easing preset, speed, stagger, spring tuning), animated in `a2ui/useMotion.ts` and off under reduced motion.
 
 **Agent policy.** One tool registry, consumed by the in-app runner and by MCP. Sandbox tiers `read-only`, `read-write`, `full`. A write needs all three: the tier allows it, the connection is writable, and the person approves (always asked for non-local connections; headless MCP refuses them). SQL is an allow-list parsed before `EXPLAIN` binds it (`docs/reference/agent-policy.md`). Guardrails (#70): grounding check, empty-result explanation, tool-result budget.
 

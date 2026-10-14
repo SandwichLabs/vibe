@@ -4,7 +4,7 @@
 
 A notebook carries `schemaVersion: 2`. v2 adds one optional field: a
 **`connection`** on `sql` cells and on the `sql`-bound components of `a2ui`
-cells (`stat`, `table`, `barChart`, `lineChart`). It names a connection (a
+cells (`stat`, `table`, `barChart`, `lineChart` and the KINETIC charts). It names a connection (a
 catalog alias matching `^[a-z_][a-z0-9_]{0,62}$`); the cell's `sql` then runs
 with that connection as the **default catalog for unqualified table names**,
 on a pinned connection (`USE <connection>`). Unset means the workspace's `default_connection`. Catalog-qualified names (`other.main.orders`) work with or without it.
@@ -42,7 +42,12 @@ UPDATE, DELETE, and DDL are rejected at run time (the frontend surfaces the
 denial as "Notebook cells are read-only queries — use the Query editor to
 change data"). A sql cell also carries:
 
-- `view` — how the result renders: `table`, `bar`, `line`, or `stat`.
+- `view` — how the result renders: `table`, `bar`, `line`, `stat`, or one
+  of the KINETIC chart views `area`, `columns`, `rings`, `radar`, `sankey`,
+  `heatmap` (each renders the matching A2UI chart from the result's columns
+  and rows; see [the chart table](#kinetic-motion-charts) for the shape each
+  wants). Studio shows the first four as toolbar buttons and the chart views
+  in a **Charts** menu; a view that does not fit the result says why.
 - `viewPinned` — when false, the view **auto-fits** to the result shape the
   first time the cell runs (a single scalar value picks `stat`; two numeric
   columns pick `bar`; a time-like first column with a numeric second column
@@ -52,6 +57,11 @@ change data"). A sql cell also carries:
 - `label` — a short cell title.
 - `connection` (v2, optional) — the connection whose catalog is the default
   for unqualified table names in `source`.
+- `motion` (optional) — the chart animation, the same closed object an A2UI
+  chart's `motion` field takes ([Motion](#motion)). Unset is the default
+  spring. Only chart views use it; an invalid value is cleared with a warning,
+  never a reason to drop the cell. Studio edits it from the **Motion** row
+  under the SQL. An older Vibe drops the field on save.
 
 In Studio the SQL is hidden by default behind a "Show SQL" row, and the
 result shows first. Whether it is open is view state and is never stored. A
@@ -146,8 +156,15 @@ a validation error, not a silently-ignored one.
 | `stat` | `label` | `value`, `sql`, `connection`, `detail`, `color` |
 | `statRow` | — | — (a row container for `stat` children) |
 | `table` | — | `columns`, `rows`, `sql`, `connection`, `label` |
-| `barChart` | — | `bars`, `sql`, `connection`, `label`, `color` |
-| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color` |
+| `barChart` | — | `bars`, `sql`, `connection`, `label`, `color`, `motion` |
+| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color`, `motion` |
+| `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `motion` |
+| `columnChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `mode`, `sorted`, `motion` |
+| `ringChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
+| `radarChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
+| `sankeyChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `motion` |
+| `heatmap` | — | `columns`, `rows`, `sql`, `connection`, `label`, `motion` |
+| `streamChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `refresh`, `window`, `threshold`, `color`, `motion` |
 | `list` | `items` | `label`, `color` |
 | `code` | `text` | `language` |
 | `callout` | `text` | `icon`, `color` |
@@ -163,12 +180,51 @@ component type here goes out of sync with that registry.
 
 ### Data-bound components
 
-`stat`, `table`, `barChart`, and `lineChart` accept either **inline data**
-(`value`/`rows`/`bars`/`points`) or a live `sql` binding. A `sql`-bound
+`stat`, `table`, `barChart`, `lineChart` and the seven KINETIC charts accept
+either **inline data** (`value`/`rows`/`bars`/`points`, or `columns` + `rows`)
+or a live `sql` binding. A `sql`-bound
 component re-runs its query every time the page renders — same read-only,
 sandbox-gated classifier as a notebook sql cell. An optional `connection`
 (v2) sets the default catalog for the binding's unqualified names, exactly as
 on a sql cell.
+
+### KINETIC motion charts
+
+Seven animated chart types, ported from the KINETIC motion chart library.
+Each takes inline `columns` + `rows` in **exactly the shape its `sql`
+returns**, so a page reads the same either way:
+
+| Type | Rows | Draws |
+|---|---|---|
+| `areaChart` | a label column, then one numeric column per series | smooth (Catmull-Rom) areas over a shared axis; hover to read every series at a label |
+| `columnChart` | a label column, then one numeric column per series | vertical columns, `mode` `stacked` (default) or `grouped`; `sorted: true` orders by total |
+| `ringChart` | label, value[, max] | up to six concentric progress rings; a row's max falls back to `max`, then 100 |
+| `radarChart` | an axis label (3+ rows), then one numeric column per series | a polygon per series, the first solid and the rest dashed ghosts; scaled to `max` or the largest value |
+| `sankeyChart` | source, target, weight | ribbons between source and target nodes, thickness by weight, with flowing packets; hover isolates one |
+| `heatmap` | row label, column label, value | a grid of cells quantized into four heat levels |
+| `streamChart` | label, value (time order) | a ticker of the last `window` values (5–120, default 30), flagged above `threshold`; `refresh` (5–3600 s) re-runs the sql while visible |
+
+The label column is the first column whose values are not numbers (column 0
+if all are). Series colors come from the theme's `chart.1` … `chart.6` roles,
+never from the page.
+
+### Motion
+
+Every chart (`barChart`, `lineChart` and the seven above) animates in, and
+takes an optional, closed `motion` object:
+
+| Field | Values | Default |
+|---|---|---|
+| `easing` | `spring` (elastic overshoot), `expo` (snappy), `cinema` (ease in-out), `steps` (quantized ticks), `custom` (a damped spring tuned by the next three), `none` (draw the final frame) | `spring` |
+| `speed` | 0.25–4 (a multiplier) | 1 |
+| `stagger` | `true` cascades values one after another, `false` moves them together | `true` |
+| `stiffness` / `damping` / `mass` | 10–500 / 1–100 / 0.1–10 (custom only) | 180 / 13 / 1 |
+
+An unknown field, an unknown easing or an out-of-range number is a validation
+error. The values only feed the renderer's easing math and never reach a
+style attribute. A chart with animation on shows a replay button. Animation
+is off, and charts draw their final frame, when the OS asks for reduced
+motion.
 
 ### The closed color enum
 

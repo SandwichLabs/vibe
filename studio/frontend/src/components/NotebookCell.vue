@@ -12,7 +12,8 @@ import ConnectionSelect from './ConnectionSelect.vue'
 import { defaultConnectionName } from '../composables/useConnections'
 import { renderSafeMarkdown } from '../lib/markdown'
 import { cellMeta } from '../lib/cellSummary'
-import { viewFit, VIEWS, VIEW_LABELS, VIEW_HINTS } from '../lib/notebookViews'
+import CellMotionPicker from './CellMotionPicker.vue'
+import { viewFit, CHART_VIEWS, CLASSIC_VIEWS, VIEW_LABELS, VIEW_HINTS, type ViewKind } from '../lib/notebookViews'
 import {
   AI_CELL_ENABLED, CELL_ICON, CELL_KIND, ariaTitleOf, isStale, mismatchInfo, pickView, shapeOf, summaryOf,
   synthesizedPage, titleOf, type CellState,
@@ -84,7 +85,7 @@ const emit = defineEmits<{
         <template v-if="!cell.collapsed">
           <template v-if="cell.type === 'sql'">
             <button
-              v-for="v in VIEWS"
+              v-for="v in CLASSIC_VIEWS"
               :key="v"
               @click="pickView(cell, v)"
               class="btn btn-ghost btn-sm"
@@ -93,6 +94,21 @@ const emit = defineEmits<{
               :title="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? viewFit(v, shapeOf(cell)!).why : VIEW_HINTS[v]"
               :data-testid="`view-${v}`"
             >{{ VIEW_LABELS[v] }}</button>
+            <select
+              class="btn btn-ghost btn-sm sh-mono"
+              :class="{ 'row-selected': CHART_VIEWS.includes(cell.view) }"
+              :value="CHART_VIEWS.includes(cell.view) ? cell.view : ''"
+              aria-label="Chart view"
+              title="More chart views"
+              data-testid="view-charts"
+              @change="pickView(cell, ($event.target as HTMLSelectElement).value as ViewKind)"
+            >
+              <option value="" disabled>CHARTS</option>
+              <option
+                v-for="v in CHART_VIEWS" :key="v" :value="v"
+                :title="shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? viewFit(v, shapeOf(cell)!).why : VIEW_HINTS[v]"
+              >{{ VIEW_LABELS[v] }}{{ shapeOf(cell) && !viewFit(v, shapeOf(cell)!).ok ? ' (won\'t fit)' : '' }}</option>
+            </select>
             <button @click="emit('run')" :disabled="cell.running" class="btn btn-primary btn-sm" data-testid="run-cell">
               <Icon name="play" :size="12" /> {{ cell.running ? 'Running…' : 'Run' }}
             </button>
@@ -140,6 +156,9 @@ const emit = defineEmits<{
                editor it explains. -->
           <div class="sh-mono" data-testid="view-hint" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: var(--sh-space-1) var(--sh-space-3);">
             {{ VIEW_LABELS[cell.view] }} · {{ VIEW_HINTS[cell.view] }}<template v-if="!cell.viewPinned"> · auto</template>
+          </div>
+          <div v-if="cell.view !== 'table' && cell.view !== 'stat'" style="padding: 0 var(--sh-space-3) var(--sh-space-1);">
+            <CellMotionPicker v-model="cell.motion" />
           </div>
           <div class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); padding: 0 var(--sh-space-3) var(--sh-space-1);">
             Notebook cells are read-only queries — use the Query editor to change data. (Ctrl/Cmd+Enter to run.)

@@ -1,8 +1,9 @@
 // Package a2ui implements the A2UI page schema: the closed, validated
 // contract an agent uses to hand a chart/table/stat page back to the Studio
 // UI. It is a hand-rolled port of schoolwork-workspace's
-// src/a2ui/schema.js — same thirteen component types, same closed color
-// enum, same structural checks, same newline-joined JSON-path-prefixed error
+// src/a2ui/schema.js — the same thirteen original component types (plus the
+// seven KINETIC motion charts and the shared "motion" option added since),
+// same closed color enum, same structural checks, same newline-joined JSON-path-prefixed error
 // format, because that format is fed straight back to the model as a tool
 // error for self-correction and its shape is part of the contract, not an
 // implementation detail.
@@ -30,7 +31,33 @@ var ColorTokens = []string{"yellow", "black", "error", "muted"}
 
 // DataBound lists the component types whose "sql" field the Vue renderer
 // binds live, re-running the query on every render.
-var DataBound = []string{"stat", "table", "barChart", "lineChart"}
+var DataBound = []string{
+	"stat", "table", "barChart", "lineChart",
+	"areaChart", "ringChart", "columnChart", "radarChart", "sankeyChart", "heatmap", "streamChart",
+}
+
+// Charts lists the component types that animate and so accept the shared
+// "motion" option.
+var Charts = []string{
+	"barChart", "lineChart",
+	"areaChart", "ringChart", "columnChart", "radarChart", "sankeyChart", "heatmap", "streamChart",
+}
+
+// Easings is the closed enum of motion.easing presets. The renderer owns the
+// curves (studio/frontend/src/a2ui/motion.ts); "custom" is a damped spring
+// tuned by motion.stiffness/damping/mass, and "none" draws the final frame.
+var Easings = []string{"spring", "expo", "cinema", "steps", "custom", "none"}
+
+// motionRanges bounds every numeric motion field. The values only ever feed
+// the renderer's easing math, never a style attribute, but an unbounded
+// speed or a zero mass would stall or explode the animation, so they are
+// rejected here with the range in the message for the model to correct.
+var motionRanges = map[string][2]float64{
+	"speed":     {0.25, 4},
+	"stiffness": {10, 500},
+	"damping":   {1, 100},
+	"mass":      {0.1, 10},
+}
 
 // maxComponents caps a page at a sane size — a model that goes off the rails
 // and emits thousands of components would otherwise hang the renderer and
@@ -50,6 +77,8 @@ const (
 	kindArray
 	kindPoint
 	kindRows
+	kindMotion
+	kindRange
 )
 
 // fieldSpec describes one component field's expected shape.
@@ -57,6 +86,8 @@ type fieldSpec struct {
 	kind   fieldKind
 	values []any      // kindEnum
 	of     *fieldSpec // kindArray
+	min    float64    // kindRange
+	max    float64    // kindRange
 }
 
 var (
@@ -71,7 +102,26 @@ var (
 	strArraySpec   = fieldSpec{kind: kindArray, of: &strSpec}
 	pointArraySpec = fieldSpec{kind: kindArray, of: &fieldSpec{kind: kindPoint}}
 	rowsSpec       = fieldSpec{kind: kindRows}
+	motionSpec     = fieldSpec{kind: kindMotion}
+	maxSpec        = fieldSpec{kind: kindRange, min: 1e-9, max: math.MaxFloat64}
+	columnModeSpec = fieldSpec{kind: kindEnum, values: []any{"stacked", "grouped"}}
+	refreshSpec    = fieldSpec{kind: kindRange, min: 5, max: 3600}
+	windowSpec     = fieldSpec{kind: kindRange, min: 5, max: 120}
 )
+
+// tableData is the field set every KINETIC chart shares: inline data in the
+// same columns + rows shape its "sql" returns (so a page reads the same either
+// way), the live binding, a caption and the motion option.
+func tableData(extra map[string]fieldSpec) map[string]fieldSpec {
+	out := map[string]fieldSpec{
+		"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec,
+		"label": strSpec, "motion": motionSpec,
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	return out
+}
 
 func toAny(ss []string) []any {
 	out := make([]any, len(ss))
@@ -87,22 +137,31 @@ type componentSpec struct {
 	opt map[string]fieldSpec
 }
 
-// Components is the closed set of the thirteen A2UI component types and
-// their field specs, mirroring schema.js's COMPONENTS exactly.
+// Components is the closed set of A2UI component types and their field
+// specs: schema.js's original thirteen, plus the KINETIC charts (areaChart,
+// ringChart, columnChart, radarChart, sankeyChart, heatmap, streamChart),
+// which take inline columns + rows or a live "sql" binding.
 var Components = map[string]componentSpec{
-	"heading":   {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"level": headingLvlSpec}},
-	"text":      {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"muted": boolSpec}},
-	"divider":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
-	"stat":      {req: map[string]fieldSpec{"label": strSpec}, opt: map[string]fieldSpec{"value": strOrNumSpec, "sql": strSpec, "connection": connSpec, "detail": strSpec, "color": colorSpec}},
-	"statRow":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
-	"table":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec}},
-	"barChart":  {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec}},
-	"lineChart": {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec}},
-	"list":      {req: map[string]fieldSpec{"items": strArraySpec}, opt: map[string]fieldSpec{"label": strSpec, "color": colorSpec}},
-	"code":      {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"language": strSpec}},
-	"callout":   {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"icon": strSpec, "color": colorSpec}},
-	"badge":     {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"color": colorSpec}},
-	"container": {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"layout": layoutSpec, "gap": numSpec}},
+	"heading":     {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"level": headingLvlSpec}},
+	"text":        {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"muted": boolSpec}},
+	"divider":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
+	"stat":        {req: map[string]fieldSpec{"label": strSpec}, opt: map[string]fieldSpec{"value": strOrNumSpec, "sql": strSpec, "connection": connSpec, "detail": strSpec, "color": colorSpec}},
+	"statRow":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
+	"table":       {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec}},
+	"barChart":    {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "motion": motionSpec}},
+	"lineChart":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "motion": motionSpec}},
+	"list":        {req: map[string]fieldSpec{"items": strArraySpec}, opt: map[string]fieldSpec{"label": strSpec, "color": colorSpec}},
+	"code":        {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"language": strSpec}},
+	"callout":     {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"icon": strSpec, "color": colorSpec}},
+	"badge":       {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"color": colorSpec}},
+	"container":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"layout": layoutSpec, "gap": numSpec}},
+	"areaChart":   {req: map[string]fieldSpec{}, opt: tableData(nil)},
+	"ringChart":   {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"max": maxSpec})},
+	"columnChart": {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"mode": columnModeSpec, "sorted": boolSpec})},
+	"radarChart":  {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"max": maxSpec})},
+	"sankeyChart": {req: map[string]fieldSpec{}, opt: tableData(nil)},
+	"heatmap":     {req: map[string]fieldSpec{}, opt: tableData(nil)},
+	"streamChart": {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"refresh": refreshSpec, "window": windowSpec, "threshold": numSpec, "color": colorSpec})},
 }
 
 // componentTypeNames is Components' keys in a stable order, for error
@@ -237,6 +296,15 @@ func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 		if !isFiniteNumber(obj["value"]) {
 			*errs = append(*errs, fmt.Sprintf("%s.value: expected a finite number, got %s", path, typeName(obj["value"])))
 		}
+	case kindMotion:
+		checkMotion(value, path, errs)
+	case kindRange:
+		f, ok := toFloat(value)
+		if !ok || !isFiniteNumber(value) {
+			*errs = append(*errs, fmt.Sprintf("%s: expected a finite number, got %s", path, typeName(value)))
+		} else if f < spec.min || f > spec.max {
+			*errs = append(*errs, fmt.Sprintf("%s: %s is out of range (%s)", path, jsonenc.Quote(value), rangeText(spec)))
+		}
 	case kindRows:
 		arr, ok := value.([]any)
 		if !ok {
@@ -256,6 +324,62 @@ func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 			}
 		}
 	}
+}
+
+// rangeText renders a kindRange's bounds for an error message: "5 to 3600",
+// or "greater than 0" for the open-ended chart max.
+func rangeText(spec fieldSpec) string {
+	if spec.max == math.MaxFloat64 {
+		return "must be greater than 0"
+	}
+	return fmt.Sprintf("must be %v to %v", spec.min, spec.max)
+}
+
+// checkMotion validates a chart's "motion" option: a closed object of
+// {easing, speed, stagger, stiffness, damping, mass}, every field optional.
+// An unknown key is an error like any other unknown field.
+func checkMotion(value any, path string, errs *[]string) {
+	obj, ok := value.(map[string]any)
+	if !ok {
+		*errs = append(*errs, fmt.Sprintf("%s: expected an object like {easing, speed, stagger}, got %s", path, typeName(value)))
+		return
+	}
+	for _, key := range sortedKeys(obj) {
+		v := obj[key]
+		sub := path + "." + key
+		switch key {
+		case "easing":
+			checkValue(fieldSpec{kind: kindEnum, values: toAny(Easings)}, v, sub, errs)
+		case "stagger":
+			checkValue(boolSpec, v, sub, errs)
+		case "speed", "stiffness", "damping", "mass":
+			r := motionRanges[key]
+			checkValue(fieldSpec{kind: kindRange, min: r[0], max: r[1]}, v, sub, errs)
+		default:
+			*errs = append(*errs, fmt.Sprintf("%s: motion has no such field. Allowed: damping, easing, mass, speed, stagger, stiffness", sub))
+		}
+	}
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ValidateMotion checks a standalone motion option (a notebook sql cell's
+// "motion") with the same rules a chart component's "motion" field gets,
+// returning the newline-joined errors or nil.
+func ValidateMotion(value any) error {
+	var errs []string
+	checkMotion(value, "motion", &errs)
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "\n"))
+	}
+	return nil
 }
 
 func isValidCell(v any) bool {

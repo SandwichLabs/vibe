@@ -1,22 +1,30 @@
 // notebookViews — what each notebook sql-cell view needs from a query
 // result, and whether a given result actually provides it. Ported from
-// schoolwork-workspace's src/notebook/views.js: same four views, same rules,
+// schoolwork-workspace's src/notebook/views.js: same four classic views, same rules,
 // so the picker's hints, the "why is this greyed out" tooltips, the mismatch
 // message, and the auto-fit on first run all tell the same story the prior
-// art did.
+// art did. The KINETIC chart views (area … heatmap) follow the same pattern
+// and mirror internal/agents' checkSeriesFit / checkTripleFit.
 import { typeFamily } from './formatCell'
 
-export type ViewKind = 'table' | 'bar' | 'line' | 'stat'
+export type ViewKind = 'table' | 'bar' | 'line' | 'stat' | 'area' | 'columns' | 'rings' | 'radar' | 'sankey' | 'heatmap'
 
-export const VIEWS: ViewKind[] = ['table', 'bar', 'line', 'stat']
+// The four classic views get toolbar buttons; the chart views sit in a menu.
+export const CLASSIC_VIEWS: ViewKind[] = ['table', 'bar', 'line', 'stat']
+export const CHART_VIEWS: ViewKind[] = ['area', 'columns', 'rings', 'radar', 'sankey', 'heatmap']
+export const VIEWS: ViewKind[] = [...CLASSIC_VIEWS, ...CHART_VIEWS]
 
-export const VIEW_LABELS: Record<ViewKind, string> = { table: 'TABLE', bar: 'BARS', line: 'LINE', stat: 'STAT' }
+export const VIEW_LABELS: Record<ViewKind, string> = {
+  table: 'TABLE', bar: 'BARS', line: 'LINE', stat: 'STAT',
+  area: 'AREA', columns: 'COLUMNS', rings: 'RINGS', radar: 'RADAR', sankey: 'FLOW', heatmap: 'HEATMAP',
+}
 
 // The A2UI component type a view synthesizes into when a sql cell's result
 // is rendered (#67's one renderer, shared by user cells and agent
 // dashboards alike).
 export const VIEW_COMPONENT: Record<ViewKind, string> = {
   table: 'table', bar: 'barChart', line: 'lineChart', stat: 'stat',
+  area: 'areaChart', columns: 'columnChart', rings: 'ringChart', radar: 'radarChart', sankey: 'sankeyChart', heatmap: 'heatmap',
 }
 
 export const VIEW_HINTS: Record<ViewKind, string> = {
@@ -24,7 +32,16 @@ export const VIEW_HINTS: Record<ViewKind, string> = {
   bar: 'a label column, then a number — one bar per row',
   line: 'an ordered label column, then a number — good for terms or dates',
   stat: 'one number: the first column of the first row',
+  area: 'a label column, then one number column per series — smooth areas',
+  columns: 'a label column, then one number column per series — stacked columns',
+  rings: 'label, value[, max] per row — up to six progress rings',
+  radar: 'an axis label column (3+ rows), then one number column per series',
+  sankey: 'source, target, then a numeric weight — one ribbon per row',
+  heatmap: 'a row label, a column label, then a number — one cell per row',
 }
+
+// MAX_RINGS matches the ring chart's (and internal/agents' maxRings) limit.
+const MAX_RINGS = 6
 
 function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v)
@@ -101,12 +118,28 @@ export function viewFit(view: ViewKind, shape: Shape): ViewFit {
     case 'table':
       return { ok: true }
     case 'bar':
-    case 'line': {
+    case 'line':
+    case 'area':
+    case 'columns':
+    case 'rings':
+    case 'radar': {
       if (numeric.length === 0) {
         return { ok: false, why: `needs a numeric column — this query returns only text (${cols.join(', ')})` }
       }
       if (cols.length < 2) {
         return { ok: false, why: 'needs two columns: something to label each point, then the number' }
+      }
+      if (view === 'radar' && rowCount < 3) return { ok: false, why: 'needs at least three rows, one per axis' }
+      if (view === 'rings' && rowCount > MAX_RINGS) {
+        return { ok: false, why: `draws at most ${MAX_RINGS} rings, but this query returns ${rowCount} rows — filter or LIMIT it` }
+      }
+      return { ok: true }
+    }
+    case 'sankey':
+    case 'heatmap': {
+      if (cols.length < 3 || !numeric.includes(cols[2])) {
+        const want = view === 'sankey' ? 'source, target, then a numeric weight' : 'a row label, a column label, then a numeric value'
+        return { ok: false, why: `needs three columns: ${want}` }
       }
       return { ok: true }
     }
