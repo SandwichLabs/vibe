@@ -87,6 +87,9 @@ type Field struct {
 	// Option marks a definition field stored under `options:` rather than as
 	// a top-level key.
 	Option bool `json:"option,omitempty"`
+	// Prominent asks the form to open the Advanced section on a new
+	// connection, for an option most people must look at (Azure's sign-in).
+	Prominent bool `json:"prominent,omitempty"`
 }
 
 // Capabilities says what a type can do.

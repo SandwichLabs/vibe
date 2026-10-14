@@ -122,7 +122,7 @@ const {
             <div v-for="fd in advFields" :key="fd.name" class="field">
               <label class="field-label" :for="`f-${fd.name}`">{{ fd.label }}</label>
               <select v-if="fd.kind === 'enum'" :id="`f-${fd.name}`" class="field-input" :value="val(fd)" :data-testid="`f-${fd.name}`" @change="setVal(fd, ($event.target as HTMLSelectElement).value)">
-                <option value="">Default</option>
+                <option value="">{{ fd.default ? `Default (${fd.default})` : 'Default' }}</option>
                 <option v-for="c in fd.choices" :key="c" :value="c">{{ c }}</option>
               </select>
               <input v-else :id="`f-${fd.name}`" class="field-input" :value="val(fd)" autocomplete="off" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />

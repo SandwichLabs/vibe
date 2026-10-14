@@ -275,6 +275,38 @@ func TestValidateFieldRules(t *testing.T) {
 	}
 }
 
+func TestS3InfoExposesUseSSL(t *testing.T) {
+	i, err := TypeInfoFor("s3")
+	require.NoError(t, err)
+	var f *Field
+	for k := range i.Fields {
+		if i.Fields[k].Name == "use_ssl" {
+			f = &i.Fields[k]
+		}
+	}
+	require.NotNil(t, f, "the form must offer use_ssl")
+	assert.Equal(t, KindEnum, f.Kind)
+	assert.True(t, f.Option)
+	assert.Equal(t, []string{"true", "false"}, f.Choices)
+	assert.Equal(t, "true", f.Default)
+	assert.Equal(t, "Use TLS", f.Label)
+	assert.Contains(t, i.FingerprintFields, "option:use_ssl")
+	for _, n := range []string{"gcs", "r2"} {
+		g, _ := TypeInfoFor(n)
+		for _, gf := range g.Fields {
+			assert.NotEqual(t, "use_ssl", gf.Name, n)
+		}
+	}
+}
+
+func TestAzureSignInIsProminent(t *testing.T) {
+	i, err := TypeInfoFor("azure")
+	require.NoError(t, err)
+	for _, f := range i.Fields {
+		assert.Equal(t, f.Name == "sign_in", f.Prominent, f.Name)
+	}
+}
+
 func TestListConnectionTypesMetadata(t *testing.T) {
 	infos := ListConnectionTypes()
 	var names []string

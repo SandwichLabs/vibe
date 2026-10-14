@@ -197,7 +197,7 @@ func (azureType) Info() TypeInfo {
 		Name: "azure", Label: "Azure Blob / Data Lake",
 		Fields: []Field{
 			{Name: "scope", Label: "Scope", Kind: KindURL, Required: true, Help: "A URL prefix such as az://container/path/ or abfss://container@account.dfs.core.windows.net/path/. Reads are allowed only inside it."},
-			{Name: "sign_in", Label: "Sign in with", Kind: KindEnum, Choices: azureAuths, Default: azureDefaultAuth, Option: true, Help: "Account key and service principal also need the account name; a service principal needs the tenant id. Ambient (az login) credentials are never used."},
+			{Name: "sign_in", Label: "Sign in with", Kind: KindEnum, Choices: azureAuths, Default: azureDefaultAuth, Option: true, Prominent: true, Help: "Account key and service principal also need the account name; a service principal needs the tenant id. Ambient (az login) credentials are never used."},
 			{Name: "account_name", Label: "Storage account", Kind: KindText, Option: true, Help: "Not needed for a connection string."},
 			{Name: "tenant_id", Label: "Tenant id", Kind: KindText, Option: true, Help: "Service principal only."},
 		},

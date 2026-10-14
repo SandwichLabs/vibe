@@ -235,6 +235,7 @@ interface ConnField {
   secret: boolean
   perPerson: boolean
   option?: boolean
+  prominent?: boolean
 }
 interface ConnTypeSpec {
   id: string

@@ -170,6 +170,7 @@ func (t storageType) Info() TypeInfo {
 			Field{Name: "region", Label: "Region", Kind: KindText, Default: "us-east-1"},
 			Field{Name: "endpoint", Label: "Endpoint", Kind: KindText, Option: true, Help: "For S3-compatible stores (MinIO and others)."},
 			Field{Name: "url_style", Label: "URL style", Kind: KindEnum, Choices: urlStyles, Option: true},
+			Field{Name: "use_ssl", Label: "Use TLS", Kind: KindEnum, Choices: []string{"true", "false"}, Default: "true", Option: true, Help: "Turn off only for a local S3-compatible store; traffic and keys are sent unencrypted."},
 		)
 		fp = append(fp, "region", "option:endpoint", "option:url_style", "option:use_ssl")
 	case "r2":
