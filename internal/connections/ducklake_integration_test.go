@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/marcboeker/go-duckdb/v2"
+	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -65,6 +65,9 @@ func TestDuckLakeLocalEndToEnd(t *testing.T) {
 	require.Len(t, rows, 2)
 	assert.Equal(t, "ada", rows[0][0])
 
+	// DuckLake 1.0 keeps small inserts in the catalog until they are flushed.
+	_, err = sess.DB().Exec("CALL ducklake_flush_inlined_data('lake')")
+	require.NoError(t, err)
 	// The lake is real files in the workspace.
 	_, err = os.Stat(filepath.Join(ws.Root(), "data", "lake.ducklake"))
 	require.NoError(t, err)
@@ -159,6 +162,9 @@ func TestDuckLakeWithObjectStorageDataPath(t *testing.T) {
 	require.NoError(t, err)
 	rows := queryAll(t, eng, "SELECT count(*) FROM wh.main.events")
 	assert.EqualValues(t, 2, rows[0][0])
+	// DuckLake 1.0 keeps small inserts in the catalog until they are flushed.
+	_, err = sess.DB().Exec("CALL ducklake_flush_inlined_data('wh')")
+	require.NoError(t, err)
 	// The Parquet file is in the bucket, under the data path.
 	rows = queryAll(t, eng, "SELECT count(*) FROM glob('s3://lake/ducklake/main/events/*.parquet')")
 	assert.EqualValues(t, 1, rows[0][0])
@@ -182,7 +188,7 @@ func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
 		"absolute table path":  "UPDATE ducklake_table SET path = '%OUT%/', path_is_relative = false",
 		"dot dot schema path":  "UPDATE ducklake_schema SET path = '../elsewhere/'",
 		"stored data path":     "UPDATE ducklake_metadata SET value = '%OUT%/' WHERE key = 'data_path'",
-		"absolute delete file": "INSERT INTO ducklake_delete_file VALUES (99, 1, 2, NULL, 0, '%OUT%/del.parquet', false, 'parquet', 1, 1, 1, NULL)",
+		"absolute delete file": "INSERT INTO ducklake_delete_file VALUES (99, 1, 2, NULL, 0, '%OUT%/del.parquet', false, 'parquet', 1, 1, 1, NULL, NULL)",
 		"scheduled deletion":   "INSERT INTO ducklake_files_scheduled_for_deletion VALUES (7, '%OUT%/victim.parquet', false, now())",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -195,7 +201,7 @@ func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
 			require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
 			sess.Preflight(ctx, "lake")
 			require.NoError(t, sess.Connect(ctx, "lake"), "an honest lake attaches")
-			_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'); DELETE FROM lake.people WHERE id = 5; INSERT INTO lake.people VALUES (2, 'bob')")
+			_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'); DELETE FROM lake.people WHERE id = 5; INSERT INTO lake.people VALUES (2, 'bob'); CALL ducklake_flush_inlined_data('lake')")
 			require.NoError(t, err)
 			require.NoError(t, sess.Close())
 

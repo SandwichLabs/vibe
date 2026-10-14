@@ -397,7 +397,7 @@ A cask is macOS-oriented and wouldn't give Linuxbrew users a formula. Keep
 
 ### DuckDB extensions: pinning and bundling
 
-- **Pinned engine.** go-duckdb is pinned to a DuckDB version MotherDuck supports (v2.4.3 = DuckDB 1.4.1 today). Bumping it is a deliberate change, checked against MotherDuck, never a routine `go get -u`. Extension binaries are per DuckDB version and platform, so a bump also changes what has to be downloaded or bundled.
+- **Pinned engine.** duckdb-go (`github.com/duckdb/duckdb-go/v2`) is pinned to a DuckDB version MotherDuck supports (v2.10506.0 = DuckDB 1.5.6 today; it moved from `marcboeker/go-duckdb` in #118). Bumping it is a deliberate change, checked against MotherDuck, never a routine `go get -u`. Extension binaries are per DuckDB version and platform, so a bump also changes what has to be downloaded or bundled.
 - **Download on consent, into the app-private directory.** Autoinstall and autoload are off; `extension_directory` is `<user cache dir>/vibe/duckdb/extensions`; a missing extension is a visible `extension-missing` state and the download happens only on the person's yes (Studio's Install, or `--install` on the CLI). The user's own `~/.duckdb` is never loaded. Details: [reference/connections.md](reference/connections.md#duckdb-version-and-extensions). `vibe workspace info` shows the running version and what is installed.
 - **Open decision: bundle an offline set?** Options:
   - bundle nothing (today): smallest download, needs network the first time each extension is used;

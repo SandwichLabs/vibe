@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	duckdb "github.com/marcboeker/go-duckdb/v2"
+	duckdb "github.com/duckdb/duckdb-go/v2"
 )
 
 // hardeningDSN returns the DSN query parameters for every option DuckDB
-// accepts at open. Strings only; secret_directory is accepted by the DSN but
-// silently ignored, so it is SET in applyHardening. lock_configuration is
+// accepts at open. Strings only; secret_directory is also set (and read back)
+// in applyHardening, as it was ignored by the DSN on DuckDB 1.4.1. lock_configuration is
 // deliberately NOT here: it must be the last thing set (it blocks every later
 // SET), and a DSN-time lock would stop the SETs below.
 func hardeningDSN(c *config) url.Values {
@@ -83,6 +83,12 @@ func expectedSettings(c *config) []hardeningCheck {
 		{"autoload_known_extensions", "false"},
 		{"allow_community_extensions", "false"},
 		{"lock_configuration", "true"},
+		// DuckDB 1.5 reads these back as empty lists; a non-empty value would mean
+		// something widened or narrowed what a session may touch or change.
+		{"allowed_configs", "[]"},
+		{"extension_directories", "[]"},
+		{"allowed_directories", "[]"},
+		{"allowed_paths", "[]"},
 	}
 	if c.tempDir != "" {
 		checks = append(checks, hardeningCheck{"temp_directory", c.tempDir})

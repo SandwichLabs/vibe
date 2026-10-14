@@ -99,7 +99,7 @@ func TestExtensionNeeds(t *testing.T) {
 			assert.Less(t, nobody[i-1].Name, n.Name, "sorted, each once")
 		}
 	}
-	assert.ElementsMatch(t, []string{"postgres", "mysql", "httpfs", "azure", "sqlite", "ducklake", "iceberg", "delta", "motherduck"}, names)
+	assert.ElementsMatch(t, []string{"postgres", "mysql", "httpfs", "azure", "sqlite", "ducklake", "iceberg", "avro", "delta", "motherduck"}, names)
 
 	require.NoError(t, ws.AddConnection(ScopeShared, pgConn("zeta")))
 	require.NoError(t, ws.AddConnection(ScopeShared, pgConn("alpha")))

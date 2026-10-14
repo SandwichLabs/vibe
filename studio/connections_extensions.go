@@ -28,6 +28,7 @@ var extensionPurpose = map[string]string{
 	"azure":      "Read files from Azure Blob Storage and Data Lake.",
 	"ducklake":   "Read and write DuckLake lakehouses.",
 	"iceberg":    "Read Iceberg tables.",
+	"avro":       "Read Avro files (Iceberg metadata needs it).",
 	"delta":      "Read Delta Lake tables.",
 }
 

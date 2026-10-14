@@ -21,7 +21,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/skills"
 
 	"charm.land/fantasy"
-	_ "github.com/marcboeker/go-duckdb/v2" // registers "duckdb"
+	_ "github.com/duckdb/duckdb-go/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

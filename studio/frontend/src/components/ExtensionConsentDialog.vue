@@ -26,6 +26,7 @@ const what = computed(() => {
     case 'azure': return 'To read files from Azure Blob Storage or Data Lake, Vibe’s database engine needs a small add-on called the'
     case 'ducklake': return 'To use a DuckLake, Vibe’s database engine needs a small add-on called the'
     case 'iceberg': return 'To read Iceberg tables, Vibe’s database engine needs a small add-on called the'
+    case 'avro': return 'Iceberg tables keep their metadata in Avro files, so reading one needs two small add-ons (this one first, then iceberg). The first is called the'
     case 'delta': return 'To read Delta Lake tables, Vibe’s database engine needs a small add-on called the'
   }
   return 'Vibe’s database engine needs a small add-on called the'

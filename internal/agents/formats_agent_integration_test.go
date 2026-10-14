@@ -64,7 +64,7 @@ func TestDeltaAndIcebergAreNotReadableByTheAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, issues)
 	defer sess.Close()
-	for _, ext := range []string{"delta", "iceberg"} {
+	for _, ext := range []string{"delta", "avro", "iceberg"} {
 		require.NoError(t, sess.InstallExtension(ctx, ext))
 	}
 	sess.Preflight(ctx, "sales_delta")
@@ -297,7 +297,7 @@ func TestDuckLakeThroughTheAgent(t *testing.T) {
 	t.Run("a write needs the three gates: approval is forced on", func(t *testing.T) {
 		resp := sqlCall(h, "INSERT INTO lake.main.people VALUES (3, 'cy')")
 		require.NotNil(t, resp.Error)
-		assert.Equal(t, agents.ErrApprovalNeeded, resp.Error.Code, "no approver over MCP")
+		assert.Equal(t, agents.ErrApprovalNeeded, resp.Error.Code, "no approver over MCP: "+resp.Error.Message)
 		var n int
 		require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM lake.main.people").Scan(&n))
 		assert.Equal(t, 2, n)
@@ -373,7 +373,7 @@ func TestDuckLakeCraftedCatalogReadsNothingForTheAgent(t *testing.T) {
 	require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
 	sess.Preflight(ctx, "lake")
 	require.NoError(t, sess.Connect(ctx, "lake"))
-	_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'),(2,'bob')")
+	_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'),(2,'bob'); CALL ducklake_flush_inlined_data('lake')")
 	require.NoError(t, err)
 	outside := t.TempDir()
 	secretPq := filepath.Join(outside, "secret.parquet")

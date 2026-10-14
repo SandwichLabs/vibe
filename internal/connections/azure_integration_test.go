@@ -170,16 +170,14 @@ func TestAzureAgainstAzurite(t *testing.T) {
 	defer sess.Close()
 
 	eng := engine.NewManager(sess)
-	// The extension reads Azure but does not write it (DuckDB 1.4.1): put a
-	// Parquet file there the way an uploader would.
+	// Put a Parquet file there the way an uploader would (the extension writes
+	// Azure too since DuckDB 1.5; the agent's policy still refuses writes inside a scope).
 	local := filepath.Join(t.TempDir(), "people.parquet")
 	_, err = sess.DB().Exec("COPY (SELECT * FROM (VALUES (1, 'ada'), (2, 'bob')) t(id, name)) TO '" + local + "' (FORMAT PARQUET)")
 	require.NoError(t, err)
 	body, err := os.ReadFile(local)
 	require.NoError(t, err)
 	az.putBlob(t, "events", "2024/people.parquet", body)
-	_, err = eng.Execute(ctx, "COPY (SELECT 1) TO 'az://events/2024/nope.parquet' (FORMAT PARQUET)", nil)
-	require.Error(t, err, "writing to Azure is not supported by the extension")
 	rows := queryAll(t, eng, "SELECT name FROM read_parquet('az://events/2024/people.parquet') ORDER BY id")
 	require.Len(t, rows, 2)
 	assert.Equal(t, "ada", rows[0][0])
@@ -221,9 +219,18 @@ func TestAzureAgainstAzurite(t *testing.T) {
 		require.NotNil(t, resp.Error, q)
 		assert.NotContains(t, resp.Error.Message, azuriteKey, q)
 	}
-	// Writing is refused in the read-only tier, and the extension has no write.
+	// Writing is refused in the read-only tier. The extension itself writes Azure
+	// since DuckDB 1.5, so in the full tier it is the policy that refuses a COPY
+	// into a connection's scope, whatever the approval.
 	resp = run("COPY (SELECT 1) TO 'az://events/2024/x.parquet'")
 	require.NotNil(t, resp.Error)
+	full := agents.NewHandler(workspace.NewAgentAccess(ws, sess), eng,
+		&agents.SandboxConfig{Mode: agents.ModeFull, MaxQueryRows: 100, RequireApproval: true}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	resp = full.Handle(ctx, &agents.Request{JSONRPC: "2.0", ID: "1", Method: "run_query", Params: map[string]any{"sql": "COPY (SELECT 1) TO 'az://events/2024/x.parquet'"}})
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "may only write to a plain file path inside the workspace's data/ folder")
+	rows = queryAll(t, eng, "SELECT count(*) FROM glob('az://events/2024/x.parquet')")
+	assert.EqualValues(t, 0, rows[0][0], "nothing was written")
 }
 
 // The service principal and account key variants build secrets DuckDB accepts

@@ -225,7 +225,7 @@ func (h *hub) readyForConnect(ctx context.Context, conn *sql.Conn, e *entry, ct 
 		}
 		switch {
 		case !installed:
-			return secrets.Credential{}, StatusExtensionMissing, fmt.Sprintf("The DuckDB %q extension is not installed. Install it (a one-time download) to use %s connections.", ext, ct.Name()), errNotReady
+			return secrets.Credential{}, StatusExtensionMissing, fmt.Sprintf("The DuckDB %q extension is not installed. Install it (a one-time download) to use %s connections.", ext, ct.Name()), &missingExtensionError{name: ext}
 		case !loaded && hubTok:
 			// MotherDuck must be loaded with its token before the lock.
 		case !loaded:
@@ -262,6 +262,14 @@ func (h *hub) readyForConnect(ctx context.Context, conn *sql.Conn, e *entry, ct 
 }
 
 var errNotReady = errors.New("connection is not ready")
+
+// missingExtensionError is errNotReady for an extension that is not installed;
+// it names the first missing one, so the status can offer exactly that download
+// (a type may need several, and they install one at a time, in order).
+type missingExtensionError struct{ name string }
+
+func (e *missingExtensionError) Error() string        { return errNotReady.Error() }
+func (e *missingExtensionError) Is(target error) bool { return target == errNotReady }
 
 // Preflight implements Session. It also resets a remembered connect failure
 // (the person changed something), and brings a storage connection (s3, gcs,

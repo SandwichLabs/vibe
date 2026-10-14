@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/marcboeker/go-duckdb/mapping"
-	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver, for the dedicated parser connection below
+	_ "github.com/duckdb/duckdb-go/v2" // DuckDB driver, for the dedicated parser connection below
+	"github.com/duckdb/duckdb-go/v2/mapping"
 
 	"github.com/SandwichLabs/vibe/internal/usersql"
 )

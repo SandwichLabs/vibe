@@ -25,7 +25,7 @@ import (
 // proves the listener sees what httpfs sends.
 func TestPolicy_NoRequestBeforeThePrecheck(t *testing.T) {
 	extDir := filepath.Join(os.TempDir(), "vibe-conn-it-ext")
-	if _, err := os.Stat(filepath.Join(extDir, "v1.4.1", "linux_amd64", "httpfs.duckdb_extension")); err != nil {
+	if m, _ := filepath.Glob(filepath.Join(extDir, "v*", "*", "httpfs.duckdb_extension")); len(m) == 0 {
 		t.Skip("httpfs is not in the shared extension cache; run the integration suites once to fetch it")
 	}
 	var hits atomic.Int64

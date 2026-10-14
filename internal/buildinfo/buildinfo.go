@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"runtime"
 
-	_ "github.com/marcboeker/go-duckdb/v2" // registers the "duckdb" driver for DuckDBVersion
+	_ "github.com/duckdb/duckdb-go/v2" // registers the "duckdb" driver for DuckDBVersion
 )
 
 // Info is what the About page shows and copies.

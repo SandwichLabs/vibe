@@ -34,7 +34,16 @@ func (t tableSourceType) Name() string                      { return t.kind }
 func (t tableSourceType) Remote() bool                      { return true }
 func (t tableSourceType) Catalogless() bool                 { return true }
 func (t tableSourceType) NeedsCredential(session.Spec) bool { return false }
-func (t tableSourceType) Extensions() []string              { return []string{t.kind} }
+
+// Extensions: iceberg reads its metadata through the avro extension, which
+// DuckDB 1.5 tries to auto-install when iceberg loads. The hub runs with
+// autoinstall off, so avro is a named extension of its own.
+func (t tableSourceType) Extensions() []string {
+	if t.kind == "iceberg" {
+		return []string{"avro", "iceberg"}
+	}
+	return []string{t.kind}
+}
 
 func (t tableSourceType) fn() string {
 	if t.kind == "iceberg" {
@@ -99,7 +108,7 @@ func (t tableSourceType) Info() TypeInfo {
 			{Name: "path", Label: "Table location", Kind: KindPath, Required: true,
 				Help: "The table's folder, or a URL inside the scope of an S3, GCS, R2 or Azure connection. Read it with " + t.fn() + "('<location>')."},
 		},
-		Extensions:        []string{t.kind},
+		Extensions:        t.Extensions(),
 		Capabilities:      Capabilities{Catalog: false, Writable: false, ReadOnlyAttach: false, Remote: true, Test: true},
 		FingerprintFields: []string{"type", "path"},
 		SignInMethods:     []string{},

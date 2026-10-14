@@ -214,13 +214,11 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	start := time.Now()
 	if err := sess.Attach(ctx, spec); err != nil {
 		kind := session.StatusError
+		ext := ""
 		if st, ok := sess.Status(def.Name); ok {
 			kind = st.Kind
-		}
-		ext := ""
-		if kind == session.StatusExtensionMissing {
-			if ci, e := TypeInfoFor(def.Type); e == nil && len(ci.Extensions) > 0 {
-				ext = ci.Extensions[0]
+			if kind == session.StatusExtensionMissing {
+				ext = st.Extension // the first missing one, not the type's first
 			}
 		}
 		if ctx.Err() != nil {

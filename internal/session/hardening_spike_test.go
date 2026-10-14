@@ -80,12 +80,12 @@ func TestSpikeHardeningAfterSecretManager(t *testing.T) {
 		t.Logf("after secret manager: %-60s err=%v", s, err)
 	}
 	// Default allow_persistent_secrets is true: a persistent secret is written to
-	// secret_directory. FINDING: secret_directory is accepted in the DSN but
-	// silently ignored (reads back the default), so it needs SET; the default
-	// is ~/.duckdb/stored_secrets, never touched here.
+	// secret_directory. DuckDB 1.5 honours secret_directory in the DSN (1.4.1
+	// silently ignored it, hence the SET in production); the default is
+	// ~/.duckdb/stored_secrets, never touched here.
 	secDir := t.TempDir()
 	db2 := openDSN(t, "?secret_directory="+url.QueryEscape(secDir))
-	assert.NotEqual(t, secDir, setting(t, db2, "secret_directory"), "DSN secret_directory is silently ignored")
+	assert.Equal(t, secDir, setting(t, db2, "secret_directory"), "DSN secret_directory is honoured on DuckDB 1.5 (it was silently ignored on 1.4.1)")
 	_, err = db2.Exec("SET secret_directory='" + secDir + "'")
 	require.NoError(t, err)
 	assert.Equal(t, secDir, setting(t, db2, "secret_directory"))

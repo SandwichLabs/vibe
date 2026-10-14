@@ -91,7 +91,7 @@ func TestListConnectionTypes_GeneratedFromRegistry(t *testing.T) {
 	assert.Equal(t, []string{"mysql"}, byID["mysql"].RequiresExtension)
 	assert.Equal(t, []string{"azure"}, byID["azure"].RequiresExtension)
 	assert.Equal(t, []string{"ducklake"}, byID["ducklake"].RequiresExtension)
-	assert.Equal(t, []string{"iceberg"}, byID["iceberg"].RequiresExtension)
+	assert.Equal(t, []string{"avro", "iceberg"}, byID["iceberg"].RequiresExtension)
 	assert.Equal(t, []string{"delta"}, byID["delta"].RequiresExtension)
 	var myPw bool
 	for _, f := range byID["mysql"].Credentials {
@@ -384,7 +384,7 @@ func TestListExtensions_AndInstallRefusesUnknown(t *testing.T) {
 		assert.NotNil(t, e.NeededBy)
 		assert.NotEmpty(t, e.Purpose)
 	}
-	assert.ElementsMatch(t, []string{"postgres", "mysql", "httpfs", "azure", "sqlite", "ducklake", "iceberg", "delta", "motherduck"}, names)
+	assert.ElementsMatch(t, []string{"postgres", "mysql", "httpfs", "azure", "sqlite", "ducklake", "iceberg", "avro", "delta", "motherduck"}, names)
 	require.Error(t, app.InstallExtension(InstallExtensionRequest{Name: "not_a_thing"}))
 }
 

@@ -406,7 +406,11 @@ func TestTableSourceTypes(t *testing.T) {
 		assert.Empty(t, steps)
 		assert.False(t, asCred(typ).NeedsCredential(d.Spec()))
 		assert.True(t, asCatless(typ).Catalogless())
-		assert.Equal(t, []string{kind}, asCred(typ).Extensions())
+		want := []string{kind}
+		if kind == "iceberg" {
+			want = []string{"avro", "iceberg"} // DuckDB 1.5: iceberg reads its metadata through avro
+		}
+		assert.Equal(t, want, asCred(typ).Extensions())
 		// The location is not a storage scope: no "scope" param is produced, so
 		// it can never widen what the agent may read.
 		assert.NotContains(t, d.Params(), "scope")
