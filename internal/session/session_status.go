@@ -60,7 +60,7 @@ func (h *hub) SetDefaultCatalog(ctx context.Context, name string) error {
 }
 
 func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
-	h.setStatusFull(name, kind, msg, pid, nil)
+	h.setStatusFull(name, kind, msg, pid, nil, "")
 }
 
 // setStatusCause is setStatus for a failure whose cause is known: a changed
@@ -68,25 +68,23 @@ func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
 func (h *hub) setStatusCause(name string, kind StatusKind, msg string, cause error) {
 	var fp *secrets.ErrFingerprintChanged
 	if errors.As(cause, &fp) && fp.Old != "" && fp.New != "" {
-		h.setStatusFull(name, kind, msg, 0, &ServerChange{Old: fp.Old, New: fp.New})
+		h.setStatusFull(name, kind, msg, 0, &ServerChange{Old: fp.Old, New: fp.New}, "")
 		return
 	}
-	h.setStatusFull(name, kind, msg, 0, nil)
+	ext := ""
 	var me *missingExtensionError
 	if errors.As(cause, &me) {
-		h.mu.Lock()
-		if e := h.conns[name]; e != nil {
-			e.status.Extension = me.name
-		}
-		h.mu.Unlock()
+		ext = me.name
 	}
+	h.setStatusFull(name, kind, msg, 0, nil, ext)
 }
 
-func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, sc *ServerChange) {
+// setStatusFull replaces the whole status of a connection in one update.
+func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, sc *ServerChange, ext string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if e := h.conns[name]; e != nil {
-		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = kind, msg, pid, sc, ""
+		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = kind, msg, pid, sc, ext
 	}
 }
 
