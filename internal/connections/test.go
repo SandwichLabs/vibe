@@ -30,6 +30,7 @@ var (
 	_ session.CataloglessType  = azureType{}
 	_ session.CredentialedType = ducklakeType{}
 	_ session.PostAttacher     = ducklakeType{}
+	_ session.PreAttacher      = ducklakeType{}
 	_ session.CredentialedType = tableSourceType{}
 	_ session.CataloglessType  = tableSourceType{}
 )

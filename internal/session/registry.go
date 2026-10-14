@@ -78,6 +78,24 @@ type PostAttacher interface {
 	PostAttach(ctx context.Context, q Querier, spec Spec) error
 }
 
+// PreAttacher is implemented by types that must vet what they are about to
+// attach before any ATTACH statement runs (DuckLake: a crafted catalog file can
+// hold views or macros that DuckLake would query as its own metadata tables).
+// When the check fails nothing is attached and the connection is reported as an
+// error. It runs on the admin connection, after the secrets and before the
+// attach statements.
+type PreAttacher interface {
+	ConnectionType
+	PreAttach(ctx context.Context, q QueryExecer, spec Spec) error
+}
+
+// QueryExecer is the surface PreAttach gets: reads, plus the statements to open
+// and close a scratch attachment.
+type QueryExecer interface {
+	Querier
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 // Querier is the read surface PostAttach gets.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)

@@ -164,6 +164,14 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 		h.setStatus(name, StatusError, h.redact(err.Error()), 0)
 		return fmt.Errorf("failed to attach %q: %s", name, h.redact(err.Error()))
 	}
+	if pre, ok := t.(PreAttacher); ok {
+		if perr := pre.PreAttach(ctx, conn, e.spec); perr != nil {
+			h.dropSecretsOn(ctx, conn, secretNames)
+			msg := h.redact(perr.Error())
+			h.setStatus(name, StatusError, msg, 0)
+			return fmt.Errorf("failed to attach %q: %s", name, msg)
+		}
+	}
 	for _, s := range stmts {
 		if _, err := conn.ExecContext(ctx, s); err != nil {
 			kind, msg, pid := classifyAttachError(err, h.redact)
