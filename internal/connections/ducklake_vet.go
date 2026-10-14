@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -98,16 +97,6 @@ var ducklakeMetadataTables = map[string]bool{
 // ducklake_inlined_data_<table id>_<schema version> and
 // ducklake_inlined_delete_<table id>.
 var ducklakeInlinedTableRE = regexp.MustCompile(`^ducklake_inlined_(data_[0-9]+_[0-9]+|delete_[0-9]+)$`)
-
-// DuckLakeMetadataTables lists the fixed tables of the allow-list, sorted.
-func DuckLakeMetadataTables() []string {
-	out := make([]string, 0, len(ducklakeMetadataTables))
-	for n := range ducklakeMetadataTables {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
 
 // DuckLakeCatalogTable reports whether name is a table an honest DuckLake
 // catalog may hold.
