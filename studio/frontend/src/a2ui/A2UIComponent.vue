@@ -15,6 +15,13 @@ import A2UIStat from './A2UIStat.vue'
 import A2UITable from './A2UITable.vue'
 import A2UIBarChart from './A2UIBarChart.vue'
 import A2UILineChart from './A2UILineChart.vue'
+import A2UIAreaChart from './A2UIAreaChart.vue'
+import A2UIRingChart from './A2UIRingChart.vue'
+import A2UIColumnChart from './A2UIColumnChart.vue'
+import A2UIRadarChart from './A2UIRadarChart.vue'
+import A2UISankeyChart from './A2UISankeyChart.vue'
+import A2UIHeatmap from './A2UIHeatmap.vue'
+import A2UIStreamChart from './A2UIStreamChart.vue'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 
@@ -66,6 +73,13 @@ const headingTag = computed(() => `h${props.component.level ?? 2}`)
   <A2UITable v-else-if="component.type === 'table'" :component="component" />
   <A2UIBarChart v-else-if="component.type === 'barChart'" :component="component" />
   <A2UILineChart v-else-if="component.type === 'lineChart'" :component="component" />
+  <A2UIAreaChart v-else-if="component.type === 'areaChart'" :component="component" />
+  <A2UIRingChart v-else-if="component.type === 'ringChart'" :component="component" />
+  <A2UIColumnChart v-else-if="component.type === 'columnChart'" :component="component" />
+  <A2UIRadarChart v-else-if="component.type === 'radarChart'" :component="component" />
+  <A2UISankeyChart v-else-if="component.type === 'sankeyChart'" :component="component" />
+  <A2UIHeatmap v-else-if="component.type === 'heatmap'" :component="component" />
+  <A2UIStreamChart v-else-if="component.type === 'streamChart'" :component="component" />
 
   <template v-if="!holdsChildrenItself">
     <A2UIComponent v-for="child in children" :key="'sib-' + child.id" :component="child" />

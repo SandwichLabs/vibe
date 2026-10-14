@@ -529,3 +529,29 @@ func TestCoerce_RejectsV3(t *testing.T) {
 	_, _, err := Coerce(map[string]any{"schemaVersion": 3, "cells": []any{}})
 	require.Error(t, err)
 }
+
+func TestCoerce_KineticViewsAndMotion(t *testing.T) {
+	raw := map[string]any{
+		"cells": []any{
+			map[string]any{"id": "c1", "type": "sql", "source": "SELECT 1", "view": "radar",
+				"motion": map[string]any{"easing": "custom", "speed": 2.0, "stiffness": 190.0}},
+			map[string]any{"id": "c2", "type": "sql", "source": "SELECT 1", "view": "sankey",
+				"motion": map[string]any{"easing": "wobble"}},
+		},
+	}
+	nb, warnings, err := Coerce(raw)
+	require.NoError(t, err)
+	assert.Equal(t, "radar", nb.Cells[0].View)
+	assert.Equal(t, "custom", nb.Cells[0].Motion["easing"])
+	assert.Equal(t, "sankey", nb.Cells[1].View)
+	assert.Nil(t, nb.Cells[1].Motion, "an invalid motion is cleared, the cell kept")
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "invalid motion")
+
+	b, err := json.Marshal(nb.Cells[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"motion":{"easing":"custom"`)
+	b, err = json.Marshal(nb.Cells[1])
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "motion")
+}

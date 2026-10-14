@@ -335,3 +335,248 @@
   padding-left: 10px;
   color: var(--sh-ink);
 }
+
+/* ---- KINETIC motion charts (areaChart, ringChart, columnChart, radarChart,
+   sankeyChart, heatmap, streamChart) ----
+   Series colors come only from the six theme chart roles (--vibe-chart-1..6)
+   through .a2ui-series-N classes; a model never names a color here. Geometry
+   is animated in script (a2ui/useMotion.ts), so these rules carry no
+   transitions on animated attributes, and the only CSS animation (sankey
+   packets) is off under prefers-reduced-motion. */
+.a2ui-page .a2ui-series-0 { --a2ui-series: var(--vibe-chart-1); }
+.a2ui-page .a2ui-series-1 { --a2ui-series: var(--vibe-chart-2); }
+.a2ui-page .a2ui-series-2 { --a2ui-series: var(--vibe-chart-3); }
+.a2ui-page .a2ui-series-3 { --a2ui-series: var(--vibe-chart-4); }
+.a2ui-page .a2ui-series-4 { --a2ui-series: var(--vibe-chart-5); }
+.a2ui-page .a2ui-series-5 { --a2ui-series: var(--vibe-chart-6); }
+
+.a2ui-page .a2ui-kchart {
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius);
+  padding: 10px 12px;
+  background: var(--sh-surface);
+  min-width: 0;
+}
+.a2ui-page .a2ui-kchart__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.a2ui-page .a2ui-kchart__replay {
+  display: inline-flex;
+  align-items: center;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: transparent;
+  color: var(--sh-graphite);
+  padding: 3px;
+  cursor: pointer;
+}
+.a2ui-page .a2ui-kchart__replay:hover { color: var(--sh-ink); background: var(--sh-paper-2); }
+.a2ui-page .a2ui-kchart__svg { width: 100%; height: auto; display: block; overflow: visible; }
+.a2ui-page .a2ui-kchart__grid { stroke: var(--sh-chalk); stroke-width: 1; fill: none; }
+.a2ui-page .a2ui-kchart__cursor { stroke: var(--sh-graphite); stroke-width: 1; stroke-dasharray: 3 3; }
+.a2ui-page .a2ui-kchart__hit { fill: transparent; cursor: crosshair; }
+.a2ui-page .a2ui-kchart__readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-family: var(--sh-font-mono);
+  font-size: var(--sh-fs-xs);
+  color: var(--sh-graphite);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.a2ui-page .a2ui-kchart__readval { color: var(--a2ui-series); font-weight: 700; }
+.a2ui-page .a2ui-kchart__xaxis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  color: var(--sh-graphite);
+}
+.a2ui-page .a2ui-kchart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: var(--sh-fs-xs);
+  color: var(--sh-graphite);
+}
+.a2ui-page .a2ui-kchart__key { display: inline-flex; align-items: center; gap: 5px; }
+.a2ui-page .a2ui-kchart__swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--a2ui-series);
+  flex: none;
+}
+
+/* areaChart */
+.a2ui-page .a2ui-area__fill { fill: color-mix(in srgb, var(--a2ui-series) 22%, transparent); stroke: none; }
+.a2ui-page .a2ui-area__line { fill: none; stroke: var(--a2ui-series); stroke-width: 3; stroke-linecap: round; }
+.a2ui-page .a2ui-area__line--secondary { stroke-width: 2; stroke-dasharray: 5 4; }
+.a2ui-page .a2ui-area__dot { fill: var(--sh-surface); stroke: var(--a2ui-series); stroke-width: 2; pointer-events: none; }
+
+/* ringChart */
+.a2ui-page .a2ui-rings { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.a2ui-page .a2ui-rings__svg { width: min(168px, 100%); height: auto; flex: 0 1 168px; overflow: visible; }
+.a2ui-page .a2ui-rings__track { fill: none; stroke: var(--sh-chalk); stroke-width: 10; }
+.a2ui-page .a2ui-rings__arc { fill: none; stroke: var(--a2ui-series); stroke-width: 10; stroke-linecap: round; }
+.a2ui-page .a2ui-rings__ring--active .a2ui-rings__arc,
+.a2ui-page .a2ui-rings__ring--active .a2ui-rings__track { stroke-width: 12; }
+.a2ui-page .a2ui-rings__tip { fill: var(--sh-surface); stroke: var(--a2ui-series); stroke-width: 2.5; }
+.a2ui-page .a2ui-rings__center { font-family: var(--sh-font-mono); font-size: 20px; font-weight: 700; fill: var(--sh-ink); dominant-baseline: middle; }
+.a2ui-page .a2ui-rings__list { list-style: none; margin: 0; padding: 0; flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.a2ui-page .a2ui-rings__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--sh-radius-sm);
+  font-size: var(--sh-fs-xs);
+}
+.a2ui-page .a2ui-rings__row--active { border-color: var(--a2ui-series); background: var(--sh-paper-2); }
+.a2ui-page .a2ui-rings__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sh-ink); }
+.a2ui-page .a2ui-rings__value { font-family: var(--sh-font-mono); font-weight: 700; color: var(--sh-ink); font-variant-numeric: tabular-nums; }
+.a2ui-page .a2ui-rings__max { font-weight: 400; color: var(--sh-graphite); }
+
+/* columnChart */
+.a2ui-page .a2ui-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(20px, 1fr);
+  gap: 4px;
+  align-items: end;
+  height: 190px;
+  overflow-x: auto;
+}
+.a2ui-page .a2ui-columns__col { display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+.a2ui-page .a2ui-columns__total { font-family: var(--sh-font-mono); font-size: 11px; color: var(--sh-graphite); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.a2ui-page .a2ui-columns__track {
+  flex: 1 1 auto;
+  width: 100%;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-paper-2);
+  overflow: hidden;
+}
+.a2ui-page .a2ui-columns__track--stacked { flex-direction: column-reverse; justify-content: flex-start; }
+.a2ui-page .a2ui-columns__track--grouped { flex-direction: row; align-items: flex-end; }
+.a2ui-page .a2ui-columns__seg { background: var(--a2ui-series); border-radius: 2px; flex: none; }
+.a2ui-page .a2ui-columns__track--stacked .a2ui-columns__seg { width: 100%; }
+.a2ui-page .a2ui-columns__track--grouped .a2ui-columns__seg { flex: 1 1 0; }
+.a2ui-page .a2ui-columns__label {
+  margin-top: 4px;
+  max-width: 100%;
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  color: var(--sh-graphite);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* radarChart */
+.a2ui-page .a2ui-radar { position: relative; width: 100%; max-width: 360px; margin: 0 auto; padding: 0 48px; box-sizing: border-box; }
+.a2ui-page .a2ui-radar__svg { width: 100%; height: auto; display: block; overflow: visible; }
+.a2ui-page .a2ui-radar__axis {
+  position: absolute;
+  font-family: var(--sh-font-mono);
+  font-size: 10px;
+  color: var(--sh-graphite);
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.a2ui-page .a2ui-radar__axis--active { color: var(--sh-ink); font-weight: 700; }
+.a2ui-page .a2ui-radar__poly { fill: color-mix(in srgb, var(--a2ui-series) 22%, transparent); stroke: var(--a2ui-series); stroke-width: 2.5; stroke-linejoin: round; }
+.a2ui-page .a2ui-radar__poly--ghost { fill: color-mix(in srgb, var(--a2ui-series) 10%, transparent); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.a2ui-page .a2ui-radar__vertex { fill: var(--sh-surface); stroke: var(--a2ui-series); stroke-width: 2.5; cursor: pointer; }
+
+/* sankeyChart */
+.a2ui-page .a2ui-sankey__band { fill: none; stroke: var(--a2ui-series); stroke-opacity: 0.35; }
+.a2ui-page .a2ui-sankey__packets { fill: none; stroke: var(--a2ui-series); stroke-linecap: round; stroke-dasharray: 6 26; opacity: 0; }
+.a2ui-page .a2ui-sankey--flowing .a2ui-sankey__packets { opacity: 0.9; animation: a2ui-flow var(--a2ui-flow-dur, 1.4s) linear infinite; }
+.a2ui-page .a2ui-sankey__ribbon { cursor: pointer; }
+.a2ui-page .a2ui-sankey__ribbon--hot .a2ui-sankey__band { stroke-opacity: 0.65; }
+.a2ui-page .a2ui-sankey__ribbon--dim .a2ui-sankey__band { stroke-opacity: 0.12; }
+.a2ui-page .a2ui-sankey__ribbon--dim .a2ui-sankey__packets { opacity: 0.2; }
+.a2ui-page .a2ui-sankey__node { fill: var(--a2ui-series); }
+.a2ui-page .a2ui-sankey__wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 2fr) minmax(0, 1fr); width: 100%; margin: 4px 0 8px; }
+.a2ui-page .a2ui-sankey { width: 100%; height: 100%; display: block; overflow: visible; }
+.a2ui-page .a2ui-sankey__col { position: relative; min-width: 0; }
+.a2ui-page .a2ui-sankey__label {
+  position: absolute;
+  transform: translateY(-50%);
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--sh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a2ui-page .a2ui-sankey__label b { font-family: var(--sh-font-mono); color: var(--sh-graphite); font-weight: 600; }
+.a2ui-page .a2ui-sankey__col--src .a2ui-sankey__label { right: 6px; text-align: right; }
+.a2ui-page .a2ui-sankey__col--tgt .a2ui-sankey__label { left: 6px; }
+@keyframes a2ui-flow { from { stroke-dashoffset: 64; } to { stroke-dashoffset: 0; } }
+
+/* heatmap: four quantized heat levels, coolest to hottest */
+.a2ui-page .a2ui-heat-0 { --a2ui-series: var(--vibe-chart-4); }
+.a2ui-page .a2ui-heat-1 { --a2ui-series: var(--vibe-chart-3); }
+.a2ui-page .a2ui-heat-2 { --a2ui-series: var(--vibe-chart-2); }
+.a2ui-page .a2ui-heat-3 { --a2ui-series: var(--vibe-chart-1); }
+.a2ui-page .a2ui-heatmap { display: grid; gap: 4px; align-items: center; overflow-x: auto; }
+.a2ui-page .a2ui-heatmap__rowlabel,
+.a2ui-page .a2ui-heatmap__collabel {
+  font-family: var(--sh-font-mono);
+  font-size: 10px;
+  color: var(--sh-graphite);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a2ui-page .a2ui-heatmap__collabel { text-align: center; }
+.a2ui-page .a2ui-heatmap__cell {
+  position: relative;
+  height: 30px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-paper-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.a2ui-page .a2ui-heatmap__cell:hover { border-color: var(--a2ui-series); }
+.a2ui-page .a2ui-heatmap__cell--empty { background: transparent; border-style: dashed; }
+.a2ui-page .a2ui-heatmap__fill { position: absolute; inset: 0; background: color-mix(in srgb, var(--a2ui-series) 70%, transparent); border-radius: inherit; }
+.a2ui-page .a2ui-heatmap__val { position: relative; font-family: var(--sh-font-mono); font-size: 10px; font-weight: 700; color: var(--sh-ink); font-variant-numeric: tabular-nums; }
+
+/* streamChart (its color, when set, is the closed a2ui--<token> enum) */
+.a2ui-page .a2ui-stream {
+  --a2ui-stream: var(--vibe-chart-1);
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding: 4px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-paper-2);
+}
+.a2ui-page .a2ui-stream:is(.a2ui--yellow, .a2ui--black, .a2ui--error, .a2ui--muted) { --a2ui-stream: var(--a2ui-accent); }
+.a2ui-page .a2ui-stream__bar { flex: 1 1 0; min-width: 2px; background: color-mix(in srgb, var(--a2ui-stream) 75%, transparent); border-radius: 2px 2px 0 0; }
+.a2ui-page .a2ui-stream__bar--hot { background: var(--sh-error); }
+.a2ui-page .a2ui-stream__threshold { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--sh-error); pointer-events: none; }
+.a2ui-page .a2ui-stream__live { color: var(--sh-error); font-weight: 700; }
+.a2ui-page .a2ui-stream__latest { color: var(--sh-ink); font-weight: 700; font-size: var(--sh-fs-sm); }
+.a2ui-page .a2ui-stream__latest--hot { color: var(--sh-error); }
+
+@media (prefers-reduced-motion: reduce) {
+  .a2ui-page .a2ui-sankey--flowing .a2ui-sankey__packets { animation: none; opacity: 0; }
+}

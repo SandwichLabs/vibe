@@ -118,7 +118,7 @@ export function useNotebookEditor() {
     if (msg) setTimeout(() => { statusMessage.value = '' }, 4000)
   })
   watch(title, save.scheduleSave)
-  watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}:${c.connection}`).join('|'), save.scheduleSave)
+  watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}:${c.connection}:${JSON.stringify(c.motion)}`).join('|'), save.scheduleSave)
   watch(() => cells.value.length, save.scheduleSave)
 
   // vue-router reuses this component instance across a /notebooks/:id ->

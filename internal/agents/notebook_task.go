@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 )
 
 // --- preview_query (#66 part B, task mode) ---
@@ -80,7 +82,7 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	shape := describeViewShape(colNames, rs.Rows)
 	suggestedView := bestViewFor(shape)
 	viewFit := map[string]any{}
-	for _, v := range []string{"table", "bar", "line", "stat"} {
+	for _, v := range notebooks.Views {
 		fit := checkViewFit(v, shape)
 		if fit.OK {
 			viewFit[v] = true
@@ -169,12 +171,14 @@ func budgetedSample(cols []string, rows [][]any, columns []map[string]any, sugge
 // budget rather than ending the turn on one malformed call. A successful
 // call sets Response.StopTurn.
 
-var validCellViews = map[string]bool{"table": true, "bar": true, "line": true, "stat": true}
-
+// normalizeCellView clamps a model-supplied view to notebooks.Views (the
+// one closed list the notebook file format accepts), defaulting to table.
 func normalizeCellView(v string) string {
 	v = strings.ToLower(strings.TrimSpace(v))
-	if validCellViews[v] {
-		return v
+	for _, ok := range notebooks.Views {
+		if v == ok {
+			return v
+		}
 	}
 	return "table"
 }

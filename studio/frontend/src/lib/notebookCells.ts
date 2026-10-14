@@ -6,6 +6,7 @@
 import { reactive } from 'vue'
 import { toPoints } from '../a2ui/query'
 import type { A2UIPageT } from '../a2ui/types'
+import type { MotionT } from '../a2ui/motion'
 import type { VibeEditorInstance } from '../composables/useVibeEditor'
 import type { EnvelopeCell } from '../composables/useAiCellDialog'
 import { describeShape, viewFit, VIEW_COMPONENT, VIEW_HINTS, VIEW_LABELS, VIEWS, type Shape, type ViewKind } from './notebookViews'
@@ -22,6 +23,8 @@ export interface RawCell {
   // Notebook format v2: the connection whose catalog is the default for
   // this cell's unqualified table names. Unset = the session default.
   connection?: string
+  // The chart animation option (a2ui's "motion"); unset = the default spring.
+  motion?: MotionT
   page?: A2UIPageT
 }
 
@@ -34,6 +37,7 @@ export interface CellState {
   viewPinned: boolean
   label: string
   connection: string
+  motion: MotionT | null
   page: A2UIPageT | null
   // Runtime-only (never saved):
   lastRunSource: string | null
@@ -67,6 +71,7 @@ export function newCellState(raw: RawCell): CellState {
     viewPinned: !!raw.viewPinned,
     label: raw.label ?? '',
     connection: raw.connection ?? '',
+    motion: raw.motion ?? null,
     page: raw.page ?? null,
     lastRunSource: null,
     result: null,
@@ -113,7 +118,7 @@ export function buildSavePayload(id: string, snapshotTitle: string, snapshotCell
     id,
     title: snapshotTitle,
     cells: snapshotCells.map((c) => {
-      if (c.type === 'sql') return { id: c.id, type: 'sql', collapsed: c.collapsed, source: c.source, view: c.view, viewPinned: c.viewPinned, label: c.label, ...(c.connection ? { connection: c.connection } : {}) }
+      if (c.type === 'sql') return { id: c.id, type: 'sql', collapsed: c.collapsed, source: c.source, view: c.view, viewPinned: c.viewPinned, label: c.label, ...(c.connection ? { connection: c.connection } : {}), ...(c.motion ? { motion: c.motion } : {}) }
       if (c.type === 'markdown') return { id: c.id, type: 'markdown', collapsed: c.collapsed, source: c.source }
       return { id: c.id, type: 'a2ui', collapsed: c.collapsed, page: c.page }
     }),
@@ -159,6 +164,8 @@ export function synthesizedPage(cell: CellState): A2UIPageT | null {
   const { columns, rows, types } = cell.result
   const componentType = VIEW_COMPONENT[cell.view]
   const base = { id: 'c', type: componentType, label: cell.label || undefined }
+  // Every view but table and stat is a chart, and charts take the cell's motion.
+  const motion = cell.motion && cell.view !== 'table' && cell.view !== 'stat' ? { motion: cell.motion } : {}
   let fields: Record<string, any> = {}
   switch (cell.view) {
     case 'table':
@@ -179,8 +186,12 @@ export function synthesizedPage(cell: CellState): A2UIPageT | null {
       // a generic "Result" rather than an empty required field.
       fields = { label: cell.label || columns[0] || 'Result', value: rows[0]?.[0] ?? null, types: [types[0]] }
       break
+    default:
+      // The KINETIC charts read the result as is: columns + rows, the same
+      // shape their own sql binding returns.
+      fields = { columns, rows }
   }
-  return { title: '', components: [{ ...base, ...fields }] }
+  return { title: '', components: [{ ...base, ...fields, ...motion }] }
 }
 
 // mismatchInfo describes why the cell's current (pinned) view does not fit

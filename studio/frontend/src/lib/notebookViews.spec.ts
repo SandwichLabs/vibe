@@ -105,3 +105,27 @@ describe('bestView', () => {
     expect(bestView(shape)).toBe('table')
   })
 })
+
+describe('viewFit — KINETIC chart views (mirrors internal/agents)', () => {
+  const series = describeShape(['region', 'a', 'b'], [['x', 1, 2], ['y', 3, 4]])
+  it('area, columns and rings take a label then numbers, like bar/line', () => {
+    for (const v of ['area', 'columns', 'rings'] as const) expect(viewFit(v, series).ok).toBe(true)
+    expect(viewFit('area', describeShape(['name'], [['Ada']])).ok).toBe(false)
+  })
+  it('radar needs three axes; rings draw at most six', () => {
+    expect(viewFit('radar', series).why).toMatch(/three rows/)
+    const seven = describeShape(['k', 'v'], Array.from({ length: 7 }, (_, i) => [`k${i}`, i]))
+    expect(viewFit('radar', seven).ok).toBe(true)
+    expect(viewFit('rings', seven).why).toMatch(/at most 6 rings/)
+  })
+  it('sankey and heatmap need three columns with a numeric third', () => {
+    const triple = describeShape(['src', 'dst', 'w'], [['a', 'b', 3]])
+    expect(viewFit('sankey', triple).ok).toBe(true)
+    expect(viewFit('heatmap', triple).ok).toBe(true)
+    expect(viewFit('sankey', describeShape(['a', 'b', 'c'], [['x', 'y', 'z']])).why).toMatch(/source, target/)
+    expect(viewFit('heatmap', series).ok).toBe(true)
+  })
+  it('bestView never guesses a KINETIC chart', () => {
+    expect(bestView(describeShape(['src', 'dst', 'w'], [['a', 'b', 3]]))).toBe('table')
+  })
+})

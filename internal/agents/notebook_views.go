@@ -8,7 +8,7 @@ import (
 
 // viewShape/viewFit/bestView are a Go port of studio/frontend/src/lib/
 // notebookViews.ts (itself ported from schoolwork-workspace's
-// src/notebook/views.js) — the SAME four-view fitting rules, kept in sync by
+// src/notebook/views.js) — the SAME view-fitting rules, kept in sync by
 // hand since preview_query (Go, this file) and the notebook cell view picker
 // (TypeScript) both need to agree on what "suggestedView" means for a given
 // result shape. Any rule change here must be mirrored there and vice versa —
@@ -95,21 +95,10 @@ func checkViewFit(view string, shape viewShape) viewFitResult {
 	switch view {
 	case "table":
 		return viewFitResult{OK: true}
-	case "bar", "line":
-		hasNumeric := false
-		for _, n := range shape.numeric {
-			if n {
-				hasNumeric = true
-				break
-			}
-		}
-		if !hasNumeric {
-			return viewFitResult{OK: false, Why: "needs a numeric column — this query returns only text (" + strings.Join(shape.cols, ", ") + ")"}
-		}
-		if len(shape.cols) < 2 {
-			return viewFitResult{OK: false, Why: "needs two columns: something to label each point, then the number"}
-		}
-		return viewFitResult{OK: true}
+	case "bar", "line", "area", "columns", "rings", "radar":
+		return checkSeriesFit(view, shape)
+	case "sankey", "heatmap":
+		return checkTripleFit(view, shape)
 	case "stat":
 		if shape.rowCount == 0 {
 			return viewFitResult{OK: false, Why: "needs one row — this query returned none"}
@@ -121,6 +110,48 @@ func checkViewFit(view string, shape viewShape) viewFitResult {
 	default:
 		return viewFitResult{OK: true}
 	}
+}
+
+// checkSeriesFit is the rule for the label-then-numbers charts: a label
+// column and at least one numeric column, plus radar's three-axis minimum and
+// the rings' six-ring maximum.
+func checkSeriesFit(view string, shape viewShape) viewFitResult {
+	hasNumeric := false
+	for _, n := range shape.numeric {
+		if n {
+			hasNumeric = true
+			break
+		}
+	}
+	if !hasNumeric {
+		return viewFitResult{OK: false, Why: "needs a numeric column — this query returns only text (" + strings.Join(shape.cols, ", ") + ")"}
+	}
+	if len(shape.cols) < 2 {
+		return viewFitResult{OK: false, Why: "needs two columns: something to label each point, then the number"}
+	}
+	if view == "radar" && shape.rowCount < 3 {
+		return viewFitResult{OK: false, Why: "needs at least three rows, one per axis"}
+	}
+	if view == "rings" && shape.rowCount > maxRings {
+		return viewFitResult{OK: false, Why: fmt.Sprintf("draws at most %d rings, but this query returns %d rows — filter or LIMIT it", maxRings, shape.rowCount)}
+	}
+	return viewFitResult{OK: true}
+}
+
+// maxRings is how many concentric rings the rings view draws.
+const maxRings = 6
+
+// checkTripleFit is the rule for sankey (source, target, weight) and heatmap
+// (row, column, value): three columns, the third numeric.
+func checkTripleFit(view string, shape viewShape) viewFitResult {
+	want := "source, target, then a numeric weight"
+	if view == "heatmap" {
+		want = "a row label, a column label, then a numeric value"
+	}
+	if len(shape.cols) < 3 || !shape.numeric[shape.cols[2]] {
+		return viewFitResult{OK: false, Why: "needs three columns: " + want}
+	}
+	return viewFitResult{OK: true}
 }
 
 var orderedNameHints = []string{"date", "day", "week", "month", "year", "term", "window", "period", "time", "quarter", "season"}

@@ -25,6 +25,7 @@ import type { A2UIComponentT } from './types'
 import { toPoints, colorClass, pickLabelIndices, type Point } from './query'
 import { useLiveQuery } from './useLiveQuery'
 import { formatNumber } from '../lib/formatCell'
+import { useMotion } from './useMotion'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, data } = useLiveQuery(() => props.component)
@@ -42,6 +43,12 @@ const values = computed(() => points.value.map((p) => p.value))
 const maxV = computed(() => Math.max(...values.value))
 const minV = computed(() => Math.min(...values.value))
 const span = computed(() => maxV.value - minV.value || 1)
+// The line rises from the bottom gridline with the component's "motion"
+// preset; axis labels and tooltips always show the real values.
+const { values: anim } = useMotion(() => values.value.map((v) => v - minV.value), () => props.component.motion)
+function animY(i: number): number {
+  return y((anim.value[i] ?? values.value[i] - minV.value) + minV.value)
+}
 
 function x(i: number): number {
   const n = points.value.length
@@ -103,7 +110,7 @@ function labelStyle(i: number): Record<string, string> {
 const ariaLabel = computed(
   () => `Line chart of ${points.value.length} points, ranging ${formatNumber(minV.value)} to ${formatNumber(maxV.value)}`,
 )
-const polylinePoints = computed(() => points.value.map((p, i) => `${x(i)},${y(p.value)}`).join(' '))
+const polylinePoints = computed(() => points.value.map((_, i) => `${x(i)},${animY(i)}`).join(' '))
 </script>
 
 <template>
@@ -118,7 +125,7 @@ const polylinePoints = computed(() => points.value.map((p, i) => `${x(i)},${y(p.
           <line :x1="PAD.left" :x2="W - PAD.right" :y1="y(maxV)" :y2="y(maxV)" class="a2ui-linechart__grid a2ui-linechart__grid--top" />
           <line :x1="PAD.left" :x2="W - PAD.right" :y1="y(minV)" :y2="y(minV)" class="a2ui-linechart__grid a2ui-linechart__grid--bottom" />
           <polyline class="a2ui-linechart__line" :points="polylinePoints" />
-          <circle v-for="(p, i) in points" :key="'dot' + i" :cx="x(i)" :cy="y(p.value)" r="4" class="a2ui-linechart__dot">
+          <circle v-for="(p, i) in points" :key="'dot' + i" :cx="x(i)" :cy="animY(i)" r="4" class="a2ui-linechart__dot">
             <title>{{ p.label }}: {{ formatNumber(p.value) }}</title>
           </circle>
         </svg>

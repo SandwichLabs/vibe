@@ -218,6 +218,9 @@ describe('A2UIPage — static (inline data) rendering', () => {
     for (const line of selectorLines) {
       const selector = line.split('{')[0].trim()
       if (selector === '.a2ui-page') continue
+      // At-rules (@keyframes, @media) are not selectors; rules inside an
+      // @media block are on their own lines and still checked.
+      if (selector.startsWith('@')) continue
       expect(selector.startsWith('.a2ui-page ')).toBe(true)
     }
   })

@@ -322,3 +322,75 @@ func TestPromptBlock_MentionsConnection(t *testing.T) {
 	assert.Contains(t, PromptBlock(), `"connection"`)
 	assert.Contains(t, PromptBlock(), "connection")
 }
+
+// KINETIC charts: inline columns + rows (the shape their sql returns) and the
+// per-type options validate.
+func TestValidate_KineticChartsAccepted(t *testing.T) {
+	_, err := Validate(`{"title":"x","components":[
+		{"id":"a","type":"areaChart","columns":["hour","primary","baseline"],"rows":[["00:00",28,18],["03:00",44,25]]},
+		{"id":"r","type":"ringChart","rows":[["Tensor",92],["VRAM",78,120]],"max":100},
+		{"id":"c","type":"columnChart","rows":[["US-East",48,32,16]],"mode":"grouped","sorted":true},
+		{"id":"d","type":"radarChart","columns":["axis","current","baseline"],"rows":[["Latency",88,70]],"max":100},
+		{"id":"s","type":"sankeyChart","rows":[["Ingest","H100",32]]},
+		{"id":"h","type":"heatmap","sql":"SELECT node, hour, load FROM t","connection":"prod"},
+		{"id":"t","type":"streamChart","sql":"SELECT ts, v FROM t","refresh":10,"window":30,"threshold":88,"color":"error"}
+	]}`)
+	require.NoError(t, err)
+}
+
+func TestValidate_KineticChartOptionsChecked(t *testing.T) {
+	cases := map[string]string{
+		`{"id":"c","type":"columnChart","mode":"stack"}`:    "components[0].mode",
+		`{"id":"t","type":"streamChart","refresh":1}`:       "components[0].refresh",
+		`{"id":"t","type":"streamChart","window":1000}`:     "components[0].window",
+		`{"id":"r","type":"ringChart","max":0}`:             "greater than 0",
+		`{"id":"a","type":"areaChart","color":"yellow"}`:    `"areaChart" has no such field`,
+		`{"id":"a","type":"heatmap","bars":[]}`:             `"heatmap" has no such field`,
+		`{"id":"d","type":"radarChart","rows":[[{"a":1}]]}`: "components[0].rows[0][0]",
+	}
+	for comp, want := range cases {
+		_, err := Validate(`{"title":"x","components":[` + comp + `]}`)
+		require.Error(t, err, comp)
+		assert.Contains(t, err.Error(), want, comp)
+	}
+}
+
+func TestValidate_MotionOnEveryChart(t *testing.T) {
+	for _, typ := range Charts {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","motion":{"easing":"custom","speed":1.5,"stagger":false,"stiffness":190,"damping":12,"mass":1}}]}`)
+		require.NoError(t, err, typ)
+	}
+	for _, typ := range []string{"table", "stat", "text"} {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","label":"l","text":"t","motion":{}}]}`)
+		require.Error(t, err, typ)
+		assert.Contains(t, err.Error(), "motion", typ)
+	}
+}
+
+func TestValidate_MotionClosed(t *testing.T) {
+	cases := map[string]string{
+		`"fast"`:                       "expected an object",
+		`{"easing":"bounce"}`:          "motion.easing: expected one of",
+		`{"speed":10}`:                 "motion.speed: 10 is out of range (must be 0.25 to 4)",
+		`{"mass":0}`:                   "motion.mass",
+		`{"stagger":"yes"}`:            "motion.stagger: expected boolean",
+		`{"duration":"1s; color:red"}`: "motion.duration: motion has no such field",
+	}
+	for motion, want := range cases {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"barChart","motion":` + motion + `}]}`)
+		require.Error(t, err, motion)
+		assert.Contains(t, err.Error(), want, motion)
+	}
+	assert.NoError(t, ValidateMotion(map[string]any{"easing": "steps", "speed": 2.0}))
+	assert.Error(t, ValidateMotion(map[string]any{"easing": "nope"}))
+}
+
+func TestPromptBlock_DocumentsMotionAndShapes(t *testing.T) {
+	block := PromptBlock()
+	for _, e := range Easings {
+		assert.Contains(t, block, `"`+e+`"`)
+	}
+	for _, want := range []string{"motion({easing, speed, stagger", "sankeyChart: source, target, weight", "refresh(number 5-3600)", "mode(stacked|grouped)"} {
+		assert.Contains(t, block, want)
+	}
+}

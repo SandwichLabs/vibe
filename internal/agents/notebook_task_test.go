@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -467,4 +468,42 @@ func TestBestViewFor_JSONNumberDecimal(t *testing.T) {
 	assert.True(t, shape.numeric["revenue"], "a json.Number column must be judged numeric")
 	assert.Equal(t, "bar", bestViewFor(shape))
 	assert.True(t, checkViewFit("bar", shape).OK)
+}
+
+// The KINETIC views: label-then-numbers charts share bar/line's rule (plus
+// radar's axis minimum and the rings' maximum); sankey and heatmap want three
+// columns with a numeric third.
+func TestCheckViewFit_KineticViews(t *testing.T) {
+	series := describeViewShape([]string{"region", "a", "b"}, [][]any{{"x", 1, 2}, {"y", 3, 4}})
+	for _, v := range []string{"area", "columns", "rings"} {
+		assert.True(t, checkViewFit(v, series).OK, v)
+	}
+	assert.False(t, checkViewFit("radar", series).OK, "radar needs three axes")
+
+	textOnly := describeViewShape([]string{"name"}, [][]any{{"Ada"}})
+	assert.False(t, checkViewFit("area", textOnly).OK)
+
+	manyRows := describeViewShape([]string{"k", "v"}, seq(7))
+	assert.False(t, checkViewFit("rings", manyRows).OK)
+	assert.True(t, checkViewFit("radar", manyRows).OK)
+
+	flows := describeViewShape([]string{"src", "dst", "w"}, [][]any{{"a", "b", 3}})
+	assert.True(t, checkViewFit("sankey", flows).OK)
+	assert.True(t, checkViewFit("heatmap", flows).OK)
+	textWeight := describeViewShape([]string{"src", "dst", "note"}, [][]any{{"a", "b", "c"}})
+	assert.False(t, checkViewFit("sankey", textWeight).OK, "third column must be numeric")
+	assert.False(t, checkViewFit("heatmap", manyRows).OK, "needs three columns")
+
+	for _, v := range []string{"area", "columns", "rings", "radar", "sankey", "heatmap"} {
+		assert.Equal(t, v, normalizeCellView(" "+strings.ToUpper(v)+" "))
+	}
+	assert.Equal(t, "table", normalizeCellView("pie"))
+}
+
+func seq(n int) [][]any {
+	rows := make([][]any, n)
+	for i := range rows {
+		rows[i] = []any{fmt.Sprintf("k%d", i), i}
+	}
+	return rows
 }

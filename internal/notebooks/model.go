@@ -71,9 +71,10 @@ const maxDataBoundComponents = 200
 const maxTitleRunes = 200
 const maxLabelRunes = 120
 
-// Views is the closed set of view kinds an sql cell may declare, mirroring
-// model.js's VIEWS.
-var Views = []string{"table", "bar", "line", "stat"}
+// Views is the closed set of view kinds an sql cell may declare: model.js's
+// original four plus the KINETIC charts (area, columns, rings, radar, sankey,
+// heatmap), each rendered as the matching internal/a2ui chart component.
+var Views = []string{"table", "bar", "line", "stat", "area", "columns", "rings", "radar", "sankey", "heatmap"}
 
 func isValidView(v string) bool {
 	for _, ok := range Views {
@@ -112,6 +113,9 @@ type Cell struct {
 	// Connection (v2) names the connection whose catalog is the default for
 	// this cell's unqualified table names. "" = the workspace default.
 	Connection string
+	// Motion is the chart animation option (a2ui's "motion" object:
+	// easing, speed, stagger, spring tuning). nil = the default spring.
+	Motion map[string]any
 
 	// a2ui only. Never nil for a CellA2UI cell — Coerce drops any a2ui cell
 	// whose page fails internal/a2ui.Validate rather than storing a partial
@@ -125,15 +129,16 @@ func (c Cell) MarshalJSON() ([]byte, error) {
 	switch c.Type {
 	case CellSQL:
 		return json.Marshal(struct {
-			ID         string `json:"id"`
-			Type       string `json:"type"`
-			Collapsed  bool   `json:"collapsed"`
-			Source     string `json:"source"`
-			View       string `json:"view"`
-			ViewPinned bool   `json:"viewPinned"`
-			Label      string `json:"label"`
-			Connection string `json:"connection,omitempty"`
-		}{c.ID, string(c.Type), c.Collapsed, c.Source, c.View, c.ViewPinned, c.Label, c.Connection})
+			ID         string         `json:"id"`
+			Type       string         `json:"type"`
+			Collapsed  bool           `json:"collapsed"`
+			Source     string         `json:"source"`
+			View       string         `json:"view"`
+			ViewPinned bool           `json:"viewPinned"`
+			Label      string         `json:"label"`
+			Connection string         `json:"connection,omitempty"`
+			Motion     map[string]any `json:"motion,omitempty"`
+		}{c.ID, string(c.Type), c.Collapsed, c.Source, c.View, c.ViewPinned, c.Label, c.Connection, c.Motion})
 	case CellMarkdown:
 		return json.Marshal(struct {
 			ID        string `json:"id"`
@@ -370,7 +375,7 @@ func Coerce(raw any) (Notebook, []string, error) {
 			cells = append(cells, Cell{
 				ID: id, Type: CellSQL, Collapsed: collapsed,
 				Source: source, View: view, ViewPinned: viewPinned, Label: label,
-				Connection: connection,
+				Connection: connection, Motion: coerceMotion(cellObj["motion"], id, &warnings),
 			})
 		case CellMarkdown:
 			source, truncated, nonString := clampSource(cellObj["source"])
@@ -460,8 +465,26 @@ func clampRunes(s string, maxRunes int) (string, bool) {
 	return string(r[:maxRunes]), true
 }
 
+// coerceMotion keeps an sql cell's motion option when it passes the same
+// check an a2ui chart's "motion" field gets, and clears it (with a warning)
+// otherwise: a bad animation setting is never a reason to drop the cell.
+func coerceMotion(raw any, cellID string, warnings *[]string) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	if err := a2ui.ValidateMotion(raw); err != nil {
+		*warnings = append(*warnings, fmt.Sprintf("cell %q: invalid motion, cleared: %v", cellID, err))
+		return nil
+	}
+	m, _ := raw.(map[string]any)
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
 // demoteExcessDataBound drops the "sql" field from as many of page's
-// data-bound components (stat/table/barChart/lineChart with a "sql" field)
+// data-bound components (stat/table/any chart with a "sql" field)
 // as needed to stay within budget, the remaining notebook-wide
 // maxDataBoundComponents allowance. A demoted component keeps its type and
 // other fields — a2ui.Validate already accepted it as valid without "sql"
