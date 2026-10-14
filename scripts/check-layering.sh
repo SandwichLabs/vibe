@@ -30,7 +30,7 @@ layer_of() {
     internal/bundle|internal/bundle/*|internal/skills|internal/skills/*|internal/filestore|internal/filestore/*|\
     internal/filelock|internal/filelock/*|internal/storageurl|internal/storageurl/*|internal/jsonenc|internal/jsonenc/*|\
     internal/dotenv|internal/dotenv/*|internal/usersql|internal/usersql/*|internal/config|internal/config/*|\
-    internal/prefs|internal/prefs/*|internal/buildinfo|internal/buildinfo/*|internal/templates|internal/templates/*|internal/secrets|internal/secrets/*|\
+    internal/prefs|internal/prefs/*|internal/selfupdate|internal/selfupdate/*|internal/buildinfo|internal/buildinfo/*|internal/templates|internal/templates/*|internal/secrets|internal/secrets/*|\
     internal/a2ui|internal/a2ui/*) echo domain;;
     *) echo unclassified;;
   esac

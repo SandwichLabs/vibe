@@ -1,6 +1,6 @@
 # Packaging and release plan: macOS and Linux
 
-> **How Vibe ships in v0.1.0: unsigned.** A release is a pushed tag. GitHub Actions builds native tarballs for Linux and macOS (amd64 and arm64), ad-hoc signs the macOS app, publishes `checksums.txt`, and attaches [`install.sh`](https://github.com/SandwichLabs/vibe/blob/main/install.sh), which is how people install it ([`install.md`](install.md)). There is no notarisation, no Apple Developer ID, no `.deb`/`.rpm`, no Homebrew tap and no auto-update. The first sections below ("v0.1.0 unsigned pipeline", "macOS unsigned path", "Installing") describe that path as built. Everything from "1. Where things stand" on is the **signed distribution plan** (epic #4) that comes after v0.1.0; where it disagrees with the unsigned sections, the unsigned sections win.
+> **How Vibe ships in v0.1.0: unsigned.** A release is a pushed tag. GitHub Actions builds native tarballs for Linux and macOS (amd64 and arm64), ad-hoc signs the macOS app, publishes `checksums.txt`, and attaches [`install.sh`](https://github.com/SandwichLabs/vibe/blob/main/install.sh), which is how people install it ([`install.md`](install.md)). There is no notarisation, no Apple Developer ID, no `.deb`/`.rpm`, no Homebrew tap and no silent auto-update (an opt-in in-app update check that re-runs `install.sh` after you confirm exists; see [`install.md`](install.md#upgrade)). The first sections below ("v0.1.0 unsigned pipeline", "macOS unsigned path", "Installing") describe that path as built. Everything from "1. Where things stand" on is the **signed distribution plan** (epic #4) that comes after v0.1.0; where it disagrees with the unsigned sections, the unsigned sections win.
 
 **Date:** 2026-09-23 (unsigned sections updated 2026-10-12)
 **Status:** The unsigned pipeline and installer are built (#46, #47); the macOS spike (#43) is done. The signed plan (§2 onward: notarised dmg, deb/rpm, Homebrew, GoReleaser) is **proposed and not built**. Tracking: epic #4.
@@ -153,7 +153,7 @@ Deferred, not rejected:
   to "any distro". Flathub review adds lead time.
 - **AppImage.** Bundling WebKitGTK's helper processes is fragile and large.
 - **Snap.**
-- **In-app auto-update.** Sparkle on macOS; Linux relies on the package manager.
+- **Sparkle and package-manager updates.** The in-app update check plus `install.sh`-driven apply is built (`internal/selfupdate`, `vibe update`, Settings > About > Updates). Sparkle on macOS is still deferred; Linux package installs update through the package manager.
 - **Windows.** The DuckDB bindings support it; there is no signing story yet.
 
 ## 3. Toolchain choice

@@ -19,6 +19,12 @@ import (
 // able to make the window impossible to close. A SECOND close attempt while
 // one is already pending lets the close through immediately.
 func (a *App) beforeClose(_ context.Context) (prevent bool) {
+	// An update is installing: closing now would orphan install.sh and lose its result. Hold the
+	// close (the frontend says why); the person quits again once it has finished.
+	if a.installing.Load() {
+		a.emitEvent("app:update-installing", map[string]any{})
+		return true
+	}
 	if a.quitConfirmed.Load() {
 		return false
 	}
@@ -60,6 +66,7 @@ func (a *App) Quit() {
 // CancelQuit abandons a close attempt (the person chose to stay because a
 // notebook could not be saved); the next close starts the flow again.
 func (a *App) CancelQuit() {
+	a.restart.disarm() // an update's "Restart now" is off too: nothing starts a second instance
 	a.HoldQuit()
 	a.closePending.Store(false)
 }

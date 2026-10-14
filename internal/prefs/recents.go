@@ -225,10 +225,13 @@ func (r *Recents) SavePreferences(p Preferences) error {
 	for k, v := range p.Extra {
 		extra[k] = v
 	}
-	if raw, ok := cur.Extra[RecentsKey]; ok {
-		extra[RecentsKey] = raw
-	} else {
-		delete(extra, RecentsKey)
+	// Keys the frontend does not round-trip come from disk, never from p.
+	for _, key := range []string{RecentsKey, UpdatesKey} {
+		if raw, ok := cur.Extra[key]; ok {
+			extra[key] = raw
+		} else {
+			delete(extra, key)
+		}
 	}
 	p.Extra = extra
 	if err := r.store.Save(p); err != nil {

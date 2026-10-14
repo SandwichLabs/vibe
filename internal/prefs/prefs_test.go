@@ -137,3 +137,41 @@ func TestDefaultDir_RelativeEnvIsIgnored(t *testing.T) {
 	assert.NotContains(t, got, "relative/dir", "a relative VIBE_CONFIG_DIR falls back to the user config dir")
 	assert.True(t, filepath.IsAbs(got))
 }
+
+func TestUpdateSettings_RoundTripAndSurviveFrontendSaves(t *testing.T) {
+	s := NewStore(t.TempDir())
+	r := NewRecents(s, nil)
+	assert.Equal(t, UpdateSettings{}, r.UpdateSettings(), "unset until asked")
+
+	require.NoError(t, r.ModifyUpdateSettings(func(u *UpdateSettings) { u.Check = UpdateCheckWeekly; u.LastChecked = "2026-10-13T00:00:00Z" }))
+	require.NoError(t, r.ModifyUpdateSettings(func(u *UpdateSettings) { u.SkippedVersion = "v0.2.0" }))
+	assert.Equal(t, UpdateSettings{Check: "weekly", LastChecked: "2026-10-13T00:00:00Z", SkippedVersion: "v0.2.0"}, r.UpdateSettings())
+
+	// The frontend round-trips only the fields it knows; a stale copy must not erase the update answer.
+	p, err := s.Load()
+	require.NoError(t, err)
+	p.Extra = nil
+	p.Theme = "signal"
+	require.NoError(t, r.SavePreferences(p))
+	assert.Equal(t, "weekly", r.UpdateSettings().Check)
+	loaded, _ := s.Load()
+	assert.Equal(t, "signal", loaded.Theme)
+
+	// Recents and updates share the document without clobbering each other.
+	r.Record("/w", "id", "w")
+	assert.Len(t, r.List(), 1)
+	assert.Equal(t, "weekly", r.UpdateSettings().Check)
+}
+
+func TestUpdateSettings_BadValuesReadAsNeverAsked(t *testing.T) {
+	s := NewStore(t.TempDir())
+	require.NoError(t, os.MkdirAll(s.Dir(), 0o700))
+	require.NoError(t, os.WriteFile(s.SettingsPath(), []byte(`{"updates":{"check":"hourly"}}`), 0o600))
+	assert.Equal(t, "", NewRecents(s, nil).UpdateSettings().Check)
+	require.NoError(t, os.WriteFile(s.SettingsPath(), []byte(`{"updates":"junk"}`), 0o600))
+	assert.Equal(t, UpdateSettings{}, NewRecents(s, nil).UpdateSettings())
+
+	var nilRecents *Recents
+	assert.Equal(t, UpdateSettings{}, nilRecents.UpdateSettings())
+	assert.Error(t, nilRecents.ModifyUpdateSettings(func(*UpdateSettings) {}))
+}

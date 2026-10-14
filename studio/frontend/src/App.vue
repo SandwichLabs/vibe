@@ -10,12 +10,15 @@ import NewWorkspaceDialog from './components/NewWorkspaceDialog.vue'
 import TakeOverDialog from './components/TakeOverDialog.vue'
 import BundleExportDialog from './components/BundleExportDialog.vue'
 import BundleImportDialog from './components/BundleImportDialog.vue'
+import UpdatePrompt from './components/UpdatePrompt.vue'
+import { startupUpdateCheck, refreshUpdateState, INSTALLING_NOTICE } from './composables/useUpdates'
 import { confirmVisible, confirmTitle, confirmMessage, confirmVariant, confirmLabel, confirmAltLabel, confirmAltDestructive, resolveConfirm, resolveConfirmChoice } from './composables/useConfirm'
 import { handleBeforeClose, handleOpenRequest, onKeydown, type OpenRequest } from './composables/useAppEvents'
 import { workspaceOpen, workspaceInfo, startWorkspaceTracking, syncWorkspaceState, launching, appNotice } from './composables/useWorkspace'
 
 let unsubBeforeClose: (() => void) | null = null
 let unsubOpenPath: (() => void) | null = null
+let unsubInstalling: (() => void) | null = null
 
 // A different workspace is a different place: land on Home, not on whatever
 // route (and notebook id) the old one left behind. A reload that merely picks
@@ -55,6 +58,8 @@ onMounted(async () => {
     // EventsOn returns an unsubscribe function scoped to THIS listener; the global
     // EventsOff(name) would remove every listener for the event name.
     unsubBeforeClose = EventsOn('app:before-close', handleBeforeClose)
+    // A quit is held while an update installs (the installer must not be orphaned).
+    unsubInstalling = EventsOn('app:update-installing', () => { appNotice.value = INSTALLING_NOTICE })
   } catch (e) {
     // No Wails runtime (or a failed first sync): the Launcher still has to show.
     console.warn('startup', e)
@@ -62,12 +67,16 @@ onMounted(async () => {
     // Whatever failed above, never leave the page on the blank placeholder.
     launching.value = false
   }
+  // After the launcher or a workspace is up: the one-time question (needsConsent) and, if the
+  // person chose weekly, the quiet startup check. Never blocks, never throws.
+  void refreshUpdateState().then(startupUpdateCheck)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   unsubBeforeClose?.()
   unsubOpenPath?.()
+  unsubInstalling?.()
 })
 </script>
 
@@ -86,6 +95,7 @@ onUnmounted(() => {
     <TakeOverDialog />
     <BundleExportDialog />
     <BundleImportDialog />
+    <UpdatePrompt v-if="!launching" />
 
     <!-- Shared promise-based confirm (composables/useConfirm.ts) — the ONE
          ConfirmDialog every askConfirm() caller in the app resolves through,
@@ -117,5 +127,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+/* It floats over content: lay the translucent warn tint over an opaque paper base. */
+.app-notice.banner.warn {
+  background: linear-gradient(var(--sh-marigold-8), var(--sh-marigold-8)), var(--sh-paper);
 }
 </style>

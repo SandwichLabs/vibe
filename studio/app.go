@@ -14,6 +14,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/selfupdate"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -156,6 +157,16 @@ type App struct {
 	// constant, so tests can shorten it instead of waiting out 5 minutes.
 	approvalTimeout time.Duration
 
+	// updates is the update-check service (settings in prefs, install detection, apply);
+	// restart is the pending "Restart now" after an update; relaunch starts the new Studio
+	// (selfupdate.Relaunch; a test seam).
+	updates *selfupdate.Service
+	restart restartRequest
+	// installing is true while ApplyUpdate runs install.sh: a quit is held until it ends, so the
+	// installer is never orphaned (beforeClose).
+	installing atomic.Bool
+	relaunch   func(goos, target string, args ...string) error
+
 	// bundles holds .vibe bundles that were previewed and await their commit (#118).
 	bundles bundleStore
 }
@@ -189,6 +200,8 @@ func NewApp(logger *slog.Logger) *App {
 	} else {
 		logger.Warn("preferences disabled: no config dir", "error", err)
 	}
+	app.updates = selfupdate.NewService(selfupdate.New(version), app.recents, logger)
+	app.relaunch = selfupdate.Relaunch
 	return app
 }
 
@@ -227,7 +240,13 @@ func (a *App) shutdown(_ context.Context) {
 	a.cancelAgentWork()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	root := ""
+	if a.ws != nil {
+		root = a.ws.Root()
+	}
 	a.closeWorkspaceLocked("")
+	// An update's "Restart now": the new Studio starts only now, with the lock free.
+	a.relaunchAfterQuit(root)
 }
 
 // errNoWorkspace is what every binding that needs an open workspace returns

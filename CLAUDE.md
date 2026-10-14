@@ -45,14 +45,14 @@ ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture
 
 Keep the Wails CLI at the `github.com/wailsapp/wails/v2` version in go.mod (v2.16.0; CI and release pin it as `WAILS_VERSION`). Wails v2.16 loads Go 1.27, so the old `WAILS_GOTOOLCHAIN` pin (#92) is gone.
 
-CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
+CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 
 ## Architecture
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
-                     notebooks,prefs,queries,skills,tables}.go (bindings by area),
+                     notebooks,prefs,queries,skills,tables,update}.go (bindings by area),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go,
                      connections_{crud,sync,catalog,creds,probe,extensions}.go, secrets.go, bundle.go,
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
@@ -81,6 +81,7 @@ internal/
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/
                      (jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
+  selfupdate/        release check + install.sh-driven apply (opt-in, confirmed; manifest-based install detection; Service wires prefs); `vibe update`, Studio's About > Updates
   buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
 legal.go            repo-root package embedding LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md (`task notices`)
