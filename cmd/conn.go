@@ -569,7 +569,7 @@ func init() {
 	f.String("database", "", "database (postgres, mysql, motherduck)")
 	f.String("region", "", "region (s3, gcs, r2)")
 	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2, azure)")
-	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path); repeatable")
+	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style, use_ssl; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path); repeatable")
 	f.Bool("read-only", true, "attach read-only (--read-only=false to allow writes)")
 	f.String("sign-in", "", "how you sign in: keychain (default), prompt or env:PREFIX")
 	addConnWorkspaceFlag(connAddCmd)

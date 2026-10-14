@@ -42,6 +42,21 @@ const TYPES: ConnTypeSpec[] = [
     credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
     requiresExtension: ['httpfs'], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
   },
+  {
+    id: 's3', label: 'Amazon S3', description: 's3 type',
+    fields: [field({ name: 'scope', label: 'Scope', kind: 'url', required: true }), field({ name: 'endpoint', label: 'Endpoint', option: true }),
+      field({ name: 'use_ssl', label: 'Use TLS', kind: 'enum', choices: ['true', 'false'], default: 'true', option: true })],
+    credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
+    requiresExtension: ['httpfs'], capabilities: { catalog: false, writable: false, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope', 'option:use_ssl'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+  },
+  {
+    id: 'azure', label: 'Azure Blob', description: 'azure type',
+    fields: [field({ name: 'scope', label: 'Scope', kind: 'url', required: true }),
+      field({ name: 'sign_in', label: 'Sign in with', kind: 'enum', choices: ['account_key', 'connection_string'], default: 'account_key', option: true, prominent: true }),
+      field({ name: 'account_name', label: 'Storage account', option: true })],
+    credentials: [field({ name: 'secret', label: 'Secret', required: true, secret: true, perPerson: true })],
+    requiresExtension: ['azure'], capabilities: { catalog: false, writable: false, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+  },
   { id: 'future', label: 'Future', description: 'Coming soon.', fields: [], credentials: [], requiresExtension: [], capabilities: { catalog: true, writable: true, readOnlyAttach: false, remote: true, test: false }, fingerprintFields: [], signInMethods: [], soon: true },
   {
     id: 'mysql', label: 'MySQL', description: 'A MySQL server.',
@@ -135,6 +150,37 @@ describe('ConnectionEditorView', () => {
     // the three sign-in choices, keychain first and selected
     const radios = w.findAll('[role="radiogroup"][aria-label="How you sign in"] [role="radio"]')
     expect(radios.map((r) => r.attributes('aria-checked'))).toEqual(['true', 'false', 'false'])
+  })
+
+  it('an option with a default (s3 Use TLS) stays closed under Advanced, reads "Default (true)" and is not written; false round-trips and Default removes it', async () => {
+    const app = makeApp()
+    const w = mountView()
+    await flushPromises()
+    await chooseType(w, 's3')
+    expect((w.find('details').element as HTMLDetailsElement).open).toBe(false)
+    const sel = w.find('[data-testid="f-use_ssl"]')
+    expect((sel.element as HTMLSelectElement).selectedOptions[0].text).toBe('Default (true)')
+    const submit = async () => {
+      await w.find('[data-testid="f-name"]').setValue('store')
+      await w.find('[data-testid="f-scope"]').setValue('s3://b/')
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      return app.SaveConnection.mock.calls.at(-1)![0].def
+    }
+    expect((await submit()).options).toBeUndefined()
+    await sel.setValue('false')
+    expect((await submit()).options).toEqual({ use_ssl: 'false' })
+    await sel.setValue('')
+    expect((await submit()).options).toBeUndefined()
+  })
+
+  it('Azure opens Advanced on a new connection (its sign-in is prominent) and writes no default', async () => {
+    makeApp()
+    const w = mountView()
+    await flushPromises()
+    await chooseType(w, 'azure')
+    expect((w.find('details').element as HTMLDetailsElement).open).toBe(true)
+    expect(w.find('[data-testid="f-account_name"]').exists()).toBe(true)
   })
 
   it('DuckLake: the required data folder is a main field with an asterisk, the hint says main, no read-only-user callout, no Team scope, and a trust warning', async () => {

@@ -199,11 +199,14 @@ export function useConnectionForm() {
     typeId.value = id
     const t = types.value.find((x) => x.id === id)
     for (const fd of t?.fields ?? []) {
-      if (fd.default && !from) setVal(fd, fd.default)
+      // An option's default is what leaving it blank means (the select's
+      // "Default" entry), so it is not written into the YAML as noise.
+      if (fd.default && !from && !fd.option) setVal(fd, fd.default)
     }
-    // Settings the type cannot do without (a DuckLake's data folder, Azure's
-    // sign-in) live under Advanced: show them open on a new connection.
-    if (!from && (t?.fields ?? []).some((fd) => fd.option && (fd.required || fd.default))) advancedOpen.value = true
+    // Settings the type cannot do without (a DuckLake's data folder) or that
+    // most people must look at (Azure's sign-in, flagged prominent) live under
+    // Advanced: show them open on a new connection.
+    if (!from && (t?.fields ?? []).some((fd) => fd.option && (fd.required || fd.prominent))) advancedOpen.value = true
     if (id === 'motherduck') readOnly.value = false
     if (['ducklake', 'iceberg', 'delta'].includes(id) && connScope.value === 'shared') connScope.value = 'local'
     envPrefix.value = id === 'motherduck' ? 'MOTHERDUCK' : ''

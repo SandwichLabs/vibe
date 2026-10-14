@@ -100,7 +100,7 @@ Object storage. These have **no catalog**: connecting creates a scoped temporary
 |---|---|
 | `scope` | required URL prefix: `s3://bucket/path/`, `gcs://` or `gs://`, `r2://` |
 | `region` | s3 only; default `us-east-1` |
-| `endpoint`, `url_style`, `use_ssl` (options) | s3, for S3-compatible stores |
+| `endpoint`, `url_style`, `use_ssl` (options) | s3, for S3-compatible stores. `use_ssl` is "Use TLS" in the form (default on); set `"false"` only for a local store such as MinIO: traffic and keys are then sent unencrypted |
 | `account_id` (option) | r2, required |
 | `key_id` | per person, readable |
 | `secret` | per person, write-only |
