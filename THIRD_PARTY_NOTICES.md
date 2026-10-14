@@ -9,7 +9,7 @@ Contents: [Go modules](#go-modules) Â· [Frontend packages](#frontend-packages) Â
 ## Go modules
 
 Every module linked into the `vibe` CLI or Vibe Studio on linux and macOS (amd64 and arm64), found with go-licenses v2.
-140 module/licence-file pairs: Apache-2.0 43, BSD-2-Clause 5, BSD-3-Clause 28, ISC 1, MIT 63.
+139 module/licence-file pairs: Apache-2.0 43, BSD-2-Clause 5, BSD-3-Clause 28, ISC 1, MIT 62.
 
 #### Apache-2.0
 
@@ -215,7 +215,7 @@ Apache License
 - github.com/aws/aws-sdk-go-v2/service/ssooidc v1.40.1
 - github.com/aws/aws-sdk-go-v2/service/sts v1.47.1
 - github.com/go-logr/stdr v1.2.2
-- github.com/google/flatbuffers v25.2.10+incompatible
+- github.com/google/flatbuffers v25.12.19+incompatible
 - github.com/google/s2a-go v0.1.9
 - github.com/googleapis/enterprise-certificate-proxy v0.3.21
 - go.opentelemetry.io/auto/sdk v1.2.1
@@ -428,7 +428,7 @@ Apache License
 
 #### Apache-2.0
 
-- github.com/apache/arrow-go/v18 v18.4.1
+- github.com/apache/arrow-go/v18 v18.5.1
 
 ```text
 Apache License
@@ -2517,13 +2517,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-2-Clause
 
-- github.com/zeebo/xxh3 v1.0.2
+- github.com/zeebo/xxh3 v1.1.0
 
 ```text
-xxHash Library
+BSD 2-Clause License
+
 Copyright (c) 2012-2014, Yann Collet
 Copyright (c) 2019, Jeff Wendling
 All rights reserved.
+
+xxHash Library
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
@@ -2587,7 +2590,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 - filippo.io/hpke v0.4.0
 - golang.org/x/crypto v0.58.0
-- golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
+- golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 - golang.org/x/mod v0.41.0
 - golang.org/x/net v0.61.0
 - golang.org/x/oauth2 v0.36.0
@@ -2900,7 +2903,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/pierrec/lz4/v4 v4.1.22
+- github.com/pierrec/lz4/v4 v4.1.25
 
 ```text
 Copyright (c) 2015, Pierre Curto
@@ -3430,13 +3433,29 @@ SOFTWARE.
 
 #### MIT
 
-- github.com/duckdb/duckdb-go-bindings/darwin-amd64 v0.1.21
-- github.com/duckdb/duckdb-go-bindings/darwin-arm64 v0.1.21
-- github.com/duckdb/duckdb-go-bindings/linux-amd64 v0.1.21
-- github.com/duckdb/duckdb-go-bindings/linux-arm64 v0.1.21
+- github.com/duckdb/duckdb-go-bindings v0.10506.0
+- github.com/duckdb/duckdb-go-bindings/lib/darwin-amd64 v0.10506.0
+- github.com/duckdb/duckdb-go-bindings/lib/darwin-arm64 v0.10506.0
+- github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 v0.10506.0
+- github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10506.0
 
 ```text
-Copyright 2018-2025 Stichting DuckDB Foundation
+Copyright 2018-2026 Stichting DuckDB Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+#### MIT
+
+- github.com/duckdb/duckdb-go/v2 v2.10506.0
+
+```text
+Copyright 2019-2024 Marc Boeker
+Copyright 2025-2026 Stichting DuckDB Foundation
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -4067,22 +4086,6 @@ SOFTWARE.
 
 ```text
 Copyright (c) 2013 Lucas Beyer
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
-#### MIT
-
-- github.com/marcboeker/go-duckdb/arrowmapping v0.0.21
-- github.com/marcboeker/go-duckdb/mapping v0.0.21
-- github.com/marcboeker/go-duckdb/v2 v2.4.3
-
-```text
-Copyright 2019 Marc Boeker
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -8321,7 +8324,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-#### github.com/apache/arrow-go/v18 v18.4.1
+#### github.com/apache/arrow-go/v18 v18.5.1
 
 ```text
 Apache Arrow Go
@@ -8413,9 +8416,9 @@ DuckDB is MIT licensed (Copyright Stichting DuckDB Foundation). The database eng
 with the components below; each applies to its own code.
 
 
-Vibe links DuckDB through github.com/marcboeker/go-duckdb/v2 v2.4.3 (DuckDB v1.4.1: libduckdb_static.a plus the
+Vibe links DuckDB through github.com/duckdb/duckdb-go/v2 v2.10506.0 (DuckDB v1.5.6: libduckdb_static.a plus the
 extension archives the bindings link). DuckDB itself is MIT. The texts below are the licence files of the components
-that ship inside that library, copied verbatim from https://github.com/duckdb/duckdb at tag v1.4.1. Refresh them when
+that ship inside that library, copied verbatim from https://github.com/duckdb/duckdb at tag v1.5.6. Refresh them when
 the DuckDB version changes.
 
 The bindings' link line also names the tpch and tpcds extension archives, but the linker drops their members because
@@ -8852,9 +8855,10 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
-### extension/jemalloc/jemalloc/LICENSE
+### third_party/jemalloc/LICENSE
 
 ```text
 Unless otherwise specified, files in the jemalloc source distribution are
@@ -9202,6 +9206,7 @@ third-party archives.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
 ```
 
 ### third_party/fmt/LICENSE
@@ -9289,7 +9294,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ```
 
 ### third_party/hyperloglog/LICENSE
@@ -9314,6 +9318,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/jaro_winkler/LICENSE
@@ -9373,6 +9378,7 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
 ### third_party/lz4/LICENSE
@@ -9402,6 +9408,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
 ### third_party/mbedtls/LICENSE
@@ -10236,6 +10243,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/pdqsort/LICENSE
@@ -10299,6 +10307,7 @@ applications, and to alter it and redistribute it freely, subject to the followi
           Copyright Malte Skarupke 2016.
  Distributed under the Boost Software License, Version 1.0.
     (See http://www.boost.org/LICENSE_1_0.txt)
+
 ```
 
 ### third_party/skiplist/LICENSE
@@ -10627,6 +10636,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
 ```
 
 ### third_party/tdigest/NOTICES
@@ -10638,6 +10648,7 @@ A number of small but very helpful changes have been contributed by Adrien Grand
 
 The C++ version herein is a derivative of the Java version.  It was written by Derrick R. Burns (https:://github.com/derrickburns).
 The main modifications are 1) higher performance multi- t-digest merging and 2) faster quantile() and cdf() computation.
+
 ```
 
 ### third_party/thrift/thrift/LICENSE
@@ -11035,6 +11046,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/zstd/LICENSE
@@ -11070,6 +11082,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
 ## Fonts

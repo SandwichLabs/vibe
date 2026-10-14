@@ -214,7 +214,8 @@ func TestPolicy_Denied(t *testing.T) {
 		{"CREATE SHARE", "CREATE SHARE s FROM other", sqlClassOther, "share"},
 		{"CREATE DATABASE", "CREATE DATABASE d", sqlClassOther, "database"},
 		{"DROP DATABASE", "DROP DATABASE other", sqlClassOther, "database"},
-		{"ALTER DATABASE", "ALTER DATABASE other RENAME TO o2", sqlClassOther, "database"},
+		// DuckDB 1.5 no longer parses ALTER DATABASE ... RENAME, so it is refused as unverifiable (still denied).
+		{"ALTER DATABASE", "ALTER DATABASE other RENAME TO o2", sqlClassOther, "verify"},
 		{"CREATE EXTENSION-like", "CREATE EXTENSION foo", sqlClassOther, "extension"},
 
 		// --- Settings, environment, catalog internals.
@@ -224,6 +225,8 @@ func TestPolicy_Denied(t *testing.T) {
 		{"current_setting", "SELECT current_setting('home_directory')", sqlClassOther, "settings"},
 		{"current_setting in WHERE", "SELECT * FROM t WHERE name = current_setting('x')", sqlClassOther, "settings"},
 		{"getenv", "SELECT getenv('HOME')", sqlClassOther, "environment"},
+		{"sleep_ms", "SELECT sleep_ms(1)", sqlClassOther, "sleeping"},
+		{"pg_sleep", "SELECT pg_sleep(1)", sqlClassOther, "sleeping"},
 		{"duckdb_extensions()", "SELECT * FROM duckdb_extensions()", sqlClassOther, "settings"},
 		{"duckdb_databases() (paths)", "SELECT * FROM duckdb_databases()", sqlClassOther, "list_connections"},
 		{"duckdb_databases projection", "SELECT database_name FROM duckdb_databases()", sqlClassOther, "list_connections"},

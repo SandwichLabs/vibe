@@ -1,8 +1,8 @@
 # DuckDB bundled components
 
-Vibe links DuckDB through github.com/marcboeker/go-duckdb/v2 v2.4.3 (DuckDB v1.4.1: libduckdb_static.a plus the
+Vibe links DuckDB through github.com/duckdb/duckdb-go/v2 v2.10506.0 (DuckDB v1.5.6: libduckdb_static.a plus the
 extension archives the bindings link). DuckDB itself is MIT. The texts below are the licence files of the components
-that ship inside that library, copied verbatim from https://github.com/duckdb/duckdb at tag v1.4.1. Refresh them when
+that ship inside that library, copied verbatim from https://github.com/duckdb/duckdb at tag v1.5.6. Refresh them when
 the DuckDB version changes.
 
 The bindings' link line also names the tpch and tpcds extension archives, but the linker drops their members because
@@ -439,9 +439,10 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
-### extension/jemalloc/jemalloc/LICENSE
+### third_party/jemalloc/LICENSE
 
 ```text
 Unless otherwise specified, files in the jemalloc source distribution are
@@ -789,6 +790,7 @@ third-party archives.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
 ```
 
 ### third_party/fmt/LICENSE
@@ -876,7 +878,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ```
 
 ### third_party/hyperloglog/LICENSE
@@ -901,6 +902,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/jaro_winkler/LICENSE
@@ -960,6 +962,7 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
 ### third_party/lz4/LICENSE
@@ -989,6 +992,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 
 ### third_party/mbedtls/LICENSE
@@ -1823,6 +1827,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/pdqsort/LICENSE
@@ -1886,6 +1891,7 @@ applications, and to alter it and redistribute it freely, subject to the followi
           Copyright Malte Skarupke 2016.
  Distributed under the Boost Software License, Version 1.0.
     (See http://www.boost.org/LICENSE_1_0.txt)
+
 ```
 
 ### third_party/skiplist/LICENSE
@@ -2214,6 +2220,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
 ```
 
 ### third_party/tdigest/NOTICES
@@ -2225,6 +2232,7 @@ A number of small but very helpful changes have been contributed by Adrien Grand
 
 The C++ version herein is a derivative of the Java version.  It was written by Derrick R. Burns (https:://github.com/derrickburns).
 The main modifications are 1) higher performance multi- t-digest merging and 2) faster quantile() and cdf() computation.
+
 ```
 
 ### third_party/thrift/thrift/LICENSE
@@ -2622,6 +2630,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ```
 
 ### third_party/zstd/LICENSE
@@ -2657,5 +2666,6 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ```
 

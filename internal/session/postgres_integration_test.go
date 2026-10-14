@@ -123,7 +123,8 @@ func TestSpikePostgresHardenedRejectsInlineAttach(t *testing.T) {
 	assert.Contains(t, err.Error(), "local_file", "misleading error text: the session must translate it")
 }
 
-// Does a wrong password put credentials into error text? (Yes: redactor needed.)
+// Does a wrong password put credentials into error text? Not on DuckDB 1.5.6's postgres extension
+// (it was echoed as password='...' on 1.4.1); the redactor is kept as defence in depth.
 func TestSpikePostgresWrongPasswordErrorText(t *testing.T) {
 	pg := startPG(t)
 	db := openWithPostgres(t, "")
@@ -132,24 +133,21 @@ func TestSpikePostgresWrongPasswordErrorText(t *testing.T) {
 	_, err := db.Exec("ATTACH '' AS bad (TYPE postgres, SECRET pgbad, READ_ONLY)")
 	require.Error(t, err)
 	t.Logf("secret attach wrong password: %v", err)
-	assert.Contains(t, err.Error(), wrong, "FINDING: password echoed in connect error")
+	assert.NotContains(t, err.Error(), wrong, "FINDING (postgres ext on DuckDB 1.5.6): the password is no longer echoed; the redactor stays as defence in depth")
 
 	_, err = db.Exec("CREATE OR REPLACE TEMPORARY SECRET pgdown (TYPE postgres, HOST '127.0.0.1', PORT 1, DATABASE 'postgres', USER 'u', PASSWORD '" + wrong + "')")
 	require.NoError(t, err)
 	_, err = db.Exec("ATTACH '' AS down (TYPE postgres, SECRET pgdown, READ_ONLY)")
 	require.Error(t, err)
 	t.Logf("unreachable: %v", err)
-	assert.Contains(t, err.Error(), wrong, "FINDING: also echoed when the server is unreachable")
+	assert.NotContains(t, err.Error(), wrong, "not echoed when the server is unreachable either")
 
 	// Rotated password: attach error again carries the (old) secret.
 	require.NoError(t, pg.createSecret(db, "pgok", pgPassword))
 	pg.psql(t, "ALTER USER postgres PASSWORD 'rotated_pw_9'")
 	_, err = db.Exec("ATTACH '' AS ok2 (TYPE postgres, SECRET pgok, READ_ONLY)")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), pgPassword)
-
-	// Pattern a redactor can key on.
-	assert.Contains(t, err.Error(), "password='")
+	assert.NotContains(t, err.Error(), pgPassword)
 }
 
 // Cost of catalog introspection and SUMMARIZE/DESCRIBE against remote PG with

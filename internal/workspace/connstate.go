@@ -91,7 +91,8 @@ func ConnectionStates(ws Workspace, sess session.Session, issues []SessionIssue)
 				}
 			}
 		case session.StatusExtensionMissing:
-			if ti, err := connections.TypeInfoFor(c.Type); err == nil && len(ti.Extensions) > 0 {
+			st.Extension = s.Extension
+			if ti, err := connections.TypeInfoFor(c.Type); err == nil && st.Extension == "" && len(ti.Extensions) > 0 {
 				st.Extension = ti.Extensions[0]
 			}
 		case session.StatusNeedsCredentials:

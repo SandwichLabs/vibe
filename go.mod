@@ -8,10 +8,9 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/duckdb/duckdb-go/v2 v2.10506.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
-	github.com/marcboeker/go-duckdb/mapping v0.0.21
-	github.com/marcboeker/go-duckdb/v2 v2.4.3
 	github.com/mark3labs/mcp-go v1.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -33,7 +32,7 @@ require (
 	filippo.io/hpke v0.4.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.68.0 // indirect
-	github.com/apache/arrow-go/v18 v18.4.1 // indirect
+	github.com/apache/arrow-go/v18 v18.5.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.45.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
@@ -66,12 +65,12 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
-	github.com/duckdb/duckdb-go-bindings v0.1.21 // indirect
-	github.com/duckdb/duckdb-go-bindings/darwin-amd64 v0.1.21 // indirect
-	github.com/duckdb/duckdb-go-bindings/darwin-arm64 v0.1.21 // indirect
-	github.com/duckdb/duckdb-go-bindings/linux-amd64 v0.1.21 // indirect
-	github.com/duckdb/duckdb-go-bindings/linux-arm64 v0.1.21 // indirect
-	github.com/duckdb/duckdb-go-bindings/windows-amd64 v0.1.21 // indirect
+	github.com/duckdb/duckdb-go-bindings v0.10506.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-amd64 v0.10506.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-arm64 v0.10506.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 v0.10506.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10506.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/windows-amd64 v0.10506.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -81,7 +80,7 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/google/flatbuffers v25.2.10+incompatible // indirect
+	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
@@ -102,7 +101,6 @@ require (
 	github.com/leaanthony/slicer v1.6.0 // indirect
 	github.com/leaanthony/u v1.1.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
-	github.com/marcboeker/go-duckdb/arrowmapping v0.0.21 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -112,7 +110,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -135,7 +133,7 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
+	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.71.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
@@ -145,7 +143,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
+	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect

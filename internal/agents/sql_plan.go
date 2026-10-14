@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/marcboeker/go-duckdb/v2" // DuckDB driver, for the dedicated parser connection below
+	_ "github.com/duckdb/duckdb-go/v2" // DuckDB driver, for the dedicated parser connection below
 
 	"github.com/SandwichLabs/vibe/internal/secrets"
 )

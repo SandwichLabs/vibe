@@ -72,13 +72,21 @@ func (h *hub) setStatusCause(name string, kind StatusKind, msg string, cause err
 		return
 	}
 	h.setStatusFull(name, kind, msg, 0, nil)
+	var me *missingExtensionError
+	if errors.As(cause, &me) {
+		h.mu.Lock()
+		if e := h.conns[name]; e != nil {
+			e.status.Extension = me.name
+		}
+		h.mu.Unlock()
+	}
 }
 
 func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, sc *ServerChange) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if e := h.conns[name]; e != nil {
-		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged = kind, msg, pid, sc
+		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = kind, msg, pid, sc, ""
 	}
 }
 

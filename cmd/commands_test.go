@@ -16,7 +16,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
-	_ "github.com/marcboeker/go-duckdb/v2"
+	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"

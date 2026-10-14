@@ -41,6 +41,9 @@ type Status struct {
 	LockedByPID int        `json:"locked_by_pid,omitempty"`
 	ReadOnly    bool       `json:"read_only"`
 	Default     bool       `json:"default,omitempty"`
+	// Extension is the first missing extension of an extension-missing status:
+	// the one download to offer next.
+	Extension string `json:"extension,omitempty"`
 	// ServerChanged is set on a needs-credentials status that is because the
 	// definition now points at a different server than the saved sign-in was
 	// made for. It carries host-level descriptions, never a secret.

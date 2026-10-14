@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	duckdb "github.com/marcboeker/go-duckdb/v2"
+	duckdb "github.com/duckdb/duckdb-go/v2"
 )
 
 // maxSafeInt is Number.MAX_SAFE_INTEGER: the largest magnitude an integer
@@ -101,6 +101,15 @@ func NormalizeValue(v any) any {
 		out := make(map[string]any, len(t))
 		for k, val := range t {
 			out[fmt.Sprint(NormalizeValue(k))] = NormalizeValue(val)
+		}
+		return out
+	case duckdb.OrderedMap:
+		// duckdb-go (DuckDB 1.5) scans MAP into an OrderedMap; same wire
+		// shape as duckdb.Map above.
+		keys, vals := t.Keys(), t.Values()
+		out := make(map[string]any, len(keys))
+		for i, k := range keys {
+			out[fmt.Sprint(NormalizeValue(k))] = NormalizeValue(vals[i])
 		}
 		return out
 	case duckdb.Union:

@@ -22,7 +22,7 @@ import (
 	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
-	_ "github.com/marcboeker/go-duckdb/v2"
+	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -128,7 +128,7 @@ var allowedPlanOperators = nameSet(
 	"COPY_TO_FILE", "BATCH_COPY_TO_FILE",
 	// MotherDuck's hybrid execution moves rows between this computer and its
 	// server for a query that touches an attached md: catalog. The names come
-	// from the extension's binary (DuckDB 1.4.1 build), not from a live run.
+	// from the extension's binary (DuckDB 1.4.1 build), not from a live run and not re-checked on 1.5.6 (no MotherDuck account here).
 	"DOWNLOAD_BRIDGE", "DOWNLOAD_SINK", "DOWNLOAD_SOURCE", "UPLOAD_BRIDGE", "UPLOAD_SINK", "UPLOAD_SOURCE", "HYBRID",
 	// Generator and catalog functions (mirrors allowedTableFunctions).
 	"RANGE", "GENERATE_SERIES", "GENERATE_SUBSCRIPTS",
@@ -140,13 +140,14 @@ var allowedPlanOperators = nameSet(
 
 // remoteWriteOps matches the plan operators a remote catalog's own DML shows as
 // (PG_INSERT, PG_UPDATE, PG_DELETE, PG_CREATE_TABLE_AS, MYSQL_INSERT,
-// MYSQL_CREATE_TABLE_AS, DUCKLAKE_INSERT, DUCKLAKE_UPDATE, DUCKLAKE_DELETE, ...). The statement was
+// MYSQL_CREATE_TABLE_AS, DUCKLAKE_INSERT, DUCKLAKE_UPDATE, DUCKLAKE_DELETE, DUCKLAKE_INLINE_DATA (DuckLake 1.0
+// stages small inserts in its catalog; a child of DUCKLAKE_INSERT / DUCKLAKE_CREATE_TABLE_AS), ...). The statement was
 // already refused unless its target is a writable, approved connection.
 func isRemoteWriteOp(name string) bool {
 	for _, prefix := range []string{"PG_", "SQLITE_", "MYSQL_", "DUCKLAKE_", "MD_", "MOTHERDUCK_"} {
 		if strings.HasPrefix(name, prefix) {
 			switch strings.TrimPrefix(name, prefix) {
-			case "INSERT", "UPDATE", "DELETE", "CREATE_TABLE", "CREATE_TABLE_AS", "ALTER", "DROP":
+			case "INSERT", "UPDATE", "DELETE", "CREATE_TABLE", "CREATE_TABLE_AS", "ALTER", "DROP", "INLINE_DATA":
 				return true
 			}
 		}
@@ -179,6 +180,8 @@ var deniedFuncExact = map[string]string{
 	"duckdb_memory":               "DuckDB's internal state is not readable by the agent",
 	"duckdb_optimizers":           "DuckDB's internal state is not readable by the agent",
 	"sql_auto_complete":           "DuckDB's internal state is not readable by the agent",
+	"sleep_ms":                    "sleeping holds a connection and a worker for as long as the query asks; it is not available to the agent",
+	"pg_sleep":                    "sleeping holds a connection and a worker for as long as the query asks; it is not available to the agent",
 	"pg_clear_cache":              "remote catalogs are refreshed by Vibe, not by SQL",
 	"get_md_token":                "MotherDuck account functions are not available to the agent",
 	"print_md_token":              "MotherDuck account functions are not available to the agent",
