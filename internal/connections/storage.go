@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/secrets"
@@ -193,4 +194,24 @@ func (t storageType) Info() TypeInfo {
 		FingerprintFields: fp,
 		SignInMethods:     []string{"keychain", "env", "prompt"},
 	}
+}
+
+// StorageTypeForScheme returns the storage connection type whose scope can
+// hold URLs of the scheme ("s3://" -> "s3"), and false for https:// and any
+// scheme that is not object storage. It reads the types' own scheme lists, so
+// a new scheme cannot drift from them. Schemes are literal: gs:// and gcs://
+// both mean gcs, but a gs:// URL still never matches a gcs:// scope.
+func StorageTypeForScheme(scheme string) (string, bool) {
+	if !strings.Contains(scheme, "://") {
+		scheme += "://"
+	}
+	for _, kind := range []string{"s3", "gcs", "r2"} {
+		if slices.Contains((storageType{kind: kind}).schemes(), scheme) {
+			return kind, true
+		}
+	}
+	if slices.Contains(storageurl.AzureSchemes, scheme) {
+		return "azure", true
+	}
+	return "", false
 }

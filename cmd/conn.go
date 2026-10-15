@@ -163,6 +163,7 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Added %s connection %s (scope: %s).\n", typ, def.Name, scope)
+	printStorageHint(out, ws, def, scope)
 	if !connections.NeedsCredential(typ) {
 		return nil
 	}

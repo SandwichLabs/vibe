@@ -25,6 +25,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`direction.md`](direction.md) | The north star: workspaces, connections, the eight primitives, and (§9) what changed from the plan |
 | [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic #105 (delivered; "as built" summary at the top) |
 | [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic #157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode |
+| [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md) | Plan for #130 (set up the storage connection from the lake form) and #131 (AWS SSO sign-in for S3); step 1, the match and the CLI hint, is delivered |
 | [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
 | [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
