@@ -62,6 +62,9 @@ func Classify(f Failure) (code, message string) {
 	}
 	code, message = CodeError, "Vibe couldn't connect with these settings."
 	switch {
+	case isRequirementMessage(low):
+		// "needs the "store" connection: it could not connect" is about another
+		// connection, already worded for the person: not an unreachable server.
 	case f.InstallExtension != "" || f.Status == session.StatusExtensionMissing:
 		ext := f.InstallExtension
 		if ext == "" {
@@ -98,4 +101,10 @@ func Classify(f Failure) (code, message string) {
 		message = fmt.Sprintf("Vibe couldn't reach %s. Is the VPN on?", host)
 	}
 	return code, message
+}
+
+// isRequirementMessage reports the hub's dependency status text (a lake waiting
+// on its storage connection), which must not be read for the words in it.
+func isRequirementMessage(low string) bool {
+	return strings.HasPrefix(low, `needs the "`) && strings.Contains(low, `" connection: `)
 }

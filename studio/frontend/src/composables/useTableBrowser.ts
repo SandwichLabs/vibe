@@ -13,6 +13,7 @@ import { connect } from './useConnections'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 import { formatCell } from '../lib/formatCell'
+import { catalogInStorage } from '../lib/connections'
 import { hasWailsRuntime } from '../lib/wails'
 
 export const FILTER_OPS = [
@@ -38,6 +39,9 @@ export function useTableBrowser() {
   // #117: why the selected table can't be edited (a read-only connection, a view,
   // a locked file), from GetTableCapabilities. Null means editable.
   const caps = ref<TableCapabilities | null>(null)
+  // The read-only connection is a lake whose catalog is in object storage: it can
+  // only be read, so the banner does not offer to turn Read-only off.
+  const catalogReadOnly = ref(false)
   const locked = computed(() => isReadOnly.value || (caps.value !== null && !caps.value.editable))
   const lockText = computed(() => {
     if (caps.value && !caps.value.editable) return caps.value.text
@@ -123,6 +127,14 @@ export function useTableBrowser() {
     applyRouteTable()
   }
 
+  // A qualified table of a connection in a schema other than its default
+  // (lake.warehouse.dim_students, from the rail) is not in the group lists,
+  // which cover each connection's default schema only: it is still openable.
+  function inOtherSchema(t: string): boolean {
+    const parts = t.split('.')
+    return parts.length === 3 && groups.value.some((g) => g.connection === parts[0] && g.status === 'ok')
+  }
+
   // applyRouteTable selects the table named by ?table= (once it's in the loaded
   // list), without disturbing a selection the user already made.
   function applyRouteTable() {
@@ -131,7 +143,7 @@ export function useTableBrowser() {
     if (t === selectedTable.value) return
     // A bare name (e.g. "Open table →" after an import) means the default
     // connection's table of that name.
-    const qualified = tables.value.includes(t)
+    const qualified = tables.value.includes(t) || inOtherSchema(t)
       ? t
       : groups.value.find((g) => g.default)?.tables.find((x) => x.name === t)?.qualified
     if (qualified && qualified !== selectedTable.value) selectTable(qualified)
@@ -143,7 +155,7 @@ export function useTableBrowser() {
   async function onDataChanged() {
     await loadTables()
     if (selectedTable.value) {
-      if (!tables.value.includes(selectedTable.value)) {
+      if (!tables.value.includes(selectedTable.value) && !inOtherSchema(selectedTable.value)) {
         // The table the agent dropped/renamed out from under us.
         selectedTable.value = null
         tableInfo.value = null
@@ -172,6 +184,10 @@ export function useTableBrowser() {
     try {
       caps.value = await App.GetTableCapabilities(name)
     } catch { caps.value = null }
+    catalogReadOnly.value = false
+    if (caps.value?.reason === 'connection-read-only') {
+      try { catalogReadOnly.value = catalogInStorage((await App.GetConnection(caps.value.connection)).def) } catch { /* the generic advice stands */ }
+    }
     await loadData()
   }
 
@@ -323,7 +339,7 @@ export function useTableBrowser() {
   })
 
   return {
-    isReadOnly, readOnlyReason, caps, locked, lockText, tables, selectedKind, unavailable, selectedTable, tableInfo,
+    isReadOnly, readOnlyReason, caps, catalogReadOnly, locked, lockText, tables, selectedKind, unavailable, selectedTable, tableInfo,
     tableData, loading, dataLoading, currentPage, sortCol, sortDir, errorMessage, statusMessage, showConfirmDrop,
     pendingDropTable, formattedRows, activeFilter, filteredTotal, showFbF, fbfCombinator, fbfConditions, colType,
     onSelect, loadTables, loadData, clearFilter, filterBySelection, openFbF, addFbFCondition, applyFbF,

@@ -89,6 +89,13 @@ export function detailLine(c: ConnectionInfo): DetailLine | null {
   }
 }
 
+// catalogInStorage is true for a DuckLake whose catalog is a storage URL: the
+// catalog is read from object storage and can only be read, so "turn off
+// Read-only" is not an option for it (the definition is refused when writable).
+export function catalogInStorage(def: { type: string; path?: string } | null | undefined): boolean {
+  return !!def && def.type === 'ducklake' && /^[a-z][a-z0-9+.-]*:\/\//i.test(def.path ?? '')
+}
+
 // statusLabel is the text a screen reader hears for a row's status.
 export function statusLabel(c: ConnectionInfo): string {
   return STATUS_META[statusKey(c.status)].label

@@ -15,7 +15,7 @@ import { cellClass, isNumericType } from '../lib/formatCell'
 const router = useRouter()
 const browser = useTableBrowser()
 const {
-  isReadOnly, readOnlyReason, caps, locked, lockText, tables, selectedKind, unavailable, selectedTable, tableInfo,
+  isReadOnly, readOnlyReason, caps, catalogReadOnly, locked, lockText, tables, selectedKind, unavailable, selectedTable, tableInfo,
   tableData, loading, dataLoading, currentPage, sortCol, sortDir, errorMessage, statusMessage, showConfirmDrop,
   pendingDropTable, formattedRows, activeFilter, filteredTotal, showFbF, fbfCombinator, fbfConditions, colType,
   loadData, clearFilter, filterBySelection, openFbF, addFbFCondition, applyFbF, saveFilterAsQuery, toggleSort,
@@ -90,9 +90,10 @@ const vFocus = {
           <Icon name="lock" :size="16" />
           <div>
             <b>This table is read-only.</b>{{ ' ' }}<span>{{ caps.text }}</span>
-            <span v-if="caps.reason === 'connection-read-only'" class="help" style="display: block;">To change data, turn off Read-only for the connection. For production data, use a database user that is allowed to write.</span>
+            <span v-if="caps.reason === 'connection-read-only' && catalogReadOnly" class="help" style="display: block;" data-testid="readonly-catalog-help">This lake's catalog is in object storage, so it can only be read.</span>
+            <span v-else-if="caps.reason === 'connection-read-only'" class="help" style="display: block;">To change data, turn off Read-only for the connection. For production data, use a database user that is allowed to write.</span>
           </div>
-          <button v-if="caps.reason === 'connection-read-only'" class="btn btn-sm" style="margin-left: auto;" @click="router.push(`/connections/${caps.connection}`)">Edit connection</button>
+          <button v-if="caps.reason === 'connection-read-only' && !catalogReadOnly" class="btn btn-sm" style="margin-left: auto;" @click="router.push(`/connections/${caps.connection}`)">Edit connection</button>
         </div>
 
         <!-- Record-count bar -->

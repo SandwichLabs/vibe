@@ -143,6 +143,9 @@ func TestClassify(t *testing.T) {
 		{"could not connect to server: Connection refused", CodeUnreachable},
 		{"server requires SSL", CodeSSLRequired},
 		{"weird", CodeError},
+		// A lake waiting on its storage connection is not an unreachable server.
+		{`needs the "floci" connection: it could not connect`, CodeError},
+		{`needs the "floci" connection: it needs credentials`, CodeError},
 	}
 	for _, c := range cases {
 		code, msg := Classify(Failure{Raw: c.raw, Def: def})

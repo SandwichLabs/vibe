@@ -53,3 +53,13 @@ describe('connection display helpers (#117)', () => {
     expect(NAME_RE.test('Prod-PG')).toBe(false)
   })
 })
+
+describe('catalogInStorage', () => {
+  it('is true only for a ducklake whose path is a storage URL', async () => {
+    const { catalogInStorage } = await import('./connections')
+    expect(catalogInStorage({ type: 'ducklake', path: 's3://b/c.sqlite' })).toBe(true)
+    expect(catalogInStorage({ type: 'ducklake', path: 'data/lake.ducklake' })).toBe(false)
+    expect(catalogInStorage({ type: 'iceberg', path: 's3://b/t/' })).toBe(false)
+    expect(catalogInStorage(null)).toBe(false)
+  })
+})
