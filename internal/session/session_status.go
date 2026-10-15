@@ -92,25 +92,36 @@ func (h *hub) Detach(ctx context.Context, name string) error {
 	if name == h.defCat() {
 		return fmt.Errorf("cannot detach the default catalog %q", name)
 	}
-	e, eAtt := h.entryOf(name)
+	if e, _ := h.entryOf(name); e == nil {
+		return fmt.Errorf("unknown connection %q", name)
+	}
+	// Everything below, including taking the entry out of the map, happens under
+	// adminMu: a dependent connecting meanwhile must see either an attached
+	// connection with its secret, or no connection at all, never an entry that
+	// still reads attached after its secret is gone.
+	h.adminMu.Lock()
+	defer h.adminMu.Unlock()
+	e, eAtt := h.entryOf(name) // read again: it may have changed while waiting
 	if e == nil {
 		return fmt.Errorf("unknown connection %q", name)
 	}
 	if eAtt {
-		h.adminMu.Lock()
 		conn, err := h.db.Conn(ctx)
 		if err != nil {
-			h.adminMu.Unlock()
 			return fmt.Errorf("failed to get admin connection: %w", err)
 		}
 		if !h.catalogless(e) {
 			_, err = conn.ExecContext(ctx, "DETACH "+QuoteIdent(name))
 		}
 		if err == nil {
+			// A dependent that cannot be detached keeps the secret in place: it
+			// must never be left attached with none.
+			err = h.detachDependents(ctx, conn, name)
+		}
+		if err == nil {
 			h.dropSecretsOn(ctx, conn, e.secrets)
 		}
 		_ = conn.Close()
-		h.adminMu.Unlock()
 		if err != nil {
 			return fmt.Errorf("failed to detach %q: %s", name, h.redact(err.Error()))
 		}

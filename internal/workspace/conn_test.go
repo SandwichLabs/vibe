@@ -697,3 +697,28 @@ func TestHandEditedURLCatalogIsAnIssueNotAFailure(t *testing.T) {
 	_, ok := sess.Status("other")
 	assert.True(t, ok, "the other connection is registered")
 }
+
+// The storage connections that matched the lake's URLs become Spec.Requires
+// (sorted, once each), straight from the scope check.
+func TestStorageURLsFillRequires(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "zstore", Type: "s3", Scope: "s3://bucket/lake/data/", Region: "us-east-1"}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "astore", Type: "s3", Scope: "s3://bucket/lake/", Region: "us-east-1"}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "other", Type: "s3", Scope: "s3://unrelated/", Region: "us-east-1"}))
+	d := urlLake("sqlite")
+	require.NoError(t, ws.AddConnection(ScopeLocal, d))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "tbl", Type: "delta", Path: "s3://unrelated/t"}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "loc", Type: "ducklake", Path: "data/l.ducklake", Options: map[string]string{"data_path": "data/f"}}))
+
+	spec, err := SessionSpec(ws, "lake")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"astore", "zstore"}, spec.Requires, "the catalog is only inside astore; the data path is inside both and zstore is the more specific scope")
+
+	spec, err = SessionSpec(ws, "tbl")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"other"}, spec.Requires)
+
+	spec, err = SessionSpec(ws, "loc")
+	require.NoError(t, err)
+	assert.Empty(t, spec.Requires, "local files require nothing")
+}

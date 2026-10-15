@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -104,6 +105,10 @@ type ResolvedConnection struct {
 	Resolved ConnectionDef
 	// Path is the absolute file path for duckdb and sqlite connections.
 	Path string
+	// Requires names the storage connections whose scope holds the definition's
+	// storage URLs (catalog, data path, table location): the session connects
+	// them first, because the lake or table is read with their secret.
+	Requires []string
 }
 
 // Def converts the resolved connection for the type registry. readOnly is the
@@ -148,21 +153,28 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 		opts["data_path"] = abs
 		out.Resolved.Options = opts
 	}
-	if err := checkStorageURLs(ws, out.Resolved, out.Path, lookup); err != nil {
+	requires, err := checkStorageURLs(ws, out.Resolved, out.Path, lookup)
+	if err != nil {
 		return ResolvedConnection{}, fmt.Errorf("connection %q: %w", c.Name, err)
 	}
+	out.Requires = requires
 	return out, nil
 }
 
 // storageTypes are the connection types that add a scoped storage secret.
 var storageTypes = map[string]bool{"s3": true, "gcs": true, "r2": true, "azure": true}
 
+// IsStorageType reports whether a connection type adds a scoped storage secret
+// (the types a lake or table in object storage depends on).
+func IsStorageType(t string) bool { return storageTypes[t] }
+
 // checkStorageURLs holds a DuckLake catalog and data path and an Iceberg or Delta
 // location that is a URL to the scope of a storage connection of this workspace: the
 // lake or table is read with that connection's secret, and a definition that
 // named any other bucket would either fail or reach data nobody configured.
-// Local paths are held to the workspace by ResolveLocalPath.
-func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupFunc) error {
+// Local paths are held to the workspace by ResolveLocalPath. It returns the
+// names of the storage connections that matched (sorted, without duplicates).
+func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupFunc) ([]string, error) {
 	type target struct{ url, what string }
 	var targets []target
 	switch d.Type {
@@ -171,22 +183,32 @@ func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupF
 	case "iceberg", "delta":
 		targets = []target{{path, "location"}}
 	}
+	var requires []string
 	for _, t := range targets {
 		if t.url == "" || !connections.IsDataURL(t.url) {
 			continue
 		}
-		if err := checkStorageURL(ws, d.Name, t.url, t.what, lookup); err != nil {
-			return err
+		name, err := checkStorageURL(ws, d.Name, t.url, t.what, lookup)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Contains(requires, name) {
+			requires = append(requires, name)
 		}
 	}
-	return nil
+	slices.Sort(requires)
+	return requires, nil
 }
 
-// checkStorageURL holds one URL to the scope of a storage connection of ws.
-func checkStorageURL(ws Workspace, self, url, what string, lookup LookupFunc) error {
+// checkStorageURL holds one URL to the scope of a storage connection of ws and
+// returns that connection's name.
+func checkStorageURL(ws Workspace, self, url, what string, lookup LookupFunc) (string, error) {
 	if err := storageurl.Validate(url); err != nil {
-		return fmt.Errorf("the %s is not a plain storage URL: %w", what, err)
+		return "", fmt.Errorf("the %s is not a plain storage URL: %w", what, err)
 	}
+	// The most specific scope wins, as for the secret DuckDB picks (longest
+	// matching prefix); a tie goes to the first by name.
+	best, bestLen := "", -1
 	for _, c := range ws.Connections() {
 		if !storageTypes[c.Type] || c.Name == self {
 			continue
@@ -197,11 +219,14 @@ func checkStorageURL(ws Workspace, self, url, what string, lookup LookupFunc) er
 		}
 		// One normaliser, shared with the agent's URL rule: a literal prefix
 		// match on the scope's folder form.
-		if storageurl.Within(url, sd.Scope) {
-			return nil
+		if storageurl.Within(url, sd.Scope) && len(sd.Scope) > bestLen {
+			best, bestLen = c.Name, len(sd.Scope)
 		}
 	}
-	return fmt.Errorf("the %s %q is not inside the scope of any S3, GCS, R2 or Azure connection of this workspace; add one whose scope contains it", what, url)
+	if best != "" {
+		return best, nil
+	}
+	return "", fmt.Errorf("the %s %q is not inside the scope of any S3, GCS, R2 or Azure connection of this workspace; add one whose scope contains it", what, url)
 }
 
 // usesLocalPath reports whether the definition's path is a file or folder on

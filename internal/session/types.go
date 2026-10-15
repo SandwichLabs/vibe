@@ -97,6 +97,12 @@ type Spec struct {
 	// there is none, which the session reports as needs-credentials. Nil on a
 	// type that needs none.
 	Credential CredentialFunc `json:"-"`
+
+	// Requires names connections to bring up before this one connects: a
+	// DuckLake or table read from a storage URL needs the storage connection
+	// whose secret reads it. A requirement that is not ready leaves this
+	// connection in StatusError with a message naming it.
+	Requires []string `json:"requires,omitempty"`
 }
 
 // CredentialFunc resolves a connection's credential on demand.

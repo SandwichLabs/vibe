@@ -117,6 +117,9 @@ type entry struct {
 	status  Status
 	attach  bool     // currently attached
 	secrets []string // temporary secrets created for it
+	// depBlocked names the requirement whose state last kept it from
+	// connecting ("" when none): cleared when that requirement is ready.
+	depBlocked string
 }
 
 type hub struct {

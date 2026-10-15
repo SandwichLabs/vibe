@@ -93,7 +93,7 @@ The extensions a lake needs depend on its spec: `ducklake`, plus `sqlite` for a 
 ### Storage dependency (`internal/session`)
 
 - `session.Spec` gains `Requires []string`. The workspace fills it for a ducklake with the storage connection(s) `checkStorageURLs` matched for the catalog URL and the data path URL.
-- `hub.connectLocked` connects each required connection (`connectImplicit(dep)`) before `AttachSQL`. Storage connections require nothing, so there are no cycles.
+- `hub.connect` connects each required connection (`connectImplicit(dep)`) before it calls `connectLocked` (which holds `adminMu`, so a dependency connected inside it would deadlock). Cycles and self-reference are refused defensively; a dependency problem is not recorded as the lake's own failure, so there is no backoff after the storage connection is fixed. Storage connections require nothing, so there are no cycles.
 - A required connection that is not `ok` leaves the lake in **`StatusError`** (no new status kind; the closed set and its precedence in `session/types.go:18-32` are mirrored in `studio/frontend/src/lib/connections.ts:39-41` and the CLI) with the message "needs the `floci` connection: it needs credentials". A `needs-credentials` kind on the lake would point the rail's Sign-in at a type that has no credentials.
 - No re-attach machinery: Preflight replaces a storage secret in place under the same name (`session_connect.go:290-301`), so an attached lake keeps working after a re-sign-in. Step 1 asserts this.
 

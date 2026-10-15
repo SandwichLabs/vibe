@@ -418,3 +418,47 @@ func TestDuckLakeURLCatalogSizeIsReadOnce(t *testing.T) {
 	t.Logf("attach: %v; requests %d, served %d", err, requests.Load(), served.Load())
 	assert.Less(t, served.Load(), int64(1<<20), "the over-cap object was not downloaded")
 }
+
+// The lake is connected FIRST, with its storage connection only registered: the
+// hub brings "store" up (Spec.Requires), then vets and attaches the catalog.
+// With the store's credentials missing the lake says so, not an S3 error.
+func TestDuckLakeConnectsItsStorageFirstOnMinIO(t *testing.T) {
+	ep := startMinIO(t)
+	ctx := context.Background()
+	cat, conn := minioLake(t, ep, "sqlite")
+	url := uploadCatalog(t, conn, cat, "sqlite", "catalog.db")
+
+	sess, err := session.New(session.WithConnectionTypes(connections.Types()...), session.WithExtensionDirectory(extDir(t)))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
+	for _, e := range []string{"httpfs", "ducklake", "sqlite"} {
+		require.NoError(t, sess.InstallExtension(ctx, e))
+	}
+	var have atomic.Bool
+	store := connections.Def{Name: "store", Type: "s3", Scope: "s3://lake/", Region: "us-east-1",
+		Options: map[string]string{"endpoint": ep, "url_style": "path", "use_ssl": "false"}}.Spec()
+	store.Credential = func(context.Context) (secrets.Credential, error) {
+		if !have.Load() {
+			return secrets.Credential{}, &secrets.ErrNeedsCredentials{Method: "keychain", Reason: "not set"}
+		}
+		return secrets.Credential{KeyID: "minioadmin", Secret: minioSecret}, nil
+	}
+	require.NoError(t, sess.Register(store))
+	lake := urlLakeDef(url, "sqlite").Spec()
+	lake.Requires = []string{"store"}
+	require.NoError(t, sess.Register(lake))
+
+	err = sess.Connect(ctx, "lake")
+	require.Error(t, err)
+	st, _ := sess.Status("lake")
+	assert.Equal(t, session.StatusError, st.Kind)
+	assert.Equal(t, `needs the "store" connection: it needs credentials`, st.Message)
+	assert.NotContains(t, err.Error(), minioSecret)
+
+	have.Store(true)
+	sess.Preflight(ctx, "store")
+	require.NoError(t, sess.ConnectReferenced(ctx, "", "SELECT count(*) FROM lake.people"))
+	assert.Equal(t, 3, countPeople(t, sess))
+	st, _ = sess.Status("store")
+	assert.Equal(t, session.StatusOK, st.Kind)
+}
