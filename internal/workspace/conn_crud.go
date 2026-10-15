@@ -27,11 +27,6 @@ func validateDefFor(scope Scope, d ConnectionDef) error {
 	if err := d.ValidateIn(scope); err != nil {
 		return err
 	}
-	// Only at save: at load the same entry is skipped with an issue by
-	// ResolveConnection, so one hand-edited line never stops a workspace opening.
-	if err := refuseURLCatalog(d); err != nil {
-		return err
-	}
 	if scope == ScopeShared && OwnScopeOnlyType(d.Type) {
 		return fmt.Errorf("connection %q: %s", d.Name, OwnScopeOnlyMessage(d.Type))
 	}

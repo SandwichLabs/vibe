@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/sandbox"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
@@ -241,17 +240,6 @@ func (d ConnectionDef) ValidateIn(scope Scope) error {
 				return fmt.Errorf("connection %q: %s: %w", d.Name, field, err)
 			}
 		}
-	}
-	return nil
-}
-
-// refuseURLCatalog fails closed on a DuckLake whose catalog is a storage URL:
-// the session layer can read one, but the workspace does not resolve it yet (it
-// would be taken for a path inside the workspace). Step 5 of #118 replaces this
-// guard with the real resolution.
-func refuseURLCatalog(d ConnectionDef) error {
-	if d.Type == "ducklake" && connections.IsDataURL(d.Path) {
-		return fmt.Errorf("connection %q: a DuckLake catalog in object storage is not supported here yet", d.Name)
 	}
 	return nil
 }

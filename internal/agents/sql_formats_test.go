@@ -359,3 +359,43 @@ func TestPolicy_UnattachedCatalogNames(t *testing.T) {
 	assert.Contains(t, v.Reason, "at most three parts")
 	assert.NotContains(t, v.Reason, "NameListToString")
 }
+
+// A DuckLake catalog in object storage is bytes in a bucket: the agent can read
+// them with read_blob if and only if a ready storage connection's scope (the
+// person's decision) already covers the URL. The lake widens nothing, and the
+// SQLite readers stay off the allow-list (#118).
+func TestPolicy_URLCatalogBytesFollowTheStorageScope(t *testing.T) {
+	const q = "SELECT size(content) FROM read_blob('s3://acme/lake/catalog.db')"
+	withScope := newPolicyFixture(t, ModeFull, withExtraConns(
+		session.ConnectionInfo{Name: "store", Type: "s3", Kind: session.StatusOK, Catalogless: true, Scope: "s3://acme/"},
+		// The lake itself carries no scope, whatever its catalog is.
+		session.ConnectionInfo{Name: "lake", Type: "ducklake", Kind: session.StatusOK, Catalogless: false},
+	))
+	// Inside the scope the URL rule lets it through; what is left to object is
+	// DuckDB's binder (httpfs is not installed in this fixture).
+	v := withScope.classify(q)
+	assert.Contains(t, v.Reason, "could not validate query", "the URL rule passed it: %s", v.Reason)
+
+	// The same URL outside the scope is refused by the URL rule itself.
+	v = withScope.classify("SELECT size(content) FROM read_blob('s3://other/lake/catalog.db')")
+	assert.Equal(t, sqlClassOther, v.Class)
+	assert.NotContains(t, v.Reason, "could not validate query", v.Reason)
+
+	// With only the lake (no storage connection) nothing covers it.
+	lakeOnly := newPolicyFixture(t, ModeFull, withExtraConns(
+		session.ConnectionInfo{Name: "lake", Type: "ducklake", Kind: session.StatusOK, Catalogless: false, Scope: "s3://acme/"},
+	))
+	v = lakeOnly.classify(q)
+	assert.Equal(t, sqlClassOther, v.Class)
+	assert.Contains(t, v.Reason, "storage connection")
+
+	for _, bad := range []string{
+		"SELECT * FROM sqlite_scan('/tmp/catalog.db', 'ducklake_table')",
+		"CALL sqlite_attach('/tmp/catalog.db')",
+		"SELECT * FROM sqlite_scan('s3://acme/lake/catalog.db', 'ducklake_table')",
+	} {
+		v = withScope.classify(bad)
+		assert.Equal(t, sqlClassOther, v.Class, bad)
+		assert.Contains(t, v.Reason, "sqlite", bad)
+	}
+}

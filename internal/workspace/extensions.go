@@ -22,10 +22,14 @@ func ExtensionNeeds(ws Workspace) []ExtensionNeed {
 	needed := map[string][]string{}
 	if ws != nil {
 		for _, c := range ws.Connections() {
-			if ti, err := connections.TypeInfoFor(c.Type); err == nil {
-				for _, e := range ti.Extensions {
-					needed[e] = append(needed[e], c.Name)
-				}
+			// ${ENV} references are expanded first (a ${LAKE_URL} catalog needs
+			// httpfs); an unresolvable one falls back to the raw definition.
+			d := c.ConnectionDef
+			if r, err := d.Resolve(nil, c.Scope); err == nil {
+				d = r
+			}
+			for _, e := range connections.ExtensionsFor(toConnDef(d, c.IsReadOnly(), d.Path)) {
+				needed[e] = append(needed[e], c.Name)
 			}
 		}
 	}

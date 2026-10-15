@@ -611,26 +611,59 @@ func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup
 	return secrets.Credential{}, ResolvedConnection{}, fmt.Errorf("unknown connection %q", name)
 }
 
-// A DuckLake catalog in object storage is refused until the workspace resolves
-// it (#118 step 5): never taken for a path inside the workspace.
-func TestDuckLakeURLCatalogIsRefusedForNow(t *testing.T) {
-	ws, _, _ := memWorkspace(t, nil)
-	d := ConnectionDef{Name: "lake", Type: "ducklake", Path: "s3://bucket/lake/catalog.db", ReadOnly: boolPtr(true),
-		Options: map[string]string{"data_path": "s3://bucket/lake/", "catalog": "sqlite"}}
-	err := ws.AddConnection(ScopeLocal, d)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not supported here yet")
-
-	// A hand-edited definition is refused when it is resolved, before any path handling.
-	_, err = ResolveConnection(ws, Connection{ConnectionDef: d, Scope: ScopeLocal}, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not supported here yet")
-	_, statErr := os.Stat(filepath.Join(ws.Root(), "s3:"))
-	assert.True(t, os.IsNotExist(statErr))
+func urlLake(_ string) ConnectionDef {
+	return ConnectionDef{Name: "lake", Type: "ducklake", Path: "s3://bucket/lake/catalog.db", ReadOnly: boolPtr(true),
+		Options: map[string]string{"data_path": "s3://bucket/lake/data/", "catalog": "sqlite"}}
 }
 
-// One hand-edited URL catalog does not stop the workspace opening: that
-// connection is skipped with an issue and the others work.
+// A DuckLake catalog in object storage is resolved as a URL (never a path
+// inside the workspace), checked against the scope of a storage connection.
+func TestDuckLakeURLCatalogResolvesAsURL(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	d := urlLake("sqlite")
+	err := ws.AddConnection(ScopeLocal, d)
+	require.NoError(t, err, "a URL catalog saves (the scope is checked when it is opened)")
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "store", Type: "s3", Scope: "s3://bucket/", Region: "us-east-1"}))
+
+	rc, err := ResolveConnection(ws, Connection{ConnectionDef: d, Scope: ScopeLocal}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "s3://bucket/lake/catalog.db", rc.Path)
+	assert.Equal(t, "s3://bucket/lake/data/", rc.Resolved.Options["data_path"])
+	assert.False(t, usesLocalPath(rc.Resolved))
+	assert.Equal(t, "s3://bucket/lake/catalog.db", ServerDescription(rc.Resolved))
+	_, statErr := os.Stat(filepath.Join(ws.Root(), "s3:"))
+	assert.True(t, os.IsNotExist(statErr))
+
+	// The read-only rule still holds at save.
+	w := d
+	w.ReadOnly = boolPtr(false)
+	w.Name = "wlake"
+	err = ws.AddConnection(ScopeLocal, w)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read")
+}
+
+func TestDuckLakeCatalogOutsideEveryScopeIsRefused(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "store", Type: "s3", Scope: "s3://bucket/lake/data/", Region: "us-east-1"}))
+	d := urlLake("sqlite")
+	// The data path is inside the scope; the catalog is not.
+	_, err := ResolveConnection(ws, Connection{ConnectionDef: d, Scope: ScopeLocal}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the catalog")
+	assert.Contains(t, err.Error(), "not inside the scope")
+
+	// And the other way round.
+	d2 := d
+	d2.Path = "s3://bucket/lake/data/catalog.db"
+	d2.Options = map[string]string{"data_path": "s3://other/x/", "catalog": "sqlite"}
+	_, err = ResolveConnection(ws, Connection{ConnectionDef: d2, Scope: ScopeLocal}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the data path")
+}
+
+// One hand-edited URL catalog outside every storage scope does not stop the
+// workspace opening: that connection is skipped with an issue and the others work.
 func TestHandEditedURLCatalogIsAnIssueNotAFailure(t *testing.T) {
 	ws, store, cfg := memWorkspace(t, nil)
 	root := ws.Root()
@@ -659,7 +692,8 @@ func TestHandEditedURLCatalogIsAnIssueNotAFailure(t *testing.T) {
 	defer sess.Close() //nolint:errcheck
 	require.Len(t, issues, 1)
 	assert.Equal(t, "lake", issues[0].Connection)
-	assert.Contains(t, issues[0].Message, "not supported here yet")
+	assert.Contains(t, issues[0].Message, "the catalog")
+	assert.Contains(t, issues[0].Message, "not inside the scope")
 	_, ok := sess.Status("other")
 	assert.True(t, ok, "the other connection is registered")
 }

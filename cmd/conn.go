@@ -584,7 +584,7 @@ func init() {
 	f := connAddCmd.Flags()
 	f.String("type", "", "connection type: "+strings.Join(connections.AllTypeNames(), ", "))
 	f.String("scope", "local", "where to keep the definition: local (this computer), shared (vibe.yaml) or user (all workspaces)")
-	f.String("path", "", "file path (duckdb, sqlite; ducklake: the metadata file; iceberg, delta: the table folder or storage URL)")
+	f.String("path", "", "file path (duckdb, sqlite; ducklake: catalog file or storage URL; iceberg, delta: the table folder or storage URL)")
 	f.String("host", "", "host (postgres, mysql)")
 	f.Int("port", 0, "port (postgres, mysql; default 5432 / 3306)")
 	f.String("database", "", "database (postgres, mysql, motherduck)")

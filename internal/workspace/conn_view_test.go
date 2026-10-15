@@ -110,3 +110,29 @@ func TestExtensionNeeds(t *testing.T) {
 	assert.Equal(t, []string{"alpha", "zeta"}, needed["postgres"], "sorted")
 	assert.Empty(t, needed["mysql"])
 }
+
+func TestExtensionNeedsFollowsTheLakeSpec(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "plain", Type: "ducklake", Path: "data/p.ducklake", Options: map[string]string{"data_path": "data/p"}}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "sq", Type: "ducklake", Path: "data/s.db", Options: map[string]string{"catalog": "sqlite", "data_path": "data/s"}}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "store", Type: "s3", Scope: "s3://bucket/", Region: "us-east-1"}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, urlLake("sqlite")))
+	needed := map[string][]string{}
+	for _, n := range ExtensionNeeds(ws) {
+		needed[n.Name] = n.NeededBy
+	}
+	assert.Equal(t, []string{"lake", "plain", "sq"}, needed["ducklake"])
+	assert.Equal(t, []string{"lake", "sq"}, needed["sqlite"])
+	assert.Equal(t, []string{"lake", "store"}, needed["httpfs"])
+}
+
+func TestExtensionNeedsExpandsEnvReferences(t *testing.T) {
+	t.Setenv("VIBE_TEST_LAKE_URL", "s3://bucket/lake/c.db")
+	ws, _, _ := memWorkspace(t, nil)
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "elake", Type: "ducklake", Path: "${VIBE_TEST_LAKE_URL}", ReadOnly: boolPtr(true), Options: map[string]string{"data_path": "data/f"}}))
+	needed := map[string][]string{}
+	for _, n := range ExtensionNeeds(ws) {
+		needed[n.Name] = n.NeededBy
+	}
+	assert.Equal(t, []string{"elake"}, needed["httpfs"])
+}
