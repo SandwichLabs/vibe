@@ -37,7 +37,7 @@ export function presetFill(preset: ConnPreset, options: Record<string, string>, 
 
 // fillRegion fills the <region> of an endpoint template from a region. A region
 // that is not a region name leaves the placeholder, which validation refuses.
-export function fillRegion(template: string, region: string): string {
+function fillRegion(template: string, region: string): string {
   const r = region.trim()
   return template.split(REGION_PLACEHOLDER).join(/^[A-Za-z0-9_-]{1,64}$/.test(r) ? r : REGION_PLACEHOLDER)
 }
