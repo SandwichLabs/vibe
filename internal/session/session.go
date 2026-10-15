@@ -135,6 +135,9 @@ type hub struct {
 
 	adminMu sync.Mutex // serialises ATTACH / DETACH / secret DDL
 
+	stageMu   sync.Mutex // guards stageRoot
+	stageRoot string     // private folder of the Stager snapshots ("" until one is made)
+
 	mu    sync.RWMutex
 	conns map[string]*entry
 
@@ -281,6 +284,7 @@ func (h *hub) Close() error {
 			first = fmt.Errorf("failed to close hub: %w", err)
 		}
 	}
+	h.removeStages() // after the database is closed: an open file cannot be deleted on Windows
 	if h.ownTemp && h.tempDir != "" {
 		if err := os.RemoveAll(h.tempDir); err != nil && first == nil {
 			first = fmt.Errorf("failed to remove hub temp directory: %w", err)

@@ -33,6 +33,13 @@ import (
 // (ducklake_view, ducklake_macro), not as catalog objects (the drift test
 // asserts this against the installed extension).
 //
+// A catalog in object storage is read once, into a private snapshot (Stage),
+// and that snapshot is what is vetted and what the lake attaches. Vetting the
+// URL and then letting the lake read the URL again would trust two reads: a
+// server (or anyone who can change what it returns) could answer the second
+// with different bytes than the first. The lake therefore reflects the catalog
+// as of the connect; a reconnect reads it again.
+//
 // Rows are vetted too, because object names are not the only thing DuckLake
 // turns into SQL. Audit of the DuckLake 1.5.6 catalog columns, each probed with
 // injection payloads against a real lake (the probe stops at "the reader bound
@@ -68,8 +75,8 @@ import (
 // DEFAULT, GENERATED, CHECK, UNIQUE, REFERENCES or AS in a table's CREATE
 // statement).
 //
-// The window between this check and the lake's own ATTACH is not closed: the
-// file is opened twice. For a catalog on this computer, changing it in between
+// The window between this check and the lake's own ATTACH is not closed for a
+// local file: it is opened twice. For a catalog on this computer, changing it in between
 // needs write access to your files, which already beats everything this guards
 // (the lake's data folder, the workspace itself). The scratch attachment is
 // detached before the lake attaches, so the same file is never open twice at
@@ -112,7 +119,8 @@ type catalogObject struct {
 	sql    string // sqlite only: the object's CREATE statement
 }
 
-// catalogKind is the metadata catalog's engine for a spec: "duckdb" or "sqlite".
+// catalogKind is the metadata catalog's engine for a spec: "duckdb" (the default)
+// or "sqlite".
 func catalogKind(s session.Spec) string {
 	if opt(s, "catalog") == "sqlite" {
 		return "sqlite"
@@ -120,14 +128,14 @@ func catalogKind(s session.Spec) string {
 	return "duckdb"
 }
 
-// PreAttach refuses a local catalog file that holds anything but DuckLake's own
-// tables (see the comment at the top of this file). A catalog that does not
-// exist yet is new: DuckLake creates it, honestly, on first write.
+// PreAttach refuses a catalog that holds anything but DuckLake's own tables
+// (see the comment at the top of this file). A local catalog that does not
+// exist yet is new: DuckLake creates it, honestly, on first write. A catalog in
+// object storage has been copied to a local snapshot by Stage, and it is that
+// file that is checked here.
 func (ducklakeType) PreAttach(ctx context.Context, q session.QueryExecer, s session.Spec) error {
 	if IsDataURL(s.Path) {
-		// Fail closed: a catalog in object storage cannot be vetted yet. The step
-		// that adds it must read and vet the file over httpfs first.
-		return fmt.Errorf("a DuckLake catalog in object storage is not supported yet; refusing to read it")
+		return fmt.Errorf("the catalog in object storage was not copied before it was checked; refusing to read it")
 	}
 	if _, err := os.Stat(s.Path); errors.Is(err, fs.ErrNotExist) {
 		return nil

@@ -55,6 +55,10 @@ func validate(u string, glob bool) error {
 		switch {
 		case r < 0x20 || r == 0x7f, r == ' ', r == '\\', r == '?', r == '#', r == '%', r == '*' && !glob:
 			return fmt.Errorf("%q must be a plain URL (no spaces, wildcards, query string, fragment or escapes)", u)
+		case r == '[', r == ']', r == '{', r == '}', r == '!':
+			// DuckDB reads these as glob syntax (a[1].db is a1.db), so they would name
+			// a different object than the one that was checked.
+			return fmt.Errorf("%q must be a plain URL (no glob characters such as [ ] { } !)", u)
 		}
 	}
 	segs := strings.Split(strings.TrimSuffix(rest, "/"), "/")

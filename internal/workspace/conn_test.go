@@ -610,3 +610,56 @@ func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup
 	}
 	return secrets.Credential{}, ResolvedConnection{}, fmt.Errorf("unknown connection %q", name)
 }
+
+// A DuckLake catalog in object storage is refused until the workspace resolves
+// it (#118 step 5): never taken for a path inside the workspace.
+func TestDuckLakeURLCatalogIsRefusedForNow(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	d := ConnectionDef{Name: "lake", Type: "ducklake", Path: "s3://bucket/lake/catalog.db", ReadOnly: boolPtr(true),
+		Options: map[string]string{"data_path": "s3://bucket/lake/", "catalog": "sqlite"}}
+	err := ws.AddConnection(ScopeLocal, d)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported here yet")
+
+	// A hand-edited definition is refused when it is resolved, before any path handling.
+	_, err = ResolveConnection(ws, Connection{ConnectionDef: d, Scope: ScopeLocal}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported here yet")
+	_, statErr := os.Stat(filepath.Join(ws.Root(), "s3:"))
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// One hand-edited URL catalog does not stop the workspace opening: that
+// connection is skipped with an issue and the others work.
+func TestHandEditedURLCatalogIsAnIssueNotAFailure(t *testing.T) {
+	ws, store, cfg := memWorkspace(t, nil)
+	root := ws.Root()
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.ducklake", Options: map[string]string{"data_path": "data/files"}}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, pgConn("other")))
+	require.NoError(t, ws.Close())
+	var edited bool
+	require.NoError(t, filepath.Walk(cfg, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && info.Name() == LocalFile {
+			b, rerr := os.ReadFile(p)
+			require.NoError(t, rerr)
+			require.Contains(t, string(b), "data/lake.ducklake")
+			require.NoError(t, os.WriteFile(p, []byte(strings.Replace(string(b), "data/lake.ducklake", "s3://bucket/lake/c.db", 1)), 0o600))
+			edited = true
+		}
+		return nil
+	}))
+	require.True(t, edited)
+
+	r := secrets.NewResolver(secrets.WithKeychain(store))
+	ws2, err := Open(root, WithConfigDir(cfg), WithUserConfig(UserConfig{Version: ConfigVersion}), WithResolver(r))
+	require.NoError(t, err, "the workspace still opens")
+	defer ws2.Close() //nolint:errcheck
+	sess, issues, err := OpenSession(context.Background(), ws2, nil)
+	require.NoError(t, err)
+	defer sess.Close() //nolint:errcheck
+	require.Len(t, issues, 1)
+	assert.Equal(t, "lake", issues[0].Connection)
+	assert.Contains(t, issues[0].Message, "not supported here yet")
+	_, ok := sess.Status("other")
+	assert.True(t, ok, "the other connection is registered")
+}

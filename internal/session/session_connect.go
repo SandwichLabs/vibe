@@ -158,14 +158,27 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 		}
 	}
 
-	stmts, err := t.AttachSQL(e.spec)
+	spec, done, err := h.stage(ctx, conn, t, e.spec)
+	if err != nil {
+		h.dropSecretsOn(ctx, conn, secretNames)
+		msg := h.redact(err.Error())
+		h.setStatus(name, StatusError, msg, 0)
+		return fmt.Errorf("failed to attach %q: %s", name, msg)
+	}
+	attached := false
+	defer func() {
+		if !attached && done {
+			h.removeStage(name)
+		}
+	}()
+	stmts, err := t.AttachSQL(spec)
 	if err != nil {
 		h.dropSecretsOn(ctx, conn, secretNames)
 		h.setStatus(name, StatusError, h.redact(err.Error()), 0)
 		return fmt.Errorf("failed to attach %q: %s", name, h.redact(err.Error()))
 	}
 	if pre, ok := t.(PreAttacher); ok {
-		if perr := pre.PreAttach(ctx, conn, e.spec); perr != nil {
+		if perr := pre.PreAttach(ctx, conn, spec); perr != nil {
 			h.dropSecretsOn(ctx, conn, secretNames)
 			msg := h.redact(perr.Error())
 			h.setStatus(name, StatusError, msg, 0)
@@ -181,7 +194,7 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 		}
 	}
 	if pa, ok := t.(PostAttacher); ok {
-		if perr := pa.PostAttach(ctx, conn, e.spec); perr != nil {
+		if perr := pa.PostAttach(ctx, conn, spec); perr != nil {
 			_, _ = conn.ExecContext(ctx, "DETACH "+QuoteIdent(name))
 			h.dropSecretsOn(ctx, conn, secretNames)
 			msg := h.redact(perr.Error())
@@ -189,6 +202,7 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 			return fmt.Errorf("failed to attach %q: %s", name, msg)
 		}
 	}
+	attached = true
 	h.mu.Lock()
 	e.attach = true
 	e.secrets = secretNames
@@ -226,7 +240,7 @@ func (h *hub) readyForConnect(ctx context.Context, conn *sql.Conn, e *entry, ct 
 	if ht, ok := ct.(HubTokenType); ok && ht.UsesHubToken() {
 		hubTok = true
 	}
-	for _, ext := range ct.Extensions() {
+	for _, ext := range ExtensionsFor(ct, e.spec) {
 		installed, loaded, err := extensionState(ctx, conn, ext)
 		if err != nil {
 			return secrets.Credential{}, StatusError, h.redact(err.Error()), err

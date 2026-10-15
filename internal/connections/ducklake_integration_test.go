@@ -178,6 +178,12 @@ func TestDuckLakeWithObjectStorageDataPath(t *testing.T) {
 // rewritten delete file) is refused and detached on attach, and what it points
 // at is never read.
 func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
+	for _, kind := range []string{"duckdb", "sqlite"} {
+		t.Run(kind, func(t *testing.T) { craftedCatalogRows(t, kind) })
+	}
+}
+
+func craftedCatalogRows(t *testing.T, kind string) {
 	ctx := context.Background()
 	for name, tamper := range map[string]string{
 		"absolute data file":   "UPDATE ducklake_data_file SET path = '%OUT%/secret.parquet', path_is_relative = false",
@@ -193,12 +199,19 @@ func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			ws, _ := memWS(t)
-			def := workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.ducklake", ReadOnly: workspaceBool(false), Options: map[string]string{"data_path": "data/lake_files"}}
+			opts := map[string]string{"data_path": "data/lake_files"}
+			if kind == "sqlite" {
+				opts["catalog"] = "sqlite"
+			}
+			def := workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.ducklake", ReadOnly: workspaceBool(false), Options: opts}
 			require.NoError(t, ws.AddConnection(workspace.ScopeLocal, def))
 			fresh := t.TempDir()
 			sess, _, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
 			require.NoError(t, err)
 			require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
+			if kind == "sqlite" {
+				require.NoError(t, sess.InstallExtension(ctx, "sqlite"))
+			}
 			sess.Preflight(ctx, "lake")
 			require.NoError(t, sess.Connect(ctx, "lake"), "an honest lake attaches")
 			_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'); DELETE FROM lake.people WHERE id = 5; INSERT INTO lake.people VALUES (2, 'bob'); CALL ducklake_flush_inlined_data('lake')")
@@ -206,13 +219,12 @@ func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
 			require.NoError(t, sess.Close())
 
 			outside := t.TempDir()
-			meta, err := sql.Open("duckdb", filepath.Join(ws.Root(), "data", "lake.ducklake"))
-			require.NoError(t, err)
-			_, err = meta.Exec("COPY (SELECT 42 AS id, 'TOP-SECRET' AS name) TO '" + filepath.Join(outside, "secret.parquet") + "' (FORMAT PARQUET)")
-			require.NoError(t, err)
-			_, err = meta.Exec(strings.ReplaceAll(tamper, "%OUT%", outside))
-			require.NoError(t, err, tamper)
-			require.NoError(t, meta.Close())
+			tamperFile(t, filepath.Join(ws.Root(), "data", "lake.ducklake"), kind, []string{
+				"COPY (SELECT 42 AS id, 'TOP-SECRET' AS name) TO '" + filepath.Join(outside, "secret.parquet") + "' (FORMAT PARQUET)",
+				"USE c",
+				strings.ReplaceAll(tamper, "%OUT%", outside),
+				"USE memory",
+			})
 
 			sess, _, err = workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
 			require.NoError(t, err)
@@ -233,7 +245,7 @@ func TestDuckLakeRefusesACraftedCatalog(t *testing.T) {
 			assert.Error(t, err)
 			// Test refuses it too.
 			res := connections.Test(ctx, connections.Def{Name: "lake", Type: "ducklake", Path: filepath.Join(ws.Root(), "data", "lake.ducklake"),
-				Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files")}}, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
+				Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files"), "catalog": kindOpt(kind)}}, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
 			assert.False(t, res.OK)
 			assert.Regexp(t, "refusing|does not match existing data path", res.Error)
 		})
@@ -290,4 +302,75 @@ func TestDuckLakeRefusesASymlinkUnderTheDataFolder(t *testing.T) {
 		Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files")}}, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
 	assert.False(t, res.OK)
 	assert.Contains(t, res.Error, "symbolic link")
+}
+
+// A lake with a SQLite catalog on this computer: consent for both extensions,
+// created on first write, read-write, then reopened read-only, and tested.
+func TestDuckLakeSQLiteCatalogLocalEndToEnd(t *testing.T) {
+	ws, _ := memWS(t)
+	ctx := context.Background()
+	opts := map[string]string{"data_path": "data/lake_files", "catalog": "sqlite"}
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.db", ReadOnly: workspaceBool(false), Options: opts}))
+	open := func(fresh string) session.Session {
+		sess, issues, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
+		require.NoError(t, err)
+		require.Empty(t, issues)
+		return sess
+	}
+
+	// Consent: the lake first, then the extension its catalog is read with.
+	fresh := t.TempDir()
+	sess := open(fresh)
+	st := connStatus(sess, "lake")
+	assert.Equal(t, session.StatusExtensionMissing, st.Kind)
+	assert.Equal(t, "ducklake", st.Extension)
+	require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
+	sess.Preflight(ctx, "lake")
+	st = connStatus(sess, "lake")
+	assert.Equal(t, session.StatusExtensionMissing, st.Kind, "sqlite is still missing")
+	assert.Equal(t, "sqlite", st.Extension)
+	require.NoError(t, sess.InstallExtension(ctx, "sqlite"))
+	sess.Preflight(ctx, "lake")
+	assert.Equal(t, session.StatusNotConnected, connStatus(sess, "lake").Kind)
+	_ = sess.Close()
+
+	cdef := connections.Def{Name: "lake", Type: "ducklake", Path: filepath.Join(ws.Root(), "data", "lake.db"),
+		Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files"), "catalog": "sqlite"}}
+	res := connections.Test(ctx, cdef, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
+	require.True(t, res.OK, res.Error)
+	assert.Contains(t, res.Detail, "new lake")
+
+	sess = open(fresh)
+	eng := engine.NewManager(sess)
+	_, err := eng.Execute(ctx, "CREATE TABLE lake.people (id INTEGER, name VARCHAR)", nil)
+	require.NoError(t, err)
+	_, err = eng.Execute(ctx, "INSERT INTO lake.people VALUES (1,'ada'),(2,'bob')", nil)
+	require.NoError(t, err)
+	_, err = sess.DB().Exec("CALL ducklake_flush_inlined_data('lake')")
+	require.NoError(t, err)
+	_, err = eng.Execute(ctx, "INSERT INTO lake.people VALUES (3,'cy')", nil)
+	require.NoError(t, err)
+	require.NoError(t, sess.Close())
+	head := make([]byte, 16)
+	f, err := os.Open(filepath.Join(ws.Root(), "data", "lake.db"))
+	require.NoError(t, err)
+	_, _ = f.Read(head)
+	_ = f.Close()
+	assert.Equal(t, "SQLite format 3\x00", string(head), "the catalog is a SQLite file")
+
+	// Tested now that it exists: attached, vetted, probed.
+	res = connections.Test(ctx, cdef, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
+	require.True(t, res.OK, res.Error)
+	assert.NotContains(t, res.Detail, "new lake")
+
+	// Reopened read-only.
+	require.NoError(t, ws.RemoveConnection(ctx, workspace.ScopeLocal, "lake"))
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.db", ReadOnly: workspaceBool(true), Options: opts}))
+	sess = open(fresh)
+	defer sess.Close() //nolint:errcheck
+	eng = engine.NewManager(sess)
+	rows := queryAll(t, eng, "SELECT count(*) FROM lake.people")
+	assert.EqualValues(t, 3, rows[0][0])
+	_, err = eng.Execute(ctx, "INSERT INTO lake.people VALUES (4,'di')", nil)
+	assert.Error(t, err, "read-only")
 }

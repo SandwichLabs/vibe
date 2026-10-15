@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -468,7 +469,7 @@ func TestNewTypesMetadata(t *testing.T) {
 	assert.False(t, az.Capabilities.Catalog)
 	dl, _ := TypeInfoFor("ducklake")
 	assert.True(t, dl.Capabilities.ReadOnlyAttach)
-	assert.Equal(t, []string{"type", "path", "option:data_path"}, dl.FingerprintFields)
+	assert.Equal(t, []string{"type", "path", "option:data_path", "option:catalog"}, dl.FingerprintFields)
 	assert.Empty(t, dl.Credentials)
 }
 
@@ -604,4 +605,134 @@ func TestAzureConnectionStringAccountMustMatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "acmelake", connStringAccount("a=b; accountname = acmelake ;c=d"))
 	assert.Equal(t, "", connStringAccount("nothing"))
+}
+
+func urlLake(path, catalog string, readOnly bool) Def {
+	o := map[string]string{"data_path": "s3://b/lake/"}
+	if catalog != "" {
+		o["catalog"] = catalog
+	}
+	return Def{Name: "lake", Type: "ducklake", Path: path, ReadOnly: readOnly, Options: o}
+}
+
+func TestDuckLakeCatalogOptionAndURLCatalogRules(t *testing.T) {
+	// Catalog values: duckdb (default, also spelled), sqlite; anything else is refused.
+	for _, c := range []string{"", "duckdb", "sqlite"} {
+		d := lakeDef(t)
+		if c != "" {
+			d.Options["catalog"] = c
+		}
+		assert.NoError(t, Validate(d), c)
+	}
+	for _, c := range []string{"postgres", "SQLite", "mysql", "sqlite:x", " "} {
+		d := lakeDef(t)
+		d.Options["catalog"] = c
+		assert.Error(t, Validate(d), c)
+	}
+
+	// A URL catalog is a plain storage URL, only ever read, whatever its kind.
+	for _, c := range []string{"duckdb", "sqlite"} {
+		assert.NoError(t, Validate(urlLake("s3://b/lake/catalog.db", c, true)), c)
+		assert.NoError(t, Validate(urlLake("abfss://c@a.dfs.core.windows.net/l/c.db", c, true)), c)
+		err := Validate(urlLake("s3://b/lake/catalog.db", c, false))
+		require.Error(t, err, c)
+		assert.Contains(t, err.Error(), "can only be read")
+	}
+	// The URL test comes before the scheme test (s3: matches the scheme pattern),
+	// and every other scheme is still refused, URL-shaped or not.
+	for _, p := range []string{
+		"postgres://u:p@h/db", "postgres:dbname=x host=h", "sqlite:/tmp/m.db", "duckdb:/tmp/m.db",
+		"https://x.example/c.db", "http://x.example/c.db", "file:///etc/passwd", "md:db",
+		"s3://b/lake/c.db?x=1", "s3://b/lake/*.db", "s3://b/../x.db",
+	} {
+		assert.Error(t, Validate(urlLake(p, "sqlite", true)), p)
+		assert.Error(t, Validate(urlLake(p, "duckdb", true)), p)
+	}
+	// A local catalog may be writable for both kinds.
+	d := lakeDef(t)
+	d.Options["catalog"] = "sqlite"
+	assert.NoError(t, Validate(d))
+}
+
+func TestDuckLakeAttachTargets(t *testing.T) {
+	typ := registry["ducklake"]
+	d := lakeDef(t)
+	stmts, err := typ.AttachSQL(d.Spec())
+	require.NoError(t, err)
+	assert.Contains(t, stmts[0], `ATTACH 'ducklake:`+d.Path+`'`)
+	assert.NotContains(t, stmts[0], "ducklake:sqlite:")
+
+	d.Options["catalog"] = "sqlite"
+	stmts, err = typ.AttachSQL(d.Spec())
+	require.NoError(t, err)
+	assert.Contains(t, stmts[0], `ATTACH 'ducklake:sqlite:`+d.Path+`' AS "lake"`)
+	assert.Len(t, statements(stmts[0]), 1)
+
+	// A URL catalog is passed as it is (not stat'ed, not made absolute), read-only.
+	for target, c := range map[string]string{"ducklake:s3://b/lake/c.db": "", "ducklake:sqlite:s3://b/lake/c.db": "sqlite"} {
+		stmts, err = typ.AttachSQL(urlLake("s3://b/lake/c.db", c, true).Spec())
+		require.NoError(t, err, c)
+		assert.Equal(t, []string{`ATTACH '` + target + `' AS "lake" (DATA_PATH 's3://b/lake/', READ_ONLY)`}, stmts)
+	}
+	// A writable URL catalog never reaches the ATTACH.
+	_, err = typ.AttachSQL(urlLake("s3://b/lake/c.db", "sqlite", false).Spec())
+	require.Error(t, err)
+
+	// A quote in a SQLite path stays inside its literal.
+	d = lakeDef(t)
+	d.Options["catalog"] = "sqlite"
+	d.Path = filepath.Join(filepath.Dir(d.Path), "it's;a lake.db")
+	stmts, err = typ.AttachSQL(d.Spec())
+	require.NoError(t, err)
+	assert.Len(t, statements(stmts[0]), 1)
+}
+
+func TestDuckLakeSpecExtensions(t *testing.T) {
+	typ := registry["ducklake"]
+	se, ok := typ.(session.SpecExtensionsType)
+	require.True(t, ok)
+	local := func(c string) Def { d := lakeDef(t); d.Options["catalog"] = c; return d }
+	for name, tc := range map[string]struct {
+		d    Def
+		want []string
+	}{
+		"local duckdb":         {local(""), []string{"ducklake"}},
+		"local sqlite":         {local("sqlite"), []string{"ducklake", "sqlite"}},
+		"url data path":        {Def{Name: "l", Type: "ducklake", Path: "/x/c.db", Options: map[string]string{"data_path": "s3://b/l/"}}, []string{"ducklake", "httpfs"}},
+		"url catalog, duckdb":  {urlLake("s3://b/c.db", "", true), []string{"ducklake", "httpfs"}},
+		"url catalog, sqlite":  {urlLake("s3://b/c.db", "sqlite", true), []string{"ducklake", "sqlite", "httpfs"}},
+		"local sqlite, url dp": {Def{Name: "l", Type: "ducklake", Path: "/x/c.db", Options: map[string]string{"data_path": "s3://b/l/", "catalog": "sqlite"}}, []string{"ducklake", "sqlite", "httpfs"}},
+	} {
+		assert.Equal(t, tc.want, se.SpecExtensions(tc.d.Spec()), name)
+		assert.Equal(t, tc.want, session.ExtensionsFor(asCred(typ), tc.d.Spec()), name)
+	}
+	// The type's base list is what person-facing flows and the allow-list read.
+	assert.Equal(t, []string{"ducklake"}, asCred(typ).Extensions())
+	// A type without the hook falls back to Extensions().
+	assert.Equal(t, []string{"sqlite"}, session.ExtensionsFor(asCred(registry["sqlite"]), session.Spec{}))
+}
+
+func TestDuckLakeTestSkipsAttachForAURLCatalog(t *testing.T) {
+	res := Test(context.Background(), urlLake("s3://b/lake/c.db", "sqlite", true), secrets.Credential{}, WithTestExtensionDir(t.TempDir()))
+	assert.True(t, res.OK, res.Error)
+	assert.Contains(t, res.Detail, "connect the lake from the rail")
+	// Not "a new lake": a URL is never stat'ed.
+	assert.NotContains(t, res.Detail, "new lake")
+	res = Test(context.Background(), urlLake("s3://b/lake/c.db", "sqlite", false), secrets.Credential{}, WithTestExtensionDir(t.TempDir()))
+	assert.False(t, res.OK)
+	assert.Contains(t, res.Error, "can only be read")
+}
+
+// A catalog URL with glob characters would name a different object than the
+// one that is checked (a[1].db is a1.db): Stage refuses it before any read, and
+// so does Validate.
+func TestDuckLakeStageRefusesGlobCharacters(t *testing.T) {
+	typ, ok := registry["ducklake"].(session.Stager)
+	require.True(t, ok)
+	for _, u := range []string{"s3://lake/a[1].db", "s3://lake/a{1,2}.db", "s3://lake/a!.db"} {
+		_, err := typ.Stage(context.Background(), nil, urlLake(u, "sqlite", true).Spec(), t.TempDir())
+		require.Error(t, err, u)
+		assert.Contains(t, err.Error(), "plain")
+		assert.Error(t, Validate(urlLake(u, "sqlite", true)), u)
+	}
 }

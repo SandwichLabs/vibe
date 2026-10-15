@@ -115,6 +115,7 @@ func (h *hub) Detach(ctx context.Context, name string) error {
 			return fmt.Errorf("failed to detach %q: %s", name, h.redact(err.Error()))
 		}
 	}
+	h.removeStage(name)
 	h.mu.Lock()
 	delete(h.conns, name)
 	h.mu.Unlock()
