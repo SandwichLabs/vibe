@@ -126,6 +126,9 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 	if err != nil {
 		return ResolvedConnection{}, err
 	}
+	if err := refuseURLCatalog(resolved); err != nil {
+		return ResolvedConnection{}, err
+	}
 	out := ResolvedConnection{Connection: c, Resolved: resolved}
 	if usesLocalPath(resolved) {
 		p, err := ResolveLocalPath(ws.Root(), resolved.Path, c.Scope)

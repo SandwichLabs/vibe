@@ -52,6 +52,24 @@ type CredentialedType interface {
 	SecretSteps(Spec, secrets.Credential) ([]SecretStep, error)
 }
 
+// SpecExtensionsType is implemented by a CredentialedType whose extensions
+// depend on the connection (DuckLake: sqlite for a SQLite catalog, httpfs for a
+// catalog or data path in object storage). The session gates a connect on
+// these, in order, instead of Extensions(), which stays the type's base list
+// (what the person-facing install flows and the install allow-list read).
+type SpecExtensionsType interface {
+	CredentialedType
+	SpecExtensions(Spec) []string
+}
+
+// ExtensionsFor is the extensions ct needs to connect spec, in install order.
+func ExtensionsFor(ct CredentialedType, spec Spec) []string {
+	if st, ok := ct.(SpecExtensionsType); ok {
+		return st.SpecExtensions(spec)
+	}
+	return ct.Extensions()
+}
+
 // CataloglessType is implemented by storage connections (s3, gcs, r2): they
 // only create secrets and attach no catalog.
 type CataloglessType interface {
@@ -87,6 +105,19 @@ type PostAttacher interface {
 type PreAttacher interface {
 	ConnectionType
 	PreAttach(ctx context.Context, q QueryExecer, spec Spec) error
+}
+
+// Stager is implemented by types that must read a remote file once and work
+// from that copy (DuckLake: a catalog in object storage). The server could
+// answer a later read with different bytes than the one that was vetted, so the
+// vetting and the attach must both see one private snapshot. Stage runs on the
+// admin connection after the secrets and before AttachSQL, PreAttach and
+// PostAttach, which all get the spec it returns. dir is a private (0700),
+// empty, per-connection folder that the session removes when the connection
+// detaches, fails to connect or the session closes.
+type Stager interface {
+	ConnectionType
+	Stage(ctx context.Context, q QueryExecer, spec Spec, dir string) (Spec, error)
 }
 
 // QueryExecer is the surface PreAttach gets: reads, plus the statements to open

@@ -412,3 +412,30 @@ func TestTokenIDDistinguishesAccounts(t *testing.T) {
 	assert.NotEqual(t, TokenID("a"), TokenID("b"))
 	assert.NotContains(t, TokenID("secret_token"), "secret")
 }
+
+// specExtType needs the extensions its spec names (option "exts", comma
+// separated), the way a DuckLake needs sqlite for a SQLite catalog.
+type specExtType struct{ stubType }
+
+func (specExtType) SpecExtensions(sp Spec) []string {
+	return strings.Split(sp.Params["exts"], ",")
+}
+
+func TestSpecExtensionsGateTheConnect(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t, WithConnectionTypes(specExtType{stubType{ext: "json", catalogs: true}}))
+	// json is installed and loadable; the second one, per spec, is not.
+	require.NoError(t, s.Register(Spec{Name: "a", Type: "stub", Params: map[string]string{"exts": "json,definitely_not_an_extension"}, Credential: credOK("t")}))
+	require.NoError(t, s.Register(Spec{Name: "b", Type: "stub", Params: map[string]string{"exts": "json"}, Credential: credOK("t")}))
+	s.Preflight(ctx, "a")
+	st := status(t, s, "a")
+	assert.Equal(t, StatusExtensionMissing, st.Kind)
+	assert.Equal(t, "definitely_not_an_extension", st.Extension, "the first missing one, from the spec's list")
+	require.Error(t, s.Connect(ctx, "a"))
+	// A spec that needs only what is there connects.
+	require.NoError(t, s.Connect(ctx, "b"))
+	assert.Equal(t, StatusOK, status(t, s, "b").Kind)
+	// A type without the hook keeps using Extensions().
+	assert.Equal(t, []string{"json"}, ExtensionsFor(stubType{ext: "json"}, Spec{}))
+	assert.Equal(t, []string{"json", "x"}, ExtensionsFor(specExtType{}, Spec{Params: map[string]string{"exts": "json,x"}}))
+}

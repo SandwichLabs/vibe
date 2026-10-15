@@ -82,3 +82,14 @@ func TestAzureAccountMustBeTheAccountsOwnEndpoint(t *testing.T) {
 	assert.True(t, ValidAzureAccount("acmelake"))
 	assert.False(t, ValidAzureAccount("acme;AccountKey=x"))
 }
+
+func TestGlobCharactersAreRefused(t *testing.T) {
+	for _, u := range []string{"s3://b/a[1].db", "s3://b/a[12].db", "s3://b/a{1,2}.db", "s3://b/a!.db", "s3://b/a]", "s3://b/{x}/c", "s3://b/a?.db"} {
+		assert.Error(t, Validate(u), u)
+		assert.Error(t, ValidateRead(u), u)
+		assert.False(t, Within(u, "s3://b/"), u)
+	}
+	// A read may still carry a "*"; a plain URL may not.
+	assert.NoError(t, ValidateRead("s3://b/a/*.parquet"))
+	assert.Error(t, Validate("s3://b/a/*.parquet"))
+}

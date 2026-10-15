@@ -299,92 +299,140 @@ func catalogInlined(t *testing.T, conn *sql.Conn, cat, kind string) string {
 	return ""
 }
 
-// The reviewer's repro, end to end, for a DuckDB catalog file: a view in the
-// place of the inlined data table over read_text() of a file outside the
-// workspace. The read-only agent must not get the file through the lake, the
-// connection is refused (also by Test), and an honest lake with inlined data
-// still attaches and reads.
+// tamperFile applies stmts to a catalog file with a plain DuckDB (the sqlite
+// extension reads a SQLite file).
+func tamperFile(t *testing.T, cat, kind string, stmts []string) {
+	t.Helper()
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	defer db.Close() //nolint:errcheck
+	conn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+	for _, s := range []string{"SET extension_directory = " + session.QuoteLiteral(extDir(t)), "INSTALL sqlite", "LOAD sqlite"} {
+		_, err := conn.ExecContext(context.Background(), s)
+		require.NoError(t, err, s)
+	}
+	tamperCatalog(t, conn, cat, kind, stmts...)
+}
+
+// The reviewer's repro, end to end, for both catalog kinds: a view in the place
+// of the inlined data table over read_text() of a file outside the workspace.
+// The read-only agent must not get the file through the lake, the connection is
+// refused (also by Test), and an honest lake with inlined data still attaches
+// and reads.
 func TestDuckLakeCrafted(t *testing.T) {
 	ctx := context.Background()
 	secretFile := filepath.Join(t.TempDir(), "secret.txt")
 	require.NoError(t, os.WriteFile(secretFile, []byte("TOP-SECRET"), 0o600))
 
-	for name, tamper := range map[string]func(inlined string) []string{
-		"view over inlined data": func(inlined string) []string {
-			return []string{"DROP TABLE " + inlined, "CREATE VIEW " + inlined + " AS SELECT 0 AS row_id, 0 AS begin_snapshot, NULL AS end_snapshot, 7 AS id, content AS name FROM read_text('" + secretFile + "')"}
-		},
-		"view over ducklake_data_file": func(string) []string {
-			return []string{"ALTER TABLE ducklake_data_file RENAME TO real_df", "CREATE VIEW ducklake_data_file AS SELECT * FROM real_df"}
-		},
-		"macro": func(string) []string { return []string{"CREATE MACRO evil(x) AS x"} },
-		"inlined registry splices a file read": func(inlined string) []string {
-			return []string{"UPDATE ducklake_inlined_data_tables SET table_name = '" + inlined + " UNION ALL SELECT 0, 0, NULL, 7, content FROM read_text(''" + secretFile + "'') --'"}
-		},
-		"generated column": func(string) []string {
-			return []string{"DROP TABLE ducklake_tag", "CREATE TABLE ducklake_tag (object_id BIGINT, begin_snapshot BIGINT, end_snapshot BIGINT, key VARCHAR, value VARCHAR GENERATED ALWAYS AS (current_setting('home_directory')))"}
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			ws, _ := memWS(t)
-			require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.ducklake", ReadOnly: workspaceBool(false), Options: map[string]string{"data_path": "data/lake_files"}}))
-			fresh := extDir(t)
-			sess, _, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
-			require.NoError(t, err)
-			require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
-			sess.Preflight(ctx, "lake")
-			require.NoError(t, sess.Connect(ctx, "lake"))
-			// Small inserts stay inlined in the catalog.
-			_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'),(2,'bob')")
-			require.NoError(t, err)
-			require.NoError(t, sess.Close())
-			catFile := filepath.Join(ws.Root(), "data", "lake.ducklake")
-
-			// An honest lake with inlined data attaches and reads, through the agent.
-			readThroughAgent := func(sess session.Session, q string) *agents.Response {
-				h := agents.NewHandler(workspace.NewAgentAccess(ws, sess), engine.NewManager(sess),
-					&agents.SandboxConfig{Mode: agents.ModeReadOnly, MaxQueryRows: 100, RequireApproval: true}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-				return h.Handle(ctx, &agents.Request{JSONRPC: "2.0", ID: "1", Method: "run_query", Params: map[string]any{"sql": q}})
-			}
-			sess, _, err = workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
-			require.NoError(t, err)
-			sess.Preflight(ctx, "lake")
-			resp := readThroughAgent(sess, "SELECT name FROM lake.people ORDER BY id")
-			require.Nil(t, resp.Error, fmt.Sprint(resp.Error))
-			assert.Contains(t, fmt.Sprint(resp.Result), "ada")
-			require.NoError(t, sess.Close())
-
-			meta, err := sql.Open("duckdb", catFile)
-			require.NoError(t, err)
-			var inlined string
-			require.NoError(t, meta.QueryRow("SELECT table_name FROM duckdb_tables() WHERE table_name LIKE 'ducklake_inlined_data_%\\_%' ESCAPE '\\' AND table_name <> 'ducklake_inlined_data_tables' LIMIT 1").Scan(&inlined))
-			for _, s := range tamper(inlined) {
-				_, err := meta.Exec(s)
-				require.NoError(t, err, s)
-			}
-			require.NoError(t, meta.Close())
-
-			sess, _, err = workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
-			require.NoError(t, err)
-			defer sess.Close()
-			sess.Preflight(ctx, "lake")
-			resp = readThroughAgent(sess, "SELECT * FROM lake.people")
-			require.NotNil(t, resp.Error, "the crafted lake must not be readable")
-			assert.NotContains(t, fmt.Sprint(resp), "TOP-SECRET")
-			st := connStatus(sess, "lake")
-			assert.Equal(t, session.StatusError, st.Kind)
-			assert.Contains(t, st.Message, "refusing to read it")
-			assert.NotContains(t, st.Message, "TOP-SECRET")
-			var n int
-			require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__vibe_vet_%'").Scan(&n))
-			assert.Zero(t, n)
-
-			res := connections.Test(ctx, connections.Def{Name: "lake", Type: "ducklake", Path: catFile,
-				Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files")}}, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
-			assert.False(t, res.OK)
-			assert.Contains(t, res.Error, "refusing to read it")
-			assert.NotContains(t, res.Error, "TOP-SECRET")
-		})
+	for _, kind := range []string{"duckdb", "sqlite"} {
+		cases := map[string]string{
+			"view over inlined data":               "view replaces the inlined data table",
+			"view over ducklake_data_file":         "view over ducklake_data_file",
+			"inlined registry splices a file read": "inlined registry splices a file read",
+			"extra unknown table":                  "extra unknown table",
+		}
+		for name, key := range cases {
+			t.Run(kind+"/"+name, func(t *testing.T) {
+				craftedLake(t, ctx, kind, key, secretFile)
+			})
+		}
 	}
+}
+
+func craftedLake(t *testing.T, ctx context.Context, kind, caseKey, secretFile string) {
+	ws, _ := memWS(t)
+	opts := map[string]string{"data_path": "data/lake_files"}
+	if kind == "sqlite" {
+		opts["catalog"] = "sqlite"
+	}
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.ducklake", ReadOnly: workspaceBool(false), Options: opts}))
+	fresh := extDir(t)
+	open := func() session.Session {
+		sess, _, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(fresh)))
+		require.NoError(t, err)
+		return sess
+	}
+	sess := open()
+	require.NoError(t, sess.InstallExtension(ctx, "ducklake"))
+	if kind == "sqlite" {
+		require.NoError(t, sess.InstallExtension(ctx, "sqlite"))
+	}
+	sess.Preflight(ctx, "lake")
+	require.NoError(t, sess.Connect(ctx, "lake"))
+	// Small inserts stay inlined in the catalog.
+	_, err := sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada'),(2,'bob')")
+	require.NoError(t, err)
+	require.NoError(t, sess.Close())
+	catFile := filepath.Join(ws.Root(), "data", "lake.ducklake")
+
+	// An honest lake with inlined data attaches and reads, through the agent.
+	readThroughAgent := func(sess session.Session, q string) *agents.Response {
+		h := agents.NewHandler(workspace.NewAgentAccess(ws, sess), engine.NewManager(sess),
+			&agents.SandboxConfig{Mode: agents.ModeReadOnly, MaxQueryRows: 100, RequireApproval: true}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		return h.Handle(ctx, &agents.Request{JSONRPC: "2.0", ID: "1", Method: "run_query", Params: map[string]any{"sql": q}})
+	}
+	sess = open()
+	sess.Preflight(ctx, "lake")
+	resp := readThroughAgent(sess, "SELECT name FROM lake.people ORDER BY id")
+	require.Nil(t, resp.Error, fmt.Sprint(resp.Error))
+	assert.Contains(t, fmt.Sprint(resp.Result), "ada")
+	// The catalog's internals are denied to the agent whatever its kind.
+	resp = readThroughAgent(sess, "SELECT * FROM __ducklake_metadata_lake.main.ducklake_data_file")
+	require.NotNil(t, resp.Error)
+	resp = readThroughAgent(sess, "SELECT * FROM sqlite_scan('"+catFile+"', 'ducklake_metadata')")
+	require.NotNil(t, resp.Error, "sqlite_scan is not on the allow-list")
+	require.NoError(t, sess.Close())
+
+	// Tamper a catalog file with the same statements the unit-level cases use.
+	var inlined string
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	pc, err := db.Conn(ctx)
+	require.NoError(t, err)
+	for _, s := range []string{"SET extension_directory = " + session.QuoteLiteral(fresh), "INSTALL sqlite", "LOAD sqlite"} {
+		_, err := pc.ExecContext(ctx, s)
+		require.NoError(t, err, s)
+	}
+	inlined = catalogInlined(t, pc, catFile, kind)
+	stmts := attackCases(inlined, kind)[caseKey]
+	require.NotEmpty(t, stmts)
+	for i, s := range stmts {
+		stmts[i] = strings.ReplaceAll(strings.ReplaceAll(s, "%SECRET%", secretFile), "%CAT%", catFile)
+	}
+	_ = pc.Close()
+	_ = db.Close()
+	tamperFile(t, catFile, kind, stmts)
+
+	sess = open()
+	defer sess.Close() //nolint:errcheck
+	sess.Preflight(ctx, "lake")
+	resp = readThroughAgent(sess, "SELECT * FROM lake.people")
+	require.NotNil(t, resp.Error, "the crafted lake must not be readable")
+	assert.NotContains(t, fmt.Sprint(resp), "TOP-SECRET")
+	st := connStatus(sess, "lake")
+	assert.Equal(t, session.StatusError, st.Kind)
+	assert.Contains(t, st.Message, "refusing to read it")
+	assert.NotContains(t, st.Message, "TOP-SECRET")
+	var n int
+	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__vibe_vet_%'").Scan(&n))
+	assert.Zero(t, n)
+
+	res := connections.Test(ctx, connections.Def{Name: "lake", Type: "ducklake", Path: catFile,
+		Options: map[string]string{"data_path": filepath.Join(ws.Root(), "data", "lake_files"), "catalog": kindOpt(kind)}}, secrets.Credential{}, connections.WithTestExtensionDir(fresh))
+	assert.False(t, res.OK)
+	assert.Contains(t, res.Error, "refusing to read it")
+	assert.NotContains(t, res.Error, "TOP-SECRET")
+}
+
+func kindOpt(kind string) string {
+	if kind == "sqlite" {
+		return "sqlite"
+	}
+	return ""
 }
 
 // A view or macro stored in the lake is SQL by design and is bound when used,

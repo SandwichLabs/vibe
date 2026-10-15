@@ -12,3 +12,10 @@ func DuckLakeMetadataTables() []string {
 	sort.Strings(out)
 	return out
 }
+
+// SetMaxCatalogBytes lowers the snapshot size cap; it returns the restore func.
+func SetMaxCatalogBytes(n int64) func() {
+	old := maxCatalogBytes
+	maxCatalogBytes = n
+	return func() { maxCatalogBytes = old }
+}

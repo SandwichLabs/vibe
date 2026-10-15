@@ -17,22 +17,24 @@ import (
 )
 
 var (
-	_ session.CredentialedType = postgresType{}
-	_ session.CredentialedType = motherduckType{}
-	_ session.CredentialedType = sqliteType{}
-	_ session.CredentialedType = storageType{}
-	_ session.CataloglessType  = storageType{}
-	_ session.HubTokenType     = motherduckType{}
-	_ session.Refresher        = postgresType{}
-	_ session.CredentialedType = mysqlType{}
-	_ session.Refresher        = mysqlType{}
-	_ session.CredentialedType = azureType{}
-	_ session.CataloglessType  = azureType{}
-	_ session.CredentialedType = ducklakeType{}
-	_ session.PostAttacher     = ducklakeType{}
-	_ session.PreAttacher      = ducklakeType{}
-	_ session.CredentialedType = tableSourceType{}
-	_ session.CataloglessType  = tableSourceType{}
+	_ session.CredentialedType   = postgresType{}
+	_ session.CredentialedType   = motherduckType{}
+	_ session.CredentialedType   = sqliteType{}
+	_ session.CredentialedType   = storageType{}
+	_ session.CataloglessType    = storageType{}
+	_ session.HubTokenType       = motherduckType{}
+	_ session.Refresher          = postgresType{}
+	_ session.CredentialedType   = mysqlType{}
+	_ session.Refresher          = mysqlType{}
+	_ session.CredentialedType   = azureType{}
+	_ session.CataloglessType    = azureType{}
+	_ session.CredentialedType   = ducklakeType{}
+	_ session.PostAttacher       = ducklakeType{}
+	_ session.PreAttacher        = ducklakeType{}
+	_ session.SpecExtensionsType = ducklakeType{}
+	_ session.Stager             = ducklakeType{}
+	_ session.CredentialedType   = tableSourceType{}
+	_ session.CataloglessType    = tableSourceType{}
 )
 
 // TestTimeout bounds one Test (secret, attach and probe).
@@ -134,10 +136,17 @@ func test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOpt
 	if err := Validate(def); err != nil {
 		return fail(session.StatusError, err)
 	}
-	if def.Type == "ducklake" && def.Path != "" {
+	if def.Type == "ducklake" && def.Path != "" && !IsDataURL(def.Path) {
 		// A test never writes, and a lake whose catalog file does not exist yet
 		// can only be attached by creating it.
 		if _, err := os.Stat(def.Path); errors.Is(err, os.ErrNotExist) {
+			if o.install {
+				// The consent was given: download what the lake needs now, so the
+				// first real connect finds it.
+				if err := installBeforeOpen(ctx, def, o); err != nil {
+					return fail(session.StatusError, err)
+				}
+			}
 			return TestResult{OK: true, Status: session.StatusOK, Detail: "a new lake: its catalog file is created the first time something writes to it"}
 		}
 	}
@@ -174,7 +183,7 @@ func installBeforeOpen(ctx context.Context, def Def, o testOpts) error {
 		return err
 	}
 	defer db.Close() //nolint:errcheck
-	for _, e := range ct.Extensions() {
+	for _, e := range session.ExtensionsFor(ct, def.Spec()) {
 		// e comes from the registry, never from the definition.
 		if _, err := db.ExecContext(ctx, "INSTALL "+e); err != nil {
 			return fmt.Errorf("the DuckDB %q extension could not be downloaded; check your network connection and try again: %w", e, err)
@@ -213,6 +222,12 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	c := cred
 	spec.Credential = func(context.Context) (secrets.Credential, error) { return c, nil }
 	start := time.Now()
+	if attachesOnlyInWorkspace(def) {
+		// Read with the storage connection whose scope contains it: this
+		// throwaway session has no storage secret. Probe says so.
+		_, detail, _ := registry[def.Type].Probe(ctx, sess, spec)
+		return TestResult{OK: true, Status: session.StatusOK, Latency: time.Since(start), Detail: detail}
+	}
 	if err := sess.Attach(ctx, spec); err != nil {
 		kind := session.StatusError
 		ext := ""
@@ -251,6 +266,13 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 		return fail(kind, err, "")
 	}
 	return TestResult{OK: true, Status: session.StatusOK, Latency: time.Since(start), Count: n, Detail: detail}
+}
+
+// attachesOnlyInWorkspace is true for a lake whose catalog is in object
+// storage: it needs the storage connection's secret, which only the workspace's
+// own session has.
+func attachesOnlyInWorkspace(def Def) bool {
+	return def.Type == "ducklake" && IsDataURL(def.Path)
 }
 
 // --- MotherDuck subprocess ---

@@ -410,7 +410,9 @@ func runConnConnect(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
-		o.Sess.Preflight(ctx, name)
+		if err := installMissing(ctx, cmd, o.Sess, name); err != nil {
+			return err
+		}
 	}
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -449,6 +451,25 @@ func runConnConnect(cmd *cobra.Command, args []string) error {
 			break
 		}
 		fmt.Fprintf(out, "  %s\n", t.Ref().String())
+	}
+	return nil
+}
+
+// installMissing installs, one at a time, the extensions the connection's own
+// status asks for (a lake needs more than its type's base list: sqlite for a
+// SQLite catalog, httpfs for a URL), until none is missing.
+func installMissing(ctx context.Context, cmd *cobra.Command, sess session.Session, name string) error {
+	const maxExtensions = 8
+	for i := 0; i < maxExtensions; i++ {
+		sess.Preflight(ctx, name)
+		st := connStatus(sess, name)
+		if st.Kind != session.StatusExtensionMissing || st.Extension == "" {
+			return nil
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "installing the DuckDB %q extension...\n", st.Extension)
+		if err := sess.InstallExtension(ctx, st.Extension); err != nil {
+			return errors.New(cliRedactor.Redact(err.Error()))
+		}
 	}
 	return nil
 }
@@ -569,7 +590,7 @@ func init() {
 	f.String("database", "", "database (postgres, mysql, motherduck)")
 	f.String("region", "", "region (s3, gcs, r2)")
 	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2, azure)")
-	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style, use_ssl; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path); repeatable")
+	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style, use_ssl; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path, catalog [duckdb|sqlite]); repeatable")
 	f.Bool("read-only", true, "attach read-only (--read-only=false to allow writes)")
 	f.String("sign-in", "", "how you sign in: keychain (default), prompt or env:PREFIX")
 	addConnWorkspaceFlag(connAddCmd)
