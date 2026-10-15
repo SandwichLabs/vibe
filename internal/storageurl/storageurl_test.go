@@ -93,3 +93,82 @@ func TestGlobCharactersAreRefused(t *testing.T) {
 	assert.NoError(t, ValidateRead("s3://b/a/*.parquet"))
 	assert.Error(t, Validate("s3://b/a/*.parquet"))
 }
+
+func TestBucket(t *testing.T) {
+	for in, want := range map[string]string{
+		"s3://b/x/y.db": "s3://b/",
+		"s3://b":        "s3://b/",
+		"s3a://b/x":     "s3a://b/",
+		"gs://b/x/":     "gs://b/",
+		"abfss://c@acct.dfs.core.windows.net/p/q": "abfss://c@acct.dfs.core.windows.net/",
+		"az://c/p":                            "az://c/",
+		"az://acct.blob.core.windows.net/c/p": "az://acct.blob.core.windows.net/c/",
+	} {
+		got, err := Bucket(in)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+	for _, bad := range []string{"s3://", "https://b/x", "s3://b/../x", "s3://b/%2e%2e/x", "s3://b/x?y", "s3://b/*", "s3://b/[a]", "s3://b/a b",
+		"abfss://c@victim.dfs.evil.example/", "az://acct.blob.core.windows.net", "local/path"} {
+		_, err := Bucket(bad)
+		assert.Error(t, err, bad)
+	}
+}
+
+func TestBucketName(t *testing.T) {
+	for in, want := range map[string]string{
+		"s3://lake/x": "lake",
+		"abfss://events@acct.dfs.core.windows.net/p": "events",
+		"az://acct.blob.core.windows.net/data/p":     "data",
+	} {
+		got, err := BucketName(in)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+}
+
+func TestCommonFolder(t *testing.T) {
+	ok := []struct {
+		urls []string
+		want string
+	}{
+		{[]string{"s3://b/catalog.sqlite"}, "s3://b/"},
+		{[]string{"s3://b/wh/catalog.sqlite"}, "s3://b/wh/"},
+		{[]string{"s3://b/wh/catalog.sqlite", "s3://b/wh/data/"}, "s3://b/wh/"},
+		{[]string{"s3://b/wh/data/", "s3://b/wh/data/"}, "s3://b/wh/data/"},
+		{[]string{"s3://b/wh/a/cat.db", "s3://b/wh/b/"}, "s3://b/wh/"},
+		{[]string{"s3://b/wh/a/cat.db", "s3://b/other/"}, "s3://b/"},
+		{[]string{"s3://b/tables/sales"}, "s3://b/tables/"},
+		{[]string{"s3://b"}, "s3://b/"},
+		{[]string{"gs://b/x/c.db"}, "gs://b/x/"},
+		{[]string{"abfss://c@acct.dfs.core.windows.net/p/c.db"}, "abfss://c@acct.dfs.core.windows.net/p/"},
+		// A prefix that is not a folder boundary is not a common folder.
+		{[]string{"s3://b/wh/data1/f", "s3://b/wh/data2/f"}, "s3://b/wh/"},
+	}
+	for _, c := range ok {
+		got, err := CommonFolder(c.urls)
+		require.NoError(t, err, c.urls)
+		assert.Equal(t, c.want, got, c.urls)
+		assert.NotEqual(t, Scheme(got), got)
+		_, err = Scope(got)
+		assert.NoError(t, err)
+		for _, u := range c.urls {
+			if u+"/" == got {
+				continue // a bare bucket without its slash is not within any scope (StorageFor reports it)
+			}
+			assert.True(t, Within(u, got), "%s within %s", u, got)
+		}
+	}
+	for _, bad := range [][]string{
+		nil,
+		{"s3://a/x", "s3://ab/y"},
+		{"s3://a/x", "s3a://a/x"}, // schemes are literal
+		{"s3://a/x", "gs://a/x"},
+		{"s3://a/x", "s3://a/../y"},
+		{"s3://", "s3://a/x"},
+		{"s3://a./x", "s3://a/x"},
+	} {
+		_, err := CommonFolder(bad)
+		assert.Error(t, err, bad)
+	}
+}

@@ -175,16 +175,8 @@ func IsStorageType(t string) bool { return storageTypes[t] }
 // Local paths are held to the workspace by ResolveLocalPath. It returns the
 // names of the storage connections that matched (sorted, without duplicates).
 func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupFunc) ([]string, error) {
-	type target struct{ url, what string }
-	var targets []target
-	switch d.Type {
-	case "ducklake":
-		targets = []target{{path, "catalog"}, {d.Options["data_path"], "data path"}}
-	case "iceberg", "delta":
-		targets = []target{{path, "location"}}
-	}
 	var requires []string
-	for _, t := range targets {
+	for _, t := range storageTargets(d, path) {
 		if t.url == "" || !connections.IsDataURL(t.url) {
 			continue
 		}
@@ -206,25 +198,8 @@ func checkStorageURL(ws Workspace, self, url, what string, lookup LookupFunc) (s
 	if err := storageurl.Validate(url); err != nil {
 		return "", fmt.Errorf("the %s is not a plain storage URL: %w", what, err)
 	}
-	// The most specific scope wins, as for the secret DuckDB picks (longest
-	// matching prefix); a tie goes to the first by name.
-	best, bestLen := "", -1
-	for _, c := range ws.Connections() {
-		if !storageTypes[c.Type] || c.Name == self {
-			continue
-		}
-		sd, err := c.ConnectionDef.Resolve(lookup, c.Scope)
-		if err != nil || sd.Scope == "" {
-			continue
-		}
-		// One normaliser, shared with the agent's URL rule: a literal prefix
-		// match on the scope's folder form.
-		if storageurl.Within(url, sd.Scope) && len(sd.Scope) > bestLen {
-			best, bestLen = c.Name, len(sd.Scope)
-		}
-	}
-	if best != "" {
-		return best, nil
+	if m, ok := bestStorageMatch(ws, self, url, lookup); ok {
+		return m.Name, nil
 	}
 	return "", fmt.Errorf("the %s %q is not inside the scope of any S3, GCS, R2 or Azure connection of this workspace; add one whose scope contains it", what, url)
 }

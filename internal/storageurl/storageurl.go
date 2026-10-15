@@ -146,3 +146,97 @@ func AzureAccount(u string) (string, error) {
 	}
 	return "", fmt.Errorf("%q is not an Azure URL", u)
 }
+
+// Bucket returns the bucket (or container) a plain storage URL lies in, as a
+// folder URL with its own scheme: "s3://b/" for s3://b/x/y.db. For an
+// abfss:// URL it keeps the container and the account host
+// (abfss://c@acct.dfs.core.windows.net/), and for a fully qualified az:// URL
+// the host and container. An Azure URL whose host is not the account's own
+// endpoint is refused, so a suggestion built from it could not send a
+// credential elsewhere.
+func Bucket(u string) (string, error) {
+	if err := Validate(u); err != nil {
+		return "", err
+	}
+	sch := Scheme(u)
+	if sch == "az://" || sch == "azure://" || sch == "abfss://" {
+		if _, err := AzureAccount(u); err != nil {
+			return "", err
+		}
+	}
+	segs := strings.Split(strings.TrimSuffix(u[len(sch):], "/"), "/")
+	n := 1
+	if (sch == "az://" || sch == "azure://") && strings.Contains(segs[0], ".") {
+		n = 2 // az://<account>.blob.core.windows.net/<container>/
+	}
+	if len(segs) < n {
+		return "", fmt.Errorf("%q names no container", u)
+	}
+	return sch + strings.Join(segs[:n], "/") + "/", nil
+}
+
+// BucketName is the short, human name of a URL's bucket or container ("lake"
+// for s3://lake/x, "events" for abfss://events@acct.dfs.core.windows.net/).
+func BucketName(u string) (string, error) {
+	b, err := Bucket(u)
+	if err != nil {
+		return "", err
+	}
+	segs := strings.Split(strings.TrimSuffix(b[len(Scheme(b)):], "/"), "/")
+	name := segs[len(segs)-1]
+	name, _, _ = strings.Cut(name, "@")
+	return name, nil
+}
+
+// CommonFolder returns the deepest folder (with a trailing slash) that holds
+// every URL: the catalog's folder rather than the catalog file. A URL ending in
+// "/" is a folder itself; any other is an object (or a table folder written
+// without the slash) and counts through its parent, which is the only scope
+// that Within would match it against. The URLs must share one scheme and one
+// bucket; the result is never shorter than the bucket and never the bare
+// scheme, and always passes Scope.
+func CommonFolder(urls []string) (string, error) {
+	if len(urls) == 0 {
+		return "", fmt.Errorf("no URL to find a folder for")
+	}
+	bucket, err := Bucket(urls[0])
+	if err != nil {
+		return "", err
+	}
+	var common []string
+	for i, u := range urls {
+		b, err := Bucket(u)
+		if err != nil {
+			return "", err
+		}
+		if b != bucket {
+			return "", fmt.Errorf("%q and %q are not in the same bucket", urls[0], u)
+		}
+		segs := folderSegments(u, bucket)
+		if i == 0 {
+			common = segs
+			continue
+		}
+		k := 0
+		for k < len(common) && k < len(segs) && common[k] == segs[k] {
+			k++
+		}
+		common = common[:k]
+	}
+	out := bucket
+	if len(common) > 0 {
+		out += strings.Join(common, "/") + "/"
+	}
+	return Scope(out)
+}
+
+// folderSegments are the folder segments of u below its bucket (the file name,
+// when u does not end in "/", is dropped).
+func folderSegments(u, bucket string) []string {
+	rest := strings.TrimPrefix(u, bucket)
+	if rest == "" || u+"/" == bucket {
+		return nil
+	}
+	segs := strings.Split(rest, "/")
+	return segs[:len(segs)-1] // the last element is "" after a trailing slash, else the object
+}

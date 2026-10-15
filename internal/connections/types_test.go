@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/SandwichLabs/vibe/internal/storageurl"
 	"os"
 	"path/filepath"
 	"strings"
@@ -387,4 +388,27 @@ func TestMotherDuckCannotBeReadOnly(t *testing.T) {
 	// A test never writes, so it does not trip the rule.
 	res := Test(context.Background(), Def{Name: "md", Type: "motherduck", Database: "db", ReadOnly: true}, secrets.Credential{}, WithTestExtensionDir(t.TempDir()))
 	assert.Equal(t, session.StatusNeedsCredentials, res.Status)
+}
+
+func TestStorageTypeForScheme(t *testing.T) {
+	for in, want := range map[string]string{
+		"s3://": "s3", "s3a://": "s3", "s3n://": "s3", "s3": "s3",
+		"gs://": "gcs", "gcs://": "gcs", "r2://": "r2",
+		"az://": "azure", "azure://": "azure", "abfss://": "azure",
+	} {
+		got, ok := StorageTypeForScheme(in)
+		assert.True(t, ok, in)
+		assert.Equal(t, want, got, in)
+	}
+	for _, in := range []string{"https://", "http://", "file://", "", "md:", "S3://"} {
+		_, ok := StorageTypeForScheme(in)
+		assert.False(t, ok, in)
+	}
+}
+
+func TestStorageTypeForSchemeCoversEveryStorageScheme(t *testing.T) {
+	for _, sch := range storageurl.Schemes {
+		_, ok := StorageTypeForScheme(sch)
+		assert.True(t, ok, sch)
+	}
 }
