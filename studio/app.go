@@ -59,6 +59,9 @@ type App struct {
 	// syncMu serialises whole syncs (an editor save and the file watcher can race).
 	syncMu   sync.Mutex
 	connSigs map[string]string
+	// connDeps is, per connection, what it was registered as requiring
+	// (guarded by connSigMu; see connections_deps.go).
+	connDeps map[string]connDeps
 
 	// initial is what was named on the command line (or opened from the OS
 	// before the window was ready): a folder, a .vibe bundle, or a note.

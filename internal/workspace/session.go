@@ -184,6 +184,7 @@ func (b *sessionBuild) resolveOne(ctx context.Context, c Connection) (sessionIte
 	}
 	def := rc.Def(readOnly)
 	spec := def.Spec()
+	spec.Requires = rc.Requires
 	if connections.NeedsCredential(rc.Resolved.Type) {
 		b.attachCredential(&spec, rc)
 	}
@@ -228,12 +229,19 @@ func (b *sessionBuild) openHub() (session.Session, error) {
 func (b *sessionBuild) registerAll(ctx context.Context, sess session.Session, items []sessionItem) map[string]bool {
 	attached := map[string]bool{}
 	fail := func(name string, err error) { b.failMsg(name, sess.Redact(err.Error())) }
+	// Everything is registered before anything is preflighted or connected: a
+	// Delta table or lake connects at once and needs the storage connection
+	// that reads it, whatever order their names sort in.
+	var registered []sessionItem
 	for _, it := range items {
-		name := it.rc.Name
 		if err := sess.Register(it.spec); err != nil {
-			fail(name, err)
+			fail(it.rc.Name, err)
 			continue
 		}
+		registered = append(registered, it)
+	}
+	for _, it := range registered {
+		name := it.rc.Name
 		if !it.prep.Eager() {
 			sess.Preflight(ctx, name)
 			continue

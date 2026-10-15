@@ -98,3 +98,38 @@ func TestS3ConnectUseAndWrongKeys(t *testing.T) {
 	sess.Preflight(ctx, "lake")
 	assert.Equal(t, session.StatusNeedsCredentials, connStatus(sess, "lake").Kind)
 }
+
+// A Delta location that sorts before its storage connection is opened with the
+// storage connection already registered: it is not "needs the ... connection"
+// at open, and once the storage credential is cleared and set again the table
+// stops waiting on its own.
+func TestDeltaTableOpensBeforeItsStorageSortsFirst(t *testing.T) {
+	ep := startMinIO(t)
+	ctx := context.Background()
+	inst, err := session.New(session.WithConnectionTypes(connections.Types()...), session.WithExtensionDirectory(extDir(t)))
+	require.NoError(t, err)
+	for _, e := range []string{"httpfs", "delta"} {
+		require.NoError(t, inst.InstallExtension(ctx, e))
+	}
+	_ = inst.Close()
+
+	ws, _ := memWS(t)
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "events", Type: "delta", Path: "s3://lake/raw/t/"}))
+	require.NoError(t, ws.AddConnection(workspace.ScopeShared, workspace.ConnectionDef{Name: "zstore", Type: "s3", Scope: "s3://lake/raw/", Region: "us-east-1",
+		Options: map[string]string{"endpoint": ep, "url_style": "path", "use_ssl": "false"}}))
+	good := secrets.Credential{KeyID: "minioadmin", Secret: minioSecret}
+	require.NoError(t, ws.SetCredentials(ctx, "zstore", good, false))
+	sess, _, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(extDir(t))))
+	require.NoError(t, err)
+	defer sess.Close() //nolint:errcheck
+	assert.Equal(t, session.StatusOK, connStatus(sess, "zstore").Kind)
+	assert.NotContains(t, connStatus(sess, "events").Message, "needs the", "the storage connection was registered and connected first (there is no table there, so the error is the read's)")
+
+	require.NoError(t, ws.ClearCredentials(ctx, "zstore"))
+	sess.Preflight(ctx, "zstore")
+	sess.Preflight(ctx, "events")
+	assert.Equal(t, `needs the "zstore" connection: it needs credentials`, connStatus(sess, "events").Message)
+	require.NoError(t, ws.SetCredentials(ctx, "zstore", good, false))
+	sess.Preflight(ctx, "zstore")
+	assert.NotContains(t, connStatus(sess, "events").Message, "needs the", "no manual action after signing in")
+}

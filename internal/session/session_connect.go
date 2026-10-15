@@ -102,6 +102,10 @@ func (h *hub) connect(ctx context.Context, name string) error {
 	if att {
 		return nil
 	}
+	// Requirements first, with no lock held: they take adminMu themselves.
+	if err := h.connectRequires(ctx, name, e.spec.Requires); err != nil {
+		return err // not recorded as a failure: nothing was dialled, and fixing the requirement must not wait out a backoff
+	}
 	err := h.connectLocked(ctx, name)
 	if err != nil {
 		h.recordFailure(name, err)
@@ -123,6 +127,12 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 	}
 	if att {
 		return nil
+	}
+	// Fail closed: the requirements were connected before adminMu was taken, and
+	// a Preflight may have dropped a storage secret since. Secrets change only
+	// under adminMu, so what holds here holds through the attach.
+	if dep, why := h.unmetRequirement(e.spec.Requires); dep != "" {
+		return h.requirementError(name, dep, why)
 	}
 	t, err := h.types.Get(e.spec.Type)
 	if err != nil {
@@ -321,6 +331,14 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 		// Drop the old secret first: the credential may have changed or gone.
 		h.adminMu.Lock()
 		if conn, err := h.db.Conn(ctx); err == nil {
+			if derr := h.detachDependents(ctx, conn, name); derr != nil {
+				// Fail closed: keep the old secret rather than leave a dependent
+				// reading without one. Nothing else changes.
+				_ = conn.Close()
+				h.adminMu.Unlock()
+				h.logger.Warn("storage credential change not applied", "name", name)
+				return
+			}
 			h.dropSecretsOn(ctx, conn, e.secrets)
 			_ = conn.Close()
 		}
@@ -343,7 +361,9 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 	}
 	h.setStatus(name, StatusNotConnected, "", 0)
 	if storage {
-		_ = h.connect(ctx, name)
+		if h.connect(ctx, name) == nil {
+			h.readyDependents(ctx, name)
+		}
 	}
 }
 

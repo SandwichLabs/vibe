@@ -30,8 +30,10 @@ func (a *App) recordConnSigs(ws workspace.Workspace) {
 	for _, c := range ws.Connections() {
 		sigs[c.Name] = connSignature(c)
 	}
+	deps := currentDeps(ws)
 	a.connSigMu.Lock()
 	a.connSigs = sigs
+	a.connDeps = deps
 	a.connSigMu.Unlock()
 }
 
@@ -60,14 +62,18 @@ func (a *App) syncConnections() {
 	for _, c := range ws.Connections() {
 		cur[c.Name] = c
 	}
+	nextDeps := currentDeps(ws)
 	a.connSigMu.Lock()
-	old := a.connSigs
+	old, oldDeps := a.connSigs, a.connDeps
 	a.connSigs = map[string]string{}
 	for n, c := range cur {
 		a.connSigs[n] = connSignature(c)
 	}
 	next := a.connSigs
+	a.connDeps = nextDeps
 	a.connSigMu.Unlock()
+	changed := changedNames(cur, old, next)
+	stale := dependentsOf(cur, changed, oldDeps, nextDeps)
 
 	var issues []workspace.SessionIssue
 	drop := map[string]bool{}
@@ -77,15 +83,30 @@ func (a *App) syncConnections() {
 			drop[n] = true
 		}
 	}
+	// Register every changed connection first, then preflight and connect them:
+	// a Delta table or lake connects at once and needs its storage connection to
+	// be registered, whatever order the names come in.
+	var changedNow []workspace.Connection
 	for n, c := range cur {
-		if old[n] == next[n] {
+		if old[n] == next[n] && !stale[n] {
 			continue
 		}
 		drop[n] = true
-		if msg := a.reregister(ctx, ws, sess, c, ro); msg != "" {
+		if msg := a.registerOnly(ctx, ws, sess, c, ro); msg != "" {
 			issues = append(issues, workspace.SessionIssue{Connection: n, Message: msg})
+			continue
 		}
-		a.emitStatus(sess, n)
+		changedNow = append(changedNow, c)
+	}
+	for _, c := range changedNow {
+		if msg := a.preflightOne(ctx, sess, c); msg != "" {
+			issues = append(issues, workspace.SessionIssue{Connection: c.Name, Message: msg})
+		}
+	}
+	for n := range drop {
+		if _, ok := cur[n]; ok {
+			a.emitStatus(sess, n)
+		}
 	}
 	a.mu.Lock()
 	if a.sess == sess {
@@ -103,6 +124,15 @@ func (a *App) syncConnections() {
 // reregister replaces one connection's registration from the current
 // definition. It returns a redacted problem message ("" when fine).
 func (a *App) reregister(ctx context.Context, ws workspace.Workspace, sess session.Session, c workspace.Connection, ro bool) string {
+	if msg := a.registerOnly(ctx, ws, sess, c, ro); msg != "" {
+		return msg
+	}
+	return a.preflightOne(ctx, sess, c)
+}
+
+// registerOnly is the first half of reregister: it replaces the registration
+// and dials nothing.
+func (a *App) registerOnly(ctx context.Context, ws workspace.Workspace, sess session.Session, c workspace.Connection, ro bool) string {
 	name := c.Name
 	if name == sess.DefaultCatalog() {
 		return fmt.Sprintf("%q is the workspace's own database; reopen the workspace to apply changes to it", name)
@@ -115,17 +145,41 @@ func (a *App) reregister(ctx context.Context, ws workspace.Workspace, sess sessi
 	if err := sess.Register(spec); err != nil {
 		return a.redact(err.Error())
 	}
+	return ""
+}
+
+// preflightOne is the second half: connect a local file, or preflight.
+func (a *App) preflightOne(ctx context.Context, sess session.Session, c workspace.Connection) string {
 	if c.Type == "duckdb" || c.Type == "sqlite" {
-		if err := sess.Connect(ctx, name); err != nil {
+		if err := sess.Connect(ctx, c.Name); err != nil {
 			return a.redact(err.Error())
 		}
 		return ""
 	}
-	sess.Preflight(ctx, name)
+	sess.Preflight(ctx, c.Name)
 	return ""
 }
 
+// emitStatus tells the rail a connection's state, and the state of what depends
+// on it (a lake waiting for its storage connection changes with it).
 func (a *App) emitStatus(sess session.Session, name string) {
+	a.emitOneStatus(sess, name)
+	a.connSigMu.Lock()
+	var dependents []string
+	for n, d := range a.connDeps {
+		for _, r := range d.Requires {
+			if r == name {
+				dependents = append(dependents, n)
+			}
+		}
+	}
+	a.connSigMu.Unlock()
+	for _, n := range dependents {
+		a.emitOneStatus(sess, n)
+	}
+}
+
+func (a *App) emitOneStatus(sess session.Session, name string) {
 	if st, ok := sess.Status(name); ok {
 		a.emitEvent("connection:status", map[string]any{"name": name, "status": string(st.Kind), "detail": st.Message})
 		return
