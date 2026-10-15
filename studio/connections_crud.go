@@ -40,6 +40,9 @@ type TypeSpec struct {
 	Capabilities      connections.Capabilities `json:"capabilities"`
 	FingerprintFields []string                 `json:"fingerprintFields"`
 	SignInMethods     []string                 `json:"signInMethods"`
+	// Presets fill the s3 form for a known S3-compatible store (empty for
+	// every other type).
+	Presets []connections.Preset `json:"presets"`
 	// Soon marks a type that is shown but cannot be chosen yet. Every type of
 	// the registry is available since #119; the flag stays for the picker.
 	Soon bool `json:"soon"`
@@ -83,10 +86,17 @@ func (a *App) ListConnectionTypes() []TypeSpec {
 			Fields: nonNilFields(i.Fields), Credentials: nonNilFields(i.Credentials),
 			RequiresExtension: append([]string{}, i.Extensions...),
 			Capabilities:      i.Capabilities, FingerprintFields: append([]string{}, i.FingerprintFields...),
-			SignInMethods: methods,
+			SignInMethods: methods, Presets: nonNilPresets(i.Presets),
 		})
 	}
 	return out
+}
+
+func nonNilPresets(p []connections.Preset) []connections.Preset {
+	if p == nil {
+		return []connections.Preset{}
+	}
+	return p
 }
 
 func nonNilFields(f []connections.Field) []connections.Field {

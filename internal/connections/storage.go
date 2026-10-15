@@ -193,6 +193,7 @@ func (t storageType) Info() TypeInfo {
 		Capabilities:      Capabilities{Catalog: false, Writable: false, ReadOnlyAttach: false, Remote: true, Test: true},
 		FingerprintFields: fp,
 		SignInMethods:     []string{"keychain", "env", "prompt"},
+		Presets:           storagePresets(t.kind),
 	}
 }
 

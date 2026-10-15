@@ -44,10 +44,16 @@ const TYPES: ConnTypeSpec[] = [
   },
   {
     id: 's3', label: 'Amazon S3', description: 's3 type',
-    fields: [field({ name: 'scope', label: 'Scope', kind: 'url', required: true }), field({ name: 'endpoint', label: 'Endpoint', option: true }),
+    fields: [field({ name: 'scope', label: 'Scope', kind: 'url', required: true }), field({ name: 'region', label: 'Region', default: 'us-east-1' }), field({ name: 'endpoint', label: 'Endpoint', option: true }),
       field({ name: 'use_ssl', label: 'Use TLS', kind: 'enum', choices: ['true', 'false'], default: 'true', option: true })],
     credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
     requiresExtension: ['httpfs'], capabilities: { catalog: false, writable: false, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope', 'option:use_ssl'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+    presets: [
+      { id: 'aws', label: 'Amazon S3', options: {} },
+      { id: 'minio', label: 'MinIO', options: { endpoint: 'localhost:9000', url_style: 'path', use_ssl: 'false' } },
+      { id: 'b2', label: 'Backblaze B2', options: { endpoint: 's3.<region>.backblazeb2.com', url_style: 'vhost', use_ssl: 'true' }, regionHint: 'us-west-004' },
+      { id: 'other', label: 'Other S3-compatible', options: {} },
+    ],
   },
   {
     id: 'azure', label: 'Azure Blob', description: 'azure type',
@@ -681,6 +687,116 @@ describe('ConnectionEditorView', () => {
       await flushPromises()
       expect(app.ListMotherDuckDatabases).toHaveBeenCalledWith(expect.objectContaining({ signIn: 'env:MOTHERDUCK' }))
       expect(w.find('[data-testid="md-empty"]').exists()).toBe(true)
+    })
+  })
+
+  describe('storage presets and detection (#130)', () => {
+    it('the Store select fills the endpoint options, opens Advanced, and Other clears nothing', async () => {
+      makeApp()
+      const w = mountView()
+      await flushPromises()
+      await chooseType(w, 's3')
+      expect(w.find('[data-testid="f-preset"]').exists()).toBe(true)
+      const sel = w.find('[data-testid="f-preset"]')
+      await sel.setValue('minio')
+      expect((w.find('[data-testid="f-endpoint"]').element as HTMLInputElement).value).toBe('localhost:9000')
+      expect((w.find('[data-testid="f-use_ssl"]').element as HTMLSelectElement).value).toBe('false')
+      expect((w.find('details').element as HTMLDetailsElement).open).toBe(true)
+      await sel.setValue('other')
+      expect((w.find('[data-testid="f-endpoint"]').element as HTMLInputElement).value).toBe('localhost:9000')
+      await sel.setValue('aws')
+      expect((w.find('[data-testid="f-endpoint"]').element as HTMLInputElement).value).toBe('')
+    })
+
+    it('B2: the endpoint follows Region until it is edited; Amazon S3 takes back a region only the hint set', async () => {
+      makeApp()
+      const w = mountView()
+      await flushPromises()
+      await chooseType(w, 's3')
+      const sel = w.find('[data-testid="f-preset"]')
+      const ep = () => (w.find('[data-testid="f-endpoint"]').element as HTMLInputElement).value
+      const region = () => (w.find('[data-testid="f-region"]').element as HTMLInputElement).value
+      await sel.setValue('b2')
+      expect(region()).toBe('us-west-004')
+      expect(ep()).toBe('s3.us-west-004.backblazeb2.com')
+      await w.find('[data-testid="f-region"]').setValue('eu-central-003')
+      expect(ep()).toBe('s3.eu-central-003.backblazeb2.com')
+      await sel.setValue('aws')
+      expect(ep()).toBe('')
+      expect(region()).toBe('eu-central-003') // the person's own region is kept
+
+      await sel.setValue('b2')
+      await w.find('[data-testid="f-endpoint"]').setValue('s3.custom.example')
+      await w.find('[data-testid="f-region"]').setValue('us-west-002')
+      expect(ep()).toBe('s3.custom.example') // an edited endpoint is left alone
+
+      // A region only the hint set goes back to the default on Amazon S3.
+      await w.find('[data-testid="f-region"]').setValue('us-east-1')
+      await sel.setValue('b2')
+      expect(region()).toBe('us-west-004')
+      await sel.setValue('aws')
+      expect(region()).toBe('us-east-1')
+    })
+
+    it('has no Store select for a type without presets', async () => {
+      makeApp()
+      const w = mountView()
+      await flushPromises()
+      await chooseType(w, 'postgres')
+      expect(w.find('[data-testid="f-preset"]').exists()).toBe(false)
+    })
+
+    it('says so when the storage check fails', async () => {
+      vi.useFakeTimers()
+      try {
+        makeApp({ FindStorageFor: vi.fn(async () => { throw new Error('boom') }) })
+        const w = mountView()
+        await flushPromises()
+        await chooseType(w, 'ducklake')
+        expect(w.find('.storage-slot[role="status"]').exists()).toBe(true) // mounted before any answer
+        await w.find('[data-testid="f-path"]').setValue('s3://lake/c.sqlite')
+        await vi.advanceTimersByTimeAsync(300)
+        await flushPromises()
+        expect(w.find('[data-testid="storage-failed"]').exists()).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('a lake shows what covers its URL, after the pause, and a problem without a button', async () => {
+      vi.useFakeTimers()
+      try {
+        const find = vi.fn(async (req: FindStorageRequest) => ({
+          needs: req.urls.map((u): StorageNeedView => (u.includes('..')
+            ? { url: u, problem: 'not a plain storage URL' }
+            : u.includes('floci') ? { url: u, match: { name: 'floci', type: 's3', scope: 's3://floci/', in: 'local', status: 'ok' } }
+              : { url: u, suggest: { type: 's3', scope: 's3://lake/', name: 'lake_s3' }, group: 1 })),
+        }))
+        makeApp({ FindStorageFor: find })
+        const w = mountView()
+        await flushPromises()
+        await chooseType(w, 'ducklake')
+        await w.find('[data-testid="f-path"]').setValue('s3://lake/catalog.sqlite')
+        expect(find).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(300)
+        await flushPromises()
+        expect(find).toHaveBeenCalledWith({ urls: ['s3://lake/catalog.sqlite'] })
+        expect(w.find('[data-testid="storage-path"]').text()).toContain('Needs a storage connection for s3://lake/')
+        expect(w.find('[data-testid="storage-setup"]').attributes('disabled')).toBeDefined()
+
+        await w.find('[data-testid="f-path"]').setValue('s3://floci/c.sqlite')
+        await vi.advanceTimersByTimeAsync(300)
+        await flushPromises()
+        expect(w.find('[data-testid="storage-path"]').text()).toContain('Read with floci')
+
+        await w.find('[data-testid="f-path"]').setValue('s3://lake/../x')
+        await vi.advanceTimersByTimeAsync(300)
+        await flushPromises()
+        expect(w.find('[data-testid="storage-problem"]').text()).toContain('not a plain storage URL')
+        expect(w.find('[data-testid="storage-setup"]').exists()).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

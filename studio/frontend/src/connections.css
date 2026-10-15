@@ -219,3 +219,4 @@ p.help { font-size: 13px; line-height: 1.5; color: var(--sh-graphite); }
 .md-db { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px; border: 2px solid var(--vibe-border); border-radius: var(--sh-radius-sm); background: var(--sh-surface); color: var(--sh-ink); font-family: var(--sh-font-mono); font-size: 13px; cursor: pointer; }
 .md-db.on { border-color: var(--vibe-accent); box-shadow: var(--sh-shadow-teal); }
 .md-db .md-share { font-family: var(--sh-font-body); font-size: 11px; color: var(--sh-graphite); }
+.storage-slot { min-height: 30px; }

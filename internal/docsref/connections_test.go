@@ -34,3 +34,21 @@ func TestConnectionsReferenceCoversTheTypeRegistry(t *testing.T) {
 		assert.Contains(t, doc, kw)
 	}
 }
+
+// Every s3 preset id and label is documented, and only s3 has presets.
+func TestConnectionsReferenceCoversThePresets(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "reference", "connections.md"))
+	require.NoError(t, err)
+	doc := string(b)
+	for _, info := range connections.ListConnectionTypes() {
+		if info.Name != "s3" {
+			assert.Empty(t, info.Presets, "%s has no presets", info.Name)
+			continue
+		}
+		require.NotEmpty(t, info.Presets)
+		for _, p := range info.Presets {
+			assert.Contains(t, doc, "`"+p.ID+"`", "preset id %s is documented", p.ID)
+			assert.Contains(t, doc, p.Label, "preset label %s is documented", p.Label)
+		}
+	}
+}

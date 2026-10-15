@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
@@ -172,7 +173,7 @@ func hideExpanded(ws Workspace, needs []StorageNeed, typed []string, failed []St
 			n.Suggest = &StorageSuggestion{Type: n.Suggest.Type, Name: nameFor(n.Group, n.Suggest.Type)}
 		}
 		if isTemplated && n.Problem != "" { // a problem message quotes the expanded value
-			n.Problem = "the URL is not a plain storage URL once its ${...} references are filled in"
+			n.Problem = "The URL is not a plain storage URL once its ${...} references are filled in"
 		}
 	}
 	for i := range failed {
@@ -203,11 +204,11 @@ func storageForTargets(ws Workspace, self string, targets []storageTarget, looku
 		}
 		b, err := storageurl.Bucket(t.url)
 		if err != nil {
-			needs[i].Problem = fmt.Sprintf("not a plain storage URL: %v", err)
+			needs[i].Problem = notPlain(targets[i].url, err)
 			continue
 		}
 		if b == t.url+"/" { // after the match: a scope may name the bare bucket (az://host/)
-			needs[i].Problem = "write the bucket with a trailing slash (" + b + ") or name a file or folder inside it"
+			needs[i].Problem = "Write the bucket with a trailing slash (" + b + ") or name a file or folder inside it"
 			continue
 		}
 		if _, ok := groups[b]; !ok {
@@ -221,7 +222,7 @@ func storageForTargets(ws Workspace, self string, targets []storageTarget, looku
 		sug, err := suggestFor(targets, idx, b, taken)
 		if err != nil {
 			for _, i := range idx {
-				needs[i].Problem = fmt.Sprintf("not a plain storage URL: %v", err)
+				needs[i].Problem = notPlain(targets[i].url, err)
 			}
 			continue
 		}
@@ -237,12 +238,20 @@ func storageForTargets(ws Workspace, self string, targets []storageTarget, looku
 // all ("" when it can).
 func storageProblem(u string) string {
 	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
-		return "read it through an S3 connection with an endpoint"
+		return "Read it through an S3 connection with an endpoint"
 	}
 	if err := storageurl.Validate(u); err != nil {
-		return fmt.Sprintf("not a plain storage URL: %v", err)
+		return notPlain(u, err)
 	}
 	return ""
+}
+
+// notPlain is the problem text for a URL that is not a plain storage URL. The
+// reason is the validator's, with the URL it quotes replaced by "the URL": the
+// text is shown next to the field the URL was typed into, and a templated or
+// pasted value is never echoed back.
+func notPlain(u string, err error) string {
+	return "Not a plain storage URL: " + strings.ReplaceAll(err.Error(), strconv.Quote(u), "the URL")
 }
 
 // suggestFor builds the one suggestion for the uncovered URLs idx, which all

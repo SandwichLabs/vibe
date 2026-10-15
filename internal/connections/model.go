@@ -130,6 +130,9 @@ type TypeInfo struct {
 	FingerprintFields []string `json:"fingerprintFields"`
 	// SignInMethods the type supports (all three, today).
 	SignInMethods []string `json:"signInMethods,omitempty"`
+	// Presets fill the form for a known S3-compatible store (s3 only). They
+	// only prefill; nothing about a preset is stored in the definition.
+	Presets []Preset `json:"presets,omitempty"`
 }
 
 // Type is a registered connection type: a session type plus form metadata and

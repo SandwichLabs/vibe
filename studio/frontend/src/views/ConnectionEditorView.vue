@@ -11,6 +11,8 @@ import Icon from '../components/Icon.vue'
 import ConnTypeTile from '../components/ConnTypeTile.vue'
 import ConnectionTypePicker from '../components/ConnectionTypePicker.vue'
 import CredentialField from '../components/CredentialField.vue'
+import S3PresetPicker from '../components/S3PresetPicker.vue'
+import StorageNeed from '../components/StorageNeed.vue'
 import ScopePicker from '../components/ScopePicker.vue'
 import TestResult from '../components/TestResult.vue'
 import { shortcutLabel } from '../composables/useModal'
@@ -26,7 +28,7 @@ const {
   status, detail, advancedOpen, saveError, result, isMD, remote, mainFields, advFields, ownScopeOnly,
   insideWorkspace, exampleTail, portField, readableCreds, secretCreds, needsSignIn, envVars, credFields, val, setVal,
   bindingChanged, fingerprintHelp, secretIsSet, serverChangedHelp, privateCopy, shadowedBy, failedTest, title,
-  chooseType,
+  chooseType, presets, applyPreset, storageLine, storageSlot, storageFailed,
 } = form
 const md = useMotherDuckPicker(form)
 const { mdDbs, mdLoading, mdLoaded, mdError, mdInstall, mdTokenReady, loadDatabases, pickDatabase } = md
@@ -89,6 +91,10 @@ const {
               <input :id="`f-${fd.name}`" :value="val(fd)" class="field-input" style="flex: 1;" :type="fd.kind === 'number' ? 'number' : 'text'" autocomplete="off" spellcheck="false" :aria-describedby="fd.help || fd.name === 'database' ? `f-${fd.name}-h` : undefined" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
             </div>
             <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
+            <div v-if="storageSlot(fd)" class="storage-slot" role="status" aria-live="polite">
+              <StorageNeed v-if="storageLine(fd)" :need="storageLine(fd)!" :testid="`storage-${fd.name}`" />
+              <div v-else-if="storageFailed" class="help" data-testid="storage-failed">Couldn't check storage connections just now.</div>
+            </div>
             <div v-if="isMD && fd.name === 'database'" class="md-picker" data-testid="md-picker">
               <div class="md-picker-bar">
                 <button type="button" class="btn btn-sm" :disabled="mdLoading || !mdTokenReady" data-testid="md-load" @click="loadDatabases">
@@ -115,6 +121,8 @@ const {
             <input id="f-port" :value="val(portField)" class="field-input" type="number" :placeholder="portField.default" data-testid="f-port" @input="setVal(portField, ($event.target as HTMLInputElement).value)" />
           </div>
         </div>
+
+        <S3PresetPicker v-if="presets.length" :presets="presets" @pick="applyPreset" />
 
         <details v-if="advFields.length" :open="advancedOpen" @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open">
           <summary style="cursor: pointer; font-weight: 600;">Advanced options</summary>
