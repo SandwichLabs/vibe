@@ -58,9 +58,9 @@ func ServerDescription(d ConnectionDef) string {
 		return net.JoinHostPort(d.Host, strconv.Itoa(port)) + "/" + d.Database
 	case "s3", "gcs", "r2", "azure":
 		return d.Scope
-	case "sqlite", "duckdb", "ducklake":
+	case "sqlite", "duckdb":
 		return filepath.Base(d.Path)
-	case "iceberg", "delta":
+	case "ducklake", "iceberg", "delta":
 		if connections.IsDataURL(d.Path) {
 			return d.Path
 		}
@@ -126,9 +126,6 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 	if err != nil {
 		return ResolvedConnection{}, err
 	}
-	if err := refuseURLCatalog(resolved); err != nil {
-		return ResolvedConnection{}, err
-	}
 	out := ResolvedConnection{Connection: c, Resolved: resolved}
 	if usesLocalPath(resolved) {
 		p, err := ResolveLocalPath(ws.Root(), resolved.Path, c.Scope)
@@ -136,7 +133,7 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 			return ResolvedConnection{}, fmt.Errorf("connection %q: %w", c.Name, err)
 		}
 		out.Path = p
-	} else if resolved.Type == "iceberg" || resolved.Type == "delta" {
+	} else if resolved.Type == "iceberg" || resolved.Type == "delta" || resolved.Type == "ducklake" {
 		out.Path = resolved.Path // a storage URL: read with a storage connection's secret
 	}
 	if dp := resolved.Options["data_path"]; resolved.Type == "ducklake" && dp != "" && !connections.IsDataURL(dp) {
@@ -160,27 +157,38 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 // storageTypes are the connection types that add a scoped storage secret.
 var storageTypes = map[string]bool{"s3": true, "gcs": true, "r2": true, "azure": true}
 
-// checkStorageURLs holds a DuckLake data path and an Iceberg or Delta location
-// that is a URL to the scope of a storage connection of this workspace: the
+// checkStorageURLs holds a DuckLake catalog and data path and an Iceberg or Delta
+// location that is a URL to the scope of a storage connection of this workspace: the
 // lake or table is read with that connection's secret, and a definition that
 // named any other bucket would either fail or reach data nobody configured.
 // Local paths are held to the workspace by ResolveLocalPath.
 func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupFunc) error {
-	var url, what string
+	type target struct{ url, what string }
+	var targets []target
 	switch d.Type {
 	case "ducklake":
-		url, what = d.Options["data_path"], "data path"
+		targets = []target{{path, "catalog"}, {d.Options["data_path"], "data path"}}
 	case "iceberg", "delta":
-		url, what = path, "location"
+		targets = []target{{path, "location"}}
 	}
-	if url == "" || !connections.IsDataURL(url) {
-		return nil
+	for _, t := range targets {
+		if t.url == "" || !connections.IsDataURL(t.url) {
+			continue
+		}
+		if err := checkStorageURL(ws, d.Name, t.url, t.what, lookup); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// checkStorageURL holds one URL to the scope of a storage connection of ws.
+func checkStorageURL(ws Workspace, self, url, what string, lookup LookupFunc) error {
 	if err := storageurl.Validate(url); err != nil {
 		return fmt.Errorf("the %s is not a plain storage URL: %w", what, err)
 	}
 	for _, c := range ws.Connections() {
-		if !storageTypes[c.Type] || c.Name == d.Name {
+		if !storageTypes[c.Type] || c.Name == self {
 			continue
 		}
 		sd, err := c.ConnectionDef.Resolve(lookup, c.Scope)
@@ -198,13 +206,13 @@ func checkStorageURLs(ws Workspace, d ConnectionDef, path string, lookup LookupF
 
 // usesLocalPath reports whether the definition's path is a file or folder on
 // this computer that must be resolved against the workspace: duckdb, sqlite and
-// ducklake files, and the folder of an iceberg or delta table (a storage URL is
-// left alone).
+// ducklake files, and the folder of an iceberg or delta table (a storage URL,
+// also a lake's catalog, is left alone).
 func usesLocalPath(d ConnectionDef) bool {
 	switch d.Type {
-	case "duckdb", "sqlite", "ducklake":
+	case "duckdb", "sqlite":
 		return true
-	case "iceberg", "delta":
+	case "ducklake", "iceberg", "delta":
 		return !connections.IsDataURL(d.Path)
 	}
 	return false

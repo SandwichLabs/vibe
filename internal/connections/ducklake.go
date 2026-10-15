@@ -351,8 +351,8 @@ func (ducklakeType) Info() TypeInfo {
 	return TypeInfo{
 		Name: "ducklake", Label: "DuckLake",
 		Fields: []Field{
-			{Name: "path", Label: "Metadata file", Kind: KindPath, Required: true, Help: "Catalog file, or a storage URL inside an S3/GCS/R2/Azure connection's scope (read-only)"},
-			{Name: "catalog", Label: "Catalog", Kind: KindEnum, Choices: append([]string(nil), catalogKinds...), Default: "duckdb", Option: true, Help: "The kind of database the catalog is: a DuckDB file or a SQLite file."},
+			{Name: "path", Label: "Catalog (file or storage URL)", Kind: KindPath, Required: true, Help: "Catalog file, or a storage URL inside an S3/GCS/R2/Azure connection's scope (read-only)"},
+			{Name: "catalog", Label: "Catalog kind", Kind: KindEnum, Choices: append([]string(nil), catalogKinds...), Default: "duckdb", Option: true, Prominent: true, Help: "The kind of database the catalog is: a DuckDB file or a SQLite file."},
 			{Name: "data_path", Label: "Data folder", Kind: KindText, Required: true, Option: true, Help: "A folder for the Parquet files, or a URL inside the scope of an S3, GCS, R2 or Azure connection of this workspace."},
 		},
 		Extensions:        []string{"ducklake"},

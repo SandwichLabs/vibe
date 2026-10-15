@@ -405,3 +405,41 @@ func TestDuckLakeCraftedCatalogReadsNothingForTheAgent(t *testing.T) {
 		}
 	}
 }
+
+// A lake with a SQLite catalog is hidden and protected like one with a DuckDB
+// catalog: the internal metadata catalog is off limits, sqlite_scan stays off
+// the allow-list, and COPY TO cannot touch the local catalog file (#118).
+func TestDuckLakeSQLiteCatalogThroughTheAgent(t *testing.T) {
+	ctx := context.Background()
+	ws := memWS(t)
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "lake", Type: "ducklake", Path: "data/lake.sqlite", ReadOnly: ptr(false),
+		Options: map[string]string{"catalog": "sqlite", "data_path": "data/lake_files"}}))
+	sess, issues, err := workspace.OpenSession(ctx, ws, nil, workspace.WithSessionOptions(session.WithExtensionDirectory(extDir(t))))
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	defer sess.Close()
+	for _, e := range []string{"ducklake", "sqlite"} {
+		require.NoError(t, sess.InstallExtension(ctx, e))
+	}
+	sess.Preflight(ctx, "lake")
+	require.NoError(t, sess.Connect(ctx, "lake"))
+	_, err = sess.DB().Exec("CREATE TABLE lake.people (id INTEGER, name VARCHAR); INSERT INTO lake.people VALUES (1,'ada')")
+	require.NoError(t, err)
+
+	h := agentOn(t, ws, sess, agents.ModeFull, false)
+	resp := sqlCall(h, "SELECT count(*) FROM lake.main.people")
+	require.Nil(t, resp.Error, errText(resp))
+	for _, q := range []string{
+		"SELECT * FROM __ducklake_metadata_lake.main.ducklake_table",
+		"SELECT * FROM __ducklake_metadata_lake.ducklake_data_file",
+		"DELETE FROM __ducklake_metadata_lake.main.ducklake_snapshot",
+		fmt.Sprintf("SELECT * FROM sqlite_scan('%s', 'ducklake_table')", filepath.Join(ws.Root(), "data", "lake.sqlite")),
+		fmt.Sprintf("CALL sqlite_attach('%s')", filepath.Join(ws.Root(), "data", "lake.sqlite")),
+		fmt.Sprintf("COPY (SELECT 1) TO '%s'", filepath.Join(ws.Root(), "data", "lake.sqlite")),
+	} {
+		resp := sqlCall(h, q)
+		require.NotNil(t, resp.Error, q)
+	}
+	resp = sqlCall(h, "SELECT count(*) FROM lake.main.people")
+	require.Nil(t, resp.Error, errText(resp))
+}

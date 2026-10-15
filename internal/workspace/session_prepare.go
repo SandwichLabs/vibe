@@ -124,7 +124,10 @@ func (p ducklakePreparer) Prepare(ctx context.Context, env prepareEnv, rc Resolv
 	if spec.ReadOnly {
 		return nil
 	}
-	dirs := []string{filepath.Dir(rc.Path)}
+	var dirs []string
+	if !connections.IsDataURL(rc.Path) { // a URL catalog is read-only (returned above); the guard is belt and braces
+		dirs = append(dirs, filepath.Dir(rc.Path))
+	}
 	if dp := def.Options["data_path"]; dp != "" && !connections.IsDataURL(dp) {
 		dirs = append(dirs, dp)
 	}

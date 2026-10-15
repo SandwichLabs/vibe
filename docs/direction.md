@@ -169,7 +169,7 @@ Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-la
 - #134: agent reads of Iceberg and Delta through a confined hub.
 - #123: auto-number gap off-by-one after reopening a file.
 - MotherDuck has only been exercised against the spike and with fakes; a pass with a real token is outstanding.
-- Iceberg REST catalogs; DuckLake with a Postgres or SQLite metadata catalog (only a local DuckDB file is supported).
+- Iceberg REST catalogs; DuckLake with a Postgres metadata catalog (a DuckDB or SQLite catalog, on this computer or read-only in object storage, is supported).
 - Removing a downloaded extension from Studio (there is Install but no Remove).
 - #77: signing and notarisation, CI and release, extension bundling, keychain on signed builds.
 - #73: notebook export to HTML, PDF and xlsx. #56 (Studio Home) is superseded by the launcher.

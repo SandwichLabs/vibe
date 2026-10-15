@@ -202,6 +202,20 @@ func TypeInfoFor(name string) (TypeInfo, error) {
 	return TypeInfo{}, fmt.Errorf("unknown connection type %q (want one of %s)", name, strings.Join(AllTypeNames(), ", "))
 }
 
+// ExtensionsFor lists the extensions one connection definition needs, in
+// install order: the type's static list, widened by the spec for a type whose
+// needs depend on it (a DuckLake with a SQLite catalog or a storage URL).
+func ExtensionsFor(d Def) []string {
+	if ct, ok := registry[d.Type].(session.SpecExtensionsType); ok {
+		return ct.SpecExtensions(d.Spec())
+	}
+	ti, err := TypeInfoFor(d.Type)
+	if err != nil {
+		return nil
+	}
+	return ti.Extensions
+}
+
 // AllTypeNames lists every type name, duckdb first.
 func AllTypeNames() []string { return append([]string{"duckdb"}, TypeNames()...) }
 

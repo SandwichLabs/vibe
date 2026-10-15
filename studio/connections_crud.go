@@ -55,7 +55,7 @@ var typeDescriptions = map[string]string{
 	"r2":         "Files in a Cloudflare R2 bucket.",
 	"mysql":      "A MySQL or MariaDB server. Read it in place; nothing is copied.",
 	"azure":      "Files in Azure Blob Storage or Data Lake (az://, azure://, abfss://).",
-	"ducklake":   "A DuckLake: tables in Parquet files with their catalog in a DuckDB file.",
+	"ducklake":   "A DuckLake: tables in Parquet files with their catalog in a DuckDB or SQLite file, here or in object storage.",
 	"iceberg":    "An Iceberg table, read with iceberg_scan('<location>').",
 	"delta":      "A Delta Lake table, read with delta_scan('<location>').",
 }

@@ -144,11 +144,13 @@ func (t storageType) Probe(ctx context.Context, sess session.Session, s session.
 	return probeScope(ctx, sess, param(s, "scope"))
 }
 
-// probeScope is the storage connections' Test: one listing of the scope.
+// probeScope is the storage connections' Test: one listing of the scope. The
+// pattern is "**" so objects in sub-folders count too (a lone "*" stops at the
+// first folder level and reported "0 objects" for a scope of folders).
 func probeScope(ctx context.Context, sess session.Session, scope string) (int, string, error) {
 	var n int
 	err := sess.DB().QueryRowContext(ctx,
-		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(scope+"*")+`) LIMIT 1000)`).Scan(&n)
+		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(scope+"**")+`) LIMIT 1000)`).Scan(&n)
 	if err != nil {
 		return 0, "", fmt.Errorf("could not list the scope: %w", err)
 	}
