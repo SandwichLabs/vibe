@@ -16,9 +16,10 @@ func TestConnAdd_DuckLakeSQLiteCatalogInObjectStorage(t *testing.T) {
 	require.NoError(t, err, stderr)
 	out, stderr, err := runVibe("conn", "list", "--json", "--workspace", root)
 	require.NoError(t, err, stderr)
-	// Resolved against the store's scope: not an issue, and nothing connected yet.
+	// Resolved against the store's scope: not an issue, and nothing connected yet
+	// (extension-missing where the extensions are not downloaded, as on CI).
 	assert.Contains(t, out, `"name": "lake"`)
-	assert.Contains(t, out, `"status": "not-connected"`)
+	assert.Regexp(t, `"name": "lake",[^}]*"status": "(not-connected|extension-missing)"`, out)
 	assert.NotContains(t, out, "not inside the scope")
 
 	// Read-only only: a writable one is refused.
