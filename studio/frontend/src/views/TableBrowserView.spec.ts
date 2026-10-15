@@ -622,6 +622,55 @@ describe('TableBrowserView ?table= pre-select', () => {
     expect(td?.attributes('aria-readonly')).toBe('true')
   })
 
+  it('opens a qualified table in a schema other than the connection default (lake.warehouse.x from the rail)', async () => {
+    const { app } = makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    ;(globalThis as any).__mockRoute.query.table = 'local.warehouse.dim_students'
+    await flushPromises()
+    expect(wrapper.find('h1').text()).toBe('local.warehouse.dim_students')
+    expect(app.DescribeTable).toHaveBeenCalledWith('local.warehouse.dim_students')
+  })
+
+  it('keeps a table in another schema open when the data changes', async () => {
+    dataChangedHandler = null
+    ;(window as any).runtime = {} // hasWailsRuntime() gate
+    makeApp()
+    const wrapper = mountView()
+    await flushPromises()
+    ;(globalThis as any).__mockRoute.query.table = 'local.warehouse.dim_students'
+    await flushPromises()
+    expect(wrapper.find('h1').text()).toBe('local.warehouse.dim_students')
+    expect(dataChangedHandler).not.toBeNull()
+    await dataChangedHandler!()
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(true)
+    expect(wrapper.find('h1').text()).toBe('local.warehouse.dim_students')
+  })
+
+  it('a lake whose catalog is in object storage says so, not "turn off Read-only"', async () => {
+    const { app } = makeApp()
+    ;(app as any).GetTableCapabilities = vi.fn(async () => ({ connection: 'lake', editable: false, reason: 'connection-read-only', text: 'lake is set to read-only, so rows can\'t be added, edited or deleted here.' }))
+    ;(app as any).GetConnection = vi.fn(async () => ({ def: { name: 'lake', type: 'ducklake', path: 's3://bucket/warehouse/ducklake/catalog.sqlite' } }))
+    const wrapper = mountView()
+    await openTable(wrapper)
+    const reason = wrapper.find('[data-testid="readonly-reason"]')
+    expect(reason.text()).toContain("catalog is in object storage, so it can only be read")
+    expect(reason.text()).not.toContain('turn off Read-only')
+    expect(reason.find('button').exists()).toBe(false)
+  })
+
+  it('a lake with a local catalog keeps the generic advice and the Edit connection button', async () => {
+    const { app } = makeApp()
+    ;(app as any).GetTableCapabilities = vi.fn(async () => ({ connection: 'lake', editable: false, reason: 'connection-read-only', text: 'lake is set to read-only.' }))
+    ;(app as any).GetConnection = vi.fn(async () => ({ def: { name: 'lake', type: 'ducklake', path: 'data/lake.ducklake' } }))
+    const wrapper = mountView()
+    await openTable(wrapper)
+    const reason = wrapper.find('[data-testid="readonly-reason"]')
+    expect(reason.text()).toContain('turn off Read-only for the connection')
+    expect(reason.find('button').exists()).toBe(true)
+  })
+
   it('an editable table shows no banner', async () => {
     const { app } = makeApp()
     ;(app as any).GetTableCapabilities = vi.fn(async () => ({ connection: 'local', editable: true, reason: '', text: '' }))

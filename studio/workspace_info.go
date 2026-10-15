@@ -223,7 +223,8 @@ func (a *App) ListCatalogGroups() ([]CatalogGroup, error) {
 			Connection: c.Name, Type: c.Type, Status: c.Status, Detail: c.Detail,
 			ReadOnly: c.ReadOnly, Default: c.Default, Tables: []CatalogTable{},
 		}
-		if c.Status == string(session.StatusOK) {
+		// A storage connection (s3, gcs, r2, azure) has no catalog to list.
+		if c.Status == string(session.StatusOK) && !c.Catalogless {
 			tabs, err := a.sess.ListTables(ctx, c.Name, "")
 			if err != nil {
 				g.Status, g.Detail = string(session.StatusError), a.sess.Redact(err.Error())

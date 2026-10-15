@@ -1,6 +1,6 @@
 # DuckLake catalogs: SQLite and DuckDB metadata, local or in object storage
 
-Status: planned (2026-10-14), reviewed. Issue #118. Removes the SQLite half of "DuckLake with a Postgres or SQLite metadata catalog" from the deferred list in `docs/direction.md` §9. Postgres metadata catalogs and a free-form "advanced attach" type are out of scope (see [Later](#later)).
+Status: **delivered** (2026-10-14), PRs #119 to #124 and the end-to-end step 7 (this document's Acceptance section says where each point is verified). Issue #118. Removes the SQLite half of "DuckLake with a Postgres or SQLite metadata catalog" from the deferred list in `docs/direction.md` §9. Postgres metadata catalogs and a free-form "advanced attach" type are out of scope (see [Later](#later)).
 
 ## The case this must handle
 
@@ -18,16 +18,18 @@ ATTACH 'ducklake:sqlite:s3://oib-data-local/warehouse/ducklake/catalog.sqlite' A
 In Vibe this is two connections the person adds in their own scopes, with no SQL and no credential in any file:
 
 ```yaml
-floci:
-  type: s3
-  scope: s3://oib-data-local/
-  region: us-east-1
-  options: { endpoint: "localhost:4567", url_style: path, use_ssl: "false" }
-lake:
-  type: ducklake
-  path: s3://oib-data-local/warehouse/ducklake/catalog.sqlite
-  read_only: true
-  options: { catalog: sqlite, data_path: s3://oib-data-local/warehouse/ducklake/ }
+# <config dir>/vibe/connections.yaml (all my workspaces), or the workspace's local.yaml (this computer)
+connections:
+  - name: floci
+    type: s3
+    scope: s3://oib-data-local/
+    region: us-east-1
+    options: { endpoint: "localhost:4567", url_style: path, use_ssl: "false" }
+  - name: lake
+    type: ducklake
+    path: s3://oib-data-local/warehouse/ducklake/catalog.sqlite
+    read_only: true
+    options: { catalog: sqlite, data_path: s3://oib-data-local/warehouse/ducklake/ }
 ```
 
 ## Why it fails today
@@ -127,12 +129,16 @@ The extensions a lake needs depend on its spec: `ducklake`, plus `sqlite` for a 
 
 ## Acceptance
 
-- The YAML above (credentials in the keychain) opens, the lake connects on first use, and `SELECT count(*) FROM lake.warehouse.dim_students` works in Studio, the CLI and over MCP (read-only).
-- With `floci` signed out, the lake shows "needs the `floci` connection: it needs credentials", not an S3 error.
-- A writable lake with a URL catalog is refused by `Validate` (save, open, hand edit).
-- A catalog URL or data path outside every storage scope is refused when the workspace is opened and the connection resolved (an issue in the rail; order-independent, like `data_path`, iceberg and delta), not at save.
-- Every crafted-catalog case is refused for a SQLite catalog as for a DuckDB one.
-- No credential appears in any file, log line, error or agent-visible result.
+Verified end to end on the case above (DuckDB 1.5.6, MinIO in a container, `warehouse.dim_students` with 6,007 rows: Parquet files plus rows still inlined in the catalog). The integration tests need a container runtime and the downloaded extensions, so they are behind `-tags integration` and skip without MinIO.
+
+- The YAML above (credentials in the keychain) opens, the lake connects on first use, and `SELECT count(*) FROM lake.warehouse.dim_students` works in Studio, the CLI and over MCP (read-only). *Lake-first ordering* (the lake connects its storage connection itself) is proven by `TestDuckLakeConnectsItsStorageFirstOnMinIO` (step 6); in the floci tests Preflight has already made floci's secret at open. *Verified by:* `TestFlociLakeEndToEnd` (`internal/hub`: `hub.Open` with a keychain credential, floci never connected by hand, the engine and then the agent handler's `run_query`, whose `INSERT`, `DELETE`, `CREATE TABLE`, `__ducklake_metadata_lake`, `sqlite_scan` and `ducklake_flush_inlined_data` are all refused); `TestFlociLakeOverMCPServe` (`vibe mcp serve` over stdio, floci signed in from `FLOCI_*`); `TestFlociLakeThroughTheCLI` (`cmd`: `conn add`, `conn list --json`, `query` in csv and json); Studio by Rodney (add both through the form, open the lake from the rail first, browse the 6,007 rows, a notebook cell returns 6,007).
+- With `floci` signed out, the lake shows "needs the `floci` connection: it needs credentials", not an S3 error. *Verified by:* the same three tests (exact message from the status and from the failed query), `TestDuckLakeConnectsItsStorageFirstOnMinIO`, and Studio (clearing floci's credentials detaches the lake, and its rail row reads that message).
+- A writable lake with a URL catalog is refused by `Validate` (save, open, hand edit). *Verified by:* the unit tests of steps 4 and 5 (`internal/connections`, `internal/workspace`) and `TestConnAdd_DuckLakeSQLiteCatalogInObjectStorage` (`cmd`).
+- A catalog URL or data path outside every storage scope is refused when the workspace is opened and the connection resolved (an issue in the rail; order-independent, like `data_path`, iceberg and delta), not at save. *Verified by:* the step 5 tests in `internal/workspace` and `TestSyncReregistersDependentsOfAChangedStorageConnection` (`studio`).
+- Every crafted-catalog case is refused for a SQLite catalog as for a DuckDB one. *Verified by:* `TestDuckLakeURLCatalogOnMinIO` (both catalog kinds, over httpfs) and the step 3 and 4 tests in `internal/connections` and `internal/agents`.
+- No credential appears in any file, log line, error or agent-visible result. *Verified by:* the audit in the three end-to-end tests (the MinIO secret `minioSecret_needle1` is searched for in every status message, error and agent result, and in every file under the workspace and the config directory; debug-level logs are captured and scanned in the hub test only, the MCP test scans client output and stderr, and the CLI test scans command output), and by grepping a Studio QA session's workspace, config directory and dev-server log.
+
+Found by the end-to-end run and fixed in step 7: the Tables view listed every ready *storage* connection as an error ("is storage, not a database") and hid the other tables behind a "can't list" page; a table in a schema other than the connection's default (`lake.warehouse.dim_students`, opened from the rail) was not selectable; the rail classified the dependency status as an unreachable server ("Is the VPN on?"); and the read-only banner told a URL-catalog lake's user to "turn off Read-only", which is refused for it.
 
 ## Later
 
