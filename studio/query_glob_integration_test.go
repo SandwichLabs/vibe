@@ -41,7 +41,7 @@ func TestRunQueryExpandsAnS3Wildcard(t *testing.T) {
 	assert.EqualValues(t, 4, res.Rows[0][0])
 	res = run("-- how many?\nSELECT count(*) AS n FROM glob('" + b + "*') /* all objects here */")
 	assert.EqualValues(t, 2, res.Rows[0][0])
-	res = run("CREATE TABLE pulled AS SELECT * FROM read_parquet('" + b + "*.parquet')")
+	run("CREATE TABLE pulled AS SELECT * FROM read_parquet('" + b + "*.parquet')")
 	res = run("SELECT count(*) FROM pulled")
 	assert.EqualValues(t, 3, res.Rows[0][0])
 

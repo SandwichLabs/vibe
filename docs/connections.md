@@ -98,6 +98,18 @@ SELECT * FROM read_parquet('s3://acme-lake/raw/2026/jan.parquet') LIMIT 10;
 
 A `*` or `**` wildcard works too (`read_parquet('s3://acme-lake/raw/2026/*.parquet')`, `FROM 's3://acme-lake/raw/**/*.csv'`, `glob('s3://acme-lake/raw/**')`): Vibe lists the matching objects when the query starts and reads that list. It is a point-in-time list, capped at 10,000 objects per query, and a pattern with no match is an error. See the object-storage notes in `reference/connections.md`.
 
+### Sign in to S3 with your AWS SSO profile
+
+If your company signs in to AWS through IAM Identity Center, use the profile you already have in `~/.aws/config` instead of a key:
+
+```sh
+vibe conn add dev --type s3 --prefix s3://acme-dev/ --region us-east-1 --sign-in aws-sso:dev
+vibe conn credentials sign-in dev     # prints a page and a code; or run: aws sso login --profile dev
+vibe conn credentials status dev
+```
+
+Only the profile name is saved (on this computer, never in `vibe.yaml`). The short-lived keys are fetched when a workspace that uses the connection opens and whenever it is used, renewed before they end, and never written to a file. When the session ends the connection says it needs you to sign in again and reads nothing (it never falls back to anonymous access). In Studio a banner offers **Sign in**; `vibe mcp serve` only reports the state, it never starts a sign-in. A lake whose files sit under this prefix uses the same sign-in. The details are in [`reference/connections.md`](reference/connections.md#aws-sso-sign-in-s3).
+
 ## Azure Blob / ADLS
 
 ```sh
@@ -116,7 +128,7 @@ vibe conn add events_ice --type iceberg --path s3://acme-lake/warehouse/events/
 ```
 
 - Only in your own scopes (the default `local` is fine); never in a committed `vibe.yaml`.
-- A `path` or `data_path` that is a URL must sit inside the scope of a storage connection you have already added (S3, GCS, R2 or Azure), which supplies the credential.
+- A `path` or `data_path` that is a URL must sit inside the scope of a storage connection (S3, GCS, R2 or Azure), which supplies the credential. In Studio the form shows whether one covers the URL and **Set up storage** opens a prefilled storage form; on the CLI `vibe conn add` prints the `vibe conn add ...` command that is missing. **Test** tries the storage connection first and says which of the two failed.
 - The extension (`ducklake`, `iceberg`, `delta`) downloads once when you press Install or pass `--install`.
 - The agent cannot read Iceberg or Delta tables yet; you can in the SQL editor.
 

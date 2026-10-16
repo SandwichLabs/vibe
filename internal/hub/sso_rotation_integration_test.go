@@ -27,8 +27,8 @@ import (
 
 // These are the acceptance of #131 step 7: the storage secret of an SSO-signed
 // connection is renewed in place before its keys end, while a lake reads; when
-// no new keys can be had the connection fails closed (with the bucket readable
-// anonymously, so a bare read WOULD succeed); and an expired-token answer from
+// no new keys can be had the connection fails closed (the bucket is readable anonymously, but a secretless read cannot reach it: the
+// deny secret must answer, which the test asserts); and an expired-token answer from
 // the store ends in needs-credentials with the sign-in hint. MinIO's shortest
 // STS session is 15 minutes, so the hub runs on a clock the test moves.
 
@@ -215,8 +215,9 @@ func TestSSORotationWhileALakeReads(t *testing.T) {
 
 // Rotation fails (the session is gone): the connection fails closed. The bucket
 // is readable anonymously here, and the object read afterwards was never read
-// before (DuckDB's external file cache cannot serve it), so a bare read would
-// succeed: it must be refused.
+// before (DuckDB's external file cache cannot serve it). A secretless read could
+// not reach the bucket anyway (it would go to the AWS default endpoint), so the
+// test asserts where fail closed is decided: the catch-all deny secret answers.
 func TestSSORotationFailureFailsClosedNeverAnonymous(t *testing.T) {
 	r := openRotWorld(t)
 	publicBucket(t, r.ep)
@@ -243,11 +244,12 @@ func TestSSORotationFailureFailsClosedNeverAnonymous(t *testing.T) {
 	var lakes int
 	require.NoError(t, r.o.Sess.DB().QueryRow(`SELECT count(*) FROM duckdb_databases() WHERE database_name = 'lake'`).Scan(&lakes))
 	assert.Zero(t, lakes)
-	assert.NotEqual(t, "vibe_floci", r.secretNamed(fresh), "the SSO secret is gone")
+	assert.Equal(t, "vibe-deny-s3", r.secretNamed(fresh), "the SSO secret is gone and the deny secret answers")
 	assert.Contains(t, r.heard.list(), "floci", "the status listener told the UI")
 
 	got, err = r.readObject(fresh)
 	require.Error(t, err, "an object never read before is not read anonymously (got %q)", got)
+	assert.Contains(t, err.Error(), "deny.invalid")
 	noNeedles(t, "logs", r.logs.String(), r.w.needles())
 
 	// Signing in again brings it back.
@@ -265,7 +267,7 @@ func TestSSORotationFailureFailsClosedNeverAnonymous(t *testing.T) {
 // connection needs sign-in, with the hint.
 func TestSSOExpiredTokenOnS3NeedsSignIn(t *testing.T) {
 	r := openRotWorld(t)
-	good := r.w.sts.Load().(stsCreds)
+	good, _ := r.w.sts.Load().(stsCreds)
 	o1 := putObject(t, r.ep, "rot/e1.csv", "v1")
 	o2 := putObject(t, r.ep, "rot/e2.csv", "v2")
 	o3 := putObject(t, r.ep, "rot/e3.csv", "v3")

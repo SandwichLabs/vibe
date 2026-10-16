@@ -352,3 +352,69 @@ func TestCancelSignIn_ThenSignInStartsANewFlow(t *testing.T) {
 	r.waitFlows(t)
 	assert.Len(t, r.events.named("signin:done"), 1)
 }
+
+// The needle audit of #131 step 9 over the Studio surface: after a complete
+// sign-in (device flow, token cache, Preflight with role keys from the portal)
+// no binding result, event, status, workspace file or config file carries a
+// token, the client secret or a role key, nor the profile's account, role or
+// start URL. The token cache is the one place the tokens are written.
+func TestSignIn_NoNeedleReachesABindingEventOrFolder(t *testing.T) {
+	r := newSSORig(t)
+	needles := []string{ssofake.NeedleAccess, ssofake.NeedleRefresh, ssofake.NeedleClientSecret, ssofake.NeedleSecretKey,
+		ssofake.NeedleSessionToken, "123456789012", "NeedleRoleName", "corp.awsapps.com"}
+	var seen []string
+	collect := func(v any, err error) {
+		if err != nil {
+			seen = append(seen, err.Error())
+		}
+		b, _ := json.Marshal(v)
+		seen = append(seen, string(b))
+	}
+	surfaces := func() {
+		collect(r.app.ListConnections())
+		collect(r.app.GetConnection("store"))
+		collect(r.app.GetConnectionCredentialStatus("store"))
+		collect(r.app.TestConnection(TestConnectionRequest{Scope: "local", SignIn: "aws-sso:dev",
+			Def: workspace.ConnectionDef{Name: "store", Type: "s3", Scope: "s3://acme-dev/", Region: "us-east-1"}}))
+	}
+	surfaces() // signed out
+	p, err := r.app.StartSignIn(ConnectionRef{Name: "store"})
+	require.NoError(t, err)
+	collect(p, nil)
+	r.fake.Approve()
+	r.waitFlows(t)
+	require.Len(t, r.events.named("signin:done"), 1)
+	surfaces() // signed in, keys resolved
+	require.Positive(t, r.fake.PortalHits(), "the role keys were fetched, so their needles were exercised")
+	for _, st := range r.app.sess.Connections() {
+		if st.Name == "store" {
+			assert.NotEqual(t, session.StatusNeedsCredentials, st.Kind, "signed in: %s", st.Message)
+		}
+	}
+
+	all := strings.Join(seen, "\n") + r.events.json() + strings.Join(r.openedURLs(), "\n")
+	for _, n := range needles {
+		assert.NotContains(t, all, n, "bindings, events and statuses")
+	}
+	for _, dir := range []string{r.app.ws.Root(), os.Getenv("VIBE_CONFIG_DIR")} {
+		require.NoError(t, filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			if b, rerr := os.ReadFile(path); rerr == nil { //nolint:gosec // test walk of its own temp dirs
+				for _, n := range needles {
+					assert.NotContains(t, string(b), n, path)
+				}
+			}
+			return nil
+		}))
+	}
+	cache := r.cacheFiles(t)
+	require.Len(t, cache, 1, "the token cache is where the session lives")
+	fi, err := os.Stat(cache[0])
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+	di, err := os.Stat(filepath.Dir(cache[0]))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), di.Mode().Perm())
+}

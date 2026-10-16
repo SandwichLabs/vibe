@@ -91,6 +91,10 @@ By design, a write needs the tier, a writable connection and your approval. Over
 
 The chat agent needs a model provider. Set one in Studio (Settings, App) or with `vibe config llm set ...` and `vibe config llm-key`. The default points at a local server on `http://localhost:8080/v1`; if nothing is running there, the agent cannot answer. See [LLM configuration](reference/llm-config.md). Everything else works without a model.
 
+## "AWS session for profile ... has expired" or "No AWS session for profile ..." (S3 with AWS SSO)
+
+The connection signs in with your AWS IAM Identity Center profile and the session has ended (or never started). Nothing is read until you sign in: Vibe never falls back to anonymous access. In Studio press **Sign in** in the banner; in a terminal run `vibe conn credentials sign-in NAME` or `aws sso login --profile PROFILE`. A running `vibe mcp serve` looks for the new session on the first statement that runs at least 30 seconds after its last look. If the profile is missing or not an SSO profile, `vibe conn credentials status NAME` says so; see [Connections](reference/connections.md#aws-sso-sign-in-s3).
+
 ## Where the logs are
 
 Vibe writes no log file. The command line and Studio log structured JSON lines to **stderr**, and `vibe mcp serve` prints plain-text notices there. The command line and Studio log through the same secret redactor: it scrubs every secret value they have seen and credential-shaped text such as `password=…` or the password in `user:pass@host`. It cannot know every value, so read the log before you share it. Run Studio from a terminal (`vibe studio --gui` or `vibe-studio`) to see them; add `--verbose` to the CLI for more. Settings live in `~/.vibe.yaml` and the per-user config directory (`~/.config/vibe` on Linux, `~/Library/Application Support/vibe` on macOS); set `VIBE_CONFIG_DIR` to use a different one, for example when testing. Per-workspace local state is in `.vibe-local/` inside the workspace folder (git-ignored).

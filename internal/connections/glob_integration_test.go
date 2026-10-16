@@ -4,7 +4,6 @@ package connections_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -111,7 +110,7 @@ func TestS3WildcardsAreExpandedOnMinIO(t *testing.T) {
 		run("COPY (SELECT 10 AS id, 'j' AS v) TO 's3://lake/data/t2.csv' (FORMAT csv, HEADER)")
 		after := run("SELECT count(*) FROM 's3://lake/data/*.csv'")[0][0]
 		assert.EqualValues(t, 1, before)
-		assert.EqualValues(t, 2, after, fmt.Sprint("the list is taken each time the statement runs"))
+		assert.EqualValues(t, 2, after, "the list is taken each time the statement runs")
 	})
 
 	t.Run("an object named like a redirect is refused by wildcards, readable by its exact name", func(t *testing.T) {
@@ -122,7 +121,7 @@ func TestS3WildcardsAreExpandedOnMinIO(t *testing.T) {
 		assert.Contains(t, err.Error(), "1 of the objects")
 		_, err = eng.Execute(ctx, "SELECT count(*) FROM glob('s3://lake/data/**')", nil)
 		require.Error(t, err, "a wildcard that would list it is refused")
-		assert.EqualValues(t, 1, run("SELECT count(*) FROM read_parquet("+session.QuoteLiteral(hostile)+")")[0][0], "the exact name is a literal key on the connection's own endpoint")
+		assert.EqualValues(t, 1, run("SELECT count(*) FROM read_parquet(" + session.QuoteLiteral(hostile) + ")")[0][0], "the exact name is a literal key on the connection's own endpoint")
 	})
 
 	assert.Empty(t, evil.seen(), "the object named ?s3_endpoint=... was read by name; the host it named saw nothing")
