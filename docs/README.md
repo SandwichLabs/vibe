@@ -29,6 +29,9 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md) | Plan for #130 (set up the storage connection from the lake form) and #131 (AWS SSO sign-in for S3); delivered in nine steps (PRs #132-#147, released in v0.1.4 with SSO as a preview); real IAM Identity Center verification and the close-out list are in the plan |
 | [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
+| [`plans/code-mode.md`](plans/code-mode.md) | Proposal: a `run_code` tool where the agent writes a program that calls the Vibe tools in a sandbox, through the same gates (not built; review notes in §13 favour a Starlark or SQL result-handle spike before Monty) |
+| [`plans/monty-client.md`](plans/monty-client.md) | Proposal: the Go client for the Monty worker that Vibe would own, the worker build from source, packaging, tests and the upgrade procedure (deferred by the §13 review) |
+| [`plans/spike-code-mode-findings.md`](plans/spike-code-mode-findings.md) | Research for code mode: Cloudflare, Anthropic, Bifrost and Muse, and the sandboxes a Go process can use (Monty, Starlark, goja, QuickJS, WASI) |
 | [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
 
 ## Reference
