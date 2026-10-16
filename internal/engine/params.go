@@ -22,6 +22,24 @@ func ValidateParamName(name string) error {
 	return nil
 }
 
+// ParamNames returns the distinct parameter names BindParams would bind in
+// sql, in order of first appearance. It uses the same placeholder rule, so a
+// caller that needs to know which parameters a statement takes (a manifest
+// deriving what each query uses) cannot drift from the rewrite. Like
+// BindParams it reads the raw text: a $name inside a string literal counts.
+func ParamNames(sql string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, loc := range paramPlaceholderRe.FindAllStringSubmatchIndex(sql, -1) {
+		name := sql[loc[2]:loc[3]]
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // BindParams replaces $param_name placeholders in the SQL string with
 // positional ? parameters and returns the transformed SQL along with an
 // ordered args slice. It validates that all parameter names are safe and
@@ -40,9 +58,8 @@ func BindParams(sql string, params map[string]any) (string, []any, error) {
 		return sql, nil, nil
 	}
 
-	// Collect unique parameter names in order of first appearance, then
-	// build the positional mapping. Each unique param gets one ? position,
-	// but the same param may appear multiple times.
+	// One ? and one arg per occurrence, in text order (a name used twice is
+	// bound twice).
 	type occurrence struct {
 		start, end int
 		name       string

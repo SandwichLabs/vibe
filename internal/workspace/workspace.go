@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
+
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/prefs"
@@ -64,6 +66,9 @@ type Workspace interface {
 	Notebooks() notebooks.Store
 	Queries() queries.Store
 	Skills() skills.Store
+	// Artifacts is the workspace's artifacts/ folder: data artifacts, one
+	// folder each (artifact.yaml and view.a2ui.json).
+	Artifacts() artifacts.Store
 
 	// Resolver is the credential resolver (keychain, env, prompt) this
 	// workspace uses. Never nil.
@@ -180,6 +185,7 @@ type workspace struct {
 	nb notebooks.Store
 	qs queries.Store
 	sk skills.Store
+	af artifacts.Store
 
 	mu       sync.RWMutex
 	cfg      Config
@@ -237,6 +243,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	w.nb = notebooks.NewFileStore(root, notebooks.WithObserver(obs))
 	w.qs = queries.NewFileStore(root, queries.WithObserver(obs), queries.WithLogger(w.logger))
 	w.sk = skills.NewFileStore(root, skills.WithObserver(obs), skills.WithLogger(w.logger))
+	w.af = artifacts.NewFileStore(root, artifacts.WithObserver(obs))
 	return w, nil
 }
 
@@ -434,6 +441,7 @@ func (w *workspace) Warnings() []string {
 func (w *workspace) Notebooks() notebooks.Store { return w.nb }
 func (w *workspace) Queries() queries.Store     { return w.qs }
 func (w *workspace) Skills() skills.Store       { return w.sk }
+func (w *workspace) Artifacts() artifacts.Store { return w.af }
 
 func (w *workspace) Reload() error { return w.reload() }
 
@@ -548,10 +556,12 @@ func (w *workspace) loadUser() (UserConfig, error) {
 
 // tempDirs lists the directories WriteAtomic leaves temp files in.
 func (w *workspace) tempDirs() []string {
-	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, LocalDir}
-	if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
-		for _, s := range subs {
-			dirs = append(dirs, skills.Dir+"/"+s)
+	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, LocalDir}
+	for _, parent := range []string{skills.Dir, artifacts.Dir} {
+		if subs, err := filestore.ListSubdirs(w.root, parent); err == nil {
+			for _, s := range subs {
+				dirs = append(dirs, parent+"/"+s)
+			}
 		}
 	}
 	return dirs

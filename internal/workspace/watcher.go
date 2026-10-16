@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
+
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/SandwichLabs/vibe/internal/dotenv"
@@ -32,6 +34,9 @@ const (
 	KindNotebook ChangeKind = "notebook"
 	KindQuery    ChangeKind = "query"
 	KindSkill    ChangeKind = "skill"
+	// KindArtifact is a data artifact: either of artifacts/<name>/'s two
+	// files (ID is the artifact name; Path says which file).
+	KindArtifact ChangeKind = "artifact"
 	KindConfig   ChangeKind = "config"
 	// KindDotEnv is the workspace's .env. The change carries no content; ask
 	// Workspace.DotEnv for the new state (an allowed file becomes "changed").
@@ -73,8 +78,8 @@ func WithDebounce(d time.Duration) WatchOption { return func(o *watchOpts) { o.d
 // Watcher reports external changes under a workspace. fsnotify is not
 // recursive on Linux, so every directory that can hold a watched file is
 // registered on its own: the root (for vibe.yaml and the content directories
-// appearing later), notebooks/, queries/, skills/, each skills/<name>/ and
-// .vibe-local/, and directories created afterwards are added as they appear.
+// appearing later), notebooks/, queries/, skills/, artifacts/, each
+// skills/<name>/ and artifacts/<name>/ and .vibe-local/, and directories created afterwards are added as they appear.
 //
 // Its own stores' writes are ignored by content hash: a store announces the
 // hash of what it is about to write, and the watcher drops any event whose
@@ -187,15 +192,23 @@ func (w *Watcher) addTree() error {
 	if !w.addDir(w.root) {
 		return fmt.Errorf("failed to watch workspace %s", w.root)
 	}
-	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir} {
+	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir} {
 		w.addDir(filepath.Join(w.root, d))
 	}
-	if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
-		for _, s := range subs {
-			w.addDir(filepath.Join(w.root, skills.Dir, s))
-		}
+	for _, parent := range []string{skills.Dir, artifacts.Dir} {
+		w.addSubdirs(parent)
 	}
 	return nil
+}
+
+// addSubdirs registers each real subfolder of a content folder (skills/<name>/,
+// artifacts/<name>/).
+func (w *Watcher) addSubdirs(parent string) {
+	if subs, err := filestore.ListSubdirs(w.root, parent); err == nil {
+		for _, s := range subs {
+			w.addDir(filepath.Join(w.root, parent, s))
+		}
+	}
 }
 
 // relevant lists the abs paths of every watched file that exists now.
@@ -217,6 +230,12 @@ func (w *Watcher) relevant() []string {
 	if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
 		for _, s := range subs {
 			add(skills.Dir + "/" + s + "/" + skills.File)
+		}
+	}
+	if subs, err := filestore.ListSubdirs(w.root, artifacts.Dir); err == nil {
+		for _, s := range subs {
+			add(artifacts.Dir + "/" + s + "/" + artifacts.ManifestFile)
+			add(artifacts.Dir + "/" + s + "/" + artifacts.ViewFile)
 		}
 	}
 	return out
@@ -263,6 +282,8 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindQuery, strings.TrimSuffix(parts[1], queries.Extension), true
 	case len(parts) == 3 && parts[0] == skills.Dir && parts[2] == skills.File && !filestore.IsTemp(parts[1]):
 		return KindSkill, parts[1], true
+	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile) && !filestore.IsTemp(parts[1]):
+		return KindArtifact, parts[1], true
 	}
 	return "", "", false
 }
@@ -352,20 +373,16 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 // anything was queued.
 func (w *Watcher) handleNewDir(abs, rel string) bool {
 	parts := strings.Split(rel, "/")
-	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir)) ||
-		(len(parts) == 2 && parts[0] == skills.Dir && !filestore.IsTemp(parts[1]))
+	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir)) ||
+		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1]))
 	if !isWatchedDir || !w.addDir(abs) {
 		return false
 	}
 	// Directories and files may already be inside by the time the
 	// watch exists (mkdir -p, a git checkout): register the
-	// skills/<name>/ levels and report what is there.
-	if len(parts) == 1 && parts[0] == skills.Dir {
-		if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
-			for _, s := range subs {
-				w.addDir(filepath.Join(abs, s))
-			}
-		}
+	// skills/<name>/ and artifacts/<name>/ levels and report what is there.
+	if len(parts) == 1 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) {
+		w.addSubdirs(parts[0])
 	}
 	queued := false
 	for _, p := range w.relevant() {
