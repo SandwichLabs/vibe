@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/SandwichLabs/vibe/internal/secrets"
 )
@@ -120,6 +121,17 @@ type entry struct {
 	// depBlocked names the requirement whose state last kept it from
 	// connecting ("" when none): cleared when that requirement is ready.
 	depBlocked string
+
+	// The deadline of the credential its secrets were made from (zero: none, so
+	// never rotated), how many times they were made, when a rotation last
+	// started, and the rotation in flight. All guarded by hub.mu.
+	expires    time.Time
+	secretGen  int
+	lastRotate time.Time
+	// closeRefused: a sign-out was refused (a dependent would not detach), so
+	// ended keys are throttled too.
+	closeRefused bool
+	rot          *rotation
 }
 
 type hub struct {
@@ -343,7 +355,7 @@ func (h *hub) QueryWith(ctx context.Context, query string, args []any, opts ...Q
 		if err != nil {
 			_ = conn.Close()
 			cancel()
-			return nil, h.wrapErr("failed to run query", err)
+			return nil, h.readErr(ctx, "failed to run query", err)
 		}
 		return &Rows{Rows: r, cap: cc.rowCap, cancel: cancel, release: conn.Close}, nil
 	}
@@ -363,7 +375,7 @@ func (h *hub) QueryWith(ctx context.Context, query string, args []any, opts ...Q
 	if err != nil {
 		_ = conn.Close()
 		cancel()
-		return nil, h.wrapErr("failed to run query", err)
+		return nil, h.readErr(ctx, "failed to run query", err)
 	}
 	return &Rows{Rows: r, cap: cc.rowCap, cancel: cancel, release: conn.Close}, nil
 }
@@ -410,7 +422,7 @@ func (h *hub) ExecWith(ctx context.Context, query string, args []any, opts ...Qu
 		h.InvalidateSchema("")
 	}
 	if err != nil {
-		return nil, h.wrapErr("failed to execute statement", err)
+		return nil, h.readErr(ctx, "failed to execute statement", err)
 	}
 	return res, nil
 }
@@ -469,7 +481,7 @@ func (c *Conn) Query(ctx context.Context, query string, args ...any) (*Rows, err
 	r, err := c.c.QueryContext(ctx, query, args...)
 	if err != nil {
 		cancel()
-		return nil, c.h.wrapErr("failed to run query", err)
+		return nil, c.h.readErr(ctx, "failed to run query", err)
 	}
 	return &Rows{Rows: r, cap: c.cfg.rowCap, cancel: cancel}, nil
 }
@@ -483,7 +495,7 @@ func (c *Conn) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 		c.h.InvalidateSchema("")
 	}
 	if err != nil {
-		return nil, c.h.wrapErr("failed to execute statement", err)
+		return nil, c.h.readErr(ctx, "failed to execute statement", err)
 	}
 	return res, nil
 }

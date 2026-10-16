@@ -17,11 +17,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -117,8 +119,19 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	}
 	// The session shares the app's redactor, so a credential resolved for a
 	// connection is scrubbed from its connect and query errors (#114).
+	// A secret the hub could not renew signs its connection out during someone's
+	// statement (an agent's, an MCP client's): the rail must hear of it.
+	var live atomic.Pointer[session.Session]
+	onStatus := func(name string) {
+		// Only the workspace that is open now: a hub being closed, or one already
+		// replaced, must not paint names into the next workspace's rail.
+		if s := live.Load(); s != nil && a.liveSess.Load() == s {
+			a.emitStatus(*s, name)
+		}
+	}
 	opened, err := hub.Open(a.ctxOrBackground(), root, hub.OpenOptions{
-		App: hub.AppStudio, Mode: hmode, FallbackReadOnly: true, RepairMissingID: true,
+		SessionOptions: []session.Option{session.WithStatusListener(onStatus)},
+		App:            hub.AppStudio, Mode: hmode, FallbackReadOnly: true, RepairMissingID: true,
 		TakeOverTimeout: 10 * time.Second,
 		HubOptions:      []hub.Option{hub.WithReleaseHandler(a.onReleaseRequested)},
 		Logger:          a.logger, Resolver: a.secrets, Redactor: a.secrets.Redactor(),
@@ -131,6 +144,8 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	readOnly, holder := opened.ReadOnly, opened.Holder
 
 	a.ws, a.sess, a.hold = ws, sess, hold
+	live.Store(&sess)
+	a.liveSess.Store(&sess)
 	a.engine = opened.Eng
 	a.issues = issues
 	a.recordConnSigs(ws)
@@ -201,6 +216,7 @@ func (a *App) CloseWorkspace() error {
 // open the DuckDB files the moment the lock is free. A no-op with none open.
 // reason rides on "workspace:closed" ("closed", "switch", "released").
 func (a *App) closeWorkspaceLocked(reason string) {
+	a.liveSess.Store(nil)
 	// Previewed bundles were compared with this workspace: forget them.
 	a.bundles.clear()
 	// A running chat turn must not outlive the session it is writing to.

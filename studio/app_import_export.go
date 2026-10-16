@@ -43,6 +43,9 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 	if ddb == nil {
 		return "", fmt.Errorf("DuckDB not available")
 	}
+	// The statement runs on the pool, not the engine: renew a storage secret
+	// that is about to end and dial what it names, as the engine would.
+	_ = a.sess.ConnectReferenced(a.ctxOrBackground(), "", sqlStr)
 	if err := session.CopyQueryTo(ddb, sqlStr, dst, copyOpts); err != nil {
 		return "", fmt.Errorf("failed to export query results: %w", err)
 	}
