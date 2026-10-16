@@ -11,6 +11,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/usersql"
 )
 
 // --- Queries ---
@@ -84,12 +85,21 @@ type RunQueryRequest struct {
 	TabID string `json:"tabId"`
 }
 
-// RunQuery runs the query editor's statement on the chosen connection.
-func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
+// validateRunRequest checks the connection name and refuses what would undo
+// Vibe's own protections (LOAD, secret DDL; see usersql.CheckManaged).
+func validateRunRequest(req RunQueryRequest) error {
 	if req.Connection != "" {
 		if err := session.ValidateName(req.Connection); err != nil {
-			return nil, fmt.Errorf("unknown connection %q", req.Connection)
+			return fmt.Errorf("unknown connection %q", req.Connection)
 		}
+	}
+	return usersql.CheckManaged(req.SQL)
+}
+
+// RunQuery runs the query editor's statement on the chosen connection.
+func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
+	if err := validateRunRequest(req); err != nil {
+		return nil, err
 	}
 	a.mu.RLock()
 	defer a.mu.RUnlock()

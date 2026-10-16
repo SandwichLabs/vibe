@@ -20,7 +20,7 @@ var extensionSizeHint = map[string]string{"excel": "about 2 MB"}
 // directory, so a feature that needs an extension must ask for it explicitly;
 // the first use downloads it once. A failure is returned with a message fit
 // for the UI, never swallowed, so callers cannot silently degrade.
-func EnsureExtension(ctx context.Context, db Execer, name, feature string) error {
+func EnsureExtension(ctx context.Context, db storageQuerier, name, feature string) error {
 	if !connname.Valid(name) {
 		return fmt.Errorf("invalid extension name %q", name)
 	}
@@ -35,5 +35,5 @@ func EnsureExtension(ctx context.Context, db Execer, name, feature string) error
 	if _, err := db.ExecContext(ctx, "LOAD "+q); err != nil {
 		return fmt.Errorf("%s could not load the DuckDB %q extension: %w", feature, name, err)
 	}
-	return nil
+	return DenyUncoveredStorage(ctx, db)
 }

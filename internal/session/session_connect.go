@@ -271,6 +271,9 @@ func (h *hub) readyForConnect(ctx context.Context, conn *sql.Conn, e *entry, ct 
 			}
 		}
 	}
+	if err := DenyUncoveredStorage(ctx, conn); err != nil {
+		return secrets.Credential{}, StatusError, h.redact(err.Error()), err
+	}
 	var cred secrets.Credential
 	if ct.NeedsCredential(e.spec) {
 		if e.spec.Credential == nil {

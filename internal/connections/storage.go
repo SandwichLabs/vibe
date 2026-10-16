@@ -108,14 +108,18 @@ func (t storageType) SecretSteps(s session.Spec, c secrets.Credential) ([]sessio
 		{Key: "KEY_ID", Value: c.KeyID},
 		{Key: "SECRET", Value: c.Secret, Secret: true},
 	}
-	if c.Token != "" && t.kind == "s3" {
-		params = append(params, session.SecretParam{Key: "SESSION_TOKEN", Value: c.Token, Secret: true})
+	// Every field is explicit. DuckDB fills a field a secret leaves out from its
+	// s3_* settings, and httpfs fills those from the host's AWS_* environment at
+	// load (#135), so an omitted SESSION_TOKEN or REGION would be the host's.
+	token := ""
+	if t.kind == "s3" {
+		token = c.Token
 	}
+	params = append(params,
+		session.SecretParam{Key: "SESSION_TOKEN", Value: token, Secret: true},
+		session.SecretParam{Key: "REGION", Value: storageRegion(t.kind, param(s, "region"))})
 	switch t.kind {
 	case "s3":
-		if r := param(s, "region"); r != "" {
-			params = append(params, session.SecretParam{Key: "REGION", Value: r})
-		}
 		if e := opt(s, "endpoint"); e != "" {
 			params = append(params, session.SecretParam{Key: "ENDPOINT", Value: e})
 		}
@@ -215,4 +219,17 @@ func StorageTypeForScheme(scheme string) (string, bool) {
 		return "azure", true
 	}
 	return "", false
+}
+
+// storageRegion is the region a secret is written with: the connection's own,
+// else the provider's default (never the host's AWS_REGION, #135).
+func storageRegion(kind, region string) string {
+	switch {
+	case region != "":
+		return region
+	case kind == "s3":
+		return "us-east-1"
+	default:
+		return "auto"
+	}
 }

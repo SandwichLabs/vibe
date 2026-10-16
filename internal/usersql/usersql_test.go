@@ -76,3 +76,18 @@ func TestRequireSelect(t *testing.T) {
 		assert.Error(t, RequireSelect(ctx, db, s), s)
 	}
 }
+
+func TestCheckManagedRefusesOnlyLoadAndSecretDDL(t *testing.T) {
+	for _, bad := range []string{
+		"LOAD httpfs", "install httpfs", "DROP TEMPORARY SECRET \"vibe-deny-s3\"",
+		"select 1; drop secret if exists x", "CREATE OR REPLACE SECRET s (TYPE s3)", "-- c\nLOAD aws", "FORCE INSTALL httpfs", "force install httpfs FROM core", "UPDATE EXTENSIONS", "update extensions (httpfs)",
+	} {
+		assert.Error(t, CheckManaged(bad), bad)
+	}
+	for _, ok := range []string{
+		"SELECT 'LOAD x'", "ATTACH 'a.duckdb' AS a", "SET threads=1", "COPY t TO 'f.csv'",
+		"DROP TABLE secrets", "UPDATE t SET x = 1", "CREATE TABLE t AS SELECT 1",
+	} {
+		assert.NoError(t, CheckManaged(ok), ok)
+	}
+}
