@@ -473,6 +473,7 @@ func (h *hub) ConnectReferenced(ctx context.Context, catalog, sqlText string) er
 	// Before the "nothing pending" early return: it is the attached storage
 	// secrets that may be about to end, not the pending connections.
 	rotErr := h.rotateDue(ctx)
+	h.reviveSignedOut(ctx)
 	h.mu.RLock()
 	var pending []string
 	for n, e := range h.conns {

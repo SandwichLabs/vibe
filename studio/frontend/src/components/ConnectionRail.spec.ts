@@ -9,6 +9,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {}, EventsO
 import ConnectionRail from './ConnectionRail.vue'
 import { _resetConnectionsForTests, connectionList, signInFor, extensionFor } from '../composables/useConnections'
 import { _resetForTests as resetWorkspace, takeOverOpen } from '../composables/useWorkspace'
+import { startSignInTracking, _resetSignInForTests } from '../composables/useSignIn'
 import { confirmVisible, confirmMessage, resolveConfirmChoice } from '../composables/useConfirm'
 
 const conn = (over: Partial<ConnectionInfo>): ConnectionInfo => ({
@@ -135,6 +136,25 @@ describe('ConnectionRail', () => {
     await w.find('[data-name="bad"] .tn').trigger('click')
     expect(push).toHaveBeenCalledWith({ path: '/connections/bad', query: { test: '1' } })
     expect(w.find('[data-name="bad"] [data-testid="conn-detail"]').text()).toContain('Can’t connect: password was rejected.')
+  })
+
+  it('an AWS SSO connection that needs a sign-in says so and its Sign in runs the sign-in, not the key prompt (#131)', async () => {
+    const app = setup([LOCAL, conn({ name: 'store', type: 's3', status: 'needs-credentials', catalogless: true, signIn: 'aws-sso:dev', signInNeeded: { kind: 'aws-sso', subject: 'dev', reason: 'expired' } })],
+      { 'local//': { kind: 'tables', schema: 'main', flattened: true, nodes: [] } })
+    app.StartSignIn = vi.fn(async () => ({ connection: 'store', profile: 'dev', url: 'https://device.sso.us-east-1.amazonaws.com/', code: 'ABCD-EFGH', expiresAt: '' }))
+    ;(window as any).runtime = {}
+    _resetSignInForTests()
+    startSignInTracking()
+    const w = mountRail()
+    await flushPromises()
+    const d = w.find('[data-name="store"] [data-testid="conn-detail"]')
+    expect(d.text()).toContain('AWS session for profile dev has expired.')
+    expect(d.text()).not.toContain('access keys')
+    await d.find('button').trigger('click')
+    await flushPromises()
+    expect(app.StartSignIn).toHaveBeenCalledWith({ name: 'store', scope: '' })
+    expect(signInFor.value).toBeNull()
+    delete (window as any).runtime
   })
 
   it('Shift+F10 opens the context menu with the connection actions; Remove confirms first', async () => {

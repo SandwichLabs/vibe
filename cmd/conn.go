@@ -47,7 +47,7 @@ func openWS(cmd *cobra.Command) (workspace.Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver()))
+	ws, err := workspace.Open(root, workspace.WithLogger(logger), workspace.WithResolver(cliResolver(ssoTestOptions(cmdCtx(cmd))...)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the workspace: %w", err)
 	}
@@ -378,7 +378,11 @@ func runConnTest(cmd *cobra.Command, args []string) error {
 		var nc *secrets.ErrNeedsCredentials
 		var fp *secrets.ErrFingerprintChanged
 		if errors.As(err, &nc) || errors.As(err, &fp) || errors.Is(err, secrets.ErrUnavailable) {
-			return fmt.Errorf("%s: needs credentials: %s", args[0], cliRedactor.Redact(err.Error()))
+			msg := cliRedactor.Redact(err.Error())
+			if nc != nil && nc.SignIn != nil {
+				msg += " Or run: vibe conn credentials sign-in " + args[0]
+			}
+			return fmt.Errorf("%s: needs credentials: %s", args[0], msg)
 		}
 		return errors.New(cliRedactor.Redact(err.Error()))
 	}
@@ -661,7 +665,8 @@ func init() {
 	addConnWorkspaceFlag(connCredsSetCmd)
 	addConnWorkspaceFlag(connCredsClearCmd)
 	addConnWorkspaceFlag(connCredsStatusCmd)
-	connCredentialsCmd.AddCommand(connCredsSetCmd, connCredsClearCmd, connCredsStatusCmd)
+	addConnWorkspaceFlag(connCredsSignInCmd)
+	connCredentialsCmd.AddCommand(connCredsSetCmd, connCredsClearCmd, connCredsStatusCmd, connCredsSignInCmd)
 
 	connCmd.AddCommand(connAddCmd, connListCmd, connTestCmd, connConnectCmd, connRmCmd, connMoveCmd, connCredentialsCmd)
 	rootCmd.AddCommand(connCmd, connChildCmd)

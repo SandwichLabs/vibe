@@ -12,6 +12,7 @@ import ConnTypeTile from '../components/ConnTypeTile.vue'
 import ConnectionTypePicker from '../components/ConnectionTypePicker.vue'
 import CredentialField from '../components/CredentialField.vue'
 import S3PresetPicker from '../components/S3PresetPicker.vue'
+import SsoSignIn from '../components/SsoSignIn.vue'
 import StorageNeed from '../components/StorageNeed.vue'
 import ScopePicker from '../components/ScopePicker.vue'
 import TestResult from '../components/TestResult.vue'
@@ -160,7 +161,7 @@ const {
       <!-- Sign-in -->
       <div v-if="needsSignIn" class="form-sec">
         <h3>Sign-in <span class="label">Just you · this computer</span></h3>
-        <div class="opt-row" role="radiogroup" aria-label="How you sign in">
+        <div class="opt-row" :class="{ four: spec?.signInMethods.includes('aws-sso') }" role="radiogroup" aria-label="How you sign in">
           <button type="button" role="radio" class="opt-card" :class="{ on: method === 'keychain' }" :aria-checked="method === 'keychain'" data-testid="method-keychain" @click="method = 'keychain'">
             <span><span class="ot">My keychain</span><span class="od">Saved once on this computer.</span></span>
           </button>
@@ -170,16 +171,16 @@ const {
           <button type="button" role="radio" class="opt-card" :class="{ on: method === 'prompt' }" :aria-checked="method === 'prompt'" data-testid="method-prompt" @click="method = 'prompt'">
             <span><span class="ot">Ask me each time</span><span class="od">Vibe asks when it connects and forgets it when you close the workspace.</span></span>
           </button>
+          <button v-if="spec?.signInMethods.includes('aws-sso')" type="button" role="radio" class="opt-card" :class="{ on: method === 'aws-sso' }" :aria-checked="method === 'aws-sso'" data-testid="method-aws-sso" @click="method = 'aws-sso'">
+            <span><span class="ot">AWS profile (SSO)</span><span class="od">Sign in with your IAM Identity Center profile. Short-lived keys, nothing stored.</span></span>
+          </button>
         </div>
 
         <div v-if="method === 'env' && bindingChanged" class="note warn" role="status" data-testid="env-server-changed">
           <Icon name="alert" :size="16" />
           <span><b>The server changed since you chose these variables.</b>{{ ' ' }}{{ detail?.info.serverChanged ? `(${detail.info.serverChanged.old} to ${detail.info.serverChanged.new}). ` : '' }}They are not used for it until you confirm: Save asks first, and nothing is sent in the meantime.</span>
         </div>
-        <div v-if="method === 'aws-sso'" class="note info" data-testid="sso-signin">
-          <Icon name="shieldCheck" :size="16" />
-          <span>Signs in with AWS profile <b>{{ ssoProfile }}</b> (IAM Identity Center). Nothing is stored. Sign in with <code>aws sso login --profile {{ ssoProfile }}</code>. Pick one of the cards above to change it.</span>
-        </div>
+        <SsoSignIn v-if="method === 'aws-sso'" v-model:profile="ssoProfile" :connection="isNew ? '' : editName" :saved="!isNew && detail?.signIn === `aws-sso:${ssoProfile}`" />
         <template v-else-if="method === 'keychain'">
           <div v-for="c in readableCreds" :key="c.name" class="field">
             <label class="field-label" :for="`f-c-${c.name}`">{{ c.label }}<span v-if="c.required" aria-hidden="true"> *</span></label>

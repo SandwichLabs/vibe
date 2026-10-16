@@ -116,6 +116,12 @@ tasks:
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
+  studio:dev:ssofake:
+    desc: Studio dev with AWS sign-in pointed at local fakes (Rodney QA only; run tools/ssofake first and set VIBE_SSOFAKE_OIDC and VIBE_SSOFAKE_PORTAL; never a release or CI build)
+    dir: studio
+    cmds:
+      - wails dev -tags webkit2_41,duckdb_arrow,ssofake
+
   build:all:
     desc: Build both CLI and Studio desktop app
     cmds:

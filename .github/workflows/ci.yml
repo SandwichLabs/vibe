@@ -139,6 +139,18 @@ jobs:
       - name: Layering
         run: scripts/check-layering.sh
 
+      # Blocking: the ssofake build tag (AWS sign-in against local fakes, Rodney QA) never reaches a CI,
+      # release or packaging build.
+      - name: No ssofake tag in shipped builds
+        run: scripts/check-no-ssofake.sh
+
+      - name: Self-test the binary tag check
+        run: scripts/test-check-binary-tags.sh
+
+      # The ssofake dev seam is never compiled by a real build: keep it vetting.
+      - name: Vet the ssofake dev build
+        run: go vet -tags ssofake,webkit2_41,duckdb_arrow ./studio/
+
       # Blocking: every exported App method needs a non-test frontend caller.
       - name: Wails binding usage
         run: scripts/check-bindings.sh
@@ -253,3 +265,10 @@ jobs:
       - name: Check the Studio binary exists
         shell: bash
         run: ls -l studio/build/bin/
+
+      # The ssofake tag (AWS sign-in against local fakes) must never ship: read it back from the binary.
+      - name: Check the Studio binary has no ssofake tag
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/vibe-studio.app/Contents/MacOS/vibe-studio; else studio=studio/build/bin/vibe-studio; fi
+          scripts/check-binary-tags.sh "$studio"

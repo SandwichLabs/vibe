@@ -217,6 +217,8 @@ func (a *App) CloseWorkspace() error {
 // reason rides on "workspace:closed" ("closed", "switch", "released").
 func (a *App) closeWorkspaceLocked(reason string) {
 	a.liveSess.Store(nil)
+	// A sign-in flow ends with the workspace it was started in.
+	a.flows.cancelAll()
 	// Previewed bundles were compared with this workspace: forget them.
 	a.bundles.clear()
 	// A running chat turn must not outlive the session it is writing to.

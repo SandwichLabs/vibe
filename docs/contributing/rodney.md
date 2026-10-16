@@ -265,3 +265,11 @@ A `dev` binary (`task studio:dev`, `go run`) honours two environment variables t
 The hooks apply to any binary whose version is `dev`, so a `go install` build honours them too; such a build is never manifest-managed (it is not listed in an install manifest), so it can check but not apply unless you fake a manifest as below.
 
 Applying needs the running binary to be listed in an install manifest: point `XDG_DATA_HOME` at a temp dir and write `vibe/install-manifest` there (`version=0.1.0` plus `F <64 hex> /abs/path/to/the/running/binary`). Use a temp `HOME`, `XDG_CONFIG_HOME` (or `VIBE_CONFIG_DIR`) and `XDG_DATA_HOME` so your real preferences and install are untouched, and a fake `install.sh` that only rewrites the temp manifest's `version=` line. Never run the real `install.sh` against your own `~/.local`.
+
+## AWS sign-in without AWS (the `ssofake` dev build)
+
+`task studio:dev:ssofake` runs the Wails dev server with the `ssofake` build tag (`studio/ssofake.go`), which points AWS sign-in at a loopback fake IAM Identity Center and lifts the AWS-endpoint rule so a connection can read a local MinIO. It exists for Rodney QA of the sign-in banner and the editor card; it is never part of CI or a release (`scripts/check-no-ssofake.sh` fails the build if a shipped build names the tag).
+
+1. Start the fake: `go run ./tools/ssofake --addr 127.0.0.1:38999 [--minio 127.0.0.1:PORT --secret MINIOSECRET]` (with `--minio` the portal hands out MinIO STS credentials, so reads work; `--cred-life 6m` is how long it says they last, and Vibe renews five minutes before).
+2. Give the dev server a home with `~/.aws/config` holding an SSO profile (`sso_start_url = https://corp.awsapps.com/start`, `sso_region = us-east-1`, an account and a role) and start it with `VIBE_SSOFAKE_OIDC=http://127.0.0.1:38999 VIBE_SSOFAKE_PORTAL=http://127.0.0.1:38999`. The build opens no browser for the sign-in page; it logs the address instead.
+3. Drive the fake from the shell: `curl 127.0.0.1:38999/_ctl/approve` (the person approved in the browser), `/_ctl/deny`, `/_ctl/expire` (the session ended: the portal refuses its tokens and the refresh), `/_ctl/state`.

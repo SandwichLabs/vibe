@@ -15,3 +15,4 @@ rule:
 ignores:
   - "**/*_test.go"
   - "internal/workspace/ssomethod.go"
+  - "studio/ssofake.go"

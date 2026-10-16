@@ -25,6 +25,13 @@ describe('connection display helpers (#117)', () => {
       .toMatchObject({ text: 'Needs a MotherDuck token.', actionLabel: 'Add it' })
     expect(detailLine({ ...base, status: 'needs-credentials', serverChanged: { old: 'db.internal', new: 'db-new.internal' } })!)
       .toMatchObject({ text: 'The server changed since you signed in (db.internal to db-new.internal).', actionLabel: 'Sign in again', action: 'signin' })
+    // An AWS SSO connection is not asked for access keys: it signs in (#131).
+    expect(detailLine({ ...base, type: 's3', status: 'needs-credentials', signIn: 'aws-sso:dev', signInNeeded: { kind: 'aws-sso', subject: 'dev', reason: 'expired' } })!)
+      .toMatchObject({ text: 'AWS session for profile dev has expired.', action: 'signin', actionLabel: 'Sign in' })
+    expect(detailLine({ ...base, type: 's3', status: 'needs-credentials', signInNeeded: { kind: 'aws-sso', subject: 'dev', reason: 'missing' } })!)
+      .toMatchObject({ text: 'Not signed in to AWS profile dev.', actionLabel: 'Sign in' })
+    expect(detailLine({ ...base, type: 's3', status: 'needs-credentials', signIn: 'aws-sso:dev' })!.text).not.toContain('access keys')
+    expect(detailLine({ ...base, type: 's3', status: 'needs-credentials' })!.text).toBe('Needs access keys.')
     expect(detailLine({ ...base, type: 's3', status: 'extension-missing', extension: 'httpfs' })!)
       .toMatchObject({ text: 'Needs the httpfs extension.', action: 'install' })
     expect(detailLine({ ...base, status: 'locked-by', lockedByPid: 4182 })!)

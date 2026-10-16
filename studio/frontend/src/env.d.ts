@@ -75,6 +75,8 @@ interface AppApi {
   ConnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
   ConnectWithCredentials(req: ConnectWithCredentialsRequest): Promise<ConnectionInfo | null>
   DisconnectConnection(ref: ConnectionRef): Promise<ConnectionInfo | null>
+  StartSignIn(ref: ConnectionRef): Promise<SignInPrompt>
+  CancelSignIn(ref: ConnectionRef): Promise<void>
   RefreshCatalog(ref: ConnectionRef): Promise<void>
   SetConnectionCredentials(req: SetCredentialsRequest): Promise<ConnectionInfo | null>
   ClearConnectionCredentials(req: { name: string; field: string }): Promise<ConnectionInfo | null>
@@ -220,7 +222,14 @@ interface ConnectionInfo {
   signIn?: string
   extension?: string
   serverChanged?: { old: string; new: string }
+  // Set on needs-credentials that is because an AWS profile must sign in
+  // (#131): the profile and why. No account, role or start URL.
+  signInNeeded?: SignInHint
 }
+// What the window may know about an AWS sign-in: the profile and the reason.
+interface SignInHint { kind: string; subject: string; reason: string }
+// What the person is shown to finish a sign-in: the page that was opened and the code it should show.
+interface SignInPrompt { connection: string; profile: string; url: string; code: string; expiresAt: string }
 
 // --- Connections (#117): mirrors studio/connections.go. No field here is a
 // secret; the password, token and secret key are write-only. ---
@@ -302,6 +311,10 @@ interface ConnCredentialStatus {
   available: boolean
   detail?: string
   env?: { name: string; set: boolean }[]
+  // aws-sso only: the profile, whether its session works, and when it ends.
+  profile?: string
+  signedIn?: boolean
+  expiresAt?: string
 }
 interface ConnectionDetail {
   name: string

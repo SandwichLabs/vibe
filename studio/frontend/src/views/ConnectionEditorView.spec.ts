@@ -49,7 +49,7 @@ const TYPES: ConnTypeSpec[] = [
     fields: [field({ name: 'scope', label: 'Scope', kind: 'url', required: true }), field({ name: 'region', label: 'Region', default: 'us-east-1' }), field({ name: 'endpoint', label: 'Endpoint', option: true }),
       field({ name: 'use_ssl', label: 'Use TLS', kind: 'enum', choices: ['true', 'false'], default: 'true', option: true })],
     credentials: [field({ name: 'key_id', label: 'Key id', perPerson: true }), field({ name: 'secret', label: 'Secret', secret: true, perPerson: true })],
-    requiresExtension: ['httpfs'], capabilities: { catalog: false, writable: false, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope', 'option:use_ssl'], signInMethods: ['keychain', 'env', 'prompt'], soon: false,
+    requiresExtension: ['httpfs'], capabilities: { catalog: false, writable: false, readOnlyAttach: false, remote: true, test: true }, fingerprintFields: ['type', 'scope', 'option:use_ssl'], signInMethods: ['keychain', 'env', 'prompt', 'aws-sso'], soon: false,
     presets: [
       { id: 'aws', label: 'Amazon S3', options: {} },
       { id: 'minio', label: 'MinIO', options: { endpoint: 'localhost:9000', url_style: 'path', use_ssl: 'false' } },
@@ -460,12 +460,14 @@ describe('ConnectionEditorView', () => {
       return detail({ name: 'lake', def, signIn: 'aws-sso:dev', credential: { method: 'aws-sso:dev', secretSet: false, fingerprintMatches: true, available: true }, info: { ...detail().info, name: 'lake', type: 's3' }, ...over })
     }
 
-    it('an AWS SSO sign-in is shown read-only and saved with its real method string', async () => {
+    it('an AWS SSO sign-in is the fourth card: a profile and a session line, no key fields, saved with its real method string', async () => {
       const app = makeApp({ GetConnectionInScope: vi.fn(async () => ssoDetail()) })
       route.path = '/connections/lake'; route.params = { name: 'lake' }
       const w = mountView()
       await flushPromises()
-      expect(w.find('[data-testid="sso-signin"]').text()).toContain('Signs in with AWS profile dev')
+      expect((w.find('[data-testid="f-sso-profile"]').element as HTMLInputElement).value).toBe('dev')
+      expect(w.find('[data-testid="method-aws-sso"]').attributes('aria-checked')).toBe('true')
+      expect(w.find('[data-testid="sso-signin-now"]').exists()).toBe(true)
       expect(w.find('[data-testid="f-c-key_id"]').exists()).toBe(false)
       await w.find('form').trigger('submit')
       await flushPromises()
