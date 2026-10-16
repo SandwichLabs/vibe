@@ -93,8 +93,10 @@ vibe conn add gcsdata --type gcs --prefix gcs://bucket/path/
 The credential is an access key id and secret (prompted, or `--sign-in env:PREFIX` with `PREFIX_KEY_ID` and `PREFIX_SECRET`; `PREFIX_TOKEN` for an S3 session token). For an S3-compatible store add `--option endpoint=...` (and, if needed, `url_style`). Once connected, query files by URL under the prefix:
 
 ```sql
-SELECT * FROM read_parquet('s3://acme-lake/raw/2026/*.parquet') LIMIT 10;
+SELECT * FROM read_parquet('s3://acme-lake/raw/2026/jan.parquet') LIMIT 10;
 ```
+
+Name each file: an `s3://`, `gcs://` or `r2://` URL is read as one literal key, so a `*` wildcard does not list anything there (wildcards work only on `az://`). See the object-storage notes in `reference/connections.md`.
 
 ## Azure Blob / ADLS
 

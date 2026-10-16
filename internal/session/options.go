@@ -24,6 +24,13 @@ type config struct {
 	mdSet         bool
 	md            *mdOpen // set by applyHardening
 
+	// listing marks the private listing session (ListObjects): it keeps S3
+	// globbing on and must only ever list one vetted scope (#138).
+	listing bool
+	// lazyStorage is set by applyHardening when httpfs was not loaded at open:
+	// the lock then lets the URL-parameter setting through (allowed_configs).
+	lazyStorage bool
+
 	// initCatalog, once set by SetDefaultCatalog, is USEd on every new pooled
 	// connection of an owned hub so the pool's default catalog follows it.
 	initCatalog atomic.Pointer[string]
@@ -36,6 +43,9 @@ func newConfig(opts []Option) *config {
 	}
 	return c
 }
+
+// withListing marks the private listing session (see ObjectLister).
+func withListing() Option { return func(c *config) { c.listing = true } }
 
 // WithLogger sets the logger. The session never logs SQL text or attach
 // parameters, only connection names and statuses.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
+	"strings"
 	"sync"
 )
 
@@ -28,6 +28,33 @@ import (
 // shorter than any real scope, so a connection whose scope is the whole
 // scheme still wins instead of tying with the deny secret (a tie goes to the
 // secret created first, which would be an accident of ordering).
+
+// Why URL parameters are switched off (#138). httpfs reads ?s3_endpoint=,
+// ?s3_use_ssl=, ?s3_url_style=, ?s3_access_key_id=, ... from an s3://, s3a://,
+// s3n://, r2://, gcs:// or gs:// URL and lets them override the matching
+// secret's own settings, after the secret has been chosen by the URL's scope. A
+// URL inside a connection's scope that carries ?s3_endpoint=attacker is still
+// signed with that connection's key id and session token, and the request goes
+// to the attacker. Such a URL can come from data Vibe cannot vet (the data-file
+// paths in an Iceberg manifest, a DuckLake catalog) or from SQL a person runs.
+//
+// The only switch in DuckDB 1.5.6 that stops it is the global setting
+// s3_url_compatibility_mode: the whole URL is then the key, "?" and "*"
+// included. (The secret parameter URL_COMPATIBILITY_MODE exists but httpfs
+// stores it under a name its reader never asks for, so it does nothing.) It
+// also turns S3 globbing off. Every session that loads httpfs sets it.
+//
+// Accepted residuals: a microsecond window between a lazy LOAD httpfs and the
+// SET, and a SET SESSION on one pooled connection (only reachable by SQL the
+// editor guard refuses).
+//
+// The setting belongs to httpfs, so it can be set only once httpfs is loaded,
+// and httpfs is often loaded after lock_configuration. A session whose httpfs
+// is not loaded when it opens therefore allows exactly this one setting through
+// the lock (allowed_configs), and the load path sets and reads it back
+// (sealURLParams). The statements usersql.CheckManaged lets through refuse to
+// change it.
+const urlParamSetting = "s3_url_compatibility_mode"
 
 // denyEndpoint never resolves.
 const denyEndpoint = "deny.invalid"
@@ -63,11 +90,19 @@ type storageQuerier interface {
 // connections fail with a catalog write-write conflict even with IF NOT EXISTS.
 var denyMu sync.Mutex
 
-// DenyUncoveredStorage creates the catch-all deny secrets once httpfs is
-// loaded. It is idempotent and a no-op until httpfs is loaded, so every place
+// DenyUncoveredStorage protects a session once httpfs is loaded: it turns URL
+// parameters and globs off (#138) and creates the catch-all deny secrets
+// (#135). It is idempotent and a no-op until httpfs is loaded, so every place
 // that loads an extension calls it afterwards. It runs on a connection of the
-// session being protected, because secrets belong to the DuckDB instance.
+// session being protected, because settings and secrets belong to the DuckDB
+// instance.
 func DenyUncoveredStorage(ctx context.Context, q storageQuerier) error {
+	return protectStorage(ctx, q, true)
+}
+
+// protectStorage is DenyUncoveredStorage; sealParams false leaves URL
+// parameters and globs on, for the private listing session only.
+func protectStorage(ctx context.Context, q storageQuerier, sealParams bool) error {
 	denyMu.Lock()
 	defer denyMu.Unlock()
 	_, loaded, err := extensionState(ctx, q, "httpfs")
@@ -77,6 +112,11 @@ func DenyUncoveredStorage(ctx context.Context, q storageQuerier) error {
 	if !loaded {
 		return nil
 	}
+	if sealParams {
+		if err := sealURLParams(ctx, q); err != nil {
+			return err
+		}
+	}
 	for _, stmt := range denyStatements() {
 		if _, err := q.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("failed to protect storage reads from host credentials: %w", err)
@@ -85,10 +125,51 @@ func DenyUncoveredStorage(ctx context.Context, q storageQuerier) error {
 	return nil
 }
 
+// sealURLParams turns URL parameters and globs off for every S3-like scheme
+// and reads the setting back: a session that cannot prove it fails closed.
+func sealURLParams(ctx context.Context, q storageQuerier) error {
+	read := func() (string, error) {
+		var got string
+		err := q.QueryRowContext(ctx, "SELECT CAST(current_setting("+QuoteLiteral(urlParamSetting)+") AS VARCHAR)").Scan(&got)
+		return got, err
+	}
+	got, err := read()
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", urlParamSetting, err)
+	}
+	if strings.EqualFold(got, "true") {
+		// Whichever pooled connection q is, a session-level override on it would
+		// shadow the global value; best effort (a sealed, locked session refuses).
+		_, _ = q.ExecContext(ctx, "SET SESSION "+urlParamSetting+" = true")
+	}
+	if !strings.EqualFold(got, "true") {
+		// Only when it is not already on: once the configuration is locked
+		// and the setting sealed, a second SET would be refused.
+		if _, err := q.ExecContext(ctx, "SET GLOBAL "+urlParamSetting+" = true"); err != nil {
+			return fmt.Errorf("failed to turn off S3 URL parameters: %w", err)
+		}
+		// A session-level override (PRAGMA/SET SESSION on a pooled connection)
+		// would shadow the global value on that connection: set it too.
+		if _, err := q.ExecContext(ctx, "SET SESSION "+urlParamSetting+" = true"); err != nil {
+			return fmt.Errorf("failed to turn off S3 URL parameters: %w", err)
+		}
+		if got, err = read(); err != nil {
+			return fmt.Errorf("failed to read back %s: %w", urlParamSetting, err)
+		}
+	}
+	if !strings.EqualFold(got, "true") {
+		return fmt.Errorf("S3 URL parameters are still on (%s=%q); refusing to read object storage", urlParamSetting, got)
+	}
+	return nil
+}
+
 // prepareStorage runs while a session opens, before the lock: when httpfs is
-// already installed it is loaded now and the deny secrets are created, so
-// there is no window in which it is loaded without them.
-func prepareStorage(ctx context.Context, conn *sql.Conn, log *slog.Logger) error {
+// already installed it is loaded now and protected, so there is no window in
+// which it is loaded without protection. When it is not loaded, the one
+// setting a later load must change is let through the lock (see above) and
+// the session remembers it.
+func prepareStorage(ctx context.Context, conn *sql.Conn, c *config) error {
+	log := c.logger
 	installed, loaded, err := extensionState(ctx, conn, "httpfs")
 	if err != nil {
 		return fmt.Errorf("failed to inspect extensions: %w", err)
@@ -99,8 +180,17 @@ func prepareStorage(ctx context.Context, conn *sql.Conn, log *slog.Logger) error
 			// reported as an error when a connection needs it. Not loaded
 			// means the host settings are never filled either.
 			log.Debug("httpfs could not be loaded while opening the session", "error", err)
-			return nil
 		}
 	}
-	return DenyUncoveredStorage(ctx, conn)
+	if _, loaded, err = extensionState(ctx, conn, "httpfs"); err != nil {
+		return fmt.Errorf("failed to inspect extensions: %w", err)
+	}
+	if !loaded {
+		if _, err := conn.ExecContext(ctx, "SET allowed_configs = ["+QuoteLiteral(urlParamSetting)+"]"); err != nil {
+			return fmt.Errorf("hardening: failed to allow the storage URL setting: %w", err)
+		}
+		c.lazyStorage = true
+		return nil
+	}
+	return protectStorage(ctx, conn, !c.listing)
 }

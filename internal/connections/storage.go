@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -146,23 +147,60 @@ func (t storageType) AttachSQL(s session.Spec) ([]string, error) {
 // Probe lists up to 1000 objects under the scope: one listing round trip, which
 // proves the key, the region and the scope.
 func (t storageType) Probe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {
-	return probeScope(ctx, sess, param(s, "scope"))
+	return t.probeListing(ctx, sess, s)
 }
 
-// probeScope is the storage connections' Test: one listing of the scope. The
-// pattern is "**" so objects in sub-folders count too (a lone "*" stops at the
-// first folder level and reported "0 objects" for a scope of folders).
-func probeScope(ctx context.Context, sess session.Session, scope string) (int, string, error) {
-	var n int
-	err := sess.DB().QueryRowContext(ctx,
-		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(scope+"**")+`) LIMIT 1000)`).Scan(&n)
+// probeListing lists the scope in a private session (session.ObjectLister):
+// the hub reads S3-like URLs literally, so it cannot glob (#138).
+func (t storageType) probeListing(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {
+	lister, ok := sess.(session.ObjectLister)
+	if !ok {
+		return 0, "", errors.New("this session cannot list a scope")
+	}
+	if s.Credential == nil {
+		return 0, "", fmt.Errorf("%s connection %q has no credential to list with", t.kind, s.Name)
+	}
+	cred, err := s.Credential(ctx)
+	if err != nil {
+		return 0, "", fmt.Errorf("could not resolve the credential to list with: %w", err)
+	}
+	steps, err := t.SecretSteps(s, cred)
+	if err != nil {
+		return 0, "", err
+	}
+	if len(steps) != 1 {
+		return 0, "", fmt.Errorf("%s connection %q has no single secret to list with", t.kind, s.Name)
+	}
+	n, err := lister.ListObjects(ctx, steps[0], param(s, "scope")+"**", maxListed)
 	if err != nil {
 		return 0, "", fmt.Errorf("could not list the scope: %w", err)
 	}
-	if n == 1000 {
+	return listingResult(n)
+}
+
+// maxListed bounds the listing a Test makes.
+const maxListed = 1000
+
+// listingResult formats a listing's object count.
+func listingResult(n int) (int, string, error) {
+	if n == maxListed {
 		return n, "1000+ objects", nil
 	}
 	return n, fmt.Sprintf("%d objects", n), nil
+}
+
+// probeScope is the Azure connections' Test: one listing of the scope. The
+// pattern is "**" so objects in sub-folders count too (a lone "*" stops at the
+// first folder level and reported "0 objects" for a scope of folders). Azure
+// does not read through httpfs, so the hub's S3 URL rules do not touch it.
+func probeScope(ctx context.Context, sess session.Session, scope string) (int, string, error) {
+	var n int
+	err := sess.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM (SELECT file FROM glob(`+session.QuoteLiteral(scope+"**")+`) LIMIT `+fmt.Sprint(maxListed)+`)`).Scan(&n)
+	if err != nil {
+		return 0, "", fmt.Errorf("could not list the scope: %w", err)
+	}
+	return listingResult(n)
 }
 
 func (t storageType) Info() TypeInfo {

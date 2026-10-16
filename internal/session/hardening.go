@@ -85,7 +85,7 @@ func expectedSettings(c *config) []hardeningCheck {
 		{"lock_configuration", "true"},
 		// DuckDB 1.5 reads these back as empty lists; a non-empty value would mean
 		// something widened or narrowed what a session may touch or change.
-		{"allowed_configs", "[]"},
+		{"allowed_configs", allowedConfigs(c)},
 		{"extension_directories", "[]"},
 		{"allowed_directories", "[]"},
 		{"allowed_paths", "[]"},
@@ -100,6 +100,15 @@ func expectedSettings(c *config) []hardeningCheck {
 		checks = append(checks, hardeningCheck{"secret_directory", c.secretDir})
 	}
 	return checks
+}
+
+// allowedConfigs is what allowed_configs must read back: nothing, except the one
+// storage setting when httpfs was not loaded at open (see storage_deny.go).
+func allowedConfigs(c *config) string {
+	if c.lazyStorage {
+		return "[" + urlParamSetting + "]"
+	}
+	return "[]"
 }
 
 // applyHardening runs the SET-only options on one connection, locks the
@@ -117,7 +126,7 @@ func applyHardening(ctx context.Context, conn *sql.Conn, c *config) error {
 	if err := prepareMotherDuck(ctx, conn, c); err != nil {
 		return err
 	}
-	if err := prepareStorage(ctx, conn, c.logger); err != nil {
+	if err := prepareStorage(ctx, conn, c); err != nil {
 		return err
 	}
 	if !c.skipLock {

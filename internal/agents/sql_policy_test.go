@@ -509,7 +509,8 @@ func TestPolicy_ScopesForURLs(t *testing.T) {
 	ok := func(u string) { assert.Empty(t, p.vetRead(u), u) }
 	no := func(u string) { assert.NotEmpty(t, p.vetRead(u), u) }
 	ok("s3://lake/raw/a.parquet")
-	ok("s3://lake/raw/2024/*.parquet")
+	no("s3://lake/raw/2024/*.parquet") // S3-like URLs are read literally (#138)
+	assert.Contains(t, p.vetRead("s3://lake/raw/2024/*.parquet"), "wildcards are not available")
 	ok("gcs://bkt/any/thing.csv")
 	ok("r2://acct/x.json")
 	no("s3://lake/other/a.parquet")

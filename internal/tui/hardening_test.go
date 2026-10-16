@@ -86,6 +86,7 @@ func TestCapRowsIfSafe(t *testing.T) {
 		{"SHOW TABLES", true, false},              // not a valid subquery
 		{"DESCRIBE t", true, false},
 		{"PRAGMA table_info('t')", true, false},
+		{"PRAGMA version", true, false},
 		{"SELECT 1; SELECT 2", true, false}, // multi-statement, even if (hypothetically) classified read
 		{"", true, false},
 		// The caller-supplied readOnly=false is authoritative: even a

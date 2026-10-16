@@ -335,10 +335,12 @@ func TestStorageScopeThroughTheAgent(t *testing.T) {
 	assert.EqualValues(t, 2, rowsOf(t, resp)[0][0])
 	resp = sqlCall(h, "SELECT count(*) FROM 's3://lake/raw/a.parquet'")
 	require.Nil(t, resp.Error, errText(resp))
+	// S3-like URLs are read literally (#138), so a wildcard is refused up front.
 	resp = sqlCall(h, "SELECT count(*) FROM glob('s3://lake/raw/*')")
-	require.Nil(t, resp.Error, errText(resp))
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, errText(resp), "wildcards are not available")
 	resp = sqlCall(h, "DESCRIBE SELECT * FROM read_parquet('s3://lake/raw/*.parquet')")
-	require.Nil(t, resp.Error, errText(resp))
+	require.NotNil(t, resp.Error)
 
 	for _, q := range []string{
 		"SELECT * FROM read_parquet('s3://lake/private/p.parquet')",

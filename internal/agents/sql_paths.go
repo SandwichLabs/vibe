@@ -173,7 +173,11 @@ func (p *pathPolicy) vetURL(lit string) string {
 	// URL is: known scheme, lower case, no query, fragment, percent-escape,
 	// backslash, "." / ".." / empty segment. Anything else is never readable.
 	if err := storageurl.ValidateRead(lit); err != nil {
-		return fmt.Sprintf("the URL %q is not a plain storage URL (%v); only plain object paths inside a storage connection's scope can be read", lit, err)
+		hint := ""
+		if strings.Contains(lit, "*") && storageurl.Scheme(lit) != "" {
+			hint = "; wildcards are not available on S3, GCS or R2 reads (name each file, or read through a lake)"
+		}
+		return fmt.Sprintf("the URL %q is not a plain storage URL (%v); only plain object paths inside a storage connection's scope can be read%s", lit, err, hint)
 	}
 	for _, s := range p.scopes {
 		if storageurl.Within(lit, s) {

@@ -251,7 +251,7 @@ func TestPolicy_OnlyStorageSchemesAndTypesWidenReads(t *testing.T) {
 	for _, u := range []string{"s3://ok/p/../q", "s3://ok/p/%2e%2e/q", "s3://ok/p/%2E%2E/q", "s3://ok/p//q", "s3://ok/p/./q", "s3://ok/p/q?x", "s3://ok/p/q#f", "S3://ok/p/q", "s3a://ok/p/q", "s3://OK/p/q"} {
 		assert.NotEmpty(t, p.vetRead(u), u)
 	}
-	assert.Empty(t, p.vetRead("s3://ok/p/q/*.parquet"))
+	assert.NotEmpty(t, p.vetRead("s3://ok/p/q/*.parquet"), "an S3-like URL is read literally, so a wildcard is refused (#138)")
 }
 
 func TestDropDuckLakeInternalRows(t *testing.T) {

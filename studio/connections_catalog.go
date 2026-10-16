@@ -74,6 +74,14 @@ func statusSnapshot(sess session.Session) map[string]session.StatusKind {
 // failed) gets its status refreshed, and anything that is not a plain read, or
 // that attached something, emits catalog:changed so open levels reload.
 func (a *App) afterRun(sess session.Session, before map[string]session.StatusKind, sqlText string) {
+	// Defence in depth (#138): whatever the run did, the S3 URL setting is on
+	// again before the next one. A no-op unless httpfs is loaded. Residual: a
+	// session-level override on the editor's own pinned connection is reset only
+	// if the pool hands that connection back here; reaching one needs both the
+	// text guard and the parser guard (usersql.CheckParsed) to have missed it.
+	if err := session.DenyUncoveredStorage(a.ctxOrBackground(), sess.DB()); err != nil && a.logger != nil {
+		a.logger.Warn("could not re-check the S3 URL setting after a run", "error", err)
+	}
 	changed := false
 	for _, st := range sess.Connections() {
 		if before[st.Name] != st.Kind {
