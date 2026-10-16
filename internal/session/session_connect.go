@@ -32,6 +32,11 @@ func (h *hub) Register(spec Spec) error {
 	if err := t.Validate(spec); err != nil {
 		return err
 	}
+	// adminMu first (then mu): swapping an entry while connectLocked is between
+	// its re-read and setting attach would orphan the entry the catalog (and
+	// its secrets) were attached under.
+	h.adminMu.Lock()
+	defer h.adminMu.Unlock()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if old, ok := h.conns[spec.Name]; ok && old.attach {
@@ -315,6 +320,12 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 	if e == nil {
 		return
 	}
+	h.preflightEntry(ctx, name, e, att)
+}
+
+// preflightEntry is Preflight for the entry (and attached state) it was
+// handed, which may be stale by the time adminMu is taken.
+func (h *hub) preflightEntry(ctx context.Context, name string, e *entry, att bool) {
 	t, err := h.types.Get(e.spec.Type)
 	if err != nil {
 		return
@@ -330,6 +341,20 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 	if att && storage {
 		// Drop the old secret first: the credential may have changed or gone.
 		h.adminMu.Lock()
+		// e and att were read before adminMu: Detach and Register may have
+		// replaced the entry since. Dropping the stale entry's secrets would
+		// then drop the secret of the new entry (same secret names), which
+		// stays attached with none and lets its dependents attach bare.
+		cur, curAtt := h.entryOf(name)
+		if cur != e {
+			h.adminMu.Unlock()
+			return
+		}
+		if !curAtt {
+			h.adminMu.Unlock()
+			h.preflightDetached(ctx, name, e, ct, storage)
+			return
+		}
 		if conn, err := h.db.Conn(ctx); err == nil {
 			if derr := h.detachDependents(ctx, conn, name); derr != nil {
 				// Fail closed: keep the old secret rather than leave a dependent
@@ -347,6 +372,12 @@ func (h *hub) Preflight(ctx context.Context, name string) {
 		h.mu.Unlock()
 		h.adminMu.Unlock()
 	}
+	h.preflightDetached(ctx, name, e, ct, storage)
+}
+
+// preflightDetached is the rest of Preflight for a connection that is not
+// attached: record whether it is ready, and bring a storage connection up.
+func (h *hub) preflightDetached(ctx context.Context, name string, e *entry, ct CredentialedType, storage bool) {
 	conn, err := h.db.Conn(ctx)
 	if err != nil {
 		return
