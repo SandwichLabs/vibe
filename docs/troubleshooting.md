@@ -95,6 +95,14 @@ The chat agent needs a model provider. Set one in Studio (Settings, App) or with
 
 The connection signs in with your AWS IAM Identity Center profile and the session has ended (or never started). Nothing is read until you sign in: Vibe never falls back to anonymous access. In Studio press **Sign in** in the banner; in a terminal run `vibe conn credentials sign-in NAME` or `aws sso login --profile PROFILE`. A running `vibe mcp serve` looks for the new session on the first statement that runs at least 30 seconds after its last look. If the profile is missing or not an SSO profile, `vibe conn credentials status NAME` says so; see [Connections](reference/connections.md#aws-sso-sign-in-s3).
 
+## S3: `AuthorizationHeaderMalformed` or a 301 after updating to 0.1.4
+
+Since 0.1.4 Vibe never reads your shell's `AWS_*` variables, `AWS_REGION` included. A connection to a bucket outside `us-east-1` that only worked because your shell set `AWS_REGION` now signs for the wrong region. Set the region on the connection: `vibe conn add NAME ... --region eu-west-1`, or the Region field in the editor.
+
+## S3: a wildcard query is refused
+
+Vibe expands `*` and `**` itself on s3, gcs and r2 (0.1.4). `?` and `[...]` are refused in a pattern, one statement expands to at most 10,000 objects, a pattern with no match is an error, and the pattern must start with the scope of a ready storage connection. Narrow the prefix, or connect the storage connection first.
+
 ## Where the logs are
 
 Vibe writes no log file. The command line and Studio log structured JSON lines to **stderr**, and `vibe mcp serve` prints plain-text notices there. The command line and Studio log through the same secret redactor: it scrubs every secret value they have seen and credential-shaped text such as `password=…` or the password in `user:pass@host`. It cannot know every value, so read the log before you share it. Run Studio from a terminal (`vibe studio --gui` or `vibe-studio`) to see them; add `--verbose` to the CLI for more. Settings live in `~/.vibe.yaml` and the per-user config directory (`~/.config/vibe` on Linux, `~/Library/Application Support/vibe` on macOS); set `VIBE_CONFIG_DIR` to use a different one, for example when testing. Per-workspace local state is in `.vibe-local/` inside the workspace folder (git-ignored).
