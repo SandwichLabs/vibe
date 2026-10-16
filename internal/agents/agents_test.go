@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -217,6 +218,16 @@ type mockAccess struct {
 	nbs notebooks.Store
 	qs  queries.Store
 	sks skills.Store
+	ars artifacts.Store
+}
+
+func (m *mockAccess) Artifacts() artifacts.Store {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ars == nil {
+		m.ars = &artifacts.Mock{}
+	}
+	return m.ars
 }
 
 func (m *mockAccess) Notebooks() notebooks.Store {

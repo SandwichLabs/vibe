@@ -286,3 +286,10 @@ func TestParamNames_MatchesWhatBindParamsBinds(t *testing.T) {
 		assert.GreaterOrEqual(t, len(args), len(names))
 	}
 }
+
+func TestParamOccurrences_OnePerPlaceholderInTextOrder(t *testing.T) {
+	assert.Equal(t, []string{"a", "b", "a", "c"}, ParamOccurrences("SELECT $a, $b FROM t WHERE x = $a -- $c"))
+	assert.Equal(t, []string{"in_string"}, ParamOccurrences("SELECT '$in_string'"), "reads the raw text, literals included")
+	assert.Empty(t, ParamOccurrences("SELECT 1"))
+	assert.Equal(t, []string{"a", "b"}, ParamNames("$a $b $a"), "ParamNames is the distinct list")
+}

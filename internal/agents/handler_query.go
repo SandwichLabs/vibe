@@ -74,29 +74,9 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 			return ce.ExecuteIn(ctx, connection, q, p)
 		}
 	}
-	connectErr := h.connectReferenced(ctx, connection, sqlStr)
-	// Wildcards on s3/gcs/r2 are expanded first; the statement is classified
-	// and run as expanded, so the cell and the binding keep the wildcard.
 	orig := sqlStr
-	sqlStr, ctx, err = h.expand(ctx, orig)
+	sqlStr, ctx, _, err = h.readOnlyVerdict(ctx, connection, orig, params)
 	if err != nil {
-		return nil, false, fmt.Errorf("query execution failed: %w", err)
-	}
-	v, err := h.classifyIn(ctx, connection, sqlStr, params)
-	if err != nil {
-		return nil, false, err
-	}
-	class, reason := v.Class, v.Reason
-	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(class, reason); err != nil {
-		if connectErr != nil {
-			return nil, false, connectErr
-		}
-		// The user/agent-facing error is one fixed, mode-agnostic message
-		// (see ErrReadOnlyBindingDenied) — it never surfaces the policy's
-		// reason, which can name a tier requirement that is false for a
-		// full-tier caller. The reason is still useful for debugging a denial
-		// that looks surprising, so it's logged here at debug level only.
-		h.logger.Debug("render-time sql binding denied", "class", class, "reason", reason, "sql", orig)
 		return nil, false, err
 	}
 
@@ -124,6 +104,41 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		truncated = true
 	}
 	return rs, truncated, nil
+}
+
+// readOnlyVerdict is the policy half of every render-time read: connect what
+// the statement references, expand s3/gcs/r2 wildcards, classify the statement
+// on a connection pinned to the named catalog, and apply the read-only gate. It
+// returns the statement as it will run (wildcards expanded), the context to
+// run it under, and the classifier's reason (empty for a read). err is the
+// connection's own failure, ErrReadOnlyBindingDenied, or an expansion or
+// classification failure. RunReadOnlySQLIn and the save-time artifact vet both
+// call it, so a statement is vetted by exactly the code that later runs it.
+func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, params map[string]any) (runSQL string, runCtx context.Context, reason string, err error) {
+	connectErr := h.connectReferenced(ctx, connection, orig)
+	// Wildcards on s3/gcs/r2 are expanded first; the statement is classified
+	// and run as expanded, so the cell and the binding keep the wildcard.
+	runSQL, runCtx, err = h.expand(ctx, orig)
+	if err != nil {
+		return "", ctx, "", fmt.Errorf("query execution failed: %w", err)
+	}
+	v, err := h.classifyIn(runCtx, connection, runSQL, params)
+	if err != nil {
+		return "", ctx, "", err
+	}
+	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
+		if connectErr != nil {
+			return "", ctx, v.Reason, connectErr
+		}
+		// The user/agent-facing error is one fixed, mode-agnostic message
+		// (see ErrReadOnlyBindingDenied) — it never surfaces the policy's
+		// reason, which can name a tier requirement that is false for a
+		// full-tier caller. The reason is still useful for debugging a denial
+		// that looks surprising, so it's logged here at debug level only.
+		h.logger.Debug("render-time sql binding denied", "class", v.Class, "reason", v.Reason, "sql", orig)
+		return "", ctx, v.Reason, err
+	}
+	return runSQL, runCtx, v.Reason, nil
 }
 
 func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {

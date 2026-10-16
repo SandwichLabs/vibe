@@ -20,10 +20,18 @@ The tier is the person's `sandbox` setting, clamped to the team limit in `vibe.y
 | `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INSERT ... ON CONFLICT` into a writable catalog | no | yes | yes |
 | `CREATE`, `DROP`, `ALTER` of tables, views, sequences, schemas, indexes, macros, types on a writable catalog | no | no | yes |
 | `COPY (...) TO '<literal path in data/>'` | no | no | yes |
-| Content tools: `add_query_cell`, `create_dashboard`, `create_or_update_skill` (workspace files, not data; #111) | no | yes | yes |
+| Content tools: `add_query_cell`, `create_dashboard`, `create_or_update_skill`, `write_artifact` (workspace files, not data; #111) | no | yes | yes |
 | Everything in the never-list | no | no | **no** |
 
 Record tools follow the same tiers (`create_record`, `update_record`, `delete_record`, `bulk_insert`, `import_csv` are data tools; `create_table`, `add_column`, `drop_table` are schema tools).
+
+### Data artifacts
+
+`write_artifact` stores a [data artifact](artifacts.md) (`artifacts/<name>/artifact.yaml` and `view.a2ui.json`) and is a content tool: refused under `read-only`, and it asks first when "Ask before changes" is on (the approval card says "Save data artifact NAME"). `list_artifacts` and `get_artifact` are introspect tools, visible in every tier and over MCP; they return the manifest and view as data (a query over 4,000 characters comes back with `sql: null` and `sql_omitted: true`, never a prefix, and is kept on a rewrite with `keep_sql: true` (valid only with a `rev` and a stored query of that name); a very large view is summarised), never results. **No tool runs an artifact for the agent**, so an artifact cannot widen what the agent's own `run_query` could read; Studio runs its queries for the person.
+
+**Artifact queries are read-only in every tier, and are vetted at save and at every run.** Each query goes through the same read-only gate as a notebook sql cell (a single statement that classifies as a read; the fixed "live bindings are read-only" refusal at run), plus two lexical checks on the policy's own lexer: a query is exactly one statement, and every `$name` is a parameter token (not text inside a `'...'`, `"..."`, `$$...$$` or a comment, and no bare `?` or positional `$1`); and a parameter is never an argument of `query(...)`, `query_table(...)` or a file reader. A value only ever becomes a prepared-statement argument. At save the queries are checked with every parameter at its default, on the connection each names (an unknown connection, or a storage connection with no catalog, is refused); a refusal names the query and the policy's reason. At run the artifact is loaded from the store, the same checks repeat (a file edited by git, an editor or a bundle never passed the vet), and the policy classifies the statement with the actual values. Both go through one function, so a statement is vetted by the code that later runs it.
+
+**An agent write never replaces a version it did not read.** `write_artifact` without a `rev` only creates: an existing name is refused. To replace one, send the `rev` that `get_artifact` (or `list_artifacts`) returned; if the artifact changed since, the write is refused and nothing is written. The store's own last-seen revision is never used in its place.
 
 ## Writes need three gates
 

@@ -236,6 +236,14 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 	case "create_or_update_skill":
 		ar.Rows = -1
 		ar.Summary = fmt.Sprintf("Save skill %s", stringParam(req.Params["name"]))
+	case "write_artifact":
+		ar.Rows = -1
+		verb := "Save"
+		if rev, _ := req.Params["rev"].(string); rev != "" {
+			verb = "Replace"
+		}
+		ar.Summary = fmt.Sprintf("%s data artifact %s", verb, stringParam(req.Params["name"]))
+		ar.SQL = artifactQueriesText(req.Params["manifest"])
 	case "add_query_cell", "create_dashboard":
 		ar.Rows = -1
 		ar.Summary = "Add a cell to a notebook"

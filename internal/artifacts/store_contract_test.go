@@ -179,3 +179,29 @@ func TestStore_MockErr(t *testing.T) {
 	assert.ErrorIs(t, err, assert.AnError)
 	assert.ErrorIs(t, m.Put(context.Background(), newArtifact(t, "a")), assert.AnError)
 }
+
+// WithRev("") is "I loaded nothing": a create-only Put. The revision the store
+// last saw must not stand in for it, or a caller that never read an artifact
+// (the agent tools) could replace it.
+func TestStore_WithEmptyRevIsCreateOnly(t *testing.T) {
+	storeContract(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		first := newArtifact(t, "sales")
+		require.NoError(t, s.Put(ctx, first, WithRev("")), "creating with an empty rev works")
+
+		_, err := s.Get(ctx, "sales") // the store has now seen the current revision
+		require.NoError(t, err)
+
+		again := newArtifact(t, "sales")
+		again.Manifest.Title = "Overwritten"
+		err = s.Put(ctx, again, WithRev(""))
+		require.ErrorIs(t, err, ErrConflict, "an empty rev never replaces an existing artifact")
+		got, err := s.Get(ctx, "sales")
+		require.NoError(t, err)
+		assert.Equal(t, "Regional sales", got.Manifest.Title)
+
+		// Without the option the last-seen fallback still works for read-then-write code.
+		got.Manifest.Title = "Edited"
+		require.NoError(t, s.Put(ctx, got))
+	})
+}

@@ -14,8 +14,8 @@ internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyCalls$
 internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyPragmas$
 # internal/session/sessiontest (a non-test helper package) builds test sessions with it.
 internal/session/testing.go:[0-9]+:[0-9]+: unreachable func: UnhardenedForTests$
-# Class 4, TEMPORARY (data artifacts, epic #162): the artifacts package lands in step 1 (#151) before its
-# callers. Remove these lines when Handler.RunArtifactQuery (step 3, #153) calls Bind and Studio's Save
+# Class 4, TEMPORARY (data artifacts, epic #162): callers land in later steps. Remove these lines when
+# Studio's RunArtifactQuery binding calls Handler.RunArtifactQuery (step 4, #154) and Studio's Save
 # (step 6a) calls Overwrite.
-internal/artifacts/bind\.go:[0-9]+:[0-9]+: unreachable func: (Bind|findQuery|coerceSupplied)$
+internal/agents/artifact_vet\.go:[0-9]+:[0-9]+: unreachable func: Handler\.RunArtifactQuery$
 internal/artifacts/store\.go:[0-9]+:[0-9]+: unreachable func: Overwrite$

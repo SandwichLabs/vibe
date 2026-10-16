@@ -56,6 +56,18 @@ A write needs three gates (tier, writable connection, the person's approval); [a
 
 Reads are not gated by approval; what the agent may read, and the never-list, are in [agent-policy.md](agent-policy.md). Every denial returns its reason as a tool error, and `list_connections` tells a client what is connected.
 
+### Data artifact tools
+
+Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`): parameterised, live views whose named queries re-run when the artifact opens or a parameter changes. They are in the one registry, so Studio's chat agent and MCP clients see the same tools with the same gates.
+
+| Tool | Category | Notes |
+|---|---|---|
+| `list_artifacts` | introspect | Name, title, description, parameter and query counts, `rev`; a broken folder is listed with its error. |
+| `get_artifact` | introspect | One artifact's manifest and view as data, and its `rev`. A query with very long SQL comes back with `sql: null` and `sql_omitted: true`, never a partial copy (send `keep_sql: true` for it to keep it); never results. |
+| `write_artifact` | content | `name`, `manifest`, `view`, optional `rev`. Refused under `read-only`; asks first when "Ask before changes" is on, so headless MCP refuses it like `create_or_update_skill`. Every query is vetted against the read-only SQL policy before anything is written. |
+
+A client reads the format with `read_skill` `data-artifacts`. `write_artifact` without a `rev` only creates; to replace an artifact send the `rev` from `get_artifact`, and a change made since is a refusal, not an overwrite ([agent-policy.md](agent-policy.md#data-artifacts)). There is no tool that runs an artifact's queries or returns its results.
+
 ### Take over
 
 Studio, opening a workspace a headless `vibe mcp serve` owns, can offer to take over: `hub.TakeOver(ctx, ws, "Vibe Studio", timeout)` signals the server (`SIGUSR1`; on Linux through a pidfd, re-verifying the lock still names that pid after the pid is pinned, so a recycled pid is never signalled; it checks it is a live owner on this host that advertised release control; if a client auto-reconnects and a different releasable owner appears while waiting, that one is asked too), the server closes its session, releases the lock and **exits with status 0**, and Studio gets the lock. The Claude session that was using it sees its server end and must reconnect (Claude Code: `/mcp`; Claude Desktop: restart the server or the app); the reconnected `vibe mcp serve` then proxies to Studio. Nothing is deleted, and open notebooks are plain files so they are unaffected.

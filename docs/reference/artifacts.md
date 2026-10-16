@@ -93,3 +93,7 @@ A control whose parameter is not declared, or is of another type, is a validatio
 ### Drill-down
 
 `drill: {param, column}` on `table`, `barChart`, `columnChart` and `pivot`: clicking a row sets `param` (any declared parameter) to that row's `column` value, validated like any other value, and re-runs the queries that use it. `column` is checked against the result at render.
+
+## Authoring with the agent
+
+The agent (Studio chat or an MCP client) writes artifacts with `write_artifact` and reads them with `list_artifacts` and `get_artifact` (see [mcp.md](mcp.md#data-artifact-tools) and [agent-policy.md](agent-policy.md#data-artifacts)); the built-in `data-artifacts` skill (`read_skill`) teaches the format. Every query is held to the agent's read policy when it is saved and again on every run, so an artifact written by hand, by git or by a bundle is held to it too. The tools never return query results.

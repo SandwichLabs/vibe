@@ -499,6 +499,14 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "present_data":
 		return h.handlePresentData(ctx, req)
 
+	// Data artifacts (epic #162)
+	case "list_artifacts":
+		return h.handleListArtifacts(ctx, req)
+	case "get_artifact":
+		return h.handleGetArtifact(ctx, req)
+	case "write_artifact":
+		return h.handleWriteArtifact(ctx, req)
+
 	// Skills (#62)
 	case "create_or_update_skill":
 		return h.handleCreateOrUpdateSkill(ctx, req)
