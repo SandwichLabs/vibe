@@ -199,6 +199,9 @@ func (h *Handler) handleListConnections(_ context.Context, req *Request) *Respon
 			"read_only": c.ReadOnly,
 			"location":  loc,
 		}
+		if c.SignIn != nil {
+			m["sign_in"] = c.SignIn
+		}
 		if c.Default || strings.EqualFold(c.Name, sess.DefaultCatalog()) {
 			m["default"] = true
 		}

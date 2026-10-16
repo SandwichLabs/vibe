@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
 
@@ -33,6 +34,9 @@ type ConnectionState struct {
 	// ServerChanged is set on needs-credentials that is because the definition
 	// now points at a different server than the saved sign-in.
 	ServerChanged *session.ServerChange
+	// SignInHint is set on needs-credentials that is because the person must
+	// sign in with an AWS SSO profile (the profile name and why; no secret).
+	SignInHint *secrets.SignInHint
 	// Extension names the extension an extension-missing connection needs.
 	Extension string
 	// Remote connections dial on first use; Catalogless ones (s3, gcs, r2)
@@ -96,7 +100,7 @@ func ConnectionStates(ws Workspace, sess session.Session, issues []SessionIssue)
 				st.Extension = ti.Extensions[0]
 			}
 		case session.StatusNeedsCredentials:
-			st.ServerChanged = s.ServerChanged
+			st.ServerChanged, st.SignInHint = s.ServerChanged, s.SignIn
 		}
 		out = append(out, st)
 	}

@@ -110,4 +110,16 @@ describe('connection prompts', () => {
     expect(w.find('[data-testid="extension-error"]').text()).toContain('check your network connection')
     expect(w.find('[data-testid="extension-install"]').text()).toBe('Try again')
   })
+
+  it('an AWS SSO sign-in shows the hint and no key fields', async () => {
+    setup(detail({ signIn: 'aws-sso:dev', credential: { method: 'aws-sso:dev', secretSet: false, fingerprintMatches: true, available: true, detail: 'AWS session for profile dev has expired. Sign in, or run `aws sso login --profile dev`.' }, info: { name: 'prod_pg', type: 'postgres', scope: 'shared', readOnly: true, default: false, status: 'needs-credentials', remote: true } }))
+    const w = mountD()
+    signInFor.value = 'prod_pg'
+    await flushPromises()
+    const d = w.find('[data-testid="signin-dialog"]')
+    expect(d.text()).toContain('AWS profile dev')
+    expect(d.text()).toContain('aws sso login --profile dev')
+    expect(d.find('input').exists()).toBe(false)
+    expect(d.find('[data-testid="signin-submit"]').exists()).toBe(false)
+  })
 })

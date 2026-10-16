@@ -41,7 +41,7 @@ func (h *hub) requirementError(name, dep, why string) error {
 	msg := fmt.Sprintf("needs the %q connection: %s", dep, why)
 	h.mu.Lock()
 	if e := h.conns[name]; e != nil && !e.attach {
-		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = StatusError, msg, 0, nil, ""
+		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension, e.status.SignIn = StatusError, msg, 0, nil, "", nil
 		e.depBlocked = dep
 	}
 	h.mu.Unlock()

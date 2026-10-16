@@ -54,9 +54,19 @@ type ErrNeedsCredentials struct {
 	Ref    Ref
 	// Type is the connection type ("" when unknown).
 	Type string
+	// SignIn is set when the person must sign in with an external identity
+	// (an AWS SSO profile) instead of entering a secret.
+	SignIn *SignInHint
 }
 
 func (e *ErrNeedsCredentials) Error() string {
+	if h := e.SignIn; h != nil && h.Kind == MethodAWSSSO {
+		cmd := "`aws sso login --profile " + h.Subject + "`"
+		if h.Reason == "expired" {
+			return fmt.Sprintf("AWS session for profile %s has expired. Sign in, or run %s.", h.Subject, cmd)
+		}
+		return fmt.Sprintf("No AWS session for profile %s. Sign in, or run %s.", h.Subject, cmd)
+	}
 	if e.Type == "motherduck" {
 		return fmt.Sprintf("no credentials for %s (%s): sign in with a MotherDuck token, or choose Environment variables and set MOTHERDUCK_TOKEN", e.Ref.Name, e.Reason)
 	}
@@ -73,6 +83,9 @@ type Resolver struct {
 	redactor *Redactor
 	logger   *slog.Logger
 	getenv   func(string) string
+	// providers resolve the sign-in methods whose secrets are not stored
+	// (aws-sso), by method kind.
+	providers map[string]MethodProvider
 	// envHint adds a sentence to the "not set" message of an env: sign-in
 	// (a workspace .env that is present but not allowed).
 	envHint func(prefix string) string
@@ -123,7 +136,8 @@ func (r *Resolver) Redactor() *Redactor { return r.redactor }
 // Keychain returns the keychain store (for the LLM key and probes).
 func (r *Resolver) Keychain() Store { return r.keyring }
 
-// ParseMethod splits a sign-in method. "" means keychain.
+// ParseMethod splits a sign-in method. "" means keychain. For env the second
+// result is the variable prefix; for aws-sso it is the profile name.
 func ParseMethod(m string) (kind, prefix string, err error) {
 	switch {
 	case m == "" || m == MethodKeychain:
@@ -132,8 +146,10 @@ func ParseMethod(m string) (kind, prefix string, err error) {
 		return MethodPrompt, "", nil
 	case strings.HasPrefix(m, MethodEnvPref) && len(m) > len(MethodEnvPref):
 		return "env", strings.TrimPrefix(m, MethodEnvPref), nil
+	case strings.HasPrefix(m, MethodAWSSSOPref) && len(m) > len(MethodAWSSSOPref):
+		return MethodAWSSSO, strings.TrimPrefix(m, MethodAWSSSOPref), nil
 	}
-	return "", "", fmt.Errorf("invalid sign-in method %q: want keychain, prompt or env:PREFIX", m)
+	return "", "", fmt.Errorf("invalid sign-in method %q: want keychain, prompt, env:PREFIX or aws-sso:PROFILE", m)
 }
 
 // WithEnvLayer returns a resolver that shares this one's keychain, session
@@ -177,6 +193,10 @@ func (r *Resolver) Resolve(ctx context.Context, ref Ref, method string, b Bindin
 	}
 	var cred Credential
 	switch kind {
+	case MethodAWSSSO:
+		// No stored value, so no stored fingerprint to compare: the sign-in is
+		// bound to its definition by the caller's guard (workspace.signInGuard).
+		return r.resolveProvided(ctx, kind, prefix, method, ref, b.Type)
 	case "env":
 		c, ok := r.env(prefix).Load()
 		if !ok {
@@ -226,8 +246,8 @@ func (r *Resolver) SetCredentials(ctx context.Context, ref Ref, method string, c
 	if err != nil {
 		return err
 	}
-	if kind == "env" {
-		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+	if err := refuseUnstored(kind); err != nil {
+		return err
 	}
 	store := r.keyring
 	if kind == MethodPrompt {
@@ -281,6 +301,18 @@ func (r *Resolver) loadExisting(ctx context.Context, s Store, ref Ref) (Credenti
 	return ParseCredential(raw)
 }
 
+// refuseUnstored is the error for writing a secret under a method that has no
+// stored secret.
+func refuseUnstored(kind string) error {
+	switch kind {
+	case "env":
+		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+	case MethodAWSSSO:
+		return fmt.Errorf("%w: an AWS SSO sign-in has no stored secret; sign in with your profile", ErrReadOnly)
+	}
+	return nil
+}
+
 // Credential field names for ClearCredentialField.
 const (
 	FieldUser     = "user"
@@ -297,8 +329,8 @@ func (r *Resolver) ClearCredentialField(ctx context.Context, ref Ref, method, fi
 	if err != nil {
 		return err
 	}
-	if kind == "env" {
-		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+	if err := refuseUnstored(kind); err != nil {
+		return err
 	}
 	store := r.keyring
 	if kind == MethodPrompt {

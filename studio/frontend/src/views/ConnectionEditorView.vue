@@ -24,7 +24,7 @@ import { typeLabel, scopeLabel, CRED_KEY as KEY } from '../lib/connections'
 const router = useRouter()
 const form = useConnectionForm()
 const {
-  types, loading, loadError, isNew, editName, typeId, spec, f, readOnly, connScope, method, envPrefix, typed,
+  types, loading, loadError, isNew, editName, typeId, spec, f, readOnly, connScope, method, envPrefix, ssoProfile, typed,
   status, detail, advancedOpen, saveError, result, isMD, remote, mainFields, advFields, ownScopeOnly,
   insideWorkspace, exampleTail, portField, readableCreds, secretCreds, needsSignIn, envVars, credFields, val, setVal,
   bindingChanged, fingerprintHelp, secretIsSet, serverChangedHelp, privateCopy, shadowedBy, failedTest, title,
@@ -176,7 +176,11 @@ const {
           <Icon name="alert" :size="16" />
           <span><b>The server changed since you chose these variables.</b>{{ ' ' }}{{ detail?.info.serverChanged ? `(${detail.info.serverChanged.old} to ${detail.info.serverChanged.new}). ` : '' }}They are not used for it until you confirm: Save asks first, and nothing is sent in the meantime.</span>
         </div>
-        <template v-if="method === 'keychain'">
+        <div v-if="method === 'aws-sso'" class="note info" data-testid="sso-signin">
+          <Icon name="shieldCheck" :size="16" />
+          <span>Signs in with AWS profile <b>{{ ssoProfile }}</b> (IAM Identity Center). Nothing is stored. Sign in with <code>aws sso login --profile {{ ssoProfile }}</code>. Pick one of the cards above to change it.</span>
+        </div>
+        <template v-else-if="method === 'keychain'">
           <div v-for="c in readableCreds" :key="c.name" class="field">
             <label class="field-label" :for="`f-c-${c.name}`">{{ c.label }}<span v-if="c.required" aria-hidden="true"> *</span></label>
             <input :id="`f-c-${c.name}`" class="field-input" autocomplete="off" spellcheck="false" :value="typed[KEY[c.name]]" :data-testid="`f-c-${c.name}`" @input="typed[KEY[c.name]] = ($event.target as HTMLInputElement).value" />

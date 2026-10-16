@@ -324,7 +324,33 @@ func (w *workspace) MoveConnection(ctx context.Context, name string, from, to Sc
 	if oldRef != newRef {
 		_ = w.Resolver().ClearConnectionCredentials(ctx, oldRef)
 	}
+	if from == ScopeUser {
+		return w.carryUserSignIn(name)
+	}
 	return nil
+}
+
+// carryUserSignIn copies the person's user-file sign-in choice (method,
+// fingerprint, server) for a connection that left the user scope into local.yaml,
+// where a workspace-scope connection reads it. Without it an env: or aws-sso:
+// choice silently became the keychain. A choice already in local.yaml stays.
+func (w *workspace) carryUserSignIn(name string) error {
+	w.mu.RLock()
+	u := w.user
+	w.mu.RUnlock()
+	method, ok := u.SignIn[name]
+	if !ok {
+		return nil
+	}
+	return w.retryConflict(func() error {
+		l := w.Local()
+		if _, has := l.SignIn[name]; has {
+			return nil
+		}
+		l.SignIn, l.SignInFingerprint, l.SignInServer = copyMap(l.SignIn), copyMap(l.SignInFingerprint), copyMap(l.SignInServer)
+		l.SignIn[name], l.SignInFingerprint[name], l.SignInServer[name] = method, u.SignInFingerprint[name], u.SignInServer[name]
+		return w.SaveLocal(l)
+	})
 }
 
 // migrateCredential copies a saved credential to its new keychain reference.
@@ -332,7 +358,7 @@ func (w *workspace) MoveConnection(ctx context.Context, name string, from, to Sc
 // process; it never leaves it.
 func (w *workspace) migrateCredential(ctx context.Context, def ConnectionDef, from Scope, oldRef, newRef secrets.Ref) error {
 	method := w.signInFor(from, def)
-	if kind, _, err := secrets.ParseMethod(method); err != nil || kind == "env" {
+	if kind, _, err := secrets.ParseMethod(method); err != nil || secrets.StoresNoSecret(kind) {
 		return nil
 	}
 	resolved, err := def.Resolve(nil, from)
@@ -382,20 +408,22 @@ func copyMap(m map[string]string) map[string]string {
 }
 
 // ErrRebindNeedsConfirm is returned by SetSignIn when it would bind an
-// environment sign-in to a server other than the one the saved sign-in was
+// environment or AWS SSO sign-in to a server other than the one the saved sign-in was
 // chosen for (a pull changed the host): the variables would go to the new server.
 // RebindSignIn is the explicit, confirmed form.
-var ErrRebindNeedsConfirm = errors.New("the server changed since this sign-in was chosen, so the environment variables would be sent to the new server; confirm to use them for it")
+var ErrRebindNeedsConfirm = errors.New("the server changed since this sign-in was chosen, so it would now be used for the new server; confirm to keep using it")
 
 // SetSignIn records this person's sign-in method for a connection together
 // with the fingerprint of the definition it is chosen for, so that if the
 // definition later points elsewhere (a pull changes the host) even an env:
 // credential is withheld until the person signs in again.
 //
-// It never re-binds silently: choosing an environment sign-in for a connection
-// whose saved sign-in was bound to a different server returns
-// ErrRebindNeedsConfirm. A first binding (nothing saved) and a switch to a
-// method that carries its own binding (keychain, prompt) are fine.
+// It enforces what the type takes (TypeInfo.SignInMethods) and, for aws-sso,
+// that the endpoint is AWS over TLS. It never re-binds silently: choosing an
+// environment or AWS SSO sign-in for a connection whose saved sign-in was bound
+// to a different server returns ErrRebindNeedsConfirm. A first binding (nothing
+// saved) and a switch to a method that carries its own binding (keychain,
+// prompt) are fine.
 func (w *workspace) SetSignIn(name, method string) error { return w.setSignIn(name, method, false) }
 
 // RebindSignIn is SetSignIn after the person confirmed the server change.
@@ -413,9 +441,12 @@ func (w *workspace) setSignIn(name, method string, confirmed bool) error {
 	if err != nil {
 		return err
 	}
+	if err := CheckSignIn(w.Resolver(), resolved, method); err != nil {
+		return err
+	}
 	fp := Fingerprint(resolved)
 	server := ServerDescription(resolved)
-	if kind, _, _ := secrets.ParseMethod(method); kind == "env" && !confirmed && c.SignInFingerprint != "" && c.SignInFingerprint != fp {
+	if boundSignIn(method) && !confirmed && c.SignInFingerprint != "" && c.SignInFingerprint != fp {
 		return ErrRebindNeedsConfirm
 	}
 	if c.Scope == ScopeUser {
@@ -469,8 +500,8 @@ func (w *workspace) CredentialStatus(ctx context.Context, name string) (secrets.
 		return secrets.CredentialStatus{}, err
 	}
 	st := w.Resolver().GetConnectionCredentialStatus(ctx, credentialRef(w.ID(), c.Scope, name), c.SignIn, BindingFor(resolved))
-	if gerr := signInGuard(c, resolved); gerr != nil {
-		st.FingerprintMatches, st.SecretSet, st.Detail = false, false, gerr.Error()
+	if gerr := signInGuard(w.Resolver(), c, resolved); gerr != nil {
+		st.FingerprintMatches, st.SecretSet, st.SignedIn, st.Detail = false, false, false, gerr.Error()
 	}
 	return st, nil
 }

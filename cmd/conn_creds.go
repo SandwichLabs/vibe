@@ -3,8 +3,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/secrets"
@@ -26,8 +28,11 @@ blank answer keeps the stored value. When input is piped, one line is read per
 field, in the order the prompts would appear.
 
 --sign-in chooses the method for this connection first: keychain (default),
-prompt, or env:PREFIX, which reads PREFIX_USER, PREFIX_PASSWORD, PREFIX_TOKEN,
-PREFIX_KEY_ID and PREFIX_SECRET at connect time and stores nothing.`,
+prompt, env:PREFIX, which reads PREFIX_USER, PREFIX_PASSWORD, PREFIX_TOKEN,
+PREFIX_KEY_ID and PREFIX_SECRET at connect time and stores nothing, or (S3
+only) aws-sso:PROFILE, which signs in with that AWS IAM Identity Center
+profile from ~/.aws/config, stores nothing and asks for nothing. Sign in with
+"aws sso login --profile PROFILE".`,
 	Args:         cobra.ExactArgs(1),
 	RunE:         runConnCredsSet,
 	SilenceUsage: true,
@@ -62,6 +67,9 @@ func runConnCredsSet(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	if kind, prefix, _ := secrets.ParseMethod(c.SignIn); kind == "env" {
 		fmt.Fprintf(out, "%s signs in from the environment: %s. Nothing is stored.\n", c.Name, strings.Join(secrets.EnvVarNames(prefix), ", "))
+		return nil
+	} else if kind == secrets.MethodAWSSSO {
+		printSSONote(out, c.Name, prefix)
 		return nil
 	}
 	cred, err := promptCredentials(cmd.InOrStdin(), cmd.ErrOrStderr(), c.Type, secrets.Credential{})
@@ -128,6 +136,13 @@ func runConnCredsStatus(cmd *cobra.Command, args []string) error {
 	if st.Detail != "" {
 		fmt.Fprintf(out, "note:          %s\n", st.Detail)
 	}
+	if st.Profile != "" {
+		fmt.Fprintf(out, "profile:       %s\n", st.Profile)
+		fmt.Fprintf(out, "signed in:     %t\n", st.SignedIn)
+		if st.ExpiresAt != nil {
+			fmt.Fprintf(out, "session until: %s\n", st.ExpiresAt.Local().Format(time.RFC3339))
+		}
+	}
 	names := make([]string, 0, len(st.Env))
 	for _, e := range st.Env {
 		names = append(names, fmt.Sprintf("%s=%t", e.Name, e.Set))
@@ -137,4 +152,10 @@ func runConnCredsStatus(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "env set:       %s\n", strings.Join(names, " "))
 	}
 	return nil
+}
+
+// printSSONote says what an aws-sso sign-in means: nothing is stored, and how to
+// sign in. It never names an account, role or start URL.
+func printSSONote(out io.Writer, name, profile string) {
+	fmt.Fprintf(out, "%s signs in with your AWS profile %s. Nothing is stored. If the session has ended, run: aws sso login --profile %s\n", name, profile, profile)
 }

@@ -11,7 +11,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/awssso"
 	"github.com/SandwichLabs/vibe/internal/sandbox"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
@@ -123,15 +125,21 @@ func ValidateConnectionName(name string) error {
 	return nil
 }
 
-// ValidateSignIn checks a sign-in method: keychain, prompt or env:PREFIX.
+// ValidateSignIn checks a sign-in method: keychain, prompt, env:PREFIX or
+// aws-sso:PROFILE (a safe subset of AWS profile names).
 func ValidateSignIn(m string) error {
 	switch {
 	case m == "keychain", m == "prompt":
 		return nil
 	case strings.HasPrefix(m, "env:") && envPrefixRE.MatchString(strings.TrimPrefix(m, "env:")):
 		return nil
+	case strings.HasPrefix(m, secrets.MethodAWSSSOPref):
+		if !awssso.ValidProfileName(strings.TrimPrefix(m, secrets.MethodAWSSSOPref)) {
+			return fmt.Errorf("invalid sign-in method %q: the profile name after aws-sso: must be letters, digits and _ . + @ -, up to 64 characters", m)
+		}
+		return nil
 	}
-	return fmt.Errorf("invalid sign-in method %q: want keychain, prompt or env:PREFIX", m)
+	return fmt.Errorf("invalid sign-in method %q: want keychain, prompt, env:PREFIX or aws-sso:PROFILE", m)
 }
 
 // Validate checks one definition. It never reads the environment.

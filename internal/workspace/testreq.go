@@ -48,6 +48,13 @@ func needsCredentials(rc ResolvedConnection, err error) connections.TestResult {
 	raw := secrets.RedactPatterns(err.Error())
 	res := connections.TestResult{Status: session.StatusNeedsCredentials, Error: raw}
 	res.Code, res.Message = connections.Classify(connections.Failure{Raw: raw, Status: res.Status, Def: rc.Def(true)})
+	// A sign-in that is not a typed key (an AWS SSO profile) has its own,
+	// already plain, wording: "the service turned down these keys" would be wrong.
+	var nc *secrets.ErrNeedsCredentials
+	var mf *secrets.ErrMethodFailed
+	if (errors.As(err, &nc) && nc.SignIn != nil) || errors.As(err, &mf) {
+		res.Message = raw
+	}
 	return res
 }
 

@@ -58,7 +58,7 @@ func ServerDescription(d ConnectionDef) string {
 		}
 		return net.JoinHostPort(d.Host, strconv.Itoa(port)) + "/" + d.Database
 	case "s3", "gcs", "r2", "azure":
-		return d.Scope
+		return storageServer(d)
 	case "sqlite", "duckdb":
 		return filepath.Base(d.Path)
 	case "ducklake", "iceberg", "delta":
@@ -68,6 +68,24 @@ func ServerDescription(d ConnectionDef) string {
 		return filepath.Base(d.Path)
 	}
 	return d.Type
+}
+
+// storageServer describes a storage connection: its scope, plus the endpoint,
+// URL style and TLS setting when they are not the defaults, so a pulled change
+// that only redirects the endpoint reads as one in the "server changed" text
+// ("s3://lake/ to s3://lake/ via host") instead of as no change at all.
+func storageServer(d ConnectionDef) string {
+	out := d.Scope
+	if ep := strings.TrimSpace(d.Options["endpoint"]); ep != "" {
+		out += " via " + ep
+	}
+	if u := strings.TrimSpace(d.Options["url_style"]); u != "" {
+		out += " (" + u + " style)"
+	}
+	if ssl := strings.TrimSpace(d.Options["use_ssl"]); ssl != "" && ssl != "true" {
+		out += " (no TLS)"
+	}
+	return out
 }
 
 // BindingFor is the fingerprint binding of an environment-resolved definition.
@@ -84,18 +102,23 @@ func toConnDef(d ConnectionDef, readOnly bool, path string) connections.Def {
 	}
 }
 
-// signInGuard withholds an env: credential unless this person's sign-in was
-// chosen for exactly this definition. A keychain or prompt credential carries
-// its own fingerprint (checked by the resolver); an environment sign-in has no
-// stored value, so the binding lives with the choice (review #115).
-func signInGuard(c Connection, resolved ConnectionDef) error {
-	if kind, _, err := secrets.ParseMethod(c.SignIn); err != nil || kind != "env" {
-		return nil //nolint:nilerr // an unparseable method is rejected by the resolver
-	}
-	if c.SignInFingerprint != "" && c.SignInFingerprint == Fingerprint(resolved) {
+// signInGuard withholds an env: or aws-sso: credential unless this person's
+// sign-in was chosen for exactly this definition. A keychain or prompt
+// credential carries its own fingerprint (checked by the resolver); these two
+// have no stored value, so the binding lives with the choice (review #115). An
+// aws-sso sign-in is also refused for a definition whose endpoint is not AWS
+// over TLS, however it got there (a hand-edited local.yaml).
+func signInGuard(res *secrets.Resolver, c Connection, resolved ConnectionDef) error {
+	if !boundSignIn(c.SignIn) {
 		return nil
 	}
-	return &secrets.ErrFingerprintChanged{Old: c.SignInServer, New: ServerDescription(resolved)}
+	if c.SignInFingerprint == "" || c.SignInFingerprint != Fingerprint(resolved) {
+		return &secrets.ErrFingerprintChanged{Old: c.SignInServer, New: ServerDescription(resolved)}
+	}
+	if err := res.CheckTarget(c.SignIn, targetOf(resolved)); err != nil {
+		return fmt.Errorf("connection %q: %w", c.Name, err)
+	}
+	return nil
 }
 
 // ResolvedConnection is a merged connection with its ${ENV} references

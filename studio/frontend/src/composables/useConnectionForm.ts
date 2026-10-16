@@ -18,7 +18,9 @@ import { parseStoragePrefill, type StoragePrefill } from '../lib/storagePrefill'
 import { takeDraft } from './useConnectionDraft'
 import { connectionByName } from './useConnections'
 
-type SignIn = 'keychain' | 'env' | 'prompt'
+// 'aws-sso' is set only by loading a connection that signs in with an AWS SSO
+// profile (chosen with the CLI); the editor shows it read-only and keeps it.
+type SignIn = 'keychain' | 'env' | 'prompt' | 'aws-sso'
 const emptyCreds = (): CredentialInput => ({ username: '', keyId: '', password: '', token: '', secret: '' })
 
 export function useConnectionForm() {
@@ -39,6 +41,7 @@ export function useConnectionForm() {
   const origScope = ref<ConnScope>('local')
   const method = ref<SignIn>('keychain')
   const envPrefix = ref('')
+  const ssoProfile = ref('')
   const typed = reactive<CredentialInput>(emptyCreds())
   const status = ref<ConnCredentialStatus | null>(null)
   const detail = ref<ConnectionDetail | null>(null)
@@ -91,7 +94,7 @@ export function useConnectionForm() {
   const primarySecret = computed(() => secretCreds.value[0]?.name ?? '')
   const needsSignIn = computed(() => credFields.value.length > 0)
 
-  const methodString = computed(() => (method.value === 'env' ? `env:${envPrefix.value.trim() || 'VIBE'}` : method.value))
+  const methodString = computed(() => (method.value === 'env' ? `env:${envPrefix.value.trim() || 'VIBE'}` : method.value === 'aws-sso' ? `aws-sso:${ssoProfile.value}` : method.value))
   const envVars = computed(() => {
     const p = envPrefix.value.trim() || 'VIBE'
     const known = new Map((status.value?.env ?? []).map((e) => [e.name, e.set]))
@@ -233,6 +236,7 @@ export function useConnectionForm() {
 
   function applyMethod(m: string) {
     if (m.startsWith('env:')) { method.value = 'env'; envPrefix.value = m.slice(4) }
+    else if (m.startsWith('aws-sso:')) { method.value = 'aws-sso'; ssoProfile.value = m.slice(8) }
     else if (m === 'prompt') method.value = 'prompt'
     else method.value = 'keychain'
   }
@@ -372,7 +376,7 @@ export function useConnectionForm() {
   }
 
   return {
-    types, loading, loadError, isNew, editName, typeId, spec, f, readOnly, connScope, origScope, method, envPrefix,
+    types, loading, loadError, isNew, editName, typeId, spec, f, readOnly, connScope, origScope, method, envPrefix, ssoProfile,
     typed, status, detail, advancedOpen, origMethod, hadKeychainSecret, saved, saveError, result, isMD, remote,
     mainFields, advFields, ownScopeOnly, insideWorkspace, exampleTail, portField, credFields, readableCreds,
     secretCreds, needsSignIn, methodString, envVars, val, setVal, buildDef, refreshDraftFingerprint,

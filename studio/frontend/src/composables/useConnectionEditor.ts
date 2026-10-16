@@ -21,7 +21,7 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
   const route = useRoute()
   const router = useRouter()
   const {
-    f, typed, method, envPrefix, status, detail, typeId, spec, readOnly, connScope, origScope, origMethod,
+    f, typed, method, envPrefix, status, detail, typeId, spec, readOnly, connScope, origScope, origMethod, ssoProfile,
     hadKeychainSecret, saved, saveError, result, isNew, isMD, remote, needsSignIn, methodString, bindingChanged,
     dirty,
   } = form
@@ -67,6 +67,14 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
 
   // ---- save ----
   function askRebind(name: string): Promise<boolean> {
+    if (method.value === 'aws-sso') {
+      return askConfirm({
+        title: `Use AWS profile ${ssoProfile.value} for the new server?`,
+        message: `The server of ${name} changed since you chose AWS profile ${ssoProfile.value} for it. Its short-lived AWS keys will be sent to the new server. Only continue if it is meant for them.`,
+        variant: 'destructive',
+        confirmLabel: 'Use it for the new server',
+      })
+    }
     return askConfirm({
       title: `Use ${envPrefix.value}_* for the new server?`,
       message: `The server of ${name} changed since you chose environment variables for it. The variables ${envPrefix.value}_* will be sent to the new server. Only continue if they are meant for it.`,
@@ -90,12 +98,12 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
     // changed server re-binds it, so the variables would go to the new one: ask.
     let confirmRebind = false
     await form.refreshDraftFingerprint() // Save must not read a stale answer
-    if (!isNew.value && method.value === 'env' && bindingChanged.value) {
+    if (!isNew.value && (method.value === 'env' || method.value === 'aws-sso') && bindingChanged.value) {
       if (!(await askRebind(name))) return
       confirmRebind = true
     }
-    const wantsSecret = method.value !== 'env' && !!(typed.password || typed.token || typed.secret)
-    const credsChanged = method.value !== 'env' && (wantsSecret || typed.username !== (status.value?.username ?? '') || typed.keyId !== (status.value?.keyId ?? ''))
+    const wantsSecret = method.value !== 'env' && method.value !== 'aws-sso' && !!(typed.password || typed.token || typed.secret)
+    const credsChanged = method.value !== 'env' && method.value !== 'aws-sso' && (wantsSecret || typed.username !== (status.value?.username ?? '') || typed.keyId !== (status.value?.keyId ?? ''))
     if (method.value === 'keychain' && wantsSecret) {
       const probe = await App.ProbeKeychain()
       if (!probe.available) { keychainDetail.value = probe.detail ?? ''; keychainBlocked.value = true; return }

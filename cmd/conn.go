@@ -87,6 +87,7 @@ var connAddCmd = &cobra.Command{
   vibe conn add pg --type postgres --host db.internal --database analytics
   vibe conn add lake --type s3 --prefix s3://acme-lake/raw/ --region us-east-1
   vibe conn add md --type motherduck --database my_db --sign-in env:MOTHERDUCK
+  vibe conn add dev --type s3 --prefix s3://acme-dev/ --region us-east-1 --sign-in aws-sso:dev
   vibe conn add b2 --type s3 --prefix s3://bucket/ --preset b2 --region us-west-004
   vibe conn add legacy --type sqlite --path data/legacy.sqlite
   vibe conn add shop --type mysql --host db.internal --database shop --option ssl_mode=required
@@ -97,7 +98,9 @@ var connAddCmd = &cobra.Command{
 Connections are read-only unless --read-only=false (MotherDuck is always
 writable: it has no read-only attach). Without a terminal no
 credentials are asked for; use "vibe conn credentials set <name>" (reads
-stdin) or --sign-in env:PREFIX. Nothing secret ever goes on the command line.`,
+stdin), --sign-in env:PREFIX or, for S3, --sign-in aws-sso:PROFILE (your AWS
+IAM Identity Center profile; nothing is stored). Nothing secret ever goes on the
+command line.`,
 	Args:         cobra.ExactArgs(1),
 	RunE:         runConnAdd,
 	SilenceUsage: true,
@@ -132,11 +135,6 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 		return errors.New(connections.ErrMotherDuckReadOnly)
 	}
 	signIn, _ := f.GetString("sign-in")
-	if signIn != "" {
-		if err := workspace.ValidateSignIn(signIn); err != nil {
-			return err
-		}
-	}
 	if def.Options, err = connOptions(f, typ, def.Region); err != nil {
 		return err
 	}
@@ -147,6 +145,13 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	}
 	defer ws.Close() //nolint:errcheck
 	ctx := cmdCtx(cmd)
+	if signIn != "" {
+		// Checked against the definition before anything is saved, so a refused
+		// sign-in never leaves a connection behind.
+		if err := checkSignInFor(ws, scope, def, signIn); err != nil {
+			return err
+		}
+	}
 	if err := ws.AddConnection(scope, def); err != nil {
 		return err
 	}
@@ -169,6 +174,9 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 			names = []string{strings.TrimPrefix(method, "env:") + "_TOKEN"} // a token is all MotherDuck takes
 		}
 		fmt.Fprintf(out, "Credentials come from the environment variables %s.\n", strings.Join(names, ", "))
+		return nil
+	} else if kind == secrets.MethodAWSSSO {
+		printSSONote(out, def.Name, strings.TrimPrefix(method, secrets.MethodAWSSSOPref))
 		return nil
 	}
 	if !stdinIsTerminal() {
@@ -631,7 +639,7 @@ func init() {
 	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2, azure)")
 	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style, use_ssl; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path, catalog [duckdb|sqlite]); repeatable")
 	f.Bool("read-only", true, "attach read-only (--read-only=false to allow writes)")
-	f.String("sign-in", "", "how you sign in: keychain (default), prompt or env:PREFIX")
+	f.String("sign-in", "", "how you sign in: keychain (default), prompt, env:PREFIX or (s3) aws-sso:PROFILE")
 	addConnWorkspaceFlag(connAddCmd)
 
 	addConnWorkspaceFlag(connListCmd)
@@ -648,8 +656,8 @@ func init() {
 	connMoveCmd.Flags().String("from", "", "source scope (default: the one in effect)")
 	addConnWorkspaceFlag(connMoveCmd)
 
-	connCredsSetCmd.Flags().String("sign-in", "", "sign-in method: keychain, prompt or env:PREFIX")
-	connCredsSetCmd.Flags().Bool("confirm-rebind", false, "use an env: sign-in for a server other than the one it was chosen for")
+	connCredsSetCmd.Flags().String("sign-in", "", "sign-in method: keychain, prompt, env:PREFIX or (s3) aws-sso:PROFILE")
+	connCredsSetCmd.Flags().Bool("confirm-rebind", false, "use an env: or aws-sso: sign-in for a server other than the one it was chosen for")
 	addConnWorkspaceFlag(connCredsSetCmd)
 	addConnWorkspaceFlag(connCredsClearCmd)
 	addConnWorkspaceFlag(connCredsStatusCmd)
@@ -667,4 +675,15 @@ func isEnvCmd(cmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+// checkSignInFor is workspace.CheckSignIn for a definition that is not saved
+// yet: the sign-in must be well formed, one the type takes, and (aws-sso) the
+// endpoint must be AWS over TLS.
+func checkSignInFor(ws workspace.Workspace, scope workspace.Scope, def workspace.ConnectionDef, signIn string) error {
+	resolved, err := def.Resolve(nil, scope)
+	if err != nil {
+		return err
+	}
+	return workspace.CheckSignIn(ws.Resolver(), resolved, signIn)
 }

@@ -60,7 +60,7 @@ func (h *hub) SetDefaultCatalog(ctx context.Context, name string) error {
 }
 
 func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
-	h.setStatusFull(name, kind, msg, pid, nil, "")
+	h.setStatusFull(name, kind, msg, pid, statusExtras{})
 }
 
 // setStatusCause is setStatus for a failure whose cause is known: a changed
@@ -68,23 +68,37 @@ func (h *hub) setStatus(name string, kind StatusKind, msg string, pid int) {
 func (h *hub) setStatusCause(name string, kind StatusKind, msg string, cause error) {
 	var fp *secrets.ErrFingerprintChanged
 	if errors.As(cause, &fp) && fp.Old != "" && fp.New != "" {
-		h.setStatusFull(name, kind, msg, 0, &ServerChange{Old: fp.Old, New: fp.New}, "")
+		h.setStatusFull(name, kind, msg, 0, statusExtras{serverChanged: &ServerChange{Old: fp.Old, New: fp.New}})
 		return
 	}
-	ext := ""
+	var x statusExtras
 	var me *missingExtensionError
 	if errors.As(cause, &me) {
-		ext = me.name
+		x.extension = me.name
 	}
-	h.setStatusFull(name, kind, msg, 0, nil, ext)
+	var nc *secrets.ErrNeedsCredentials
+	if errors.As(cause, &nc) && nc.SignIn != nil {
+		hint := *nc.SignIn
+		x.signIn = &hint
+	}
+	h.setStatusFull(name, kind, msg, 0, x)
+}
+
+// statusExtras are the typed, non-secret details a status may carry beside its
+// kind and message.
+type statusExtras struct {
+	serverChanged *ServerChange
+	extension     string
+	signIn        *secrets.SignInHint
 }
 
 // setStatusFull replaces the whole status of a connection in one update.
-func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, sc *ServerChange, ext string) {
+func (h *hub) setStatusFull(name string, kind StatusKind, msg string, pid int, x statusExtras) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if e := h.conns[name]; e != nil {
-		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = kind, msg, pid, sc, ext
+		e.status.Kind, e.status.Message, e.status.LockedByPID, e.status.ServerChanged, e.status.Extension = kind, msg, pid, x.serverChanged, x.extension
+		e.status.SignIn = x.signIn
 	}
 }
 
@@ -168,7 +182,7 @@ func (h *hub) ConnectionInfos() []ConnectionInfo {
 	for _, e := range h.conns {
 		info := ConnectionInfo{
 			Name: e.spec.Name, Type: e.spec.Type, Kind: e.status.Kind,
-			ReadOnly: e.spec.ReadOnly, Default: e.status.Default,
+			ReadOnly: e.spec.ReadOnly, Default: e.status.Default, SignIn: e.status.SignIn,
 		}
 		if t, err := h.types.Get(e.spec.Type); err == nil {
 			info.Remote = t.Remote()

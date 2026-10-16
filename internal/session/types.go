@@ -48,6 +48,10 @@ type Status struct {
 	// definition now points at a different server than the saved sign-in was
 	// made for. It carries host-level descriptions, never a secret.
 	ServerChanged *ServerChange `json:"server_changed,omitempty"`
+	// SignIn is set on a needs-credentials status that is because the person
+	// must sign in with an AWS SSO profile (missing or expired session). It
+	// carries the profile name and a reason, never an account, role or key.
+	SignIn *secrets.SignInHint `json:"sign_in,omitempty"`
 }
 
 // ServerChange names the server a saved sign-in was made for (Old) and the one
@@ -74,6 +78,9 @@ type ConnectionInfo struct {
 	Catalogless bool   `json:"catalogless,omitempty"`
 	Scope       string `json:"scope,omitempty"`
 	Default     bool   `json:"default,omitempty"`
+	// SignIn is set when the connection needs the person to sign in with an AWS
+	// SSO profile (the profile name and why; no secret).
+	SignIn *secrets.SignInHint `json:"sign_in,omitempty"`
 }
 
 // Spec declares a connection. For the duckdb type, Path is the file to attach.

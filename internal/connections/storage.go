@@ -238,9 +238,18 @@ func (t storageType) Info() TypeInfo {
 		Extensions:        []string{"httpfs"},
 		Capabilities:      Capabilities{Catalog: false, Writable: false, ReadOnlyAttach: false, Remote: true, Test: true},
 		FingerprintFields: fp,
-		SignInMethods:     []string{"keychain", "env", "prompt"},
+		SignInMethods:     storageSignIns(t.kind),
 		Presets:           storagePresets(t.kind),
 	}
+}
+
+// storageSignIns are the sign-in methods of a storage type. Only s3 takes an
+// AWS SSO profile; the others have no AWS identity to sign in with.
+func storageSignIns(kind string) []string {
+	if kind == "s3" {
+		return []string{"keychain", "env", "prompt", "aws-sso"}
+	}
+	return []string{"keychain", "env", "prompt"}
 }
 
 // StorageTypeForScheme returns the storage connection type whose scope can

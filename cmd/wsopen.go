@@ -48,7 +48,7 @@ func isVibeTableArg(arg string) bool {
 // environment as it was when the command started, secrets scrubbed through
 // the CLI redactor.
 func cliResolver() *secrets.Resolver {
-	return secrets.NewResolver(secrets.WithRedactor(cliRedactor), secrets.WithResolverLogger(logger), secrets.WithEnv(workspace.SnapshotEnv()))
+	return workspace.NewResolver(workspace.WithSecretsOptions(secrets.WithRedactor(cliRedactor), secrets.WithResolverLogger(logger)))
 }
 
 // addWorkspaceFlag registers the shared --workspace flag.

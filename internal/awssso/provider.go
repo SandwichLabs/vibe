@@ -90,25 +90,24 @@ type Option func(*Provider)
 // only from tests or the planned `ssofake` build tag, never from config or env.
 func WithTestEndpoints(oidc, portal string) Option {
 	return func(p *Provider) {
+		loopbackURL := func(raw string) bool {
+			u, err := url.Parse(raw)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				return false
+			}
+			h := u.Hostname()
+			if h == "localhost" {
+				return true
+			}
+			ip := net.ParseIP(h)
+			return ip != nil && ip.IsLoopback()
+		}
 		if !loopbackURL(oidc) || !loopbackURL(portal) {
 			p.optErr = errors.New("awssso: test endpoints must be loopback URLs")
 			return
 		}
 		p.oidcEndpoint, p.portalEndpoint = oidc, portal
 	}
-}
-
-func loopbackURL(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return false
-	}
-	h := u.Hostname()
-	if h == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
 }
 
 // WithHTTPClient sets the HTTP client for both services (tests record or fake).
@@ -156,10 +155,6 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 type CredOption func(*credCall)
 
 type credCall struct{ bypass bool }
-
-// Bypass ignores the in-memory caches (rotation re-resolves from the cache file
-// and the portal).
-func Bypass() CredOption { return func(c *credCall) { c.bypass = true } }
 
 func (p *Provider) entryFor(prof Profile) *entry {
 	p.mu.Lock()
