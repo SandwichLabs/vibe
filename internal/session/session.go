@@ -128,6 +128,9 @@ type entry struct {
 	expires    time.Time
 	secretGen  int
 	lastRotate time.Time
+	// lastRevive is when a signed-out connection last re-read its sign-in
+	// (reviveSignedOut).
+	lastRevive time.Time
 	// closeRefused: a sign-out was refused (a dependent would not detach), so
 	// ended keys are throttled too.
 	closeRefused bool

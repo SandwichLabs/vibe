@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fails on any function unreachable from the CLI and Studio entry points that is not
+# Fails on any function unreachable from the CLI, Studio and tools/ssofake entry points that is not
 # in scripts/deadcode-allow.txt. Install: go install golang.org/x/tools/cmd/deadcode@latest
 # To clear a finding: delete the function, or move a test-only helper to an export_test.go.
 set -euo pipefail
@@ -11,7 +11,7 @@ command -v deadcode >/dev/null || { echo "deadcode not installed: go install gol
 allow="$(mktemp)"
 trap 'rm -f "$allow"' EXIT
 grep -vE '^[[:space:]]*(#|$)' scripts/deadcode-allow.txt > "$allow"
-out="$(deadcode -tags webkit2_41,duckdb_arrow ./cmd/vibe ./studio)"
+out="$(deadcode -tags webkit2_41,duckdb_arrow ./cmd/vibe ./studio ./tools/ssofake)"
 new="$(printf '%s\n' "$out" | grep -vEf "$allow" || true)"
 if [ -n "$new" ]; then
   echo "new unreachable functions (delete them, or move test-only helpers to export_test.go):"

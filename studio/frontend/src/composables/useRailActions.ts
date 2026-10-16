@@ -10,7 +10,8 @@ import { openPromptFor, refreshConnections } from './useConnections'
 import { takeOverOpen } from './useWorkspace'
 import { askConfirm } from './useConfirm'
 import { errorText } from '../lib/errors'
-import { statusKey, selectFrom, scopeLabel } from '../lib/connections'
+import { statusKey, selectFrom, scopeLabel, ssoProfileOf } from '../lib/connections'
+import { startSignIn } from './useSignIn'
 import type { Row } from '../lib/railTree'
 import type { ConnectionTree } from './useConnectionTree'
 
@@ -51,6 +52,7 @@ export function useRailActions(tree: ConnectionTree, opts: { closeDrawer: () => 
     if (!d) return
     if (d.action === 'fix') void router.push({ path: `/connections/${r.conn.name}`, query: { test: '1' } })
     else if (d.action === 'takeover') takeOverOpen.value = true
+    else if (d.action === 'signin' && ssoProfileOf(r.conn) && !r.conn.serverChanged) void startSignIn(r.conn.name)
     else openPromptFor(r.conn)
   }
 

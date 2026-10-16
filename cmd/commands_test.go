@@ -36,6 +36,10 @@ func resetFlags(c *cobra.Command) {
 	}
 	c.Flags().VisitAll(reset)
 	c.PersistentFlags().VisitAll(reset)
+	// Cobra keeps the context of the first run on each subcommand it reaches, so a
+	// later run would see the earlier one's (a test's fake endpoints, a cancelled
+	// context).
+	c.SetContext(nil) //nolint:staticcheck // clearing, not passing, a context
 	for _, sub := range c.Commands() {
 		resetFlags(sub)
 	}

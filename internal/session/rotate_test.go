@@ -547,3 +547,49 @@ func TestRotateRefusedSignOutKeepsTheInterval(t *testing.T) {
 	calls, _ = e.sso.count()
 	assert.Equal(t, 2, calls)
 }
+
+// A sign-in made elsewhere (`aws sso login`) revives a signed-out storage
+// connection on the next statement, at most once per interval, so a long-lived
+// `vibe mcp serve` needs no restart (#131 step 7 review F2).
+func TestSignedOutConnectionIsRevivedWhenTheSessionReturns(t *testing.T) {
+	e := newRotEnv(t)
+	e.sso.set(func(f *fakeSSO) { f.err = signInNeeded() })
+	e.clock.advance(56 * time.Minute)
+	require.Error(t, e.touch(t))
+	require.Equal(t, StatusNeedsCredentials, status(t, e.s, "store").Kind)
+	require.Zero(t, attachedCatalogs(t, e.s, "lake"))
+	e.heard.mu.Lock()
+	e.heard.names = nil
+	e.heard.mu.Unlock()
+
+	// Still signed out: the first statement after the sign-out tried once; a
+	// second inside the interval does not look again.
+	e.sso.set(func(f *fakeSSO) { f.calls = 0 })
+	_ = e.touch(t)
+	calls, _ := e.sso.count()
+	assert.Zero(t, calls, "no second look within 30 s")
+
+	// The person signs in elsewhere; the interval has passed.
+	e.sso.set(func(f *fakeSSO) { f.err = nil })
+	e.clock.advance(31 * time.Second)
+	require.NoError(t, e.touch(t))
+	assert.Equal(t, StatusOK, status(t, e.s, "store").Kind, "the storage connection is ready again")
+	assert.Equal(t, 1, attachedCatalogs(t, e.s, "lake"), "and its lake follows")
+	assert.Contains(t, e.heard.list(), "store", "the status listener hears of it")
+}
+
+func TestOnlyAnSSOSignOutIsRevived(t *testing.T) {
+	e := newRotEnv(t)
+	e.sso.set(func(f *fakeSSO) { f.err = errors.New("boom"); f.calls = 0 })
+	require.NoError(t, e.s.Register(Spec{Name: "other", Type: "stub", Credential: func(context.Context) (secrets.Credential, error) {
+		return secrets.Credential{}, &secrets.ErrNeedsCredentials{Method: "keychain", Reason: "none"}
+	}}))
+	e.s.Preflight(context.Background(), "other")
+	require.Equal(t, StatusNeedsCredentials, status(t, e.s, "other").Kind)
+	e.clock.advance(time.Minute)
+	n := 0
+	e.sso.set(func(f *fakeSSO) { n = f.calls })
+	require.NoError(t, e.touch(t))
+	calls, _ := e.sso.count()
+	assert.Equal(t, n, calls, "a keychain sign-out has no hint and is not re-read")
+}

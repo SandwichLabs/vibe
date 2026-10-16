@@ -47,8 +47,9 @@ func isVibeTableArg(arg string) bool {
 // cliResolver is the credential resolver of CLI commands: OS keychain,
 // environment as it was when the command started, secrets scrubbed through
 // the CLI redactor.
-func cliResolver() *secrets.Resolver {
-	return workspace.NewResolver(workspace.WithSecretsOptions(secrets.WithRedactor(cliRedactor), secrets.WithResolverLogger(logger)))
+func cliResolver(extra ...workspace.ResolverOption) *secrets.Resolver {
+	opts := append([]workspace.ResolverOption{workspace.WithSecretsOptions(secrets.WithRedactor(cliRedactor), secrets.WithResolverLogger(logger))}, extra...)
+	return workspace.NewResolver(opts...)
 }
 
 // addWorkspaceFlag registers the shared --workspace flag.

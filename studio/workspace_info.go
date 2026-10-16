@@ -8,6 +8,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
@@ -35,6 +36,10 @@ type ConnectionInfo struct {
 	// ServerChanged is set when a needs-credentials status is because the
 	// definition now points at a different server than the saved sign-in.
 	ServerChanged *ServerChange `json:"serverChanged,omitempty"`
+	// SignInNeeded is set when a needs-credentials status is because the
+	// person must sign in with an AWS profile (kind, profile, missing|expired):
+	// the banner and the rail's Sign in button read it. No account or role.
+	SignInNeeded *secrets.SignInHint `json:"signInNeeded,omitempty"`
 }
 
 // WorkspaceCounts are the live counts shown on Home.
@@ -194,7 +199,7 @@ func (a *App) connectionInfosLocked() []ConnectionInfo {
 		ci := ConnectionInfo{
 			Name: st.Name, Type: st.Type, Scope: string(st.Scope), ReadOnly: st.EffectiveReadOnly,
 			Default: st.Default, Status: string(st.Status), Detail: st.Detail, LockedByPID: st.LockedByPID,
-			SignIn: st.SignIn, Remote: st.Remote, Catalogless: st.Catalogless, Extension: st.Extension,
+			SignIn: st.SignIn, SignInNeeded: st.SignInHint, Remote: st.Remote, Catalogless: st.Catalogless, Extension: st.Extension,
 		}
 		for _, sc := range st.Shadows {
 			ci.Shadows = append(ci.Shadows, string(sc))

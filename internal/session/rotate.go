@@ -357,3 +357,34 @@ func (h *hub) clock() time.Time {
 	}
 	return time.Now()
 }
+
+// reviveSignedOut re-reads the sign-in of storage connections that are signed
+// out with an AWS SSO hint, at most once per rotateInterval each. A session made
+// elsewhere (`aws sso login`, or another Vibe window) is found in the shared
+// token cache, so the statement about to run, in a long-lived `vibe mcp serve`
+// as much as in Studio, finds the connection ready again instead of refusing
+// until a restart. Preflight reads the cache without any network when there is
+// still no session, so a statement waits for nothing.
+func (h *hub) reviveSignedOut(ctx context.Context) {
+	now := h.clock()
+	h.mu.Lock()
+	var names []string
+	for n, e := range h.conns {
+		if e.attach || e.status.Kind != StatusNeedsCredentials || e.status.SignIn == nil {
+			continue
+		}
+		if !e.lastRevive.IsZero() && now.Sub(e.lastRevive) < rotateInterval {
+			continue
+		}
+		e.lastRevive = now
+		names = append(names, n)
+	}
+	h.mu.Unlock()
+	sort.Strings(names)
+	for _, n := range names {
+		h.Preflight(ctx, n)
+		if st, ok := h.Status(n); ok && st.Kind != StatusNeedsCredentials {
+			h.notifyStatus(n)
+		}
+	}
+}

@@ -1,15 +1,22 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/awssso"
 	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 const ssoCLIConfig = `[profile dev]
@@ -119,4 +126,133 @@ func TestCLIResolverKnowsAWSSSO(t *testing.T) {
 	st := cliResolver().Status(context.Background(), secrets.Ref{Name: "x"}, "aws-sso:dev", secrets.Binding{})
 	assert.True(t, st.Available, st.Detail)
 	assert.Equal(t, "dev", st.Profile)
+}
+
+// runVibeCtx is runVibe with a context, which is how a test hands the command a
+// loopback fake in place of AWS.
+func runVibeCtx(ctx context.Context, args ...string) (stdout, stderr string, err error) {
+	var out, errb bytes.Buffer
+	resetFlags(rootCmd)
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&errb)
+	rootCmd.SetIn(strings.NewReader(""))
+	rootCmd.SetArgs(args)
+	err = rootCmd.ExecuteContext(ctx)
+	return out.String(), errb.String(), err
+}
+
+func TestConnCredentialsSignIn_PrintsPageAndCodeOpensNothingAndSignsIn(t *testing.T) {
+	ssoHome(t)
+	root := newWS(t)
+	fake := ssofake.New()
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	_, stderr, err := runVibe("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	require.NoError(t, err, stderr)
+
+	ctx := context.WithValue(context.Background(), ssoTestKey{}, []workspace.ResolverOption{
+		workspace.WithSSOTestEndpoints(srv.URL, srv.URL),
+		workspace.WithSSOOptions(awssso.WithSleep(func(c context.Context, _ time.Duration) error {
+			select {
+			case <-c.Done():
+				return c.Err()
+			case <-time.After(10 * time.Millisecond):
+				return nil
+			}
+		})),
+	})
+	// The person approves in the browser once the page and code are printed.
+	go func() {
+		for i := 0; i < 500; i++ {
+			if fake.Waiting() > 0 {
+				fake.Approve()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	out, stderr, err := runVibeCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, out, "open this page")
+	assert.Contains(t, out, srv.URL+"/verify")
+	assert.Contains(t, out, ssofake.UserCode)
+	assert.Contains(t, out, "Signed in to AWS profile dev")
+	for _, n := range []string{ssofake.NeedleAccess, ssofake.NeedleRefresh, ssofake.NeedleClientSecret, "123456789012", "NeedleRoleName"} {
+		assert.NotContains(t, out+stderr, n)
+	}
+	// The token went where the AWS CLI keeps it, and the session now reads as signed in.
+	cache, _ := filepath.Glob(filepath.Join(os.Getenv("HOME"), ".aws", "sso", "cache", "*.json"))
+	assert.Len(t, cache, 1)
+	st, _, err := runVibeCtx(ctx, "conn", "credentials", "status", "dev", "--workspace", root)
+	require.NoError(t, err)
+	assert.Contains(t, st, "signed in:     true")
+}
+
+func TestConnCredentialsSignIn_RefusesWhatIsNotAnAWSSignIn(t *testing.T) {
+	ssoHome(t)
+	root := newWS(t)
+	_, stderr, err := runVibe("conn", "add", "pg", "--type", "postgres", "--host", "db.internal", "--database", "d", "--workspace", root)
+	require.NoError(t, err, stderr)
+	_, _, err = runVibe("conn", "credentials", "sign-in", "pg", "--workspace", root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conn credentials set pg")
+	_, _, err = runVibe("conn", "credentials", "sign-in", "nope", "--workspace", root)
+	require.Error(t, err)
+}
+
+func TestConnCredentialsSignIn_DeniedAndCancelled(t *testing.T) {
+	ssoHome(t)
+	root := newWS(t)
+	fake := ssofake.New()
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	_, stderr, err := runVibe("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	require.NoError(t, err, stderr)
+	opts := []workspace.ResolverOption{workspace.WithSSOTestEndpoints(srv.URL, srv.URL), workspace.WithSSOOptions(awssso.WithSleep(func(c context.Context, _ time.Duration) error {
+		select {
+		case <-c.Done():
+			return c.Err()
+		case <-time.After(10 * time.Millisecond):
+			return nil
+		}
+	}))}
+	ctx := context.WithValue(context.Background(), ssoTestKey{}, opts)
+	go func() {
+		for i := 0; i < 500; i++ {
+			if fake.Waiting() > 0 {
+				fake.Deny()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	_, _, err = runVibeCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "denied")
+
+	cctx, cancel := context.WithCancel(ctx)
+	go func() {
+		for i := 0; i < 500; i++ {
+			if fake.Waiting() > 0 {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	_, _, err = runVibeCtx(cctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+// The sign-in command prints the page and the code and starts no other program:
+// there is no browser opener to inject an argument into.
+func TestConnCredentialsSignIn_StartsNoProcess(t *testing.T) {
+	for _, f := range []string{"conn_signin.go", "../internal/workspace/signin.go"} {
+		src, err := os.ReadFile(f)
+		require.NoError(t, err)
+		for _, banned := range []string{`"os/exec"`, "xdg-open", "rundll32", "BrowserOpen"} {
+			assert.NotContains(t, string(src), banned, f)
+		}
+	}
 }

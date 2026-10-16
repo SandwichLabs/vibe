@@ -70,6 +70,13 @@ const NEEDS: Record<string, string> = {
   azure: 'an account key, connection string or service principal',
 }
 
+// ssoProfileOf is the AWS profile a connection signs in with, or '' when it
+// does not use one: from the status hint, else from the person's sign-in method.
+export function ssoProfileOf(c: ConnectionInfo): string {
+  if (c.signInNeeded?.kind === 'aws-sso') return c.signInNeeded.subject
+  return (c.signIn ?? '').startsWith('aws-sso:') ? c.signIn!.slice(8) : ''
+}
+
 // detailLine is the text under a row, only when the person can act on it.
 export function detailLine(c: ConnectionInfo): DetailLine | null {
   switch (statusKey(c.status)) {
@@ -78,6 +85,11 @@ export function detailLine(c: ConnectionInfo): DetailLine | null {
     case 'creds':
       if (c.serverChanged) {
         return { text: `The server changed since you signed in (${c.serverChanged.old} to ${c.serverChanged.new}).`, action: 'signin', actionLabel: 'Sign in again' }
+      }
+      if (ssoProfileOf(c)) {
+        const p = ssoProfileOf(c)
+        const gone = c.signInNeeded?.reason === 'expired'
+        return { text: gone ? `AWS session for profile ${p} has expired.` : `Not signed in to AWS profile ${p}.`, action: 'signin', actionLabel: 'Sign in' }
       }
       return { text: `Needs ${NEEDS[c.type] ?? 'credentials'}.`, action: 'signin', actionLabel: 'Add it' }
     case 'ext':

@@ -172,6 +172,12 @@ type App struct {
 	installing atomic.Bool
 	relaunch   func(goos, target string, args ...string) error
 
+	// flows are the AWS sign-in flows in flight (signin.go); openURL opens the
+	// page a flow shows (nil: the Wails runtime; tests and the ssofake dev build
+	// replace it).
+	flows   signInFlows
+	openURL func(string)
+
 	// bundles holds .vibe bundles that were previewed and await their commit (#118).
 	bundles bundleStore
 }
@@ -193,7 +199,8 @@ func NewApp(logger *slog.Logger) *App {
 	logger = slog.New(secrets.NewRedactingHandler(logger.Handler(), red))
 	app := &App{
 		logger:          logger,
-		secrets:         workspace.NewResolver(workspace.WithSecretsOptions(secrets.WithRedactor(red), secrets.WithResolverLogger(logger))),
+		secrets:         workspace.NewResolver(append(ssoDevOptions(), workspace.WithSecretsOptions(secrets.WithRedactor(red), secrets.WithResolverLogger(logger)))...),
+		openURL:         ssoDevOpenURL(),
 		llmCfg:          config.Load().LLM,
 		approvals:       agents.NewApprovalQueue(),
 		approvalTimeout: defaultApprovalTimeout,

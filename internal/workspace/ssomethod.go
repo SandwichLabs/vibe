@@ -224,3 +224,17 @@ func signInKindAllowed(allowed []string, kind string) bool {
 	}
 	return false
 }
+
+var _ secrets.DeviceSigner = ssoMethod{}
+
+// DeviceLogin runs the OIDC device flow for the profile (awssso.DeviceLogin) and
+// writes the shared token cache. It opens no browser: show gets a URL that has
+// passed the host check, and the caller decides how to present it.
+func (m ssoMethod) DeviceLogin(ctx context.Context, profile string, show func(secrets.DevicePrompt)) error {
+	if err := m.unavailable(); err != nil {
+		return err
+	}
+	return m.p.DeviceLogin(ctx, profile, func(p awssso.Prompt) {
+		show(secrets.DevicePrompt{URL: p.URL, Code: p.Code, ExpiresAt: p.ExpiresAt})
+	})
+}

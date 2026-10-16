@@ -53,7 +53,7 @@ CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`conf
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area),
-                     workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go,
+                     workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
@@ -81,7 +81,7 @@ internal/
   bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, storageglob/, jsonenc/, prefs/, config/, templates/, tui/, testsupport/
-                     (storageglob = s3/gcs/r2 wildcard expansion: DuckDB's parser finds the pattern literals, the hub's private lister lists them, the SQL is rewritten to explicit key lists before it runs, #138; testsupport = integration-tag-only test fixtures, e.g. a throwaway MinIO; jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
+                     (storageglob = s3/gcs/r2 wildcard expansion: DuckDB's parser finds the pattern literals, the hub's private lister lists them, the SQL is rewritten to explicit key lists before it runs, #138; testsupport = test fixtures: miniotest (a throwaway MinIO, integration tag only) and ssofake (a loopback AWS IAM Identity Center for tests, `tools/ssofake` and the `ssofake` dev build); jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
   selfupdate/        release check + install.sh-driven apply (opt-in, confirmed; manifest-based install detection; Service wires prefs); `vibe update`, Studio's About > Updates
   buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys

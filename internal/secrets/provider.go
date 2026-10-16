@@ -166,3 +166,39 @@ func (r *Resolver) CheckTarget(method string, t Target) error {
 	}
 	return nil
 }
+
+// DevicePrompt is what a person is shown to finish a device sign-in: open URL
+// and check that the page shows Code. Neither is a secret. URL has already
+// passed the provider's host check.
+type DevicePrompt struct {
+	URL       string
+	Code      string
+	ExpiresAt time.Time
+}
+
+// DeviceSigner is an optional extension of MethodProvider: it runs the
+// provider's interactive sign-in (the OIDC device flow). It never opens a
+// browser itself; show is called once with what to display and must not block.
+type DeviceSigner interface {
+	DeviceLogin(ctx context.Context, subject string, show func(DevicePrompt)) error
+}
+
+// DeviceSignIn runs the device sign-in of method's provider and blocks until
+// the person approves, it is denied or expires, or ctx ends. Only an explicit
+// person action calls it (a Studio binding, one CLI command); resolving a
+// credential never does.
+func (r *Resolver) DeviceSignIn(ctx context.Context, method string, show func(DevicePrompt)) error {
+	kind, subject, err := ParseMethod(method)
+	if err != nil {
+		return err
+	}
+	p, err := r.provider(kind)
+	if err != nil {
+		return err
+	}
+	ds, ok := p.(DeviceSigner)
+	if !ok {
+		return fmt.Errorf("the %s sign-in method cannot sign in from Vibe", kind)
+	}
+	return ds.DeviceLogin(ctx, subject, show)
+}

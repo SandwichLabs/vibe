@@ -127,6 +127,13 @@ jobs:
             -X main.commit=$COMMIT \
             -X main.date=$DATE"
 
+      # The ssofake tag (AWS sign-in against local fakes) must never ship: read it back from the binary.
+      - name: Check the Studio binary has no ssofake tag
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/vibe-studio.app/Contents/MacOS/vibe-studio; else studio=studio/build/bin/vibe-studio; fi
+          scripts/check-binary-tags.sh vibe "$studio"
+
       - name: Package (and ad-hoc sign on macOS)
         shell: bash
         run: scripts/package.sh "$OS_NAME" "$ARCH" "$VER" dist

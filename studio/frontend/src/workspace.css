@@ -165,6 +165,7 @@ kbd {
 
 .linkbtn { background: none; border: 0; padding: 6px 8px; font-family: var(--sh-font-body); font-weight: 600; font-size: 13px; color: var(--sh-teal); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; cursor: pointer; }
 .linkbtn.danger { color: var(--sh-error); }
+.err-text { color: var(--vibe-error); }
 .linkbtn:hover { color: var(--sh-teal-lo); }
 
 .opt-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 2px solid var(--vibe-border); border-radius: var(--sh-radius-sm); background: var(--sh-surface); width: 100%; text-align: left; color: var(--sh-ink); }
@@ -173,6 +174,7 @@ kbd {
 .opt-card .od { font-size: 13px; color: var(--sh-graphite); display: block; line-height: 1.45; margin-top: 2px; }
 .opt-card .od code { font-size: 11.5px; }
 .opt-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.opt-row.four { grid-template-columns: repeat(2, 1fr); }
 .switch-row { display: flex; gap: 14px; align-items: flex-start; }
 .switch-row .toggle { flex: none; margin-top: 2px; }
 .switch-row .st-t { font-weight: 600; font-size: 14px; display: block; }

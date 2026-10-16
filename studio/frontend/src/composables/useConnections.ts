@@ -9,6 +9,7 @@ import { errorText } from '../lib/errors'
 import { takeOverOpen } from './useWorkspace'
 import { hasWailsRuntime } from '../lib/wails'
 import { App } from '../lib/bindings'
+import { ssoProfileOf } from '../lib/connections'
 
 export const connectionList = ref<ConnectionInfo[]>([])
 export const relaunch = ref<{ required: boolean; message: string }>({ required: false, message: '' })
@@ -21,6 +22,14 @@ export const connecting = ref<Set<string>>(new Set())
 // raise the same prompt.
 export const signInFor = ref<string | null>(null)
 export const extensionFor = ref<{ connection: string; extension: string } | null>(null)
+
+// An AWS sign-in is the device flow (useSignIn), not a password prompt, and it
+// starts only from an explicit Sign in button. A prompt raised by some other use
+// (a failed Run, a pick in the connection selector, a tree expand, a deep link)
+// only reveals the banner. useSignIn registers its reveal here; it imports this
+// module, so it cannot be imported back.
+let revealAwsSignIn: ((profile: string) => void) | null = null
+export function setAwsSignInReveal(f: ((profile: string) => void) | null): void { revealAwsSignIn = f }
 
 let started = false
 const unsubs: Array<() => void> = []
@@ -81,7 +90,12 @@ export async function connect(name: string): Promise<ConnectResult> {
 // openPromptFor raises the prompt a status asks for, if any.
 export function openPromptFor(c: ConnectionInfo): boolean {
   switch (c.status) {
-    case 'needs-credentials': signInFor.value = c.name; return true
+    case 'needs-credentials':
+      // A changed server is confirmed in the editor, which the prompt links to (Edit
+      // connection) without leaving the page that raised it; a new sign-in cannot fix it.
+      if (ssoProfileOf(c) && !c.serverChanged && revealAwsSignIn) { revealAwsSignIn(ssoProfileOf(c)); return true }
+      signInFor.value = c.name
+      return true
     case 'extension-missing': extensionFor.value = { connection: c.name, extension: c.extension || '' }; return true
     case 'locked-by': takeOverOpen.value = true; return true
   }
@@ -97,4 +111,5 @@ export function _resetConnectionsForTests(): void {
   signInFor.value = null
   extensionFor.value = null
   catalogVersion.value = 0
+  revealAwsSignIn = null
 }

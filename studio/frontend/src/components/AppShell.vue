@@ -11,6 +11,7 @@ import Icon from './Icon.vue'
 import AgentPanel from './AgentPanel.vue'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 import WorkspaceBanner from './WorkspaceBanner.vue'
+import SignInBanner from './SignInBanner.vue'
 import McpApprovals from './McpApprovals.vue'
 import ConnectionRail from './ConnectionRail.vue'
 import ConnectionDialogs from './ConnectionDialogs.vue'
@@ -176,6 +177,7 @@ watch(() => info.value?.name, (name) => {
     <!-- Main content -->
     <main style="overflow: hidden; background: var(--sh-paper); min-width: 0; display: flex; flex-direction: column;">
       <WorkspaceBanner />
+      <SignInBanner />
       <div style="flex: 1; min-height: 0; overflow: hidden;">
         <router-view :key="info?.sessionId ?? 'none'" />
       </div>
