@@ -40,6 +40,10 @@ var (
 // TestTimeout bounds one Test (secret, attach and probe).
 const TestTimeout = 10 * time.Second
 
+// maxRequiredTotal caps a Test that tries storage connections first: each part
+// has its own TestTimeout, the whole at most this.
+const maxRequiredTotal = 30 * time.Second
+
 // TestResult is what Test returns. Every string in it is redacted.
 type TestResult struct {
 	OK bool `json:"ok"`
@@ -51,6 +55,10 @@ type TestResult struct {
 	// Count is the table count (catalogs) or object count (storage scopes).
 	Count  int    `json:"count"`
 	Detail string `json:"detail,omitempty"`
+	// Requirement names the storage connection that failed, when the lake or
+	// table under test read with another connection's secret and that part
+	// failed first ("" when the definition itself failed or all was well).
+	Requirement string `json:"requirement,omitempty"`
 	// Error is the redacted failure message; it never holds a credential.
 	Error string `json:"error,omitempty"`
 	// InstallHint names the extension the person can install and retry.
@@ -81,6 +89,8 @@ type testOpts struct {
 	exe      string
 	timeout  time.Duration
 	redactor *secrets.Redactor
+	// required are the storage connections tried first, in the same session.
+	required []requiredStorage
 }
 
 // WithTestExtensionDir pins the extension directory (default: the app's).
@@ -122,9 +132,9 @@ func test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOpt
 		f(&o)
 	}
 	red := secrets.NewRedactor()
-	red.AddCredential(cred)
-	if o.redactor != nil {
-		o.redactor.AddCredential(cred)
+	o.addRedacted(red, cred)
+	for _, r := range o.required {
+		o.addRedacted(red, r.cred)
 	}
 	fail := func(kind session.StatusKind, err error) TestResult {
 		msg := secrets.RedactPatterns(red.Redact(err.Error()))
@@ -150,12 +160,20 @@ func test(ctx context.Context, def Def, cred secrets.Credential, opts ...TestOpt
 			return TestResult{OK: true, Status: session.StatusOK, Detail: "a new lake: its catalog file is created the first time something writes to it"}
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
-
 	if def.Type == "motherduck" {
+		ctx, cancel := context.WithTimeout(ctx, o.timeout)
+		defer cancel()
 		return testInSubprocess(ctx, def, cred, o, red)
 	}
+	if len(o.required) > 0 {
+		// Each part (the storage connections, then the definition) has its own
+		// limit, runTest applies them; the whole is capped too.
+		ctx, cancel := context.WithTimeout(ctx, min(maxRequiredTotal, o.timeout*time.Duration(len(o.required)+1)))
+		defer cancel()
+		return runTest(ctx, def, cred, o, red)
+	}
+	ctx, cancel := context.WithTimeout(ctx, o.timeout)
+	defer cancel()
 	return runTest(ctx, def, cred, o, red)
 }
 
@@ -198,7 +216,12 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	fail := func(kind session.StatusKind, err error, ext string) TestResult {
 		return TestResult{Status: kind, Error: secrets.RedactPatterns(red.Redact(err.Error())), InstallExtension: ext}
 	}
-	if o.install {
+	if len(o.required) > 0 {
+		if err := checkCovered(def, o.required); err != nil {
+			return fail(session.StatusError, err, "")
+		}
+	}
+	if o.install && len(o.required) == 0 {
 		if err := installBeforeOpen(ctx, def, o); err != nil {
 			return fail(session.StatusError, err, "")
 		}
@@ -221,8 +244,31 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	spec.ReadOnly = def.Type != "motherduck" // a test never writes (MotherDuck cannot attach read-only)
 	c := cred
 	spec.Credential = func(context.Context) (secrets.Credential, error) { return c, nil }
+	if len(o.required) > 0 {
+		var failed bool
+		var res TestResult
+		if spec.Requires, res, failed = attachRequired(ctx, sess, def, o, red); failed {
+			return res
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.timeout)
+		defer cancel()
+		if o.install {
+			if err := installBeforeOpen(ctx, def, o); err != nil {
+				return fail(session.StatusError, err, "")
+			}
+		}
+	}
+	return attachAndProbe(ctx, sess, def, spec, o, red)
+}
+
+// attachAndProbe attaches spec in sess and probes it. ctx carries the limit.
+func attachAndProbe(ctx context.Context, sess session.Session, def Def, spec session.Spec, o testOpts, red *secrets.Redactor) TestResult {
+	fail := func(kind session.StatusKind, err error, ext string) TestResult {
+		return TestResult{Status: kind, Error: secrets.RedactPatterns(red.Redact(err.Error())), InstallExtension: ext}
+	}
 	start := time.Now()
-	if attachesOnlyInWorkspace(def) {
+	if attachesOnlyInWorkspace(def) && len(spec.Requires) == 0 {
 		// Read with the storage connection whose scope contains it: this
 		// throwaway session has no storage secret. Probe says so.
 		_, detail, _ := registry[def.Type].Probe(ctx, sess, spec)
@@ -247,6 +293,7 @@ func runTest(ctx context.Context, def Def, cred secrets.Credential, o testOpts, 
 	var (
 		n      int
 		detail string
+		err    error
 	)
 	if t, ok := registry[def.Type]; ok {
 		n, detail, err = t.Probe(ctx, sess, spec)

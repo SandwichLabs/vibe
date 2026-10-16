@@ -43,6 +43,9 @@ type TestResultView struct {
 	Error   *TestError `json:"error,omitempty"`
 	// InstallExtension names an extension to install (then test again).
 	InstallExtension string `json:"installExtension,omitempty"`
+	// Requirement names the storage connection that failed when the lake or
+	// table reads with one ("" when the connection itself failed).
+	Requirement string `json:"requirement,omitempty"`
 }
 
 // TestConnection attaches the definition in a throwaway session and probes it,
@@ -77,15 +80,13 @@ func (a *App) probe(ws workspace.Workspace, c workspace.Connection, signIn strin
 	if err != nil {
 		return fail(connections.CodeInvalid, a.redact(err.Error()), err.Error())
 	}
-	cred, err := workspace.TestCredential(a.ctxOrBackground(), ws, rc, signIn, typed)
+	// The test never reads a read-only flag a person might have off.
+	res, err := workspace.TestWithRequirements(a.ctxOrBackground(), ws, rc, signIn, typed, connections.WithTestRedactor(a.secrets.Redactor()))
 	var changed *secrets.ErrFingerprintChanged
 	if errors.As(err, &changed) {
 		return fail(connections.CodeServerChanged, connections.ServerChangedMessage, "")
 	}
-	a.secrets.Redactor().AddCredential(cred)
-	// The test never reads a read-only flag a person might have off.
-	res := connections.Test(a.ctxOrBackground(), rc.Def(true), cred, connections.WithTestRedactor(a.secrets.Redactor()))
-	out := &TestResultView{OK: res.OK, Status: string(res.Status), Ms: res.Latency.Milliseconds(), Count: res.Count, Detail: res.Detail, InstallExtension: res.InstallExtension}
+	out := &TestResultView{OK: res.OK, Status: string(res.Status), Ms: res.Latency.Milliseconds(), Count: res.Count, Detail: res.Detail, InstallExtension: res.InstallExtension, Requirement: res.Requirement}
 	if res.OK {
 		out.Summary = a.redact(res.Detail)
 		return out

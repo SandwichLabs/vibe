@@ -353,3 +353,19 @@ func TestListMotherDuckDatabases_EnvSignInIgnoresATypedToken(t *testing.T) {
 	assert.Empty(t, res.Source, "no typed token was used")
 	assert.NotContains(t, res.Message, leakNeedle)
 }
+
+// A lake read with a storage connection: Test tries the storage connection first
+// and reports it as the failure (Requirement), without its secret.
+func TestLeak_TestOfALakeNamesTheFailedStorageConnection(t *testing.T) {
+	app := leakApp(t, map[string]string{"STO_KEY_ID": "AKIAsto", "STO_SECRET": leakNeedle})
+	_, err := app.SaveConnection(SaveConnectionRequest{Scope: "local", Def: workspace.ConnectionDef{Name: "store", Type: "s3", Scope: "s3://acme/", Region: "us-east-1",
+		Options: map[string]string{"endpoint": "127.0.0.1:1", "use_ssl": "false"}}, IsNew: true, SignIn: "env:STO"})
+	require.NoError(t, err)
+	lake := workspace.ConnectionDef{Name: "sales", Type: "ducklake", Path: "s3://acme/c.ducklake", Options: map[string]string{"data_path": "s3://acme/d/"}}
+	res, err := app.TestConnection(TestConnectionRequest{Scope: "local", Def: lake})
+	require.NoError(t, err)
+	require.NotNil(t, res.Error)
+	assert.False(t, res.OK)
+	assert.Equal(t, "store", res.Requirement)
+	assert.NotContains(t, res.Error.Message+res.Error.Details, leakNeedle)
+}

@@ -20,6 +20,7 @@ const (
 	CodeDBNotFound       = "db-not-found"
 	CodeSSLRequired      = "ssl-required"
 	CodeKeychain         = "keychain"
+	CodeNeedsCredentials = "needs-credentials"
 	CodeUnreachable      = "unreachable"
 )
 

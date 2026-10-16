@@ -365,7 +365,7 @@ func runConnTest(cmd *cobra.Command, args []string) error {
 		return errors.New(cliRedactor.Redact(err.Error()))
 	}
 	out := cmd.OutOrStdout()
-	cred, err := workspace.TestCredential(ctx, ws, rc, "", secrets.Credential{})
+	res, err := workspace.TestWithRequirements(ctx, ws, rc, "", secrets.Credential{}, connections.WithInstall(install), connections.WithTestRedactor(cliRedactor))
 	if err != nil {
 		var nc *secrets.ErrNeedsCredentials
 		var fp *secrets.ErrFingerprintChanged
@@ -374,16 +374,32 @@ func runConnTest(cmd *cobra.Command, args []string) error {
 		}
 		return errors.New(cliRedactor.Redact(err.Error()))
 	}
-	res := connections.Test(ctx, rc.Def(true), cred, connections.WithInstall(install), connections.WithTestRedactor(cliRedactor))
 	if !res.OK {
-		msg := fmt.Sprintf("%s: %s: %s", args[0], res.Status, res.Error)
-		if res.InstallExtension != "" {
-			msg += fmt.Sprintf("\n(re-run with --install to download the %q extension)", res.InstallExtension)
-		}
-		return errors.New(msg)
+		return errors.New(connTestFailure(args[0], res))
+	}
+	for _, req := range rc.Requires {
+		// The storage part is tried first, so it is reported first.
+		fmt.Fprintf(out, "%s: ok (storage for %s)\n", req, args[0])
 	}
 	fmt.Fprintf(out, "%s: ok, %s (%d ms)\n", args[0], res.Detail, res.Latency.Milliseconds())
 	return nil
+}
+
+// connTestFailure words a failed test. A failure of a storage connection the
+// connection reads with says so first, and names the connection to fix.
+func connTestFailure(name string, res connections.TestResult) string {
+	msg := fmt.Sprintf("%s: %s: %s", name, res.Status, res.Error)
+	if res.Requirement != "" {
+		why := res.Error
+		if why == "" {
+			why = res.Message
+		}
+		msg = fmt.Sprintf("%s: storage connection %q failed (%s): %s\n(%s was not tried; fix %q with `vibe conn test %s`)", name, res.Requirement, res.Status, why, name, res.Requirement, res.Requirement)
+	}
+	if res.InstallExtension != "" {
+		msg += fmt.Sprintf("\n(re-run with --install to download the %q extension)", res.InstallExtension)
+	}
+	return msg
 }
 
 // --- connect ---
