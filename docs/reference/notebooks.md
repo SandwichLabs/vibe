@@ -175,8 +175,22 @@ Components are a **flat list**, nested by a `parent` id field rather than by
 JSON nesting — a `container` or `statRow`'s children point their `parent` at
 its id. This is the live source of truth: `internal/a2ui.Components` (and
 its presentation order, `internal/a2ui.typeOrder`, used in the agent's system
-prompt). A docs-consistency test (`internal/docsref`) fails the build if a
+prompt; the view-only types are the separate `internal/a2ui.ViewComponents`, which the prompt never lists). A docs-consistency test (`internal/docsref`) fails the build if a
 component type here goes out of sync with that registry.
+
+### Artifact view components
+
+These types exist **only in a data artifact view** (`artifacts/<name>/view.a2ui.json`, see [`artifacts.md`](artifacts.md)). A notebook `a2ui` cell, a chat `present_data` page or `create_dashboard` that carries one is refused with "only allowed in a data artifact view" (a notebook drops the cell with that warning). They name manifest parameters and queries, so they validate only against a manifest.
+
+| Type | Required fields | Optional fields |
+|---|---|---|
+| `select` | `param` (an `enum` or `boolean` parameter) | `label` |
+| `dateRange` | `start`, `end` (two `date` parameters) | `label` |
+| `numberInput` | `param` (a `number` or `integer` parameter) | `label` |
+| `textInput` | `param` (a `text` parameter) | `label` |
+| `pivot` | `query`, `rows` (1 to 8 column names), `columns`, `value` | `label`, `drill` |
+
+In a view the data-bound types take `query` (a manifest query name) instead of `sql` and `connection`, and `table`, `barChart` and `columnChart` also take `drill` (`{param, column}`). See [`artifacts.md`](artifacts.md).
 
 ### Data-bound components
 

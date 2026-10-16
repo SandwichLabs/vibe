@@ -142,6 +142,19 @@ func TestCreateDashboard_RejectsInvalidPage(t *testing.T) {
 	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
 }
 
+func TestCreateDashboard_RefusesViewOnlyComponents(t *testing.T) {
+	handler, _ := newNotebookTestHandler(t, ModeFull)
+	resp := handler.Handle(context.Background(), &Request{
+		JSONRPC: "2.0", ID: "1", Method: "create_dashboard",
+		Params: map[string]any{"page": map[string]any{"title": "D", "components": []any{
+			map[string]any{"id": "a", "type": "table", "query": "by_region"},
+		}}},
+	})
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "only allowed in a data artifact view")
+}
+
 func TestCreateDashboard_AppendsA2UICell(t *testing.T) {
 	handler, nbs := newNotebookTestHandler(t, ModeFull)
 	ctx := context.Background()

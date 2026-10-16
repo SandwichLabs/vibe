@@ -146,7 +146,7 @@ func (s *FileStore) load(name string) (*Artifact, error) {
 	if !p.view.present {
 		return nil, invalid("%s is missing", ViewFile)
 	}
-	if err := ValidateView(p.view.data); err != nil {
+	if err := ValidateView(m, p.view.data); err != nil {
 		return nil, err
 	}
 	return &Artifact{

@@ -14,7 +14,7 @@ import (
 )
 
 const artifactManifest = "version: 1\ntitle: T\nqueries:\n  - name: q\n    sql: SELECT 1\n"
-const artifactView = `{"title":"T","components":[]}`
+const artifactView = `{"title":"T","components":[{"id":"root","type":"container"}]}`
 
 func TestClassify_Artifacts(t *testing.T) {
 	k, id, ok := classify("artifacts/regional-sales/artifact.yaml")

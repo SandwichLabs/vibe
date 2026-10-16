@@ -78,7 +78,7 @@ internal/
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json}` under one two-file revision; structure only, SQL vetting lives in `internal/agents`
-  a2ui/              component schema + validator (Go validates, Vue renders)
+  a2ui/              component schema + validator (Go validates, Vue renders); `ValidateView` + `ViewComponents` = the context-aware data artifact view schema (controls, pivot, `query`/`drill`; refused by `Validate`)
   bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
   filestore/, filelock/, storageurl/, storageglob/, jsonenc/, prefs/, config/, templates/, tui/, testsupport/

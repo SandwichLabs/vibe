@@ -67,7 +67,7 @@ func TestFileStore_TwoFileRev_EitherFileChangedConflicts(t *testing.T) {
 			if file == ManifestFile {
 				cur = []byte(strings.Replace(string(cur), "title: Regional sales", "title: Edited by hand", 1))
 			} else {
-				cur = []byte(`{"title":"hand edited","components":[]}`)
+				cur = []byte(`{"title":"hand edited","components":[{"id":"root","type":"container"}]}`)
 			}
 			require.NoError(t, os.WriteFile(p, cur, 0o644))
 			beforeM, _ := os.ReadFile(fsPath(root, "sales", ManifestFile))
@@ -75,7 +75,7 @@ func TestFileStore_TwoFileRev_EitherFileChangedConflicts(t *testing.T) {
 
 			mine := newArtifact(t, "sales")
 			mine.Manifest.Title = "Mine"
-			mine.View = []byte(`{"title":"mine","components":[]}`)
+			mine.View = []byte(`{"title":"mine","components":[{"id":"root","type":"container"}]}`)
 			err = s.Put(context.Background(), mine, WithRev(loaded))
 			require.ErrorIs(t, err, ErrConflict)
 
@@ -398,7 +398,7 @@ func TestFileStore_ConflictingPutLeavesThePairAsItWas(t *testing.T) {
 	foreign := []byte(strings.Replace(string(oldM), "title: Regional sales", "title: Foreign", 1))
 	inject = func() { require.NoError(t, os.WriteFile(fsPath(root, "sales", ManifestFile), foreign, 0o644)) }
 	mine := newArtifact(t, "sales")
-	mine.View = []byte(`{"title":"mine","components":[]}`)
+	mine.View = []byte(`{"title":"mine","components":[{"id":"root","type":"container"}]}`)
 	got, err := s.Get(ctx, "sales")
 	require.NoError(t, err)
 	mine.Rev = got.Rev
@@ -461,7 +461,7 @@ func TestFileStore_DeleteChecksTheLastSeenRevision(t *testing.T) {
 	ctx := context.Background()
 	s := NewFileStore(root)
 	putFresh(t, s, "sales")
-	require.NoError(t, os.WriteFile(fsPath(root, "sales", ViewFile), []byte(`{"edited":"outside"}`), 0o644))
+	require.NoError(t, os.WriteFile(fsPath(root, "sales", ViewFile), []byte(`{"title":"edited","components":[{"id":"root","type":"container"}]}`), 0o644))
 	require.ErrorIs(t, s.Delete(ctx, "sales"), ErrConflict)
 	_, err := os.Stat(fsPath(root, "sales", ManifestFile))
 	assert.NoError(t, err, "nothing was deleted")

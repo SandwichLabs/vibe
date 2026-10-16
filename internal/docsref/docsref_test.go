@@ -17,9 +17,11 @@
 package docsref
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -86,6 +88,10 @@ func TestReferenceDocsDocumentEveryA2UIComponent(t *testing.T) {
 		assert.Contains(t, docs, strings.ToLower(name),
 			"a2ui component %q is registered in internal/a2ui but undocumented in docs/reference/", name)
 	}
+	for name := range a2ui.ViewComponents {
+		assert.Contains(t, docs, strings.ToLower(name),
+			"a2ui view component %q is registered in internal/a2ui but undocumented in docs/reference/", name)
+	}
 }
 
 // TestReferenceDocsDocumentColorEnum asserts every closed A2UI color token
@@ -134,45 +140,108 @@ func TestReferenceDocsCoverRequiredSections(t *testing.T) {
 	}
 }
 
-// componentTableRowRe matches one row of docs/reference/notebooks.md's "##
-// Component types" table: `| \`Type\` | required | optional |`. Capturing
+// componentTableRowRe matches one row of a component table in
+// docs/reference/notebooks.md: `| \`Type\` | required | optional |`. Capturing
 // group 1 is the backtick-wrapped type name in the first column.
 var componentTableRowRe = regexp.MustCompile("(?m)^\\|\\s*`([A-Za-z][A-Za-z0-9]*)`\\s*\\|")
 
-// notebooksDocComponentTypes parses every component type named in
-// docs/reference/notebooks.md's component-types table (the first column of
-// each `| \`Type\` | ... | ... |` row).
-func notebooksDocComponentTypes(t *testing.T, root string) map[string]bool {
+// docSection returns the text of the markdown section whose heading line is
+// exactly heading, up to the next heading of the same or a higher level (or
+// the end of the file).
+func docSection(t *testing.T, doc, heading string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, "docs", "reference", "notebooks.md"))
-	require.NoError(t, err, "docs/reference/notebooks.md must exist")
+	level := len(heading) - len(strings.TrimLeft(heading, "#"))
+	lines := strings.Split(doc, "\n")
+	var out []string
+	inSection := false
+	for _, line := range lines {
+		if !inSection {
+			inSection = strings.TrimRight(line, " \t\r") == heading
+			continue
+		}
+		if l := len(line) - len(strings.TrimLeft(line, "#")); l > 0 && l <= level && strings.HasPrefix(line[l:], " ") {
+			break
+		}
+		out = append(out, line)
+	}
+	require.True(t, inSection, "docs/reference/notebooks.md has no %q section", heading)
+	return strings.Join(out, "\n")
+}
 
+// tableTypes parses every type named in a section's table rows (the first
+// column of each `| \`Type\` | ... | ... |` row).
+func tableTypes(section string) map[string]bool {
 	out := map[string]bool{}
-	for _, m := range componentTableRowRe.FindAllStringSubmatch(string(data), -1) {
+	for _, m := range componentTableRowRe.FindAllStringSubmatch(section, -1) {
 		out[m[1]] = true
 	}
 	return out
 }
 
-// TestNotebooksDocComponentTableMatchesA2UIRegistry cross-checks
-// docs/reference/notebooks.md's "Component types" table against
-// internal/a2ui.Components BOTH ways: every registered type must have a
-// table row (TestReferenceDocsDocumentEveryA2UIComponent already partly
-// covers this via a substring check, but not specifically the table), and
-// every table row must name a real registered type — so a typo'd or
-// stale/renamed component type in the table (not just a totally missing
-// one) is caught too.
-func TestNotebooksDocComponentTableMatchesA2UIRegistry(t *testing.T) {
-	root := repoRoot(t)
-	docTypes := notebooksDocComponentTypes(t, root)
-	require.NotEmpty(t, docTypes, "docs/reference/notebooks.md's component-types table must not be empty/unparseable")
+// notebooksDocSection reads one section of docs/reference/notebooks.md.
+func notebooksDocSection(t *testing.T, root, heading string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "docs", "reference", "notebooks.md"))
+	require.NoError(t, err, "docs/reference/notebooks.md must exist")
+	return docSection(t, string(data), heading)
+}
 
-	for name := range a2ui.Components {
-		assert.True(t, docTypes[name], "a2ui component %q has no row in docs/reference/notebooks.md's component-types table", name)
+// tableProblems checks a doc table against a registry both ways and returns
+// what is wrong: every registered type needs a row, and every row must name a
+// registered type.
+func tableProblems[V any](docTypes map[string]bool, registry map[string]V, where string) []string {
+	var problems []string
+	if len(docTypes) == 0 {
+		return []string{where + " must not be empty/unparseable"}
+	}
+	for name := range registry {
+		if !docTypes[name] {
+			problems = append(problems, fmt.Sprintf("%q is registered in internal/a2ui but has no row in %s", name, where))
+		}
 	}
 	for name := range docTypes {
-		assert.NotNil(t, a2ui.Components[name], "docs/reference/notebooks.md's component-types table lists %q, which is not (or no longer) a registered a2ui component", name)
+		if _, ok := registry[name]; !ok {
+			problems = append(problems, fmt.Sprintf("%s lists %q, which is not (or no longer) registered in internal/a2ui", where, name))
+		}
 	}
+	sort.Strings(problems)
+	return problems
+}
+
+// TestNotebooksDocComponentTableMatchesA2UIRegistry cross-checks
+// docs/reference/notebooks.md's "Component types" section against
+// internal/a2ui.Components BOTH ways, so a typo'd or stale/renamed type in the
+// table (not just a missing one) is caught too. The rows are read from that
+// section only: the artifact view table below it is another registry.
+func TestNotebooksDocComponentTableMatchesA2UIRegistry(t *testing.T) {
+	root := repoRoot(t)
+	section := notebooksDocSection(t, root, "### Component types")
+	assert.Empty(t, tableProblems(tableTypes(section), a2ui.Components, "docs/reference/notebooks.md's component-types table"))
+}
+
+// TestNotebooksDocViewComponentTableMatchesViewRegistry does the same for the
+// "Artifact view components" section and a2ui.ViewComponents.
+func TestNotebooksDocViewComponentTableMatchesViewRegistry(t *testing.T) {
+	root := repoRoot(t)
+	section := notebooksDocSection(t, root, "### Artifact view components")
+	assert.Empty(t, tableProblems(tableTypes(section), a2ui.ViewComponents, "docs/reference/notebooks.md's artifact-view-components table"))
+}
+
+// TestDocTableCheckFailsOnAStaleRow proves the checks above can fail: a
+// fixture with a row for a type that is not registered (and one missing) is
+// reported both ways, and a row outside the scoped section is ignored.
+func TestDocTableCheckFailsOnAStaleRow(t *testing.T) {
+	doc := "### Component types\n\n| Type | R | O |\n|---|---|---|\n| `heading` | `text` | — |\n| `ghost` | — | — |\n\n### Artifact view components\n\n| `select` | `param` | — |\n"
+	section := docSection(t, doc, "### Component types")
+	types := tableTypes(section)
+	assert.True(t, types["ghost"])
+	assert.False(t, types["select"], "rows of the next section are not read")
+
+	registry := map[string]struct{}{"heading": {}, "text": {}}
+	problems := tableProblems(types, registry, "fixture")
+	require.Len(t, problems, 2, "one for the missing type, one for the stale row")
+	assert.Contains(t, problems[0]+problems[1], `"text" is registered`)
+	assert.Contains(t, problems[0]+problems[1], `lists "ghost"`)
 }
 
 // fencedCodeRe strips fenced code blocks (```...```) so the stale-directive

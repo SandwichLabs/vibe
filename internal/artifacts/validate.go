@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/SandwichLabs/vibe/internal/connname"
 	"github.com/SandwichLabs/vibe/internal/engine"
 )
@@ -257,14 +258,35 @@ func optionsCycle(p *Param, declared map[string]*Param, queries map[string]*Quer
 	return nil
 }
 
-// ValidateView checks the view document the store holds: one JSON value, an
-// object, within the cap. Its A2UI content is validated against the manifest
-// by a2ui.ValidateView (step 2).
-func ValidateView(view []byte) error {
+// ValidateView checks the view document the store holds against its
+// manifest: within the size cap, one JSON object, and an A2UI view that
+// a2ui.ValidateView accepts for the manifest's parameters and queries
+// (m must have passed Validate). The error is JSON-path-prefixed, as the
+// agent sees it.
+func ValidateView(m *Manifest, view []byte) error {
 	if len(view) > MaxViewBytes {
 		return invalid("%s is %d bytes, over the %d byte limit", ViewFile, len(view), MaxViewBytes)
 	}
-	return checkJSONObject(view)
+	if err := checkJSONObject(view); err != nil {
+		return err
+	}
+	if _, err := a2ui.ValidateView(view, viewContext(m)); err != nil {
+		return invalid("%s:\n%v", ViewFile, err)
+	}
+	return nil
+}
+
+// viewContext is what the view validator knows of a manifest: parameter names
+// and types, and query names.
+func viewContext(m *Manifest) a2ui.ViewContext {
+	vc := a2ui.ViewContext{}
+	for _, p := range m.Parameters {
+		vc.Params = append(vc.Params, a2ui.ViewParam{Name: p.Name, Type: p.Type})
+	}
+	for _, q := range m.Queries {
+		vc.Queries = append(vc.Queries, q.Name)
+	}
+	return vc
 }
 
 func checkJSONObject(view []byte) error {

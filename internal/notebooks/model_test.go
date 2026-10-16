@@ -199,6 +199,27 @@ func TestCoerce_DropsInvalidA2UIPage(t *testing.T) {
 	assert.Contains(t, warnings[0], "invalid page")
 }
 
+// A data artifact view's controls, pivot and query/drill fields are refused in
+// a notebook a2ui cell: the cell is dropped with the page error as a warning.
+func TestCoerce_DropsViewOnlyA2UIComponents(t *testing.T) {
+	for name, comp := range map[string]map[string]any{
+		"select": {"id": "s1", "type": "select", "param": "region"},
+		"pivot":  {"id": "s1", "type": "pivot", "query": "q", "rows": []any{"a"}, "columns": "b", "value": "c"},
+		"query":  {"id": "s1", "type": "table", "query": "q"},
+		"drill":  {"id": "s1", "type": "table", "drill": map[string]any{"param": "p", "column": "c"}},
+	} {
+		raw := map[string]any{"cells": []any{
+			map[string]any{"id": "c1", "type": "a2ui", "page": map[string]any{"title": "Dash", "components": []any{comp}}},
+			map[string]any{"id": "c2", "type": "markdown", "source": "still here"},
+		}}
+		nb, warnings, err := Coerce(raw)
+		require.NoError(t, err, name)
+		require.Len(t, nb.Cells, 1, name)
+		require.Len(t, warnings, 1, name)
+		assert.Contains(t, warnings[0], "only allowed in a data artifact view", name)
+	}
+}
+
 func TestCoerce_CapsCellCount(t *testing.T) {
 	cells := make([]any, maxCells+10)
 	for i := range cells {
