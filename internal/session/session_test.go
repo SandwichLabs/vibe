@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -369,28 +368,19 @@ func TestNewCleansUpTempDir(t *testing.T) {
 	assert.NoDirExists(t, h.tempDir)
 }
 
-type failingExecer struct{ failOn string }
-
-func (f failingExecer) ExecContext(_ context.Context, q string, _ ...any) (sql.Result, error) {
-	if strings.HasPrefix(q, f.failOn) {
-		return nil, errors.New("network unreachable")
-	}
-	return nil, nil
-}
-
 func TestEnsureExtension_FailureIsVisible(t *testing.T) {
-	err := EnsureExtension(context.Background(), failingExecer{failOn: "INSTALL"}, "excel", "Exporting to Excel")
+	err := EnsureExtension(context.Background(), failingDB(t, "INSTALL"), "excel", "Exporting to Excel")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "one-time download")
 	assert.Contains(t, err.Error(), "about 2 MB")
 	assert.Contains(t, err.Error(), "network unreachable")
 
-	err = EnsureExtension(context.Background(), failingExecer{failOn: "LOAD"}, "excel", "x")
+	err = EnsureExtension(context.Background(), failingDB(t, "LOAD"), "excel", "x")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not load")
 
-	assert.Error(t, EnsureExtension(context.Background(), failingExecer{failOn: "NEVER"}, `excel; DROP`, "x"), "extension names are validated")
-	assert.NoError(t, EnsureExtension(context.Background(), failingExecer{failOn: "NEVER"}, "excel", "x"))
+	assert.Error(t, EnsureExtension(context.Background(), failingDB(t, "NEVER"), `excel; DROP`, "x"), "extension names are validated")
+	assert.NoError(t, EnsureExtension(context.Background(), failingDB(t, "NEVER"), "excel", "x"))
 }
 
 // A USE issued through the pool must not leak: unqualified writes keep landing
@@ -600,4 +590,11 @@ func TestListSchemasIncludesMainAndExcludesSystemSchemas(t *testing.T) {
 		names = append(names, ti.Schema+"."+ti.Name)
 	}
 	assert.ElementsMatch(t, []string{"main.people", "archive.old"}, names)
+}
+
+func failingDB(t *testing.T, failOn string) *sql.DB {
+	t.Helper()
+	f, db := newFake(t)
+	f.failOn = failOn
+	return db
 }

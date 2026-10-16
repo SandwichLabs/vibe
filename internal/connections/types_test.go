@@ -140,12 +140,15 @@ func TestStorageEmittedSQL(t *testing.T) {
 			Def{Name: "gcp", Type: "gcs", Scope: "gs://bkt/p/"},
 			session.SecretStep{Name: "vibe_gcp", Type: "gcs", Params: []session.SecretParam{
 				{Key: "SCOPE", Value: "gs://bkt/p/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
+				// Explicit and empty/default, so the host's AWS_SESSION_TOKEN and AWS_REGION never fill in (#135).
+				{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "auto"},
 			}},
 		},
 		{
 			Def{Name: "cf", Type: "r2", Scope: "r2://bkt/", Options: map[string]string{"account_id": "abc123"}},
 			session.SecretStep{Name: "vibe_cf", Type: "r2", Params: []session.SecretParam{
 				{Key: "SCOPE", Value: "r2://bkt/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
+				{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "auto"},
 				{Key: "ACCOUNT_ID", Value: "abc123"},
 			}},
 		},
@@ -411,4 +414,16 @@ func TestStorageTypeForSchemeCoversEveryStorageScheme(t *testing.T) {
 		_, ok := StorageTypeForScheme(sch)
 		assert.True(t, ok, sch)
 	}
+}
+
+// A default s3 connection (no token, no region) still writes both fields, so
+// the host's AWS_SESSION_TOKEN and AWS_REGION can never fill them in (#135).
+func TestStorageDefaultS3WritesTokenAndRegionExplicitly(t *testing.T) {
+	d := Def{Name: "plain", Type: "s3", Scope: "s3://b/"}
+	steps, err := asCred(registry["s3"]).SecretSteps(d.Spec(), secrets.Credential{KeyID: "AKIA123", Secret: "sk/needle"})
+	require.NoError(t, err)
+	assert.Equal(t, []session.SecretStep{{Name: "vibe_plain", Type: "s3", Params: []session.SecretParam{
+		{Key: "SCOPE", Value: "s3://b/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
+		{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "us-east-1"},
+	}}}, steps)
 }

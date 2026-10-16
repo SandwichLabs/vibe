@@ -46,14 +46,47 @@ func Check(sqlText string, readOnly bool) error {
 				return fmt.Errorf("EXPORT writes files, which --read-only does not allow")
 			}
 		case "CREATE", "DROP":
-			for _, w := range st.words[1:] {
-				if w == "SECRET" || w == "SECRETS" {
-					return fmt.Errorf("%s SECRET is not available here: credentials live in your OS keychain, never in SQL", first)
-				}
-				if w != "OR" && w != "REPLACE" && w != "PERSISTENT" && w != "TEMPORARY" && w != "TEMP" && w != "IF" && w != "NOT" && w != "EXISTS" {
-					break
-				}
+			if err := secretDDL(first, st.words[1:]); err != nil {
+				return err
 			}
+		}
+	}
+	return nil
+}
+
+// CheckManaged is the narrow form of Check for the Studio query editor, which
+// has always allowed ATTACH, SET and COPY. It refuses only what would undo
+// Vibe's own protections: INSTALL/LOAD (a hand-loaded extension), and
+// FORCE INSTALL and UPDATE EXTENSIONS, and CREATE/DROP SECRET (dropping the catch-all deny secrets that stop an
+// uncovered storage URL being read with the host's credentials, #135).
+func CheckManaged(sqlText string) error {
+	for _, st := range statements(sqlText) {
+		if len(st.words) == 0 {
+			continue
+		}
+		switch first := st.words[0]; first {
+		case "INSTALL", "LOAD", "FORCE":
+			return fmt.Errorf("%s is not available here: the session loads the DuckDB extensions it needs itself", first)
+		case "UPDATE":
+			if len(st.words) > 1 && st.words[1] == "EXTENSIONS" {
+				return fmt.Errorf("UPDATE EXTENSIONS is not available here: the session manages the DuckDB extensions it needs itself")
+			}
+		case "CREATE", "DROP":
+			if err := secretDDL(first, st.words[1:]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func secretDDL(first string, rest []string) error {
+	for _, w := range rest {
+		if w == "SECRET" || w == "SECRETS" {
+			return fmt.Errorf("%s SECRET is not available here: credentials live in your OS keychain, never in SQL", first)
+		}
+		if w != "OR" && w != "REPLACE" && w != "PERSISTENT" && w != "TEMPORARY" && w != "TEMP" && w != "IF" && w != "NOT" && w != "EXISTS" {
+			break
 		}
 	}
 	return nil

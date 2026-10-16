@@ -96,6 +96,22 @@ jobs:
           "$RUNNER_TEMP/vibe" conn test pg --install </dev/null || true
           find "$HOME/.cache/vibe/duckdb/extensions" -name 'postgres*.duckdb_extension' | grep .
 
+      # The host-AWS-credentials tests (#135, internal/session/storage_deny_test.go) need httpfs in the
+      # app-private extension dir and fail (not skip) under CI=true without it. Same download path as above.
+      - name: Install the DuckDB httpfs extension
+        env:
+          CI_S3_KEY_ID: ci
+          CI_S3_SECRET: ci
+        run: |
+          go build -o "$RUNNER_TEMP/vibe" ./cmd/vibe
+          ws="$(mktemp -d)"
+          cd "$ws"
+          "$RUNNER_TEMP/vibe" workspace init . </dev/null
+          "$RUNNER_TEMP/vibe" conn add lake --type s3 --prefix s3://ci-nonexistent/ --region us-east-1 --option endpoint=127.0.0.1:9 --option url_style=path --option use_ssl=false --sign-in env:CI_S3 </dev/null
+          # The test itself is expected to fail (nothing listens on 127.0.0.1:9, so AWS is never contacted); only the download matters.
+          "$RUNNER_TEMP/vibe" conn test lake --install </dev/null || true
+          find "$HOME/.cache/vibe/duckdb/extensions" -name 'httpfs*.duckdb_extension' | grep .
+
       - name: shellcheck
         run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck --severity=warning
 
