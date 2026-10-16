@@ -20,6 +20,8 @@ type config struct {
 	defaultRowCap int           // default row cap (0 = none)
 	skipLock      bool          // tests only: leave lock_configuration off
 	extraTypes    []ConnectionType
+	clock         func() time.Time // nil: time.Now
+	onStatus      func(name string)
 	mdToken       string // MotherDuck token to SET before the lock ("" = none)
 	mdSet         bool
 	md            *mdOpen // set by applyHardening
@@ -128,4 +130,18 @@ func WithConnectionTypes(types ...ConnectionType) Option {
 // requirement. Do not pass an empty token; omit the option instead.
 func WithMotherDuckToken(token string) Option {
 	return func(c *config) { c.mdToken, c.mdSet = token, token != "" }
+}
+
+// WithClock replaces the wall clock the hub compares credential deadlines with
+// (tests).
+func WithClock(now func() time.Time) Option {
+	return func(c *config) { c.clock = now }
+}
+
+// WithStatusListener calls f(name) when a connection's state changes on its
+// own, not because a caller asked: a storage secret that could not be renewed
+// and signed the connection out during somebody's statement. f runs on the
+// goroutine that noticed, with no hub lock held; it must not block.
+func WithStatusListener(f func(name string)) Option {
+	return func(c *config) { c.onStatus = f }
 }

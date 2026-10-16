@@ -81,6 +81,8 @@ type App struct {
 	// save land in the NEW one after a switch. The token check is the one
 	// guard a caller that skips the frontend's own flush cannot bypass.
 	sessionID string
+	// liveSess is the session the status listener may speak for (nil: none open).
+	liveSess atomic.Pointer[session.Session]
 
 	// activeNotebookID is the id of the notebook currently open in
 	// NotebookView.vue, if any — set via SetActiveNotebook. Consulted by

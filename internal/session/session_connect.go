@@ -150,12 +150,14 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 	defer conn.Close() //nolint:errcheck
 
 	var secretNames []string
+	var expires time.Time
 	if ct, ok := t.(CredentialedType); ok {
 		cred, kind, msg, err := h.readyForConnect(ctx, conn, e, ct)
 		if err != nil {
 			h.setStatusCause(name, kind, msg, err)
 			return fmt.Errorf("failed to connect %q: %s", name, msg)
 		}
+		expires = cred.Expires
 		steps, serr := ct.SecretSteps(e.spec, cred)
 		if serr != nil {
 			msg := h.redact(serr.Error())
@@ -221,6 +223,9 @@ func (h *hub) connectLocked(ctx context.Context, name string) error {
 	h.mu.Lock()
 	e.attach = true
 	e.secrets = secretNames
+	e.expires = expires
+	e.secretGen++
+	e.closeRefused = false
 	e.status = Status{Name: name, Type: e.spec.Type, Kind: StatusOK, ReadOnly: e.spec.ReadOnly}
 	delete(h.failures, name)
 	h.mu.Unlock()
@@ -465,6 +470,9 @@ func (h *hub) RefreshCatalog(ctx context.Context, name string) error {
 
 // ConnectReferenced implements Session.
 func (h *hub) ConnectReferenced(ctx context.Context, catalog, sqlText string) error {
+	// Before the "nothing pending" early return: it is the attached storage
+	// secrets that may be about to end, not the pending connections.
+	rotErr := h.rotateDue(ctx)
 	h.mu.RLock()
 	var pending []string
 	for n, e := range h.conns {
@@ -474,11 +482,11 @@ func (h *hub) ConnectReferenced(ctx context.Context, catalog, sqlText string) er
 	}
 	h.mu.RUnlock()
 	if len(pending) == 0 {
-		return nil
+		return rotErr
 	}
 	sort.Strings(pending)
 	named := qualifiers(sqlText)
-	var firstErr error
+	firstErr := rotErr
 	for _, n := range pending {
 		if n == catalog || named[strings.ToLower(n)] {
 			if e, _ := h.entryOf(n); e != nil && h.catalogless(e) {

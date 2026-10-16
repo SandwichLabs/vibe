@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
 
@@ -666,4 +667,33 @@ func TestPolicy_MoreNeverListCases(t *testing.T) {
 		{"CALL pragma_version", "CALL pragma_version()", sqlClassOther, "allow-list"},
 		{"table macro defined by the owner that passes a parameter to a reader", "SELECT * FROM owner_reader('%DATA%/x.csv')", sqlClassOther, "plain string literal"},
 	})
+}
+
+// A storage connection that is not ready widens nothing, but the refusal inside
+// its scope names it and, for an AWS SSO sign-in, how to sign in (profile name
+// only), so an MCP client sees why instead of "no storage connection".
+func TestPolicy_RefusalNamesTheNotReadyCoveringConnection(t *testing.T) {
+	env := newSQLEnv("", []session.ConnectionInfo{
+		{Name: "dev", Type: "s3", Kind: session.StatusNeedsCredentials, Catalogless: true, Scope: "s3://acme-dev/",
+			SignIn: &secrets.SignInHint{Kind: "aws-sso", Subject: "dev", Reason: "expired"}},
+		{Name: "other", Type: "s3", Kind: session.StatusError, Catalogless: true, Scope: "s3://other/"},
+	})
+	p := env.pathPolicy()
+	msg := p.vetRead("s3://acme-dev/x.parquet")
+	assert.Contains(t, msg, `the storage connection "dev" covers it but is not ready`)
+	assert.Contains(t, msg, "AWS session for profile dev has expired")
+	assert.Contains(t, msg, "aws sso login --profile dev")
+	assert.Contains(t, p.vetRead("s3://other/y.parquet"), `"other" covers it but is not ready: error`)
+	assert.NotContains(t, p.vetRead("s3://elsewhere/z.parquet"), "not ready", "a URL no connection covers is just uncovered")
+	err := p.vetPattern("s3://acme-dev/raw/*.parquet")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "aws sso login --profile dev")
+
+	// A ready connection with a longer scope still wins inside a blocked one.
+	env2 := newSQLEnv("", []session.ConnectionInfo{
+		{Name: "wide", Type: "s3", Kind: session.StatusNeedsCredentials, Catalogless: true, Scope: "s3://acme/"},
+		{Name: "narrow", Type: "s3", Kind: session.StatusOK, Catalogless: true, Scope: "s3://acme/raw/"},
+	})
+	assert.Empty(t, env2.pathPolicy().vetRead("s3://acme/raw/a.parquet"))
+	assert.Contains(t, env2.pathPolicy().vetRead("s3://acme/other/a.parquet"), `"wide"`)
 }

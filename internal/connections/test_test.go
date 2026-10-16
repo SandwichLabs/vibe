@@ -164,6 +164,10 @@ func TestClassify(t *testing.T) {
 	code, msg = Classify(Failure{Raw: "403", Status: session.StatusNeedsCredentials, Def: Def{Type: "s3"}})
 	assert.Equal(t, CodeBadSignin, code)
 	assert.Contains(t, msg, "keys or this token")
+	// An expired or revoked session token is a sign-in problem, not a wrong key.
+	code, msg = Classify(Failure{Raw: "HTTP GET error (HTTP 403 Forbidden) <Code>ExpiredToken</Code>", Status: session.StatusNeedsCredentials, Def: Def{Type: "s3"}})
+	assert.Equal(t, CodeNeedsCredentials, code)
+	assert.Contains(t, msg, "Sign in again")
 }
 
 func TestTest_FillsCodeAndMessageWhereTheErrorIsProduced(t *testing.T) {

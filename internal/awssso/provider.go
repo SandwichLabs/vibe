@@ -156,6 +156,12 @@ type CredOption func(*credCall)
 
 type credCall struct{ bypass bool }
 
+// Bypass ignores the in-memory caches (a cached success and a remembered
+// failure) and resolves again: the rotation of a secret that is about to
+// expire (#131). The token cache on disk is still read, so a sign-in made
+// elsewhere is seen.
+func Bypass() CredOption { return func(c *credCall) { c.bypass = true } }
+
 func (p *Provider) entryFor(prof Profile) *entry {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -256,16 +262,24 @@ func (p *Provider) resolve(ctx context.Context, prof Profile) (Creds, error) {
 	if !st.SignedIn {
 		return Creds{}, &SignInNeeded{Profile: prof.Name, Reason: st.Reason}
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
+	// The caller's own deadline is theirs, not "couldn't reach AWS".
+	fail := func(err error) error {
+		if pe := parent.Err(); pe != nil {
+			return pe
+		}
+		return p.classify(ctx, prof, err)
+	}
 	access, err := p.accessToken(ctx, prof)
 	if err != nil {
-		return Creds{}, p.classify(ctx, prof, err)
+		return Creds{}, fail(err)
 	}
 	out, err := p.portalClient(prof.Region).GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
 		AccessToken: aws.String(access), AccountId: aws.String(prof.AccountID), RoleName: aws.String(prof.RoleName)})
 	if err != nil {
-		return Creds{}, p.classify(ctx, prof, err)
+		return Creds{}, fail(err)
 	}
 	rc := out.RoleCredentials
 	if rc == nil || aws.ToString(rc.AccessKeyId) == "" || aws.ToString(rc.SecretAccessKey) == "" || aws.ToString(rc.SessionToken) == "" {

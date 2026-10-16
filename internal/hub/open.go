@@ -83,6 +83,9 @@ type OpenOptions struct {
 	// Studio uses it to let go of the workspace it has open, which must
 	// happen after the new one validated and before the lock is taken.
 	OnWorkspaceOpened func(ws workspace.Workspace)
+	// SessionOptions are passed to the DuckDB session (session.New): Studio's
+	// WithStatusListener.
+	SessionOptions []session.Option
 	// BeforeSession runs after the lock is held, before the session opens.
 	// The CLI prints the workspace's warnings and asks about its .env here:
 	// the answer decides which credentials the session can resolve.
@@ -203,6 +206,9 @@ func openWith(ctx context.Context, root string, o OpenOptions, st steps) (opened
 	sopts := []workspace.SessionOption{}
 	if o.Redactor != nil {
 		sopts = append(sopts, workspace.WithSessionOptions(session.WithRedactor(o.Redactor)))
+	}
+	if len(o.SessionOptions) > 0 {
+		sopts = append(sopts, workspace.WithSessionOptions(o.SessionOptions...))
 	}
 	switch o.Mode {
 	case ModeReadOnly:

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
 
@@ -92,12 +93,15 @@ func (e *sqlEnv) pathPolicy() *pathPolicy {
 		}
 		// A storage connection is ready when it is connected or can connect;
 		// one that needs credentials or failed does not widen what is readable.
-		if c.Kind != session.StatusOK && c.Kind != session.StatusNotConnected {
+		s := normalizeScope(c.Scope)
+		if s == "" {
 			continue
 		}
-		if s := normalizeScope(c.Scope); s != "" {
-			p.scopes = append(p.scopes, s)
+		if c.Kind != session.StatusOK && c.Kind != session.StatusNotConnected {
+			p.blocked = append(p.blocked, blockedScope{scope: s, name: c.Name, why: notReadyWhy(c)})
+			continue
 		}
+		p.scopes = append(p.scopes, s)
 	}
 	return p
 }
@@ -445,4 +449,13 @@ func sortedNames(m map[string]bool) string {
 		}
 	}
 	return strings.Join(out, ", ")
+}
+
+// notReadyWhy words a storage connection's state for a refusal: its status, and
+// for an AWS SSO sign-in what the person does about it (profile name only).
+func notReadyWhy(c session.ConnectionInfo) string {
+	if c.SignIn != nil {
+		return string(c.Kind) + ": " + (&secrets.ErrNeedsCredentials{SignIn: c.SignIn}).Error()
+	}
+	return string(c.Kind)
 }

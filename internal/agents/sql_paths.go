@@ -32,6 +32,24 @@ type pathPolicy struct {
 	// of attached connections (a DuckLake's catalog and its data folder, a duckdb
 	// or sqlite file), symlink-resolved.
 	protected []string
+	// blocked are storage connections that are not ready (needs sign-in, error):
+	// they widen nothing, but a refusal inside their scope names them, so the
+	// person (or an MCP client) learns what to fix instead of "no connection".
+	blocked []blockedScope
+}
+
+// blockedScope is a storage connection that is not ready, with why.
+type blockedScope struct{ scope, name, why string }
+
+// notReadyFor returns " (covered by the connection X, which is not ready: why)"
+// when a connection that is not ready covers the URL or pattern, else "".
+func (p *pathPolicy) notReadyFor(u string, pattern bool) string {
+	for _, b := range p.blocked {
+		if (pattern && storageurl.PatternWithin(u, b.scope)) || (!pattern && storageurl.Within(u, b.scope)) {
+			return fmt.Sprintf(" (the storage connection %q covers it but is not ready: %s)", b.name, b.why)
+		}
+	}
+	return ""
 }
 
 var urlSchemeRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.\-]*:`)
@@ -187,9 +205,9 @@ func (p *pathPolicy) vetPattern(pattern string) error {
 		}
 	}
 	if len(p.scopes) == 0 {
-		return &patternRefusal{fmt.Sprintf("the pattern %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it", pattern)}
+		return &patternRefusal{fmt.Sprintf("the pattern %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it%s", pattern, p.notReadyFor(pattern, true))}
 	}
-	return &patternRefusal{fmt.Sprintf("the pattern %q is outside every storage connection's scope (%s); a wildcard must start with a scope", pattern, strings.Join(p.scopes, ", "))}
+	return &patternRefusal{fmt.Sprintf("the pattern %q is outside every storage connection's scope (%s); a wildcard must start with a scope%s", pattern, strings.Join(p.scopes, ", "), p.notReadyFor(pattern, true))}
 }
 
 func (p *pathPolicy) vetURL(lit string) string {
@@ -209,9 +227,9 @@ func (p *pathPolicy) vetURL(lit string) string {
 		}
 	}
 	if len(p.scopes) == 0 {
-		return fmt.Sprintf("the URL %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it", lit)
+		return fmt.Sprintf("the URL %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it%s", lit, p.notReadyFor(lit, false))
 	}
-	return fmt.Sprintf("the URL %q is outside every storage connection's scope (%s)", lit, strings.Join(p.scopes, ", "))
+	return fmt.Sprintf("the URL %q is outside every storage connection's scope (%s)%s", lit, strings.Join(p.scopes, ", "), p.notReadyFor(lit, false))
 }
 
 // vetWrite returns "" when COPY ... TO lit is allowed: an absolute, glob-free

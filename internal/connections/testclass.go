@@ -76,6 +76,11 @@ func Classify(f Failure) (code, message string) {
 	case f.TimedOut || strings.Contains(low, "timed out"):
 		code = CodeTimeout
 		message = "No answer after 10 seconds. Check the address and whether you need a VPN."
+	case session.IsExpiredToken(raw):
+		// A lapsed or revoked session (an AWS SSO sign-in, an STS token), not a
+		// wrong key: signing in again fixes it.
+		code = CodeNeedsCredentials
+		message = "The keys' session has ended. Sign in again to get new ones, then test again."
 	case strings.Contains(low, "password authentication failed") || strings.Contains(low, "authentication failed") ||
 		strings.Contains(low, "invalid token") || strings.Contains(low, "not authenticated") || f.Status == session.StatusNeedsCredentials:
 		code = CodeBadSignin

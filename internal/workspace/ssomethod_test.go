@@ -435,3 +435,35 @@ func TestMoveFromUserScopeCarriesTheSignInToLocal(t *testing.T) {
 	_, _, err := ConnectionCredential(context.Background(), ws, "lake", nil)
 	require.NoError(t, err, "and it is still bound to the same definition")
 }
+
+// A rotation asks for new keys with secrets.WithFresh: the resolver then skips
+// the provider's cache (a plain resolve is served from it, with no portal call).
+func TestFreshContextBypassesTheSSOCache(t *testing.T) {
+	f := newFakeSSO(t, true)
+	r := f.resolver()
+	ctx := context.Background()
+	ref := secrets.Ref{Name: "lake"}
+	b := secrets.Binding{Type: "s3"}
+
+	c1, err := r.Resolve(ctx, ref, "aws-sso:dev", b)
+	require.NoError(t, err)
+	assert.False(t, c1.Expires.IsZero(), "an SSO credential carries its deadline")
+	require.Equal(t, int64(1), f.hits.Load())
+	_, err = r.Resolve(ctx, ref, "aws-sso:dev", b)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), f.hits.Load(), "served from the cache")
+
+	_, err = r.Resolve(secrets.WithFresh(ctx), ref, "aws-sso:dev", b)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), f.hits.Load(), "a fresh resolve asks the portal")
+	_, err = r.Resolve(ctx, ref, "aws-sso:dev", b)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), f.hits.Load(), "and its answer is what the cache now holds")
+
+	// Signed out: a fresh resolve is the typed sign-in error, not a stale success.
+	require.NoError(t, os.RemoveAll(filepath.Join(f.home, ".aws", "sso")))
+	_, err = r.Resolve(secrets.WithFresh(ctx), ref, "aws-sso:dev", b)
+	var nc *secrets.ErrNeedsCredentials
+	require.ErrorAs(t, err, &nc)
+	require.NotNil(t, nc.SignIn)
+}

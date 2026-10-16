@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/SandwichLabs/vibe/internal/engine"
@@ -32,6 +34,14 @@ func (a *App) tableRefArg(name string) (session.TableRef, error) {
 			return ref, rerr
 		}
 		ref = resolved
+		// Table paging, CRUD and the schema tree read the hub's pool directly,
+		// not through the engine: this is where they renew a storage secret that
+		// is about to expire (and dial the table's catalog on first use). A failure
+		// is not fatal here; the read then reports its own.
+		// Bounded: the caller holds a.mu, and a rotation can wait on a portal.
+		cctx, cancel := context.WithTimeout(a.ctxOrBackground(), 10*time.Second)
+		defer cancel()
+		_ = sess.ConnectReferenced(cctx, ref.Catalog, "")
 	}
 	return ref, nil
 }

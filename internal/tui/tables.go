@@ -177,6 +177,8 @@ func (m TablesModel) loadTableData(item TableInfo) tea.Cmd {
 		if sess == nil {
 			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no session available")}
 		}
+		// Renews a storage secret that is about to end, as the engine would.
+		_ = sess.ConnectReferenced(context.Background(), ref.Catalog, "")
 		pg, err := crud.Page(context.Background(), sess.DB(), ref, crud.PageRequest{Page: 1, PageSize: crud.MaxPageSize, SkipCount: true})
 		if err != nil {
 			return tableDataMsg{tableName: tableName, err: err}

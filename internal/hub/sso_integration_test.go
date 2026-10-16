@@ -366,6 +366,8 @@ func TestSSOMCPServeReportsNeedsSignIn(t *testing.T) {
 	assert.Less(t, time.Since(start), 20*time.Second, "no hang")
 	assert.True(t, isErr, text)
 	assert.Contains(t, text, "no ready storage connection", "the agent's URL policy stops it before any read: the connection is not ready")
+	assert.Contains(t, text, `the storage connection "dev" covers it but is not ready`, "the refusal names the connection that covers the URL")
+	assert.Contains(t, text, "aws sso login --profile dev", "and how to sign in")
 	conns, cerr := run.tool("list_connections", map[string]any{})
 	require.False(t, cerr, conns)
 	assert.Contains(t, conns, `"status":"needs-credentials"`, "the client is told the connection needs sign-in")

@@ -103,7 +103,12 @@ func (m ssoMethod) Resolve(ctx context.Context, profile string) (secrets.Credent
 	if err := m.unavailable(); err != nil {
 		return secrets.Credential{}, err
 	}
-	c, err := m.p.Credentials(ctx, profile)
+	var opts []awssso.CredOption
+	if secrets.IsFresh(ctx) {
+		// A rotation asked for new keys: not the cached set it is replacing.
+		opts = append(opts, awssso.Bypass())
+	}
+	c, err := m.p.Credentials(ctx, profile, opts...)
 	if err != nil {
 		return secrets.Credential{}, needsSignIn(profile, err)
 	}
