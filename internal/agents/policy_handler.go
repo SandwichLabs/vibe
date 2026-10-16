@@ -2,10 +2,12 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/storageglob"
 )
 
 // policyEnv describes the workspace to the SQL policy: its data/ folder (when
@@ -29,9 +31,51 @@ func (h *Handler) policyEnv() *sqlEnv {
 	return newSQLEnv(dir, conns, protected...)
 }
 
+// expand rewrites the s3, gcs and r2 wildcard patterns in raw into explicit
+// lists of the objects they match (internal/storageglob), before the policy
+// sees the statement. Each pattern is checked against the ready storage scopes
+// first (an uncovered one is refused, never listed), the expanded text is then
+// vetted like any other (every key against its scope, then EXPLAIN), and the
+// statement runs as expanded: the returned context tells the engine not to
+// expand it again and to keep its errors short. Text with no pattern comes
+// back unchanged.
+func (h *Handler) expand(ctx context.Context, raw string) (string, context.Context, error) {
+	var lister storageglob.Lister
+	if h.access != nil {
+		if s := h.access.Session(); s != nil {
+			lister, _ = s.(storageglob.Lister)
+		}
+	}
+	text, rw, err := storageglob.Expand(ctx, raw, storageglob.Options{
+		Lister:       lister,
+		Vet:          h.policyEnv().pathPolicy().vetPattern,
+		RequirePlain: true,
+	})
+	if err != nil {
+		return "", ctx, err
+	}
+	return text, storageglob.WithRewrite(ctx, rw), nil
+}
+
+// expandErrorCode maps an expansion failure to the response code: a pattern the
+// policy refuses is a permission problem, anything else (nothing matched, too
+// many matches, a listing failure) is not.
+func expandErrorCode(err error) int {
+	var refused *patternRefusal
+	if errors.As(err, &refused) {
+		return ErrPermission
+	}
+	return ErrInvalidParams
+}
+
 // classify runs the agent SQL policy on raw (with its $name params) against db.
 func (h *Handler) classify(ctx context.Context, db queryDB, raw string, params map[string]any) *sqlVerdict {
-	return analyzeSQL(ctx, db, h.policyEnv(), raw, params)
+	v := analyzeSQL(ctx, db, h.policyEnv(), raw, params)
+	// A denial may quote the expanded statement (EXPLAIN's context line).
+	if rw, ok := storageglob.FromContext(ctx); ok && v.Reason != "" {
+		v.Reason = rw.Redact(v.Reason)
+	}
+	return v
 }
 
 // classifyIn is classify on a connection pinned to the named catalog ("" is the

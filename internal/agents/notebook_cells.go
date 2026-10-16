@@ -75,7 +75,12 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
 	}
 	connectErr := h.connectReferenced(ctx, connection, sqlStr)
-	v, verr := h.classifyIn(ctx, connection, sqlStr, nil)
+	// The cell keeps its wildcard; it is vetted as it will run, expanded.
+	vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
+	if xerr != nil {
+		return NewErrorResponse(req.ID, expandErrorCode(xerr), "notebook sql cells: "+xerr.Error())
+	}
+	v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
 	if verr != nil {
 		return NewErrorResponse(req.ID, ErrInternal, verr.Error())
 	}

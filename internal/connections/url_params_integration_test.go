@@ -98,12 +98,15 @@ func TestS3URLParametersAreInertOnMinIO(t *testing.T) {
 	}
 	assert.Empty(t, evil.seen(), "no request, and so no key id, token or signature, reached the host the URL named")
 
-	// What still works: a plain read, and a wildcard is a literal key.
+	// What still works: a plain read, and a wildcard, which Vibe expands itself
+	// (the hub reads every URL as a literal key, and a wildcard in a URL
+	// parameter is no wildcard).
 	rs, err := eng.Execute(ctx, "SELECT count(*) FROM read_parquet('s3://lake/raw/a.parquet')", nil)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, rs.Rows[0][0])
-	_, err = eng.Execute(ctx, "SELECT count(*) FROM read_parquet('s3://lake/raw/*.parquet')", nil)
-	require.Error(t, err, "S3 globs are off: the URL is the key")
+	rs, err = eng.Execute(ctx, "SELECT count(*) FROM read_parquet('s3://lake/raw/*.parquet')", nil)
+	require.NoError(t, err, "a wildcard is expanded to the listed keys")
+	assert.EqualValues(t, 2, rs.Rows[0][0])
 
 	// Test still lists the scope (in its private session) and counts the object.
 	res := connections.Test(ctx, d, good, connections.WithInstall(true), connections.WithTestExtensionDir(extDir(t)))

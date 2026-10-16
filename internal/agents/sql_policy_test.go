@@ -280,7 +280,10 @@ func TestPolicy_Denied(t *testing.T) {
 		{"path from concatenation", "SELECT * FROM read_csv('%DATA%/' || 'x.csv')", sqlClassOther, "plain string literal"},
 		{"path from a cast", "SELECT * FROM read_csv('%DATA%/x.csv'::VARCHAR)", sqlClassOther, "plain string literal"},
 		{"path from a column", "SELECT * FROM t, read_csv(t.name)", sqlClassOther, "plain string literal"},
-		{"path as a list", "SELECT * FROM read_csv(['%DATA%/x.csv', '%DATA%/y.csv'])", sqlClassOther, "plain string literal"},
+		{"list with a path outside data/", "SELECT * FROM read_csv(['%DATA%/x.csv', '%OUT%/secret.csv'])", sqlClassOther, "outside"},
+		{"list with an expression", "SELECT * FROM read_csv(['%DATA%/x.csv', '%DATA%/' || 'y.csv'])", sqlClassOther, "plain string literal"},
+		{"empty list", "SELECT * FROM read_csv([])", sqlClassOther, "plain string literal"},
+		{"list then a second path", "SELECT * FROM read_csv(['%DATA%/x.csv'], '%DATA%/y.csv')", sqlClassOther, "one path"},
 		{"two positional paths", "SELECT * FROM read_csv('%DATA%/x.csv', '%DATA%/y.csv')", sqlClassOther, "one path"},
 		{"adjacent literals concatenate", "SELECT * FROM read_csv('%DATA%/x.csv'\n'/../../etc/passwd')", sqlClassOther, "plain string literal"},
 		{"E'' escape string path", "SELECT * FROM read_csv(E'%DATA%/x.csv')", sqlClassOther, "plain string literal"},
@@ -509,8 +512,19 @@ func TestPolicy_ScopesForURLs(t *testing.T) {
 	ok := func(u string) { assert.Empty(t, p.vetRead(u), u) }
 	no := func(u string) { assert.NotEmpty(t, p.vetRead(u), u) }
 	ok("s3://lake/raw/a.parquet")
-	no("s3://lake/raw/2024/*.parquet") // S3-like URLs are read literally (#138)
-	assert.Contains(t, p.vetRead("s3://lake/raw/2024/*.parquet"), "wildcards are not available")
+	no("s3://lake/raw/2024/*.parquet") // a "*" is expanded before the policy sees it (#138); one left is refused
+	assert.Contains(t, p.vetRead("s3://lake/raw/2024/*.parquet"), "was not expanded")
+	// The pattern itself is vetted against the scope before it is expanded.
+	assert.NoError(t, p.vetPattern("s3://lake/raw/2024/*.parquet"))
+	assert.NoError(t, p.vetPattern("s3://lake/raw/**"))
+	assert.NoError(t, p.vetPattern("gcs://bkt/*"))
+	assert.Error(t, p.vetPattern("s3://lake/other/*.parquet"))
+	assert.Error(t, p.vetPattern("s3://lake/*.parquet"), "a * outside the scope's folder")
+	assert.Error(t, p.vetPattern("s3://lake/raw*"), "a * in the scope's last segment")
+	assert.Error(t, p.vetPattern("s3://lake/raw/a?s3_endpoint=evil*"))
+	assert.Error(t, p.vetPattern("s3://lake/raw/[ab]*.parquet"))
+	assert.Error(t, p.vetPattern("s3://lake/raw/../other/*"))
+	assert.Error(t, (&pathPolicy{}).vetPattern("s3://lake/raw/*"), "no ready connection")
 	ok("gcs://bkt/any/thing.csv")
 	ok("r2://acct/x.json")
 	no("s3://lake/other/a.parquet")

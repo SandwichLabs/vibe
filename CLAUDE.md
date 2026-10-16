@@ -79,8 +79,8 @@ internal/
   a2ui/              component schema + validator (Go validates, Vue renders)
   bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
-  filestore/, filelock/, storageurl/, jsonenc/, prefs/, config/, templates/, tui/, testsupport/
-                     (testsupport = integration-tag-only test fixtures, e.g. a throwaway MinIO; jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
+  filestore/, filelock/, storageurl/, storageglob/, jsonenc/, prefs/, config/, templates/, tui/, testsupport/
+                     (storageglob = s3/gcs/r2 wildcard expansion: DuckDB's parser finds the pattern literals, the hub's private lister lists them, the SQL is rewritten to explicit key lists before it runs, #138; testsupport = integration-tag-only test fixtures, e.g. a throwaway MinIO; jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
   selfupdate/        release check + install.sh-driven apply (opt-in, confirmed; manifest-based install detection; Service wires prefs); `vibe update`, Studio's About > Updates
   buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys

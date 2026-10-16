@@ -69,6 +69,43 @@ func constString(n any) (string, bool) {
 	return s, ok
 }
 
+// constPaths is the path argument of a reader: one plain string literal, or a
+// list of them (['s3://b/a.parquet', 's3://b/b.parquet'], what a wildcard on
+// s3, gcs or r2 is expanded to). Every string is vetted on its own.
+func (a *analyzer) constPaths(n any) ([]string, bool) {
+	if s, ok := constString(n); ok {
+		return []string{s}, true
+	}
+	m, ok := n.(map[string]any)
+	if !ok || m["function_name"] != "list_value" || !a.listFormSafe() {
+		return nil, false
+	}
+	children, _ := m["children"].([]any)
+	if len(children) == 0 {
+		return nil, false
+	}
+	out := make([]string, 0, len(children))
+	for _, c := range children {
+		s, ok := constString(c)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+// listFormSafe reports whether ['a', 'b'] still means DuckDB's own list_value.
+// A user macro named list_value or list_pack replaces it (the bracket syntax
+// resolves through the same search path), and would make a vetted list of
+// literals read whatever the macro returns.
+func (a *analyzer) listFormSafe() bool {
+	m := a.functions().macros
+	_, v := m["list_value"]
+	_, p := m["list_pack"]
+	return !v && !p
+}
+
 // namedParamName is the lower-cased option name of a `name = value` argument.
 func namedParamName(n any) string {
 	m, _ := n.(map[string]any)
@@ -182,6 +219,10 @@ func (a *analyzer) tableFunc(fn map[string]any, st *walkState) {
 	}
 	switch {
 	case readerFuncs[lname]:
+		if _, shadowed := a.functions().macros[lname]; shadowed {
+			st.fail("%s() is shadowed by a macro of the same name, so it would not read the file that was checked; the agent will not use it", lname)
+			return
+		}
 		children, _ := fn["children"].([]any)
 		positional := 0
 		for _, c := range children {
@@ -193,16 +234,18 @@ func (a *analyzer) tableFunc(fn map[string]any, st *walkState) {
 				continue
 			}
 			positional++
-			s, ok := constString(c)
+			paths, ok := a.constPaths(c)
 			if !ok || positional > 1 {
-				st.fail("%s() needs its path written out as one plain string literal (no expressions, variables, lists or concatenation)", lname)
+				st.fail("%s() needs its path written out as one plain string literal, or a list of them (no expressions, variables or concatenation)", lname)
 				return
 			}
-			if r := a.paths.vetRead(s); r != "" {
-				st.fail("%s", r)
-				return
+			for _, s := range paths {
+				if r := a.paths.vetRead(s); r != "" {
+					st.fail("%s", r)
+					return
+				}
+				a.vetted[s] = true
 			}
-			a.vetted[s] = true
 		}
 		if positional == 0 {
 			st.fail("%s() needs a path", lname)

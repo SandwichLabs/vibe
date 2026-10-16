@@ -168,14 +168,38 @@ func (p *pathPolicy) vetGlob(lit string, glob int) string {
 	return ""
 }
 
+// patternRefusal is the policy refusing an s3, gcs or r2 wildcard pattern.
+type patternRefusal struct{ msg string }
+
+func (e *patternRefusal) Error() string { return e.msg }
+
+// vetPattern is vetURL for a wildcard pattern, asked before it is expanded: a
+// plain s3, gcs or r2 URL (only * and ** are wildcards) whose text starts with
+// the scope of a ready storage connection, so every object it can match is
+// inside that scope. The keys it expands to are vetted again as plain URLs.
+func (p *pathPolicy) vetPattern(pattern string) error {
+	if err := storageurl.ValidatePattern(pattern); err != nil {
+		return &patternRefusal{fmt.Sprintf("the pattern %q is not a plain storage URL (%v); only * and ** are wildcards", pattern, err)}
+	}
+	for _, s := range p.scopes {
+		if storageurl.PatternWithin(pattern, s) {
+			return nil
+		}
+	}
+	if len(p.scopes) == 0 {
+		return &patternRefusal{fmt.Sprintf("the pattern %q cannot be read: this workspace has no ready storage connection (s3, gcs, r2 or azure) whose scope contains it", pattern)}
+	}
+	return &patternRefusal{fmt.Sprintf("the pattern %q is outside every storage connection's scope (%s); a wildcard must start with a scope", pattern, strings.Join(p.scopes, ", "))}
+}
+
 func (p *pathPolicy) vetURL(lit string) string {
 	// One shared normaliser (internal/storageurl) decides what a plain storage
 	// URL is: known scheme, lower case, no query, fragment, percent-escape,
 	// backslash, "." / ".." / empty segment. Anything else is never readable.
 	if err := storageurl.ValidateRead(lit); err != nil {
 		hint := ""
-		if strings.Contains(lit, "*") && storageurl.Scheme(lit) != "" {
-			hint = "; wildcards are not available on S3, GCS or R2 reads (name each file, or read through a lake)"
+		if strings.Contains(lit, "*") && storageurl.IsS3Like(lit) {
+			hint = "; Vibe expands a wildcard on s3, gcs and r2 only as a reader function's path (read_parquet('s3://b/*.parquet')) or a FROM 's3://b/*.parquet', so this one was not expanded"
 		}
 		return fmt.Sprintf("the URL %q is not a plain storage URL (%v); only plain object paths inside a storage connection's scope can be read%s", lit, err, hint)
 	}

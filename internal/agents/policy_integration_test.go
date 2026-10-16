@@ -323,6 +323,10 @@ func TestStorageScopeThroughTheAgent(t *testing.T) {
 	eng := engine.NewManager(sess)
 	_, err = eng.Execute(ctx, "COPY (SELECT 1 AS x UNION ALL SELECT 2) TO 's3://lake/raw/a.parquet'", nil)
 	require.NoError(t, err)
+	_, err = eng.Execute(ctx, "COPY (SELECT 3 AS x) TO 's3://lake/raw/b.parquet'", nil)
+	require.NoError(t, err)
+	_, err = eng.Execute(ctx, "COPY (SELECT 4 AS x UNION ALL SELECT 5 UNION ALL SELECT 6) TO 's3://lake/raw/sub/c.parquet'", nil)
+	require.NoError(t, err)
 	_, err = eng.Execute(ctx, "COPY (SELECT 'secret' AS x) TO 's3://lake/private/p.parquet'", nil)
 	require.NoError(t, err)
 
@@ -335,12 +339,64 @@ func TestStorageScopeThroughTheAgent(t *testing.T) {
 	assert.EqualValues(t, 2, rowsOf(t, resp)[0][0])
 	resp = sqlCall(h, "SELECT count(*) FROM 's3://lake/raw/a.parquet'")
 	require.Nil(t, resp.Error, errText(resp))
-	// S3-like URLs are read literally (#138), so a wildcard is refused up front.
+	// A wildcard inside the scope is expanded by Vibe (#138): the pattern is
+	// vetted against the scope, listed with the connection's own secret, and
+	// the statement that is vetted and run holds the keys.
+	resp = sqlCall(h, "SELECT count(*) FROM read_parquet('s3://lake/raw/*.parquet')")
+	require.Nil(t, resp.Error, errText(resp))
+	assert.EqualValues(t, 3, rowsOf(t, resp)[0][0], "a.parquet (2 rows) and b.parquet (1); sub/ is not reached by *")
+	resp = sqlCall(h, "SELECT count(*) FROM read_parquet('s3://lake/raw/**')")
+	require.Nil(t, resp.Error, errText(resp))
+	assert.EqualValues(t, 6, rowsOf(t, resp)[0][0])
+	resp = sqlCall(h, "SELECT count(*) FROM 's3://lake/raw/*.parquet'")
+	require.Nil(t, resp.Error, errText(resp))
+	assert.EqualValues(t, 3, rowsOf(t, resp)[0][0])
 	resp = sqlCall(h, "SELECT count(*) FROM glob('s3://lake/raw/*')")
-	require.NotNil(t, resp.Error)
-	assert.Contains(t, errText(resp), "wildcards are not available")
+	require.Nil(t, resp.Error, errText(resp))
+	assert.EqualValues(t, 2, rowsOf(t, resp)[0][0])
+	resp = sqlCall(h, "SELECT x FROM read_parquet(['s3://lake/raw/a.parquet', 's3://lake/raw/sub/*.parquet'], union_by_name = true) ORDER BY x")
+	require.Nil(t, resp.Error, errText(resp))
+	assert.Len(t, rowsOf(t, resp), 5)
 	resp = sqlCall(h, "DESCRIBE SELECT * FROM read_parquet('s3://lake/raw/*.parquet')")
+	require.Nil(t, resp.Error, errText(resp))
+	resp = sqlCall(h, "SELECT count(*) FROM read_parquet('s3://lake/raw/none-*.parquet')")
 	require.NotNil(t, resp.Error)
+	assert.Contains(t, errText(resp), "no files found that match the pattern")
+	// A wildcard still never leaves the scope, and is not even listed.
+	for _, q := range []string{
+		"SELECT * FROM read_parquet('s3://lake/private/*.parquet')",
+		"SELECT * FROM read_parquet('s3://lake/*/p.parquet')",
+		"SELECT * FROM read_parquet('s3://lake/**')",
+		"SELECT * FROM 's3://lake/*.parquet'",
+		"SELECT * FROM glob('s3://lake/private/*')",
+		"SELECT * FROM read_parquet('s3://lake/raw/*.parquet?s3_endpoint=evil.example')",
+		"SELECT * FROM read_parquet('s3://lake/raw/[ab].parquet*')",
+		"CREATE TABLE copied2 AS SELECT * FROM read_parquet('s3://lake/private/*.parquet')",
+	} {
+		resp := sqlCall(h, q)
+		require.NotNil(t, resp.Error, q)
+		assert.NotContains(t, resp.Error.Message, "secret", q)
+	}
+	// The same wildcard in a notebook cell / A2UI binding (RunReadOnlySQL, also
+	// preview_query): expanded each time it runs, the cell keeps the wildcard.
+	rs, _, err := h.RunReadOnlySQL(ctx, "SELECT count(*) AS n FROM read_parquet('s3://lake/raw/*.parquet')", nil, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, rs.Rows[0][0])
+	_, _, err = h.RunReadOnlySQL(ctx, "SELECT count(*) AS n FROM read_parquet('s3://lake/private/*.parquet')", nil, 10)
+	require.Error(t, err)
+	_, _, err = h.RunReadOnlySQL(ctx, "SELECT count(*) AS n FROM read_parquet('s3://lake/raw/zzz*.parquet')", nil, 10)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no files found")
+	// An expanded read can feed a write the agent is allowed (a local table).
+	resp = sqlCall(h, "CREATE TABLE pulled AS SELECT * FROM read_parquet('s3://lake/raw/*.parquet')")
+	require.Nil(t, resp.Error, errText(resp))
+	require.NotNil(t, ap)
+	n := 0
+	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM pulled").Scan(&n))
+	assert.Equal(t, 3, n)
+	ap.mu.Lock()
+	ap.asked = nil
+	ap.mu.Unlock()
 
 	for _, q := range []string{
 		"SELECT * FROM read_parquet('s3://lake/private/p.parquet')",

@@ -208,7 +208,11 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 			return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
 		}
 		connectErr := h.connectReferenced(ctx, connection, sqlStr)
-		v, verr := h.classifyIn(ctx, connection, sqlStr, nil)
+		vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
+		if xerr != nil {
+			return NewErrorResponse(req.ID, expandErrorCode(xerr), "write_cell: "+xerr.Error())
+		}
+		v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
 		if verr != nil {
 			return NewErrorResponse(req.ID, ErrInternal, verr.Error())
 		}
