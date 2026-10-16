@@ -36,8 +36,12 @@ defineExpose({ focus: () => el.value?.focus() })
   <div v-else-if="result && result.error" ref="el" tabindex="-1" class="banner attn" role="alert" data-testid="test-error">
     <div class="ico"><Icon name="alert" :size="22" /></div>
     <div class="body">
-      <div class="ttl">Couldn't connect</div>
+      <div v-if="result.requirement" class="ttl" data-testid="test-requirement">Storage connection <strong>{{ result.requirement }}</strong> failed</div>
+      <div v-else class="ttl">Couldn't connect</div>
       <div class="sub">{{ result.error.message }}</div>
+      <div v-if="result.requirement" class="sub" style="margin-top: 4px;">This connection reads with it, so it was not tried.
+        <router-link v-if="result.error.code !== 'invalid'" :to="`/connections/${encodeURIComponent(result.requirement)}`" data-testid="test-open-requirement">Open {{ result.requirement }}</router-link>
+      </div>
       <button v-if="result.installExtension" type="button" class="btn btn-sm" style="margin-top: 8px;" data-testid="test-install" @click="emit('install', result.installExtension!)">Install the {{ result.installExtension }} extension…</button>
       <details v-if="result.error.details" style="margin-top: 8px;">
         <summary style="cursor: pointer; font-weight: 600; font-size: 13px;">Show details</summary>

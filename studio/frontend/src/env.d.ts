@@ -332,6 +332,7 @@ interface TestResultView {
   summary?: string
   error?: { code: string; message: string; details: string }
   installExtension?: string
+  requirement?: string
 }
 interface CatalogNode { kind: 'schema' | 'table' | 'view' | 'column'; name: string; qualified?: string; rows: number; dataType?: string; pk?: boolean; fk?: boolean }
 interface CatalogListing { kind: 'schemas' | 'tables' | 'columns'; schema: string; flattened: boolean; nodes: CatalogNode[] }

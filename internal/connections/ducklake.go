@@ -336,7 +336,7 @@ func refuseSymlinksUnder(dir string) error {
 }
 
 func (ducklakeType) Probe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {
-	if IsDataURL(s.Path) {
+	if IsDataURL(s.Path) && len(s.Requires) == 0 {
 		return 0, "a catalog in object storage is read with the matching S3, GCS, R2 or Azure connection; connect the lake from the rail", nil
 	}
 	var n int

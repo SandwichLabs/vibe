@@ -84,11 +84,12 @@ func (t tableSourceType) AttachSQL(s session.Spec) ([]string, error) {
 	return []string{}, nil
 }
 
-// Probe reads the table's schema (no rows). A URL is not read here: the
-// throwaway test session has no storage secret, so it can only be proven by the
-// workspace's own session.
+// Probe reads the table's schema (no rows). A URL is read only when the session
+// holds the covering storage connection's secret (s.Requires names it, as in
+// the hub and in a Test that brought it up first); without one nothing is read,
+// because DuckDB would read the URL anonymously.
 func (t tableSourceType) Probe(ctx context.Context, sess session.Session, s session.Spec) (int, string, error) {
-	if IsDataURL(s.Path) {
+	if IsDataURL(s.Path) && len(s.Requires) == 0 {
 		return 0, "a storage location is read with the matching S3, GCS, R2 or Azure connection", nil
 	}
 	var n int
