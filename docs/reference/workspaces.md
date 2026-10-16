@@ -121,7 +121,7 @@ A definition says what a connection needs, never how you sign in.
 | `region` | Cloud region, for storage types. |
 | `scope` | The storage prefix a storage connection covers, such as `s3://bucket/`. |
 | `read_only` | Defaults to `true`. Set `false` to allow writes. |
-| `credentials` | A suggestion for how to sign in: `keychain`, `prompt` or `env:PREFIX`. |
+| `credentials` | A suggestion for how to sign in: `keychain`, `prompt`, `env:PREFIX` or `aws-sso:PROFILE`. Only a hint: it never chooses the sign-in. |
 | `options` | Extra non-secret settings such as `sslmode`. |
 <!-- /keys -->
 
@@ -144,7 +144,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 
 - **Local beats shared beats user.** When two scopes define the same name, the more specific entry replaces the other whole; fields are not merged. The merged list reports the scope each connection came from and which lower scopes it shadows.
 - **A user entry never overrides** a workspace one.
-- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt` or `env:PREFIX` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise `keychain`: the definition's `credentials` value is only a UI hint (review #115, see Credentials).
+- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt`, `env:PREFIX` or (S3 only) `aws-sso:PROFILE` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise `keychain`: the definition's `credentials` value is only a UI hint (review #115, see Credentials).
 - **Status precedence**, when several apply to one connection: `extension-missing`, then `needs-credentials`, then `error`, then `locked-by`, then `not connected`, then `ok`.
 
 <!-- keys:local -->
@@ -174,7 +174,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 
 ## Credentials
 
-**(review #115) A shared `credentials:` value is only a hint.** A `credentials:` line in the committed `vibe.yaml` may pre-select a method in the UI; it is never the effective method, because a pulled commit must not choose how your credentials are fetched (a committed `credentials: env:PG_PROD` plus a host of its choosing would otherwise send your environment password there). The effective method comes only from your own per-person `sign_in`, defaulting to the keychain; an empty keychain is *needs-credentials*. Every `sign_in` entry (env included) is stored with the fingerprint of the definition it was chosen for (`sign_in_fingerprint`, in your `local.yaml` or user `connections.yaml`), and if the definition no longer matches (a pull changed the host), even an environment credential is withheld as "the server changed since you signed in" until you choose it again and confirm (`vibe conn credentials set <name> --sign-in env:PREFIX --confirm-rebind`; Studio asks). A hand-written `sign_in` without a fingerprint is withheld the same way.
+**(review #115) A shared `credentials:` value is only a hint.** A `credentials:` line in the committed `vibe.yaml` may pre-select a method in the UI; it is never the effective method, because a pulled commit must not choose how your credentials are fetched (a committed `credentials: env:PG_PROD` plus a host of its choosing would otherwise send your environment password there). The effective method comes only from your own per-person `sign_in`, defaulting to the keychain; an empty keychain is *needs-credentials*. Every `sign_in` entry (env included) is stored with the fingerprint of the definition it was chosen for (`sign_in_fingerprint`, in your `local.yaml` or user `connections.yaml`), and if the definition no longer matches (a pull changed the host, scope, region or any option), even an environment credential, or an `aws-sso:PROFILE` sign-in, is withheld as "the server changed since you signed in" until you choose it again and confirm (`vibe conn credentials set <name> --sign-in env:PREFIX --confirm-rebind`; Studio asks). A hand-written `sign_in` without a fingerprint is withheld the same way.
 
 A connection's secrets never live in `vibe.yaml`, in `local.yaml`, in a log line, in the agent's context or in a bundle. They are kept per person, by a **sign-in method** you choose per connection (it is stored in your `local.yaml`, or the user `connections.yaml` for user connections, never committed):
 
@@ -183,6 +183,7 @@ A connection's secrets never live in `vibe.yaml`, in `local.yaml`, in a log line
 | `keychain` (default) | your OS keychain, service `vibe` | one JSON entry per connection: `user`, `password`, `token`, `key_id`, `secret`, plus a fingerprint and a host-level description of the server |
 | `env:PREFIX` | environment variables, read only | see the mapping below |
 | `prompt` | process memory, until Vibe quits | "Remember in my keychain" is off by default and promotes the entry to the keychain only when you tick it |
+| `aws-sso:PROFILE` | none stored: short-lived keys are resolved from your AWS IAM Identity Center profile when needed | S3 only. `PROFILE` is a profile in your `~/.aws/config` (letters, digits and `_ . + @ -`, up to 64 characters). Bound to the definition fingerprint like `env:` (a pulled change to the scope, region or endpoint withholds it until you choose it again and confirm). Refused for any endpoint that is not an S3 host under `amazonaws.com`, and with `use_ssl: "false"`. Nothing can be stored under it (`credentials set` and Studio's key fields are refused). Only per person, never in `vibe.yaml`: a committed `credentials: aws-sso:x` stays a hint. See [connections.md](connections.md#aws-sso-sign-in-s3) |
 
 There is **no plaintext-file fallback**. With no keychain (SSH, a locked collection, no desktop) Vibe says so and names the `env:` alternative. Every keychain call has a five second timeout, so a locked keychain reads "not reachable" instead of freezing Studio.
 

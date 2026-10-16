@@ -179,3 +179,11 @@ func TestLLMKeyBindings_OpenAIStandardEnv(t *testing.T) {
 	assert.Equal(t, "from-openai-env", a.llmAPIKey())
 	assert.Equal(t, "env", a.GetLLMKeyStatus("").Source)
 }
+
+func TestStudioResolverKnowsTheAWSSSOSignInMethod(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	a := NewApp(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	st := a.secrets.Status(context.Background(), secrets.Ref{Name: "x"}, "aws-sso:dev", secrets.Binding{})
+	assert.True(t, st.Available, st.Detail)
+	assert.Equal(t, "dev", st.Profile)
+}

@@ -198,8 +198,8 @@ func (b *sessionBuild) resolveOne(ctx context.Context, c Connection) (sessionIte
 func (b *sessionBuild) attachCredential(spec *session.Spec, rc ResolvedConnection) {
 	ref := credentialRef(b.ws.ID(), rc.Scope, rc.Name)
 	binding, method := rc.Binding(), rc.SignIn
-	guard := signInGuard(rc.Connection, rc.Resolved)
 	resolver := b.resolver
+	guard := signInGuard(resolver, rc.Connection, rc.Resolved)
 	spec.Credential = func(ctx context.Context) (secrets.Credential, error) {
 		if guard != nil {
 			return secrets.Credential{}, guard

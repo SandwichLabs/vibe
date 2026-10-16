@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -438,4 +439,35 @@ func TestSpecExtensionsGateTheConnect(t *testing.T) {
 	// A type without the hook keeps using Extensions().
 	assert.Equal(t, []string{"json"}, ExtensionsFor(stubType{ext: "json"}, Spec{}))
 	assert.Equal(t, []string{"json", "x"}, ExtensionsFor(specExtType{}, Spec{Params: map[string]string{"exts": "json,x"}}))
+}
+
+func TestSignInHintIsTypedOnTheStatusAndClearedOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	s := stubSession(t, stubType{ext: "json", catalogs: true})
+	signedIn := false
+	cred := func(context.Context) (secrets.Credential, error) {
+		if signedIn {
+			return secrets.Credential{Token: "tok_needle_signin"}, nil
+		}
+		return secrets.Credential{}, &secrets.ErrNeedsCredentials{Method: "aws-sso:dev", Reason: "sign-in needed", Ref: secrets.WorkspaceRef("w", "x"),
+			SignIn: &secrets.SignInHint{Kind: "aws-sso", Subject: "dev", Reason: "expired"}}
+	}
+	require.NoError(t, s.Register(Spec{Name: "r", Type: "stub", Credential: cred}))
+	require.Error(t, s.Connect(ctx, "r"))
+	st := status(t, s, "r")
+	assert.Equal(t, StatusNeedsCredentials, st.Kind)
+	require.NotNil(t, st.SignIn)
+	assert.Equal(t, secrets.SignInHint{Kind: "aws-sso", Subject: "dev", Reason: "expired"}, *st.SignIn)
+	assert.Contains(t, st.Message, "aws sso login --profile dev")
+	b, err := json.Marshal(st)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"sign_in":{"kind":"aws-sso","subject":"dev","reason":"expired"}`)
+
+	// The person signs in; the next attempt clears the hint.
+	signedIn = true
+	s.Preflight(ctx, "r")
+	require.NoError(t, s.Connect(ctx, "r"))
+	st = status(t, s, "r")
+	assert.Equal(t, StatusOK, st.Kind)
+	assert.Nil(t, st.SignIn)
 }

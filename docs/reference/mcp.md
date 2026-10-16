@@ -118,6 +118,10 @@ The server name is `vibe-<folder>` so two workspaces do not collide. With "Ask b
 - A proxy sends the token only as an `Authorization: Bearer` header.
 - `SIGUSR1` is only sent to a pid whose lock file says it advertised release control, on this host, with the lock verified held and (Linux) the process pinned by a pidfd. One signal listener exists per process and is never torn down, so a stray signal cannot kill a Vibe process.
 
+### Needs sign-in is reported, never prompted
+
+A connection signed in with `aws-sso:PROFILE` ([connections.md](connections.md#aws-sso-sign-in-s3)) resolves its keys from the person's SSO session when it is used. Headless `vibe mcp serve` (and every CLI command) only reads that session: with none, or an ended one, the connection is *needs-credentials* with the hint "AWS session for profile dev has expired. Sign in, or run `aws sso login --profile dev`", and a statement that needs it fails at once with that text (nothing waits, and no browser or sign-in flow can be started from MCP). `list_connections` shows the status word and, for such a connection, `sign_in: {kind, subject, reason}` (the profile name and `missing` or `expired`; never an account, role or start URL). The agent reaches the same scope rule as with any storage connection: SSO keys change nothing it may read, and `~/.aws` is outside `data/`.
+
 ### SSE transport security
 
 Both `--transport sse` and Studio's built-in MCP server bind to

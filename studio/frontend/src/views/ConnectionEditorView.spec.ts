@@ -455,6 +455,51 @@ describe('ConnectionEditorView', () => {
       expect(app.SetConnectionCredentials).toHaveBeenCalledWith(expect.objectContaining({ name: 'prod_pg', username: 'rosa', password: 'new-pw' }))
     })
 
+    const ssoDetail = (over: Partial<ConnectionDetail> = {}) => {
+      const def = { name: 'lake', type: 's3', scope: 's3://lake/', region: 'us-east-1' }
+      return detail({ name: 'lake', def, signIn: 'aws-sso:dev', credential: { method: 'aws-sso:dev', secretSet: false, fingerprintMatches: true, available: true }, info: { ...detail().info, name: 'lake', type: 's3' }, ...over })
+    }
+
+    it('an AWS SSO sign-in is shown read-only and saved with its real method string', async () => {
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => ssoDetail()) })
+      route.path = '/connections/lake'; route.params = { name: 'lake' }
+      const w = mountView()
+      await flushPromises()
+      expect(w.find('[data-testid="sso-signin"]').text()).toContain('Signs in with AWS profile dev')
+      expect(w.find('[data-testid="f-c-key_id"]').exists()).toBe(false)
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(app.SaveConnection.mock.calls[0][0].signIn).toBe('aws-sso:dev')
+      expect(app.SetConnectionCredentials).not.toHaveBeenCalled()
+    })
+
+    it('moving an AWS SSO connection from all my workspaces to this computer keeps its sign-in', async () => {
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => ssoDetail({ scope: 'user' })) })
+      route.path = '/connections/lake'; route.params = { name: 'lake' }
+      const w = mountView()
+      await flushPromises()
+      await w.find('[data-testid="scope-local"]').trigger('click')
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(app.MoveConnection).toHaveBeenCalledWith({ name: 'lake', to: 'local' })
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ scope: 'local', signIn: 'aws-sso:dev' }))
+    })
+
+    it('an endpoint edit of an AWS SSO connection asks before re-binding it', async () => {
+      const app = makeApp({ GetConnectionInScope: vi.fn(async () => ssoDetail()) })
+      route.path = '/connections/lake'; route.params = { name: 'lake' }
+      const w = mountView()
+      await flushPromises()
+      await w.find('[data-testid="f-region"]').setValue('eu-west-1')
+      await w.find('form').trigger('submit')
+      await flushPromises()
+      expect(confirmVisible.value).toBe(true)
+      expect(app.SaveConnection).not.toHaveBeenCalled()
+      resolveConfirmChoice('confirm')
+      await flushPromises()
+      expect(app.SaveConnection).toHaveBeenCalledWith(expect.objectContaining({ confirmRebind: true, signIn: 'aws-sso:dev' }))
+    })
+
     it('an environment sign-in asks before it is re-bound to a changed server', async () => {
       const app = makeApp({ GetConnectionInScope: vi.fn(async () => detail({ signIn: 'env:PGPROD', credential: { method: 'env:PGPROD', secretSet: true, fingerprintMatches: true, available: true, env: [{ name: 'PGPROD_USER', set: true }, { name: 'PGPROD_PASSWORD', set: true }] } })) })
       const w = mountView()

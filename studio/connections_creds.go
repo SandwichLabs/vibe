@@ -74,8 +74,8 @@ func (a *App) applyCredentials(ws workspace.Workspace, req SetCredentialsRequest
 			return err
 		}
 	}
-	if kind, _, _ := secrets.ParseMethod(method); kind == "env" {
-		return nil // environment variables are set outside Vibe
+	if kind, _, _ := secrets.ParseMethod(method); secrets.StoresNoSecret(kind) {
+		return nil // environment variables are set outside Vibe; an AWS SSO profile has no secret to store
 	}
 	cred := req.toCredential()
 	if cred == (secrets.Credential{}) {

@@ -100,6 +100,7 @@ func (h *hub) coveringSecret(ctx context.Context, pattern string) (SecretStep, t
 	var best *entry
 	bestLen := -1
 	var blocked *entry
+	var blockedWhy string
 	h.mu.RLock()
 	for _, e := range h.conns {
 		t, err := h.types.Get(e.spec.Type)
@@ -113,7 +114,12 @@ func (h *hub) coveringSecret(ctx context.Context, pattern string) (SecretStep, t
 			continue
 		}
 		if e.status.Kind != StatusOK && e.status.Kind != StatusNotConnected {
-			blocked = e
+			blocked, blockedWhy = e, string(e.status.Kind)
+			if e.status.Kind == StatusNeedsCredentials && e.status.Message != "" {
+				// The status message is already redacted; for an AWS SSO sign-in it
+				// says which profile to sign in with.
+				blockedWhy += ": " + e.status.Message
+			}
 			continue
 		}
 		if n := len(e.spec.Params["scope"]); n > bestLen {
@@ -123,7 +129,7 @@ func (h *hub) coveringSecret(ctx context.Context, pattern string) (SecretStep, t
 	h.mu.RUnlock()
 	if best == nil {
 		if blocked != nil {
-			return SecretStep{}, 0, fmt.Errorf("the connection %q covers %s but is not ready (%s)", blocked.spec.Name, pattern, blocked.status.Kind)
+			return SecretStep{}, 0, fmt.Errorf("the connection %q covers %s but is not ready (%s)", blocked.spec.Name, pattern, blockedWhy)
 		}
 		return SecretStep{}, 0, fmt.Errorf("no storage connection has a scope that covers %s; add one (its scope must start the pattern, with the same scheme: s3:// and s3a://, gcs:// and gs:// are different)", pattern)
 	}

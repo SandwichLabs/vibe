@@ -52,3 +52,17 @@ func TestConnectionsReferenceCoversThePresets(t *testing.T) {
 		}
 	}
 }
+
+// Every sign-in method any type declares is documented in workspaces.md (as
+// `kind` or `kind:...`).
+func TestWorkspacesReferenceCoversEverySignInMethod(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "reference", "workspaces.md"))
+	require.NoError(t, err)
+	doc := string(b)
+	for _, info := range connections.ListConnectionTypes() {
+		for _, m := range info.SignInMethods {
+			assert.True(t, strings.Contains(doc, "`"+m+"`") || strings.Contains(doc, "`"+m+":"),
+				"type %s sign-in method %q is documented in workspaces.md", info.Name, m)
+		}
+	}
+}

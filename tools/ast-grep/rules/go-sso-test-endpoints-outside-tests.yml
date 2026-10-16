@@ -1,0 +1,17 @@
+id: go-sso-test-endpoints-outside-tests
+language: go
+severity: error
+message: WithSSOTestEndpoints / awssso.WithTestEndpoints point AWS sign-in at a fake and lift the AWS-endpoint rule. Only tests (or the planned ssofake build) may reference them (call, method value or func variable), never config, flags or env.
+rule:
+  any:
+    - kind: identifier
+    - kind: field_identifier
+  regex: '^(WithSSOTestEndpoints|WithTestEndpoints)$'
+  not:
+    inside:
+      kind: function_declaration
+      has: {field: name, regex: '^(WithSSOTestEndpoints|WithTestEndpoints)$'}
+      stopBy: end
+ignores:
+  - "**/*_test.go"
+  - "internal/workspace/ssomethod.go"

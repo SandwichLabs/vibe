@@ -554,7 +554,7 @@ func TestSetSignIn_NeverRebindsAnEnvBindingSilently(t *testing.T) {
 	require.ErrorIs(t, err, ErrRebindNeedsConfirm)
 	c, _ := findConn(ws, "pg")
 	assert.Equal(t, "db.internal:5432/analytics", c.SignInServer, "the binding still names the old server")
-	assert.Error(t, signInGuard(c, mustResolve(t, c)), "so the credential is still withheld")
+	assert.Error(t, signInGuard(secrets.NewResolver(), c, mustResolve(t, c)), "so the credential is still withheld")
 
 	// Switching to a method that carries its own binding needs no confirmation.
 	require.NoError(t, ws.SetSignIn("pg", "keychain"))
@@ -562,13 +562,13 @@ func TestSetSignIn_NeverRebindsAnEnvBindingSilently(t *testing.T) {
 	require.NoError(t, ws.RebindSignIn("pg", "env:PGPROD"))
 	c, _ = findConn(ws, "pg")
 	assert.Equal(t, "db-new.internal:5432/analytics", c.SignInServer)
-	assert.NoError(t, signInGuard(c, mustResolve(t, c)))
+	assert.NoError(t, signInGuard(secrets.NewResolver(), c, mustResolve(t, c)))
 
 	// The guard's error names both servers, for env as for the keychain.
 	require.NoError(t, ws.UpdateConnection(ScopeShared, pgConn("pg")))
 	c, _ = findConn(ws, "pg")
 	var fc *secrets.ErrFingerprintChanged
-	require.ErrorAs(t, signInGuard(c, mustResolve(t, c)), &fc)
+	require.ErrorAs(t, signInGuard(secrets.NewResolver(), c, mustResolve(t, c)), &fc)
 	assert.Equal(t, "db-new.internal:5432/analytics", fc.Old)
 	assert.Equal(t, "db.internal:5432/analytics", fc.New)
 }
@@ -602,7 +602,7 @@ func ConnectionCredential(ctx context.Context, ws Workspace, name string, lookup
 		if !connections.NeedsCredential(rc.Resolved.Type) {
 			return secrets.Credential{}, rc, nil
 		}
-		if err := signInGuard(c, rc.Resolved); err != nil {
+		if err := signInGuard(ws.Resolver(), c, rc.Resolved); err != nil {
 			return secrets.Credential{}, rc, err
 		}
 		cred, err := ws.Resolver().Resolve(ctx, credentialRef(ws.ID(), c.Scope, c.Name), c.SignIn, rc.Binding())

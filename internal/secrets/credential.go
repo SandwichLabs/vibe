@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // Credential is the per-connection blob: the person's own fields plus the
@@ -22,6 +23,10 @@ type Credential struct {
 	// "server changed" message). Neither is secret.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Server      string `json:"server,omitempty"`
+
+	// Expires is when a credential resolved from a sign-in session (aws-sso)
+	// stops working; zero for a stored one. It is never stored or sent.
+	Expires time.Time `json:"-"`
 }
 
 // SecretValues lists the values that must never be shown or logged.

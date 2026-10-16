@@ -30,6 +30,10 @@ const serverChanged = computed(() => detail.value?.info.serverChanged ?? null)
 const cred = computed(() => detail.value?.credential ?? null)
 const keychainDown = computed(() => !!cred.value && cred.value.available === false)
 const isEnv = computed(() => (detail.value?.signIn ?? '').startsWith('env:'))
+const isSso = computed(() => (detail.value?.signIn ?? '').startsWith('aws-sso:'))
+const ssoProfile = computed(() => (detail.value?.signIn ?? '').slice(8))
+// The status text marks commands with backticks: show them as code.
+const ssoParts = computed(() => (cred.value?.detail || `Sign in to AWS with profile ${ssoProfile.value}.`).split('`').map((t, i) => ({ t, code: i % 2 === 1 })))
 const fields = computed(() => spec.value?.credentials ?? [])
 
 watch(signInFor, async (n) => {
@@ -102,11 +106,24 @@ function editConnection() {
   <div v-if="open" class="modal-overlay" role="presentation" @click.self="close">
     <div ref="root" class="dialog" role="dialog" aria-modal="true" aria-labelledby="cp-h" aria-describedby="cp-d" data-testid="signin-dialog">
       <!-- A2: the keychain is not answering -->
-      <template v-if="keychainDown && !isEnv">
+      <template v-if="keychainDown && !isEnv && !isSso">
         <div class="d-head"><h2 id="cp-h">Can't reach your keychain</h2></div>
         <div id="cp-d" class="d-body">
           <p>Vibe stores passwords in this computer's keychain, but it isn't answering. That's common over SSH or when no one is signed in to the desktop.</p>
           <div class="note info"><Icon name="info" :size="16" /><span>You can still connect. Set the variables in the environment Vibe starts from, then choose <b>Environment variables</b> for this connection. Vibe never writes passwords to a file instead.</span></div>
+        </div>
+        <div class="d-foot">
+          <button class="btn" type="button" data-testid="signin-retry" @click="tryAgain">Try again</button>
+          <button class="btn btn-primary" type="button" data-testid="signin-edit" @click="editConnection">Edit connection</button>
+        </div>
+      </template>
+
+      <!-- AWS SSO profile: there are no keys to type -->
+      <template v-else-if="isSso">
+        <div class="d-head"><h2 id="cp-h">{{ name }} signs in with AWS profile {{ ssoProfile }}</h2></div>
+        <div id="cp-d" class="d-body" data-testid="signin-sso">
+          <p><template v-for="(p, i) in ssoParts" :key="i"><code v-if="p.code">{{ p.t }}</code><template v-else>{{ p.t }}</template></template></p>
+          <div class="note info"><Icon name="info" :size="16" /><span>No keys are stored for this connection. Sign in with <code>aws sso login --profile {{ ssoProfile }}</code>, then try again.</span></div>
         </div>
         <div class="d-foot">
           <button class="btn" type="button" data-testid="signin-retry" @click="tryAgain">Try again</button>

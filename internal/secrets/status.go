@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 )
 
 // EnvVarStatus says whether one environment variable is set, never its value.
@@ -27,6 +28,12 @@ type CredentialStatus struct {
 	Available          bool           `json:"available"`
 	Detail             string         `json:"detail,omitempty"`
 	Env                []EnvVarStatus `json:"env,omitempty"`
+	// Profile, SignedIn and ExpiresAt describe an aws-sso sign-in: the profile
+	// name, whether its session is usable, and when the session ends. They are
+	// never a key.
+	Profile   string     `json:"profile,omitempty"`
+	SignedIn  bool       `json:"signedIn,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 // Status describes the credential for ref under method. Errors from the store
@@ -39,6 +46,9 @@ func (r *Resolver) Status(ctx context.Context, ref Ref, method string, b Binding
 	}
 	if method == "" {
 		method = MethodKeychain
+	}
+	if kind == MethodAWSSSO {
+		return r.providedStatus(ctx, kind, prefix, method)
 	}
 	st := CredentialStatus{Method: method, Available: true, FingerprintMatches: true}
 

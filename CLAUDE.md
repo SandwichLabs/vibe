@@ -69,8 +69,8 @@ internal/
   connname/          the connection-name rule (catalog alias), a dependency-free leaf
   session/           the DuckDB hub for a workspace; connection lifecycle and status
   sandbox/           the three sandbox tiers: Mode, Parse, Rank/Tighter (leaf; shared by workspace policy and agents)
-  secrets/           keychain + env credential store (write-only across every boundary)
-  awssso/            AWS IAM Identity Center sign-in in Go: SSO profile loading, the shared token cache, role credentials, device-flow login (leaf: AWS SDK + stdlib only; not wired to a UI yet)
+  secrets/           keychain + env credential store, plus pluggable sign-in methods (`MethodProvider`: aws-sso) (write-only across every boundary)
+  awssso/            AWS IAM Identity Center sign-in in Go: SSO profile loading, the shared token cache, role credentials, device-flow login (leaf: AWS SDK + stdlib only; `workspace.NewResolver` wires it as the `aws-sso:PROFILE` sign-in; no UI or sign-in command yet)
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
   skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)

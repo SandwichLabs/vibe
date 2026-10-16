@@ -221,7 +221,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	}
 	w := &workspace{root: root, opts: o, logger: o.logger, configDir: o.configDir}
 	if w.opts.resolver == nil {
-		w.opts.resolver = secrets.NewResolver(secrets.WithEnv(SnapshotEnv()), secrets.WithResolverLogger(o.logger))
+		w.opts.resolver = NewResolver(WithSecretsOptions(secrets.WithResolverLogger(o.logger)))
 	}
 	if w.configDir == "" {
 		if d, err := prefs.DefaultDir(o.logger); err == nil {

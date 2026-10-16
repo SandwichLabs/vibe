@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
@@ -24,8 +25,8 @@ const credentialTimeout = 15 * time.Second
 // environment or prompt) is used. Only typed values are. When the type needs a
 // secret and none was typed (a prefilled user name is not a secret), it returns
 // *secrets.ErrFingerprintChanged and no credential. A connection that does not
-// exist yet has nothing stored, but an environment sign-in the person chose for
-// it is theirs to use.
+// exist yet has nothing stored, but an environment or AWS SSO sign-in the
+// person chose for it is theirs to use.
 //
 // A failure to find a stored credential is returned as err only when nothing
 // typed made up for it; the (possibly partial) credential comes back with it,
@@ -63,9 +64,15 @@ func savedTestCredential(ctx context.Context, ws Workspace, rc ResolvedConnectio
 	if method == "" {
 		method = "keychain"
 	}
-	kind, _, _ := secrets.ParseMethod(method)
-	if !hasSaved && kind != "env" {
+	bound := boundSignIn(method)
+	if !hasSaved && !bound {
 		return secrets.Credential{}, nil, nil
+	}
+	if bound {
+		// An AWS SSO identity goes only to AWS over TLS, whatever the form says.
+		if err := ws.Resolver().CheckTarget(method, targetOf(rc.Resolved)); err != nil {
+			return secrets.Credential{}, nil, fmt.Errorf("connection %q: %w", rc.Name, err)
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, credentialTimeout)
 	defer cancel()
@@ -77,11 +84,11 @@ func savedTestCredential(ctx context.Context, ws Workspace, rc ResolvedConnectio
 		}
 		// The saved sign-in itself must still match its definition (the same guard
 		// the session applies): keychain and prompt carry their own fingerprint,
-		// an environment sign-in is bound by the choice.
+		// an environment or AWS SSO sign-in is bound by the choice.
 		if st, err := ws.CredentialStatus(ctx, rc.Name); err != nil || !st.FingerprintMatches {
 			return secrets.Credential{}, &secrets.ErrFingerprintChanged{Old: savedServer(saved), New: now}, nil
 		}
-		if kind == "env" && saved.SignInFingerprint != Fingerprint(savedResolved) {
+		if bound && saved.SignInFingerprint != Fingerprint(savedResolved) {
 			return secrets.Credential{}, &secrets.ErrFingerprintChanged{Old: savedServer(saved), New: now}, nil
 		}
 	}

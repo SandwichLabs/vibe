@@ -39,7 +39,8 @@ func (l *lockedBuf) String() string              { l.mu.Lock(); defer l.mu.Unloc
 // flociWorkspace writes the two connections the way a person adds them (own
 // scope, through the workspace API) and returns the workspace root and the
 // config dir. signIn "" stores the floci credential in the (in-memory)
-// keychain of r; "env" binds it to FLOCI_* variables instead.
+// keychain of r; "env" binds it to FLOCI_* variables instead; "aws-sso" signs in
+// with the profile "dev" (r must be a workspace.NewResolver with a fake portal).
 func flociWorkspace(t *testing.T, ep, signIn string, r *secrets.Resolver) (root, cfg string) {
 	t.Helper()
 	cfg = t.TempDir()
@@ -64,6 +65,9 @@ func flociWorkspace(t *testing.T, ep, signIn string, r *secrets.Resolver) (root,
 		Options: map[string]string{"catalog": "sqlite", "data_path": "s3://" + bucket + "/warehouse/ducklake/"}}))
 	if signIn == "env" {
 		require.NoError(t, ws.SetSignIn("floci", "env:FLOCI"))
+	} else if signIn == "aws-sso" {
+		// Nothing is stored: the profile is resolved when it is used.
+		require.NoError(t, ws.SetSignIn("floci", "aws-sso:dev"))
 	} else {
 		require.NoError(t, ws.SetCredentials(context.Background(), "floci", secrets.Credential{KeyID: miniotest.KeyID, Secret: miniotest.Secret}, false))
 	}
