@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -55,6 +56,7 @@ type fakeDriver struct {
 	mu     sync.Mutex
 	stmts  []string
 	failOn string // an Exec starting with this fails ("network unreachable")
+	sealed bool   // SET GLOBAL s3_url_compatibility_mode = true was run
 }
 
 func (f *fakeDriver) Open(string) (driver.Conn, error) { return &fakeConn{f}, nil }
@@ -62,6 +64,17 @@ func (f *fakeDriver) record(q string) {
 	f.mu.Lock()
 	f.stmts = append(f.stmts, q)
 	f.mu.Unlock()
+}
+func (f *fakeDriver) sealCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, s := range f.stmts {
+		if strings.HasPrefix(s, "SET GLOBAL "+urlParamSetting+" = true") {
+			n++
+		}
+	}
+	return n
 }
 func (f *fakeDriver) denyCount() int {
 	f.mu.Lock()
@@ -82,6 +95,11 @@ func (c *fakeConn) Close() error                        { return nil }
 func (c *fakeConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
 func (c *fakeConn) ExecContext(_ context.Context, q string, _ []driver.NamedValue) (driver.Result, error) {
 	c.f.record(q)
+	if strings.HasPrefix(q, "SET GLOBAL "+urlParamSetting) {
+		c.f.mu.Lock()
+		c.f.sealed = true
+		c.f.mu.Unlock()
+	}
 	if c.f.failOn != "" && strings.HasPrefix(q, c.f.failOn) {
 		return nil, errors.New("network unreachable")
 	}
@@ -90,6 +108,11 @@ func (c *fakeConn) ExecContext(_ context.Context, q string, _ []driver.NamedValu
 func (c *fakeConn) QueryContext(_ context.Context, q string, _ []driver.NamedValue) (driver.Rows, error) {
 	if strings.Contains(q, "duckdb_extensions") {
 		return &fakeRows{cols: []string{"installed", "loaded"}, vals: []driver.Value{true, true}}, nil
+	}
+	if strings.Contains(q, "current_setting") {
+		c.f.mu.Lock()
+		defer c.f.mu.Unlock()
+		return &fakeRows{cols: []string{"v"}, vals: []driver.Value{strconv.FormatBool(c.f.sealed)}}, nil
 	}
 	return &fakeRows{cols: []string{"v"}, vals: []driver.Value{""}}, nil
 }
@@ -145,6 +168,7 @@ func TestEveryLoadPathRunsTheDenyStep(t *testing.T) {
 		f, db := newFake(t)
 		require.NoError(t, EnsureExtension(ctx, db, "httpfs", "test"))
 		assert.Equal(t, len(denySecrets), f.denyCount())
+		assert.Equal(t, 1, f.sealCount(), "URL parameters are turned off")
 	})
 	t.Run("applyHardening", func(t *testing.T) {
 		f, db := newFake(t)
@@ -153,6 +177,7 @@ func TestEveryLoadPathRunsTheDenyStep(t *testing.T) {
 		defer conn.Close()                            //nolint:errcheck
 		_ = applyHardening(ctx, conn, newConfig(nil)) // read-back fails on the fake; the deny step ran first
 		assert.Equal(t, len(denySecrets), f.denyCount())
+		assert.Equal(t, 1, f.sealCount())
 	})
 	t.Run("readyForConnect", func(t *testing.T) {
 		f, db := newFake(t)
@@ -164,6 +189,7 @@ func TestEveryLoadPathRunsTheDenyStep(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, StatusOK, kind)
 		assert.Equal(t, len(denySecrets), f.denyCount())
+		assert.Equal(t, 1, f.sealCount())
 	})
 }
 

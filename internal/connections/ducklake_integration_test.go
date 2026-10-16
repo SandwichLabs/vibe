@@ -165,9 +165,11 @@ func TestDuckLakeWithObjectStorageDataPath(t *testing.T) {
 	// DuckLake 1.0 keeps small inserts in the catalog until they are flushed.
 	_, err = sess.DB().Exec("CALL ducklake_flush_inlined_data('wh')")
 	require.NoError(t, err)
-	// The Parquet file is in the bucket, under the data path.
-	rows = queryAll(t, eng, "SELECT count(*) FROM glob('s3://lake/ducklake/main/events/*.parquet')")
+	// The Parquet file is in the bucket, under the data path. (The hub reads S3
+	// URLs literally, so a glob cannot list it: ask the lake.)
+	rows = queryAll(t, eng, "SELECT count(*), min(data_file) FROM ducklake_list_files('wh', 'events')")
 	assert.EqualValues(t, 1, rows[0][0])
+	assert.Contains(t, fmt.Sprint(rows[0][1]), "s3://lake/ducklake/main/events/")
 	// The secret never shows in DuckDB's listing of databases.
 	rows = queryAll(t, eng, "SELECT coalesce(path, '') FROM duckdb_databases() WHERE database_name = 'wh'")
 	assert.NotContains(t, fmt.Sprint(rows[0][0]), minioSecret)
@@ -188,6 +190,7 @@ func craftedCatalogRows(t *testing.T, kind string) {
 	for name, tamper := range map[string]string{
 		"absolute data file":   "UPDATE ducklake_data_file SET path = '%OUT%/secret.parquet', path_is_relative = false",
 		"dot dot data file":    "UPDATE ducklake_data_file SET path = '../../../../..%OUT%/secret.parquet'",
+		"query string":         "UPDATE ducklake_data_file SET path = path || '?s3_endpoint=127.0.0.1:1&s3_use_ssl=false'",
 		"url data file":        "UPDATE ducklake_data_file SET path = 'http://127.0.0.1:1/x.parquet'",
 		"leading slash":        "UPDATE ducklake_data_file SET path = '/etc/hostname'",
 		"backslash":            "UPDATE ducklake_data_file SET path = 'a\\b.parquet'",

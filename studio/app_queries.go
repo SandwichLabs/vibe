@@ -96,6 +96,18 @@ func validateRunRequest(req RunQueryRequest) error {
 	return usersql.CheckManaged(req.SQL)
 }
 
+// requireRunnable is requireWorkspace plus the parser-based half of the
+// editor's guard (usersql.CheckParsed): the caller holds a.mu.
+func (a *App) requireRunnable(sqlText string) error {
+	if err := a.requireWorkspace(); err != nil {
+		return err
+	}
+	if !session.LazyStorage(a.sess) {
+		return nil // the configuration lock already refuses the setting
+	}
+	return usersql.CheckParsed(a.ctxOrBackground(), a.sess.DB(), sqlText)
+}
+
 // RunQuery runs the query editor's statement on the chosen connection.
 func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	if err := validateRunRequest(req); err != nil {
@@ -104,7 +116,7 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if err := a.requireWorkspace(); err != nil {
+	if err := a.requireRunnable(req.SQL); err != nil {
 		return nil, err
 	}
 

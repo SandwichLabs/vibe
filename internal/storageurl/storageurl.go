@@ -15,6 +15,7 @@ package storageurl
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -38,12 +39,15 @@ func Scheme(u string) string {
 // comment) with something after the scheme.
 func Validate(u string) error { return validate(u, false) }
 
-// ValidateRead is Validate for a URL a read names: a "*" wildcard is allowed in
-// the last segments (a glob such as s3://b/raw/2024/*.parquet).
+// ValidateRead is Validate for a URL a read names. A "*" wildcard is allowed in
+// an Azure URL (a glob such as az://c/raw/2024/*.parquet), and in no other: the
+// session reads an S3-like URL literally, "?" and "*" included, so that no URL
+// can carry a different endpoint for the credential to be sent to (#138).
 func ValidateRead(u string) error { return validate(u, true) }
 
-func validate(u string, glob bool) error {
+func validate(u string, read bool) error {
 	sch := Scheme(u)
+	glob := read && slices.Contains(AzureSchemes, sch)
 	if sch == "" {
 		return fmt.Errorf("%q does not start with one of %s", u, strings.Join(Schemes, ", "))
 	}
@@ -86,7 +90,7 @@ func Scope(s string) (string, error) {
 	return s, nil
 }
 
-// Within reports whether the plain URL u (a read may carry a "*") lies inside the scope: a literal,
+// Within reports whether the plain URL u (an Azure read may carry a "*") lies inside the scope: a literal,
 // case-sensitive prefix match against the scope's folder form.
 func Within(u, scope string) bool {
 	sc, err := Scope(scope)

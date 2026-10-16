@@ -37,6 +37,12 @@ func Check(sqlText string, readOnly bool) error {
 			return fmt.Errorf("%s is not available here: the session loads the DuckDB extensions it needs itself", first)
 		case "SET", "RESET":
 			return fmt.Errorf("%s is not available here: DuckDB settings are fixed when the session opens", first)
+		case "PRAGMA":
+			// A read PRAGMA (table_info, show_tables, version) is fine; an
+			// assignment is SET in disguise.
+			if st.hasEq || guardedSetting(st.words[1:]) {
+				return fmt.Errorf("PRAGMA of a setting is not available here: DuckDB settings are fixed when the session opens")
+			}
 		case "COPY":
 			if readOnly && st.hasTo {
 				return fmt.Errorf("COPY ... TO writes a file, which --read-only does not allow")
@@ -57,7 +63,7 @@ func Check(sqlText string, readOnly bool) error {
 // CheckManaged is the narrow form of Check for the Studio query editor, which
 // has always allowed ATTACH, SET and COPY. It refuses only what would undo
 // Vibe's own protections: INSTALL/LOAD (a hand-loaded extension), and
-// FORCE INSTALL and UPDATE EXTENSIONS, and CREATE/DROP SECRET (dropping the catch-all deny secrets that stop an
+// FORCE INSTALL and UPDATE EXTENSIONS, SET/RESET/PRAGMA of the S3 URL-parameter setting (#138), and CREATE/DROP SECRET (dropping the catch-all deny secrets that stop an
 // uncovered storage URL being read with the host's credentials, #135).
 func CheckManaged(sqlText string) error {
 	for _, st := range statements(sqlText) {
@@ -75,9 +81,24 @@ func CheckManaged(sqlText string) error {
 			if err := secretDDL(first, st.words[1:]); err != nil {
 				return err
 			}
+		case "SET", "RESET", "PRAGMA":
+			// PRAGMA name = value is SET in disguise.
+			if guardedSetting(st.words[1:]) {
+				return fmt.Errorf("%s of that setting is not available here: it keeps S3 URLs from carrying credentials to another host", first)
+			}
 		}
 	}
 	return nil
+}
+
+// guardedSetting reports whether the words after SET/RESET name the S3 URL
+// setting (#138), or a quoted name, which cannot be told from it: the lock lets
+// that one setting through after httpfs loads, so it is checked here.
+func guardedSetting(words []string) bool {
+	for len(words) > 0 && (words[0] == "GLOBAL" || words[0] == "SESSION" || words[0] == "LOCAL") {
+		words = words[1:]
+	}
+	return len(words) > 0 && (words[0] == "S3_URL_COMPATIBILITY_MODE" || words[0] == "?" || words[0] == "ALL")
 }
 
 func secretDDL(first string, rest []string) error {
@@ -117,6 +138,8 @@ func RequireSelect(ctx context.Context, db *sql.DB, sqlText string) error {
 type statement struct {
 	words []string // first words, upper-cased; "?" stands for a quoted token
 	hasTo bool     // a bare TO keyword appears anywhere in the statement
+	hasEq bool     // a bare "=" appears outside quotes (PRAGMA name = value)
+	text  string   // the statement's own text, without its ";"
 }
 
 func isWordRune(r rune) bool {
@@ -145,12 +168,15 @@ func statements(s string) []statement {
 			cur.words = append(cur.words, "?") // a quoted token is never a keyword
 		}
 	}
-	end := func() {
+	rs := []rune(s)
+	start := 0
+	end := func(at int) {
 		flushWord()
+		cur.text = strings.TrimSpace(string(rs[start:at]))
+		start = at + 1
 		out = append(out, cur)
 		cur = statement{}
 	}
-	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
 		r := rs[i]
 		switch {
@@ -206,13 +232,16 @@ func statements(s string) []statement {
 				}
 			}
 		case r == ';':
-			end()
+			end(i)
+		case r == '=':
+			cur.hasEq = true
+			flushWord()
 		case isWordRune(r):
 			word.WriteRune(r)
 		default:
 			flushWord()
 		}
 	}
-	end()
+	end(len(rs))
 	return out
 }

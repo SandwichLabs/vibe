@@ -77,10 +77,24 @@ func TestRequireSelect(t *testing.T) {
 	}
 }
 
+func TestCheckAllowsReadPragmasAndRefusesAssignments(t *testing.T) {
+	for _, ok := range []string{"PRAGMA table_info('t')", "pragma show_tables", "PRAGMA version", "PRAGMA database_list"} {
+		assert.NoError(t, Check(ok, false), ok)
+		assert.NoError(t, CheckManaged(ok), ok)
+	}
+	for _, bad := range []string{"PRAGMA threads=1", "PRAGMA threads = 1", "PRAGMA s3_url_compatibility_mode", "PRAGMA \"x\"='y'"} {
+		assert.Error(t, Check(bad, false), bad)
+	}
+}
+
 func TestCheckManagedRefusesOnlyLoadAndSecretDDL(t *testing.T) {
 	for _, bad := range []string{
 		"LOAD httpfs", "install httpfs", "DROP TEMPORARY SECRET \"vibe-deny-s3\"",
 		"select 1; drop secret if exists x", "CREATE OR REPLACE SECRET s (TYPE s3)", "-- c\nLOAD aws", "FORCE INSTALL httpfs", "force install httpfs FROM core", "UPDATE EXTENSIONS", "update extensions (httpfs)",
+		"SET s3_url_compatibility_mode = false", "set global S3_URL_COMPATIBILITY_MODE=false", "RESET s3_url_compatibility_mode",
+		`SET "s3_url_compatibility_mode" = false`, "select 1; set session s3_url_compatibility_mode to false",
+		"PRAGMA s3_url_compatibility_mode=false", "pragma S3_URL_COMPATIBILITY_MODE=false", `PRAGMA "s3_url_compatibility_mode"=false`,
+		"PRAGMA s3_url_compatibility_mode = 'false'", "SELECT 1; PRAGMA s3_url_compatibility_mode=false",
 	} {
 		assert.Error(t, CheckManaged(bad), bad)
 	}
@@ -90,4 +104,19 @@ func TestCheckManagedRefusesOnlyLoadAndSecretDDL(t *testing.T) {
 	} {
 		assert.NoError(t, CheckManaged(ok), ok)
 	}
+}
+
+// A piece that DuckDB reads as two statements (our splitter and DuckDB's
+// disagreeing) cannot be prepared; it must still be refused when it names the
+// setting, and passed when it does not.
+func TestCheckPieceRefusesAnUnpreparablePieceThatNamesTheSetting(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close() //nolint:errcheck
+	conn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+	assert.Error(t, checkPiece(conn, "SELECT 1; PRAGMA s3_url_compatibility_mode=false"))
+	assert.Error(t, checkPiece(conn, "SELECT 1; SET \"S3_URL_compatibility_mode\" = 'false'"))
+	assert.NoError(t, checkPiece(conn, "SELECT 1; SELECT 2"))
 }

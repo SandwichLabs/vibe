@@ -116,7 +116,7 @@ Data lives in named connections: a local DuckDB file, Postgres, MySQL, MotherDuc
 
 ## What you may and may not do
 
-- Reads are free within the policy: any attached catalog, plus files only by a literal **absolute** path inside the workspace data/ folder, or a URL inside a storage connection's scope.
+- Reads are free within the policy: any attached catalog, plus files only by a literal **absolute** path inside the workspace data/ folder, or a URL inside a storage connection's scope (name each file: no wildcards on s3/gcs/r2 URLs).
 - ATTACH, SET, INSTALL/LOAD, secrets, settings and raw passthroughs (postgres_query, postgres_execute) are refused in every sandbox mode.
 - A write needs three things: the sandbox mode allows it, the connection is writable, and the user approves it. For local files approval applies while "Ask before changes" is on; for a connection that is not a local file it is always required, so headless MCP refuses those writes.
 - Credentials live in the OS keychain or environment variables. You can never read them; do not ask the user to paste one into a query or a notebook.

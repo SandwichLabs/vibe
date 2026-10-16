@@ -33,13 +33,13 @@ func TestScopeIsAPlainStorageFolder(t *testing.T) {
 
 func TestWithinIsOneLiteralPrefixRule(t *testing.T) {
 	scope := "s3://lake/raw"
-	for _, u := range []string{"s3://lake/raw/a.parquet", "s3://lake/raw/2024/*.parquet", "s3://lake/raw/x/y/z"} {
+	for _, u := range []string{"s3://lake/raw/a.parquet", "s3://lake/raw/x/y/z"} {
 		assert.True(t, Within(u, scope), u)
 	}
 	for _, u := range []string{
 		"s3://lake/raw", "s3://lake/rawx/a", "s3://lake-evil/raw/a", "s3://lake/other/a", "s3://lake/raw/../other/a", "s3://lake/raw/%2e%2e/other/a",
 		"s3://lake/raw//a", "s3://lake/raw/./a", "s3://lake/raw/a?x=1", "s3://lake/raw/a#f", "S3://lake/raw/a", "s3a://lake/raw/a", "s3n://lake/raw/a",
-		"gs://lake/raw/a", "https://lake.s3.amazonaws.com/raw/a", "file:///lake/raw/a", "s3://LAKE/raw/a", "s3://lake/Raw/a", "s3://lake/raw/a b",
+		"gs://lake/raw/a", "https://lake.s3.amazonaws.com/raw/a", "file:///lake/raw/a", "s3://LAKE/raw/a", "s3://lake/Raw/a", "s3://lake/raw/a b", "s3://lake/raw/2024/*.parquet",
 	} {
 		assert.False(t, Within(u, scope), u)
 	}
@@ -52,9 +52,11 @@ func TestWithinIsOneLiteralPrefixRule(t *testing.T) {
 	assert.False(t, Within("file:///etc/hostname", "file:///"))
 	assert.False(t, Within("http://127.0.0.1/x", "http://"))
 	assert.False(t, Within("s3://b/x", "s3://b/*"))
-	// A read may use a glob; a scope may not.
-	assert.NoError(t, ValidateRead("s3://b/a/*.parquet"))
-	assert.Error(t, Validate("s3://b/a/*.parquet"))
+	// Only an Azure read may use a glob (#138: an S3-like URL is read literally); a scope may not.
+	assert.Error(t, ValidateRead("s3://b/a/*.parquet"))
+	assert.Error(t, ValidateRead("gcs://b/a/*.parquet"))
+	assert.NoError(t, ValidateRead("az://b/a/*.parquet"))
+	assert.Error(t, Validate("az://b/a/*.parquet"))
 }
 
 func TestAzureAccountMustBeTheAccountsOwnEndpoint(t *testing.T) {
@@ -89,9 +91,10 @@ func TestGlobCharactersAreRefused(t *testing.T) {
 		assert.Error(t, ValidateRead(u), u)
 		assert.False(t, Within(u, "s3://b/"), u)
 	}
-	// A read may still carry a "*"; a plain URL may not.
-	assert.NoError(t, ValidateRead("s3://b/a/*.parquet"))
-	assert.Error(t, Validate("s3://b/a/*.parquet"))
+	// An Azure read may still carry a "*"; a plain URL may not, and no S3-like read may.
+	assert.NoError(t, ValidateRead("az://b/a/*.parquet"))
+	assert.Error(t, ValidateRead("s3://b/a/*.parquet"))
+	assert.Error(t, Validate("az://b/a/*.parquet"))
 }
 
 func TestBucket(t *testing.T) {

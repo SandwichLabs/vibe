@@ -78,31 +78,42 @@ var catalogKinds = []string{"duckdb", "sqlite"}
 // once on the way to the file.
 var maxCatalogBytes int64 = 512 << 20
 
-// globEscape makes a URL match only itself in a glob.
-var globEscape = strings.NewReplacer("*", "[*]", "?", "[?]", "[", "[[]")
+// sidecarSuffixes are the write-ahead logs and journals a copy of the catalog
+// file alone would miss.
+var sidecarSuffixes = []string{".wal", "-wal", "-journal", "-shm"}
 
 // catalogSidecar returns the suffix of a write-ahead log or journal object that
-// sits beside the catalog, or "". (glob of a name without wildcards echoes it
-// back whether or not it exists, so the folder is listed by prefix.)
+// sits beside the catalog, or "". Each name is asked for by itself (a HEAD
+// request): the hub reads S3-like URLs literally and cannot list a folder
+// (#138). A 404 means absent; any other failure is an error, so a catalog is
+// never copied on a guess.
 func catalogSidecar(ctx context.Context, q session.QueryExecer, path string) (string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT file FROM glob(`+session.QuoteLiteral(globEscape.Replace(path)+"*")+`)`)
-	if err != nil {
-		return "", fmt.Errorf("could not check the lake's catalog for a write-ahead log: %w", err)
-	}
-	defer rows.Close() //nolint:errcheck
-	for rows.Next() {
-		var f string
-		if err := rows.Scan(&f); err != nil {
+	for _, suffix := range sidecarSuffixes {
+		var size int64
+		found := false
+		rows, err := q.QueryContext(ctx, `SELECT size FROM read_blob(`+session.QuoteLiteral(path+suffix)+`)`)
+		if err == nil {
+			if found = rows.Next(); found {
+				err = rows.Scan(&size)
+			}
+			if err == nil {
+				err = rows.Err()
+			}
+			_ = rows.Close()
+		}
+		switch {
+		case err == nil && found:
+			return suffix, nil
+		case err == nil:
+			continue
+		// duckdb-go has no typed HTTP status, so absence is the message's
+		// "HTTP 404"; a reworded message fails closed (the lake does not attach).
+		// MinIO integration tests pin the wording.
+		case strings.Contains(err.Error(), "HTTP 404"):
+			continue
+		default:
 			return "", fmt.Errorf("could not check the lake's catalog for a write-ahead log: %w", err)
 		}
-		for _, suffix := range []string{".wal", "-wal", "-journal", "-shm"} {
-			if f == path+suffix {
-				return suffix, nil
-			}
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return "", fmt.Errorf("could not check the lake's catalog for a write-ahead log: %w", err)
 	}
 	return "", nil
 }
@@ -284,12 +295,12 @@ func (t ducklakeType) PostAttach(ctx context.Context, q session.Querier, s sessi
 			WHERE NOT coalesce(path_is_relative, false)
 			   OR path IS NULL
 			   OR regexp_matches(path, '(^|[/\\])\.\.([/\\]|$)')
-			   OR path LIKE '%://%' OR path LIKE '/%' OR path LIKE '%\%'`).Scan(&bad)
+			   OR path LIKE '%://%' OR path LIKE '/%' OR path LIKE '%\%' OR path LIKE '%?%'`).Scan(&bad)
 		if err != nil {
 			return fmt.Errorf("could not verify the lake's catalog (%s): %w", tbl, err)
 		}
 		if bad > 0 {
-			return fmt.Errorf("the lake's catalog (%s) names %d file(s) by an absolute path, a URL or a path that leaves the data folder; refusing to read it", tbl, bad)
+			return fmt.Errorf("the lake's catalog (%s) names %d file(s) by an absolute path, a URL, a query string or a path that leaves the data folder; refusing to read it", tbl, bad)
 		}
 	}
 	if !IsDataURL(opt(s, "data_path")) {
