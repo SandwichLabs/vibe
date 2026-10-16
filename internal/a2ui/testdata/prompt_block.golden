@@ -1,0 +1,65 @@
+<a2ui>
+present_data takes an A2UI page as a JSON object (a JSON string is also accepted):
+
+  {"title": "...", "components": [ {"id": "c1", "type": "...", ...}, ... ]}
+
+Components form a flat list; nesting is by reference — a child sets
+"parent" to its parent's id. Every component needs a unique "id".
+
+Types and their fields (optional unless marked required):
+  heading      text(required), level(1|2|3)
+  text         text(required), muted
+  divider      —
+  callout      text(required), color, icon
+  badge        text(required), color
+  list         items(required, string[]), color, label
+  code         text(required), language
+  container    gap, layout(row|column|grid)
+  statRow      —
+  stat         label(required), color, connection, detail, sql, value
+  table        columns(string[]), connection, label, rows(array of cell arrays), sql
+  barChart     bars([{label, value}]), color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), sql
+  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql
+  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  columnChart  columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sorted, sql
+  ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  radarChart   columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  sankeyChart  columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  heatmap      columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  streamChart  color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), refresh(number 5-3600), rows(array of cell arrays), sql, threshold, window(number 5-120)
+
+color must be one of: "yellow", "black", "error", "muted".
+
+Data binding: stat, table, barChart, lineChart, areaChart, ringChart, columnChart, radarChart, sankeyChart, heatmap, streamChart accept either inline data or
+a "sql" field. "sql" bindings are READ-ONLY queries over this workspace's
+connections — no INSERT/UPDATE/DELETE/DDL/multiple statements in ANY sandbox mode
+(the query re-runs on every render, so a write would fire each time); files only
+by a literal absolute path inside data/, as for run_query. Prefer inline data in present_data: you
+already have the values and the reply is a one-off, so there is nothing for a
+live query to buy you.
+
+A data-bound component may also set "connection" (a connection name, as accepted by
+introspect_schema) to run its "sql" with that connection as the default for
+unqualified table names; omit it for the workspace default.
+
+SQL result shape: barChart and lineChart want a label column then a numeric
+column (SELECT school, AVG(score) ...). stat wants a single number in the first
+column of the first row. table renders whatever columns come back.
+The other charts take inline "columns" + "rows" in exactly the shape their
+sql returns:
+  areaChart, columnChart, radarChart: a label column, then one numeric column per
+    series (SELECT month, revenue, cost ...); columnChart mode stacked|grouped.
+  ringChart: label, value[, max] per ring (max defaults to the "max" field, else 100).
+  sankeyChart: source, target, weight per flow.
+  heatmap: row label, column label, value per cell (SELECT node, hour, load ...).
+  streamChart: label, value in time order; "refresh" (seconds) re-runs its sql
+    while visible and keeps the last "window" points; values above "threshold" flag.
+
+Every chart (barChart, lineChart, areaChart, ringChart, columnChart, radarChart, sankeyChart, heatmap, streamChart) animates in; "motion" tunes it:
+easing one of "spring", "expo", "cinema", "steps", "custom", "none" ("custom" uses stiffness/damping/mass),
+speed 0.25-4, stagger true|false. Omit motion for the default spring.
+
+Do not add a heading component that just repeats the page's own "title" — the
+title already renders above the components, so a duplicate heading is redundant
+and, in the narrow panel this renders in, competes with it for space.
+</a2ui>

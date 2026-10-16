@@ -105,8 +105,8 @@ type Query struct {
 type Artifact struct {
 	Name     string
 	Manifest Manifest
-	// View is the view document (JSON text). Step 2 validates its content;
-	// the store checks that it is a single JSON value within the cap.
+	// View is the view document (JSON text), validated against the manifest
+	// (ValidateView): within the cap, one JSON object, a valid A2UI view.
 	View []byte
 	Rev  string
 	// UpdatedAt is the newer of the two files' modification times (RFC 3339).

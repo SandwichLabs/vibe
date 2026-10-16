@@ -384,6 +384,20 @@ func TestHandler_PresentData_InvalidPageDenied(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "pieChart")
 }
 
+func TestHandler_PresentData_RefusesViewOnlyComponents(t *testing.T) {
+	handler, _ := newTestHandler(t, ModeFull)
+	resp := handler.Handle(context.Background(), &Request{
+		JSONRPC: "2.0", ID: 1, Method: "present_data",
+		Params: map[string]any{"page": map[string]any{
+			"title":      "Controls",
+			"components": []any{map[string]any{"id": "a", "type": "select", "param": "region"}},
+		}},
+	})
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "only allowed in a data artifact view")
+}
+
 func TestHandler_PresentData_ToleratesJSONStringPage(t *testing.T) {
 	handler, _ := newTestHandler(t, ModeFull)
 	ctx := context.Background()

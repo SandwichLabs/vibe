@@ -47,6 +47,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/mcp.md`](reference/mcp.md) | `vibe mcp serve` (stdio/SSE), client config, SSE auth |
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |
 | [`reference/notebooks.md`](reference/notebooks.md) | Notebooks and the A2UI component reference |
+| [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down |
 | [`reference/import-office.md`](reference/import-office.md) | Import (CSV/TSV/XLSX) and export |
 | [`reference/templates.md`](reference/templates.md) | Starter templates |
 | [`reference/themes.md`](reference/themes.md) | Studio themes |

@@ -79,6 +79,12 @@ const (
 	kindRows
 	kindMotion
 	kindRange
+	// View-only kinds (view.go); only reachable through ValidateView.
+	kindQuery
+	kindParam
+	kindDrill
+	kindNameList
+	kindColumnName
 )
 
 // fieldSpec describes one component field's expected shape.
@@ -433,9 +439,10 @@ func toFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-// rawComponent is one components[i] entry as decoded from JSON, before
-// type/shape validation.
-func validateComponent(comp any, index int, errs *[]string) (id, ctype, parent string, fields map[string]any, ok bool) {
+// validateComponent validates one components[i] entry. vc is nil for the
+// chat/notebook schema (Validate) and set for a data artifact view
+// (ValidateView), which swaps in the view's specs.
+func validateComponent(comp any, index int, vc *ViewContext, errs *[]string) (id, ctype, parent string, fields map[string]any, ok bool) {
 	path := fmt.Sprintf("components[%d]", index)
 	obj, isObj := comp.(map[string]any)
 	if !isObj {
@@ -459,41 +466,32 @@ func validateComponent(comp any, index int, errs *[]string) (id, ctype, parent s
 	}
 
 	typeVal, _ := obj["type"].(string)
-	spec, known := Components[typeVal]
+	spec, known := lookupSpec(typeVal, vc)
 	if !known {
-		*errs = append(*errs, fmt.Sprintf("%s.type: unknown type %s. Valid types: %s", path, jsonenc.Quote(obj["type"]), strings.Join(componentTypeNames, ", ")))
+		*errs = append(*errs, unknownTypeError(path, obj["type"], typeVal, vc))
 		return idVal, typeVal, parent, nil, false
 	}
 
-	for field, fieldSpec := range spec.req {
+	for _, field := range sortedFieldNames(spec.req) {
+		fieldSpec := spec.req[field]
 		if v, present := obj[field]; !present {
 			*errs = append(*errs, fmt.Sprintf("%s.%s: required for type %q", path, field, typeVal))
 		} else {
-			checkValue(fieldSpec, v, fmt.Sprintf("%s.%s", path, field), errs)
+			checkViewValue(vc, fieldSpec, v, fmt.Sprintf("%s.%s", path, field), errs)
 		}
 	}
-	for field, fieldSpec := range spec.opt {
+	for _, field := range sortedFieldNames(spec.opt) {
+		fieldSpec := spec.opt[field]
 		if v, present := obj[field]; present {
-			checkValue(fieldSpec, v, fmt.Sprintf("%s.%s", path, field), errs)
+			checkViewValue(vc, fieldSpec, v, fmt.Sprintf("%s.%s", path, field), errs)
 		}
 	}
-
-	known2 := map[string]bool{"id": true, "type": true, "parent": true}
-	for f := range spec.req {
-		known2[f] = true
+	checkUnknownFields(obj, spec, typeVal, path, vc, errs)
+	if vc != nil && typeVal == "pivot" {
+		checkPivotColumns(obj, path, errs)
 	}
-	for f := range spec.opt {
-		known2[f] = true
-	}
-	allowedNames := make([]string, 0, len(known2))
-	for f := range known2 {
-		allowedNames = append(allowedNames, f)
-	}
-	sort.Strings(allowedNames)
-	for field := range obj {
-		if !known2[field] {
-			*errs = append(*errs, fmt.Sprintf("%s.%s: %q has no such field. Allowed: %s", path, field, typeVal, strings.Join(allowedNames, ", ")))
-		}
+	if vc != nil && typeVal == "dateRange" {
+		checkDateRange(obj, path, errs)
 	}
 
 	fields = make(map[string]any, len(obj))
@@ -511,6 +509,61 @@ func validateComponent(comp any, index int, errs *[]string) (id, ctype, parent s
 	return idVal, typeVal, parent, fields, true
 }
 
+// lookupSpec finds a type's spec in the registry that applies: Components
+// for the chat/notebook schema, the view's own specs for an artifact view.
+func lookupSpec(typeVal string, vc *ViewContext) (componentSpec, bool) {
+	if vc != nil {
+		s, ok := viewSpecs[typeVal]
+		return s, ok
+	}
+	s, ok := Components[typeVal]
+	return s, ok
+}
+
+func unknownTypeError(path string, rawType any, typeVal string, vc *ViewContext) string {
+	if vc == nil {
+		if _, viewOnly := ViewComponents[typeVal]; viewOnly {
+			return fmt.Sprintf("%s.type: %s is only allowed in a data artifact view. Valid types: %s", path, jsonenc.Quote(typeVal), strings.Join(componentTypeNames, ", "))
+		}
+		return fmt.Sprintf("%s.type: unknown type %s. Valid types: %s", path, jsonenc.Quote(rawType), strings.Join(componentTypeNames, ", "))
+	}
+	return fmt.Sprintf("%s.type: unknown type %s. Valid types: %s", path, jsonenc.Quote(rawType), strings.Join(viewTypeNames, ", "))
+}
+
+// checkUnknownFields reports every field the type does not define. The new
+// view-only fields (query, drill) get a pointed message from the chat schema,
+// and sql/connection a pointed one from a view.
+func checkUnknownFields(obj map[string]any, spec componentSpec, typeVal, path string, vc *ViewContext, errs *[]string) {
+	known := map[string]bool{"id": true, "type": true, "parent": true}
+	for f := range spec.req {
+		known[f] = true
+	}
+	for f := range spec.opt {
+		known[f] = true
+	}
+	allowedNames := make([]string, 0, len(known))
+	for f := range known {
+		allowedNames = append(allowedNames, f)
+	}
+	sort.Strings(allowedNames)
+	for _, field := range sortedKeys(obj) {
+		if known[field] {
+			continue
+		}
+		*errs = append(*errs, unknownFieldError(field, typeVal, path, strings.Join(allowedNames, ", "), vc))
+	}
+}
+
+func unknownFieldError(field, typeVal, path, allowed string, vc *ViewContext) string {
+	if vc == nil && viewSpecHasField(typeVal, field) && (field == "query" || field == "drill") {
+		return fmt.Sprintf("%s.%s: %q is only allowed in a data artifact view", path, field, field)
+	}
+	if vc != nil && (field == "sql" || field == "connection") && isDataBound(typeVal) {
+		return fmt.Sprintf("%s.%s: %q is not allowed in a data artifact view: name one of the artifact's queries with \"query\" (the query holds the sql and the connection)", path, field, field)
+	}
+	return fmt.Sprintf("%s.%s: %q has no such field. Allowed: %s", path, field, typeVal, allowed)
+}
+
 // Validate validates raw as an A2UI page. raw may be a JSON string, a []byte
 // of JSON, or an already-decoded value (map[string]any/[]any/...) — models
 // served through some providers/tool-calling shims hand back a parsed object
@@ -525,7 +578,7 @@ func Validate(raw any) (Page, error) {
 	if err != nil {
 		return Page{}, err
 	}
-	return validateDecoded(data)
+	return validateDecoded(data, nil)
 }
 
 func decode(raw any) (any, error) {
@@ -547,7 +600,7 @@ func decode(raw any) (any, error) {
 	}
 }
 
-func validateDecoded(data any) (Page, error) {
+func validateDecoded(data any, vc *ViewContext) (Page, error) {
 	var errs []string
 
 	obj, isObj := data.(map[string]any)
@@ -582,7 +635,7 @@ func validateDecoded(data any) (Page, error) {
 	}
 	results := make([]parsed, len(compsArr))
 	for i, c := range compsArr {
-		id, ctype, parent, fields, ok := validateComponent(c, i, &errs)
+		id, ctype, parent, fields, ok := validateComponent(c, i, vc, &errs)
 		results[i] = parsed{id, ctype, parent, fields, ok}
 	}
 

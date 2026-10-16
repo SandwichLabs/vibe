@@ -115,7 +115,7 @@ func TestStore_ViewOnlyChangeIsAConflict(t *testing.T) {
 
 		other, err := s.Get(ctx, "sales")
 		require.NoError(t, err)
-		other.View = []byte(`{"title":"Different","components":[]}`)
+		other.View = []byte(`{"title":"Different","components":[{"id":"root","type":"container"}]}`)
 		require.NoError(t, s.Put(ctx, other))
 
 		assert.ErrorIs(t, s.Put(ctx, a, WithRev(stale)), ErrConflict, "the revision covers the view too")

@@ -68,7 +68,7 @@ func prepare(a *Artifact) (prepared, error) {
 	if err != nil {
 		return prepared{}, err
 	}
-	if err := ValidateView(a.View); err != nil {
+	if err := ValidateView(&a.Manifest, a.View); err != nil {
 		return prepared{}, err
 	}
 	return prepared{manifest: manifest, view: a.View}, nil
