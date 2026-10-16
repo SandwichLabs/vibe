@@ -14,3 +14,5 @@ internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyCalls$
 internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyPragmas$
 # internal/session/sessiontest (a non-test helper package) builds test sessions with it.
 internal/session/testing.go:[0-9]+:[0-9]+: unreachable func: UnhardenedForTests$
+# internal/awssso (#131 step 5) is a leaf with no caller until step 6 wires the aws-sso sign-in method; remove this line then.
+internal/awssso/.*: unreachable func:
