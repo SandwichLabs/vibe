@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"path/filepath"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
+
 	"github.com/SandwichLabs/vibe/internal/connections"
 
 	"github.com/SandwichLabs/vibe/internal/notebooks"
@@ -54,6 +56,9 @@ func (a *AgentAccess) Queries() queries.Store { return a.ws.Queries() }
 
 // Skills is the workspace's skills/ folder.
 func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
+
+// Artifacts is the workspace's artifacts/ folder.
+func (a *AgentAccess) Artifacts() artifacts.Store { return a.ws.Artifacts() }
 
 // AgentPolicy is the workspace's effective policy for this person.
 func (a *AgentAccess) AgentPolicy() (string, bool) { return a.ws.AgentPolicy() }

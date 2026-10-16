@@ -269,3 +269,20 @@ func TestDuckDBEngine_Close(t *testing.T) {
 	eng := NewDuckDBEngine(sessiontest.ForTests(db))
 	assert.NoError(t, eng.Close())
 }
+
+func TestParamNames_MatchesWhatBindParamsBinds(t *testing.T) {
+	assert.Equal(t, []string{"a", "b"}, ParamNames("SELECT $a, $b, $a WHERE x = $b"))
+	assert.Nil(t, ParamNames("SELECT 1"))
+	// Same rule as BindParams: the raw text, so a literal counts, and so does $1.
+	assert.Equal(t, []string{"x", "1"}, ParamNames("SELECT '$x', $1"))
+	for _, sql := range []string{"SELECT $a, $b", "SELECT '$q', $q2 + $q2", "SELECT $1"} {
+		names := ParamNames(sql)
+		params := map[string]any{}
+		for _, n := range names {
+			params[n] = 1
+		}
+		_, args, err := BindParams(sql, params)
+		require.NoError(t, err, sql)
+		assert.GreaterOrEqual(t, len(args), len(names))
+	}
+}
