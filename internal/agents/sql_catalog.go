@@ -183,12 +183,30 @@ type funcInfo struct {
 	table  map[string]bool
 	macros map[string]string // lower name -> definition (scalar: an expression; table macro: a query)
 	tmacro map[string]bool
+	// internal are the names of DuckDB's own functions of every kind: a user
+	// macro with one of these names would replace it.
+	internal map[string]bool
 }
 
 func loadFunctions(ctx context.Context, userDB queryDB) (*funcInfo, error) {
-	f := &funcInfo{table: map[string]bool{}, macros: map[string]string{}, tmacro: map[string]bool{}}
+	f := &funcInfo{table: map[string]bool{}, macros: map[string]string{}, tmacro: map[string]bool{}, internal: map[string]bool{}}
 	if nilDB(userDB) {
 		return f, errors.New("no duckdb connection available")
+	}
+	irows, err := userDB.QueryContext(ctx, `SELECT DISTINCT lower(function_name) FROM duckdb_functions() WHERE internal`)
+	if err != nil {
+		return f, err
+	}
+	for irows.Next() {
+		var n string
+		if err := irows.Scan(&n); err != nil {
+			_ = irows.Close()
+			return f, err
+		}
+		f.internal[n] = true
+	}
+	if err := irows.Close(); err != nil {
+		return f, err
 	}
 	rows, err := userDB.QueryContext(ctx, `SELECT lower(function_name), function_type, macro_definition, internal FROM duckdb_functions()
 		WHERE function_type IN ('table','table_macro','pragma','macro')`)

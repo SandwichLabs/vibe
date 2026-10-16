@@ -145,6 +145,11 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 		return deny(fmt.Sprintf("%s %s is not allowed (the agent may %s tables, views, sequences, schemas, indexes, macros and types)", verb, what, strings.ToLower(verb)))
 	}
 	kind := toks[i].Text
+	if verb == "CREATE" && (kind == "MACRO" || kind == "FUNCTION") {
+		if r := a.macroShadows(toks, i+1); r != "" {
+			return deny(r)
+		}
+	}
 	if verb == "ALTER" && kind != "TABLE" && kind != "VIEW" && kind != "SEQUENCE" {
 		return deny("ALTER " + kind + " is not allowed")
 	}
@@ -207,6 +212,24 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 		}
 	}
 	return &sqlVerdict{Class: sqlClassDDL, Targets: targets}
+}
+
+// macroShadows refuses a macro named like one of DuckDB's own functions: it
+// would replace it for every later statement (list_value, read_text, glob ...),
+// including the ones the policy has vetted by name.
+func (a *analyzer) macroShadows(toks []lexTok, i int) string {
+	for i < len(toks) && (toks[i].isWord("IF") || toks[i].isWord("NOT") || toks[i].isWord("EXISTS")) {
+		i++
+	}
+	parts, _, ok := parseName(toks, i)
+	if !ok || len(parts) == 0 {
+		return fmt.Sprintf("%s: could not tell what this macro is called", couldntVerifyMsg)
+	}
+	name := strings.ToLower(parts[len(parts)-1])
+	if a.functions().internal[name] || hardDeniedFunc(name) != "" {
+		return fmt.Sprintf("a macro cannot be named %q: that is a DuckDB function, and the macro would replace it for every later statement", name)
+	}
+	return ""
 }
 
 func anyReadOnly(targets []sqlTarget) bool {
@@ -545,21 +568,21 @@ func parseNameFromString(s string) ([]string, int, bool) {
 // arguments (header = true, columns = {...}) are not paths and pass.
 func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 	closeIdx := matchParen(toks, open)
-	const need = "%s() needs its path written out as one plain string literal (no expressions, variables, lists, concatenation or E'...' strings)"
+	const need = "%s() needs its path written out as one plain string literal, or a list of them (no expressions, variables, concatenation or E'...' strings)"
 	if closeIdx < 0 || open+2 > closeIdx {
 		return fmt.Sprintf(need, fn)
 	}
-	first := toks[open+1]
-	if first.Kind != lkString || !first.Plain {
-		return fmt.Sprintf(need, fn)
+	if _, shadowed := a.functions().macros[strings.ToLower(fn)]; shadowed {
+		return fmt.Sprintf("%s() is shadowed by a macro of the same name, so it would not read the file that was checked; the agent will not use it", fn)
 	}
-	if after := toks[open+2]; !(after.isPunct(",") || after.isParen(")")) {
-		return fmt.Sprintf(need, fn) // 'a' 'b' adjacent literals, 'a' || 'b', 'a'::T ...
+	paths, next, ok := readerPathTokens(toks, open+1, closeIdx)
+	if !ok || (toks[open+1].isPunct("[") && !a.listFormSafe()) {
+		return fmt.Sprintf(need, fn)
 	}
 	// A second positional string (after a comma, not after "=" or ":=") would
 	// be a second path.
 	depth := 0
-	for j := open + 2; j < closeIdx; j++ {
+	for j := next; j < closeIdx; j++ {
 		switch {
 		case toks[j].isParen("("), toks[j].isPunct("{"), toks[j].isPunct("["):
 			depth++
@@ -575,7 +598,7 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 	// them (version_name_format, allow_moved_paths, rejects_table ...): only an
 	// explicit list of options that cannot is accepted.
 	depth = 0
-	for j := open + 2; j < closeIdx; j++ {
+	for j := next; j < closeIdx; j++ {
 		switch {
 		case toks[j].isParen("("), toks[j].isPunct("{"), toks[j].isPunct("["):
 			depth++
@@ -588,11 +611,49 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 			}
 		}
 	}
-	r := a.paths.vetRead(first.Text)
-	if r == "" {
-		a.vetted[first.Text] = true
+	for _, p := range paths {
+		if r := a.paths.vetRead(p); r != "" {
+			return r
+		}
+		a.vetted[p] = true
 	}
-	return r
+	return ""
+}
+
+// readerPathTokens reads a reader's path argument starting at toks[i]: one
+// plain string literal, or a bracketed list of them. next is the index after it,
+// which must be a "," or the closing ")" (so 'a' 'b', 'a' || 'b' and 'a'::T
+// are not paths).
+func readerPathTokens(toks []lexTok, i, closeIdx int) (paths []string, next int, ok bool) {
+	plain := func(t lexTok) bool { return t.Kind == lkString && t.Plain }
+	switch {
+	case plain(toks[i]):
+		paths, next = []string{toks[i].Text}, i+1
+	case toks[i].isPunct("["):
+		next = i + 1
+		for {
+			if next >= closeIdx || !plain(toks[next]) {
+				return nil, 0, false
+			}
+			paths = append(paths, toks[next].Text)
+			next++
+			if next < closeIdx && toks[next].isPunct(",") {
+				next++
+				continue
+			}
+			if next < closeIdx && toks[next].isPunct("]") {
+				next++
+				break
+			}
+			return nil, 0, false
+		}
+	default:
+		return nil, 0, false
+	}
+	if next > closeIdx || !(toks[next].isPunct(",") || toks[next].isParen(")")) {
+		return nil, 0, false
+	}
+	return paths, next, true
 }
 
 // isTableRefStart reports whether toks[i] begins a table reference: the token

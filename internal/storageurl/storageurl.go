@@ -46,8 +46,12 @@ func Validate(u string) error { return validate(u, false) }
 func ValidateRead(u string) error { return validate(u, true) }
 
 func validate(u string, read bool) error {
+	return validateGlob(u, read && slices.Contains(AzureSchemes, Scheme(u)))
+}
+
+// validateGlob is validate with the wildcard decision made by the caller.
+func validateGlob(u string, glob bool) error {
 	sch := Scheme(u)
-	glob := read && slices.Contains(AzureSchemes, sch)
 	if sch == "" {
 		return fmt.Errorf("%q does not start with one of %s", u, strings.Join(Schemes, ", "))
 	}
@@ -75,6 +79,61 @@ func validate(u string, read bool) error {
 		}
 	}
 	return nil
+}
+
+// S3Like are the schemes httpfs reads: Vibe reads them as literal keys (#138),
+// so a wildcard in one is expanded by Vibe itself (internal/storageglob).
+var S3Like = []string{"s3://", "s3a://", "s3n://", "gcs://", "gs://", "r2://"}
+
+// IsS3Like reports whether u starts with an S3-like scheme (not Azure).
+func IsS3Like(u string) bool {
+	for _, s := range S3Like {
+		if strings.HasPrefix(u, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasWildcard reports whether u holds a "*" (or "**"). Only "*" is a wildcard
+// on an S3-like URL: "?" and "[" are not (they are refused in a pattern, and
+// part of the name in a plain URL, see ValidatePattern).
+func HasWildcard(u string) bool { return strings.Contains(u, "*") }
+
+// ValidatePattern is Validate for an S3-like pattern a read names: a plain URL
+// that may hold "*" and "**" and nothing else DuckDB's glob would read
+// specially. "?" and "[" are refused (DuckDB's glob reads them as a one-character
+// and a character-class wildcard, and a "?" would start a URL parameter in the
+// session that lists the bucket), like every other character Validate refuses.
+func ValidatePattern(u string) error {
+	if !IsS3Like(u) {
+		return fmt.Errorf("%q is not an s3, gcs or r2 URL", u)
+	}
+	return validateGlob(u, true)
+}
+
+// PatternPrefix is the fixed part of a pattern: everything up to the folder
+// that holds its first "*" (with a trailing slash), the part a scope must cover.
+func PatternPrefix(pattern string) string {
+	i := strings.IndexByte(pattern, '*')
+	if i < 0 {
+		return pattern
+	}
+	if j := strings.LastIndexByte(pattern[:i], '/'); j >= 0 {
+		return pattern[:j+1]
+	}
+	return pattern[:i]
+}
+
+// PatternWithin reports whether the pattern is a valid pattern and its text
+// starts with the scope's folder form, so every object it can match (a "*"
+// never leaves the scope's folder by text) is inside the scope.
+func PatternWithin(pattern, scope string) bool {
+	sc, err := Scope(scope)
+	if err != nil || ValidatePattern(pattern) != nil {
+		return false
+	}
+	return strings.HasPrefix(pattern, sc)
 }
 
 // Scope validates a connection's scope and returns it as a folder prefix (with

@@ -157,7 +157,7 @@ func (a *analyzer) functions() *funcInfo {
 	if a.funcs == nil && a.fnErr == nil {
 		a.funcs, a.fnErr = loadFunctions(a.ctx, a.db)
 		if a.funcs == nil {
-			a.funcs = &funcInfo{table: map[string]bool{}, macros: map[string]string{}, tmacro: map[string]bool{}}
+			a.funcs = &funcInfo{table: map[string]bool{}, macros: map[string]string{}, tmacro: map[string]bool{}, internal: map[string]bool{}}
 		}
 	}
 	return a.funcs

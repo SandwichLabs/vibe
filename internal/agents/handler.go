@@ -349,7 +349,7 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 			}
 		}
 		if sb.RequireApproval || len(nonLocal) > 0 {
-			if r := h.awaitApproval(ctx, req, sb, "", nil, sqlClassWrite, nonLocal); r != nil {
+			if r := h.awaitApproval(ctx, req, sb, "", "", nil, sqlClassWrite, nonLocal); r != nil {
 				return r
 			}
 		}
@@ -370,7 +370,9 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 // nonLocal names the connections this write changes that are not the
 // workspace's own local files. Approval is forced for those whatever the
 // person's "Ask before changes" setting is (the third write gate, #116).
-func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText string, params map[string]any, class sqlClass, nonLocal []string) *Response {
+// runSQL is the text that will actually run (wildcards expanded): the re-check after
+// the wait vets exactly it, not a fresh expansion.
+func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText, runSQL string, params map[string]any, class sqlClass, nonLocal []string) *Response {
 	if h.approver == nil {
 		if len(nonLocal) > 0 {
 			return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
@@ -415,7 +417,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 				"the agent's access changed while this was waiting for approval: %s", err.Error()))
 		}
 		if req.Method == "run_query" {
-			v := h.classify(ctx, userDB, sqlText, params)
+			v := h.classify(ctx, userDB, runSQL, params)
 			if err := fresh.checkSQLClass(v.Class, v.Reason); err != nil {
 				return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
 					"the agent's access changed while this was waiting for approval: %s", err.Error()))

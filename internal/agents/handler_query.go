@@ -75,6 +75,13 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		}
 	}
 	connectErr := h.connectReferenced(ctx, connection, sqlStr)
+	// Wildcards on s3/gcs/r2 are expanded first; the statement is classified
+	// and run as expanded, so the cell and the binding keep the wildcard.
+	orig := sqlStr
+	sqlStr, ctx, err = h.expand(ctx, orig)
+	if err != nil {
+		return nil, false, fmt.Errorf("query execution failed: %w", err)
+	}
 	v, err := h.classifyIn(ctx, connection, sqlStr, params)
 	if err != nil {
 		return nil, false, err
@@ -89,7 +96,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		// reason, which can name a tier requirement that is false for a
 		// full-tier caller. The reason is still useful for debugging a denial
 		// that looks surprising, so it's logged here at debug level only.
-		h.logger.Debug("render-time sql binding denied", "class", class, "reason", reason, "sql", sqlStr)
+		h.logger.Debug("render-time sql binding denied", "class", class, "reason", reason, "sql", orig)
 		return nil, false, err
 	}
 
@@ -104,7 +111,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 			}
 			return rs, truncated, nil
 		}
-		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "sql", sqlStr, "wrap_error", err)
+		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "sql", orig, "wrap_error", err)
 	}
 
 	rs, err = exec(ctx, sqlStr, params)
@@ -143,7 +150,13 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	}
 	connectErr := h.connectReferenced(ctx, "", sqlStr)
 	sb := h.sandboxFor(ctx)
-	v := h.classify(ctx, userDB, sqlStr, params)
+	// Wildcards on s3/gcs/r2 are expanded before the policy looks at the
+	// statement; what is vetted, approved-for and run is the expanded text.
+	runSQL, runCtx, err := h.expand(ctx, sqlStr)
+	if err != nil {
+		return NewErrorResponse(req.ID, expandErrorCode(err), "run_query: "+err.Error())
+	}
+	v := h.classify(runCtx, userDB, runSQL, params)
 	class := v.Class
 	if err := sb.checkSQLClass(v.Class, v.Reason); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
@@ -163,12 +176,12 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	// The third write gate: the person's OK. It is forced on for anything that
 	// is not a local file, whatever the "Ask before changes" setting is.
 	if class != sqlClassRead && (sb.RequireApproval || len(nonLocal) > 0) {
-		if r := h.awaitApproval(ctx, req, sb, sqlStr, params, class, nonLocal); r != nil {
+		if r := h.awaitApproval(ctx, req, sb, sqlStr, runSQL, params, class, nonLocal); r != nil {
 			return r
 		}
 	}
 
-	rs, err := h.engine.Execute(ctx, sqlStr, params)
+	rs, err := h.engine.Execute(runCtx, runSQL, params)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query execution failed: %v", err))
 	}

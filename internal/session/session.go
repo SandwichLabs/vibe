@@ -508,6 +508,16 @@ func (c *Conn) Close() error {
 		_ = c.c.Raw(func(any) error { return driver.ErrBadConn })
 		return c.c.Close()
 	}
+	// A TEMP macro or function belongs to this one connection, where the agent's
+	// SQL policy (which looks at functions on whichever connection it is handed)
+	// cannot see it, yet it can replace list_value or a reader for the next run
+	// that lands here. It does not outlive the run that made it: the connection
+	// is discarded. TEMP tables and views are not affected.
+	var tempFuncs int
+	if err := c.c.QueryRowContext(ctx, "SELECT count(*) FROM duckdb_functions() WHERE database_name = 'temp' AND NOT internal").Scan(&tempFuncs); err != nil || tempFuncs > 0 {
+		_ = c.c.Raw(func(any) error { return driver.ErrBadConn })
+		return c.c.Close()
+	}
 	var cat, schema string
 	err := c.c.QueryRowContext(ctx, "SELECT current_database(), current_schema()").Scan(&cat, &schema)
 	if err != nil || cat != c.h.defCat() || schema != c.h.defSchema() {

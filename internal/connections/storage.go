@@ -171,7 +171,11 @@ func (t storageType) probeListing(ctx context.Context, sess session.Session, s s
 	if len(steps) != 1 {
 		return 0, "", fmt.Errorf("%s connection %q has no single secret to list with", t.kind, s.Name)
 	}
-	n, err := lister.ListObjects(ctx, steps[0], param(s, "scope")+"**", maxListed)
+	scope, err := storageurl.Scope(param(s, "scope"))
+	if err != nil {
+		return 0, "", err
+	}
+	n, err := lister.ListObjects(ctx, steps[0], scope+"**", maxListed)
 	if err != nil {
 		return 0, "", fmt.Errorf("could not list the scope: %w", err)
 	}

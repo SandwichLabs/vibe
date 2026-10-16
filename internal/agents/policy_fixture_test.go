@@ -25,6 +25,20 @@ type fakeConnSession struct {
 	session.Session
 	extra  []session.ConnectionInfo
 	remote map[string]bool
+	// keys are the objects a wildcard pattern lists to (storageglob.Lister);
+	// listed records every pattern the hub was asked to list.
+	keys   map[string][]string
+	listed []string
+}
+
+// ListMatching makes the fixture a storageglob.Lister with canned listings.
+func (s *fakeConnSession) ListMatching(_ context.Context, pattern string, limit int) ([]string, error) {
+	s.listed = append(s.listed, pattern)
+	ks := s.keys[pattern]
+	if len(ks) > limit+1 {
+		ks = ks[:limit+1]
+	}
+	return ks, nil
 }
 
 func (s *fakeConnSession) ConnectionInfos() []session.ConnectionInfo {

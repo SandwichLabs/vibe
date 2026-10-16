@@ -96,7 +96,7 @@ The credential is an access key id and secret (prompted, or `--sign-in env:PREFI
 SELECT * FROM read_parquet('s3://acme-lake/raw/2026/jan.parquet') LIMIT 10;
 ```
 
-Name each file: an `s3://`, `gcs://` or `r2://` URL is read as one literal key, so a `*` wildcard does not list anything there (wildcards work only on `az://`). See the object-storage notes in `reference/connections.md`.
+A `*` or `**` wildcard works too (`read_parquet('s3://acme-lake/raw/2026/*.parquet')`, `FROM 's3://acme-lake/raw/**/*.csv'`, `glob('s3://acme-lake/raw/**')`): Vibe lists the matching objects when the query starts and reads that list. It is a point-in-time list, capped at 10,000 objects per query, and a pattern with no match is an error. See the object-storage notes in `reference/connections.md`.
 
 ## Azure Blob / ADLS
 

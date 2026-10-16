@@ -49,17 +49,23 @@ func (e *DuckDBEngine) executeIn(ctx context.Context, connection, query string, 
 		return nil, 0, fmt.Errorf("failed to bind parameters: %w", err)
 	}
 
+	boundSQL, rw, err := e.expandWildcards(ctx, boundSQL)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var opts []session.QueryOption
 	if connection != "" {
 		opts = append(opts, session.WithCatalog(connection))
 	}
 	rows, err := e.sess.QueryWith(ctx, boundSQL, args, opts...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to execute duckdb query: %w", err)
+		return nil, 0, shorten(rw, fmt.Errorf("failed to execute duckdb query: %w", err))
 	}
 	defer rows.Close() //nolint:errcheck
 
-	return ScanRows(rows.Rows, maxRows)
+	rs, total, err := ScanRows(rows.Rows, maxRows)
+	return rs, total, shorten(rw, err)
 }
 
 // Close is a no-op for DuckDBEngine since the db is managed externally.
