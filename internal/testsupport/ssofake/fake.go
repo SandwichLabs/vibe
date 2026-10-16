@@ -114,6 +114,18 @@ func (f *Fake) Expire() {
 	f.refuseRfsh = true
 }
 
+// IssueToken returns an access token the portal accepts, as if the person had
+// run `aws sso login` outside Vibe: the test writes it into the token cache.
+func (f *Fake) IssueToken() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tokenSeq++
+	at := fmt.Sprintf("%s_%d", NeedleAccess, f.tokenSeq)
+	f.valid[at] = true
+	f.refuseRfsh = false
+	return at
+}
+
 // Waiting reports how many device authorizations await approval.
 func (f *Fake) Waiting() int {
 	f.mu.Lock()

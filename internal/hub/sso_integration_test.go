@@ -31,6 +31,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/vibe/internal/testsupport/ssofake"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -38,8 +39,6 @@ import (
 // with a (fake) AWS SSO profile connects to MinIO with STS credentials a fake
 // portal mints, reads a DuckLake and a wildcard, and every secret stays out of
 // statuses, errors, agent results, files and logs. Nothing leaves the machine.
-
-const ssoAccessNeedle = "NEEDLE_SSO_ACCESS_TOKEN_hub"
 
 const ssoHubConfig = `[profile dev]
 sso_session = corp
@@ -90,8 +89,9 @@ func assumeRole(t *testing.T, ep string) stsCreds {
 // MinIO STS credentials, and a resolver wired to it.
 type ssoWorld struct {
 	home   string
+	fake   *ssofake.Fake
 	portal *httptest.Server
-	hits   atomic.Int64
+	hits   portalHits
 	sts    atomic.Value // stsCreds
 	res    *secrets.Resolver
 	red    *secrets.Redactor
@@ -109,19 +109,12 @@ func newSSOWorld(t *testing.T, ep string, signedIn bool) *ssoWorld {
 	if ep != "" {
 		w.sts.Store(assumeRole(t, ep))
 	}
-	w.portal = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		w.hits.Add(1)
-		if r.Header.Get("x-amz-sso_bearer_token") != ssoAccessNeedle {
-			rw.Header().Set("X-Amzn-Errortype", "UnauthorizedException")
-			rw.WriteHeader(401)
-			_, _ = rw.Write([]byte(`{"message":"expired"}`))
-			return
-		}
+	w.fake = ssofake.New(ssofake.WithCredentials(func() ssofake.Creds {
 		c, _ := w.sts.Load().(stsCreds)
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{"roleCredentials": map[string]any{
-			"accessKeyId": c.KeyID, "secretAccessKey": c.Secret, "sessionToken": c.Token, "expiration": c.Expires.UnixMilli()}})
+		return ssofake.Creds{KeyID: c.KeyID, Secret: c.Secret, Token: c.Token, Expires: c.Expires}
 	}))
+	w.hits = portalHits{w.fake}
+	w.portal = httptest.NewServer(w.fake)
 	t.Cleanup(w.portal.Close)
 	w.res = workspace.NewResolver(workspace.WithSSOTestEndpoints(w.portal.URL, w.portal.URL),
 		workspace.WithSecretsOptions(secrets.WithKeychain(secrets.NewMemoryStore()), secrets.WithRedactor(w.red)))
@@ -130,6 +123,11 @@ func newSSOWorld(t *testing.T, ep string, signedIn bool) *ssoWorld {
 	}
 	return w
 }
+
+// portalHits counts the portal's role-credential calls, as an atomic did.
+type portalHits struct{ f *ssofake.Fake }
+
+func (h portalHits) Load() int64 { return int64(h.f.PortalHits()) }
 
 func (w *ssoWorld) cachePath() string {
 	sum := sha1.Sum([]byte("corp")) //nolint:gosec // see import
@@ -140,7 +138,7 @@ func (w *ssoWorld) signIn(t *testing.T) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(w.cachePath()), 0o700))
 	b, _ := json.Marshal(map[string]string{"startUrl": "https://corp.awsapps.com/start", "region": "us-east-1",
-		"accessToken": ssoAccessNeedle, "expiresAt": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
+		"accessToken": w.fake.IssueToken(), "expiresAt": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
 	require.NoError(t, os.WriteFile(w.cachePath(), b, 0o600))
 }
 
@@ -149,7 +147,7 @@ func (w *ssoWorld) signOut(t *testing.T) { t.Helper(); require.NoError(t, os.Rem
 // ssoNeedles are the values no output may contain.
 func (w *ssoWorld) needles() []string {
 	c, _ := w.sts.Load().(stsCreds)
-	return []string{c.Secret, c.Token, ssoAccessNeedle, miniotest.Secret, "NeedleRoleName", "123456789012", "corp.awsapps.com"}
+	return []string{c.Secret, c.Token, ssofake.NeedleAccess, ssofake.NeedleRefresh, ssofake.NeedleClientSecret, miniotest.Secret, "NeedleRoleName", "123456789012", "corp.awsapps.com"}
 }
 
 func noNeedles(t *testing.T, what, s string, needles []string) {
@@ -363,7 +361,7 @@ func TestSSOMCPServeReportsNeedsSignIn(t *testing.T) {
 	run.handshake()
 	start := time.Now()
 	text, isErr := run.tool("run_query", map[string]any{"sql": "SELECT * FROM read_parquet('s3://acme-dev/x.parquet')"})
-	assert.Less(t, time.Since(start), 20*time.Second, "no hang")
+	assert.Less(t, time.Since(start), 5*time.Second, "refuses at once: no hang, no waiting for a browser")
 	assert.True(t, isErr, text)
 	assert.Contains(t, text, "no ready storage connection", "the agent's URL policy stops it before any read: the connection is not ready")
 	assert.Contains(t, text, `the storage connection "dev" covers it but is not ready`, "the refusal names the connection that covers the URL")
@@ -376,4 +374,9 @@ func TestSSOMCPServeReportsNeedsSignIn(t *testing.T) {
 		noNeedles(t, "mcp output", s, w.needles())
 	}
 	assert.Equal(t, int64(0), w.hits.Load())
+	_, statErr := os.Stat(filepath.Join(w.home, ".aws", "sso"))
+	assert.True(t, os.IsNotExist(statErr), "serve wrote no token cache: it only reads one")
+	text, isErr = run.tool("run_query", map[string]any{"sql": "SELECT 41 + 1"})
+	require.False(t, isErr, text)
+	assert.Contains(t, text, "42", "a statement that needs no storage still runs")
 }

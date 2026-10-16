@@ -148,6 +148,7 @@ Everything above shipped. These are the places where the result differs from wha
 - **MotherDuck cannot be read-only.** `READ_ONLY` is not supported on `md:` attaches, so the type defaults to `read_only: false` and rejects `true`; read-only comes from a read-scaling token.
 - **DuckLake catalogs: SQLite, and in object storage (#118, PRs #119-#124 and the end-to-end step).** The DuckLake type takes a `catalog` option (`duckdb` or `sqlite`) and a catalog that is a storage URL, read-only, vetted before attach (a crafted catalog's views and rows could otherwise read any file), with the lake connecting its storage connection first and saying `needs the "floci" connection: ...` when that is not ready. It needed DuckDB 1.5.6 (the bump, #120). The case it was built for, a SQLite catalog and Parquet in a no-TLS path-style S3-compatible store, is exercised end to end over the CLI, the agent tool surface, `vibe mcp serve` and Studio ([`plans/ducklake-catalogs.md`](plans/ducklake-catalogs.md)). Postgres metadata catalogs and an advanced-attach escape hatch stay deferred.
 - **Bundles use age (#118).** The optional passphrase envelope is an [age](https://age-encryption.org) scrypt recipient, not a bespoke format.
+- **Storage setup from the lake form, and AWS SSO sign-in for S3 (#130, #131).** A lake, Iceberg or Delta form shows whether a storage connection covers its URL, offers **Set up storage** (with S3-compatible presets) and Test tries the storage connection first. An S3 connection can sign in with an `aws-sso:PROFILE` from `~/.aws/config`: Vibe resolves the profile in Go (not DuckDB's `credential_chain`), keeps the keys in memory and the DuckDB temporary secret, renews them before they end, fails closed (never anonymous) when the session ends, and runs the device sign-in natively from Studio and `vibe conn credentials sign-in`; `vibe mcp serve` only reports "needs sign-in". The SSO token lives only in the AWS CLI's shared cache. S3, GCS and R2 wildcards are expanded by Vibe in a private listing session, because the URL-parameter hardening (#138) turns DuckDB's own globs off. Plan: [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md).
 - **Packaging is wired but not shipped.** Launch arguments, macOS `OnFileOpen`, the `Info.plist` document types and the Linux `.desktop` and MIME files are in the repo ([`packaging.md`](packaging.md) §1a). Signing, notarisation, CI, the release pipeline, the offline-extension decision and the signed-build keychain check remain epic #77.
 
 ### Open-source launch decisions (2026-10-11, epic #51)
@@ -167,6 +168,9 @@ Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-la
 
 ### Open follow-ups
 
+- #131: not yet checked against a real IAM Identity Center (needs a real AWS account); the fakes and MinIO STS cover everything else.
+- #127 (the rail's Fix on a dependency error opens the lake, not the storage connection), #129 (smaller DuckLake catalog follow-ups) and #142 (Floci as the S3 test double instead of MinIO).
+- No CI job runs the `-tags integration` tests (MinIO, the SSO journey), and macOS is unverified for the SSO sign-in.
 - #134: agent reads of Iceberg and Delta through a confined hub.
 - #123: auto-number gap off-by-one after reopening a file.
 - MotherDuck has only been exercised against the spike and with fakes; a pass with a real token is outstanding.
