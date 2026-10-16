@@ -1,6 +1,6 @@
 # DuckLake catalogs: SQLite and DuckDB metadata, local or in object storage
 
-Status: **delivered** (2026-10-14), PRs #119 to #124 and the end-to-end step 7 (this document's Acceptance section says where each point is verified). Issue #118. Removes the SQLite half of "DuckLake with a Postgres or SQLite metadata catalog" from the deferred list in `docs/direction.md` §9. Postgres metadata catalogs and a free-form "advanced attach" type are out of scope (see [Later](#later)).
+Status: **delivered** (2026-10-14; released in v0.1.3), PRs #119 to #125 (#125 is the end-to-end step 7) (this document's Acceptance section says where each point is verified). Issue #118. Removes the SQLite half of "DuckLake with a Postgres or SQLite metadata catalog" from the deferred list in `docs/direction.md` §9. Postgres metadata catalogs and a free-form "advanced attach" type are out of scope (see [Later](#later)).
 
 ## The case this must handle
 

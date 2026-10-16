@@ -1,6 +1,6 @@
 # Storage setup from the lake form, and AWS SSO sign-in for S3
 
-Status: **built, awaiting a real IAM Identity Center check** (planned 2026-10-15; steps 1-9 merged by 2026-10-16: #130 steps 1-4 in PRs #132-#134 and #136, #131 steps 5-9 in PRs #143-#146 and the end-to-end step; see [Remaining before and after release](#remaining-before-and-after-release)). Issues #130 (detect storage URLs and set up the storage connection inline) and #131 (AWS SSO / profile sign-in for S3, with a `.env`-style sign-in prompt). Builds on #118 (`docs/plans/ducklake-catalogs.md`): `checkStorageURLs`, `Spec.Requires`, `connectRequires` / `detachDependents` / `readyDependents` (#124), `use_ssl` (#119). Related: #127 (the rail's "Fix" on a dependency error), #116 (the agent's URL-read boundary).
+Status: **released in v0.1.4 (SSO as a preview), awaiting a real IAM Identity Center check** (planned 2026-10-15; steps 1-9 merged by 2026-10-16: #130 steps 1-4 in PRs #132-#134 and #136, #131 steps 5-9 in PRs #143-#147; review fixes #137, #139-#141; see [Remaining before and after release](#remaining-before-and-after-release)). Issues #130 (detect storage URLs and set up the storage connection inline) and #131 (AWS SSO / profile sign-in for S3, with a `.env`-style sign-in prompt). Builds on #118 (`docs/plans/ducklake-catalogs.md`): `checkStorageURLs`, `Spec.Requires`, `connectRequires` / `detachDependents` / `readyDependents` (#124), `use_ssl` (#119). Related: #127 (the rail's "Fix" on a dependency error), #116 (the agent's URL-read boundary).
 
 ## Goal
 

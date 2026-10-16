@@ -169,12 +169,11 @@ Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-la
 ### Open follow-ups
 
 - #131: not yet checked against a real IAM Identity Center (needs a real AWS account); the fakes and MinIO STS cover everything else.
-- #127 (the rail's Fix on a dependency error opens the lake, not the storage connection), #129 (smaller DuckLake catalog follow-ups) and #142 (Floci as the S3 test double instead of MinIO).
+- #126 (a workspace with a MotherDuck connection cannot open offline), #128 (the Tables view lists only the default schema), #127 (the rail's Fix on a dependency error opens the lake, not the storage connection), #129 (smaller DuckLake catalog follow-ups) and #142 (Floci as the S3 test double instead of MinIO).
 - No CI job runs the `-tags integration` tests (MinIO, the SSO journey), and macOS is unverified for the SSO sign-in.
-- #134: agent reads of Iceberg and Delta through a confined hub.
-- #123: auto-number gap off-by-one after reopening a file.
+- #20: agent reads of Iceberg and Delta through a confined hub.
 - MotherDuck has only been exercised against the spike and with fakes; a pass with a real token is outstanding.
 - Iceberg REST catalogs; DuckLake with a Postgres metadata catalog (a DuckDB or SQLite catalog, on this computer or read-only in object storage, is supported).
 - Removing a downloaded extension from Studio (there is Install but no Remove).
-- #77: signing and notarisation, CI and release, extension bundling, keychain on signed builds.
-- #73: notebook export to HTML, PDF and xlsx. #56 (Studio Home) is superseded by the launcher.
+- #4: signing and notarisation, CI and release, extension bundling, keychain on signed builds.
+- #1: notebook export to HTML, PDF and xlsx. vibe-app#56 (Studio Home) is superseded by the launcher.

@@ -4,9 +4,49 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-16
+
+### Added
+
+- **Set up storage without leaving the lake.** When a DuckLake, Iceberg or Delta connection points at `s3://`, `gs://`, `r2://` or `az://`, the editor names the storage connection that will read it, and if there is none offers **Set up storage**, prefilled, then brings you back to the lake. `vibe conn add` prints the matching `vibe conn add` hint. S3 presets (Amazon S3, MinIO, Backblaze B2, Floci, other S3-compatible) fill in the endpoint, URL style and TLS fields. ([#130](https://github.com/SandwichLabs/vibe/issues/130))
+- **Test a lake through its storage.** Test on a lake connects its storage connection first and says which of the two failed.
+- **AWS SSO sign-in for S3 (preview).** An `s3` connection can sign in with an IAM Identity Center profile (`--sign-in aws-sso:PROFILE`, or the "AWS profile (SSO)" card). Studio shows a sign-in banner with a code; `vibe conn credentials sign-in NAME` does the same in a terminal, and `aws sso login` works too (shared `~/.aws/sso/cache`). Short-lived keys are renewed before they expire, and an ended session signs the connection out rather than reading anonymously. Not yet verified against a real Identity Center. ([#131](https://github.com/SandwichLabs/vibe/issues/131))
+
+### Changed
+
+- **`AWS_REGION` is no longer read.** An `s3` connection outside `us-east-1` that only worked because your shell set `AWS_REGION` now fails with an AWS signing error (`AuthorizationHeaderMalformed` or a 301). Set `region` on the connection (`--region`, or the Region field).
+- **Wildcards on s3, gcs and r2 are expanded by Vibe.** `*` and `**` still work in `read_parquet`, `FROM '...'` and `glob()`; `?` and `[...]` are refused in a pattern, one statement expands to at most 10,000 objects, and the pattern must start with the scope of a ready storage connection. Azure is unchanged. ([#141](https://github.com/SandwichLabs/vibe/pull/141))
+- **A `TEMP MACRO` or `TEMP FUNCTION` lasts only for the run that created it.** TEMP tables and views are unaffected.
+- **The query editor, `vibe query` and the TUI refuse** `INSTALL`, `LOAD`, `UPDATE EXTENSIONS`, `CREATE`/`DROP SECRET`, and `SET`/`RESET`/`PRAGMA` of `s3_url_compatibility_mode`. Install extensions with the connection's Install button or `--install`.
+
+### Security
+
+- **S3 reads never use your shell's AWS credentials.** DuckDB copied `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` into every session, so a storage URL no connection covered was read as you. Every session now has a catch-all deny secret per scheme. ([#135](https://github.com/SandwichLabs/vibe/issues/135))
+- **A URL can no longer redirect a connection's signed request.** `?s3_endpoint=` and the other `?s3_*` URL parameters, which can come from an Iceberg manifest or a DuckLake catalog, overrode the secret's endpoint; the whole URL is now the object key. ([#138](https://github.com/SandwichLabs/vibe/issues/138))
+
+### Fixed
+
+- **A lake could attach without its storage secret** when connections were re-registered concurrently (a regression from 0.1.3). ([#137](https://github.com/SandwichLabs/vibe/pull/137))
+
+## [0.1.3] - 2026-10-15
+
+### Added
+
+- **DuckLake catalogs in SQLite, and in object storage.** The DuckLake type takes a `catalog` option (`duckdb` or `sqlite`) and a catalog that is a storage URL (read-only), so a lake whose SQLite catalog and Parquet files both live in an S3-compatible store attaches as two connections, with no SQL and no credential in any file. A catalog is vetted before it is attached. ([#118](https://github.com/SandwichLabs/vibe/issues/118))
+- **Storage dependencies.** A DuckLake, Iceberg or Delta connection whose URLs are in object storage connects its storage connection first, and says `needs the "NAME" connection` when that is not ready.
+- **Use TLS** on S3 connections (default on), for local S3-compatible stores such as MinIO and Floci.
+
+### Changed
+
+- **DuckDB 1.5.6.**
+- The connection form no longer writes an option's default into the YAML; a blank choice reads "Default (…)".
+
+## [0.1.2] - 2026-10-14
+
 ### Added
 
 - **Update check and `vibe update`.** Studio asks once whether to check GitHub for new releases (**Check weekly** or **No thanks**; development builds never ask). Settings, About, Updates has the toggle, **Check now**, the release notes (shown as plain text) and, for a Vibe installed by `install.sh`, **Update to vX**: after you confirm, it downloads that release's `install.sh`, verifies it against the release's `checksums.txt` and runs it (never `--force`), then offers **Restart now** (through the normal quit path, so unsaved-work guards run; the old Studio keeps running until you do). `vibe update [--check] [--yes]` does the same from a terminal; `vibe config updates [off|weekly]` mirrors the toggle. Nothing is checked or installed in the background without your answer; builds from source, `go install` and package managers are told to update the way they were installed. What is sent is listed in [Privacy](docs/privacy.md).
+- **Motion charts in A2UI.** Seven new chart types (`areaChart`, `columnChart`, `ringChart`, `radarChart`, `sankeyChart`, `heatmap`, `streamChart`), each with inline data or a live `sql` binding, and a closed `motion` object on every chart (easing preset, speed, stagger, spring tuning), off under reduced motion. ([#117](https://github.com/SandwichLabs/vibe/pull/117))
 
 ## [0.1.1] - 2026-10-13
 
@@ -65,6 +105,9 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/SandwichLabs/vibe/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/SandwichLabs/vibe/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/SandwichLabs/vibe/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/SandwichLabs/vibe/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/SandwichLabs/vibe/releases/tag/v0.1.0
