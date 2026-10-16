@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // StorageNeed — the storage line under a lake / table location (#130): which
 // storage connection reads this URL, or what is missing, or why the URL cannot
-// be read from storage at all. "Set up storage" is wired in the next step.
+// be read from storage at all. "Set up storage" asks the editor to open the
+// storage form (useStorageHandoff); the button is a plain, focusable button.
 import { computed } from 'vue'
 import Icon from './Icon.vue'
 import StatusIcon from './StatusIcon.vue'
 import { STATUS_META, statusKey } from '../lib/connections'
 
 const props = defineProps<{ need: StorageNeedView; testid?: string }>()
+defineEmits<{ setup: [need: StorageNeedView] }>()
 const statusText = computed(() => (props.need.match ? STATUS_META[statusKey(props.need.match.status)].label : ''))
 </script>
 
@@ -24,7 +26,7 @@ const statusText = computed(() => (props.need.match ? STATUS_META[statusKey(prop
     <template v-else-if="need.suggest">
       <Icon name="alert" :size="14" />
       <span>Needs a storage connection for <code data-testid="storage-suggest">{{ need.suggest.scope || need.url }}</code></span>
-      <button type="button" class="btn btn-sm" disabled title="Available in the next update" data-testid="storage-setup">Set up storage</button>
+      <button v-if="need.suggest.scope || need.suggest.bucket_scope" type="button" class="btn btn-sm" data-testid="storage-setup" @click="$emit('setup', need)">Set up storage</button>
     </template>
     <template v-else-if="need.problem">
       <Icon name="alert" :size="14" />

@@ -74,7 +74,17 @@ export function useStorageDetect(typeId: Ref<string>, f: Form) {
   function needFor(key: DetectKey): StorageNeedView | null {
     const mine = urls.value.find((u) => u.key === key)
     if (!mine) return null
-    return needs.value.find((n) => n.url === mine.url) ?? null
+    const need = needs.value.find((n) => n.url === mine.url) ?? null
+    // One line per answer: the data path says nothing the path did not, when it is
+    // the same URL, an uncovered URL in the same suggestion group, or a URL read by the same connection.
+    if (need && key === 'data_path') {
+      const first = urls.value.find((u) => u.key === 'path')
+      const other = first && needs.value.find((n) => n.url === first.url)
+      if (other && (other === need
+        || (need.suggest && other.suggest && need.group && other.group === need.group)
+        || (need.match && other.match && need.match.name === other.match.name))) return null
+    }
+    return need
   }
 
   return { needs, failed, needFor }

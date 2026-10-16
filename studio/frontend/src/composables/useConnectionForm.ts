@@ -14,6 +14,9 @@ import { errorText } from '../lib/errors'
 import { NAME_RE, CRED_ENV_SUFFIX } from '../lib/connections'
 import { presetFill, endpointProblem, followRegion, REGION_PLACEHOLDER, type FilledTemplate } from '../lib/storagePresets'
 import { useStorageDetect, type DetectKey } from './useStorageDetect'
+import { parseStoragePrefill, type StoragePrefill } from '../lib/storagePrefill'
+import { takeDraft } from './useConnectionDraft'
+import { connectionByName } from './useConnections'
 
 type SignIn = 'keychain' | 'env' | 'prompt'
 const emptyCreds = (): CredentialInput => ({ username: '', keyId: '', password: '', token: '', secret: '' })
@@ -48,6 +51,10 @@ export function useConnectionForm() {
   const saved = ref(false)
   const saveError = ref('')
   const result = ref<TestResultView | null>(null)
+  // The form was filled from a link (?type=&prefix=): the person is told to check it.
+  const prefilled = ref(false)
+  // The lake being edited changed on disk while its storage connection was set up.
+  const changedWhileAway = ref(false)
 
   const isMD = computed(() => typeId.value === 'motherduck')
   const remote = computed(() => !!spec.value?.capabilities.remote)
@@ -249,6 +256,35 @@ export function useConnectionForm() {
     void nextTick(() => document.getElementById('f-name')?.focus())
   }
 
+  // applyStoragePrefill fills a new storage connection from a validated link
+  // (lib/storagePrefill). It fills visible fields only; the sign-in stays the
+  // keychain default and nothing is saved.
+  function applyStoragePrefill(pre: StoragePrefill) {
+    chooseType(pre.type)
+    // A name a connection already has is left empty: saving it would shadow that one.
+    f.name = connectionByName(pre.name) ? '' : pre.name
+    f.scope = pre.prefix
+    connScope.value = pre.scope
+    origScope.value = pre.scope
+    prefilled.value = true
+    initial.value = snapshot()
+  }
+
+  // resumeDraft puts the stashed lake form back after its storage connection
+  // was saved (or the set-up was cancelled), over what the route loaded.
+  let focusAfterLoad = ''
+  function resumeDraft() {
+    const d = takeDraft(isNew.value ? '' : editName.value)
+    if (!d) return
+    if (isNew.value) { typeId.value = d.def.type; initial.value = '' }
+    else if (d.fingerprint && detail.value && detail.value.fingerprint !== d.fingerprint) changedWhileAway.value = true
+    applyDef(d.def)
+    advancedOpen.value = d.advancedOpen
+    connScope.value = d.connScope
+    // Back where the person was: the field whose storage line they followed.
+    focusAfterLoad = d.focus
+  }
+
   // loadForm fills the form from the route: a blank form, a duplicate (?from=),
   // or the connection being edited.
   async function loadForm() {
@@ -259,6 +295,8 @@ export function useConnectionForm() {
       saved.value = false
       result.value = null
       saveError.value = ''
+      prefilled.value = false
+      changedWhileAway.value = false
       Object.assign(typed, emptyCreds())
       if (isNew.value) {
         const from = typeof route.query.from === 'string' ? route.query.from : ''
@@ -286,6 +324,8 @@ export function useConnectionForm() {
           status.value = null
           detail.value = null
           initial.value = ''
+          const pre = parseStoragePrefill(route.query)
+          if (pre && types.value.some((t) => t.id === pre.type)) applyStoragePrefill(pre)
         }
       } else {
         const scope = typeof route.query.scope === 'string' ? (route.query.scope as ConnScope) : ('' as const)
@@ -303,10 +343,17 @@ export function useConnectionForm() {
         typed.keyId = d.credential.keyId ?? ''
         initial.value = snapshot()
       }
+      if (route.query.resume === '1') resumeDraft()
     } catch (e: unknown) {
       loadError.value = errorText(e)
     }
     loading.value = false
+    if (focusAfterLoad) {
+      const id = focusAfterLoad
+      focusAfterLoad = ''
+      await nextTick()
+      document.getElementById(id)?.focus()
+    }
   }
 
   // validate returns what is wrong with the form, or '' when it can be saved.
@@ -330,7 +377,7 @@ export function useConnectionForm() {
     mainFields, advFields, ownScopeOnly, insideWorkspace, exampleTail, portField, credFields, readableCreds,
     secretCreds, needsSignIn, methodString, envVars, val, setVal, buildDef, refreshDraftFingerprint,
     fingerprintChanged, bindingChanged, dirty, fingerprintHelp, secretIsSet, serverChangedHelp, privateCopy,
-    shadowedBy, failedTest, title, chooseType, loadForm, validate, presets, applyPreset, storageLine, storageSlot, storageFailed,
+    shadowedBy, failedTest, title, chooseType, loadForm, validate, presets, applyPreset, storageLine, storageSlot, storageFailed, prefilled, changedWhileAway,
   }
 }
 

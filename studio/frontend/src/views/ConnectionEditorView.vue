@@ -28,13 +28,13 @@ const {
   status, detail, advancedOpen, saveError, result, isMD, remote, mainFields, advFields, ownScopeOnly,
   insideWorkspace, exampleTail, portField, readableCreds, secretCreds, needsSignIn, envVars, credFields, val, setVal,
   bindingChanged, fingerprintHelp, secretIsSet, serverChangedHelp, privateCopy, shadowedBy, failedTest, title,
-  chooseType, presets, applyPreset, storageLine, storageSlot, storageFailed,
+  chooseType, presets, applyPreset, storageLine, storageSlot, storageFailed, prefilled, changedWhileAway,
 } = form
 const md = useMotherDuckPicker(form)
 const { mdDbs, mdLoading, mdLoaded, mdError, mdInstall, mdTokenReady, loadDatabases, pickDatabase } = md
 const {
   saving, savedNote, testing, resultEl, errorEl, keychainBlocked, keychainDetail,
-  runTest, installFor, save, clearSecret, useEnvInstead, removeMine, remove, cancel,
+  runTest, installFor, save, clearSecret, useEnvInstead, removeMine, remove, cancel, handoff,
 } = useConnectionEditor(form, md)
 </script>
 
@@ -63,6 +63,19 @@ const {
 
     <!-- Step 2: the generated form -->
     <form v-else class="card" style="margin-top: 16px;" novalidate @submit.prevent="save">
+      <div v-if="handoff.returning.value" class="note info" role="status" style="margin: 16px 24px 0;" data-testid="storage-handoff">
+        <Icon name="info" :size="16" />
+        <span>Setting up storage for <b>{{ handoff.lakeName.value }}</b>. Save returns to it with the storage connection in place.
+          <button type="button" class="linkbtn" data-testid="handoff-back" @click="cancel">Back to {{ handoff.lakeName.value }}</button></span>
+      </div>
+      <div v-else-if="prefilled" class="note info" style="margin: 16px 24px 0;" role="status" data-testid="prefill-note">
+        <Icon name="info" :size="16" />
+        <span>Some fields were filled in from a link. Check the scope and name before you save.</span>
+      </div>
+      <div v-if="changedWhileAway" class="note warn" role="status" style="margin: 16px 24px 0;" data-testid="changed-away">
+        <Icon name="alert" :size="16" />
+        <span><b>{{ f.name }} changed on disk while you were away.</b> Your form is back as you left it. Check it before you save.</span>
+      </div>
       <div v-if="privateCopy" class="note info" style="margin: 16px 24px 0;" data-testid="shadow-banner">
         <Icon name="layers" :size="16" />
         <span><b>This is your private copy of {{ f.name }}.</b> On this computer it overrides the {{ scopeLabel(detail!.shadows[0]) }} <code>{{ f.name }}</code>.
@@ -91,8 +104,12 @@ const {
               <input :id="`f-${fd.name}`" :value="val(fd)" class="field-input" style="flex: 1;" :type="fd.kind === 'number' ? 'number' : 'text'" autocomplete="off" spellcheck="false" :aria-describedby="fd.help || fd.name === 'database' ? `f-${fd.name}-h` : undefined" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
             </div>
             <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
+            <div v-if="fd.name === 'scope' && handoff.wholeBucket.value" class="help">
+              <button type="button" class="linkbtn" data-testid="whole-bucket" @click="handoff.useWholeBucket">Use the whole bucket, <code>{{ handoff.wholeBucket.value }}</code></button>
+              Queries and the agent can then read anything in it.
+            </div>
             <div v-if="storageSlot(fd)" class="storage-slot" role="status" aria-live="polite">
-              <StorageNeed v-if="storageLine(fd)" :need="storageLine(fd)!" :testid="`storage-${fd.name}`" />
+              <StorageNeed v-if="storageLine(fd)" :need="storageLine(fd)!" :testid="`storage-${fd.name}`" @setup="handoff.setup" />
               <div v-else-if="storageFailed" class="help" data-testid="storage-failed">Couldn't check storage connections just now.</div>
             </div>
             <div v-if="isMD && fd.name === 'database'" class="md-picker" data-testid="md-picker">

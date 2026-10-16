@@ -8,6 +8,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
   useRouter: () => router,
   onBeforeRouteLeave: () => {},
+  onBeforeRouteUpdate: () => {},
 }))
 vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {}, EventsOff: () => {} }))
 
@@ -15,6 +16,7 @@ import ConnectionEditorView from './ConnectionEditorView.vue'
 import { _resetConnectionsForTests, extensionFor } from '../composables/useConnections'
 import { _resetForTests as resetWorkspace, workspaceInfo } from '../composables/useWorkspace'
 import { confirmVisible, resolveConfirmChoice } from '../composables/useConfirm'
+import { stashDraft, currentDraft, clearDraft } from '../composables/useConnectionDraft'
 
 const field = (o: Partial<ConnField>): ConnField => ({ name: 'x', label: 'X', kind: 'text', required: false, secret: false, perPerson: false, ...o })
 const TYPES: ConnTypeSpec[] = [
@@ -782,7 +784,9 @@ describe('ConnectionEditorView', () => {
         await flushPromises()
         expect(find).toHaveBeenCalledWith({ urls: ['s3://lake/catalog.sqlite'] })
         expect(w.find('[data-testid="storage-path"]').text()).toContain('Needs a storage connection for s3://lake/')
-        expect(w.find('[data-testid="storage-setup"]').attributes('disabled')).toBeDefined()
+        const setup = w.find('[data-testid="storage-setup"]')
+        expect(setup.attributes('disabled')).toBeUndefined() // a real, focusable button
+        expect(setup.attributes('title')).toBeUndefined()
 
         await w.find('[data-testid="f-path"]').setValue('s3://floci/c.sqlite')
         await vi.advanceTimersByTimeAsync(300)
@@ -798,5 +802,160 @@ describe('ConnectionEditorView', () => {
         vi.useRealTimers()
       }
     })
+  })
+})
+
+// "Set up storage" from a lake form (#130 step 3).
+describe('ConnectionEditorView: set up storage inline', () => {
+  const suggest = { type: 's3', scope: 's3://lake/', bucket_scope: 's3://lake/', name: 'lake_s3' }
+  const lakeDraft = (over: Partial<Parameters<typeof stashDraft>[0]> = {}) => stashDraft({
+    def: { name: 'my_lake', type: 'ducklake', path: 's3://lake/catalog.sqlite', options: { data_path: 's3://lake/data/' } },
+    connScope: 'local', advancedOpen: true, editName: '', editScope: '', focus: 'f-path', fingerprint: '', suggest: { ...suggest, scope: 's3://lake/wh/' }, ...over,
+  })
+  const storageQuery = () => ({ type: 's3', prefix: 's3://lake/wh/', name: 'lake_s3', in: 'local', return: 'lake-draft' })
+  const val = (w: ReturnType<typeof mountView>, id: string) => (w.find(`[data-testid="${id}"]`).element as HTMLInputElement).value
+
+  beforeEach(() => {
+    _resetConnectionsForTests(); resetWorkspace(); clearDraft(); document.body.innerHTML = ''
+    route.path = '/connections/new'; route.params = {}; route.query = {}
+    router.push.mockClear(); router.replace.mockClear()
+    workspaceInfo.value = { isGit: true, root: '/w', name: 'A', sessionId: 's' } as unknown as WorkspaceInfo
+  })
+
+  it('Set up storage stashes the lake form and routes to a prefilled storage form, without asking about unsaved edits', async () => {
+    vi.useFakeTimers()
+    try {
+      makeApp({ FindStorageFor: vi.fn(async (req: FindStorageRequest) => ({ needs: req.urls.map((u): StorageNeedView => ({ url: u, suggest: { ...suggest, scope: 's3://lake/wh/' }, group: 1 })) })) })
+      const w = mountView()
+      await flushPromises()
+      await chooseType(w, 'ducklake')
+      await w.find('[data-testid="f-name"]').setValue('my_lake')
+      await w.find('[data-testid="f-path"]').setValue('s3://lake/wh/catalog.sqlite')
+      await w.find('[data-testid="f-data_path"]').setValue('s3://lake/wh/data/')
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      // path and data path share one suggestion: one line, one button
+      expect(w.findAll('[data-testid="storage-setup"]')).toHaveLength(1)
+      expect(w.find('[data-testid="storage-data_path"]').exists()).toBe(false)
+      await w.find('[data-testid="storage-setup"]').trigger('click')
+      expect(router.replace).toHaveBeenCalledWith({ path: '/connections/new', query: storageQuery() })
+      expect(confirmVisible.value).toBe(false)
+      expect(currentDraft.value?.def).toMatchObject({ name: 'my_lake', path: 's3://lake/wh/catalog.sqlite', options: { data_path: 's3://lake/wh/data/' } })
+      expect(JSON.stringify(currentDraft.value)).not.toMatch(/secret|password/i)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens the storage form prefilled and visible, with the keychain sign-in and nothing saved', async () => {
+    const app = makeApp()
+    lakeDraft()
+    route.query = storageQuery()
+    const w = mountView()
+    await flushPromises()
+    expect(val(w, 'f-scope')).toBe('s3://lake/wh/')
+    expect(val(w, 'f-name')).toBe('lake_s3')
+    expect(w.find('[data-testid="storage-handoff"]').text()).toContain('my_lake')
+    expect(w.find('[data-testid="method-keychain"]').attributes('aria-checked')).toBe('true')
+    expect(app.SaveConnection).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="whole-bucket"]').exists()).toBe(true)
+    await w.find('[data-testid="whole-bucket"]').trigger('click')
+    expect(val(w, 'f-scope')).toBe('s3://lake/')
+    expect(w.find('[data-testid="whole-bucket"]').exists()).toBe(false)
+  })
+
+  it.each([
+    ['an unknown type', { type: 'postgres', prefix: 's3://lake/' }],
+    ['a scheme of another type', { type: 's3', prefix: 'gs://lake/' }],
+    ['a scope that is not own', { type: 's3', prefix: 's3://lake/', in: 'shared' }],
+    ['a bad name', { type: 's3', prefix: 's3://lake/', name: 'Bad Name' }],
+    ['a dot segment', { type: 's3', prefix: 's3://lake/../x' }],
+    ['a prefix with no type', { prefix: 's3://lake/' }],
+  ])('drops a crafted prefill whole: %s', async (_n, q) => {
+    makeApp()
+    route.query = q as Record<string, string>
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="f-name"]').exists()).toBe(false) // still the type picker
+    expect(w.find('[data-testid="prefill-note"]').exists()).toBe(false)
+  })
+
+  it('a prefill from a plain link is shown with a note to check it, and ?scope= means nothing on the new route', async () => {
+    makeApp()
+    route.query = { type: 's3', prefix: 's3://lake/', scope: 'user' }
+    const w = mountView()
+    await flushPromises()
+    expect(val(w, 'f-scope')).toBe('s3://lake/')
+    expect(w.find('[data-testid="prefill-note"]').exists()).toBe(true)
+    expect(w.find('[data-testid="storage-handoff"]').exists()).toBe(false) // no draft, no hand-off
+  })
+
+  it('Save returns to the lake form, which comes back with every field', async () => {
+    const app = makeApp()
+    lakeDraft()
+    route.query = storageQuery()
+    let w = mountView()
+    await flushPromises()
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(app.SaveConnection).toHaveBeenCalledOnce()
+    expect(app.SaveConnection.mock.calls[0][0].def).toMatchObject({ name: 'lake_s3', type: 's3', scope: 's3://lake/wh/' })
+    expect(router.replace).toHaveBeenCalledWith({ path: '/connections/new', query: { resume: '1' } })
+
+    document.body.innerHTML = ''
+    route.query = { resume: '1' }
+    w = mountView()
+    await flushPromises()
+    expect(val(w, 'f-name')).toBe('my_lake')
+    expect(val(w, 'f-path')).toBe('s3://lake/catalog.sqlite')
+    expect(val(w, 'f-data_path')).toBe('s3://lake/data/')
+    expect(currentDraft.value).toBeNull() // taken
+  })
+
+  it('Cancel returns to the lake; typed values are asked about first', async () => {
+    makeApp()
+    lakeDraft()
+    route.query = storageQuery()
+    const w = mountView()
+    await flushPromises()
+    await w.find('[data-testid="handoff-back"]').trigger('click')
+    await flushPromises()
+    expect(router.replace).toHaveBeenCalledWith({ path: '/connections/new', query: { resume: '1' } })
+
+    router.replace.mockClear()
+    await w.find('[data-testid="f-c-secret"], #f-c-secret-in').setValue('typed-needle')
+    await w.find('[data-testid="handoff-back"]').trigger('click')
+    await flushPromises()
+    expect(confirmVisible.value).toBe(true)
+    expect(router.replace).not.toHaveBeenCalled()
+    resolveConfirmChoice('cancel')
+    await flushPromises()
+    expect(router.replace).not.toHaveBeenCalled()
+  })
+
+  it('an edited lake resumes at its own route, not as a new connection', async () => {
+    makeApp()
+    lakeDraft({ editName: 'prod_pg', editScope: 'local' })
+    route.query = storageQuery()
+    const w = mountView()
+    await flushPromises()
+    await w.find('[data-testid="handoff-back"]').trigger('click')
+    await flushPromises()
+    expect(router.replace).toHaveBeenCalledWith({ path: '/connections/prod_pg', query: { resume: '1', scope: 'local' } })
+  })
+
+  it('a draft from another workspace is not restored, and the return is dropped', async () => {
+    makeApp()
+    lakeDraft()
+    workspaceInfo.value = { isGit: true, root: '/other', name: 'B', sessionId: 's2' } as unknown as WorkspaceInfo
+    route.query = { resume: '1' }
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="f-name"]').exists()).toBe(false)
+    route.query = storageQuery()
+    document.body.innerHTML = ''
+    const w2 = mountView()
+    await flushPromises()
+    expect(w2.find('[data-testid="storage-handoff"]').exists()).toBe(false)
   })
 })
