@@ -77,7 +77,7 @@ model ──run_code(code)──▶ agents.Handler.Handle            (gates for 
 
 The package has three parts:
 
-- **`Engine`**: an interface. It runs one program with a `Host` and limits, and returns a `Result`. The first implementation uses `github.com/camdenclark/monty-go`. A `starlark-go` implementation is the fallback (findings §5).
+- **`Engine`**: an interface. It runs one program with a `Host` and limits, and returns a `Result`. The first implementation uses `internal/montyclient`, a Go client for the Monty worker that Vibe owns ([monty-client.md](monty-client.md)). A `starlark-go` implementation is the fallback (findings §5).
 - **`Host`**: an interface with one method, `Call(ctx, tool string, kwargs map[string]any) (any, error)`. The production `Host` sends each call to the agent handler.
 - **`Stubs`**: a function that makes Python type stubs (`.pyi`) from `ToolDef` values. `ParamsToJSONSchema` is the model for this function.
 
@@ -151,7 +151,7 @@ This also makes a settings change apply to the next inner call. This is the same
 
 ### 5.3 Approval
 
-**Phase 1 (blocking).** A gated write blocks inside `awaitApproval`, as it does now. The Studio approver waits up to 5 minutes (`defaultApprovalTimeout`). The Monty worker waits in its suspension during this time. Monty does not count host waits against `max_feed_duration` or `max_turn_duration`. The spike must make sure that the `monty-go` `RequestTimeout` watchdog does not stop the worker during this wait.
+**Phase 1 (blocking).** A gated write blocks inside `awaitApproval`, as it does now. The Studio approver waits up to 5 minutes (`defaultApprovalTimeout`). The Monty worker waits in its suspension during this time. Monty does not count host waits against `max_feed_duration` or `max_turn_duration`. The client's worker timer runs only while the parent waits for the child, so it does not stop the worker during this wait ([monty-client.md](monty-client.md) §4.5).
 
 The approval card must show that the write comes from a program. Add these fields to the card:
 
@@ -205,23 +205,25 @@ The `calls` list lets the model see what the program did. It is also the audit s
 
 | Limit | Value | Where |
 |---|---|---|
-| Execution time for one program | 30 s | Monty `MaxFeedDuration` |
+| Execution time for one program | 30 s | Monty `max_feed_duration` |
 | Wall time for one program, without approval waits | 120 s | `context.WithTimeout` on the `run_code` context |
-| Memory | 256 MiB | Monty `MaxMemory` |
-| Inner tool calls | 200 | Monty `MaxSuspensions` |
-| Recursion depth | 100 | Monty `MaxRecursionDepth` |
+| Memory | 256 MiB | Monty `max_memory` |
+| Inner tool calls | 200 | `max_suspensions`, counted by the client |
+| Recursion depth | 100 | Monty `max_recursion_depth` |
 | Source size | 64 KiB | `run_code` parameter check |
-| `print` output | 8 KiB | `NewCollectString` cap |
-| Workers in the pool | 2 | `monty-go` pool |
+| `print` output | 8 KiB | Cap in the client's `Print` handler |
+| Workers in the pool | 2 | `internal/montyclient` pool |
 
 The wall-time context also goes to each inner call. At this time `run_query` has no statement timeout. Thus the program deadline is the first limit on a slow inner query. When a limit stops a program, discard the session (findings §4.2).
 
 ### 7.2 The worker binary
 
-- The release build puts the pinned `monty` binary next to the `vibe` binary. Each of the four release runners adds the binary for its platform.
-- Vibe gives the path in `monty.Options.BinaryPath`. **Do not** use `monty.Install` or `AutoInstall`. They download from the network at run time.
+[monty-client.md](monty-client.md) §5 gives the full rules. In summary:
+
+- The release workflow builds the worker from a pinned Monty tag. It installs it as `vibe-monty` next to the `vibe` binary on each of the four release runners.
+- Vibe never downloads the worker at run time.
 - Verify the SHA-256 of the binary when the pool starts. Use a digest that the build stamps in with `ldflags`.
-- Add Monty and `monty-go` to `THIRD_PARTY_NOTICES.md` (`task notices`).
+- Add the Rust crates of the worker to `THIRD_PARTY_NOTICES.md` (`task notices`).
 - If the binary is not there, Vibe does not show `run_code`. Settings shows "Code mode is not available on this install".
 - macOS: sign the helper with the app when the signed release comes (epic #77). Until then, measure the Gatekeeper effect on an unsigned helper in the spike.
 
@@ -263,7 +265,7 @@ Document the `vibe.yaml` key in `docs/reference/workspaces.md` between the `<!--
 
 | Phase | Content | Done when |
 |---|---|---|
-| P0, spike | Build `monty-go` into a branch. Measure the binary size on four platforms. Test the watchdog during a 5-minute host wait. Test Gatekeeper with an unsigned helper. Write findings. | A findings note in `docs/plans/`. |
+| P0, spike | Build a minimum `internal/montyclient` (protocol 6, `import vibe`, one host call) against Pydantic's worker build. Build the worker from source on the four release runners and measure size and time. Test Gatekeeper with an unsigned helper. Write findings. | A findings note in `docs/plans/`. |
 | P1, reads | `internal/codemode`, the `run_code` tool, read tools only in the `vibe` module, the setting, the binary in the release. Chat and MCP. | The parity test (§11) passes for all read tools. |
 | P2, writes | Add the write tools. Blocking approval with the new card fields (§5.3). Fix the `MaxQueryRows` flag (§6.1). | The parity test passes for all tools and tiers. |
 | P3, durable approval | Snapshots (§7.3). | A program that waits for approval survives a Studio restart. |
@@ -283,7 +285,7 @@ Document the `vibe.yaml` key in `docs/reference/workspaces.md` between the `<!--
 ## 12. Open questions
 
 1. **Language.** Python (Monty) is the proposal. JavaScript (`qjs`) is the alternative. Python fits Vibe users and skills better. Decide before P1.
-2. **Monty and `monty-go` maintenance.** `monty-go` has one maintainer. Do we fork it into the SandwichLabs organization, or contribute to it?
+2. **Monty maintenance.** Decided: Vibe owns its Go client and builds the worker itself ([monty-client.md](monty-client.md)). Open: do we offer our client back to the Monty project as a Go binding?
 3. **Default.** Code mode is off by default in this proposal. After P2, do we turn it on by default for MCP clients only?
 4. **Approval scope.** Muse grants one-time, session, task and time-bounded approvals. Vibe approves one call. Do we add "approve all writes from this program to this connection"?
 5. **Data-flow display.** §5.3 shows the connections that a program read before a write. Do we also block such a write in the `read-write` tier when the source is non-local and the target is shared?

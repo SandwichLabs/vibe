@@ -29,6 +29,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
 | [`plans/code-mode.md`](plans/code-mode.md) | Proposal: a `run_code` tool where the agent writes a Python program that calls the Vibe tools in a Monty sandbox, through the same gates (not built) |
+| [`plans/monty-client.md`](plans/monty-client.md) | Proposal: the Go client for the Monty worker that Vibe owns (no `monty-go` dependency), the worker build from source, packaging, tests and the upgrade procedure |
 | [`plans/spike-code-mode-findings.md`](plans/spike-code-mode-findings.md) | Research for code mode: Cloudflare, Anthropic, Bifrost and Muse, and the sandboxes a Go process can use (Monty, Starlark, goja, QuickJS, WASI) |
 | [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
 

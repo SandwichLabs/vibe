@@ -18,7 +18,7 @@ In code mode, the model writes one short program. A sandbox runs the program. Th
 
 We must answer three questions:
 
-1. Which sandbox technology can a Go process use safely on macOS, Linux and Windows?
+1. Which sandbox technology can a Go process use safely on macOS and Linux?
 2. How do the Vibe gates (tier, writable connection, approval, SQL policy) apply to a call from a program?
 3. How do we keep credentials out of the sandbox?
 
@@ -80,7 +80,7 @@ The parts that apply to Vibe:
 | Approvals as capabilities | An approval is bound to one connector and one use. It can be one-time, session, task, time-bounded or permanent. | The approval card [vibe] |
 | Tainted egress | A process that reads user data loses auto-allow for network requests. | Not in Vibe. See [code-mode.md](code-mode.md) §8. |
 
-Muse is a Linux VM product. Vibe is a desktop app on three operating systems. We can use the Muse architecture, but not its Linux mechanisms (eBPF, `systemd-nspawn`, `SO_PEERCRED`).
+Muse is a Linux VM product. Vibe is a desktop app on macOS and Linux. We can use the Muse architecture, but not its Linux mechanisms (eBPF, `systemd-nspawn`, `SO_PEERCRED`).
 
 The most important Muse rule for code mode: **the code that holds a credential never runs in the sandbox.** The sandbox only sends typed requests to a component that it cannot change.
 
@@ -90,7 +90,7 @@ These requirements come from `CLAUDE.md` and from the code. [vibe]
 
 | # | Requirement | Reason |
 |---|---|---|
-| R1 | Works in a Go 1.27 process with `CGO_ENABLED=1`, on macOS, Linux (amd64, arm64) and Windows. | Release builds on four native runners. |
+| R1 | Works in a Go 1.27 process with `CGO_ENABLED=1`, on Linux amd64 and arm64 (glibc 2.35 baseline) and macOS arm64 (14.0 or later) and amd64 (13.0 or later). | Release builds on four native runners (`release.yml`). Vibe does not support Windows at this time. |
 | R2 | No ambient access to files, network, environment variables or processes. | Credentials and data must stay inside Vibe gates. |
 | R3 | Limits on CPU time, wall time and memory. | A model can write an infinite loop. |
 | R4 | A crash in the sandbox does not stop Studio or `vibe mcp serve`. | Studio holds the DuckDB hub for the workspace. |
@@ -105,7 +105,7 @@ These requirements come from `CLAUDE.md` and from the code. [vibe]
 
 | Technology | Language | Isolation | Crash isolation | Memory limit | Pause and resume | Go integration |
 |---|---|---|---|---|---|---|
-| Monty with `monty-go` | Python subset | Language-level | Yes (worker subprocess) | Yes | Yes (snapshots) | Pure Go, plus a worker binary |
+| Monty with a Go client (`monty-go`, or our own) | Python subset | Language-level | Yes (worker subprocess) | Yes | Yes (snapshots) | Pure Go, plus a worker binary |
 | Monty with `gomonty` | Python subset | Language-level | No (in process) | Yes | Yes | `purego`, bundled shared library |
 | `starlark-go` | Starlark (Python dialect) | Language-level (hermetic) | No (in process) | No | No | Pure Go |
 | `goja` | JavaScript (ES5.1, most of ES6) | Language-level (by omission) | No (in process) | No | No | Pure Go |
@@ -139,10 +139,10 @@ Monty does not authenticate snapshots. Load only snapshots that the same host ma
 
 **Go bindings.** Pydantic does not maintain Go bindings. Its README links community bindings. [source: https://github.com/pydantic/monty/issues/289]
 
-- `CamdenClark/monty-go` (MIT): pure Go. It uses the same subprocess protocol as the official TypeScript binding. Version v0.7.0 supports Monty 1.1 (protocol 5), released 2026-10-15. It has typed host functions by reflection, `monty.Async`, snapshots (`FeedStart`, `Dump`, `LoadSnapshot`), resource limits, type checking stubs and print callbacks. It has no file mounts. File access is denied unless the host handles the OS call. The supported targets are macOS arm64 and x64, Linux arm64 and x64 (glibc), and Windows x64. [source: https://github.com/CamdenClark/monty-go]
+- `CamdenClark/monty-go` (MIT): pure Go. It uses the same subprocess protocol as the official TypeScript binding. Version v0.7.0 supports Monty 1.1 (protocol 5), released 2026-10-14. It has typed host functions by reflection, `monty.Async`, snapshots (`FeedStart`, `Dump`, `LoadSnapshot`), resource limits, type checking stubs and print callbacks. It has no file mounts. File access is denied unless the host handles the OS call. The supported targets are macOS arm64 and x64, Linux arm64 and x64 (glibc), and Windows x64. [source: https://github.com/CamdenClark/monty-go]
 - `ewhauser/gomonty` (MIT): an older binding. It loads a bundled Rust shared library with `purego` and runs Monty in process. The last release was in March 2026, before the subprocess model. [source: https://github.com/ewhauser/gomonty]
 
-`monty-go` can download the worker from Pydantic at run time with a pinned SHA-256. Vibe must not use that path (R7). The release must put the pinned `monty` binary in the tarball, and Vibe must give its path in `Options.BinaryPath`.
+`monty-go` can download the worker from Pydantic at run time with a pinned SHA-256. Vibe must not use that path (R7). The release must put the pinned `monty` binary in the tarball.
 
 ### 4.3 starlark-go
 
@@ -180,17 +180,17 @@ These give the strongest isolation and full Python. But Docker is not on every d
 2. **The security boundary is the host function, not the interpreter.** Every source says this. A host function that takes SQL is a database primitive. Thus each host function must call the same `ToolDef` handler, through the same gates, as a direct tool call.
 3. **Credentials never enter the sandbox.** This is already true for Vibe tools. A host function gets a connection name, not a secret. The worker process starts with an empty environment.
 4. **Approval needs pause and resume.** Only Monty gives a serializable pause at a host call. With Starlark or `goja`, an approval blocks a goroutine, and a Studio restart loses the run.
-5. **Monty through `monty-go` is the best fit.** It meets R1 to R6 and R8. It meets R7 when Vibe bundles the worker binary. It gives crash isolation, memory limits and snapshots. No other candidate gives all three.
-6. **`starlark-go` is the fallback.** It is pure Go and proven for this use. Use it if the Monty worker binary cannot ship on a platform, or if `monty-go` stops its maintenance.
+5. **Monty, with a Go client that Vibe owns, is the best fit.** It meets R1 to R6 and R8. It meets R7 when Vibe bundles the worker binary. [monty-client.md](monty-client.md) says what the client needs. It gives crash isolation, memory limits and snapshots. No other candidate gives all three.
+6. **`starlark-go` is the fallback.** It is pure Go and proven for this use. Use it if the Monty worker binary cannot ship on a platform, or if Monty stops its maintenance.
 
 ## 6. Risks
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| `monty-go` is a community project with one maintainer. | The binding can fall behind Monty releases. | Pin the version. Keep the Vibe adapter small (one package). Keep `starlark-go` as the fallback behind the same interface. |
+| `monty-go` is a community project with one maintainer. | The binding can fall behind Monty releases. | Do not depend on it. Vibe writes and owns its own client ([monty-client.md](monty-client.md)). Keep `starlark-go` as the fallback behind the same interface. |
 | Monty releases change the snapshot format. | Old snapshots do not load. | Keep snapshots only while a run waits for approval. Store the worker version with the snapshot. Discard snapshots after an upgrade. |
 | The worker binary adds size and a new executable to the release. | Larger tarball. macOS Gatekeeper can block an unsigned helper. | Measure the size. Sign and notarize the helper with the app in the signed release (epic #77). |
-| Linux musl and Windows arm64 have no installer target. | Code mode is not available there. | Code mode is optional. The normal tool path always works. |
+| A future Vibe target (for example Windows) has no Monty worker build. | Code mode is not available there. | Code mode is optional. The normal tool path always works. |
 | The model writes Python that the subset does not support. | Extra turns. | Supply type stubs. Return Monty errors in the tool result. State the subset in the tool description. |
 | A host function becomes a new path around a gate. | A policy bypass. | Each host function calls the existing dispatcher. A test proves that each gate has the same result for a direct call and a code call. |
 
