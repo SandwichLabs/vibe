@@ -54,7 +54,7 @@ cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, impo
 studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go,
-                     connections_{crud,sync,catalog,creds,probe,extensions}.go, secrets.go, bundle.go,
+                     connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`

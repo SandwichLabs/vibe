@@ -16,6 +16,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var connCmd = &cobra.Command{
@@ -86,6 +87,7 @@ var connAddCmd = &cobra.Command{
   vibe conn add pg --type postgres --host db.internal --database analytics
   vibe conn add lake --type s3 --prefix s3://acme-lake/raw/ --region us-east-1
   vibe conn add md --type motherduck --database my_db --sign-in env:MOTHERDUCK
+  vibe conn add b2 --type s3 --prefix s3://bucket/ --preset b2 --region us-west-004
   vibe conn add legacy --type sqlite --path data/legacy.sqlite
   vibe conn add shop --type mysql --host db.internal --database shop --option ssl_mode=required
   vibe conn add events --type azure --prefix az://events/2024/ --option sign_in=account_key --option account_name=acmelake
@@ -135,16 +137,8 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	opts, _ := f.GetStringArray("option")
-	for _, kv := range opts {
-		k, v, ok := strings.Cut(kv, "=")
-		if !ok || k == "" {
-			return fmt.Errorf("--option %q: want key=value", kv)
-		}
-		if def.Options == nil {
-			def.Options = map[string]string{}
-		}
-		def.Options[k] = v
+	if def.Options, err = connOptions(f, typ, def.Region); err != nil {
+		return err
 	}
 
 	ws, err := openWS(cmd)
@@ -190,6 +184,33 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(out, "Credentials saved (%s). Try: vibe conn test %s\n", method, def.Name)
 	return nil
+}
+
+// connOptions builds the definition's options from --preset (s3 only) and
+// --option; an explicit --option wins over what the preset fills.
+func connOptions(f *pflag.FlagSet, typ, region string) (map[string]string, error) {
+	var opts map[string]string
+	if id, _ := f.GetString("preset"); id != "" {
+		if typ != "s3" {
+			return nil, fmt.Errorf("--preset is for s3 connections (got --type %s)", typ)
+		}
+		var err error
+		if opts, err = connections.PresetOptions(id, region); err != nil {
+			return nil, err
+		}
+	}
+	kvs, _ := f.GetStringArray("option")
+	for _, kv := range kvs {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok || k == "" {
+			return nil, fmt.Errorf("--option %q: want key=value", kv)
+		}
+		if opts == nil {
+			opts = map[string]string{}
+		}
+		opts[k] = v
+	}
+	return opts, nil
 }
 
 func findConn(ws workspace.Workspace, name string) (workspace.Connection, bool) {
@@ -590,6 +611,7 @@ func init() {
 	f.Int("port", 0, "port (postgres, mysql; default 5432 / 3306)")
 	f.String("database", "", "database (postgres, mysql, motherduck)")
 	f.String("region", "", "region (s3, gcs, r2)")
+	f.String("preset", "", "fill an s3 connection's endpoint options for a store: "+strings.Join(connections.PresetIDs(), ", ")+" (--option overrides)")
 	f.String("prefix", "", "storage scope: a URL prefix such as s3://bucket/path/ (s3, gcs, r2, azure)")
 	f.StringArray("option", nil, "type option key=value (postgres: sslmode; mysql: ssl_mode; s3: endpoint, url_style, use_ssl; r2: account_id; azure: sign_in, account_name, tenant_id; ducklake: data_path, catalog [duckdb|sqlite]); repeatable")
 	f.Bool("read-only", true, "attach read-only (--read-only=false to allow writes)")

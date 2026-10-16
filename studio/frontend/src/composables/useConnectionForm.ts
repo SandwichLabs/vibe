@@ -12,6 +12,8 @@ import { App } from '../lib/bindings'
 import { workspaceInfo } from './useWorkspace'
 import { errorText } from '../lib/errors'
 import { NAME_RE, CRED_ENV_SUFFIX } from '../lib/connections'
+import { presetFill, endpointProblem, followRegion, REGION_PLACEHOLDER, type FilledTemplate } from '../lib/storagePresets'
+import { useStorageDetect, type DetectKey } from './useStorageDetect'
 
 type SignIn = 'keychain' | 'env' | 'prompt'
 const emptyCreds = (): CredentialInput => ({ username: '', keyId: '', password: '', token: '', secret: '' })
@@ -168,6 +170,39 @@ export function useConnectionForm() {
   const serverChangedHelp = computed(() => (!isNew.value && (fingerprintChanged.value || (!!status.value?.secretSet && status.value.fingerprintMatches === false)) && method.value === 'keychain'
     ? "The server changed, so your saved password won't be used. Enter it again." : ''))
 
+  // ---- S3-compatible store presets, and the storage line of lakes and tables ----
+  const presets = computed(() => spec.value?.presets ?? [])
+  // The template the last preset filled in, so Region keeps the endpoint right.
+  let filled: FilledTemplate | null = null
+  const defaultRegion = () => (spec.value?.fields ?? []).find((x) => x.name === 'region')?.default ?? ''
+  function applyPreset(p: ConnPreset) {
+    if (p.id !== 'other' && filled?.hintRegion && f.region === filled.hintRegion && !Object.values(p.options).some((v) => v.includes(REGION_PLACEHOLDER))) {
+      f.region = defaultRegion() // a region only the previous preset's hint set
+    }
+    const before = f.region
+    const r = presetFill(p, f.options, f.region)
+    f.options = r.options
+    f.region = r.region
+    advancedOpen.value = true
+    if (p.id === 'other') return
+    const template = Object.values(p.options).find((v) => v.includes(REGION_PLACEHOLDER))
+    const endpoint = r.options['endpoint'] ?? ''
+    filled = template && p.options['endpoint'] === template ? { template, endpoint, hintRegion: r.region !== before ? r.region : '' } : null
+  }
+  watch(() => f.region, (region) => {
+    const next = followRegion(filled, f.options['endpoint'] ?? '', region)
+    if (next === null || !filled) return
+    f.options['endpoint'] = next
+    filled = { ...filled, endpoint: next }
+  })
+  const storage = useStorageDetect(typeId, f)
+  // Whether a location field has a storage line at all (its slot stays mounted).
+  const storageSlot = (fd: ConnField): boolean => ['ducklake', 'iceberg', 'delta'].includes(typeId.value) && (fd.name === 'path' || fd.name === 'data_path')
+  // The storage line under a location field: its path, and a lake's data path.
+  const storageLine = (fd: ConnField): StorageNeedView | null =>
+    storageSlot(fd) ? storage.needFor(fd.name as DetectKey) : null
+  const storageFailed = computed(() => storage.failed.value)
+
   // ---- shadowing ----
   const privateCopy = computed(() => !isNew.value && detail.value && detail.value.scope === 'local' && detail.value.shadows.length > 0 && !detail.value.shadowedBy)
   const shadowedBy = computed(() => detail.value?.shadowedBy ?? '')
@@ -284,6 +319,8 @@ export function useConnectionForm() {
     for (const fd of (spec.value.fields ?? []).filter((x) => x.option)) {
       if (fd.required && !(f.options[fd.name] ?? '').trim()) return `${fd.label} is needed.`
     }
+    const ep = endpointProblem((f.options['endpoint'] ?? '').trim())
+    if (ep) return ep
     return ''
   }
 
@@ -293,7 +330,7 @@ export function useConnectionForm() {
     mainFields, advFields, ownScopeOnly, insideWorkspace, exampleTail, portField, credFields, readableCreds,
     secretCreds, needsSignIn, methodString, envVars, val, setVal, buildDef, refreshDraftFingerprint,
     fingerprintChanged, bindingChanged, dirty, fingerprintHelp, secretIsSet, serverChangedHelp, privateCopy,
-    shadowedBy, failedTest, title, chooseType, loadForm, validate,
+    shadowedBy, failedTest, title, chooseType, loadForm, validate, presets, applyPreset, storageLine, storageSlot, storageFailed,
   }
 }
 

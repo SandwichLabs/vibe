@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/connections"
 	"github.com/SandwichLabs/vibe/internal/storageurl"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
@@ -43,7 +44,7 @@ func printStorageHint(out io.Writer, ws workspace.Workspace, def workspace.Conne
 		fmt.Fprintf(out, "No storage connection covers %s. Add one: vibe conn add %s --type %s --prefix %s%s --scope %s\n",
 			covers, shellQuote(s.Name), s.Type, prefix, requiredOption(s), scope)
 		if s.Type == "s3" {
-			fmt.Fprintln(out, "  Optional: --region <region>, --option endpoint=<host:port> for an S3-compatible store.")
+			fmt.Fprintln(out, "  Optional: --region <region>, --preset <id> (one of "+strings.Join(connections.PresetIDs(), ", ")+") or --option endpoint=<host:port> for an S3-compatible store.")
 		}
 		if n.What == "location" && !n.Templated && !strings.HasSuffix(n.URL, "/") {
 			fmt.Fprintln(out, "  Write the location with a trailing slash to scope the connection to this table only; without it the whole parent folder is covered.")

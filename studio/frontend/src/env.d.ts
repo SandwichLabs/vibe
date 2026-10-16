@@ -62,6 +62,7 @@ interface AppApi {
   ListCatalogGroups(): Promise<CatalogGroup[]>
   // Connections (#117)
   ListConnectionTypes(): Promise<ConnTypeSpec[]>
+  FindStorageFor(req: FindStorageRequest): Promise<StorageNeedsView>
   ListConnections(): Promise<ConnectionList>
   GetConnection(name: string): Promise<ConnectionDetail>
   GetConnectionInScope(ref: ConnectionRef): Promise<ConnectionDetail>
@@ -247,8 +248,31 @@ interface ConnTypeSpec {
   capabilities: { catalog: boolean; writable: boolean; readOnlyAttach: boolean; remote: boolean; test: boolean; subprocess?: boolean }
   fingerprintFields: string[]
   signInMethods: string[]
+  // S3-compatible store presets (s3 only; an empty list for every other type).
+  presets?: ConnPreset[]
   soon: boolean
 }
+interface ConnPreset {
+  id: string
+  label: string
+  // Only endpoint, url_style and use_ssl; "<region>" in an endpoint stands for the Region field.
+  options: Record<string, string>
+  regionHint?: string
+  help?: string
+}
+// Storage detection (#130): which connection covers a URL typed into a lake or table form.
+interface FindStorageRequest { urls: string[] }
+interface StorageMatchView { name: string; type: string; scope: string; in: ConnScope; status: string }
+interface StorageSuggestionView { type: string; scope?: string; bucket_scope?: string; name: string }
+interface StorageNeedView {
+  url: string
+  match?: StorageMatchView
+  suggest?: StorageSuggestionView
+  problem?: string
+  group?: number
+  templated?: boolean
+}
+interface StorageNeedsView { needs: StorageNeedView[] }
 interface ConnectionList {
   connections: ConnectionInfo[]
   relaunchRequired: boolean
