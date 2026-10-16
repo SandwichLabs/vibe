@@ -122,7 +122,8 @@ Use way B for the P0 spike only. Use way A for releases.
 - The `standalone` feature adds the interactive command line. A pool never uses it. `--no-default-features` removes it. [source: `crates/monty-runtime/Cargo.toml`]
 - The type checker (`monty-type-checking`, based on `ty`) is not optional. It is a large part of the binary.
 - Pydantic's 1.1.0 binaries: 31.7 MB (Linux x86_64), 27.5 MB (macOS arm64), 29.9 MB (Windows x86_64), uncompressed. The wheels are 12 to 14 MB. [measured]
-- Our worker-only build on Linux x86_64: the measurement is in progress. The P0 spike records it for all four runners.
+- Our worker-only build (`--no-default-features`) on Linux x86_64, Rust 1.97: 27.5 MB uncompressed, 11.8 MB with gzip. A cold build took 17 min 42 s on 4 cores. Pydantic's build for the same target is 31.7 MB. [measured]
+- The release workflow has a 60-minute job timeout. [vibe] Cache the Cargo build by Monty tag and toolchain, so that only a Monty upgrade pays the cold build time. The P0 spike records the size and time on all four runners.
 
 ### 5.3 Platform rules
 
