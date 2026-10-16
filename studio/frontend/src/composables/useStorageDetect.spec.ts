@@ -104,4 +104,19 @@ describe('useStorageDetect', () => {
     await nextTick()
     expect(d.needs.value).toEqual([])
   })
+
+  it('one line when both URLs are read by the same connection, two when by different ones', async () => {
+    const { form, d, resolvers } = setup()
+    const m = (name: string): StorageMatchView => ({ name, type: 's3', scope: 's3://a/', in: 'local', status: 'ok' })
+    form.path = 's3://a/c.sqlite'
+    form.options['data_path'] = 's3://a/d/'
+    await nextTick()
+    vi.advanceTimersByTime(DETECT_DELAY_MS)
+    resolvers[0]({ needs: [need('s3://a/c.sqlite', { match: m('x') }), need('s3://a/d/', { match: m('x') })] })
+    await Promise.resolve(); await Promise.resolve()
+    expect(d.needFor('path')?.match?.name).toBe('x')
+    expect(d.needFor('data_path')).toBeNull()
+    d.needs.value = [need('s3://a/c.sqlite', { match: m('x') }), need('s3://a/d/', { match: m('y') })]
+    expect(d.needFor('data_path')?.match?.name).toBe('y')
+  })
 })

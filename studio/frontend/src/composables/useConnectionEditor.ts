@@ -6,13 +6,15 @@
  * remove, and the keyboard and leave-with-unsaved-edits guards.
  */
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { App } from '../lib/bindings'
 import { askConfirm } from './useConfirm'
 import { extensionFor, refreshConnections } from './useConnections'
 import { errorText } from '../lib/errors'
 import { scopeLabel } from '../lib/connections'
 import type { ConnectionForm } from './useConnectionForm'
+import { useStorageHandoff, consumeHandoff } from './useStorageHandoff'
+import { clearDraft } from './useConnectionDraft'
 import type { MotherDuckPicker } from './useMotherDuckPicker'
 
 export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) {
@@ -24,6 +26,7 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
     dirty,
   } = form
 
+  const handoff = useStorageHandoff(form)
   const saving = ref(false)
   const savedNote = ref('')
   const testing = ref(false)
@@ -131,9 +134,16 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
       saved.value = true
       savedNote.value = `Saved to ${scopeLabel(connScope.value)}.`
       await refreshConnections()
-      if (isNew.value) await router.replace(`/connections/${name}`)
-      else { await load(); saved.value = true }
-      savedNote.value = `Saved to ${scopeLabel(d.scope)}.`
+      if (isNew.value && handoff.returning.value) {
+        // A storage connection set up for a lake: the lake itself is not saved yet.
+        const lake = handoff.lakeName.value
+        await handoff.backToLake()
+        savedNote.value = `Saved ${name}. ${lake} is not saved yet.`
+      } else {
+        if (isNew.value) await router.replace(`/connections/${name}`)
+        else { await load(); saved.value = true }
+        savedNote.value = `Saved to ${scopeLabel(d.scope)}.`
+      }
     } catch (e: unknown) {
       saveError.value = errorText(e)
       await nextTick()
@@ -192,17 +202,30 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
 
   // ---- leaving ----
   async function cancel() {
+    if (handoff.returning.value) { await handoff.cancel(); return }
     await router.push('/')
   }
-  onBeforeRouteLeave(async () => {
-    if (!dirty.value) return true
-    return askConfirm({
+  // The one guard for every move out of the form. /connections/new and
+  // /connections/:name are separate route records, so a lake <-> storage hand-off
+  // runs the leave guard too; the hand-off itself (flagged by useStorageHandoff,
+  // never inferred from the destination) passes and keeps the draft. Anything else
+  // asks: "leave without finishing" on a storage form opened for a lake, otherwise
+  // the usual discard question when the form has unsaved edits.
+  async function guardMove(sameRecord: boolean): Promise<boolean> {
+    if (consumeHandoff()) return true
+    if (handoff.returning.value) return handoff.guard()
+    if (!dirty.value) { if (!sameRecord) clearDraft(); return true }
+    const ok = await askConfirm({
       title: isNew.value ? 'Discard this connection?' : 'Discard your changes?',
       message: isNew.value ? "It hasn't been saved yet." : 'Your edits to this connection will be lost.',
       variant: 'destructive',
       confirmLabel: 'Discard',
     })
-  })
+    if (ok && !sameRecord) clearDraft()
+    return ok
+  }
+  onBeforeRouteUpdate(() => guardMove(true))
+  onBeforeRouteLeave(() => guardMove(false))
 
   function onKey(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && typeId.value) { e.preventDefault(); void runTest() }
@@ -211,10 +234,10 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
 
   onMounted(() => { void load(); window.addEventListener('keydown', onKey) })
   onUnmounted(() => window.removeEventListener('keydown', onKey))
-  watch(() => [route.path, route.params.name, route.query.scope, route.query.from], () => { void load() })
+  watch(() => [route.path, route.params.name, route.query.scope, route.query.from, route.query.type, route.query.prefix, route.query.resume], () => { void load() })
 
   return {
     saving, savedNote, testing, resultEl, errorEl, keychainBlocked, keychainDetail,
-    runTest, installFor, save, clearSecret, useEnvInstead, removeMine, remove, cancel,
+    runTest, installFor, save, clearSecret, useEnvInstead, removeMine, remove, cancel, handoff,
   }
 }
