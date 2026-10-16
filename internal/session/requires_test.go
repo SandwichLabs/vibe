@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,8 @@ type lakeyType struct {
 	sawSecret *atomic.Bool
 	// bare counts attaches made while the storage secret did not exist.
 	bare *atomic.Int32
+	// hook, when set, runs inside PreAttach (before the ATTACH).
+	hook func()
 }
 
 func (lakeyType) Name() string         { return "lakey" }
@@ -32,6 +35,9 @@ func (l lakeyType) PreAttach(ctx context.Context, conn QueryExecer, _ Spec) erro
 	var n int
 	if err := conn.QueryRowContext(ctx, "SELECT count(*) FROM duckdb_secrets() WHERE name = 'stub_store'").Scan(&n); err != nil {
 		return err
+	}
+	if l.hook != nil {
+		l.hook()
 	}
 	l.sawSecret.Store(n == 1)
 	if n != 1 && l.bare != nil {
@@ -316,4 +322,67 @@ func TestRequiresConcurrentConnectsDoNotDeadlock(t *testing.T) {
 	for _, n := range []string{"l1", "l2", "l3", "store"} {
 		assert.Equal(t, StatusOK, status(t, s, n).Kind)
 	}
+}
+
+// A Preflight that read the storage entry before it was detached and
+// registered again must not drop the new entry's secret: the new entry would
+// stay attached with none, and a lake would attach bare (the #124 stress flake).
+func TestRequiresStalePreflightKeepsTheNewStorageSecret(t *testing.T) {
+	ctx := context.Background()
+	s, _ := requiresSession(t, "json")
+	cred := &switchable{}
+	cred.have.Store(true)
+	require.NoError(t, s.Register(Spec{Name: "store", Type: "stub", Credential: cred.fn}))
+	require.NoError(t, s.Connect(ctx, "store"))
+	h, ok := s.(*hub)
+	require.True(t, ok)
+	stale, att := h.entryOf("store") // what a Preflight read before the swap
+	require.True(t, att)
+
+	require.NoError(t, s.Detach(ctx, "store"))
+	require.NoError(t, s.Register(Spec{Name: "store", Type: "stub", Credential: cred.fn}))
+	require.NoError(t, s.Connect(ctx, "store"))
+	require.Equal(t, 1, secretCount(t, s))
+
+	h.preflightEntry(ctx, "store", stale, true)
+
+	assert.Equal(t, 1, secretCount(t, s), "the new storage entry keeps its secret")
+	_, att = h.entryOf("store")
+	assert.True(t, att)
+}
+
+// Register waits for a connect in progress: it cannot swap the entry between
+// connectLocked's re-read and its attach, which would leave the lake attached
+// in DuckDB under an orphaned entry that no secret change can reach.
+func TestRequiresRegisterWaitsForAConnectInProgress(t *testing.T) {
+	ctx := context.Background()
+	inPre, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hook := func() {
+		once.Do(func() { close(inPre); <-release })
+	}
+	s := newTestSession(t, WithConnectionTypes(stubType{ext: "json"}, lakeyType{sawSecret: &atomic.Bool{}, hook: hook}))
+	cred := &switchable{}
+	cred.have.Store(true)
+	require.NoError(t, s.Register(Spec{Name: "store", Type: "stub", Credential: cred.fn}))
+	require.NoError(t, s.Register(Spec{Name: "lake", Type: "lakey", Requires: []string{"store"}}))
+
+	connected := make(chan error, 1)
+	go func() { connected <- s.Connect(ctx, "lake") }()
+	<-inPre
+	registered := make(chan error, 1)
+	go func() { registered <- s.Register(Spec{Name: "lake", Type: "lakey", Requires: []string{"store"}}) }()
+	select {
+	case <-registered:
+		t.Fatal("Register returned while the lake was connecting")
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-connected)
+	assert.Error(t, <-registered, "the lake is attached by now, so it cannot be registered over")
+
+	cred.have.Store(false)
+	s.Preflight(ctx, "store")
+	assert.Zero(t, secretCount(t, s))
+	assert.Zero(t, attachedCatalogs(t, s, "lake"), "no lake catalog outlives the storage secret")
 }
