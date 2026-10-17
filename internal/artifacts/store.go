@@ -25,9 +25,28 @@ type Store interface {
 	// conflict, so callers Get first (or pass Overwrite). On success a.Rev and
 	// a.UpdatedAt are updated.
 	Put(ctx context.Context, a *Artifact, opts ...PutOption) error
+	// Source returns an artifact's two files as text, as they are on disk,
+	// valid or not, with the one revision over both. It is what an editor
+	// shows: a broken artifact (which Get refuses) can be read and fixed. A
+	// name with neither file satisfies errors.Is(err, ErrNotFound).
+	Source(ctx context.Context, name string) (*Source, error)
 	// Delete removes an artifact's files (and its folder when that leaves it
-	// empty); a missing name is a no-op.
-	Delete(ctx context.Context, name string) error
+	// empty); a missing name is a no-op. It returns ErrConflict when the pair
+	// changed since the revision the caller loaded (WithRev), or, without one,
+	// since the revision this store last read.
+	Delete(ctx context.Context, name string, opts ...PutOption) error
+}
+
+// Source is an artifact's files as text, unvalidated. A file that does not
+// exist is empty with its Missing flag set. Rev covers both, as for Get.
+type Source struct {
+	Name            string
+	Manifest        string
+	View            string
+	ManifestMissing bool
+	ViewMissing     bool
+	Rev             string
+	UpdatedAt       string
 }
 
 // PutOption tunes one Put.
@@ -67,9 +86,18 @@ type prepared struct {
 // prepare validates a for storing and renders its two files. The name rule
 // lives in the stores (they differ in how a bad name is reported).
 func prepare(a *Artifact) (prepared, error) {
-	manifest, err := Encode(&a.Manifest)
-	if err != nil {
-		return prepared{}, err
+	var manifest []byte
+	if len(a.ManifestText) > 0 {
+		m, err := Decode(a.ManifestText)
+		if err != nil {
+			return prepared{}, err
+		}
+		a.Manifest, manifest = *m, append([]byte(nil), a.ManifestText...)
+	} else {
+		var err error
+		if manifest, err = Encode(&a.Manifest); err != nil {
+			return prepared{}, err
+		}
 	}
 	if err := ValidateView(&a.Manifest, a.View); err != nil {
 		return prepared{}, err

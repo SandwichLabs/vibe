@@ -116,6 +116,11 @@ interface AppApi {
   ListArtifacts(): Promise<ArtifactSummary[]>
   GetArtifact(name: string): Promise<ArtifactDetail>
   RunArtifactQuery(name: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
+  GetArtifactSource(name: string): Promise<ArtifactSource>
+  SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
+  CheckArtifact(name: string): Promise<string[]>
+  NewArtifact(name: string): Promise<ArtifactSource>
+  DeleteArtifact(name: string, rev: string): Promise<void>
   ListQueries(): Promise<QuerySummary[]>
   GetQuery(id: string): Promise<QueryDetail>
   SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
@@ -420,7 +425,7 @@ interface WorkspaceSettings {
 }
 
 interface ConflictRequest {
-  kind: 'notebook' | 'query' | 'skill'
+  kind: 'notebook' | 'query' | 'skill' | 'artifact'
   id: string
   action: 'reload' | 'overwrite' | 'saveCopy'
   data: Record<string, any>
@@ -674,6 +679,26 @@ interface ArtifactDetail {
   rev: string
   updated_at: string
   error?: string
+}
+
+// ArtifactSource mirrors studio.ArtifactSource (#162): an artifact's two files as
+// text, as on disk (valid or not), with the one revision over both.
+interface ArtifactSource {
+  name: string
+  manifest: string
+  view: string
+  manifest_missing: boolean
+  view_missing: boolean
+  rev: string
+  updated_at: string
+}
+
+// ArtifactSaveResult mirrors studio.ArtifactSaveResult: a save that landed.
+// `warnings` are queries the agent's read policy refuses (the policy's reason).
+interface ArtifactSaveResult {
+  rev: string
+  updated_at: string
+  warnings: string[]
 }
 
 // Mirrors internal/importer's Type/ColType/Source/Inspection/Column/Options/

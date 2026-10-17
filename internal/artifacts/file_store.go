@@ -254,6 +254,7 @@ func (s *FileStore) write(a *Artifact, prep prepared, cur readParts) error {
 		newest = mst.ModTime
 	}
 	a.Rev = RevOf(prep.manifest, prep.view)
+	a.ManifestText = nil // consumed: a reused value must encode its Manifest next time
 	a.UpdatedAt = newest.UTC().Format(time.RFC3339)
 	s.remember(a.Name, a.Rev)
 	return nil
@@ -291,11 +292,34 @@ func (s *FileStore) restoreView(name string, was filePart, written string) {
 	_, _ = filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(name, ViewFile), Data: was.data, Expect: written}, s.obs)
 }
 
-// Delete implements Store. Like the skills and queries stores it refuses (with
-// ErrConflict) when the artifact changed on disk since this store last read it.
-// It removes both files, then the folder when that
-// leaves it empty (other files beside them are never touched).
-func (s *FileStore) Delete(_ context.Context, name string) error {
+// Source implements Store.
+func (s *FileStore) Source(_ context.Context, name string) (*Source, error) {
+	if !filestore.ValidID(name) {
+		return nil, fmt.Errorf("artifact %q: %w", name, ErrNotFound)
+	}
+	p, err := s.read(name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read artifact %q: %w", name, err)
+	}
+	if !p.manifest.present && !p.view.present {
+		return nil, fmt.Errorf("artifact %q: %w", name, ErrNotFound)
+	}
+	rev := revision(p.manifest, p.view)
+	s.remember(name, rev)
+	return &Source{
+		Name: name, Manifest: string(p.manifest.data), View: string(p.view.data),
+		ManifestMissing: !p.manifest.present, ViewMissing: !p.view.present,
+		Rev: rev, UpdatedAt: p.modTime.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+// Delete implements Store. It refuses (with ErrConflict) when the artifact
+// changed on disk since the revision the caller loaded (WithRev) or, without
+// one, since this store last read it, like the skills and queries stores. It
+// removes both files, then the folder when that leaves it empty (other files
+// beside them are never touched).
+func (s *FileStore) Delete(_ context.Context, name string, opts ...PutOption) error {
+	o := applyPutOpts(opts)
 	if !filestore.ValidID(name) {
 		return nil
 	}
@@ -305,11 +329,22 @@ func (s *FileStore) Delete(_ context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete artifact %q: %w", name, err)
 	}
-	if seen, now := s.lastSeen(name), revision(cur.manifest, cur.view); seen != "" && now != "" && seen != now {
-		return fmt.Errorf("failed to delete artifact %q: %w", name, &filestore.ConflictError{Path: Dir + "/" + name, Want: seen, Got: now})
+	expect := s.lastSeen(name)
+	if o.hasRev {
+		expect = o.rev
 	}
-	for _, f := range []string{ViewFile, ManifestFile} {
-		if err := filestore.Remove(s.root, rel(name, f), "", false, s.obs); err != nil {
+	if now := revision(cur.manifest, cur.view); expect != "" && now != "" && expect != now {
+		return fmt.Errorf("failed to delete artifact %q: %w", name, &filestore.ConflictError{Path: Dir + "/" + name, Want: expect, Got: now})
+	}
+	// Each file goes only if it is still the bytes just read, so a writer in
+	// another process (this lock covers only this one) that lands after the
+	// pair check is a conflict, not a deletion. A conflict on the second file
+	// leaves a half-deleted pair, which lists with its error.
+	for _, f := range []struct {
+		file string
+		part filePart
+	}{{ViewFile, cur.view}, {ManifestFile, cur.manifest}} {
+		if err := filestore.Remove(s.root, rel(name, f.file), expectOf(f.part), false, s.obs); err != nil {
 			return fmt.Errorf("failed to delete artifact %q: %w", name, err)
 		}
 	}

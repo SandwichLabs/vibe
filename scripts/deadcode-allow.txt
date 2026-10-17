@@ -14,6 +14,3 @@ internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyCalls$
 internal/agents/sql_names.go:[0-9]+:[0-9]+: unreachable func: PolicyPragmas$
 # internal/session/sessiontest (a non-test helper package) builds test sessions with it.
 internal/session/testing.go:[0-9]+:[0-9]+: unreachable func: UnhardenedForTests$
-# Class 4, TEMPORARY (data artifacts, epic #162): the caller lands in a later step. Remove this line when
-# Studio's Save (step 6a) calls Overwrite.
-internal/artifacts/store\.go:[0-9]+:[0-9]+: unreachable func: Overwrite$

@@ -469,3 +469,43 @@ func TestFileStore_DeleteChecksTheLastSeenRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.Delete(ctx, "sales"))
 }
+
+func TestFileStore_SourceReadsABrokenArtifactAndPutFixesItWithItsRev(t *testing.T) {
+	root := t.TempDir()
+	ctx := context.Background()
+	s := NewFileStore(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(fsPath(root, "sales", ManifestFile)), 0o755))
+	require.NoError(t, os.WriteFile(fsPath(root, "sales", ManifestFile), []byte("title: [oops\n"), 0o644))
+
+	_, err := s.Get(ctx, "sales")
+	require.ErrorIs(t, err, ErrInvalid)
+	src, err := s.Source(ctx, "sales")
+	require.NoError(t, err)
+	assert.Equal(t, "title: [oops\n", src.Manifest)
+	assert.True(t, src.ViewMissing)
+	assert.False(t, src.ManifestMissing)
+
+	fix := newArtifact(t, "sales")
+	require.NoError(t, s.Put(ctx, fix, WithRev(src.Rev)), "the source's revision is enough: no Overwrite needed")
+	_, err = s.Get(ctx, "sales")
+	require.NoError(t, err)
+}
+
+func TestFileStore_DeleteRemovesEachFileOnlyIfUnchanged(t *testing.T) {
+	root := t.TempDir()
+	ctx := context.Background()
+	var s *FileStore
+	armed := false
+	s = NewFileStore(root, WithObserver(func(abs, _ string) {
+		// Announced just before the view is removed: an outside writer touches the manifest now.
+		if armed && filepath.Base(abs) == ViewFile {
+			armed = false
+			_ = os.WriteFile(fsPath(root, "sales", ManifestFile), []byte("# outside\n"+goodManifest), 0o644)
+		}
+	}))
+	a := putFresh(t, s, "sales")
+	armed = true
+	require.ErrorIs(t, s.Delete(ctx, "sales", WithRev(a.Rev)), ErrConflict)
+	_, err := os.Stat(fsPath(root, "sales", ManifestFile))
+	assert.NoError(t, err, "the manifest that changed after the check was not deleted")
+}

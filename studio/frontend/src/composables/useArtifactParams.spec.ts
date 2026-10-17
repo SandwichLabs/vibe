@@ -77,4 +77,14 @@ describe('useArtifactParams', () => {
     expect(p.values.top).toBe(40)
     expect(p.values.region).toBe('')
   })
+
+  it('a value still at its old default follows an edited default; a changed one is kept', () => {
+    const { p } = make()
+    p.set('top', '40')
+    const next = detail()
+    next.defaults = { from: '2026-02-02', top: 20, region: '' }
+    p.load(next, true)
+    expect(p.values.from).toBe('2026-02-02')
+    expect(p.values.top).toBe(40)
+  })
 })

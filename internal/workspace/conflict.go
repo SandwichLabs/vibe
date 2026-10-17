@@ -17,6 +17,8 @@ const (
 	ConflictNotebook = "notebook"
 	ConflictQuery    = "query"
 	ConflictSkill    = "skill"
+	// ConflictArtifact is a data artifact: one item over two files, one revision.
+	ConflictArtifact = "artifact"
 
 	ConflictReload    = "reload"
 	ConflictOverwrite = "overwrite"
@@ -25,12 +27,13 @@ const (
 
 // ConflictRequest resolves a save refused because the file changed on disk.
 type ConflictRequest struct {
-	Kind   string `json:"kind"`   // notebook | query | skill
+	Kind   string `json:"kind"`   // notebook | query | skill | artifact
 	ID     string `json:"id"`     // notebook id, query id or skill name
 	Action string `json:"action"` // reload | overwrite | saveCopy
 	// Data is the local edit. Notebook: the same document SaveNotebook takes.
 	// Query: {title, sql, description}. Skill: {description, instructions,
-	// tableName}.
+	// tableName}. Artifact: {manifest, view}, the text of artifact.yaml and
+	// view.a2ui.json.
 	Data map[string]any `json:"data"`
 	// Rev is the revision on disk that the conflict banner was raised against.
 	// "Keep mine" only overwrites that revision: a file that changed again
@@ -66,7 +69,7 @@ type conflictTarget interface {
 // ResolveConflict settles a save that was refused because the file changed on
 // disk: "reload" keeps the disk version, "overwrite" writes the local edit over
 // it, and "saveCopy" writes the local edit as a new item (a notebook or query
-// named "<title> (copy)", a skill named "<name>-copy"). A write whose revision
+// named "<title> (copy)", a skill or artifact named "<name>-copy"). A write whose revision
 // no longer matches the disk is refused with filestore.ErrConflict, so a
 // second outside edit is never overwritten silently.
 func ResolveConflict(ctx context.Context, ws Workspace, sess session.Session, req ConflictRequest) (*ConflictResult, error) {
@@ -83,6 +86,8 @@ func ResolveConflict(ctx context.Context, ws Workspace, sess session.Session, re
 		target = queryConflicts{store: ws.Queries()}
 	case ConflictSkill:
 		target = skillConflicts{store: ws.Skills(), sess: sess}
+	case ConflictArtifact:
+		target = artifactConflicts{store: ws.Artifacts()}
 	default:
 		return nil, fmt.Errorf("unknown kind %q", req.Kind)
 	}

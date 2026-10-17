@@ -104,6 +104,7 @@ func (m *Mock) Put(_ context.Context, a *Artifact, opts ...PutOption) error {
 	prep.view = append([]byte(nil), prep.view...)
 	m.byName[a.Name] = prep
 	a.Rev = RevOf(prep.manifest, prep.view)
+	a.ManifestText = nil
 	if m.seen == nil {
 		m.seen = map[string]string{}
 	}
@@ -111,11 +112,37 @@ func (m *Mock) Put(_ context.Context, a *Artifact, opts ...PutOption) error {
 	return nil
 }
 
-func (m *Mock) Delete(_ context.Context, name string) error {
+func (m *Mock) Source(_ context.Context, name string) (*Source, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	p, ok := m.byName[name]
+	if !ok {
+		return nil, fmt.Errorf("artifact %q: %w", name, ErrNotFound)
+	}
+	rev := RevOf(p.manifest, p.view)
+	if m.seen == nil {
+		m.seen = map[string]string{}
+	}
+	m.seen[name] = rev
+	return &Source{Name: name, Manifest: string(p.manifest), View: string(p.view), Rev: rev}, nil
+}
+
+func (m *Mock) Delete(_ context.Context, name string, opts ...PutOption) error {
+	o := applyPutOpts(opts)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.Err != nil {
 		return m.Err
+	}
+	expect := m.seen[name]
+	if o.hasRev {
+		expect = o.rev
+	}
+	if cur := m.revOf(name); expect != "" && cur != "" && expect != cur {
+		return &filestore.ConflictError{Path: Dir + "/" + name, Want: expect, Got: cur}
 	}
 	delete(m.byName, name)
 	delete(m.seen, name)

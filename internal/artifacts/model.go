@@ -105,6 +105,12 @@ type Query struct {
 type Artifact struct {
 	Name     string
 	Manifest Manifest
+	// ManifestText, when set on a Put, is written as artifact.yaml as given
+	// (comments and layout kept) instead of the encoding of Manifest. It must
+	// pass Decode, and the Put replaces Manifest with what it decoded, so the
+	// two cannot disagree. A successful Put clears it. Never set on a value a
+	// store returns.
+	ManifestText []byte
 	// View is the view document (JSON text), validated against the manifest
 	// (ValidateView): within the cap, one JSON object, a valid A2UI view.
 	View []byte

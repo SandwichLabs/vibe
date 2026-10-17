@@ -129,3 +129,31 @@ func (h *agentToolHandler) RunArtifactQuery(ctx context.Context, name, query str
 	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
 	return h.inner.RunArtifactQuery(ctx, name, query, values)
 }
+
+// VetArtifact is agents.Handler.VetArtifact behind the same workspace identity
+// check as RunArtifactQuery: the vet may connect the sources the queries name,
+// so a call that outlives a workspace switch is refused instead of running on
+// the new workspace.
+func (h *agentToolHandler) VetArtifact(ctx context.Context, m *artifacts.Manifest) error {
+	h.app.mu.RLock()
+	defer h.app.mu.RUnlock()
+
+	if h.app.ws != h.ws || h.app.sess != h.sess {
+		return fmt.Errorf("the workspace was closed or replaced; reopen the artifact and try again")
+	}
+	policy := h.app.agentPolicy()
+	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
+	return h.inner.VetArtifact(ctx, m)
+}
+
+// artifactEditEnv takes the open workspace's artifact store and its vetter in
+// one locked step, so a workspace switch cannot pair one workspace's store with
+// another's connections.
+func (a *App) artifactEditEnv() (artifactEnv, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return artifactEnv{}, err
+	}
+	return artifactEnv{store: a.ws.Artifacts(), vet: a.newAgentToolHandler(agents.ModeFull), root: a.ws.Root()}, nil
+}

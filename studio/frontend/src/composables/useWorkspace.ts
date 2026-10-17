@@ -87,7 +87,7 @@ export async function flushOrConfirm(action: string): Promise<boolean> {
   const { failed } = await flushAll()
   if (failed.length === 0) return true
   return askConfirm({
-    title: 'Unsaved notebook',
+    title: 'Unsaved changes',
     message: `${failed[0].label} couldn't be saved: ${failed[0].error}. ${action} anyway?`,
     variant: 'destructive',
     confirmLabel: action,
