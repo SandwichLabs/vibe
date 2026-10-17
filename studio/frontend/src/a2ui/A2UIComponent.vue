@@ -12,6 +12,7 @@ import { computed, inject, type ComputedRef } from 'vue'
 import type { A2UIComponentT } from './types'
 import { colorClass, clampGap } from './query'
 import A2UIControl from './A2UIControl.vue'
+import A2UIPivot from './A2UIPivot.vue'
 import A2UIStat from './A2UIStat.vue'
 import A2UITable from './A2UITable.vue'
 import A2UIBarChart from './A2UIBarChart.vue'
@@ -75,6 +76,7 @@ const headingTag = computed(() => `h${props.component.level ?? 2}`)
 
   <A2UIControl v-else-if="CONTROL_TYPES.has(component.type)" :component="component" />
 
+  <A2UIPivot v-else-if="component.type === 'pivot'" :component="component" />
   <A2UIStat v-else-if="component.type === 'stat'" :component="component" />
   <A2UITable v-else-if="component.type === 'table'" :component="component" />
   <A2UIBarChart v-else-if="component.type === 'barChart'" :component="component" />

@@ -493,6 +493,9 @@ func validateComponent(comp any, index int, vc *ViewContext, errs *[]string) (id
 	if vc != nil && typeVal == "dateRange" {
 		checkDateRange(obj, path, errs)
 	}
+	if vc != nil {
+		checkDrillNeedsQuery(obj, path, errs)
+	}
 
 	fields = make(map[string]any, len(obj))
 	for f := range spec.req {

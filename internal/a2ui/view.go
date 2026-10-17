@@ -255,6 +255,18 @@ func checkDrill(vc *ViewContext, value any, path string, errs *[]string) {
 	}
 }
 
+// checkDrillNeedsQuery: drill reads a column of a query's result, so a
+// component with inline data (no query) has nothing to drill from; refusing it
+// keeps a valid view from carrying a drill the renderer would ignore.
+func checkDrillNeedsQuery(obj map[string]any, path string, errs *[]string) {
+	if _, has := obj["drill"]; !has {
+		return
+	}
+	if _, bound := obj["query"]; !bound {
+		*errs = append(*errs, fmt.Sprintf("%s.drill: drill needs a query: inline data has no result column to read", path))
+	}
+}
+
 func checkNameList(value any, path string, errs *[]string) {
 	arr, ok := value.([]any)
 	if !ok {

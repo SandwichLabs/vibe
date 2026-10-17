@@ -42,7 +42,8 @@ const options = computed<Opt[]>(() => {
   // The default first (it may be "", read as "all"), then the current value, then the rows.
   if (typeof p.default === 'string') add(p.default)
   const shown = rt.params.display(p.name)
-  if (typeof shown === 'string') add(shown)
+  // A draft the parameter refused is not an option: the select shows nothing chosen and the error.
+  if (typeof shown === 'string' && !rt.params.error(p.name)) add(shown)
   for (const o of p.options ?? []) add(o)
   for (const row of optionRows?.data?.rows ?? []) add(row[0])
   return out
