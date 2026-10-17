@@ -26,7 +26,7 @@ useModalKeys(open, () => close(), root)
       <div class="d-head">
         <h2 id="bi-h">Import .vibe</h2>
         <p v-if="mode === 'new'">Start a new workspace from a bundle someone shared with you.</p>
-        <p v-else>Add notebooks, queries and skills from a bundle to <b>{{ workspaceInfo?.name }}</b>.</p>
+        <p v-else>Add notebooks, queries, skills and data artifacts from a bundle to <b>{{ workspaceInfo?.name }}</b>.</p>
       </div>
 
       <div class="d-body">
@@ -135,7 +135,7 @@ useModalKeys(open, () => close(), root)
           </div>
           <ul v-if="result.outcomes.length" class="bi-list" role="list">
             <li v-for="o in result.outcomes" :key="o.key" class="bi-item">
-              <span class="bi-name"><span class="kind">{{ o.kind }}</span><span class="nm">{{ o.id }}</span><span v-if="o.finalId && o.finalId !== o.id" class="sub">saved as {{ o.finalId }}</span></span>
+              <span class="bi-name"><span class="kind">{{ KIND_LABEL[o.kind] ?? o.kind }}</span><span class="nm">{{ o.id }}</span><span v-if="o.finalId && o.finalId !== o.id" class="sub">saved as {{ o.finalId }}</span></span>
               <span class="bi-result" :class="{ bad: !!o.error }">{{ o.error ? 'Failed' : o.result }}</span>
             </li>
           </ul>
@@ -165,11 +165,11 @@ useModalKeys(open, () => close(), root)
 .bi-item:last-child { border-bottom: 0; }
 .bi-item.conflict { background: color-mix(in srgb, var(--vibe-warn) 8%, transparent); }
 .bi-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; cursor: pointer; }
-.bi-name .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sh-graphite); flex: none; min-width: 64px; }
+.bi-name .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sh-graphite); flex: none; min-width: 96px; }
 .bi-name .nm { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bi-name .sub, .bi-conn .sub { font-size: 12px; color: var(--sh-graphite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bi-choice { display: flex; align-items: center; gap: 8px; flex: none; }
-.bi-select { width: 190px; padding-top: 4px; padding-bottom: 4px; }
+.bi-select { width: 210px; padding-top: 4px; padding-bottom: 4px; }
 .bi-result { font-size: 13px; color: var(--sh-graphite); }
 .bi-result.bad { color: var(--vibe-error); }
 .bi-conns { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

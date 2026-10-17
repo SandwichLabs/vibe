@@ -11,6 +11,7 @@ const content = (): BundleContent => ({
   notebooks: [{ id: 'review', title: 'Quarterly review' }],
   queries: [{ id: 'top', title: 'Top customers' }],
   skills: [{ id: 'revenue', title: 'How revenue is counted' }],
+  artifacts: [{ id: 'sales', title: 'Sales by region' }],
   connections: [
     { name: 'wh', type: 'postgres', summary: 'db.example d', scope: 'team', portable: true },
     { name: 'mine', type: 'sqlite', summary: '/home/me/x.sqlite', scope: 'this computer', portable: false, reason: 'It points at a file path on this computer.' },
@@ -20,7 +21,7 @@ const content = (): BundleContent => ({
 function makeApp(over: Record<string, any> = {}) {
   const app = {
     GetBundleContent: vi.fn(async () => content()),
-    ExportBundle: vi.fn(async (req: BundleExportRequest) => ({ path: '/out/a.vibe', cancelled: false, encrypted: !!req.passphrase, notebooks: 1, queries: 1, skills: 1, connections: 0, bytes: 2048, warnings: [] })),
+    ExportBundle: vi.fn(async (req: BundleExportRequest) => ({ path: '/out/a.vibe', cancelled: false, encrypted: !!req.passphrase, notebooks: 1, queries: 1, skills: 1, artifacts: 1, connections: 0, bytes: 2048, warnings: [] })),
     ...over,
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
@@ -43,6 +44,8 @@ describe('BundleExportDialog', () => {
     const w = await mountDialog()
     expect(w.find('[data-testid="bundle-no-data-note"]').text()).toContain('no data and no credentials')
     expect((w.find('[data-testid="be-nb-review"]').element as HTMLInputElement).checked).toBe(true)
+    expect((w.find('[data-testid="be-ar-sales"]').element as HTMLInputElement).checked).toBe(true)
+    expect(w.text()).toContain('Data artifacts')
     expect((w.find('[data-testid="be-conn-wh"]').element as HTMLInputElement).checked).toBe(false)
     expect(w.text()).toContain('It points at a file path on this computer.')
     w.unmount()
@@ -57,10 +60,11 @@ describe('BundleExportDialog', () => {
     await flushPromises()
     expect(app.ExportBundle).toHaveBeenCalledWith({
       path: '',
-      selection: { all: false, notebooks: ['review'], queries: [], skills: ['revenue'], sharedConnections: false, teamConnections: ['wh'], localConnections: [] },
+      selection: { all: false, notebooks: ['review'], queries: [], skills: ['revenue'], artifacts: ['sales'], sharedConnections: false, teamConnections: ['wh'], localConnections: [] },
       passphrase: '',
     })
     expect(w.find('[data-testid="bundle-export-done"]').text()).toContain('Saved 1 notebook')
+    expect(w.find('[data-testid="bundle-export-done"]').text()).toContain('1 data artifact')
     w.unmount()
   })
 
@@ -82,7 +86,7 @@ describe('BundleExportDialog', () => {
   })
 
   it('a cancelled save dialog leaves the dialog open', async () => {
-    makeApp({ ExportBundle: vi.fn(async () => ({ path: '', cancelled: true, encrypted: false, notebooks: 0, queries: 0, skills: 0, connections: 0, bytes: 0, warnings: [] })) })
+    makeApp({ ExportBundle: vi.fn(async () => ({ path: '', cancelled: true, encrypted: false, notebooks: 0, queries: 0, skills: 0, artifacts: 0, connections: 0, bytes: 0, warnings: [] })) })
     const w = await mountDialog()
     await w.find('[data-testid="be-export"]').trigger('click')
     await flushPromises()

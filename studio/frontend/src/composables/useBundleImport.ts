@@ -11,7 +11,7 @@ import { workspaceInfo, flushOrConfirm } from './useWorkspace'
 import { useNewWorkspaceFields } from './useNewWorkspaceFields'
 import { errorText } from '../lib/errors'
 
-export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill' }
+export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill', artifact: 'Data artifact' }
 
 export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
   const open = computed(() => bundleImportRequest.value !== null)

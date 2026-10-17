@@ -22,13 +22,13 @@ const bundlePassphraseEnv = "VIBE_BUNDLE_PASSPHRASE"
 
 var exportBundleCmd = &cobra.Command{
 	Use:   "bundle [-o file.vibe]",
-	Short: "Export the workspace's notebooks, queries and skills as a .vibe bundle",
-	Long: `Write a .vibe bundle: a zip of notebooks, queries and skills (and, with
+	Short: "Export the workspace's notebooks, queries, skills and data artifacts as a .vibe bundle",
+	Long: `Write a .vibe bundle: a zip of notebooks, queries, skills and data artifacts (and, with
 --with-connections, connection definitions). A bundle holds no data and no
 credentials; connection definitions are stripped of sign-in methods and of paths
 outside the workspace.
 
-With no --notebooks, --queries or --skills the bundle takes everything. Name
+With no --notebooks, --queries, --skills or --artifacts the bundle takes everything. Name
 some of them (comma separated ids) to take only those.
 
 --encrypt wraps the whole bundle in a passphrase envelope (age, scrypt). The
@@ -170,6 +170,7 @@ func init() {
 	f.StringSlice("notebooks", nil, "notebook ids to include")
 	f.StringSlice("queries", nil, "query ids to include")
 	f.StringSlice("skills", nil, "skill names to include")
+	f.StringSlice("artifacts", nil, "data artifact names to include")
 	f.Bool("with-connections", false, "include the committed (team) connection definitions")
 	f.StringSlice("with-local-connections", nil, `include these "This computer" connection definitions`)
 	f.Bool("encrypt", false, "wrap the bundle in a passphrase envelope")
@@ -248,8 +249,9 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 	if _, err := os.Lstat(out); err == nil && !force {
 		return fmt.Errorf("%s already exists; use --force to replace it", out)
 	}
-	sel := bundle.Selection{Notebooks: nbs, Queries: qs, Skills: sks, SharedConnections: withConns, LocalConnections: localConns}
-	sel.All = len(nbs)+len(qs)+len(sks) == 0
+	arts, _ := f.GetStringSlice("artifacts")
+	sel := bundle.Selection{Notebooks: nbs, Queries: qs, Skills: sks, Artifacts: arts, SharedConnections: withConns, LocalConnections: localConns}
+	sel.All = len(nbs)+len(qs)+len(sks)+len(arts) == 0
 	var pass string
 	if encrypt {
 		if pass, err = readBundlePassphrase(cmd, true); err != nil {
@@ -280,7 +282,8 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 	for _, e := range res.Manifest.Contents {
 		counts[e.Kind]++
 	}
-	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], out)
+	// A data artifact is two entries.
+	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills, %d data artifacts to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], counts[bundle.KindArtifact]/2, out)
 	if counts[bundle.KindConnections] > 0 {
 		fmt.Fprint(w, " (with connection definitions)")
 	}

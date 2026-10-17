@@ -165,6 +165,7 @@ type BundleExportResult struct {
 	Notebooks int      `json:"notebooks"`
 	Queries   int      `json:"queries"`
 	Skills    int      `json:"skills"`
+	Artifacts int      `json:"artifacts"`
 	Connected int      `json:"connections"`
 	Bytes     int      `json:"bytes"`
 	Warnings  []string `json:"warnings"`
@@ -234,7 +235,7 @@ func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error)
 	n := res.Manifest.Counts()
 	return &BundleExportResult{
 		Path: path, Encrypted: res.Encrypted, Bytes: len(res.Data), Warnings: append([]string{}, res.Manifest.Warnings...),
-		Notebooks: n.Notebooks, Queries: n.Queries, Skills: n.Skills, Connected: n.Connections,
+		Notebooks: n.Notebooks, Queries: n.Queries, Skills: n.Skills, Artifacts: n.Artifacts, Connected: n.Connections,
 	}, nil
 }
 
@@ -365,6 +366,13 @@ func (a *App) afterBundleImport(res bundle.Result) {
 	// lists to refresh.
 	a.emitNotebooksChanged("", nil)
 	a.emitEvent("data:changed")
+	// Same for artifacts: the Artifacts list and an open artifact listen for
+	// the watcher's on-disk event, which the store's own writes never raise.
+	for _, o := range res.Outcomes {
+		if o.Kind == bundle.KindArtifact && o.Error == "" && o.Result != "skipped" {
+			a.emitEvent("workspace:changed-on-disk", map[string]any{"kind": "artifact", "id": o.FinalID, "op": "changed"})
+		}
+	}
 	if touchedConns {
 		a.syncConnections()
 		a.emitEvent("workspace:changed", map[string]any{"kind": "connections"})

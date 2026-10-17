@@ -19,8 +19,10 @@ import (
 // item is one verified, validated entry.
 type item struct {
 	Entry
-	Title    string
-	Data     []byte
+	Title string
+	Data  []byte
+	// View is the second file of a data artifact (Data is its manifest).
+	View     []byte
 	Warnings []string
 }
 
@@ -226,6 +228,7 @@ func unpack(plain []byte) (*Package, error) {
 	man.CreatedBy = cleanText(man.CreatedBy, maxTextRunes)
 	man.CreatedAt = cleanText(man.CreatedAt, 40)
 	p := &Package{Manifest: man, MakerNotes: cleanNotes(man.Warnings), revs: map[string]string{}}
+	arts := artifactParts{}
 	for _, e := range man.Contents {
 		b, err := read(files[e.Path], MaxEntryBytes)
 		if err != nil {
@@ -243,6 +246,12 @@ func unpack(plain []byte) (*Package, error) {
 			p.conns, p.askedWrite, p.Warnings = defs, asked, append(p.Warnings, warnings...)
 			continue
 		}
+		if e.Kind == KindArtifact {
+			if err := arts.add(e, b); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		title, warnings, err := validateItem(e.Kind, e.ID, b)
 		if err != nil {
 			return nil, err
@@ -250,6 +259,11 @@ func unpack(plain []byte) (*Package, error) {
 		p.Warnings = append(p.Warnings, warnings...)
 		p.items = append(p.items, item{Entry: e, Title: cleanText(title, maxTextRunes), Data: b})
 	}
+	artItems, err := arts.items()
+	if err != nil {
+		return nil, err
+	}
+	p.items = append(p.items, artItems...)
 	sort.Slice(p.items, func(i, j int) bool { return p.items[i].Path < p.items[j].Path })
 	return p, nil
 }

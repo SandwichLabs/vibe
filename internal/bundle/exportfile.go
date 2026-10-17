@@ -2,8 +2,10 @@ package bundle
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
@@ -25,6 +27,7 @@ type Counts struct {
 	Notebooks   int
 	Queries     int
 	Skills      int
+	Artifacts   int
 	Connections int // 1 when the bundle carries connection definitions, else 0
 }
 
@@ -40,6 +43,10 @@ func (m Manifest) Counts() Counts {
 			c.Queries++
 		case KindSkill:
 			c.Skills++
+		case KindArtifact:
+			if path.Base(e.Path) == artifacts.ManifestFile {
+				c.Artifacts++ // an artifact is two entries; count it once
+			}
 		case KindConnections:
 			c.Connections = 1
 		}

@@ -45,12 +45,12 @@ ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture
 
 Keep the Wails CLI at the `github.com/wailsapp/wails/v2` version in go.mod (v2.16.0; CI and release pin it as `WAILS_VERSION`). Wails v2.16 loads Go 1.27, so the old `WAILS_GOTOOLCHAIN` pin (#92) is gone.
 
-CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
+CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `artifact` (`artifact list`, mirrors the Artifacts list), `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 
 ## Architecture
 
 ```
-cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
+cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{agent,artifacts,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),

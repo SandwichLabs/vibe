@@ -463,12 +463,13 @@ func SlugOr(s, fallback string, maxBytes int) string {
 }
 
 // UniqueSlug returns base, or base-2, base-3, ... the first one exists
-// reports false for.
+// reports false for. It gives up after a bounded number of tries and returns
+// "", so an exists that is always true (an unreadable store) cannot hang.
 func UniqueSlug(base string, exists func(string) bool) string {
 	if !exists(base) {
 		return base
 	}
-	for i := 2; ; i++ {
+	for i := 2; i <= maxUniqueSlugTries; i++ {
 		suffix := fmt.Sprintf("-%d", i)
 		cand := base
 		if len(cand)+len(suffix) > 64 {
@@ -479,7 +480,10 @@ func UniqueSlug(base string, exists func(string) bool) string {
 			return cand
 		}
 	}
+	return ""
 }
+
+const maxUniqueSlugTries = 1000
 
 var idRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
