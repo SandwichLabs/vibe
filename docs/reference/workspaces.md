@@ -2,7 +2,7 @@
 
 A **workspace** is a folder, optionally a git repository, that holds your notebooks, saved queries and skills as ordinary files, plus a small `vibe.yaml` that marks it. Your data stays wherever it already lives; the workspace only describes how to reach it.
 
-This page is the file-level reference, the command line, and how Studio opens, creates and switches workspaces (#111). Everything below is implemented by `internal/workspace` and its stores. `.vibe` here means a bundle (see "Sharing without git"); the older data-holding container files are not opened by anything any more.
+This page is the file-level reference, the command line, and how Studio opens, creates and switches workspaces (vibe-app#111). Everything below is implemented by `internal/workspace` and its stores. `.vibe` here means a bundle (see "Sharing without git"); the older data-holding container files are not opened by anything any more.
 
 ## In Studio
 
@@ -23,7 +23,7 @@ Studio opens a workspace at launch without showing the Launcher first:
 - **Started from a desktop launcher** (current directory is your home folder or `/`) or from a folder outside any workspace: the Launcher, as always. For this automatic search, a `vibe.yaml` in your home folder, in a folder above it, or in `/` is never opened (a stray file there would otherwise capture every desktop launch). Name it explicitly to open it.
 - **If it cannot be opened** (the folder is gone, `vibe.yaml` does not parse), the Launcher appears with the error. A workspace whose database another process owns opens read-only with the usual **Take over…** banner.
 
-A `.vibe` file (the OS opening one with Vibe, or `vibe studio --gui x.vibe`) opens the **Import .vibe…** dialog instead, and anything else gets a plain notice. On macOS the Finder hands Studio a folder or `.vibe` file as an Apple Event rather than an argument, and while Studio is already running it is handled the same way. How the OS associations are wired is in [`../packaging.md`](../packaging.md#1a-file-opening-as-built-105-slice-3).
+A `.vibe` file (the OS opening one with Vibe, or `vibe studio --gui x.vibe`) opens the **Import .vibe…** dialog instead, and anything else gets a plain notice. On macOS the Finder hands Studio a folder or `.vibe` file as an Apple Event rather than an argument, and while Studio is already running it is handled the same way. How the OS associations are wired is in [`../packaging.md`](../packaging.md#1a-file-opening-as-built-vibe-app105-slice-3).
 
 ## Layout
 
@@ -50,7 +50,7 @@ acme-analytics/
     └── state.json            open tabs, last notebook
 ```
 
-Your own settings for a workspace are **not** in the folder (review #109). They live in your user config directory, next to your app preferences:
+Your own settings for a workspace are **not** in the folder (review vibe-app#109). They live in your user config directory, next to your app preferences:
 
 ```
 <config dir>/vibe/                       $VIBE_CONFIG_DIR, or the OS user config dir + /vibe
@@ -130,8 +130,8 @@ A definition says what a connection needs, never how you sign in.
 <!-- /keys -->
 
 - **No secrets.** A `password`, `token` or `key` field does not exist, so it is an unknown key. Option names that look like credentials are rejected, and so is any value that embeds a password (`postgres://user:pw@host`, `user:pw@host`).
-- **Environment variables, only in your own scopes (review #109).** `path`, `host`, `database`, `region`, `scope` and option values may contain `${NAME}` in your own files (`local.yaml`, the user `connections.yaml`) but **never in `vibe.yaml`**, which is written by someone else: a committed `${VAR}` is a parse error, so a pull cannot read your environment. A variable that is not set is a hard error that names the connection and field, never a silent empty string; an empty but set variable is fine. A variable whose name looks like a credential (`...SECRET...`, `...TOKEN...`, `...PASSWORD...`, `...KEY...`, `AUTH...`) is refused even in your own scopes. `$$` is a literal `$`. The name, type and credentials are never expanded.
-- **Paths (review #109).** In `vibe.yaml` every `path` must be relative and stay inside the workspace folder, including through symbolic links: an absolute path, a `~`, a drive letter or a `..` that leaves the folder is a parse error. Your own scopes may use an absolute path, which is your explicit choice, but Vibe only ever creates folders inside the workspace; an absolute path in your own scope whose folder does not exist is reported as an issue when the session opens. (An absolute path in `vibe.yaml` never gets that far: the file does not open.) A relative path in an "All my workspaces" connection is refused, because it belongs to no workspace.
+- **Environment variables, only in your own scopes (review vibe-app#109).** `path`, `host`, `database`, `region`, `scope` and option values may contain `${NAME}` in your own files (`local.yaml`, the user `connections.yaml`) but **never in `vibe.yaml`**, which is written by someone else: a committed `${VAR}` is a parse error, so a pull cannot read your environment. A variable that is not set is a hard error that names the connection and field, never a silent empty string; an empty but set variable is fine. A variable whose name looks like a credential (`...SECRET...`, `...TOKEN...`, `...PASSWORD...`, `...KEY...`, `AUTH...`) is refused even in your own scopes. `$$` is a literal `$`. The name, type and credentials are never expanded.
+- **Paths (review vibe-app#109).** In `vibe.yaml` every `path` must be relative and stay inside the workspace folder, including through symbolic links: an absolute path, a `~`, a drive letter or a `..` that leaves the folder is a parse error. Your own scopes may use an absolute path, which is your explicit choice, but Vibe only ever creates folders inside the workspace; an absolute path in your own scope whose folder does not exist is reported as an issue when the session opens. (An absolute path in `vibe.yaml` never gets that far: the file does not open.) A relative path in an "All my workspaces" connection is refused, because it belongs to no workspace.
 - **Fingerprint.** A hash of type, host, port, database and scope is stored with a keychain entry. If a pull changes any of them, the connection asks you to sign in again rather than sending a saved password to a different server.
 
 ## Scopes and precedence
@@ -148,7 +148,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 
 - **Local beats shared beats user.** When two scopes define the same name, the more specific entry replaces the other whole; fields are not merged. The merged list reports the scope each connection came from and which lower scopes it shadows.
 - **A user entry never overrides** a workspace one.
-- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt`, `env:PREFIX` or (S3 only) `aws-sso:PROFILE` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise `keychain`: the definition's `credentials` value is only a UI hint (review #115, see Credentials).
+- **Sign-in is per person.** `sign_in` in your `local.yaml` maps a connection name to `keychain`, `prompt`, `env:PREFIX` or (S3 only) `aws-sso:PROFILE` for that person. A user-scope connection uses `sign_in` from the user file. Otherwise `keychain`: the definition's `credentials` value is only a UI hint (review vibe-app#115, see Credentials).
 - **Status precedence**, when several apply to one connection: `extension-missing`, then `needs-credentials`, then `error`, then `locked-by`, then `not connected`, then `ok`.
 
 <!-- keys:local -->
@@ -178,7 +178,7 @@ Connection definitions come from three files and are merged most-specific-wins.
 
 ## Credentials
 
-**(review #115) A shared `credentials:` value is only a hint.** A `credentials:` line in the committed `vibe.yaml` may pre-select a method in the UI; it is never the effective method, because a pulled commit must not choose how your credentials are fetched (a committed `credentials: env:PG_PROD` plus a host of its choosing would otherwise send your environment password there). The effective method comes only from your own per-person `sign_in`, defaulting to the keychain; an empty keychain is *needs-credentials*. Every `sign_in` entry (env included) is stored with the fingerprint of the definition it was chosen for (`sign_in_fingerprint`, in your `local.yaml` or user `connections.yaml`), and if the definition no longer matches (a pull changed the host, scope, region or any option), even an environment credential, or an `aws-sso:PROFILE` sign-in, is withheld as "the server changed since you signed in" until you choose it again and confirm (`vibe conn credentials set <name> --sign-in env:PREFIX --confirm-rebind`; Studio asks). A hand-written `sign_in` without a fingerprint is withheld the same way.
+**(review vibe-app#115) A shared `credentials:` value is only a hint.** A `credentials:` line in the committed `vibe.yaml` may pre-select a method in the UI; it is never the effective method, because a pulled commit must not choose how your credentials are fetched (a committed `credentials: env:PG_PROD` plus a host of its choosing would otherwise send your environment password there). The effective method comes only from your own per-person `sign_in`, defaulting to the keychain; an empty keychain is *needs-credentials*. Every `sign_in` entry (env included) is stored with the fingerprint of the definition it was chosen for (`sign_in_fingerprint`, in your `local.yaml` or user `connections.yaml`), and if the definition no longer matches (a pull changed the host, scope, region or any option), even an environment credential, or an `aws-sso:PROFILE` sign-in, is withheld as "the server changed since you signed in" until you choose it again and confirm (`vibe conn credentials set <name> --sign-in env:PREFIX --confirm-rebind`; Studio asks). A hand-written `sign_in` without a fingerprint is withheld the same way.
 
 A connection's secrets never live in `vibe.yaml`, in `local.yaml`, in a log line, in the agent's context or in a bundle. They are kept per person, by a **sign-in method** you choose per connection (it is stored in your `local.yaml`, or the user `connections.yaml` for user connections, never committed):
 

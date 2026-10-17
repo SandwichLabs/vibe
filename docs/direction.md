@@ -1,11 +1,12 @@
 # Vibe direction — an agentic workspace for the data you already have
 
 **Date:** 2026-10-06 (delivered 2026-10-06; see §9)
-**Status:** **Delivered.** Epic #105 (issues #106–#119) is merged: the code matches this document, apart from the departures listed in §9. This remains the product north star.
+**Status:** **Delivered.** Epic vibe-app#105 (issues vibe-app#106–vibe-app#119) is merged: the code matches this document, apart from the departures listed in §9. This remains the product north star.
 - **Supersedes** the 2026-09-22 direction (Vibe as a "single-file" data workspace), whose primitives mostly carry forward. That version is in git history.
 - **Plan:** [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) (implemented; its "as built" summary lists the amendments and open follow-ups).
-- **Tracking:** epic #105, issues #106–#119. What is left (packaging and signing in #77, and the follow-ups named in §9) is listed there.
-- **Earlier work this builds on:** #62–#70 (shipped in PR #71) and #93 part 1 (PR #104).
+- **Tracking:** epic vibe-app#105, issues vibe-app#106–vibe-app#119. What is left (packaging and signing in #4, and the follow-ups named in §9) is listed there.
+- **Earlier work this builds on:** vibe-app#62–vibe-app#70 (shipped in PR vibe-app#71) and vibe-app#93 part 1 (PR vibe-app#104).
+- **Issue numbers:** the numbers in this document up to #119 are from the archived `SandwichLabs/vibe-app`; read them as `vibe-app#N` (the diagram in §5 uses them bare). The packaging epic (#4), the launch issues (#36–#51), #118 in the DuckLake bullet of §9 and everything after it are in this repo.
 
 ---
 
@@ -20,14 +21,14 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 ## 2. Why
 
 - **What users asked for.** Early feedback was consistent. A file that *holds* the data is less useful than a tool that *reaches* the data people already have, especially shared backends like MotherDuck, where the data is already shared and versioned. The single-file container made every team workflow a copy.
-- **Why the old container caused trouble.** It caused most of the trust problems the 2026-09-26 persona panel found (#93): a temp plaintext copy, Save-or-lose semantics, last-writer-wins between Studio and MCP, and no way to share notebooks without sharing data. PR #104 patched those. This direction removes their cause.
+- **Why the old container caused trouble.** It caused most of the trust problems the 2026-09-26 persona panel found (vibe-app#93): a temp plaintext copy, Save-or-lose semantics, last-writer-wins between Studio and MCP, and no way to share notebooks without sharing data. PR vibe-app#104 patched those. This direction removes their cause.
 - **Prior art.** `../duck-tape` proved the hub shape (attach every source into one DuckDB, connection name = catalog alias, read-only by default). Its unbuilt PRD has the right ideas for project discovery, env interpolation and schema caching. Its secret handling (plaintext DSNs, logged) is what we will not do.
 
 ## 3. The primitives
 
 Eight nouns. Everything in the product is one of these.
 
-### 3.1 Workspace — #109, #111
+### 3.1 Workspace — vibe-app#109, vibe-app#111
 - **What it is:** a folder with a `vibe.yaml` at the root. That file holds the id, name, default connection, agent settings and shared connection definitions.
 - **What's in it:** `notebooks/*.vnb`, `queries/*.sql`, `skills/<name>/SKILL.md` and `data/`, which holds local files and the default `data/local.duckdb`.
 - **Machine-local state:** lives in `.vibe-local/`, which git ignores.
@@ -36,14 +37,14 @@ Eight nouns. Everything in the product is one of these.
 - **Files are the source of truth.** Writes are compare-and-write, and a watcher picks up changes from git, editors, Claude Code and other processes.
 - **Git-friendly.** Files serialise in a stable, diff-friendly form. Outputs are never persisted.
 
-### 3.2 Connections — #108, #115
+### 3.2 Connections — vibe-app#108, vibe-app#115
 - **Definition and naming.** A named, typed definition attached into the session's in-memory DuckDB hub. The name is the catalog alias in SQL (`prod_pg.public.orders`).
-- **Types.** `duckdb` file, `postgres`, `mysql`, `motherduck`, `sqlite`, `s3`/`gcs`/`r2`, `azure`, `ducklake` and `iceberg`/`delta` (#115, #119). The metadata-driven formats (`ducklake`, `iceberg`, `delta`) can only be defined in your own scopes, never in a committed `vibe.yaml` (§9).
+- **Types.** `duckdb` file, `postgres`, `mysql`, `motherduck`, `sqlite`, `s3`/`gcs`/`r2`, `azure`, `ducklake` and `iceberg`/`delta` (vibe-app#115, vibe-app#119). The metadata-driven formats (`ducklake`, `iceberg`, `delta`) can only be defined in your own scopes, never in a committed `vibe.yaml` (§9).
 - **Scopes:** user (every workspace), shared (committed in `vibe.yaml`) and local (this machine).
 - **Behaviour.** Connections are read-only by default and only connect when first used. Each has a visible status: connected, error, needs credentials, extension missing, or locked by another process.
 - **MotherDuck:** one account per workspace. A MotherDuck connection cannot be attached read-only (DuckDB does not support `READ_ONLY` on `md:`); use a read-scaling token for read-only access.
 
-### 3.3 Credentials — #114
+### 3.3 Credentials — vibe-app#114
 - **Where they live:** the OS keychain, or `env:` references for CI, headless use and development. There is no plaintext fallback.
 - **Write-only across every boundary.** Studio's UI, MCP and the agent can set or clear a credential, never read it.
 - **What's covered:** per-person values (username, password, tokens, keys) live with the credential, never in committed config.
@@ -55,44 +56,44 @@ Eight nouns. Everything in the product is one of these.
 - **Editing.** Datasheet editing, CRUD, import (CSV, xlsx, Parquet, JSON via extensions) and export work against any **writable** connection. The default target is the workspace's local DuckDB.
 - **No save step.** Writes are the source's own transactions, so connection data has nothing to Save or Revert.
 
-### 3.5 Notebooks — #66
+### 3.5 Notebooks — vibe-app#66
 Unchanged in spirit.
 - **Format:** JSON documents of `sql` / `markdown` / `a2ui` cells, one file per notebook.
 - **Running:** outputs are never persisted, and every data cell re-runs on open.
-- **Connections (format v2, #108):** a SQL cell or A2UI binding may name a `connection`, and otherwise uses the workspace default.
+- **Connections (format v2, vibe-app#108):** a SQL cell or A2UI binding may name a `connection`, and otherwise uses the workspace default.
 - **Agent authoring** uses task mode: `preview_query` before a terminal `write_cell` or `need_more_info`.
 
-### 3.6 Skills — #62
+### 3.6 Skills — vibe-app#62
 - **Format:** `SKILL.md` documents. Built-ins are embedded, and workspace skills live in `skills/<name>/SKILL.md`.
 - **Compatibility:** they use the same format external agents such as Claude Code read.
 - **Loading:** the agent sees each skill's name and description and loads the body on demand.
 - **Table-bound skills:** gate on a catalog-qualified table, checked lazily so opening a workspace never connects to a remote source.
 
-### 3.7 Artifacts (A2UI) — #67
+### 3.7 Artifacts (A2UI) — vibe-app#67
 Unchanged: `{ title, components[] }`, a closed color enum, unknown fields rejected, inline data or a live `sql` binding, Go validates and Vue renders. Bindings gain an optional `connection`. The component set has since grown to twenty types (the KINETIC charts).
 
 **Data artifacts (#162).** A parameterised, live view stored as files, `artifacts/<name>/artifact.yaml` (typed parameters, *named* queries) plus `view.a2ui.json`. It stores questions, never answers; a value is bound as a parameter and never becomes SQL text. The A2UI schema gains parameter controls, `pivot` and drill-down for views only (`a2ui.ValidateView`). The agent authors with `write_artifact`, one tool surface for Studio and MCP. See [`reference/artifacts.md`](reference/artifacts.md) and [`plans/data-artifacts.md`](plans/data-artifacts.md).
 
-### 3.8 Agent + MCP — #63, #64, #70, #79, #116
+### 3.8 Agent + MCP — vibe-app#63, vibe-app#64, vibe-app#70, vibe-app#79, vibe-app#116
 - **One tool surface.** A single registry in `internal/agents` is used by the in-app runner and exposed over MCP with the same gating.
 - **Default: reads freely, writes need permission.** A write needs all three of:
   - the sandbox tier allows it;
   - the connection is writable;
-  - the user approves it. The #79 approval gate is forced on for any connection that isn't local.
+  - the user approves it. The vibe-app#79 approval gate is forced on for any connection that isn't local.
 - **SQL policy is an allow-list.** The agent can never attach databases, touch secrets or settings, install extensions, use raw-SQL passthroughs, or read files or URLs outside the workspace's data and the configured storage scopes.
-- **MCP.** `vibe mcp serve` discovers the workspace from the current directory. When Studio already has the workspace open, it hands requests to Studio's server (#112), because DuckDB allows only one writer per local file.
+- **MCP.** `vibe mcp serve` discovers the workspace from the current directory. When Studio already has the workspace open, it hands requests to Studio's server (vibe-app#112), because DuckDB allows only one writer per local file.
 
-### Import / Export — #118
+### Import / Export — vibe-app#118
 - **`.vibe` bundle (v2):** a zip of notebooks, queries, skills and connection definitions (never credentials). It is unencrypted by default, with optional passphrase encryption ([age](https://age-encryption.org)). `vibe export bundle`, `vibe import <file.vibe>`, and the workspace menu in Studio; opening a `.vibe` file with Vibe starts the import.
-- **Legacy `.vibe` files (v1, SQLCipher + data):** **not supported** (#110 was dropped). They get a plain "not supported" message.
-- **Notebook export** to HTML/PDF/xlsx is still #73.
+- **Legacy `.vibe` files (v1, SQLCipher + data):** **not supported** (vibe-app#110 was dropped). They get a plain "not supported" message.
+- **Notebook export** to HTML/PDF/xlsx is still vibe-app#73.
 
 ## 4. What stays, what goes, what changes
 
 | | |
 |---|---|
-| **Stays** | DuckDB as the single engine; notebooks, skills, A2UI, task mode; one tool surface; MCP; guardrails; the #79 approval gate; the #80 holder-naming lock (reused for hub ownership); import wizard (#82); datasheet editing; SchoolHouse theming; TUI as a SQL REPL |
-| **Goes** (gone) | The SQLCipher container and `internal/container`; the plaintext temp DuckDB copy; Save / Don't save / Revert for table data (#81, #98); per-file passphrases; `verify`, `compact`, `rekey`, `dump`, `passphrase`; `.vibe` as the thing Studio opens |
+| **Stays** | DuckDB as the single engine; notebooks, skills, A2UI, task mode; one tool surface; MCP; guardrails; the vibe-app#79 approval gate; the vibe-app#80 holder-naming lock (reused for hub ownership); import wizard (vibe-app#82); datasheet editing; SchoolHouse theming; TUI as a SQL REPL |
+| **Goes** (gone) | The SQLCipher container and `internal/container`; the plaintext temp DuckDB copy; Save / Don't save / Revert for table data (vibe-app#81, vibe-app#98); per-file passphrases; `verify`, `compact`, `rekey`, `dump`, `passphrase`; `.vibe` as the thing Studio opens |
 | **Changes** | Container → workspace folder. One DuckDB → a hub of connections. `_vibe_*` rows → files. Plaintext LLM key → keychain. Agent `full` deny-list → allow-list. `Unlock` → launcher + switcher. `vibe mcp serve <file>` → `vibe mcp serve [--workspace]`. `.vibe` → exchange bundle. |
 
 ## 5. Sequencing
@@ -105,7 +106,7 @@ Phase 0 ─ #106 design pass   #107 spike
 Slice 1 ─ #108 session hub ─► #109 workspace + stores ─► (#110 legacy import: dropped) ─► #111 Studio launcher/shell
                      │                    └──────────► #112 hub lock + mcp serve     #113 CLI (closes #72)
 Slice 2 ─ #114 secrets ─► #115 connections ─► #116 agent SQL policy ─► #117 Studio connections UI + `vibe conn`
-Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #77 packaging & signing (open)
+Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #4 packaging & signing (open)
 ```
 
 - **Slice 1** shipped a usable workspace with local DuckDB only: git-shared notebooks, agent and MCP working.
@@ -125,12 +126,12 @@ Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #77 
 
 ## 7. Non-goals
 
-- Bound forms, App Mode, macros, a data-entry persona (still gone, see #68).
+- Bound forms, App Mode, macros, a data-entry persona (still gone, see vibe-app#68).
 - A Python execution plane. Scheduled refresh may come later as a notebook feature.
 - A plaintext-file fallback for credentials.
 - A git client: commit, push and merge stay in the user's git tool. Studio shows branch and dirty state only.
 - Multi-user / Tailscale mesh. Still deferred; shared backends plus git cover the sharing need for now.
-- Windows, for this epic (macOS + Linux per #77).
+- Windows, for this epic (macOS + Linux per #4).
 - A terminal or server-side A2UI renderer.
 
 ## 8. Prior art and references
@@ -143,24 +144,24 @@ Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #77 
 
 Everything above shipped. These are the places where the result differs from what was first written, in the order they matter.
 
-- **No legacy import (scope change, #110 closed).** The plan made the legacy `.vibe` importer permanent. It was dropped by an owner decision recorded on the epic (2026-10-06), which also let the container code go. Studio, the CLI and MCP never open a v1 file, `internal/container` and the container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are gone (the names stay registered as hidden stubs that point to `vibe workspace init`), and a v1 or SQLCipher `.vibe` is told "not supported". `MigratePages` went with it, so old pages are not migrated.
-- **The agent's SQL policy is an allow-list, parsed first (#116).** The syntactic check happens before any `EXPLAIN` binds the statement. Reads are the readers the policy names, over `data/` and the scope of a ready storage connection; writes need three gates (tier, writable connection, person's approval), and the approval is always required for anything that is not a local file, so headless MCP refuses those writes. See [`reference/agent-policy.md`](reference/agent-policy.md).
-- **Metadata-driven formats are own-scope only (#119).** DuckLake, Iceberg and Delta read whatever files their own metadata names, so a crafted table in a cloned repository could read any file on the machine. They can be defined only in your own scopes (`local.yaml`, the user `connections.yaml`), never in a committed `vibe.yaml`, and `iceberg_scan`, `iceberg_metadata`, `iceberg_snapshots` and `delta_scan` are not agent readers in any tier. Giving the agent a safe path is #134 (a separate agent hub with external access off, plan D13).
+- **No legacy import (scope change, vibe-app#110 closed).** The plan made the legacy `.vibe` importer permanent. It was dropped by an owner decision recorded on the epic (2026-10-06), which also let the container code go. Studio, the CLI and MCP never open a v1 file, `internal/container` and the container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are gone (the names stay registered as hidden stubs that point to `vibe workspace init`), and a v1 or SQLCipher `.vibe` is told "not supported". `MigratePages` went with it, so old pages are not migrated.
+- **The agent's SQL policy is an allow-list, parsed first (vibe-app#116).** The syntactic check happens before any `EXPLAIN` binds the statement. Reads are the readers the policy names, over `data/` and the scope of a ready storage connection; writes need three gates (tier, writable connection, person's approval), and the approval is always required for anything that is not a local file, so headless MCP refuses those writes. See [`reference/agent-policy.md`](reference/agent-policy.md).
+- **Metadata-driven formats are own-scope only (vibe-app#119).** DuckLake, Iceberg and Delta read whatever files their own metadata names, so a crafted table in a cloned repository could read any file on the machine. They can be defined only in your own scopes (`local.yaml`, the user `connections.yaml`), never in a committed `vibe.yaml`, and `iceberg_scan`, `iceberg_metadata`, `iceberg_snapshots` and `delta_scan` are not agent readers in any tier. Giving the agent a safe path is vibe-app#134 (a separate agent hub with external access off, plan D13).
 - **Trust moved out of the folder.** A workspace arrives with whatever its authors committed, so a committed `vibe.yaml` can only *tighten* the agent's limits, its `credentials:` line is only a UI hint, `${VAR}` interpolation and absolute paths are refused in it, and per-person settings (looser agent policy, sign-in method) live outside the folder, keyed by workspace id and the folder's real path.
 - **MotherDuck cannot be read-only.** `READ_ONLY` is not supported on `md:` attaches, so the type defaults to `read_only: false` and rejects `true`; read-only comes from a read-scaling token.
 - **DuckLake catalogs: SQLite, and in object storage (#118, PRs #119-#124 and the end-to-end step).** The DuckLake type takes a `catalog` option (`duckdb` or `sqlite`) and a catalog that is a storage URL, read-only, vetted before attach (a crafted catalog's views and rows could otherwise read any file), with the lake connecting its storage connection first and saying `needs the "floci" connection: ...` when that is not ready. It needed DuckDB 1.5.6 (the bump, #120). The case it was built for, a SQLite catalog and Parquet in a no-TLS path-style S3-compatible store, is exercised end to end over the CLI, the agent tool surface, `vibe mcp serve` and Studio ([`plans/ducklake-catalogs.md`](plans/ducklake-catalogs.md)). Postgres metadata catalogs and an advanced-attach escape hatch stay deferred.
-- **Bundles use age (#118).** The optional passphrase envelope is an [age](https://age-encryption.org) scrypt recipient, not a bespoke format.
+- **Bundles use age (vibe-app#118).** The optional passphrase envelope is an [age](https://age-encryption.org) scrypt recipient, not a bespoke format.
 - **Storage setup from the lake form, and AWS SSO sign-in for S3 (#130, #131).** A lake, Iceberg or Delta form shows whether a storage connection covers its URL, offers **Set up storage** (with S3-compatible presets) and Test tries the storage connection first. An S3 connection can sign in with an `aws-sso:PROFILE` from `~/.aws/config`: Vibe resolves the profile in Go (not DuckDB's `credential_chain`), keeps the keys in memory and the DuckDB temporary secret, renews them before they end, fails closed (never anonymous) when the session ends, and runs the device sign-in natively from Studio and `vibe conn credentials sign-in`; `vibe mcp serve` only reports "needs sign-in". The SSO token lives only in the AWS CLI's shared cache. S3, GCS and R2 wildcards are expanded by Vibe in a private listing session, because the URL-parameter hardening (#138) turns DuckDB's own globs off. Plan: [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md).
 - **Data artifacts, level 1 (epic #162, steps 1-6b and 10; PRs #164-#172).** Delivered as planned: the `internal/artifacts` store with one revision over both files, `Bind`, the context-aware view validator, `write_artifact` / `list_artifacts` / `get_artifact`, Studio's list, view, controls, pivot, drill-down and Source tab with conflicts, `.vibe` bundle entries and `vibe artifact list`. Every query is vetted at save and again at every run, in every tier, so a file edited by hand, git or a bundle is held to the same policy. No tool runs an artifact for the agent. Plan: [`plans/data-artifacts.md`](plans/data-artifacts.md).
 - **Data artifacts, level 2 (custom views): not built.** The step 7 spike (Linux, 2026-10-17) dropped the iframe design: a sandboxed frame can still reach the Wails binding IPC, because Wails authorises a message by the top view's URI (filed as [#174](https://github.com/SandwichLabs/vibe/issues/174)), and an iframe cannot be stopped when it loops. A terminable worker returning an SVG or a validated A2UI page passed every Linux row; the macOS run ([#158](https://github.com/SandwichLabs/vibe/issues/158)) must pass before any of it is built.
-- **Packaging is wired but not shipped.** Launch arguments, macOS `OnFileOpen`, the `Info.plist` document types and the Linux `.desktop` and MIME files are in the repo ([`packaging.md`](packaging.md) §1a). Signing, notarisation, CI, the release pipeline, the offline-extension decision and the signed-build keychain check remain epic #77.
+- **Packaging ships unsigned; signing is still open.** Launch arguments, macOS `OnFileOpen`, the `Info.plist` document types and the Linux `.desktop` and MIME files are in the repo ([`packaging.md`](packaging.md) §1a), and v0.1.0 onward ship as ad-hoc-signed tarballs with `install.sh`. Signing, notarisation, the offline-extension decision and the signed-build keychain check remain in epic #4 (macOS human checks in #81).
 
 ### Open-source launch decisions (2026-10-11, epic #51)
 
 Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-launch.md`](plans/open-source-launch.md).
 
 - **Name:** keep **Vibe**; the CLI binary stays `vibe`. Because Mistral Vibe also installs a `vibe` command, `install.sh` will carry a collision guard (#47) (it refuses to overwrite another vendor's `vibe`) and the README says so. Revisit before 1.0.
-- **Repo and module:** `SandwichLabs/vibe`, Go module `github.com/SandwichLabs/vibe`. Private until the go-public step (#50).
+- **Repo and module:** `SandwichLabs/vibe`, Go module `github.com/SandwichLabs/vibe`. Public since v0.1.0 (the go-public step, #50).
 - **Licence:** Apache-2.0.
 - **History:** the public repo is a filtered copy of `vibe-app` `main`. `landing/`, `docs/reviews/ux-panel-2026-09-26/` and `docs/archive/*.txt` were dropped from all history, the 88 MB binary was never on `main`, and a work-email author was mailmapped.
 - **Reporting:** GitHub only, no email address. Vulnerabilities go through GitHub private vulnerability reporting; everything else through Issues.

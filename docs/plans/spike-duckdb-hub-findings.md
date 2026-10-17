@@ -1,5 +1,7 @@
 # Spike #107 findings: DuckDB 1.4.1 hub
 
+_Issue numbers in this document are from the archived `SandwichLabs/vibe-app` repo._
+
 Part of epic #105. Pins plan §4.4/§4.5 of `workspaces-and-connections.md`. Engine: go-duckdb v2.4.3, DuckDB 1.4.1, Postgres 16 (podman), Fedora/GNOME Secret Service.
 
 Probes live in `internal/session/*_spike_test.go`, with `doc.go` as the placeholder package.

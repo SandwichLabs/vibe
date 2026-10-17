@@ -90,7 +90,7 @@ and press **Run** (Ctrl+Enter, Cmd+Enter on a Mac). The connections rail on the 
 2. Use **SQL** to add a SQL cell, paste a query and press its **Run** button.
 3. Add a **Markdown** cell for notes. **Run all** re-runs everything.
 
-A notebook stores your questions, not the answers: every cell runs again when you open it, so the numbers are always current. See [notebooks](reference/notebooks.md).
+A notebook stores your questions, not the answers: every cell runs again when you open it, so the numbers are always current. See [notebooks](reference/notebooks.md). For a view with parameters and drill-down that you can version in git, see [data artifacts](reference/artifacts.md).
 
 ![A notebook with a SQL cell showing its query and a table of results below it (from the richer "Coffee Shop Analytics" demo workspace, so yours will look simpler)](assets/quickstart-notebook.png)
 

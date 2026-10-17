@@ -75,6 +75,7 @@ Vibe's limits are the same as for the built-in agent ([agent policy](reference/a
 - **Over plain `vibe mcp serve`, nobody is there to approve.** So with "Ask me before it changes data" on, the client can read but every write is refused. Turn it off in Studio (Settings, Workspace, The agent) to let a client change **local** DuckDB and SQLite files without asking.
 - **Non-local writes are never silent.** A write to Postgres, MySQL, MotherDuck or any connection that is not a local file always needs your approval, even with the gate off. Headless MCP has no way to ask, so it **refuses** them and changes nothing.
 - **Want approvals?** Open the workspace in Studio and press **Start** under Settings, Workspace, Claude and other tools. A client's `vibe mcp serve` then passes through to Studio, and every write shows an approval card in the Studio window.
+- **Data artifacts.** A client can list, read and write [data artifacts](reference/artifacts.md) with `list_artifacts`, `get_artifact` and `write_artifact`. A write follows the same tier and approval rules, and every query in an artifact is held to the read-only policy.
 - Credentials are never visible to the client. Tool results are size-limited, and the agent cannot read files outside the workspace's `data/` folder.
 
 ## One owner per workspace

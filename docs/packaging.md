@@ -68,15 +68,15 @@ Run on GitHub-hosted runners, `macos-15` (arm64, macOS 15.7.9) and `macos-15-int
 | `.goreleaser.yaml` fails `goreleaser check` (v2.13.3): `before.hooks` with `dir:` is GoReleaser Pro syntax. | No release has ever run from it. |
 | Its `vibe-studio` build is a plain `go build ./studio`, without the `desktop,production` tags `wails build` adds. | The binary would refuse to start, and there is no `.app` bundle, icon, or `.desktop` file. |
 | It cross-compiles CGO for darwin and linux/arm64 from one runner with no cross toolchain. | Can't link DuckDB for those targets. |
-| ~~`studio/build/` is gitignored wholesale.~~ Fixed in the #105 wrap-up (only `bin/` and Wails-generated defaults are ignored). | `Info.plist` and the Linux files are committed. `appicon.png` and the Linux icons are committed (#44, `scripts/gen-icons.sh`). |
+| ~~`studio/build/` is gitignored wholesale.~~ Fixed in the vibe-app#105 wrap-up (only `bin/` and Wails-generated defaults are ignored). | `Info.plist` and the Linux files are committed. `appicon.png` and the Linux icons are committed (#44, `scripts/gen-icons.sh`). |
 | No `.github/workflows/` at all. | No CI on PRs either. |
 | The repo is private. | Release assets aren't downloadable by Homebrew or the website without a token. |
-| ~~`studio/main.go` read the path to open from `os.Args[1]` only.~~ Fixed in #105 wrap-up. | On macOS an opened folder or `.vibe` arrives as an Apple Event (`mac.Options.OnFileOpen`), not argv; Studio now handles both (§1a). |
+| ~~`studio/main.go` read the path to open from `os.Args[1]` only.~~ Fixed in vibe-app#105 wrap-up. | On macOS an opened folder or `.vibe` arrives as an Apple Event (`mac.Options.OnFileOpen`), not argv; Studio now handles both (§1a). |
 | `vibe studio --gui` looks for `vibe-studio` beside the executable, then on `PATH`. | Needs an `open -a "Vibe Studio"` path on macOS, and symlink resolution when `vibe` is a Homebrew link. |
 | DuckDB extensions (`excel`, `postgres`, `httpfs`, ...) download from extensions.duckdb.org on first use, after the person agrees, into Vibe's own directory (§8). | The first use of each needs network access. On macOS, loading a `.duckdb_extension` dylib under the hardened runtime likely needs `com.apple.security.cs.disable-library-validation`. Verify in the spike. |
 | ~~Studio has no version ldflags.~~ Fixed (#44, #40): Studio and the CLI are stamped, and Settings > About shows version, commit, build date and platform with a Copy build info button. | Bug reports carry the build. |
 
-## 1a. File opening, as built (#105 Slice 3)
+## 1a. File opening, as built (vibe-app#105 Slice 3)
 
 What the app does, whichever way the OS hands it a path. All of it is `studio/workspace_launch.go` (`classifyLaunchArg`, `resolveLaunch`, `handleOpenPath`, `GetInitialWorkspace`, `MarkLaunchHandled`) and `studio/frontend/src/App.vue` (`handleOpenRequest`).
 
@@ -248,7 +248,7 @@ the same, so switching later is cheap.
 In order. Each step is one small PR.
 
 ### 5.1 Build hygiene
-Done in #105's wrap-up:
+Done in vibe-app#105's wrap-up:
 - `studio/build/` is un-ignored except `studio/build/bin/`, and holds `darwin/Info.plist` (§1a) and `linux/vibe-studio.desktop` and `linux/vibe-mime.xml` (§1a).
 - `wails.json` has `info` (product name, version, copyright, company).
 - `studio/main.go` has `Mac: &mac.Options{OnFileOpen: …}` routed to the same open path as argv, handling it arriving before and after startup.
@@ -272,10 +272,10 @@ Still to do (#4):
 - `build-smoke` matrix (`ubuntu-22.04`, `ubuntu-22.04-arm`, `macos-15`):
   - `wails build` with the release tags
   - `vibe --version`
-  - `vibe workspace init` + `vibe import` + `vibe query` round-trip in a temp folder, a real CGO smoke test of DuckDB (the #72 CLI bug is fixed, #113)
+  - `vibe workspace init` + `vibe import` + `vibe query` round-trip in a temp folder, a real CGO smoke test of DuckDB (the vibe-app#72 CLI bug is fixed, vibe-app#113)
 - Cache: Go module/build cache, the npm cache, and `~/.duckdb/extensions` if vendoring.
 - The Wails CLI is installed at `WAILS_VERSION`, which matches `github.com/wailsapp/wails/v2` in `go.mod`
-  (v2.16.0). Wails v2.11 could not load Go 1.27 (#92); v2.16 can, so the `wails build` steps run on the
+  (v2.16.0). Wails v2.11 could not load Go 1.27 (vibe-app#92); v2.16 can, so the `wails build` steps run on the
   `go.mod` toolchain with no `GOTOOLCHAIN` pin.
 
 ### 5.3 Release: `.github/workflows/release.yml` (on `push` tag `v*`)

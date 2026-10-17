@@ -1,6 +1,6 @@
 # Notebooks & A2UI Reference
 
-## Format version 2 (#108)
+## Format version 2 (vibe-app#108)
 
 A notebook carries `schemaVersion: 2`. v2 adds one optional field: a
 **`connection`** on `sql` cells and on the `sql`-bound components of `a2ui`
@@ -16,7 +16,7 @@ known connection on this machine is **kept as written** (cells are never
 dropped, queries are never silently retargeted at the default): the cell
 fails when it runs with `unknown connection "x"`. A non-string `connection`
 is cleared with a warning. The value only ever reaches SQL as a quoted
-identifier. Studio's cell header has a **Run on** selector for it (#117), and
+identifier. Studio's cell header has a **Run on** selector for it (vibe-app#117), and
 the agent and imported bundles can set it too.
 
 A **Notebook** is a JSON document, one file per notebook at
@@ -24,7 +24,7 @@ A **Notebook** is a JSON document, one file per notebook at
 format, atomic writes and conflict handling): a title plus an ordered list of
 **cells**. There is no page markup, no directives, and no
 inter-cell references — the database is the only shared state. Notebooks
-replace the old page system (#66/#69); this file replaces the retired
+replace the old page system (vibe-app#66/vibe-app#69); this file replaces the retired
 `pages.md`.
 
 ## Cell types
@@ -97,7 +97,7 @@ The in-app agent and MCP clients share one tool surface (`internal/agents`).
 Two tools write notebook content (category `content`, with
 `create_or_update_skill`: denied under `read-only`, allowed under
 `read-write` and `full`, and asked for like any change when "Ask before
-changes" is on; #111):
+changes" is on; vibe-app#111):
 
 - **`add_query_cell`** — appends a single sql cell. `notebook_id` is
   optional: it appends to that notebook, else to the notebook currently open
@@ -136,7 +136,7 @@ file Studio's Export writes), or a `.vibe` bundle (`vibe export bundle
 --notebooks a,b`, `vibe import <file.vibe>`, or the workspace menu in Studio);
 see `workspaces.md`, "Sharing without git". Those replaced the CLI
 import/export once planned in #9.
-Still planned: HTML/PDF/xlsx snapshot export (#73).
+Still planned: HTML/PDF/xlsx snapshot export (vibe-app#73).
 
 ## A2UI component reference
 

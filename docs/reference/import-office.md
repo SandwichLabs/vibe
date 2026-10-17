@@ -102,7 +102,7 @@ vibe import <file> [--into [conn.]table] [--workspace DIR]
 
 `vibe import` runs `importer.Import` on the workspace's DuckDB session, the
 same call as the Studio wizard, so an imported table is immediately visible to
-`vibe query`, Studio, the agent and MCP (#113 closed #72: the CLI used to write
+`vibe query`, Studio, the agent and MCP (vibe-app#113 closed vibe-app#72: the CLI used to write
 into the old SQLite envelope).
 
 - **Target.** `--into` is `table`, `conn.table` or `conn.schema.table`. The
@@ -150,10 +150,10 @@ one-time download ... check your network connection" and changes nothing.
 After that it works offline.
 
 Banded reports, and their PDF/Word export, were part of the Access
-application layer removed in #68 — a banded report migrates into a notebook
+application layer removed in vibe-app#68 — a banded report migrates into a notebook
 on first open of an old file (a markdown cell + one sql cell over its
 source). HTML/PDF/xlsx export of a notebook is tracked as a notebook
-feature in #73, not a report one.
+feature in vibe-app#73, not a report one.
 
 ### CLI
 

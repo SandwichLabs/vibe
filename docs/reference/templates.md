@@ -3,7 +3,7 @@
 A **template** seeds a fresh **workspace** (Studio's New workspace dialog, or `vibe workspace init --template`) with a complete little relational dataset, written into the workspace's local `data/local.duckdb` connection and a `notebooks/*.vnb` file:
 DuckDB user tables (with inline foreign keys so referential integrity is
 enforced), sample data, and a starter **notebook** with a cell over each table
-so the workspace is immediately explorable. (#68: forms, the switchboard,
+so the workspace is immediately explorable. (vibe-app#68: forms, the switchboard,
 relationship/field-meta metadata, and macros were dropped from every
 template along with the Access application layer — a template is now just
 tables + seed data + a notebook.)

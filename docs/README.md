@@ -23,8 +23,8 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | Doc | What it is |
 |---|---|
 | [`direction.md`](direction.md) | The north star: workspaces, connections, the eight primitives, and (§9) what changed from the plan |
-| [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic #105 (delivered; "as built" summary at the top) |
-| [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic #157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode |
+| [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic vibe-app#105 (delivered; "as built" summary at the top) |
+| [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic vibe-app#157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode; only phase A and the spike are built |
 | [`plans/ducklake-catalogs.md`](plans/ducklake-catalogs.md) | Plan for #118 (DuckLake catalogs in SQLite and in object storage, with a storage dependency); delivered in PRs #119-#125, released in v0.1.3 |
 | [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md) | Plan for #130 (set up the storage connection from the lake form) and #131 (AWS SSO sign-in for S3); delivered in nine steps (PRs #132-#147, released in v0.1.4 with SSO as a preview); real IAM Identity Center verification and the close-out list are in the plan |
 | [`plans/data-artifacts.md`](plans/data-artifacts.md) | Plan for epic #162 (data artifacts; level 1 delivered, level 2 not built): parameterised, live views stored as `artifacts/<name>/` files, with named queries bound by value only, agent and MCP tools, Studio controls, pivot and drill-down, and a conditional custom-view level gated on an isolation spike |
@@ -33,7 +33,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`plans/code-mode.md`](plans/code-mode.md) | Proposal: a `run_code` tool where the agent writes a program that calls the Vibe tools in a sandbox, through the same gates (not built; review notes in §13 favour a Starlark or SQL result-handle spike before Monty) |
 | [`plans/monty-client.md`](plans/monty-client.md) | Proposal: the Go client for the Monty worker that Vibe would own, the worker build from source, packaging, tests and the upgrade procedure (deferred by the §13 review) |
 | [`plans/spike-code-mode-findings.md`](plans/spike-code-mode-findings.md) | Research for code mode: Cloudflare, Anthropic, Bifrost and Muse, and the sandboxes a Go process can use (Monty, Starlark, goja, QuickJS, WASI) |
-| [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
+| [`plans/spike-byo-agent-findings.md`](plans/spike-byo-agent-findings.md) | Findings from the bring-your-own-agent spike (vibe-app#149): per-agent MCP registration, `instructions`, elicitation and ACP behaviour for Claude Code, Codex, Gemini CLI and OpenCode |
 
 ## Reference
 
@@ -56,26 +56,27 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 
 | Doc | What it is |
 |---|---|
-| [`design/workspaces-connections/`](design/workspaces-connections/index.html) | The mockup set and [spec](design/workspaces-connections/SPEC.md) for #106 (launcher, shell switcher, connections rail and editor, states, approval card). Open `index.html` in a browser; [`SHOTS.md`](design/workspaces-connections/SHOTS.md) lists the captured screenshots. The design record, not a description of the current UI. |
+| [`design/workspaces-connections/`](design/workspaces-connections/index.html) | The mockup set and [spec](design/workspaces-connections/SPEC.md) for vibe-app#106 (launcher, shell switcher, connections rail and editor, states, approval card). Open `index.html` in a browser; [`SHOTS.md`](design/workspaces-connections/SHOTS.md) lists the captured screenshots. The design record, not a description of the current UI. |
 
 ## Contributing
 
 | Doc | What it is |
 |---|---|
 | [`contributing/rodney.md`](contributing/rodney.md) | Driving Studio in a headless browser with Rodney for QA |
+| [`assets/README.md`](assets/README.md) | Where the README and release screenshots come from and how they were made |
 | [`../tools/ast-grep/`](../tools/ast-grep/sgconfig.yml) | The architecture lint rules CI runs (`ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio`) |
 
 ## Packaging
 
 | Doc | What it is |
 |---|---|
-| [`packaging.md`](packaging.md) | How v0.1.0 ships (unsigned tarballs and `install.sh`), the macOS spike findings, file association wiring, and the later signed-distribution plan (epic #77) |
+| [`packaging.md`](packaging.md) | How v0.1.0 ships (unsigned tarballs and `install.sh`), the macOS spike findings, file association wiring, and the later signed-distribution plan (epic #4) |
 
 ## Reviews
 
 | Doc | What it is |
 |---|---|
-| [`reviews/cleanup-2026-10/FINDINGS.md`](reviews/cleanup-2026-10/FINDINGS.md) | The post-#105 cleanup survey (#137) and its review verdicts |
+| [`reviews/cleanup-2026-10/FINDINGS.md`](reviews/cleanup-2026-10/FINDINGS.md) | The post-vibe-app#105 cleanup survey (vibe-app#137) and its review verdicts |
 | [`reviews/arch-2026-10/`](reviews/arch-2026-10/) | The architecture review for #54: rubric, findings, judge rulings. Its ast-grep rules are in `tools/ast-grep/` |
 
 ## Archive
