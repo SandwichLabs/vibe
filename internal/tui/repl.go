@@ -117,8 +117,21 @@ func (r REPLModel) Update(msg tea.Msg) (REPLModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
+		case tea.KeyCtrlO:
+			val := r.input.Value()
+			return r, func() tea.Msg { return replEditMsg{initial: val} }
 		case tea.KeyEnter:
 			val := r.input.Value()
+			if strings.TrimSpace(val) == editCommand {
+				// psql's \e: edit the last query in $EDITOR.
+				r.input.SetValue("")
+				r.histIdx = -1
+				last := ""
+				if n := len(r.history); n > 0 {
+					last = r.history[n-1]
+				}
+				return r, func() tea.Msg { return replEditMsg{initial: last} }
+			}
 			if val != "" {
 				r.history = append(r.history, val)
 				r.input.SetValue("")
@@ -170,6 +183,14 @@ func (r REPLModel) View(width, height int) string {
 	parts = append(parts, r.input.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// recordEdited clears the prompt and adds a query run from the editor to the
+// history, multi-line text and all, so \e can edit it again.
+func (r *REPLModel) recordEdited(query string) {
+	r.input.SetValue("")
+	r.history = append(r.history, query)
+	r.histIdx = -1
 }
 
 // InputValue returns the current text input value (for testing).

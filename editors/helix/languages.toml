@@ -1,0 +1,9 @@
+# Add to ~/.config/helix/languages.toml (or a workspace's .helix/languages.toml).
+[language-server.vibe]
+command = "vibe"
+args = ["lsp"]
+
+[[language]]
+name = "sql"
+roots = ["vibe.yaml"]
+language-servers = ["vibe"]

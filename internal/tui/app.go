@@ -85,6 +85,13 @@ type App struct {
 	readOnly bool
 	// name is the workspace name shown in the status bar.
 	name string
+
+	// editRoot is the workspace root for editor scratch buffers ("" = system
+	// temp); editorArgv overrides $VISUAL/$EDITOR in tests.
+	editRoot   string
+	editorArgv func() ([]string, error)
+
+	snapshotState
 }
 
 // Option configures NewApp.
@@ -143,6 +150,7 @@ func (a *App) LoadData() {
 	}
 	a.tables.LoadTables(a.ws.Session())
 	a.notebooks.LoadNotebooks(a.ws.Notebooks())
+	a.refreshSnapshot()
 }
 
 // Init implements tea.Model.
@@ -162,11 +170,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case replSubmitMsg:
 		return a, a.executeREPLQuery(msg.query)
+	case replEditMsg:
+		return a, a.openEditor(msg.initial)
+	case editorDoneMsg:
+		return a, a.finishEdit(msg)
 	case replResultMsg:
 		a.repl.AppendOutput(msg.output)
 		if msg.wrote {
 			// The statement may have changed what exists: refresh the lists.
 			a.LoadData()
+		} else {
+			a.refreshSnapshot() // it may have connected a connection
 		}
 		return a, nil
 	case tableDataMsg:

@@ -14,6 +14,7 @@ surface so each area is easy to find:
 | [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
 | [`connections.md`](connections.md) | **Connections**: every type (DuckDB file, Postgres, MySQL, MotherDuck, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg, Delta), fields, credentials, read-only, Test, extensions |
 | [`mcp.md`](mcp.md) | **MCP**: `vibe mcp serve` (stdio/SSE), client configuration, SSE auth and security |
+| [`editor.md`](editor.md) | **Your own editor**: `$VISUAL`/`$EDITOR` from the TUI and `vibe query -e`, and `vibe lsp` (completion and hover) for Neovim, Helix and eglot |
 | [`llm-config.md`](llm-config.md) | **LLM provider** configuration and the API key |
 | [`agent-policy.md`](agent-policy.md) | **The agent's SQL policy**: what each tier allows, the three-gate rule for writes, file and URL rules, the never-list, `list_connections` |
 
