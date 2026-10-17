@@ -108,6 +108,8 @@ func TestValidateView_Errors(t *testing.T) {
 			`components[0].drill: "lineChart" has no such field`},
 		{"pivot nine rows", `{"id":"a","type":"pivot","query":"by_region","rows":["a","b","c","d","e","f","g","h","i"],"columns":"x","value":"v"}`,
 			`components[0].rows: expected 1 to 8 column names, got 9`},
+		{"drill without query", `{"id":"a","type":"barChart","bars":[{"label":"x","value":1}],"drill":{"param":"region","column":"label"}}`,
+			`components[0].drill: drill needs a query`},
 		{"unknown type", `{"id":"a","type":"slider"}`, `components[0].type: unknown type "slider". Valid types: areaChart,`},
 	}
 	for _, tc := range cases {

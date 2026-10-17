@@ -14,6 +14,8 @@ export interface BoundQuery {
   error: ComputedRef<string>
   fetched: ComputedRef<boolean>
   data: ComputedRef<LiveQueryResult | null>
+  /** The query hit Go's 500-row cap. */
+  truncated: ComputedRef<boolean>
 }
 
 const NOT_ALLOWED = 'A data artifact view can only use its own named queries.'
@@ -30,5 +32,6 @@ export function useBoundQuery(runtime: ArtifactRuntime, component: () => A2UICom
     error: computed(() => (state.value ? state.value.error : refused ? NOT_ALLOWED : '')),
     fetched: computed(() => (state.value ? state.value.fetched : refused)),
     data: computed(() => state.value?.data ?? null),
+    truncated: computed(() => !!state.value?.truncated),
   }
 }

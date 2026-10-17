@@ -623,3 +623,51 @@
 
 .a2ui-page .a2ui-control--range { min-width: 320px; max-width: 400px; }
 .a2ui-page .a2ui-control__pair .a2ui-control__input { min-width: 130px; }
+
+/* Drill-down (#162): a row, bar, column or pivot cell that sets a parameter.
+   Roles only. The ring is inset so a scrolling or clipping parent cannot cut it. */
+.a2ui-page .a2ui-drill-row { cursor: pointer; }
+.a2ui-page .a2ui-table tbody tr.a2ui-drill-row:hover td { background: var(--sh-paper-2); }
+.a2ui-page .a2ui-drill-row--current { background: color-mix(in srgb, var(--sh-teal) 12%, transparent); box-shadow: inset 3px 0 0 var(--sh-teal); }
+.a2ui-page .a2ui-columns__col.a2ui-drill-row--current { box-shadow: inset 0 3px 0 var(--sh-teal); }
+.a2ui-page .a2ui-drill:focus-visible { box-shadow: none; outline: 2px solid var(--vibe-focus); outline-offset: 1px; border-radius: var(--sh-radius-sm); }
+.a2ui-page .a2ui-drill-row:focus-visible { box-shadow: none; outline: 2px solid var(--vibe-focus); outline-offset: -2px; }
+.a2ui-page .a2ui-drill {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.a2ui-page .a2ui-drill--current { font-weight: 700; }
+.a2ui-page .a2ui-drill--cell { padding: 2px 4px; margin: -2px -4px; }
+.a2ui-page .a2ui-columns__col.a2ui-drill-row { border-radius: var(--sh-radius-sm); padding: 2px; position: relative; z-index: 0; }
+.a2ui-page .a2ui-columns__col.a2ui-drill-row:focus-visible { z-index: 1; }
+
+/* pivot (#162) */
+.a2ui-page .a2ui-pivot__note { font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin-bottom: 4px; }
+.a2ui-page .a2ui-pivot th { white-space: nowrap; }
+.a2ui-page .a2ui-pivot__head,
+.a2ui-page .a2ui-pivot__rowhead,
+.a2ui-page .a2ui-pivot__group { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.a2ui-page .a2ui-pivot__group { text-align: center; border-bottom: var(--sh-border-thin); }
+.a2ui-page .a2ui-pivot__corner { border-bottom: none; }
+.a2ui-page .a2ui-pivot th.a2ui-pivot__rowhead {
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--sh-ink);
+  border-bottom: 1px solid var(--sh-chalk);
+  padding: 4px 8px;
+  position: sticky;
+  left: 0;
+  background: var(--sh-paper);
+}
+.a2ui-page .a2ui-pivot th.a2ui-pivot__rowhead--current { box-shadow: inset 3px 0 0 var(--sh-teal); background: color-mix(in srgb, var(--sh-teal) 12%, var(--sh-paper)); }
+.a2ui-page .a2ui-pivot td.cell-num { text-align: right; font-variant-numeric: tabular-nums; }
+.a2ui-page .a2ui-pivot__btn { width: 100%; text-align: inherit; font-variant-numeric: tabular-nums; padding: 2px 4px; }
+.a2ui-page .a2ui-pivot__btn:hover { background: var(--sh-paper-2); }
