@@ -3,7 +3,7 @@
 // first column of its first row). Ported from renderer.js's renderStat.
 import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { colorClass } from './query'
+import { colorClass, isBound } from './query'
 import { useLiveQuery } from './useLiveQuery'
 import { formatCell } from '../lib/formatCell'
 
@@ -20,7 +20,7 @@ const liveType = computed(() => data.value?.types[0])
 // synthesizer stamps on a synthesized stat component — never part of the
 // A2UI schema, never saved (see a2ui/types.ts).
 const displayValue = computed(() => {
-  if (props.component.sql) {
+  if (isBound(props.component)) {
     if (loading.value) return '…'
     if (error.value) return '!'
     if (!fetched.value) return ''
@@ -38,6 +38,6 @@ const displayValue = computed(() => {
     <div class="a2ui-stat__label">{{ component.label }}</div>
     <div class="a2ui-stat__value">{{ displayValue }}</div>
     <div v-if="component.detail" class="a2ui-stat__detail">{{ component.detail }}</div>
-    <div v-if="component.sql && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
+    <div v-if="isBound(component) && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
   </div>
 </template>

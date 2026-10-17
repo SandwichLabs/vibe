@@ -74,6 +74,24 @@ func statusSnapshot(sess session.Session) map[string]session.StatusKind {
 // failed) gets its status refreshed, and anything that is not a plain read, or
 // that attached something, emits catalog:changed so open levels reload.
 func (a *App) afterRun(sess session.Session, before map[string]session.StatusKind, sqlText string) {
+	changed := a.settleRun(sess, before)
+	if changed || !agents.IsReadOnlyStatement(a.ctxOrBackground(), sess.DB(), sqlText, nil) {
+		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+	}
+}
+
+// afterReadOnlyRun is afterRun for a run already vetted as a plain read (an
+// artifact query): the S3 URL setting and connection status are settled as
+// usual, but the catalog is only reported changed when a connection attached.
+func (a *App) afterReadOnlyRun(sess session.Session, before map[string]session.StatusKind) {
+	if a.settleRun(sess, before) {
+		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+	}
+}
+
+// settleRun re-checks the S3 URL setting and publishes any connection status
+// that moved; it reports whether one did.
+func (a *App) settleRun(sess session.Session, before map[string]session.StatusKind) bool {
 	// Defence in depth (#138): whatever the run did, the S3 URL setting is on
 	// again before the next one. A no-op unless httpfs is loaded. Residual: a
 	// session-level override on the editor's own pinned connection is reset only
@@ -89,7 +107,5 @@ func (a *App) afterRun(sess session.Session, before map[string]session.StatusKin
 			a.emitStatus(sess, st.Name)
 		}
 	}
-	if changed || !agents.IsReadOnlyStatement(a.ctxOrBackground(), sess.DB(), sqlText, nil) {
-		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
-	}
+	return changed
 }

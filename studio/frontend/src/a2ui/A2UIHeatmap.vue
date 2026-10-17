@@ -5,6 +5,7 @@
 // staggered cell by cell. Hover or focus a cell for its readout.
 import { computed, ref } from 'vue'
 import type { A2UIComponentT } from './types'
+import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
@@ -49,7 +50,7 @@ const readout = computed(() => {
 </script>
 
 <template>
-  <A2UIChartFrame kind="heatmap" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error" :empty="m.rowLabels.length === 0" :animated="enabled" @replay="replay">
+  <A2UIChartFrame kind="heatmap" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error" :empty="m.rowLabels.length === 0" :animated="enabled" @replay="replay">
     <div class="a2ui-kchart__readout" aria-live="polite">{{ readout }}</div>
     <div class="a2ui-heatmap" :style="gridStyle" role="img" :aria-label="ariaLabel">
       <template v-for="(rl, r) in m.rowLabels" :key="'r' + r">

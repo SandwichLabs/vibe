@@ -5,6 +5,7 @@
 // "max" when set, else the largest value.
 import { computed, ref } from 'vue'
 import type { A2UIComponentT } from './types'
+import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
@@ -54,7 +55,7 @@ const ariaLabel = computed(() => `Radar chart over ${n.value} axes (${data.value
 
 <template>
   <A2UIChartFrame
-    kind="radar" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error"
+    kind="radar" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error"
     :empty="n < 3 || data.series.length === 0" :animated="enabled" :legend="data.series.map((s) => s.name)"
     @replay="replay"
   >

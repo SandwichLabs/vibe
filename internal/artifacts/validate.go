@@ -1,6 +1,8 @@
 package artifacts
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -264,16 +266,37 @@ func optionsCycle(p *Param, declared map[string]*Param, queries map[string]*Quer
 // (m must have passed Validate). The error is JSON-path-prefixed, as the
 // agent sees it.
 func ValidateView(m *Manifest, view []byte) error {
+	_, err := validatedPage(m, view)
+	return err
+}
+
+// RenderView is the view as Go validated it, re-marshalled: the one form a UI
+// renders. A caller must never re-parse the stored bytes itself (Go and
+// JavaScript disagree on, for one, a lone surrogate escape).
+func RenderView(m *Manifest, view []byte) ([]byte, error) {
+	page, err := validatedPage(m, view)
+	if err != nil {
+		return nil, err
+	}
+	out, err := json.Marshal(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render %s: %w", ViewFile, err)
+	}
+	return out, nil
+}
+
+func validatedPage(m *Manifest, view []byte) (a2ui.Page, error) {
 	if len(view) > MaxViewBytes {
-		return invalid("%s is %d bytes, over the %d byte limit", ViewFile, len(view), MaxViewBytes)
+		return a2ui.Page{}, invalid("%s is %d bytes, over the %d byte limit", ViewFile, len(view), MaxViewBytes)
 	}
 	if err := checkJSONObject(view); err != nil {
-		return err
+		return a2ui.Page{}, err
 	}
-	if _, err := a2ui.ValidateView(view, viewContext(m)); err != nil {
-		return invalid("%s:\n%v", ViewFile, err)
+	page, err := a2ui.ValidateView(view, viewContext(m))
+	if err != nil {
+		return a2ui.Page{}, invalid("%s:\n%v", ViewFile, err)
 	}
-	return nil
+	return page, nil
 }
 
 // viewContext is what the view validator knows of a manifest: parameter names

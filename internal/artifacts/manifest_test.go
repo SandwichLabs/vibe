@@ -386,3 +386,15 @@ func TestValidate_OptionsQuery(t *testing.T) {
 	_, err = Decode([]byte(chain))
 	assert.NoError(t, err, "b depending on a is fine without a loop")
 }
+
+func TestDefaults_ResolvesDates(t *testing.T) {
+	m := mustDecode(t, goodManifest)
+	got, err := Defaults(m, time.Date(2026, time.March, 10, 9, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.Len(t, got, len(m.Parameters))
+	assert.Equal(t, "2025-12-10", got["from"])
+	assert.Equal(t, "2026-03-10", got["to"])
+	assert.Equal(t, "", got["region"])
+	assert.Equal(t, int64(10), got["top"])
+	assert.Equal(t, true, got["live"])
+}

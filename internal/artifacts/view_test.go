@@ -89,3 +89,22 @@ func TestViewParamTypesMatchTheManifest(t *testing.T) {
 	assert.Equal(t, []string{TypeText, TypeNumber, TypeInteger, TypeDate, TypeBoolean, TypeEnum},
 		[]string{a2ui.ParamText, a2ui.ParamNumber, a2ui.ParamInteger, a2ui.ParamDate, a2ui.ParamBoolean, a2ui.ParamEnum})
 }
+
+func TestRenderView_IsTheValidatedPageRemarshalled(t *testing.T) {
+	m := mustDecode(t, goodManifest)
+	// A lone surrogate escape: Go reads it as U+FFFD, so the rendered form
+	// holds the replacement character, never the escape JavaScript would keep.
+	view := `{"title":"A\ud800B","components":[{"id":"h","type":"heading","text":"x"}]}`
+	out, err := RenderView(m, []byte(view))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), `\ud800`)
+	assert.Contains(t, string(out), "�")
+	assert.Contains(t, string(out), `"components"`)
+}
+
+func TestRenderView_RefusesWhatValidateViewRefuses(t *testing.T) {
+	m := mustDecode(t, goodManifest)
+	_, err := RenderView(m, []byte(`{"title":"T","components":[{"id":"a","type":"table","sql":"SELECT 1"}]}`))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalid)
+}

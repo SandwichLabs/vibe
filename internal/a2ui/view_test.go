@@ -69,6 +69,8 @@ func TestValidateView_Errors(t *testing.T) {
 			`components[0].sql: "sql" is not allowed in a data artifact view: name one of the artifact's queries with "query"`},
 		{"connection refused", `{"id":"a","type":"barChart","connection":"x"}`,
 			`components[0].connection: "connection" is not allowed in a data artifact view`},
+		{"refresh on a query-bound chart", `{"id":"a","type":"streamChart","query":"by_region","refresh":10}`,
+			`components[0].refresh: "refresh" is not allowed in a data artifact view`},
 		{"query missing", `{"id":"a","type":"table","query":"gone"}`,
 			`components[0].query: "gone" is not a query of this artifact. Queries: by_region, customers`},
 		{"query not string", `{"id":"a","type":"table","query":1}`, `components[0].query: expected a query name (string), got number`},

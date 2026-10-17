@@ -22,7 +22,7 @@
 // unit tests assert the algorithm directly rather than pixel overlap).
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { toPoints, colorClass, pickLabelIndices, type Point } from './query'
+import { toPoints, colorClass, pickLabelIndices, type Point, isBound } from './query'
 import { useLiveQuery } from './useLiveQuery'
 import { formatNumber } from '../lib/formatCell'
 import { useMotion } from './useMotion'
@@ -31,7 +31,7 @@ const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, data } = useLiveQuery(() => props.component)
 const livePoints = computed<Point[]>(() => (data.value ? toPoints(data.value.columns, data.value.rows) : []))
 
-const points = computed<Point[]>(() => (props.component.sql ? livePoints.value : (props.component.points ?? [])))
+const points = computed<Point[]>(() => (isBound(props.component) ? livePoints.value : (props.component.points ?? [])))
 
 const W = 640
 const H = 200
@@ -116,8 +116,8 @@ const polylinePoints = computed(() => points.value.map((_, i) => `${x(i)},${anim
 <template>
   <div class="a2ui-linechart">
     <div v-if="component.label" class="a2ui-component__title">{{ component.label }}</div>
-    <div v-if="component.sql && loading" class="a2ui-loading">RUNNING QUERY…</div>
-    <div v-else-if="component.sql && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
+    <div v-if="isBound(component) && loading" class="a2ui-loading">RUNNING QUERY…</div>
+    <div v-else-if="isBound(component) && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
     <div v-else-if="points.length === 0" class="a2ui-empty">NO ROWS</div>
     <div v-else class="a2ui-linechart__wrap">
       <div class="a2ui-linechart__plot">

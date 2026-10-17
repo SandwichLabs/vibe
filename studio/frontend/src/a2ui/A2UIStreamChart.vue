@@ -9,7 +9,7 @@ import type { A2UIComponentT } from './types'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
-import { colorClass } from './query'
+import { colorClass, isBound } from './query'
 import { num } from './series'
 import { formatNumber } from '../lib/formatCell'
 
@@ -27,12 +27,12 @@ function hot(i: number): boolean {
   return threshold.value !== null && points.value[i].value > threshold.value
 }
 const latest = computed(() => points.value[points.value.length - 1])
-const live = computed(() => !!props.component.sql && Number(props.component.refresh) >= 5)
+const live = computed(() => isBound(props.component) && Number(props.component.refresh) >= 5)
 const ariaLabel = computed(() => `Stream of ${points.value.length} values; latest ${latest.value ? formatNumber(latest.value.value) : 'none'}`)
 </script>
 
 <template>
-  <A2UIChartFrame kind="stream" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error" :empty="points.length === 0" :animated="enabled" @replay="replay">
+  <A2UIChartFrame kind="stream" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error" :empty="points.length === 0" :animated="enabled" @replay="replay">
     <div class="a2ui-kchart__readout">
       <span v-if="live" class="a2ui-stream__live">● LIVE · {{ component.refresh }}s</span>
       <span v-if="latest">{{ latest.label }}</span>

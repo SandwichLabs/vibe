@@ -4,6 +4,8 @@ import NotebooksView from '../views/NotebooksView.vue'
 import NotebookView from '../views/NotebookView.vue'
 import TableBrowserView from '../views/TableBrowserView.vue'
 import QueryEditorView from '../views/QueryEditorView.vue'
+import ArtifactsView from '../views/ArtifactsView.vue'
+import ArtifactView from '../views/ArtifactView.vue'
 import SkillsView from '../views/SkillsView.vue'
 import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
@@ -29,6 +31,9 @@ const routes = [
   { path: '/connections/new', name: 'connection-new', component: ConnectionEditorView },
   { path: '/connections/:name', name: 'connection-edit', component: ConnectionEditorView },
   { path: '/queries', name: 'queries', component: QueryEditorView },
+  // Data artifacts (#162): live, parameterised views stored as artifacts/<name>/.
+  { path: '/artifacts', name: 'artifacts', component: ArtifactsView },
+  { path: '/artifacts/:name', name: 'artifact', component: ArtifactView },
   // Skills (#62) — domain context the agent loads on demand.
   { path: '/skills', name: 'skills', component: SkillsView },
   // Dedicated Agent wizard page (W0.5).

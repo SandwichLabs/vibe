@@ -6,10 +6,15 @@
 // honours the host's abort signal: a result that resolves after the page was
 // unmounted or reloaded is dropped, never applied to state that moved on.
 import { ref, shallowRef, onMounted, inject } from 'vue'
+import { ARTIFACT_RUNTIME } from './artifactRuntime'
+import { useBoundQuery } from './useBoundQuery'
 import type { A2UIComponentT } from './types'
 import { runLiveQuery, type LiveQueryResult } from './query'
 
 export function useLiveQuery(component: () => A2UIComponentT) {
+  // Inside a data artifact view the rows come from its named queries (#162).
+  const artifact = inject(ARTIFACT_RUNTIME, undefined)
+  if (artifact) return useBoundQuery(artifact, component)
   const abortSignal = inject<AbortSignal | undefined>('a2uiAbortSignal', undefined)
 
   const loading = ref(false)

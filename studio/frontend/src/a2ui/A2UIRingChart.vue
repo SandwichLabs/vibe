@@ -5,6 +5,7 @@
 // or focusing a row (or its ring) brings it forward.
 import { computed, ref } from 'vue'
 import type { A2UIComponentT } from './types'
+import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
@@ -43,7 +44,7 @@ function pct(i: number): string {
 </script>
 
 <template>
-  <A2UIChartFrame kind="rings" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error" :empty="rings.length === 0" :animated="enabled" @replay="replay">
+  <A2UIChartFrame kind="rings" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error" :empty="rings.length === 0" :animated="enabled" @replay="replay">
     <div class="a2ui-rings">
       <svg :viewBox="`0 0 ${SIZE} ${SIZE}`" class="a2ui-rings__svg" role="img" :aria-label="ariaLabel">
         <g v-for="(r, i) in rings" :key="i" :class="[seriesClass(i), { 'a2ui-rings__ring--active': selected === i }]" @mouseenter="selected = i">

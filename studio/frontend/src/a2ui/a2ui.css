@@ -580,3 +580,46 @@
 @media (prefers-reduced-motion: reduce) {
   .a2ui-page .a2ui-sankey--flowing .a2ui-sankey__packets { animation: none; opacity: 0; }
 }
+
+/* Data artifact parameter controls (#162). SchoolHouse inputs (.field-input);
+   roles only, nothing from the page reaches a style or class. */
+.a2ui-page .a2ui-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  max-width: 320px;
+  padding-right: 12px;
+}
+.a2ui-page .a2ui-control__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.a2ui-page .a2ui-control__head .a2ui-component__title { margin-bottom: 0; }
+.a2ui-page .a2ui-control__pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.a2ui-page .a2ui-control__to {
+  font-size: var(--sh-fs-xs);
+  color: var(--sh-graphite);
+}
+.a2ui-page .a2ui-control__input { width: 100%; box-sizing: border-box; }
+.a2ui-page .a2ui-control__input[aria-invalid="true"] { border-color: var(--sh-error); }
+.a2ui-page .a2ui-control__reset {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: var(--sh-fs-xs);
+  font-family: var(--sh-font-mono);
+  color: var(--sh-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.a2ui-page .a2ui-control__error { text-transform: none; letter-spacing: 0; }
+
+.a2ui-page .a2ui-control--range { min-width: 320px; max-width: 400px; }
+.a2ui-page .a2ui-control__pair .a2ui-control__input { min-width: 130px; }

@@ -128,6 +128,10 @@ func viewVariant(name string, spec componentSpec) componentSpec {
 	if isDataBound(name) {
 		delete(out.opt, "sql")
 		delete(out.opt, "connection")
+		// refresh re-runs a sql binding on a timer; a view's named queries re-run
+		// when a parameter changes, so a refresh there would promise a live
+		// chart that never refreshes.
+		delete(out.opt, "refresh")
 		out.opt["query"] = querySpec
 	}
 	for _, d := range drillable {

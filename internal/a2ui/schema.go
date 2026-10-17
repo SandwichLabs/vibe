@@ -561,6 +561,9 @@ func unknownFieldError(field, typeVal, path, allowed string, vc *ViewContext) st
 	if vc != nil && (field == "sql" || field == "connection") && isDataBound(typeVal) {
 		return fmt.Sprintf("%s.%s: %q is not allowed in a data artifact view: name one of the artifact's queries with \"query\" (the query holds the sql and the connection)", path, field, field)
 	}
+	if vc != nil && field == "refresh" && isDataBound(typeVal) {
+		return fmt.Sprintf("%s.%s: %q is not allowed in a data artifact view: its queries re-run when a parameter changes", path, field, field)
+	}
 	return fmt.Sprintf("%s.%s: %q has no such field. Allowed: %s", path, field, typeVal, allowed)
 }
 

@@ -6,6 +6,7 @@
 // motion. Hovering a ribbon isolates it.
 import { computed, ref } from 'vue'
 import type { A2UIComponentT } from './types'
+import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
@@ -73,7 +74,7 @@ const ariaLabel = computed(() => `Flow chart of ${data.value.flows.length} flows
 </script>
 
 <template>
-  <A2UIChartFrame kind="sankey" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error" :empty="data.flows.length === 0" :animated="enabled" @replay="replay">
+  <A2UIChartFrame kind="sankey" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error" :empty="data.flows.length === 0" :animated="enabled" @replay="replay">
     <div class="a2ui-sankey__wrap" :style="{ height: H + 'px' }">
       <div class="a2ui-sankey__col a2ui-sankey__col--src">
         <span v-for="(s, i) in data.sources" :key="'s' + i" class="a2ui-sankey__label" :style="{ top: topPct(srcBoxes[i]) }">{{ s.name }} <b>{{ formatNumber(s.total) }}</b></span>
