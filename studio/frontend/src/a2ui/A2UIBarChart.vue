@@ -9,7 +9,7 @@
 // animate in with the component's "motion" preset (useMotion).
 import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
-import { toPoints, colorClass, type Point } from './query'
+import { toPoints, colorClass, type Point, isBound } from './query'
 import { useLiveQuery } from './useLiveQuery'
 import { formatNumber } from '../lib/formatCell'
 import { useMotion } from './useMotion'
@@ -18,7 +18,7 @@ const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, data } = useLiveQuery(() => props.component)
 const livePoints = computed<Point[]>(() => (data.value ? toPoints(data.value.columns, data.value.rows) : []))
 
-const points = computed<Point[]>(() => (props.component.sql ? livePoints.value : (props.component.bars ?? [])))
+const points = computed<Point[]>(() => (isBound(props.component) ? livePoints.value : (props.component.bars ?? [])))
 const values = computed(() => points.value.map((p) => p.value))
 const maxV = computed(() => Math.max(...values.value))
 const minV = computed(() => Math.min(...values.value, 0))
@@ -35,8 +35,8 @@ function widthPct(i: number): number {
 <template>
   <div class="a2ui-barchart">
     <div v-if="component.label" class="a2ui-component__title">{{ component.label }}</div>
-    <div v-if="component.sql && loading" class="a2ui-loading">RUNNING QUERY…</div>
-    <div v-else-if="component.sql && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
+    <div v-if="isBound(component) && loading" class="a2ui-loading">RUNNING QUERY…</div>
+    <div v-else-if="isBound(component) && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
     <div v-else-if="points.length === 0" class="a2ui-empty">NO ROWS</div>
     <template v-else>
       <div v-for="(bar, i) in points" :key="i" class="a2ui-bar">

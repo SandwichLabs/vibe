@@ -11,6 +11,7 @@
 import { computed, inject, type ComputedRef } from 'vue'
 import type { A2UIComponentT } from './types'
 import { colorClass, clampGap } from './query'
+import A2UIControl from './A2UIControl.vue'
 import A2UIStat from './A2UIStat.vue'
 import A2UITable from './A2UITable.vue'
 import A2UIBarChart from './A2UIBarChart.vue'
@@ -22,6 +23,9 @@ import A2UIRadarChart from './A2UIRadarChart.vue'
 import A2UISankeyChart from './A2UISankeyChart.vue'
 import A2UIHeatmap from './A2UIHeatmap.vue'
 import A2UIStreamChart from './A2UIStreamChart.vue'
+
+// The data artifact parameter controls (view-only types, #162).
+const CONTROL_TYPES = new Set(['select', 'dateRange', 'numberInput', 'textInput'])
 
 const props = defineProps<{ component: A2UIComponentT }>()
 
@@ -68,6 +72,8 @@ const headingTag = computed(() => `h${props.component.level ?? 2}`)
   <div v-else-if="component.type === 'statRow'" class="a2ui-statrow">
     <A2UIComponent v-for="child in children" :key="child.id" :component="child" />
   </div>
+
+  <A2UIControl v-else-if="CONTROL_TYPES.has(component.type)" :component="component" />
 
   <A2UIStat v-else-if="component.type === 'stat'" :component="component" />
   <A2UITable v-else-if="component.type === 'table'" :component="component" />

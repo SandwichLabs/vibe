@@ -11,71 +11,15 @@
 // the component.
 import { errorText } from '../lib/errors'
 import { App } from '../lib/bindings'
+import { runPooled, _resetQueryPoolForTests, type QueryPriority } from './pool'
 
 export interface LiveQueryResult {
   columns: string[]
   types: string[]
   rows: any[][]
   error?: string
-}
-
-// --- shared concurrency pool with a priority lane (review fix, step 4a #1
-// and step 4a round 2 #5) ---
-//
-// Every A2UI data-bound component (stat/table/barChart/lineChart) and every
-// notebook sql cell fires its query through THIS one function, so gating
-// concurrency here bounds EVERY live-binding caller in the app at once —
-// chat, skills, notebooks — not just notebooks. Without it, a page with
-// many data-bound components (even after the Coerce-time cap on how many a
-// notebook may declare) mounting all at once fires that many RunA2UIQuery
-// calls simultaneously, saturating the file's one DuckDB connection and
-// making every OTHER open query wait behind all of them instead of behind
-// a small, fixed number.
-//
-// Round 2 review: a background a2ui component storm (many low-priority
-// queries) starved an explicit, user-initiated cell Run for ~15s. Fix:
-// two priority lanes. 'low' (every A2UI component's auto-fetch on mount)
-// may use at most LOW_SLOT_CAP of the MAX_CONCURRENT_QUERIES slots, so
-// RESERVED_HIGH_SLOTS is always available for 'high' work (a user clicking
-// Run, or Ctrl/Cmd+Enter, on a notebook sql cell) to start immediately —
-// never queued behind a background component backlog.
-type QueryPriority = 'high' | 'low'
-
-const MAX_CONCURRENT_QUERIES = 4
-const RESERVED_HIGH_SLOTS = 1
-const LOW_SLOT_CAP = MAX_CONCURRENT_QUERIES - RESERVED_HIGH_SLOTS
-
-let activeHigh = 0
-let activeLow = 0
-const highQueue: Array<() => void> = []
-const lowQueue: Array<() => void> = []
-
-function pump(): void {
-  while (highQueue.length && activeHigh + activeLow < MAX_CONCURRENT_QUERIES) {
-    const task = highQueue.shift()!
-    activeHigh++
-    task()
-  }
-  while (lowQueue.length && activeLow < LOW_SLOT_CAP && activeHigh + activeLow < MAX_CONCURRENT_QUERIES) {
-    const task = lowQueue.shift()!
-    activeLow++
-    task()
-  }
-}
-
-function acquireSlot(priority: QueryPriority): Promise<void> {
-  return new Promise((resolve) => {
-    const task = () => resolve()
-    if (priority === 'high') highQueue.push(task)
-    else lowQueue.push(task)
-    pump()
-  })
-}
-
-function releaseSlot(priority: QueryPriority): void {
-  if (priority === 'high') activeHigh--
-  else activeLow--
-  pump()
+  // the artifact query hit Go's 500-row cap
+  truncated?: boolean
 }
 
 // runLiveQuery executes sql through RunA2UIQuery (RunA2UIQueryIn when a
@@ -85,7 +29,7 @@ function releaseSlot(priority: QueryPriority): void {
 // or failed query resolves with `error` set rather than throwing, so callers
 // render an inline error state instead of an unhandled rejection.
 //
-// Queries queue behind the shared pool above; `priority` ('low' by default —
+// Queries queue behind the shared pool (pool.ts); `priority` ('low' by default —
 // pass 'high' for a directly user-initiated run) decides which lane. An
 // optional AbortSignal lets a caller that is about to unmount or reload
 // (NotebookView switching notebooks, a component leaving the DOM) skip a
@@ -94,35 +38,25 @@ function releaseSlot(priority: QueryPriority): void {
 // applying a stale result to state that has since moved on to different
 // content.
 export async function runLiveQuery(sql: string, signal?: AbortSignal, priority: QueryPriority = 'low', connection?: string): Promise<LiveQueryResult & { aborted?: boolean }> {
-  if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
-  await acquireSlot(priority)
+  const aborted = { columns: [], types: [], rows: [], aborted: true }
   try {
-    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
     // Notebook format v2: an optional `connection` makes that connection the
     // default catalog for the statement's unqualified names. Unset keeps the
     // original binding (the session default).
-    const res = connection
-      ? await App.RunA2UIQueryIn(sql, connection)
-      : await App.RunA2UIQuery(sql)
-    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
-    return { columns: res?.columns ?? [], types: res?.types ?? [], rows: res?.rows ?? [] }
+    const out = await runPooled(
+      () => (connection ? App.RunA2UIQueryIn(sql, connection) : App.RunA2UIQuery(sql)),
+      signal,
+      priority,
+    )
+    if (out.aborted) return aborted
+    return { columns: out.value?.columns ?? [], types: out.value?.types ?? [], rows: out.value?.rows ?? [] }
   } catch (e: any) {
-    if (signal?.aborted) return { columns: [], types: [], rows: [], aborted: true }
-    const message = errorText(e)
-    return { columns: [], types: [], rows: [], error: message }
-  } finally {
-    releaseSlot(priority)
+    if (signal?.aborted) return aborted
+    return { columns: [], types: [], rows: [], error: errorText(e) }
   }
 }
 
-// Exposed for tests only — the pool's internal queue state is module-level
-// and otherwise invisible/unresettable between test cases.
-export function _resetQueryPoolForTests(): void {
-  activeHigh = 0
-  activeLow = 0
-  highQueue.length = 0
-  lowQueue.length = 0
-}
+export { _resetQueryPoolForTests }
 
 // formatNumber (chart values/axis labels) and formatCell (table cells) moved
 // to lib/formatCell.ts — the one shared cell formatter used by every
@@ -229,4 +163,10 @@ export function clampGap(gap: unknown): number {
   const n = typeof gap === 'number' ? gap : Number(gap)
   if (!Number.isFinite(n)) return 0
   return Math.min(Math.max(n, 0), 64)
+}
+
+// isBound: a data-bound component reads its rows from a query (a notebook or
+// chat `sql`, or an artifact view's named `query`) instead of inline data.
+export function isBound(c: { [key: string]: any }): boolean {
+  return !!(c.sql || c.query)
 }

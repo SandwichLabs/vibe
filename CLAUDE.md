@@ -51,7 +51,7 @@ CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `config` (`conf
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, config, bundle, mcp, studio)
-studio/              Wails app (one bound App): app.go (core) + app_{agent,import_export,lifecycle,llm,
+studio/              Wails app (one bound App): app.go (core) + app_{agent,artifacts,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
@@ -59,7 +59,7 @@ studio/              Wails app (one bound App): app.go (core) + app_{agent,impor
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
                      and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Notebooks/Notebook,
-                     TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
+                     TableBrowser, QueryEditor, ConnectionEditor, Skills, Artifacts/Artifact, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
                      ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard);

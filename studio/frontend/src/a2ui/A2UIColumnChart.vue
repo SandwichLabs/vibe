@@ -6,6 +6,7 @@
 // percentages bound through a numeric :style, never a model string.
 import { computed } from 'vue'
 import type { A2UIComponentT } from './types'
+import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
@@ -42,7 +43,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
 
 <template>
   <A2UIChartFrame
-    kind="columns" :label="component.label" :sql="!!component.sql" :loading="loading" :error="error"
+    kind="columns" :label="component.label" :sql="isBound(component)" :loading="loading" :error="error"
     :empty="cols.length === 0 || k === 0" :animated="enabled" :legend="data.series.map((s) => s.name)"
     @replay="replay"
   >

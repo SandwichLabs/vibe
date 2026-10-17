@@ -59,6 +59,21 @@ func checkISODate(s string) error {
 	return nil
 }
 
+// Defaults is every parameter's default as Bind would bind it on now's clock
+// (dates resolved), keyed by parameter name. A UI shows these as the controls'
+// initial values and as what Reset restores.
+func Defaults(m *Manifest, now time.Time) (map[string]any, error) {
+	out := make(map[string]any, len(m.Parameters))
+	for i := range m.Parameters {
+		v, err := defaultValue(&m.Parameters[i], now)
+		if err != nil {
+			return nil, invalid("%v", err)
+		}
+		out[m.Parameters[i].Name] = v
+	}
+	return out, nil
+}
+
 // defaultValue resolves a parameter's default to the Go value Bind passes.
 func defaultValue(p *Param, now time.Time) (any, error) {
 	if p.Default == nil {

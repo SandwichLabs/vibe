@@ -113,6 +113,9 @@ interface AppApi {
   RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
   RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
   RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
+  ListArtifacts(): Promise<ArtifactSummary[]>
+  GetArtifact(name: string): Promise<ArtifactDetail>
+  RunArtifactQuery(name: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ListQueries(): Promise<QuerySummary[]>
   GetQuery(id: string): Promise<QueryDetail>
   SaveQueryOn(req: { id: string; title: string; sql: string; description: string; rev: string; connection: string }): Promise<{ id: string; rev: string }>
@@ -629,6 +632,48 @@ interface A2UIQueryResult {
   columns: string[]
   types: string[]
   rows: any[][]
+  // true when the query had more rows than the 500-row cap (Go caps; never capped again here)
+  truncated?: boolean
+}
+
+// ArtifactSummary mirrors studio.ArtifactSummary (#162): one data artifact in
+// the Artifacts list. A folder that could not be read still lists, with `error`.
+interface ArtifactSummary {
+  name: string
+  title: string
+  description: string
+  view: string
+  updated_at: string
+  rev: string
+  error?: string
+}
+
+// ArtifactParamT mirrors artifacts.Param (the manifest's parameter declaration).
+interface ArtifactParamT {
+  name: string
+  type: 'text' | 'number' | 'integer' | 'date' | 'boolean' | 'enum'
+  label?: string
+  default: string | null
+  max_length?: number
+  min?: number
+  max?: number
+  options?: string[]
+  options_query?: string
+}
+
+// ArtifactDetail mirrors studio.ArtifactDetail: an artifact opened. `view` is the
+// page Go validated and re-marshalled; `defaults` the resolved default values.
+interface ArtifactDetail {
+  name: string
+  title: string
+  description: string
+  params: ArtifactParamT[]
+  queries: { name: string; uses: string[] }[]
+  view?: { title: string; components: import('./a2ui/types').A2UIComponentT[] }
+  defaults: Record<string, string | number | boolean>
+  rev: string
+  updated_at: string
+  error?: string
 }
 
 // Mirrors internal/importer's Type/ColType/Source/Inspection/Column/Options/
