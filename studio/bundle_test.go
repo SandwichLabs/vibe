@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/bundle"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/workspace"
@@ -236,4 +237,31 @@ func TestBundleStore_TakeIsAtomic(t *testing.T) {
 		require.True(t, ok, "taking one handle leaves the others")
 		require.Len(t, s.order, 1)
 	}
+}
+
+// The store's own writes are not seen by the watcher, so an import tells the
+// Artifacts list (and an open artifact) with the event they listen for.
+func TestBundle_ImportEmitsArtifactChangedOnDisk(t *testing.T) {
+	src := newOpenApp(t)
+	view := []byte(`{"title":"T","components":[{"id":"t","type":"table","query":"rows"}]}`)
+	manifest := []byte("version: 1\ntitle: Sales\nqueries:\n  - name: rows\n    sql: SELECT 1 AS id\n")
+	require.NoError(t, src.ws.Artifacts().Put(src.ctxOrBackground(), &artifacts.Artifact{Name: "sales", ManifestText: manifest, View: view}, artifacts.WithRev("")))
+	path := filepath.Join(t.TempDir(), "out.vibe")
+	_, err := src.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{Artifacts: []string{"sales"}}})
+	require.NoError(t, err)
+
+	openOther(t, src, "Dest")
+	pv, err := src.PreviewBundleImport(path, "")
+	require.NoError(t, err)
+	ev := &eventLog{}
+	src.emit = ev.sink
+	_, err = src.CommitBundleImport(pv.Handle, BundleDecisions{})
+	require.NoError(t, err)
+
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
+	require.Len(t, ev.data["workspace:changed-on-disk"], 1)
+	payload, _ := ev.data["workspace:changed-on-disk"][0].(map[string]any)
+	assert.Equal(t, "artifact", payload["kind"])
+	assert.Equal(t, "sales", payload["id"])
 }

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
@@ -152,6 +153,8 @@ func (p *Package) noteRev(ctx context.Context, t Target, kind ItemKind, id strin
 		if sk, err := t.Skills().Get(ctx, id); err == nil {
 			rev = sk.Rev
 		}
+	case KindArtifact:
+		rev = artifactRev(ctx, t, id)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -183,14 +186,30 @@ func (p *Package) revFor(ctx context.Context, t Target, kind ItemKind, id string
 func (p *Package) Items() []PreviewItem {
 	out := make([]PreviewItem, 0, len(p.items))
 	for _, it := range p.items {
-		out = append(out, PreviewItem{Key: Key(it.Kind, it.ID), Kind: it.Kind, ID: it.ID, Title: it.Title, Size: it.Size})
+		out = append(out, PreviewItem{Key: Key(it.Kind, it.ID), Kind: it.Kind, ID: it.ID, Title: it.Title, Size: it.Size + int64(len(it.View))})
 	}
 	return out
 }
 
-func storeHas(t Target, kind ItemKind, id string) bool {
-	_, err := filestore.StatStamp(t.Root(), entryPath(kind, id))
-	return !errors.Is(err, filestore.ErrNotFound)
+// storeHas reports whether the item's files are in the workspace. An error
+// other than "not found" (a symbolic link where the folder should be, an
+// unreadable folder) is returned: the item cannot be placed safely.
+func storeHas(t Target, kind ItemKind, id string) (bool, error) {
+	paths := []string{entryPath(kind, id)}
+	if kind == KindArtifact {
+		// Either file is enough to be in the way.
+		paths = append(paths, artifacts.Dir+"/"+id+"/"+artifacts.ViewFile)
+	}
+	for _, rel := range paths {
+		_, err := filestore.StatStamp(t.Root(), rel)
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, filestore.ErrNotFound) {
+			return false, fmt.Errorf("cannot check %s: %w", rel, err)
+		}
+	}
+	return false, nil
 }
 
 func existingConnection(t Target, name string) (workspace.Connection, bool) {
@@ -234,7 +253,11 @@ func (p *Package) Preview(ctx context.Context, t Target) Preview {
 		MakerNotes: append([]string{}, p.MakerNotes...),
 	}
 	for _, it := range p.Items() {
-		it.Conflict = t != nil && storeHas(t, it.Kind, it.ID)
+		has := false
+		if t != nil {
+			has, _ = storeHas(t, it.Kind, it.ID) // an unreadable store shows at Import
+		}
+		it.Conflict = has
 		if it.Conflict {
 			p.noteRev(ctx, t, it.Kind, it.ID)
 		}
@@ -361,14 +384,33 @@ func (r *itemImporter) action(it item, clash, inStore bool) Action {
 
 func (r *itemImporter) importItem(ctx context.Context, it item) Outcome {
 	o := Outcome{Key: Key(it.Kind, it.ID), Kind: it.Kind, ID: it.ID}
-	inStore := storeHas(r.t, it.Kind, it.ID)
+	inStore, err := storeHas(r.t, it.Kind, it.ID)
+	if err != nil {
+		o.Result, o.Error = "failed", err.Error()
+		return o
+	}
 	clash := inStore || r.isTaken(it.Kind, it.ID)
 	action := r.action(it, clash, inStore)
 	switch {
 	case action == ActionSkip:
 		o.Result = "skipped"
 	case action == ActionRename && clash:
-		final := filestore.UniqueSlug(it.ID, func(c string) bool { return r.isTaken(it.Kind, c) || storeHas(r.t, it.Kind, c) })
+		var probeErr error
+		final := filestore.UniqueSlug(it.ID, func(c string) bool {
+			has, err := storeHas(r.t, it.Kind, c)
+			if err != nil {
+				probeErr = err
+				return true
+			}
+			return r.isTaken(it.Kind, c) || has
+		})
+		if final == "" {
+			o.Result, o.Error = "failed", "cannot find a free name for it"
+			if probeErr != nil {
+				o.Error = probeErr.Error()
+			}
+			return o
+		}
 		r.take(it.Kind, final)
 		o.Result, o.FinalID = r.p.write(ctx, r.t, it, final, false, r.opts.DryRun, &o)
 		if o.Error == "" {
@@ -404,6 +446,8 @@ func (p *Package) write(ctx context.Context, t Target, it item, finalID string, 
 		final, err = p.writeQuery(ctx, t, it, finalID, overwrite)
 	case KindSkill:
 		final, err = p.writeSkill(ctx, t, it, finalID, overwrite)
+	case KindArtifact:
+		final, err = p.writeArtifact(ctx, t, it, finalID, overwrite)
 	default:
 		err = fmt.Errorf("unknown kind %q", it.Kind)
 	}

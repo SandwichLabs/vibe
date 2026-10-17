@@ -37,6 +37,10 @@ acme-analytics/
 ├── skills/
 │   └── revenue-definitions/
 │       └── SKILL.md          same format as the built-in skills
+├── artifacts/
+│   └── regional-sales/       one folder per data artifact, see "Data artifacts" below
+│       ├── artifact.yaml     title, typed parameters, named queries
+│       └── view.a2ui.json    the A2UI view
 ├── data/                     local files and local .duckdb files
 ├── .gitignore                .vibe-local/, data/*.duckdb, data/*.duckdb.wal
 ├── .gitattributes            *.vnb text eol=lf
@@ -279,6 +283,10 @@ The same frontmatter as the built-in skills, so Claude Code and other tools can 
 
 Saving is lossless: frontmatter keys Vibe does not know (`allowed-tools`, `license`, `metadata`, comments) are kept as written and in order, and only blank lines around the body are trimmed, so indentation survives. Line endings are normalised to LF.
 
+### Data artifacts: `artifacts/<name>/`
+
+A data artifact is two files in a folder named for it: `artifact.yaml` (the manifest: title, typed parameters with defaults, named queries) and `view.a2ui.json` (the A2UI view). The name is a store id (1 to 64 lowercase letters, digits, `-` and `_`). Anything else in the folder is left alone. Both files are one unit: one revision covers them, and a folder with only one of them lists with an error. The formats, caps and view rules are in [artifacts.md](artifacts.md); `vibe artifact list` prints each artifact's name, title, view kind and, for a broken one, why (the same facts Studio's list shows, never a query).
+
 ## Editing from outside, and conflicts
 
 Files are the source of truth. You can edit them in an editor, `git pull`, or let Claude Code write them.
@@ -320,7 +328,8 @@ The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, 
 | `vibe workspace env status\|allow\|deny\|revoke [--workspace DIR] [--json]` | The workspace `.env` decision (see "The workspace `.env`"). `status` prints the state, variable names and the connections they feed, never values. |
 | `vibe query "<sql>" [-c conn] [--format table\|csv\|json] [--limit N] [--read-only]` | One statement through the session. `-c` makes that connection's catalog the default for unqualified names. `-` reads the statement from standard input. `--limit` defaults to 1000 (0 for all), and a cap is reported on standard error. |
 | `vibe import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. A `.vibe` file is routed to `vibe import bundle`. |
-| `vibe export bundle [-o file.vibe] [--notebooks a,b] [--queries ...] [--skills ...] [--with-connections] [--with-local-connections a,b] [--encrypt] [--force]` | Write a `.vibe` bundle of the workspace's content (everything unless some are named). Takes no hub lock: it only reads files. See "Sharing without git". |
+| `vibe export bundle [-o file.vibe] [--notebooks a,b] [--queries ...] [--skills ...] [--artifacts a,b] [--with-connections] [--with-local-connections a,b] [--encrypt] [--force]` | Write a `.vibe` bundle of the workspace's content (everything unless some are named). Takes no hub lock: it only reads files. See "Sharing without git". |
+| `vibe artifact list [--json] [--workspace DIR]` | The workspace's data artifacts: name, title, view kind and (for a broken one) the error, as Studio's Artifacts list shows them. Reads files only; there is no `vibe artifact run` or `write`. |
 | `vibe export notebook <id> [-o file.vnb]` / `vibe import notebook <file.vnb> [--on-conflict ...]` | One notebook, through the same checks as a bundle. |
 | `vibe import bundle <file.vibe> [--on-conflict rename\|overwrite\|skip] [--with-connections all\|a,b] [--dry-run]` | Import a bundle into the workspace. |
 | `vibe export <[conn.]table> \| --sql "<query>" [-o file]` | See `import-office.md`. |
@@ -335,7 +344,7 @@ The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, 
 
 ## Sharing without git: `.vibe` bundles
 
-A `.vibe` file is a **bundle**: a zip of a workspace's notebooks, queries and skills, and optionally its connection definitions, for sharing by email or chat when git is not in the picture. It is implemented by `internal/bundle`; Studio and the CLI are two front ends to it. It is a person's action: no agent tool and no MCP method can export or import a bundle (a test keeps `internal/agents`, `internal/llm` and `internal/mcp` from importing the package).
+A `.vibe` file is a **bundle**: a zip of a workspace's notebooks, queries, skills and data artifacts, and optionally its connection definitions, for sharing by email or chat when git is not in the picture. It is implemented by `internal/bundle`; Studio and the CLI are two front ends to it. It is a person's action: no agent tool and no MCP method can export or import a bundle (a test keeps `internal/agents`, `internal/llm` and `internal/mcp` from importing the package).
 
 **A bundle holds no data and no credentials.** There is no `data/` directory and no `.duckdb` file in it. Connection definitions never carry a sign-in method, a keychain reference, a fingerprint, a nonce or any per-person setting; they are read from the committed team definitions (and the "This computer" ones the person ticks) and then sanitised with the strictest rule there is, the one for the committed `vibe.yaml`: no absolute path or path outside the workspace, no `${ENV}` reference, nothing credential-shaped, and any option whose value is an absolute path is left out. A definition that cannot be made portable is left out and named in the manifest's `warnings`. The workspace's own default `local` connection is not exported, since there is no data to go with it.
 
@@ -346,8 +355,12 @@ manifest.json
 notebooks/<id>.vnb
 queries/<id>.sql
 skills/<name>/SKILL.md
+artifacts/<name>/artifact.yaml
+artifacts/<name>/view.a2ui.json
 connections.yaml            (optional)
 ```
+
+A data artifact is two entries of kind `artifact` with the same `id` (its name); they are one item in the preview, in the export counts and in Replace, and a bundle that holds only one of the two is refused. There is no `artifacts/<name>/view.html` entry: custom views do not exist yet, so the name is refused like any other unknown file.
 
 `manifest.json` has `kind: "vibe/bundle"`, `formatVersion: 2`, `createdAt`, `createdBy` (the app version), `workspaceName`, `warnings`, and `contents`: one `{path, kind, id, sha256, size}` per entry. The entries are the stores' own file bytes, so an export followed by an import into an empty workspace gives byte-identical files. `connections.yaml` is `version: 1` plus `connections:` and nothing else.
 
@@ -361,11 +374,12 @@ Studio: **Import .vibe…** in the workspace menu imports into the open workspac
 
 Import treats the file as hostile:
 
-- The set of entry names is closed: the five patterns above. Absolute paths, `..`, backslashes, drive letters, directories, symlinks, nested paths, encrypted zip entries and any unknown file refuse the whole bundle. Ids and skill names must pass the stores' own id rules.
+- The set of entry names is closed: the closed list of entries above (`manifest.json`, `notebooks/<id>.vnb`, `queries/<id>.sql`, `skills/<name>/SKILL.md`, the two files of `artifacts/<name>/`, `connections.yaml`). Absolute paths, `..`, backslashes, drive letters, directories, symlinks, nested paths, encrypted zip entries and any unknown file refuse the whole bundle. Ids and skill names must pass the stores' own id rules.
 - Every entry's SHA-256 and size must match the manifest, and the manifest must list exactly the entries in the archive.
 - Caps: 10 MB per entry, 50 MB unpacked in all, 2,000 entries, 64 MB on disk. Declared sizes are checked before decompression and the real byte count is enforced while reading, so a zip bomb is refused. An encrypted bundle's scrypt work factor is capped at 18, the value Vibe itself encrypts with; a header asking for more is refused ("this bundle was made with settings Vibe won't use").
-- Each document is parsed by its own store's rules (`notebooks.Coerce`, `queries.Decode`, `skills.Decode`) before anything is written. A skill can never claim `source: built-in` (it is imported as an ordinary skill, with a warning) and cannot take a built-in's name; every skill that arrives in a bundle is saved with `source: import` and badged **Imported** in the Skills view.
-- Writes go through `notebooks.Store`, `queries.Store` and `skills.Store`.
+- Each document is parsed by its own store's rules (`notebooks.Coerce`, `queries.Decode`, `skills.Decode`, and for an artifact `artifacts.Decode` plus `artifacts.ValidateView` over the pair) before anything is written; an artifact is written through its store with the same compare-and-write as the rest. A skill can never claim `source: built-in` (it is imported as an ordinary skill, with a warning) and cannot take a built-in's name; every skill that arrives in a bundle is saved with `source: import` and badged **Imported** in the Skills view.
+- Writes go through `notebooks.Store`, `queries.Store`, `skills.Store` and `artifacts.Store`.
+- **An imported artifact is structural only.** The bundle package cannot import the agent policy, so it checks an artifact's shape, not whether its SQL is allowed. A hostile query imports and is refused when it runs: every run, from any source, repeats the policy checks (see [artifacts.md](artifacts.md) and [agent-policy.md](agent-policy.md#data-artifacts)). Read a bundle from someone you do not know before you open its artifacts, as with its notebooks.
 - **Connections** are never added unless the person names them (Studio: tick them in the preview; CLI: `--with-connections all|a,b`). The preview shows everything a definition sets (host, database, path, region, storage scope, every option) and warns about TLS turned off, `sslmode=disable|allow|prefer`, a non-AWS endpoint for `s3`, and a storage scope that is a whole bucket. A definition always arrives **read-only**, whatever it asks for (Overwrite keeps your own read/write choice, and clears your sign-in choice and saved credential for that name, so it arrives needing credentials). They go to **This computer** for the workspace, never the committed `vibe.yaml`, and arrive with no credentials, so each shows *needs credentials* until you sign in. Move one to the team later with the usual scope move. A bundle cannot replace a team or all-workspaces connection of the same name; the imported one is renamed (`name_2`) or skipped. An imported notebook still runs its SQL when opened, as any notebook from a git pull does; read a bundle from someone you do not know before you open its notebooks.
 
 A file that is a **formatVersion 1** bundle or a file with SQLite's header gets one plain message: "This is an older .vibe file that holds data. Vibe no longer opens these." An SQLCipher container has no header at all, so it, like anything else that is not a bundle, says "this is not a Vibe bundle (an older .vibe file that held data is not opened either)". A bundle from a newer Vibe asks you to update.

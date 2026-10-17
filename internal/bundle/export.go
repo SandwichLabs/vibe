@@ -33,7 +33,7 @@ func Export(ctx context.Context, t Target, opts ExportOptions) (*ExportResult, e
 		return nil, err
 	}
 	if len(ex.items) == 0 {
-		return nil, errors.New("nothing to export: select at least one notebook, query, skill or connection")
+		return nil, errors.New("nothing to export: select at least one notebook, query, skill, data artifact or connection")
 	}
 	sort.Slice(ex.items, func(i, j int) bool { return ex.items[i].Path < ex.items[j].Path })
 	if err := ex.checkSize(); err != nil {
@@ -68,6 +68,9 @@ type exporter struct {
 // add reads and validates one stored item. An explicitly selected item that
 // cannot be exported fails the export; a listed one is skipped with a warning.
 func (ex *exporter) add(kind ItemKind, id string, explicit bool) error {
+	if kind == KindArtifact {
+		return ex.addArtifact(id, explicit)
+	}
 	rel := entryPath(kind, id)
 	data, _, err := filestore.Read(ex.t.Root(), rel)
 	if err == nil {
@@ -120,6 +123,14 @@ func exportGroups(ctx context.Context, t Target, sel Selection) []exportGroup {
 			ids := make([]string, 0, len(l))
 			for _, s := range l {
 				ids = append(ids, s.Name)
+			}
+			return ids, err
+		}},
+		{KindArtifact, sel.Artifacts, func() ([]string, error) {
+			l, err := t.Artifacts().List(ctx)
+			ids := make([]string, 0, len(l))
+			for _, a := range l {
+				ids = append(ids, a.Name)
 			}
 			return ids, err
 		}},

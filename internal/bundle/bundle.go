@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
@@ -72,6 +73,7 @@ const (
 	KindNotebook    ItemKind = "notebook"
 	KindQuery       ItemKind = "query"
 	KindSkill       ItemKind = "skill"
+	KindArtifact    ItemKind = "artifact"
 	KindConnections ItemKind = "connections"
 )
 
@@ -108,19 +110,21 @@ type Target interface {
 	Notebooks() notebooks.Store
 	Queries() queries.Store
 	Skills() skills.Store
+	Artifacts() artifacts.Store
 	AddConnection(scope workspace.Scope, def workspace.ConnectionDef) error
 	RemoveConnection(ctx context.Context, scope workspace.Scope, name string) error
 }
 
 var _ Target = workspace.Workspace(nil)
 
-// Selection says what an export takes. Notebooks, Queries and Skills are ids
-// (skill names); All takes every one of each kind and ignores them.
+// Selection says what an export takes. Notebooks, Queries, Skills and
+// Artifacts are ids (skill and artifact names); All takes every one of each kind and ignores them.
 type Selection struct {
 	All       bool     `json:"all"`
 	Notebooks []string `json:"notebooks"`
 	Queries   []string `json:"queries"`
 	Skills    []string `json:"skills"`
+	Artifacts []string `json:"artifacts"`
 	// SharedConnections adds every committed (team) vibe.yaml definition;
 	// TeamConnections names just some of them.
 	SharedConnections bool     `json:"sharedConnections"`
@@ -186,8 +190,13 @@ func classify(name string) (ItemKind, string, error) {
 		if skills.NamePattern.MatchString(parts[1]) && filestore.ValidID(parts[1]) {
 			return KindSkill, parts[1], nil
 		}
+	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile):
+		// view.html is not here on purpose: custom views do not exist yet.
+		if filestore.ValidID(parts[1]) {
+			return KindArtifact, parts[1], nil
+		}
 	}
-	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills and connection definitions)", name)
+	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills, data artifacts and connection definitions)", name)
 }
 
 func entryPath(kind ItemKind, id string) string {
@@ -198,6 +207,8 @@ func entryPath(kind ItemKind, id string) string {
 		return queries.Dir + "/" + id + queries.Extension
 	case KindSkill:
 		return skills.Dir + "/" + id + "/" + skills.File
+	case KindArtifact:
+		return artifacts.Dir + "/" + id + "/" + artifacts.ManifestFile
 	}
 	return ConnectionsName
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
-// ContentItem is one notebook, query or skill that can go in a bundle.
+// ContentItem is one notebook, query, skill or data artifact that can go in a bundle.
 type ContentItem struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
@@ -33,6 +33,7 @@ type Contents struct {
 	Notebooks     []ContentItem       `json:"notebooks"`
 	Queries       []ContentItem       `json:"queries"`
 	Skills        []ContentItem       `json:"skills"`
+	Artifacts     []ContentItem       `json:"artifacts"`
 	Connections   []ContentConnection `json:"connections"`
 }
 
@@ -41,7 +42,7 @@ type Contents struct {
 // definitions, each marked portable or not. The workspace's own default
 // database is left out: a bundle has no data to go with it.
 func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
-	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Connections: []ContentConnection{}}
+	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Artifacts: []ContentItem{}, Connections: []ContentConnection{}}
 	nbs, err := t.Notebooks().List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list notebooks: %w", err)
@@ -67,6 +68,15 @@ func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
 	for _, s := range sks {
 		if s.Error == "" && s.Source != skills.SourceBuiltin {
 			out.Skills = append(out.Skills, ContentItem{ID: s.Name, Title: s.Description})
+		}
+	}
+	as, err := t.Artifacts().List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list artifacts: %w", err)
+	}
+	for _, a := range as {
+		if a.Error == "" {
+			out.Artifacts = append(out.Artifacts, ContentItem{ID: a.Name, Title: a.Manifest.Title})
 		}
 	}
 	out.Connections = append(contentConnections("team", t.Config().Connections), contentConnections("this computer", t.Local().Connections)...)
