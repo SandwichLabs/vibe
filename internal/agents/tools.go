@@ -108,6 +108,31 @@ var Tools = []ToolDef{
 		},
 	},
 	{
+		Name:        "list_artifacts",
+		Description: "List the workspace's data artifacts (artifacts/<name>/): parameterised, live views over its connections. Each entry gives name, title, description, parameter and query counts, and a rev; a folder that cannot be read as an artifact is listed with its error. Lists definitions only, never results.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+	{
+		Name:        "get_artifact",
+		Description: "Get one data artifact as data: its manifest (title, typed parameters with defaults, named queries; a query with very long SQL comes back with sql null and sql_omitted true instead; to keep it unchanged send {\"name\": ..., \"keep_sql\": true} to write_artifact, to change it send the full new SQL), its view (an A2UI page, summarised when very large) and its rev. Never returns query results.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Artifact name, from list_artifacts"},
+		},
+	},
+	{
+		Name:        "write_artifact",
+		Description: "Author or replace a data artifact: a parameterised, live view stored as files (artifacts/<name>/artifact.yaml and view.a2ui.json) that re-runs its named queries whenever it opens or a parameter changes. Every query is read-only and vetted against the SQL policy now and again on every run; a value only ever becomes a bound parameter. Call read_skill \"data-artifacts\" first for the manifest and view format. To replace an existing artifact, send the \"rev\" that get_artifact returned: without one the write only creates, and an existing name is refused. A query returned with sql_omitted is sent back as {\"name\": ..., \"keep_sql\": true} (needs the rev) to keep its stored SQL.",
+		Category:    "content",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Artifact name: 1 to 64 lowercase letters, digits, - or _"},
+			{Name: "manifest", Type: "object", Required: true, Desc: "The manifest: {title, description?, parameters: [{name, type, default, ...}], queries: [{name, connection?, sql}]}. See the data-artifacts skill."},
+			{Name: "view", Type: "object", Required: true, Desc: "The A2UI view: {title, components: [...]}, with data bound by \"query\" (a query name), never sql. See the data-artifacts skill."},
+			{Name: "rev", Type: "string", Required: false, Desc: "The \"rev\" get_artifact or list_artifacts returned for the artifact being replaced. If it changed since, the write is refused instead of overwriting the change"},
+		},
+	},
+	{
 		Name:        "help_search",
 		Description: "Search built-in Vibe documentation for help on features, syntax, directives, templates, and more. Returns matching help topics with full content. Call with an empty query to list all topics.",
 		Category:    "introspect",

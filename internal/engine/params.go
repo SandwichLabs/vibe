@@ -22,6 +22,18 @@ func ValidateParamName(name string) error {
 	return nil
 }
 
+// ParamOccurrences returns the name of every placeholder BindParams would bind
+// in sql, one per occurrence, in text order. It reads the raw text: a $name
+// inside a string literal or a comment counts.
+func ParamOccurrences(sql string) []string {
+	locs := paramPlaceholderRe.FindAllStringSubmatchIndex(sql, -1)
+	out := make([]string, 0, len(locs))
+	for _, loc := range locs {
+		out = append(out, sql[loc[2]:loc[3]])
+	}
+	return out
+}
+
 // ParamNames returns the distinct parameter names BindParams would bind in
 // sql, in order of first appearance. It uses the same placeholder rule, so a
 // caller that needs to know which parameters a statement takes (a manifest
@@ -30,8 +42,7 @@ func ValidateParamName(name string) error {
 func ParamNames(sql string) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, loc := range paramPlaceholderRe.FindAllStringSubmatchIndex(sql, -1) {
-		name := sql[loc[2]:loc[3]]
+	for _, name := range ParamOccurrences(sql) {
 		if !seen[name] {
 			seen[name] = true
 			out = append(out, name)

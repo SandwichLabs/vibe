@@ -42,7 +42,10 @@ type putOpts struct {
 // Overwrite skips the conflict check ("overwrite" in the conflict banner).
 func Overwrite() PutOption { return func(o *putOpts) { o.overwrite = true } }
 
-// WithRev sets the revision the caller loaded, overriding a.Rev.
+// WithRev sets the revision the caller loaded, overriding a.Rev. WithRev("")
+// says the caller loaded nothing: the Put only creates (an existing artifact is
+// a conflict), and the revision the store last saw is NOT used in its place.
+// Callers that did not themselves read the artifact (the agent tools) pass it.
 func WithRev(rev string) PutOption {
 	return func(o *putOpts) { o.rev, o.hasRev = rev, true }
 }

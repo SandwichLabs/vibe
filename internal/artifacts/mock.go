@@ -92,7 +92,7 @@ func (m *Mock) Put(_ context.Context, a *Artifact, opts ...PutOption) error {
 	if o.hasRev {
 		expect = o.rev
 	}
-	if expect == "" && !o.overwrite {
+	if expect == "" && !o.overwrite && !o.hasRev {
 		expect = m.seen[a.Name]
 	}
 	if cur := m.revOf(a.Name); !o.overwrite && expect != cur {

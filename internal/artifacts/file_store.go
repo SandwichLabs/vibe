@@ -209,7 +209,7 @@ func (s *FileStore) Put(_ context.Context, a *Artifact, opts ...PutOption) error
 	if o.hasRev {
 		expect = o.rev
 	}
-	if expect == "" && !o.overwrite {
+	if expect == "" && !o.overwrite && !o.hasRev {
 		expect = s.lastSeen(a.Name)
 	}
 
