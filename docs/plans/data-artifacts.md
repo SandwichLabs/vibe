@@ -1,6 +1,6 @@
 # Data artifacts: parameterised, live views stored as files
 
-Status: **planned 2026-10-16, in progress.** Epic #162; steps 1-10 are #151-#161 (step 6a #156, 6b #157, spike #158). Builds on vibe-app#67 (A2UI), vibe-app#66 (notebooks, task mode), vibe-app#116 (the agent SQL policy), vibe-app#118 (`.vibe` bundle v2), vibe-app#168 (the `.env` allow model) and #138 (storage hardening). Level 1 (steps 1-6b) is committed work. Level 2 (steps 8-9) is **conditional on the spike in step 7**.
+Status: **planned 2026-10-16, in progress.** Epic #162; steps 1-10 are #151-#161 (step 6a #156, 6b #157, spike #158). Builds on vibe-app#67 (A2UI), vibe-app#66 (notebooks, task mode), vibe-app#116 (the agent SQL policy), vibe-app#118 (`.vibe` bundle v2), vibe-app#168 (the `.env` allow model) and #138 (storage hardening). Level 1 (steps 1-6b) is committed work. Level 2 (steps 8-9) is **conditional on the spike in step 7**: the Linux half ran 2026-10-17 (see *Spike* at the end). The iframe design is dropped; a worker reshape passed on Linux and waits on the macOS run.
 
 ## Goal
 
@@ -315,8 +315,76 @@ Three known risks and one found while grounding this plan. Step 7 measures them 
 ## Open questions and assumptions
 
 1. **DuckDB parameter typing. Answered 2026-10-16** by a throwaway program on DuckDB 1.5.6 (results in D3): an ISO string takes `DATE` in a comparison but not in a function or arithmetic (`$from::DATE` there), `LIMIT $n` takes a bound integer, and `time.Time` is not a safe fallback (it binds as `TIMESTAMPTZ`). Step 1 pins these as regression tests.
-2. **Level 2 depends on step 7.** Expect (b) to fail for the iframe. The reshape to a worker is the likely outcome; it narrows "custom HTML" to "custom drawing". The owner should confirm that the reshape is still worth building before step 8.
-3. **A Mac for the spike.** Step 7 needs Zac's Mac (arm64 at least). Without it, level 2 is not built (D10).
-4. **A CSP on Studio's own page** (candidate (a1)) is new for the whole app. If it breaks Vite HMR in dev, it may have to be production-only, which would make dev and release differ in a security property. The spike says.
+2. **Level 2 depends on step 7.** Linux result (2026-10-17): the iframe fails (a), (b) and, decisively, (d); the worker passed. Expect (b) to fail for the iframe. The reshape to a worker is the likely outcome; it narrows "custom HTML" to "custom drawing". The owner should confirm that the reshape is still worth building before step 8.
+3. **A Mac for the spike.** Step 7 needs Zac's Mac (arm64 at least). Without it, level 2 is not built (D10). Still open: the owner runs the macOS half by hand (the spike patch and run notes are attached to #158).
+4. **A CSP on Studio's own page** (candidate (a1)) is new for the whole app. If it breaks Vite HMR in dev, it may have to be production-only, which would make dev and release differ in a security property. Linux: a `frame-src 'self'` meta CSP blocked every navigation vector and did not break the dev server or HMR.
 5. **Library list.** Which charting libraries, at which versions, and their licences. Proposal: d3 modules and vega + vega-lite (BSD-3), both DOM-free for the worker shape. Owner to confirm.
 6. **Agent-authored views need an allow.** D9 treats them as untrusted. This adds a click after every agent edit. Accepted for now; revisit only if it proves painful, never by trusting model output.
+
+## Spike: custom view isolation (run 2026-10-17)
+
+Step 7 run on **Linux only** (WebKitGTK 4.1, reported WebKitGTK **2.54.1**;
+in-webview UA `AppleWebKit/605.1.15 … Version/60.5 … wails.io`). macOS (WKWebView,
+arm64) was **Not run** — no Mac to hand — which per D10 counts as a **fail**, so
+level 2 cannot be GO or RESHAPE on this run alone. Throwaway branch
+`spike/custom-view-isolation` (never merged/pushed); Wails itself was not
+modified. Method: an `AssetServer.Middleware` served `/vibe-view/spike/…` with
+the D9 CSP (+nosniff, +no-store, 400 on injection-match paths); the host logic
+was injected into Studio's own page; the untrusted parts ran in a
+`sandbox="allow-scripts"` iframe and a dedicated Worker. Ground truth is a
+loopback listener on `127.0.0.1:39247` (any request logged = escape) and a
+`SpikeProbe` Go binding that only logs (a line = IPC reached Go). "Blocked" below
+means **no request arrived at the listener / no line in the Go log**, never a
+console error. Logs saved to the scratchpad (`listener-run1.log`,
+`goprobe-run1.log`, and `-run2-a1` for the candidate-a1 run).
+
+### D10 rows
+
+| Row | Linux (WebKitGTK 2.54.1) | macOS (WKWebView) |
+|---|---|---|
+| **(a) navigation exfiltration** | **Not verified (FAIL).** Of 9 vectors, `location.href`, `location.replace`, `<a>.click()` and `<meta refresh>` navigated the sandboxed frame to the loopback listener with query data (4 `/nav` HITs). `window.open`, `top.location`, GET form submit, `data:` and `blob:` navigation did not reach the listener (sandbox has no allow-popups / allow-top-navigation). The D9 `sandbox`+`connect-src 'none'` CSP does not govern a frame navigating itself. **Candidate (a1) verified:** adding `<meta http-equiv="Content-Security-Policy" content="frame-src 'self';">` to Studio's `index.html` blocked **all 9** vectors (0 `/nav` HITs) and did not break Studio dev (app booted, HMR connected, only frame-src constrained). | Not run = fail. a1 is the only candidate that can pass on mac (no app-side nav hook); must be confirmed there. |
+| **(b) freeze** | **iframe Not verified (FAIL), worker Verified (PASS).** Worker `while(true)` was `terminate()`d after a missed heartbeat in **913 ms** and the host heartbeat never stopped → Studio stayed responsive. The iframe `while(true)` stalled the shared main thread: the host heartbeat stopped dead at `hb:85` and never resumed (unrecoverable; an iframe cannot be terminated). | Not run = fail. |
+| **(c) CSP sandbox header** | **Frame: mostly Verified.** `origin === 'null'`; `parent.document` and `top.document` both throw; `fetch`, XHR, WebSocket, the `ws://localhost:34115/wails/ipc` dev socket, `EventSource`, `<img src=http…>` and (implicitly) `new Worker` all produced **no listener HIT** → `connect-src 'none'` held. **Deviation:** `document.cookie` did **not throw** — it returned `""` (empty, no access) rather than throwing as the row's wording expects. **Worker: Verified for the property that matters** — `connect-src 'none'` held (fetch rejected, `importScripts` throws, WebSocket/XHR/nested-worker no HIT); `self.webkit` undefined. **Deviation:** the worker's `self.origin` was the real `wails://wails.localhost:34115`, **not** opaque — the CSP `sandbox` directive does not give a dedicated worker an opaque origin in WebKitGTK (immaterial: a worker has no DOM/cookies/parent, cannot navigate). | Not run = fail. DROP if the worker cannot be held to `connect-src 'none'` on mac. |
+| **(d) Wails IPC from a sub-frame** | **Not verified (FAIL) — the decisive result.** In the sandboxed opaque-origin frame `self.webkit.messageHandlers.external` is **defined**. A raw binding message `C{"name":"main.App.SpikeProbe",…}` posted from the frame **reached Go** (`SpikeProbe REACHED tag=frame-raw-ipc` in the Go log), and `BOL<url>` (runtime `BrowserOpenURL`) **launched the system browser** against the loopback listener (`/browseropen` HITs; a stray Firefox tab was left open as proof). Cause confirmed by source-reading: Wails' Linux handler (`internal/frontend/desktop/linux/window.c` `sendMessageToBackend` → `frontend.go` `startBindingsMessageProcessor`) validates `webkit_web_view_get_uri(webview)` — the **main** web view's URI — not the originating frame's, so the opaque-origin child passes the origin check. **Candidate a1 does not fix this** (it governs navigation, not the IPC channel): with the meta CSP in place the frame IPC still reached Go and still opened the browser. In the Worker, `self.webkit` is undefined (the worker cannot reach the IPC). | Not run = fail. Measure whether a sub-frame message is accepted by `userContentController:didReceiveScriptMessage` on the WKWebView. |
+
+### Extra checks (Step 7)
+
+- **Hostile SVG as `<img>` — Verified (inert).** `<img src="…hostile.svg">` with an embedded `<script>`, a `<foreignObject>` HTML subtree, an `<image href="http://127.0.0.1:…">` and a CSS `url(http://127.0.0.1:…)` rendered as an image and produced **zero** listener HITs (`/svg-script`, `/svg-image-href`, `/svg-foreignobject`, `/svg-css-url` all absent). Supports the RESHAPE path of rendering a worker-produced SVG as `<img src="blob:…">`.
+- **meta `frame-src` stops child-frame self-navigation — Verified (Linux).** See row (a): all 9 vectors blocked.
+- **Does the meta CSP break Studio — Verified not broken (Linux dev).** With only `frame-src` set (all other directives unconstrained), Studio booted, the bootstrap injected, HMR/Vite was live and the heartbeat ran normally. CodeMirror/A2UI-motion were not exercised cell-by-cell but nothing script/style/connect-related was constrained, so no breakage is expected; confirm on the shipped (non-dev) build and on mac, where WKWebView enforces meta CSP identically.
+- **(a2) native `decide-policy` handler (Linux cgo)** — **Not attempted.** It was gated on (a1) failing; a1 passed, and (d) is an independent hard fail that no navigation hook addresses, so the iframe path is dead regardless.
+
+### Provisional verdict (Linux only; macOS still required)
+
+**DROP the iframe design; the worker RESHAPE is the only survivable shape, pending macOS.**
+
+- The **iframe** shape fails three independent ways on Linux: (a) frame
+  self-navigation exfiltrates (fixable only by the app-wide meta CSP a1, which
+  mac cannot replace with anything stronger), (b) a `while(true)` freezes and
+  cannot be recovered, and — decisively — (d) the sandboxed frame reaches the
+  **full Wails binding IPC**: it can call any bound Go method and
+  `BrowserOpenURL` to exfiltrate, because Wails checks the main view's URI, not
+  the frame's. a1 does not touch (d). An iframe view is therefore not acceptable
+  at any CSP.
+- The **worker** shape passed every property measured on Linux: terminable
+  (b), `connect-src 'none'` held (c), and no IPC channel exists (`self.webkit`
+  undefined, d). Combined with the proven-inert SVG-as-`<img>` render path, the
+  D10 "RESHAPE to a worker view" ("custom drawing, not custom UI": `view.js` in a
+  terminable Worker returning an SVG document or a Go-validated A2UI page) is the
+  recommended direction.
+- This verdict is **provisional**: D10 requires both platforms, and macOS was
+  not run (= fail). Before step 8, run `scratchpad/spike/MAC-RUN.md` on Zac's Mac
+  and confirm, for the **worker** path, that `connect-src 'none'` holds and
+  `self.webkit` is undefined under WKWebView (and that a1 blocks every nav vector
+  there). Only then is RESHAPE a GO.
+
+### Wails sub-frame IPC (filed as #174)
+
+The Linux Wails binding-IPC path authorises a message by the **top web view's**
+URI, so **any** sub-frame — including a `sandbox="allow-scripts"`, opaque-origin,
+`connect-src 'none'` frame — can invoke every bound Go method and the runtime
+`BrowserOpenURL`. This is broader than the known #173 (dev-socket `CheckOrigin`
+always true): it affects the production custom-scheme IPC, not just the dev
+websocket. It does not expose Studio today (Studio embeds no untrusted frames),
+but it is the reason level-2 custom views cannot be iframes, and it is worth an
+upstream report with the `main_frame`/`is_main_frame` check the handler lacks.
