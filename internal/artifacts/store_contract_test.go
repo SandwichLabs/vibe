@@ -205,3 +205,60 @@ func TestStore_WithEmptyRevIsCreateOnly(t *testing.T) {
 		require.NoError(t, s.Put(ctx, got))
 	})
 }
+
+func TestStore_SourceReadsTheFilesAsText(t *testing.T) {
+	storeContract(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		_, err := s.Source(ctx, "ghost")
+		assert.ErrorIs(t, err, ErrNotFound)
+
+		a := newArtifact(t, "sales")
+		require.NoError(t, s.Put(ctx, a))
+		src, err := s.Source(ctx, "sales")
+		require.NoError(t, err)
+		assert.Equal(t, a.Rev, src.Rev, "the same revision Get and Put use")
+		assert.Equal(t, goodView, src.View)
+		assert.Contains(t, src.Manifest, "title: Regional sales")
+		assert.False(t, src.ManifestMissing || src.ViewMissing)
+	})
+}
+
+func TestStore_PutWritesManifestTextAsTyped(t *testing.T) {
+	storeContract(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		text := "# kept comment\n" + goodManifest
+		a := &Artifact{Name: "sales", ManifestText: []byte(text), View: []byte(goodView)}
+		require.NoError(t, s.Put(ctx, a))
+		assert.Equal(t, "Regional sales", a.Manifest.Title, "Manifest follows the text")
+		assert.Nil(t, a.ManifestText, "a successful Put consumes it")
+		src, err := s.Source(ctx, "sales")
+		require.NoError(t, err)
+		assert.Equal(t, text, src.Manifest)
+		assert.Equal(t, RevOf([]byte(text), []byte(goodView)), a.Rev)
+
+		bad := &Artifact{Name: "sales", ManifestText: []byte("title: x\nbogus: 1\n"), View: []byte(goodView)}
+		require.ErrorIs(t, s.Put(ctx, bad, WithRev(a.Rev)), ErrInvalid)
+		again, err := s.Source(ctx, "sales")
+		require.NoError(t, err)
+		assert.Equal(t, text, again.Manifest, "a refused text changes nothing")
+	})
+}
+
+func TestStore_DeleteWithRevRefusesAChangedPair(t *testing.T) {
+	storeContract(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		a := newArtifact(t, "sales")
+		require.NoError(t, s.Put(ctx, a))
+		old := a.Rev
+		a.Manifest.Title = "Edited elsewhere"
+		a.ManifestText = nil
+		require.NoError(t, s.Put(ctx, a, WithRev(old)))
+
+		require.ErrorIs(t, s.Delete(ctx, "sales", WithRev(old)), ErrConflict, "the revision the caller saw is stale")
+		_, err := s.Get(ctx, "sales")
+		require.NoError(t, err, "nothing was deleted")
+		require.NoError(t, s.Delete(ctx, "sales", WithRev(a.Rev)))
+		_, err = s.Get(ctx, "sales")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}

@@ -25,15 +25,26 @@ export function useArtifactParams(detail: () => ArtifactDetail | null, debounceM
     timers.delete(name)
   }
 
-  /** Re-derive the values for a (re)loaded artifact: kept where still valid, else the default. */
+  // The defaults the current values were derived from, so a reload can tell a value
+  // the person changed from one still sitting at the old default.
+  let loadedDefaults: Record<string, unknown> = {}
+
+  /**
+   * Re-derive the values for a (re)loaded artifact: kept where still valid, else the
+   * default. A value still at its old default follows a changed default (an edit in
+   * the Source tab), so the view shows what the file now says.
+   */
   function load(d: ArtifactDetail | null, keep = false) {
     for (const n of [...timers.keys()]) clearTimer(n)
     const previous = keep ? { ...values } : {}
+    const wasDefault = keep ? loadedDefaults : {}
+    loadedDefaults = { ...(d?.defaults ?? {}) }
     for (const k of Object.keys(values)) delete values[k]
     for (const k of Object.keys(drafts)) delete drafts[k]
     for (const k of Object.keys(errors)) delete errors[k]
     for (const p of d?.params ?? []) {
-      const kept = p.name in previous ? coerceParam(p, previous[p.name]) : undefined
+      const atOldDefault = p.name in previous && previous[p.name] === wasDefault[p.name]
+      const kept = p.name in previous && !atOldDefault ? coerceParam(p, previous[p.name]) : undefined
       if (kept?.ok) values[p.name] = kept.value
       else if (p.name in d!.defaults) values[p.name] = d!.defaults[p.name]
     }

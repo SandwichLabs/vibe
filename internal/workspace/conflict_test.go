@@ -4,11 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -235,4 +237,133 @@ func TestResolveConflict_Skill(t *testing.T) {
 		_, err := ResolveConflict(ctx, ws, sess, ConflictRequest{Kind: ConflictSkill, ID: "rules", Action: ConflictReload})
 		assert.ErrorIs(t, err, skills.ErrNotFound)
 	})
+}
+
+const conflictArtifactManifest = `version: 1
+title: Orders
+parameters:
+  - name: since
+    type: date
+    default: today-30d
+queries:
+  - name: q
+    sql: SELECT $since::DATE AS d
+`
+
+const conflictArtifactView = `{"title":"Orders","components":[{"id":"t","type":"table","query":"q"}]}`
+
+func artifactData(manifest, view string) map[string]any {
+	return map[string]any{"manifest": manifest, "view": view}
+}
+
+func TestResolveConflict_Artifact(t *testing.T) {
+	ws, sess := conflictFixture(t)
+	ctx := context.Background()
+	store := ws.Artifacts()
+	a := &artifacts.Artifact{Name: "orders", ManifestText: []byte(conflictArtifactManifest), View: []byte(conflictArtifactView)}
+	require.NoError(t, store.Put(ctx, a))
+	mine := "# mine\n" + conflictArtifactManifest
+
+	// Someone else edits only the view (the second file).
+	other := `{"title":"Elsewhere","components":[{"id":"t","type":"table","query":"q"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "artifacts", "orders", artifacts.ViewFile), []byte(other), 0o600))
+	resolve := func(action, rev string) (*ConflictResult, error) {
+		return ResolveConflict(ctx, ws, sess, ConflictRequest{Kind: ConflictArtifact, ID: "orders", Action: action, Rev: rev, Data: artifactData(mine, conflictArtifactView)})
+	}
+
+	disk, err := resolve(ConflictReload, "")
+	require.NoError(t, err)
+	assert.Equal(t, "Orders", disk.Title)
+	src, err := store.Source(ctx, "orders")
+	require.NoError(t, err)
+	assert.Equal(t, src.Rev, disk.Rev, "reload reports the pair as it is on disk")
+	assert.Equal(t, other, src.View, "and changes nothing")
+
+	// A copy leaves the original alone and never reuses a name.
+	cp, err := resolve(ConflictSaveCopy, "")
+	require.NoError(t, err)
+	assert.Equal(t, "orders-copy", cp.ID)
+	cp2, err := resolve(ConflictSaveCopy, "")
+	require.NoError(t, err)
+	assert.Equal(t, "orders-copy-2", cp2.ID)
+	got, err := store.Source(ctx, "orders-copy")
+	require.NoError(t, err)
+	assert.Equal(t, mine, got.Manifest)
+	assert.Equal(t, conflictArtifactView, got.View)
+	still, err := store.Source(ctx, "orders")
+	require.NoError(t, err)
+	assert.Equal(t, other, still.View)
+
+	// Keep mine only replaces the revision the banner was raised against.
+	_, err = resolve(ConflictOverwrite, "stale")
+	require.ErrorIs(t, err, filestore.ErrConflict)
+	won, err := resolve(ConflictOverwrite, src.Rev)
+	require.NoError(t, err)
+	after, err := store.Source(ctx, "orders")
+	require.NoError(t, err)
+	assert.Equal(t, mine, after.Manifest)
+	assert.Equal(t, conflictArtifactView, after.View)
+	assert.Equal(t, after.Rev, won.Rev)
+
+	// Deleted on disk: keep mine writes it back; reload is not a conflict.
+	require.NoError(t, store.Delete(ctx, "orders"))
+	_, err = resolve(ConflictReload, "")
+	require.ErrorIs(t, err, artifacts.ErrNotFound)
+	_, err = resolve(ConflictOverwrite, src.Rev)
+	require.NoError(t, err)
+	_, err = store.Get(ctx, "orders")
+	require.NoError(t, err)
+}
+
+func TestResolveConflict_ArtifactCopyNameFitsTheLimit(t *testing.T) {
+	long := strings.Repeat("a", artifacts.MaxNameLength)
+	for n := 1; n < 12; n++ {
+		name := artifactCopyName(long, n)
+		assert.LessOrEqual(t, len(name), artifacts.MaxNameLength)
+		assert.True(t, filestore.ValidID(name), name)
+	}
+	assert.Equal(t, "orders-copy", artifactCopyName("orders", 1))
+	assert.Equal(t, "orders-copy-3", artifactCopyName("orders", 3))
+}
+
+func TestResolveConflict_ArtifactRefusesAStructuralErrorBeforeWriting(t *testing.T) {
+	ws, sess := conflictFixture(t)
+	ctx := context.Background()
+	for _, action := range []string{ConflictOverwrite, ConflictSaveCopy} {
+		_, err := ResolveConflict(ctx, ws, sess, ConflictRequest{Kind: ConflictArtifact, ID: "orders", Action: action, Data: artifactData("title: [oops", "{}")})
+		require.ErrorIs(t, err, artifacts.ErrInvalid, action)
+	}
+	list, err := ws.Artifacts().List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, list)
+}
+
+func TestResolveConflict_ArtifactCopySkipsAnUnusableNameAndKeepMineNeedsARevision(t *testing.T) {
+	ws, sess := conflictFixture(t)
+	ctx := context.Background()
+	a := &artifacts.Artifact{Name: "orders", ManifestText: []byte(conflictArtifactManifest), View: []byte(conflictArtifactView)}
+	require.NoError(t, ws.Artifacts().Put(ctx, a))
+	// orders-copy is a symbolic link: never written through, and not a reason to give up.
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(ws.Root(), "artifacts", "orders-copy")))
+	req := ConflictRequest{Kind: ConflictArtifact, ID: "orders", Action: ConflictSaveCopy, Data: artifactData(conflictArtifactManifest, conflictArtifactView)}
+	res, err := ResolveConflict(ctx, ws, sess, req)
+	require.NoError(t, err)
+	assert.Equal(t, "orders-copy-2", res.ID)
+
+	// Keep mine with no revision, over an artifact that exists, is a conflict.
+	req.Action, req.Rev = ConflictOverwrite, ""
+	_, err = ResolveConflict(ctx, ws, sess, req)
+	require.ErrorIs(t, err, filestore.ErrConflict)
+}
+
+func TestResolveConflict_ArtifactCopyOfABadViewIsRefusedUpFront(t *testing.T) {
+	ws, sess := conflictFixture(t)
+	ctx := context.Background()
+	bad := `{"title":"x","components":[{"id":"t","type":"table","query":"nope"}]}`
+	_, err := ResolveConflict(ctx, ws, sess, ConflictRequest{Kind: ConflictArtifact, ID: "orders", Action: ConflictSaveCopy, Data: artifactData(conflictArtifactManifest, bad)})
+	require.ErrorIs(t, err, artifacts.ErrInvalid)
+	assert.NotContains(t, err.Error(), "free name")
+	list, err := ws.Artifacts().List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, list)
 }

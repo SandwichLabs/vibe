@@ -37,6 +37,8 @@ const detail = (over: Partial<ArtifactDetail> = {}): ArtifactDetail => ({
 function makeApp(d: ArtifactDetail, over: MockApp = {}) {
   const app: MockApp = {
     GetArtifact: vi.fn(async () => d),
+    GetArtifactSource: vi.fn(async () => ({ name: d.name, manifest: 'title: x\n', view: '{}', manifest_missing: false, view_missing: false, rev: d.rev, updated_at: '' })),
+    CheckArtifact: vi.fn(async () => []),
     ListArtifacts: vi.fn(async () => []),
     RunA2UIQuery: vi.fn(async () => ({ columns: [], types: [], rows: [] })),
     RunArtifactQuery: vi.fn(async (_n: string, q: string) => {

@@ -2,6 +2,8 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
 import { sql as sqlLang } from '@codemirror/lang-sql'
+import { json as jsonLang } from '@codemirror/lang-json'
+import { yaml as yamlLang } from '@codemirror/lang-yaml'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
@@ -63,6 +65,8 @@ const vibeHighlightStyle = HighlightStyle.define([
   { tag: tags.strong, fontWeight: '700', color: 'var(--vibe-syntax-heading)' },
   { tag: tags.keyword, color: 'var(--vibe-syntax-keyword)' },
   { tag: tags.atom, color: 'var(--vibe-syntax-keyword)' },
+  { tag: tags.bool, color: 'var(--vibe-syntax-keyword)' },
+  { tag: tags.propertyName, color: 'var(--vibe-syntax-heading)' },
   { tag: tags.number, color: 'var(--vibe-syntax-number)' },
   { tag: tags.string, color: 'var(--vibe-syntax-string)' },
   { tag: tags.comment, color: 'var(--vibe-syntax-comment)', fontStyle: 'italic' },
@@ -78,8 +82,8 @@ interface VibeEditorOptions {
   value?: string
   /** Called whenever the document changes. */
   onChange?: (value: string) => void
-  /** Language mode — 'markdown' (default) or 'sql' (notebook sql cells, the Query Explorer). */
-  lang?: 'markdown' | 'sql'
+  /** Language mode — 'markdown' (default), 'sql' (notebook sql cells, the Query Explorer), or 'json' / 'yaml' (the artifact Source tab). */
+  lang?: 'markdown' | 'sql' | 'json' | 'yaml'
   /** Extra key bindings layered on top of the default keymap (e.g. Ctrl/Cmd+Enter to run). */
   extraKeymap?: import('@codemirror/view').KeyBinding[]
 }
@@ -111,7 +115,8 @@ export function createVibeEditor(
     }
   })
 
-  const languageExtension = options.lang === 'sql' ? sqlLang() : markdown()
+  const languages = { markdown, sql: sqlLang, json: jsonLang, yaml: yamlLang }
+  const languageExtension = languages[options.lang ?? 'markdown']()
   const extraKeymap = options.extraKeymap ?? []
 
   const state = EditorState.create({

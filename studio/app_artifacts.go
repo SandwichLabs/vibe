@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 )
 
 // --- Data artifacts (#162) ---
@@ -49,4 +51,70 @@ func (a *App) RunArtifactQuery(name, query string, values map[string]any) (*A2UI
 		return nil, a.explainReadOnlyDenial(err)
 	}
 	return a2uiResult(rs, truncated)
+}
+
+// GetArtifactSource returns an artifact's two files as text, as they are on
+// disk, valid or not, with the one revision over both (the Source tab).
+func (a *App) GetArtifactSource(name string) (*ArtifactSource, error) {
+	store, err := a.artifactStore()
+	if err != nil {
+		return nil, err
+	}
+	return getArtifactSource(a.ctxOrBackground(), store, name)
+}
+
+// SaveArtifact writes a person's edit of both files. A manifest or view that
+// does not pass the structural checks is refused; a stale rev (either file
+// changed on disk) is a conflict; the agent policy's objections to a query come
+// back as warnings, after the save. The files are written as typed. The write
+// runs outside a.mu and completes in the workspace it started in: the store is
+// path-based, an open editor is flushed before a switch, and the old watcher is
+// stopped, so a late write is the save the person asked for.
+func (a *App) SaveArtifact(name, manifest, view, rev string) (*ArtifactSaveResult, error) {
+	env, err := a.artifactEditEnv()
+	if err != nil {
+		return nil, err
+	}
+	res, err := saveArtifact(a.ctxOrBackground(), env, name, manifest, view, rev)
+	return res, conflictErr(err)
+}
+
+// CheckArtifact is the agent-policy check of a stored artifact: the warnings a
+// save would show, for an artifact written some other way.
+func (a *App) CheckArtifact(name string) ([]string, error) {
+	env, err := a.artifactEditEnv()
+	if err != nil {
+		return nil, err
+	}
+	return checkArtifact(a.ctxOrBackground(), env, name)
+}
+
+// NewArtifact creates artifacts/<name> from a small working starter; a name
+// already in use is refused.
+func (a *App) NewArtifact(name string) (*ArtifactSource, error) {
+	store, err := a.artifactStore()
+	if err != nil {
+		return nil, err
+	}
+	return newArtifact(a.ctxOrBackground(), store, name)
+}
+
+// DeleteArtifact removes both files of an artifact, only if they are still at
+// the revision the person had open (an outside edit meanwhile is a conflict).
+func (a *App) DeleteArtifact(name, rev string) error {
+	store, err := a.artifactStore()
+	if err != nil {
+		return err
+	}
+	return conflictErr(deleteArtifact(a.ctxOrBackground(), store, name, rev))
+}
+
+// artifactStore is the open workspace's artifact store.
+func (a *App) artifactStore() (artifacts.Store, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
+	}
+	return a.ws.Artifacts(), nil
 }

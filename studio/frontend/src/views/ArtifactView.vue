@@ -5,10 +5,11 @@
 // artifact opens to its errors. The runs behind it share one pool lane that
 // never starves a person's own Run (useArtifactRuns); a workspace switch drops
 // them. Error text is text interpolation only.
-import { computed, provide, watch, onUnmounted } from 'vue'
+import { computed, provide, ref, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import A2UIPage from '../a2ui/A2UIPage.vue'
+import ArtifactSource from '../components/ArtifactSource.vue'
 import { ARTIFACT_RUNTIME, type ArtifactRuntime } from '../a2ui/artifactRuntime'
 import { useArtifact } from '../composables/useArtifact'
 import { useArtifactParams } from '../composables/useArtifactParams'
@@ -44,6 +45,12 @@ provide(ARTIFACT_RUNTIME, runtime)
 
 const page = computed(() => (detail.value && !detail.value.error ? detail.value.view : undefined))
 function refresh() { void reload(); runs.rerunAll() }
+
+// View | Source: the Source tab stays mounted so an unsaved edit survives a flip back.
+const tab = ref<'view' | 'source'>('view')
+// A save changes the files: re-read the artifact and run its queries again.
+const onSaved = refresh
+const onGone = () => router.push('/artifacts')
 </script>
 
 <template>
@@ -56,11 +63,21 @@ function refresh() { void reload(); runs.rerunAll() }
           <div v-if="detail?.description" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">{{ detail.description }}</div>
         </div>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" title="Re-run every query" data-testid="artifact-refresh" @click="refresh"><Icon name="refresh" :size="14" /> Refresh</button>
+      <div class="row" style="gap: var(--sh-space-3); align-items: center;">
+        <div class="seg" role="group" aria-label="Artifact tab">
+          <button type="button" :class="{ on: tab === 'view' }" :aria-pressed="tab === 'view'" data-testid="artifact-tab-view" @click="tab = 'view'">View</button>
+          <button type="button" :class="{ on: tab === 'source' }" :aria-pressed="tab === 'source'" data-testid="artifact-tab-source" @click="tab = 'source'">Source</button>
+        </div>
+        <button v-show="tab === 'view'" type="button" class="btn btn-ghost btn-sm" title="Re-run every query" data-testid="artifact-refresh" @click="refresh"><Icon name="refresh" :size="14" /> Refresh</button>
+      </div>
     </div>
 
-    <div style="flex: 1; overflow: auto; padding: var(--sh-space-6);">
-      <div v-if="failure" class="a2ui-error" role="alert" data-testid="artifact-failure">{{ failure }}</div>
+    <div v-show="tab === 'source'" style="flex: 1; min-height: 0; overflow: auto; padding: var(--sh-space-6);">
+      <ArtifactSource :key="name" :name="name" :active="tab === 'source'" @saved="onSaved" @gone="onGone" />
+    </div>
+
+    <div v-show="tab === 'view'" style="flex: 1; overflow: auto; padding: var(--sh-space-6);">
+      <div v-if="failure" class="artifact-failure" role="alert" data-testid="artifact-failure">{{ failure }}</div>
       <div v-else-if="loading && !detail" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
       <div v-else-if="detail?.error" class="card card-pad col" style="gap: var(--sh-space-2); border-color: var(--sh-error);" role="alert" data-testid="artifact-errors">
         <strong>This artifact can't be shown yet.</strong>
@@ -78,6 +95,7 @@ function refresh() { void reload(); runs.rerunAll() }
 </template>
 
 <style scoped>
+.artifact-failure { border: 2px solid var(--sh-error); background: var(--sh-paper-2); color: var(--sh-error); padding: var(--sh-space-3); border-radius: var(--sh-radius); }
 .artifact-errors { white-space: pre-wrap; margin: 0; color: var(--sh-error); font-size: var(--sh-fs-xs); }
 .artifact-page :deep(.a2ui-page__title) { display: none; }
 .artifact-note { font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin-bottom: var(--sh-space-3); }

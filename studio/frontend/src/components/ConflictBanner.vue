@@ -8,7 +8,7 @@ import Icon from './Icon.vue'
 import { askConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
-  kind: 'notebook' | 'query' | 'skill'
+  kind: 'notebook' | 'query' | 'skill' | 'artifact'
   // Workspace-relative file, e.g. notebooks/weekly-revenue.vnb.
   path: string
   // The file was deleted on disk rather than changed.
@@ -17,7 +17,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ reload: []; overwrite: []; saveCopy: [] }>()
 
-const thing = computed(() => ({ notebook: 'notebook', query: 'query', skill: 'skill' })[props.kind])
+const thing = computed(() => ({ notebook: 'notebook', query: 'query', skill: 'skill', artifact: 'artifact' })[props.kind])
 
 async function reload() {
   const ok = await askConfirm({
