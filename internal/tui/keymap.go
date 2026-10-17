@@ -16,6 +16,7 @@ type KeyMap struct {
 	NavDown     key.Binding
 	HistoryUp   key.Binding
 	HistoryDown key.Binding
+	Edit        key.Binding
 }
 
 // ShortHelp returns key bindings for the short help view.
@@ -27,7 +28,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.SwitchView, k.NavUp, k.NavDown, k.Select, k.Back},
-		{k.HistoryUp, k.HistoryDown},
+		{k.HistoryUp, k.HistoryDown, k.Edit},
 		{k.Help, k.Quit, k.ForceQuit},
 	}
 }
@@ -74,6 +75,10 @@ func DefaultKeyMap() KeyMap {
 		HistoryDown: key.NewBinding(
 			key.WithKeys("down"),
 			key.WithHelp("↓", "REPL history down"),
+		),
+		Edit: key.NewBinding(
+			key.WithKeys("ctrl+o"),
+			key.WithHelp("ctrl+o / \\e", "edit query in $EDITOR"),
 		),
 	}
 }

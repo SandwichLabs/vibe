@@ -45,12 +45,12 @@ ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture
 
 Keep the Wails CLI at the `github.com/wailsapp/wails/v2` version in go.mod (v2.16.0; CI and release pin it as `WAILS_VERSION`). Wails v2.16 loads Go 1.27, so the old `WAILS_GOTOOLCHAIN` pin (vibe-app#92) is gone.
 
-CLI: `vibe workspace init`, `query`, `import`, `export`, `conn`, `artifact` (`artifact list`, mirrors the Artifacts list), `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
+CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapshot`), `import`, `export`, `conn`, `artifact` (`artifact list`, mirrors the Artifacts list), `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 
 ## Architecture
 
 ```
-cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, mcp, studio)
+cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go (the logic behind the data artifact bindings: list, open, run, edit, save, delete), agent_turn.go (the in-flight chat turn and its cancel),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
@@ -75,6 +75,8 @@ internal/
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
   skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)
   llm/               in-app agent runner (fantasy), task mode, grounding
+  editor/            $VISUAL/$EDITOR hand-off for the TUI REPL (ctrl+o, \e) and `vibe query --edit`; scratch buffers in .vibe-local/edit/
+  lsp/               `vibe lsp`: stdio Language Server (completion, hover) over a catalog snapshot (.vibe-local/catalog.json) the TUI or `vibe lsp snapshot` writes; opens no database and writes no file
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json}` under one two-file revision; structure only, SQL vetting lives in `internal/agents`
@@ -86,6 +88,7 @@ internal/
   selfupdate/        release check + install.sh-driven apply (opt-in, confirmed; manifest-based install detection; Service wires prefs); `vibe update`, Studio's About > Updates
   buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
   docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
+editors/            Neovim plugin, Helix and eglot setup for `vibe lsp` (`docs/reference/editor.md`)
 legal.go            repo-root package embedding LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md (`task notices`)
 docs/                see docs/README.md
 ```
