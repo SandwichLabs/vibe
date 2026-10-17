@@ -79,6 +79,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>
     </div>
+    <div v-if="isBound(component) && loading" class="a2ui-loading" role="status">RUNNING QUERY…</div>
     <div v-if="drill.error.value" class="a2ui-error" role="alert" data-testid="a2ui-drill-error">{{ drill.error.value }}</div>
   </A2UIChartFrame>
 </template>

@@ -120,3 +120,28 @@ Leaving the Source tab with unsaved text asks first. In a warning, the workspace
 ## Authoring with the agent
 
 The agent (Studio chat or an MCP client) writes artifacts with `write_artifact` and reads them with `list_artifacts` and `get_artifact` (see [mcp.md](mcp.md#data-artifact-tools) and [agent-policy.md](agent-policy.md#data-artifacts)); the built-in `data-artifacts` skill (`read_skill`) teaches the format. Every query is held to the agent's read policy when it is saved and again on every run, so an artifact written by hand, by git or by a bundle is held to it too. The tools never return query results.
+
+## Running an artifact
+
+A run belongs to the person's UI (Studio's `RunArtifactQuery` binding); no agent tool and no MCP method runs one. The steps, in order:
+
+1. The artifact is loaded from the store, so what runs is what is on disk.
+2. `artifacts.Bind` turns the query name and the raw values into the manifest's SQL text, unchanged, plus bound parameters. A value of the wrong shape (a date that is not one, a number past `max`, a value outside an `enum`, a name that is no parameter) is refused here.
+3. The save-time checks repeat on the statement and its connection (one statement, every `$name` a parameter token, no parameter as the argument of `query(...)`, `query_table(...)` or a file reader), and the read-only SQL policy classifies the statement with the actual values. A policy refusal shows the fixed "live bindings are read-only" text, and its reason goes to the debug log and to the Source tab's warnings. A lexical, binding or connection refusal shows its own short reason (never the SQL).
+4. The statement runs read-only in every sandbox tier (a tier changes what the agent may *write*, not what an artifact may), at most 30 seconds, and returns at most 500 rows.
+
+Because step 3 runs every time, a manifest edited by hand, pulled from git or imported from a bundle is held to the same policy as one the agent saved. Nothing is trusted because it "was vetted once".
+
+## Sharing
+
+- **Git.** `artifacts/` is ordinary workspace content; commit it with the rest.
+- **Bundles.** A `.vibe` bundle carries artifacts as two entries each (`artifacts/<name>/artifact.yaml` and `view.a2ui.json`). Import checks structure only; the SQL is vetted when it runs ([workspaces.md](workspaces.md#sharing-without-git-vibe-bundles)).
+- **CLI.** `vibe artifact list [--json]` mirrors the Artifacts list (name, title, view kind, error; never SQL). `vibe export bundle --artifacts a,b` exports. There is no CLI run or write.
+
+## Credentials
+
+An artifact holds no credential. A query names a connection; the connection's sign-in is resolved by the session as for any query. A connection password or `.env` value never appears in an artifact error, in `get_artifact` or `list_artifacts`, in a log line or in a bundle (an end-to-end test audits each, `internal/hub/artifacts_e2e_test.go`; it covers credentialed connections that fail before attaching, since no network or database extension is available to a plain `go test`).
+
+## Not built: custom views
+
+The plan's level 2 (a `view.html` or a worker-drawn view with a query bridge) is **not built**. The Linux spike dropped the iframe design (a sandboxed frame can reach Wails' binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)); a terminable-worker reshape passed on Linux and waits on a macOS run ([#158](https://github.com/SandwichLabs/vibe/issues/158)). A `view.html` in a bundle is refused as an unknown entry. See the spike section of the [plan](../plans/data-artifacts.md#spike-custom-view-isolation-run-2026-10-17).

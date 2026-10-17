@@ -140,6 +140,8 @@ Still planned: HTML/PDF/xlsx snapshot export (#73).
 
 ## A2UI component reference
 
+A page with parameter controls, a pivot or drill-down, fed by named queries, is a [data artifact](artifacts.md) view, not a notebook cell: those components exist only there (see [Artifact view components](#artifact-view-components)).
+
 A2UI is the `internal/a2ui` package: a closed, validated component schema an
 agent (or a hand-authored a2ui cell) uses to describe a small dashboard. Go
 validates; Vue renders. **Model output never reaches a style attribute** —

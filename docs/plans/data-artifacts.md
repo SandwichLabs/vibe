@@ -1,6 +1,6 @@
 # Data artifacts: parameterised, live views stored as files
 
-Status: **planned 2026-10-16, in progress.** Epic #162; steps 1-10 are #151-#161 (step 6a #156, 6b #157, spike #158). Builds on vibe-app#67 (A2UI), vibe-app#66 (notebooks, task mode), vibe-app#116 (the agent SQL policy), vibe-app#118 (`.vibe` bundle v2), vibe-app#168 (the `.env` allow model) and #138 (storage hardening). Level 1 (steps 1-6b) is committed work. Level 2 (steps 8-9) is **conditional on the spike in step 7**: the Linux half ran 2026-10-17 (see *Spike* at the end). The iframe design is dropped; a worker reshape passed on Linux and waits on the macOS run.
+Status: **level 1 delivered 2026-10-17 (steps 1-6b and 10); level 2 not built.** Epic #162; steps 1-10 are #151-#161 (step 6a #156, 6b #157, spike #158). Builds on vibe-app#67 (A2UI), vibe-app#66 (notebooks, task mode), vibe-app#116 (the agent SQL policy), vibe-app#118 (`.vibe` bundle v2), vibe-app#168 (the `.env` allow model) and #138 (storage hardening). Level 1 (steps 1-6b, and the step 10 end-to-end and docs sweep) is delivered; see *As built (level 1)*. Level 2 (steps 8-9) is **conditional on the spike in step 7**: the Linux half ran 2026-10-17 (see *Spike* at the end). The iframe design is dropped; a worker reshape passed on Linux and waits on the macOS run.
 
 ## Goal
 
@@ -388,3 +388,23 @@ always true): it affects the production custom-scheme IPC, not just the dev
 websocket. It does not expose Studio today (Studio embeds no untrusted frames),
 but it is the reason level-2 custom views cannot be iframes, and it is worth an
 upstream report with the `main_frame`/`is_main_frame` check the handler lacks.
+
+## As built (level 1)
+
+Level 1 shipped in PRs #164 (step 1), #165 (2), #167 (3), #169 (4), #170 (5), #171 (6a), #172 (6b) and the step 10 sweep. Where the code differs from the plan above, or the plan was wrong:
+
+- **Agent writes never replace a version they did not read.** `WithRev("")` is create-only in the artifacts store; to replace, `write_artifact` takes the `rev` from `get_artifact`. The store's last-seen revision is never a fallback. The same hole in `create_or_update_skill` is #166.
+- **`keep_sql`.** `get_artifact` never returns part of a query over 4000 runes (`sql: null`, `sql_omitted`); `write_artifact` with `keep_sql: true` and a `rev` keeps the stored SQL byte for byte, and it is vetted again.
+- **One vet path.** Save (`VetArtifact`) and run (`RunArtifactQuery`) share `checkArtifactStatement`, with lexer checks on the policy's own lexer and `readOnlyVerdict` extracted unchanged from `RunReadOnlySQLIn`. The save vet runs with every parameter at its default; the run vet classifies with the actual values.
+- **A policy refusal does not refuse a person's save.** In Studio's Source tab a query the read policy refuses saves, with the policy's reason (paths scrubbed) as a warning; the run still refuses with the fixed text. Structural errors do refuse.
+- **The save vet connects on first use.** A query on a connection that cannot connect (no sign-in, a changed server, offline) is refused at save, and at run, as "not attached". The vet connects a pending connection like any query, so `write_artifact` fails while a source is offline; Studio's Save turns this into a warning. The reason (for example "the server changed since you signed in") is visible only in the connection's status, not in the refusal.
+- **The needle audit's limit.** The audit covers credentialed connections that fail before attaching: plain `go test` has no postgres or httpfs extension and no network, so no credentialed connection is attached and the paths where a password would travel (the secret, an ATTACH string, a driver error after a dial) are not exercised. An `integration`-tagged variant on `miniotest` with an S3 secret-key needle would cover them.
+- **The renderer draws what Go validated.** `artifacts.RenderView` re-marshals the validated view; the raw file bytes are never rendered (Go and JS disagree on lone surrogates).
+- **Run path details.** Studio's `RunArtifactQuery` binding has a 30 s timeout (`a2uiQueryTimeout`); the handler caps results at 500 rows; Studio runs artifact queries in the low lane with one in flight and one waiting per query. Errors from a run are not scrubbed of store paths, which is acceptable in Studio's own UI; a level-2 bridge would have to use fixed text.
+- **Drill and pivot.** `drill` is valid on `table`, `barChart`, `columnChart` and `pivot` as planned, and refused without `query`; a refused drilled value shows a note naming it and runs nothing. A pivot never aggregates; duplicate cells are an error.
+- **Two-file writes.** The view is written first, the manifest second, with the view rolled back if the manifest write conflicts. A crash between the two leaves a pair that fails validation and lists with its error.
+- **Bundles.** Exactly the two entries per artifact; `view.html` and any other name refuse the bundle. Import is structural only (the bundle package cannot import the agent policy); a hostile query imports and is refused when it runs.
+- **MCP.** There is no `run_artifact` tool (the *Later* item), so "refused at run, MCP included" in step 10 is tested as: over MCP in each tier a write statement or file read is refused at `write_artifact`, and no tool lists or runs results. The run itself is tested on `Handler.RunArtifactQuery` in each tier.
+- **docsref** reverse check for A2UI components could never fail before step 2; fixed and scoped.
+- **Step 10 UI polish** (carried from review): bar chart row label padding, column chart focus ring in dark mode, and the "RUNNING QUERY" note on re-run in the column chart.
+- **Not done:** the optional captioned Rodney walkthrough video (cost); level 2 (steps 8-9), pending the macOS spike run (#158) and Wails sub-frame IPC (#174).

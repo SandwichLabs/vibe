@@ -644,8 +644,11 @@
 }
 .a2ui-page .a2ui-drill--current { font-weight: 700; }
 .a2ui-page .a2ui-drill--cell { padding: 2px 4px; margin: -2px -4px; }
-.a2ui-page .a2ui-columns__col.a2ui-drill-row { border-radius: var(--sh-radius-sm); padding: 2px; position: relative; z-index: 0; }
-.a2ui-page .a2ui-columns__col.a2ui-drill-row:focus-visible { z-index: 1; }
+.a2ui-page .a2ui-columns__col.a2ui-drill-row { border-radius: var(--sh-radius-sm); padding: 3px; position: relative; z-index: 0; }
+.a2ui-page .a2ui-columns__col.a2ui-drill-row:focus-visible { z-index: 1; outline-width: 3px; outline-offset: -3px; }
+/* The current-row edge (3px) and the focus ring (2px) sit on a bar row's first
+   letter without this. */
+.a2ui-page .a2ui-bar.a2ui-drill-row .a2ui-bar__label { padding-left: 6px; }
 
 /* pivot (#162) */
 .a2ui-page .a2ui-pivot__note { font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin-bottom: 4px; }
