@@ -244,6 +244,7 @@ describe('drill review round 1', () => {
     await nextTick()
     expect(wrapper.findAll('.a2ui-bar')).toHaveLength(4)
     expect(wrapper.findAll('.a2ui-columns__col')).toHaveLength(4)
+    expect(wrapper.find('[data-testid=a2ui-columns] .a2ui-loading').text()).toContain('RUNNING QUERY')
     expect(wrapper.find('table.a2ui-pivot').exists()).toBe(true)
     const first = setup([tbl], {})
     first.states.get('q')!.loading = true

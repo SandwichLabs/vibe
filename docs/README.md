@@ -27,7 +27,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic #157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode |
 | [`plans/ducklake-catalogs.md`](plans/ducklake-catalogs.md) | Plan for #118 (DuckLake catalogs in SQLite and in object storage, with a storage dependency); delivered in PRs #119-#125, released in v0.1.3 |
 | [`plans/storage-setup-and-sso.md`](plans/storage-setup-and-sso.md) | Plan for #130 (set up the storage connection from the lake form) and #131 (AWS SSO sign-in for S3); delivered in nine steps (PRs #132-#147, released in v0.1.4 with SSO as a preview); real IAM Identity Center verification and the close-out list are in the plan |
-| [`plans/data-artifacts.md`](plans/data-artifacts.md) | Plan for epic #162 (data artifacts): parameterised, live views stored as `artifacts/<name>/` files, with named queries bound by value only, agent and MCP tools, Studio controls, pivot and drill-down, and a conditional custom-view level gated on an isolation spike |
+| [`plans/data-artifacts.md`](plans/data-artifacts.md) | Plan for epic #162 (data artifacts; level 1 delivered, level 2 not built): parameterised, live views stored as `artifacts/<name>/` files, with named queries bound by value only, agent and MCP tools, Studio controls, pivot and drill-down, and a conditional custom-view level gated on an isolation spike |
 | [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
 | [`plans/code-mode.md`](plans/code-mode.md) | Proposal: a `run_code` tool where the agent writes a program that calls the Vibe tools in a sandbox, through the same gates (not built; review notes in §13 favour a Starlark or SQL result-handle spike before Monty) |
@@ -47,7 +47,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/mcp.md`](reference/mcp.md) | `vibe mcp serve` (stdio/SSE), client config, SSE auth |
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |
 | [`reference/notebooks.md`](reference/notebooks.md) | Notebooks and the A2UI component reference |
-| [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down |
+| [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down, running, sharing |
 | [`reference/import-office.md`](reference/import-office.md) | Import (CSV/TSV/XLSX) and export |
 | [`reference/templates.md`](reference/templates.md) | Starter templates |
 | [`reference/themes.md`](reference/themes.md) | Studio themes |

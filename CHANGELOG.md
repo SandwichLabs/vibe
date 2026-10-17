@@ -4,6 +4,14 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **Data artifacts.** A parameterised, live view stored as files in `artifacts/<name>/` (`artifact.yaml` with typed parameters and named queries, plus an A2UI `view.a2ui.json`). Parameter controls (select, date range, number, text), a `pivot` crosstab and drill-down re-run only the queries that use a changed parameter. Studio has an Artifacts list, a view and a Source tab with conflict handling; the agent and MCP clients author with `write_artifact`, `list_artifacts` and `get_artifact` (no tool runs an artifact); `.vibe` bundles carry them; `vibe artifact list` and `vibe export bundle --artifacts` mirror the UI. A value is only ever a bound parameter, and every query is checked against the read-only SQL policy when it is saved and again on every run, so a hand-edited, pulled or bundled artifact is held to it too. See `docs/reference/artifacts.md`. ([#162](https://github.com/SandwichLabs/vibe/issues/162))
+
+### Changed
+
+- The data artifact plan records that custom (level 2) views are not built: the sandboxed-iframe design was dropped after the Linux isolation spike (a frame can reach the Wails binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)); a worker reshape awaits a macOS run ([#158](https://github.com/SandwichLabs/vibe/issues/158)).
+
 ## [0.1.4] - 2026-10-16
 
 ### Added
