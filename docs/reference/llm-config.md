@@ -3,7 +3,7 @@
 The in-app wizard agent's model provider is **app-global and viper-driven**:
 configure it once in Studio's Settings → App (which edits `~/.vibe.yaml`), `vibe config llm`, `~/.vibe.yaml` itself (or via `VIBE_*` environment variables) and
 every workspace you open uses it. (The agent *sandbox* — read-only / read-write /
-full — and the "Ask before changes" switch (#79, on by default: the
+full — and the "Ask before changes" switch (vibe-app#79, on by default: the
 agent shows every write for approval before it runs) are per-workspace
 settings, since they're a security boundary for that specific workspace; the
 workspace's `vibe.yaml` can cap them for everyone. Both live in Studio's
@@ -123,7 +123,7 @@ export VIBE_LLM_MODEL=my-local-model
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_API_KEY`, `CLOUDFLARE_API_TOKEN`), so secrets stay out of config files.
 An explicit `VIBE_LLM_API_KEY` takes precedence. See "API key" below.
 
-## API key (#114)
+## API key (vibe-app#114)
 
 The key lives in your **OS keychain** (macOS Keychain, Windows Credential
 Manager, Linux Secret Service), never in a config file, a log or the agent's

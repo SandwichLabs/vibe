@@ -143,7 +143,7 @@ The worker must obey the same rules as the `vibe` binary. [vibe]
 3. Install it with `install.sh`. Remove it with the uninstall steps in `docs/install.md`.
 4. Stamp its SHA-256 into `vibe` with `ldflags`. Verify the digest before the first worker starts.
 5. Find it only next to the running `vibe` executable. Do not search `PATH`, and do not read an environment variable for the path.
-6. Sign and notarize it with the app when the signed release comes (epic #77).
+6. Sign and notarize it with the app when the signed release comes (epic #4).
 
 ### 5.5 Licence notices
 

@@ -238,7 +238,7 @@ rodney ax-node "#submit-btn" --json
 
 ---
 
-## Driving Vibe Studio (workspaces, #111)
+## Driving Vibe Studio (workspaces, vibe-app#111)
 
 Studio has no file to unlock any more: it starts at the **launcher** and opens a workspace *folder*.
 

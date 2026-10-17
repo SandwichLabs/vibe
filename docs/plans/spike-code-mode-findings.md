@@ -189,7 +189,7 @@ These give the strongest isolation and full Python. But Docker is not on every d
 |---|---|---|
 | `monty-go` is a community project with one maintainer. | The binding can fall behind Monty releases. | Do not depend on it. Vibe writes and owns its own client ([monty-client.md](monty-client.md)). Keep `starlark-go` as the fallback behind the same interface. |
 | Monty releases change the snapshot format. | Old snapshots do not load. | Keep snapshots only while a run waits for approval. Store the worker version with the snapshot. Discard snapshots after an upgrade. |
-| The worker binary adds size and a new executable to the release. | Larger tarball. macOS Gatekeeper can block an unsigned helper. | Measure the size. Sign and notarize the helper with the app in the signed release (epic #77). |
+| The worker binary adds size and a new executable to the release. | Larger tarball. macOS Gatekeeper can block an unsigned helper. | Measure the size. Sign and notarize the helper with the app in the signed release (epic #4). |
 | A future Vibe target (for example Windows) has no Monty worker build. | Code mode is not available there. | Code mode is optional. The normal tool path always works. |
 | The model writes Python that the subset does not support. | Extra turns. | Supply type stubs. Return Monty errors in the tool result. State the subset in the tool description. |
 | A host function becomes a new path around a gate. | A policy bypass. | Each host function calls the existing dispatcher. A test proves that each gate has the same result for a direct call and a code call. |

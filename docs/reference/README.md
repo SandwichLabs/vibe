@@ -24,8 +24,8 @@ workspace schema must appear here.
 
 > **Direction note.** Per [`../direction.md`](../direction.md), the page
 > system (`pages.md`, page directives, the web preview server, the Studio page
-> editor/runtime views) was retired in #69 — Notebooks (#66) and A2UI artifacts
-> (#67) are the only authoring surface now. Older data-holding `.vibe` files (and their pages) are not opened or
-> imported at all (#110 was dropped), so there is nothing left to document about pages. Forms, banded reports, macros, the switchboard, and App Mode —
-> the Access application layer — were removed in #68. Do not reintroduce either
+> editor/runtime views) was retired in vibe-app#69 — Notebooks (vibe-app#66) and A2UI artifacts
+> (vibe-app#67) are the only authoring surface now. Older data-holding `.vibe` files (and their pages) are not opened or
+> imported at all (vibe-app#110 was dropped), so there is nothing left to document about pages. Forms, banded reports, macros, the switchboard, and App Mode —
+> the Access application layer — were removed in vibe-app#68. Do not reintroduce either
 > surface.

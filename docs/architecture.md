@@ -43,7 +43,7 @@ DuckDB allows one writing process per database file. So one process owns a works
 Everything the agent can do is a `ToolDef` in a single registry (`internal/agents`): run a query, describe a table, create a record, author a notebook cell, read a skill, and so on. Studio's chat agent (`internal/llm`, built on `charmbracelet/fantasy`) and external MCP clients (`internal/mcp`) consume the same registry and pass through the same gating:
 
 - **Sandbox tiers:** `read-only`, `read-write`, `full`.
-- **SQL allow-list:** the agent's SQL is parsed and checked against what the tier permits before DuckDB ever binds it. Your own SQL in the editor is not restricted.
+- **SQL allow-list:** the agent's SQL is parsed and checked against what the tier permits before DuckDB ever binds it. Your own SQL in the query editor is not restricted; notebook cells and live bindings re-run under the read-only policy.
 - **Three-gate writes:** the tier allows it, the connection is writable and you approve it; approval is always required for anything that is not a local file.
 - **Guardrails:** answers must be grounded in a query, empty results are explained, tool results are size-budgeted.
 
@@ -54,6 +54,7 @@ Reference: [agent policy](reference/agent-policy.md), [MCP](reference/mcp.md).
 - **Notebooks** are JSON documents of `sql`, `markdown` and `a2ui` cells. They store questions, not answers: every data cell re-runs when you open the notebook, and outputs are never saved.
 - **Skills** are `SKILL.md` documents describing what your metrics mean. The agent sees a name and a line, and loads the body on demand.
 - **A2UI artifacts** are small, validated component specs (stats, tables, charts) bound to live SQL. The Go validator rejects unknown fields and the frontend draws them with hand-written CSS and SVG, so model output never reaches a style attribute (`internal/a2ui`). Reference: [notebooks and A2UI](reference/notebooks.md).
+- **Data artifacts** are parameterised, live views stored as files in `artifacts/<name>/` (`artifact.yaml` plus `view.a2ui.json`): typed parameters and named queries that are bound by value, never pasted into SQL. Every query is checked against the read-only SQL policy when it is saved and again on every run. Reference: [data artifacts](reference/artifacts.md).
 
 ## The programs
 

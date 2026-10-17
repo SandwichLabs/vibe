@@ -5,7 +5,7 @@ Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that
 - **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
 - **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port (Settings → Workspace → Claude and other tools). A write that needs approval shows the same approval card the chat agent uses, in the Studio window; the card waits for you, and a declined or unanswered card changes nothing.
 
-Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (#63, #70, #79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
+Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (vibe-app#63, vibe-app#70, vibe-app#79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
 
 ## `vibe mcp serve`
 
@@ -72,7 +72,7 @@ A client reads the format with `read_skill` `data-artifacts`. `write_artifact` w
 
 Studio, opening a workspace a headless `vibe mcp serve` owns, can offer to take over: `hub.TakeOver(ctx, ws, "Vibe Studio", timeout)` signals the server (`SIGUSR1`; on Linux through a pidfd, re-verifying the lock still names that pid after the pid is pinned, so a recycled pid is never signalled; it checks it is a live owner on this host that advertised release control; if a client auto-reconnects and a different releasable owner appears while waiting, that one is asked too), the server closes its session, releases the lock and **exits with status 0**, and Studio gets the lock. The Claude session that was using it sees its server end and must reconnect (Claude Code: `/mcp`; Claude Desktop: restart the server or the app); the reconnected `vibe mcp serve` then proxies to Studio. Nothing is deleted, and open notebooks are plain files so they are unaffected.
 
-### For Studio (#111)
+### For Studio (vibe-app#111)
 
 ```go
 hold, err := hub.AcquireHub(ws, hub.AppStudio, hub.WithReleaseHandler(onReleaseRequested))
@@ -88,7 +88,7 @@ cfg, _ := hub.BuildClaudeConfig(ws.Root(), exe)   // exe from hub.LocateVibe()
 holder, err := hub.ReadHolder(ws.Root())          // who holds it, without the lock
 ```
 
-How #111 wires it (`studio/workspace.go`):
+How the workspace launcher wires it (`studio/workspace_open.go` and `studio/workspace_mcp.go`; the old vibe-app#111):
 
 1. **Opening a workspace:** `AcquireHub` first. On `ErrHubHeld`, read `held.Holder` and show the read-only banner (SPEC 7 C): "Open read-only" opens `workspace.Open` only (stores are files, so notebooks/queries/skills stay editable) and does **not** call `OpenSession` for the local `duckdb` connections, which show `locked-by(pid)`; "Take over" calls `TakeOver`, then continues as the owner. `ErrNotReleasable` or a timeout is shown as the reason, never a hang.
 2. **Releasable owner:** pass `WithReleaseHandler` (one per process; Studio holds one workspace at a time). The handler must ask the person if needed, close the session, stop MCP, `Release()`, and switch the window to the launcher or read-only. A second releasable hold in the process is an error (`ErrOneReleasableHold`).
@@ -173,9 +173,15 @@ See "Copy Claude config" above: no passphrase and no token are needed. The older
 ## Tool list
 
 `vibe mcp serve` (owner or proxy) and Studio's SSE server all advertise exactly
-`agents.ListToolsForMode(agents.ModeMCP)` — every non-task-mode tool
-(`run_query`, `list_connections`, `introspect_schema`, `describe_table`, `create_record`,
-`create_table`, `present_data`, skills, notebook-authoring tools, etc.).
+`agents.ListToolsForMode(agents.ModeMCP)`, which is every tool that is not task-mode only. Call `tools/list` for the live set. By category (the sandbox tier that allows each is in [agent-policy.md](agent-policy.md#what-each-tier-allows)):
+
+| Category | Tools |
+|---|---|
+| introspect (every tier) | `list_connections`, `introspect_schema`, `describe_table`, `list_notebooks`, `get_notebook`, `list_queries`, `list_skills`, `read_skill`, `list_artifacts`, `get_artifact`, `help_search`, `propose_schema`, `present_data` |
+| data | `run_query`, `create_record`, `update_record`, `delete_record`, `bulk_insert` |
+| content | `add_query_cell`, `create_dashboard`, `create_or_update_skill`, `write_artifact` |
+| schema (`full` only) | `create_table`, `add_column`, `drop_table`, `import_csv`, `build_query`, `save_query` |
+
 Task-mode-only tools (`preview_query`, `write_cell`, `need_more_info`) are
 never listed or dispatchable over MCP — those exist purely for the in-app
-task-mode notebook-cell authoring loop (#66).
+task-mode notebook-cell authoring loop (vibe-app#66).

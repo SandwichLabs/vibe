@@ -1,6 +1,6 @@
-# Spike #149 findings: external agents over MCP and ACP
+# Spike vibe-app#149 findings: external agents over MCP and ACP
 
-Part of epic #157 ([bring-your-own-agent.md](bring-your-own-agent.md) §5 B0). No product code: the throwaway server, the ACP driver and a mock model server lived outside the repo and are not committed. Run on Fedora, 2026-10-08.
+Part of epic vibe-app#157 ([bring-your-own-agent.md](bring-your-own-agent.md) §5 B0). No product code: the throwaway server, the ACP driver and a mock model server lived outside the repo and are not committed. Run on Fedora, 2026-10-08.
 
 Every claim carries a label:
 
@@ -52,7 +52,7 @@ Versions tested:
 
 Target: `vibe mcp serve --workspace DIR [--sandbox TIER]`. Every command below was run with a private config root; `/usr/local/bin/vibe` does not exist here, so the registration was inspected, not connected.
 
-**What matters for #151 across all four [observed]:**
+**What matters for vibe-app#151 across all four [observed]:**
 
 - The server process's **cwd is the agent's cwd, not the workspace**. The env probe in the spike server logged `cwd=…/scratch/<agent-run-dir>` for all four. So `--workspace DIR` must always be in the snippet; relying on "walk up from cwd to a `vibe.yaml`" only works when the agent is started inside the workspace.
 - Use an absolute path to the `vibe` binary (all four launch it without a shell).
@@ -82,7 +82,7 @@ Gotchas:
 - `${VAR}` and `${VAR:-default}` expand in `.mcp.json` `command`/`args`/`env` [docs]; there is a `timeout` field per server and `MCP_TOOL_TIMEOUT` (default about 28 hours) [docs].
 - Windows: not verified. Docs only mention a `cmd /c` wrapper for `npx`-launched servers; a real `vibe.exe` should not need it [docs, unverified].
 
-The Studio button's current snippet (`hub.BuildClaudeConfig().Code`, `claude mcp add NAME -- exe …`) uses the **local** scope, so it works only from the directory where it was pasted. That is a latent bug in the existing button, not only a #151 concern (§8).
+The Studio button's current snippet (`hub.BuildClaudeConfig().Code`, `claude mcp add NAME -- exe …`) uses the **local** scope, so it works only from the directory where it was pasted. That is a latent bug in the existing button, not only a vibe-app#151 concern (§8).
 
 ### 2.2 Codex
 
@@ -103,7 +103,7 @@ FOO = "bar"
 
 - `codex mcp add` only writes the global file. A project-scoped `.codex/config.toml` is documented ("trusted projects only") but has no add command [docs: https://developers.openai.com/codex/mcp].
 - Config keys that matter [docs: https://developers.openai.com/codex/config-reference]: `env`, **`env_vars`** (names to forward from Codex's environment), `cwd`, `startup_timeout_sec`, `tool_timeout_sec`, `default_tools_approval_mode` and `tools.<tool>.approval_mode` (`auto | prompt | writes | approve`), `enabled_tools`/`disabled_tools`.
-- **Codex starts MCP children with a scrubbed environment** [observed]. With `VIBE_PROBE_TOKEN=x VIBE_PROBE_PLAIN=y` exported, the child saw neither; `HOME`, `PATH`, `USER`, `LANG` were set, but `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR` were **not**. Adding `env_vars = ["VIBE_PROBE_TOKEN", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]` made all three arrive [observed]. Consequence: on Linux, `vibe mcp serve` under Codex cannot reach the Secret Service keychain, and cannot see `env:` credentials, unless the snippet forwards the right names (§9, #151).
+- **Codex starts MCP children with a scrubbed environment** [observed]. With `VIBE_PROBE_TOKEN=x VIBE_PROBE_PLAIN=y` exported, the child saw neither; `HOME`, `PATH`, `USER`, `LANG` were set, but `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR` were **not**. Adding `env_vars = ["VIBE_PROBE_TOKEN", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]` made all three arrive [observed]. Consequence: on Linux, `vibe mcp serve` under Codex cannot reach the Secret Service keychain, and cannot see `env:` credentials, unless the snippet forwards the right names (§9, vibe-app#151).
 - A Codex MCP tool call asks for Codex's own approval first (`MCP tool call requires approval, but approval policy is never` under `codex exec` with `approval_policy = "never"`) [observed]. `tools.<tool>.approval_mode = "approve"` skips that prompt [observed].
 
 ### 2.3 Gemini CLI
@@ -179,7 +179,7 @@ This workspace has a secret orientation codeword: PELICAN-7741. …
 
 **Also [observed]:** the instructions reach the model through both ACP adapters. With `claude-agent-acp` over an HTTP MCP server the model answered `PELICAN-7741`; with `codex-acp` the `initialize` result was logged by the server (the mock model's request was not inspected for that path).
 
-Implications for #150:
+Implications for vibe-app#150:
 
 - Budget the orientation at **well under 2,000 characters** and put the most important lines first. Claude Code cuts silently.
 - The instructions are computed once, when the `MCPServer` is built. A client reads them once per connection, and MCP has no "instructions changed" notification. Connections or skills added later are not reflected until reconnect. Keep the text to stable facts (workspace name, connection names, "call `help`") and point at tools for anything live.
@@ -438,7 +438,7 @@ Install commands to show (Vibe never runs them; D4):
 
 ## 7. Detail for the three consumers
 
-### #150: elicitation approver and instructions
+### vibe-app#150: elicitation approver and instructions
 
 1. Attach the approver only when `ClientSessionFromContext(ctx).(server.SessionWithClientInfo).GetClientCapabilities().Elicitation != nil`. Claude Code and Codex declare it. Gemini and OpenCode do not: keep the refusal message and name Studio (or Claude Code / Codex) as the way to approve.
 2. Use a **form with no fields**: `RequestedSchema: map[string]any{"type":"object","properties":map[string]any{}}`. Claude shows Accept/Decline, Codex shows Allow/Deny/Cancel. No ambiguity from a checkbox. If a field is ever added, remember both clients can return `accept` with a false value (Codex "False" does exactly that).
@@ -448,7 +448,7 @@ Install commands to show (Vibe never runs them; D4):
 6. Message text: SQL statement, connection name, truncated. Long messages were not tried in either UI.
 7. `instructions`: see §3 (< 2,000 characters, front-loaded, stable facts only; add via `buildMCPServer`).
 
-### #151: `vibe mcp config`
+### vibe-app#151: `vibe mcp config`
 
 Always emit an absolute `vibe` path and `--workspace DIR`. Candidate output per client:
 
@@ -479,7 +479,7 @@ Notes for the generator:
 - Fix the existing Studio "Copy Claude Code config" (`hub.BuildClaudeConfig().Code`): add `--scope user`, or say "run it from the project folder". Its golden test will need updating.
 - Windows quoting and paths: not verified.
 
-### #153: ACP client
+### vibe-app#153: ACP client
 
 - Spawn with a **process group** and kill the group on close (gemini leaves an orphan otherwise).
 - Advertise `auth.terminal: true` if Studio wants `claude-agent-acp` to list its sign-in methods; otherwise show Vibe's own "run `claude`, then `/login`" text. For all four, treat `-32000` + "Authentication required"/"…API key…" as the not-signed-in state, from `session/new` (Codex, Gemini) or `session/prompt` (Claude). Do not treat OpenCode as needing sign-in.
@@ -497,7 +497,7 @@ Notes for the generator:
 3. **The existing "Copy Claude Code config" uses the default `local` scope**, so it only works from the directory it was pasted in.
 4. **`instructions` are truncated at 2,048 characters by Claude Code** (silently). The plan's orientation (workspace, connections, skills by name and description) can exceed that on a real workspace.
 5. **ACP adapters answer MCP elicitation themselves**, so elicitation is a terminal-only feature. Fine for the plan, as Studio is the owner under ACP. But the "stdio `vibe mcp serve` fallback" in §4.4 only works because it proxies to Studio; a headless owner under an ACP agent would see a declared-but-dead elicitation and refuse writes.
-6. **Double permission prompts under ACP** and **`.claude/settings.local.json` written into the workspace** (§5.5, §7 #153).
+6. **Double permission prompts under ACP** and **`.claude/settings.local.json` written into the workspace** (§5.5, §7 vibe-app#153).
 7. **Not-signed-in is discovered late for Claude** (first prompt) and **never for OpenCode**.
 8. **Orphaned child under `gemini --acp`**; process-group kill is required.
 9. The adapters **bundle their own CLI at their own version**, and are the thing to detect. `node` must be resolvable from a GUI process.

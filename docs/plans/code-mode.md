@@ -225,7 +225,7 @@ The wall-time context also goes to each inner call. At this time `run_query` has
 - Verify the SHA-256 of the binary when the pool starts. Use a digest that the build stamps in with `ldflags`.
 - Add the Rust crates of the worker to `THIRD_PARTY_NOTICES.md` (`task notices`).
 - If the binary is not there, Vibe does not show `run_code`. Settings shows "Code mode is not available on this install".
-- macOS: sign the helper with the app when the signed release comes (epic #77). Until then, measure the Gatekeeper effect on an unsigned helper in the spike.
+- macOS: sign the helper with the app when the signed release comes (epic #4). Until then, measure the Gatekeeper effect on an unsigned helper in the spike.
 
 ### 7.3 Snapshots (phase 3 only)
 

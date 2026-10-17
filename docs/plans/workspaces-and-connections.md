@@ -1,6 +1,7 @@
 # Workspaces & Connections — implementation plan
 
 **Status:** IMPLEMENTED · epic #105 merged (issues #106–#119) · originally accepted 2026-10-06 · owner decisions in §7 · v1 adversarially reviewed (Fable), findings in §9 · see "As built" below first
+_Issue numbers in this document (#105 to #119 and below) are from the archived `SandwichLabs/vibe-app` repo._
 **Supersedes:** `docs/direction.md` §1 "file is the app", §3.1 "Container unchanged", §3.2 "in-process data", §6 non-goal "no plaintext container"; CLAUDE.md *Design Principles* "File is the app" and "Encryption by default".
 
 ---
