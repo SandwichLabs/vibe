@@ -83,3 +83,38 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 	}
 	return &st, nil
 }
+
+// OpenArtifactView issues the token a custom view's Worker is loaded by
+// (/vibe-view/<token>/worker.js), only for a view that is allowed right now; it
+// holds the bytes that were hashed, and those are what the token serves. origin
+// is the page's own origin, which the view's CSP names. A view that is not
+// allowed, or changed since, is refused.
+func (a *App) OpenArtifactView(name, origin string) (*ArtifactViewGrant, error) {
+	ws, _, _, err := a.snapshot()
+	if err != nil {
+		return nil, err
+	}
+	return openViewGrant(a.views, ws, name, origin)
+}
+
+// ValidateArtifactViewPage validates the A2UI page a custom view returned
+// against the artifact's manifest (ValidateView with its parameters and
+// queries) and returns it as Go re-marshalled it, the only form the renderer is
+// given. An invalid page comes back as the validation error.
+func (a *App) ValidateArtifactViewPage(name, page string) (string, error) {
+	store, err := a.artifactStore()
+	if err != nil {
+		return "", err
+	}
+	return validateViewPage(a.ctxOrBackground(), store, name, page)
+}
+
+// RunArtifactViewQuery runs one named query for a custom view's Worker, the only
+// way its bridge reaches data. The artifact is the grant's, never the caller's:
+// the token must still be allowed (same workspace, same ViewHash, decision
+// allowed) when the query starts and again when it returns, so an edit to the
+// manifest or a revoked view gets no rows. The run stops when the token is
+// dropped. Everything else is RunArtifactQuery's (read policy, 500 rows, 30 s).
+func (a *App) RunArtifactViewQuery(token, query string, values map[string]any) (*A2UIQueryResult, error) {
+	return a.runViewQuery(token, query, values)
+}

@@ -330,6 +330,29 @@ func RenderView(m *Manifest, view []byte) ([]byte, error) {
 	return out, nil
 }
 
+// RenderPage validates a page that a script view (view.js) returned against the
+// manifest's parameters and queries, and returns it re-marshalled: the one form
+// the renderer is given. It is RenderView for a page that did not come from
+// view.a2ui.json, so the same context-aware schema applies (controls, the
+// `query` binding, pivot, drill) and an unknown field or type is refused.
+func RenderPage(m *Manifest, page []byte) ([]byte, error) {
+	if len(page) > MaxViewBytes {
+		return nil, invalid("the page is %d bytes, over the %d byte limit", len(page), MaxViewBytes)
+	}
+	if err := checkJSONObject(page); err != nil {
+		return nil, err
+	}
+	p, err := a2ui.ValidateView(page, viewContext(m))
+	if err != nil {
+		return nil, invalid("the page:\n%v", err)
+	}
+	out, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render the page: %w", err)
+	}
+	return out, nil
+}
+
 func validatedPage(m *Manifest, view []byte) (a2ui.Page, error) {
 	if len(view) > MaxViewBytes {
 		return a2ui.Page{}, invalid("%s is %d bytes, over the %d byte limit", ViewFile, len(view), MaxViewBytes)

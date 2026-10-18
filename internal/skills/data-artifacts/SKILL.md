@@ -154,11 +154,49 @@ returns it as `view_source` (or `view_source_omitted`, and then
 `keep_view_source: true` plus the `rev` keeps it as stored). Use it only when no
 A2UI component draws what is needed.
 
-The script runs later, in a sandboxed worker with no network, no files and no
-DOM, **only after the person allows it** in Studio. You cannot allow it, and it
-asks again after every edit. It defines `draw` (or `run`) and gets rows only
-through `run(queryName, params)`, which can name only this artifact's own
-queries. It returns either an SVG document string or an A2UI page object (the
-same shape as `view`). The queries and parameters are still the manifest's and
-are vetted as for any artifact. The worker host arrives in a later update, so
-write the script plainly and do not assume the person has seen it run.
+The script runs in a sandboxed worker with no network, no files and no DOM,
+**only after the person allows it** in Studio. You cannot allow it, and it asks
+again after every edit. It has no browser APIs beyond JavaScript itself, no
+`eval` or `new Function`, and cannot load anything but the libraries below. Its
+whole world is the `vibe` object and one function you define:
+
+```
+function draw({params, theme, width, height}) {
+  return vibe.run('by_region', {from: params.from, to: params.to})  // Promise of {columns, rows, truncated}
+    .then(res => ({svg: '<svg xmlns="http://www.w3.org/2000/svg" ...>...</svg>'}))
+}
+```
+
+- `draw` is a global function. It returns, or resolves to, `{svg: "<svg ...>"}`
+  (an SVG document, at most 2 MB, shown as an image: no script, no external
+  loads, no fonts beyond the system's, so give text a `font-family`) or
+  `{a2ui: {title, components}}` (an A2UI page, validated like `view`, so
+  `query`-bound components, controls and `pivot` work).
+- It runs when the artifact opens and again on every parameter change; `params`
+  holds every parameter's current typed value. `width` is the space available
+  in pixels and `height` is 400.
+- `vibe.run(queryName, params)` runs one of THIS artifact's named queries with
+  the values you pass (an object of parameter names to strings, numbers or
+  booleans; the SQL is the manifest's, never yours) and resolves to `{columns,
+  rows, truncated}` (at most 500 rows). It rejects with a short fixed message
+  when the query fails; at most 4 run at once and 60 a minute.
+- `vibe.theme` (also `ctx.theme`) holds plain colour strings to draw with, so
+  the chart follows light and dark: `chart.1`..`chart.6` (also `theme.chart`, an
+  array), `fg`, `fg.muted`, `bg`, `bg.alt`, `surface`, `border`, `accent`, and
+  `type` (`"light"` or `"dark"`). Use them instead of hard-coded colours.
+- `vibe.lib(name)` loads a pinned library and returns it: `d3-array`,
+  `d3-scale`, `d3-shape`, `d3-format`, `d3-time-format`, `d3-geo` (all leave
+  their functions on `d3`, so `vibe.lib('d3-scale')` returns an object with
+  `scaleLinear`, and the other d3 pieces already loaded), `vega` and
+  `vega-lite`. Nothing else can be loaded. Vega runs without `eval`: use
+  `new vega.View(vega.parse(spec, null, {ast: true}), {expr:
+  vega.expressionInterpreter, renderer: 'none'})` and `await view.toSVG()`, and
+  `vl.compile(vlSpec).spec` for vega-lite.
+- A draw must finish in 30 seconds and must not keep the worker busy for over a
+  second without yielding: a loop that runs longer stops the view
+  ("This view stopped responding"). Aggregate in SQL; do not loop over thousands
+  of rows to build markup you could chart with a few.
+
+The queries and parameters are still the manifest's and are vetted as for any
+artifact; Studio builds the parameter controls from the manifest, so the script
+draws only the chart.

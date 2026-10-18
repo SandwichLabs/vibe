@@ -38,11 +38,17 @@ func (a *App) GetArtifact(name string) (*ArtifactDetail, error) {
 // caller, and the values only ever become bound parameters; every check is
 // agents.Handler.RunArtifactQuery's.
 func (a *App) RunArtifactQuery(name, query string, values map[string]any) (*A2UIQueryResult, error) {
+	return a.runArtifactQuery(a.ctx, name, query, values)
+}
+
+// runArtifactQuery is RunArtifactQuery under a parent context (a custom view's
+// grant cancels it when the Worker goes away).
+func (a *App) runArtifactQuery(parent context.Context, name, query string, values map[string]any) (*A2UIQueryResult, error) {
 	handler, runSess, err := a.readOnlyRunner()
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
+	ctx, cancel := context.WithTimeout(parent, a2uiQueryTimeout)
 	defer cancel()
 	before := statusSnapshot(runSess)
 	rs, truncated, err := handler.RunArtifactQuery(ctx, name, query, values)

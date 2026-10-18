@@ -3,15 +3,19 @@
 // allows it (#159). Nothing here runs the view: the text of view.js and
 // artifact.yaml sits in read-only CodeMirror, and Allow approves exactly the hash
 // that was on screen (Go refuses it if the files changed since). A view that was
-// allowed and then edited says so and asks again. Until the view host lands
-// (step 9) an allowed view shows a placeholder. Every string is text.
+// allowed and then edited says so and asks again. An allowed view runs in
+// CustomView (the Worker host, #160); a change to the artifact on disk, or the
+// state leaving "allowed", tears that down at once and this screen asks again.
+// Every string is text.
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
 import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
+import CustomView from './CustomView.vue'
 import { useArtifactViewTrust } from '../composables/useArtifactViewTrust'
+import type { ParamValue } from '../a2ui/artifactParams'
 
-const props = defineProps<{ name: string }>()
-const { status, changedWhileReading, showNew, busy, error, allow, deny, revoke } = useArtifactViewTrust(() => props.name)
+const props = defineProps<{ name: string; detail?: ArtifactDetail | null; values?: Record<string, ParamValue> }>()
+const { status, changedWhileReading, showNew, busy, error, refreshing, allow, deny, revoke } = useArtifactViewTrust(() => props.name)
 
 const state = computed(() => status.value?.state ?? 'none')
 const shortHash = computed(() => (status.value?.hash ?? '').slice(0, 12))
@@ -41,6 +45,9 @@ watch(status, (s) => {
   }
 })
 watch(tab, async () => { await nextTick(); editors[tab.value]?.view.requestMeasure() })
+// The view runs only while it is allowed and nothing is being re-read.
+const running = computed(() => state.value === 'allowed' && !refreshing.value && !!props.detail && !props.detail.error)
+async function remeasure() { await nextTick(); for (const e of Object.values(editors)) e?.view.requestMeasure() }
 </script>
 
 <template>
@@ -61,15 +68,11 @@ watch(tab, async () => { await nextTick(); editors[tab.value]?.view.requestMeasu
     </div>
 
     <template v-if="status && !status.error">
-      <div v-if="state === 'allowed'" class="note info" role="status" data-testid="view-trust-placeholder">
-        <Icon name="info" :size="16" />
-        <span>Allowed. The view host arrives in the next update.</span>
-      </div>
-      <div v-else-if="state === 'denied'" class="note warn" role="status" data-testid="view-trust-denied">
+      <div v-if="state === 'denied'" class="note warn" role="status" data-testid="view-trust-denied">
         <Icon name="alert" :size="16" />
         <span>You denied this view, so it will not run, even after edits. Revoke the decision to be asked again.</span>
       </div>
-      <div v-else class="note warn" role="status" data-testid="view-trust-line">
+      <div v-else-if="state !== 'allowed'" class="note warn" role="status" data-testid="view-trust-line">
         <Icon name="alert" :size="16" />
         <span>
           <template v-if="state === 'changed'">This view changed since you allowed it. Read it again before you allow it. </template>
@@ -90,6 +93,14 @@ watch(tab, async () => { await nextTick(); editors[tab.value]?.view.requestMeasu
       </div>
     </template>
 
+    <CustomView v-if="running" :name="name" :detail="detail!" :values="values ?? {}" />
+    <div v-else-if="state === 'allowed'" class="note info" role="status" data-testid="view-trust-checking">
+      <Icon name="info" :size="16" />
+      <span>Checking the view…</span>
+    </div>
+
+    <component :is="state === 'allowed' ? 'details' : 'div'" class="col view-trust__src" data-testid="view-trust-src" @toggle="remeasure">
+    <summary v-if="state === 'allowed'" class="view-trust__summary">View source</summary>
     <div class="seg view-trust__tabs" role="group" aria-label="Custom view file">
       <button type="button" :class="{ on: tab === 'script' }" :aria-pressed="tab === 'script'" data-testid="view-trust-tab-script" @click="tab = 'script'">view.js</button>
       <button type="button" :class="{ on: tab === 'manifest' }" :aria-pressed="tab === 'manifest'" data-testid="view-trust-tab-manifest" @click="tab = 'manifest'">artifact.yaml</button>
@@ -98,6 +109,7 @@ watch(tab, async () => { await nextTick(); editors[tab.value]?.view.requestMeasu
       <div v-show="tab === 'script'" ref="scriptEl" class="view-trust__editor" data-testid="view-trust-source" />
       <div v-show="tab === 'manifest'" ref="manifestEl" class="view-trust__editor" data-testid="view-trust-manifest" />
     </div>
+    </component>
   </div>
 </template>
 
@@ -105,6 +117,8 @@ watch(tab, async () => { await nextTick(); editors[tab.value]?.view.requestMeasu
 .view-trust { gap: var(--sh-space-3); }
 .view-trust__bar { align-items: center; gap: var(--sh-space-3); }
 .view-trust__tabs { width: fit-content; align-self: flex-start; }
+.view-trust__summary { cursor: pointer; font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin-bottom: var(--sh-space-2); }
+.view-trust__src { gap: var(--sh-space-3); }
 .view-trust__hash { font-size: var(--sh-fs-xs); color: var(--sh-graphite); }
 .view-trust__actions { gap: var(--sh-space-2); }
 .view-trust__editors { min-height: 320px; border: var(--sh-border); border-radius: var(--sh-radius); overflow: hidden; display: flex; flex-direction: column; }

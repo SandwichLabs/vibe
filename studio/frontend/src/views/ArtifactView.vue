@@ -87,7 +87,7 @@ const onGone = () => router.push('/artifacts')
         <span class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">Fix <code>artifacts/{{ detail.name }}/artifact.yaml</code> or its view file (<code>view.a2ui.json</code> or <code>view.js</code>); this page updates when the file is saved.</span>
         <pre class="sh-mono artifact-errors">{{ detail.error }}</pre>
       </div>
-      <ArtifactViewTrust v-else-if="isScript" :key="name" :name="name" />
+      <ArtifactViewTrust v-else-if="isScript" :key="name" :name="name" :detail="detail" :values="params.values" />
       <template v-else-if="page">
         <div v-if="runs.truncated.value.length" class="sh-mono artifact-note" data-testid="artifact-truncated">
           Showing the first 500 rows of {{ runs.truncated.value.join(', ') }}.

@@ -122,6 +122,9 @@ interface AppApi {
   DenyArtifactView(name: string): Promise<ArtifactViewStatus>
   RevokeArtifactView(name: string): Promise<ArtifactViewStatus>
   ListArtifactViewDecisions(): Promise<ArtifactViewDecision[]>
+  OpenArtifactView(name: string, origin: string): Promise<ArtifactViewGrant>
+  RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
+  ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
   CheckArtifact(name: string): Promise<string[]>
   NewArtifact(name: string): Promise<ArtifactSource>
@@ -450,6 +453,9 @@ interface ArtifactViewStatus {
   source: string
   error?: string
 }
+// ArtifactViewGrant mirrors studio.ArtifactViewGrant (#160): the token an allowed
+// view's Worker URL is made from (/vibe-view/<token>/worker.js), bound to one hash.
+interface ArtifactViewGrant { token: string; hash: string }
 interface ArtifactViewDecision {
   name: string
   path: string

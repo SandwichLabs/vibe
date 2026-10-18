@@ -268,3 +268,27 @@ func TestDecode_RefusesControlCharactersInTheManifest(t *testing.T) {
 	_, err := Decode([]byte(goodManifest + "# caf\u00e9\n"))
 	require.NoError(t, err)
 }
+
+func TestRenderPage_ChecksAScriptViewsPageAgainstTheManifest(t *testing.T) {
+	a := newScriptArtifact(t, "chart")
+	m := &a.Manifest
+	require.NoError(t, Validate(m))
+	out, err := RenderPage(m, []byte(`{"title":"T","components":[{"id":"a","type":"text","text":"hi"}]}`))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"hi"`)
+
+	for name, page := range map[string]string{
+		"unknown type":          `{"title":"T","components":[{"id":"a","type":"iframe"}]}`,
+		"unknown field":         `{"title":"T","components":[{"id":"a","type":"text","text":"x","onclick":"x()"}]}`,
+		"query not in manifest": `{"title":"T","components":[{"id":"a","type":"table","query":"nope"}]}`,
+		"not an object":         `[1]`,
+		"not json":              `{`,
+		"over the cap":          `{"title":"` + strings.Repeat("a", MaxViewBytes) + `","components":[]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := RenderPage(m, []byte(page))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrInvalid)
+		})
+	}
+}

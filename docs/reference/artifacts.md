@@ -149,12 +149,12 @@ An artifact holds no credential. A query names a connection; the connection's si
 
 A manifest that says `view: script` draws itself with `view.js` instead of an A2UI page, for charts the A2UI components cannot draw. The spike ([plan](../plans/data-artifacts.md#spike-custom-view-isolation-run-2026-10-17)) ruled out an iframe (a sandboxed frame can reach Wails' binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)) and chose a dedicated, terminable Web Worker: it receives rows only through `run(queryName, params)` and returns either an SVG document string (shown as an inert image) or an A2UI page (validated by Go first). A `view.html` is not a thing: a bundle that holds one is refused as an unknown entry.
 
-**Status.** The trust step is built; the worker host is not (the next update). An allowed view shows "Allowed. The view host arrives in the next update." and runs nothing yet.
+**Status.** Built: trust (below), the view host and the bridge ([The view host](#the-view-host-and-the-worker-contract)).
 
 **Nothing runs until you allow it.** The code in `view.js` is written by someone else or by the agent, so the artifact opens as **source**: a read-only code view of `view.js` and of `artifact.yaml`, with **Allow** and **Deny** and the line "This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries."
 
 - **What an allow covers.** Allow is keyed by the artifact folder's canonical absolute path (symlinks resolved; on macOS and Windows spelled as the file system spells it) plus the `ViewHash`: a sha256 over a version-tagged (`vibe-view-hash/1`), length-prefixed list, entry 0 `artifact.yaml`, then each view file as (path, bytes) sorted by path. Any change to `artifact.yaml` (a query's SQL or connection included) or to `view.js` ends the allow: the view says it **changed since you allowed it** and asks again. Bytes moved from one file to the other change the hash. A clone of the folder at another path, or a copy under another name, is undecided.
-- **What you saw is what you allow.** Allow sends the hash of the bytes on screen, and Go refuses it if the files differ by then. If the files change while you are reading (a reload with a different hash while Allow is armed), Studio keeps showing what you were reading, says "This view changed while you were reading it", and keeps Allow off until you click "Show the new version". The read-only editors draw any remaining control or invisible character as a visible marker, and the CLI prints them as `<U+XXXX>`. The step that runs a view (the next update) serves the bytes it hashed, never a second read.
+- **What you saw is what you allow.** Allow sends the hash of the bytes on screen, and Go refuses it if the files differ by then. If the files change while you are reading (a reload with a different hash while Allow is armed), Studio keeps showing what you were reading, says "This view changed while you were reading it", and keeps Allow off until you click "Show the new version". The read-only editors draw any remaining control or invisible character as a visible marker, and the CLI prints them as `<U+XXXX>`. The view host serves the bytes it hashed (held in memory under the view's token), never a second read.
 - **Deny** holds for that folder until revoked, across edits.
 - **Where decisions live.** In `views.json` beside `dotenv.json` in your own config directory (the same JSON format as `dotenv.json`). Never in the workspace folder, never in a bundle, never in git. **Settings > Workspace > Custom views** lists them with **Revoke**.
 - **Agent edits ask again.** The agent can write a script view (`write_artifact`'s `view_source`) but cannot allow one: there is no tool, MCP method or other path that allows, denies or revokes. Every edit, by anyone, asks again.
@@ -163,4 +163,89 @@ A manifest that says `view: script` draws itself with `view.js` instead of an A2
 
 **Sharing.** A script view travels in a bundle as `artifacts/<name>/artifact.yaml` plus `artifacts/<name>/view.js` (the view file must be the one the manifest names), and arrives undecided on the other machine.
 
-**Writing one.** The `data-artifacts` skill describes the worker contract in a few lines: define `draw` (or `run`), call `run(queryName, params)` for rows, return an SVG string or an A2UI page.
+**Writing one.** The `data-artifacts` skill (what the agent reads) and [the contract below](#the-view-host-and-the-worker-contract) describe it: define `draw`, call `vibe.run(queryName, params)` for rows, return an SVG string or an A2UI page.
+
+## The view host and the worker contract
+
+An allowed view runs in a dedicated Web Worker, never an iframe. Studio's Go side serves it, a Vue host (`CustomView`, `useViewBridge`) talks to it, and nothing else reaches it.
+
+### What Studio shows
+
+The artifact opens to the view: a control for each manifest parameter (the level-1 controls: `select` for an enum or boolean, `numberInput`, `textInput`, and a `dateRange` for each pair of date parameters, a lone date alone), a **Reset**, and what the view drew. The view draws on open and again after every parameter change (debounced, the latest request wins; a result that arrives for an older request is dropped), when the theme changes and when the width changes. The source stays one click away under **View source**. If the artifact changes on disk, or the decision stops being *allowed* (revoked, denied, edited), the Worker is terminated and the screen returns to the trust prompt. That happens after the file watcher's short debounce; until then the query gate below (every run re-checks the view is still allowed at the hash it was served at) refuses anything from the old Worker. A view that fails to load, or whose draw fails, shows the message the script gave (as text, at most 300 characters); a bridge error is always one of the fixed texts below.
+
+### The contract (what `view.js` sees)
+
+`view.js` is a classic script run by `importScripts` in a Worker. There is no DOM, no `window`, no network, no `indexedDB`, `caches`, `BroadcastChannel`, `localStorage`, `navigator.storage` or `navigator.locks` (a Worker shares Studio's origin, so these are removed before the view loads), no `eval` or `new Function` (the CSP has no `'unsafe-eval'`), no nested worker, and `self.webkit` is undefined. The script's world is `vibe` and one function it defines:
+
+```js
+// Define a global draw(); Studio calls it with the current state.
+function draw({ params, theme, width, height }) {
+  return vibe.run('by_region', { from: params.from, to: params.to })
+    .then((res) => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" ...>...</svg>' }))
+}
+```
+
+| | |
+|---|---|
+| `draw({params, theme, width, height})` | Global. Returns, or resolves to, `{svg: string}` or `{a2ui: page}`. `params` is every parameter's current typed value; `width` is the space available in pixels; `height` is 400. A draw over 30 seconds stops the view. |
+| `vibe.run(queryName, params)` | Promise of `{columns, rows, truncated}`. Runs one of this artifact's named queries through `RunArtifactViewQuery(token, …)`, which is level 1's `RunArtifactQuery` behind the view's own grant (the artifact is the token's, and the view must still be allowed at the served hash when the query starts and when it returns): the SQL is the manifest's, the values are bound parameters Go re-validates, at most 500 rows and 30 seconds. `params` is a flat object (at most 32 keys named like parameters; values are a string up to 1,000 characters, a finite number, a boolean or null; at most 8 KB of JSON). Rejects with a fixed text. |
+| `vibe.lib(name)` | Loads a pinned library by name, from a closed list (below), and returns its global. Synchronous. Any other name throws. |
+| `vibe.theme` | Plain strings: `chart.1` to `chart.6` (and `chart`, the six as an array), `fg`, `fg.muted`, `bg`, `bg.alt`, `surface`, `border`, `accent` (hex colours), and `type` (`light` or `dark`). Also passed to `draw` as `theme`. |
+
+Output:
+
+- **`{svg}`**: an SVG document string, at most 2 MB. Studio shows it only as `<img src="blob:…">` with type `image/svg+xml` (revoked when replaced or when the view closes), never in the page's DOM. An SVG image runs no script and loads nothing, so it cannot reach out even if it tries; fonts inside it are the system's (give text a `font-family`), and the page's CSS variables do not apply (use `vibe.theme`).
+- **`{a2ui: page}`**: an A2UI page object (the Worker hands it to Studio as JSON text, at most 1 MB), sent to Go and validated with the same context-aware schema as `view.a2ui.json` (`ValidateView` with the manifest's parameters and queries), then rendered by the level-1 renderer with the artifact runtime, so `query`-bound components, controls, `pivot` and `drill` work, and the queries behind them run through the usual lane. An invalid page shows the validation error.
+
+### Libraries
+
+Pinned exact versions, vendored by the frontend build into `dist/vibe-view/lib/` and served from the Studio binary (no CDN), all permissive licences (see `THIRD_PARTY_NOTICES.md`):
+
+| `vibe.lib(...)` | Package | Leaves |
+|---|---|---|
+| `d3-array`, `d3-format`, `d3-time-format`, `d3-scale`, `d3-shape`, `d3-geo` | d3-array 3.2.4, d3-format 3.1.2, d3-time-format 4.1.0, d3-scale 4.0.2, d3-shape 3.2.0, d3-geo 3.1.1 (their UMD builds, with d3-color, d3-interpolate, d3-time and d3-path as dependencies) | `d3` |
+| `vega` | vega 6.4.0, with `vega-interpreter` 2.3.2 bundled as `vega.expressionInterpreter` | `vega` |
+| `vega-lite` | vega-lite 6.4.3 (loads `vega` too) | `vegaLite` |
+
+Vega and vega-lite run in the Worker with no DOM and no eval: use the interpreter, and `toSVG()`.
+
+```js
+async function draw(ctx) {
+  const vl = vibe.lib('vega-lite'), vega = vibe.lib('vega')
+  const res = await vibe.run('sales', {})
+  const spec = { /* a vega-lite spec with data.values from res.rows */ }
+  const view = new vega.View(vega.parse(vl.compile(spec).spec, null, { ast: true }),
+    { expr: vega.expressionInterpreter, renderer: 'none' })
+  return { svg: await view.toSVG() }
+}
+```
+
+### Limits and the watchdog
+
+- **Queries:** at most 4 in flight and 60 in any rolling minute; a call over either gets a fixed error and runs nothing. A message that is not exactly `{t: 'run', id, query, params}` with a query named like a manifest query, or that carries anything else (an `sql` field, another artifact's name), is refused the same way; an unknown message type is ignored. A Worker that sends over 100 messages or 16 MB of payload in a second is stopped. A Worker answers each draw once: a repeated or late result is ignored.
+- **Fixed error texts** (what `vibe.run` rejects with, never a path, an SQL error or the policy's reason): "That request was not valid.", "Too many queries are running at once.", "Too many queries in the last minute.", "The query could not be run."
+- **Heartbeat:** the Worker beats every 250 ms. Studio terminates it after 1 second of silence (4 seconds while it starts; 5 seconds while it parses a library, once per library file; and it must be ready within 15 seconds), or after a draw over 30 seconds, and shows **This view stopped responding** with **Reload**. A script that blocks its thread for over a second (a long synchronous loop, a very large vega chart) is stopped; aggregate in SQL and keep drawing work small. Termination does not touch Studio's UI thread. The watchdog guards liveness, not CPU: a busy loop that yields (async) keeps beating and is stopped only by the 30 second draw limit.
+- **Output:** an SVG over 2 MB or an A2UI page over 1 MB is refused with a message.
+
+### How it is served and confined
+
+Go serves the Worker through the Wails asset server's middleware under `/vibe-view/`, with nothing else reachable:
+
+| Path | Serves |
+|---|---|
+| `/vibe-view/<token>/worker.js` | The host-owned bootstrap (embedded in the binary; it sets up the channel, the heartbeat and `vibe`, then `importScripts` the view). |
+| `/vibe-view/<token>/view.js` | The artifact's `view.js`, the exact bytes that were hashed. |
+| `/vibe-view/lib/<file>.js` | One pinned library. |
+
+A **token** is 32 random bytes, issued by `OpenArtifactView(name, origin)` only for a view that is *allowed right now*, and bound to that artifact, its `ViewHash` and the open workspace for this Studio process. The view's bytes are read once when the token is issued, hashed together with `artifact.yaml`, compared with the allowed hash and held in memory; those held bytes are what `view.js` serves. Each request for a token's files also re-checks that the decision still allows exactly that hash: a changed, revoked or denied view gets 404 and the token is dropped (it never serves the new bytes, and never a mix). A new token for an artifact replaces its older ones; at most 32 tokens are held. A token for one artifact cannot fetch another's files.
+
+Every response under `/vibe-view/`, errors included, carries `Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. The Worker's own response (its `worker.js`) carries:
+
+```
+default-src 'none'; script-src <origin>/vibe-view/<token>/view.js <origin>/vibe-view/lib/;
+connect-src 'none'; worker-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'
+```
+
+`<origin>` is the page's own origin, which the page passes in (`location.protocol//location.host`: `wails://wails.localhost:34115` in `task studio:dev`, `wails://wails` in a built app on Linux and macOS, `http://wails.localhost` on Windows); Go accepts only a plain `http`, `https` or `wails` origin and puts nothing else in a header. A path source needs a host, so `'self'` could not be narrowed to these paths. The spike showed the Worker's own response CSP is what holds `connect-src 'none'`: `fetch`, XHR, WebSocket, EventSource, `importScripts` of anything but those paths, and nested workers are all blocked. No path ends in `/` or `index.html` (Wails would inject its runtime into it), and a request under `/vibe-view/` that would match that injection is answered 400, never 404 (Wails would swap a 404 for its own page). There is no directory listing, a path with `..`, `//` or a backslash is 400, nothing from the workspace is reachable except through a token, and only `GET` and `HEAD` are accepted.
+
+The Worker holds one `MessagePort`, handed over in its first message and kept in the bootstrap's closure; every later message uses it, never a broadcast. Studio's page owns the artifact name for every `run`.
