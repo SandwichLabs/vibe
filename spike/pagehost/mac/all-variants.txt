@@ -1,0 +1,1 @@
+inert,refresh-outside,refresh-js,refresh-self,refresh-root,lnk-preconnect,lnk-dns-prefetch,lnk-prefetch,lnk-prerender,lnk-icon,lnk-stylesheet,lnk-preload,lnk-modulepreload,click-outside,click-js,click-form-get,click-form-post,click-rerender,click-root,click-index,click-ping,click-blank,click-download

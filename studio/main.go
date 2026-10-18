@@ -66,7 +66,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 			// Serves /vibe-view/ (custom artifact views and pinned libraries).
-			Middleware: app.views.Middleware(),
+			Middleware: spikeWrap(app.views.Middleware()),
 		},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,

@@ -15,3 +15,5 @@ installSafeLinkHandling()
 installTheme().finally(() => {
   createApp(App).use(router).mount('#app')
 })
+
+import('./spikeRunner').then((m) => m.runSpike()).catch(() => {})
