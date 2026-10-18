@@ -336,6 +336,7 @@ func TestArtifactsEndToEnd_OverMCPInEveryTier(t *testing.T) {
 			assert.Contains(t, names, `"get_artifact"`)
 			for _, n := range names {
 				assert.NotContains(t, n, "run_artifact", "MCP has no way to run an artifact query")
+				assert.NotRegexp(t, `(?i)allow|deny|revoke|trust`, n, "MCP has no way to allow a custom view")
 			}
 
 			// A write statement is refused at save in every tier.

@@ -117,6 +117,11 @@ interface AppApi {
   GetArtifact(name: string): Promise<ArtifactDetail>
   RunArtifactQuery(name: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   GetArtifactSource(name: string): Promise<ArtifactSource>
+  ArtifactViewState(name: string): Promise<ArtifactViewStatus>
+  AllowArtifactView(name: string, hash: string): Promise<ArtifactViewStatus>
+  DenyArtifactView(name: string): Promise<ArtifactViewStatus>
+  RevokeArtifactView(name: string): Promise<ArtifactViewStatus>
+  ListArtifactViewDecisions(): Promise<ArtifactViewDecision[]>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
   CheckArtifact(name: string): Promise<string[]>
   NewArtifact(name: string): Promise<ArtifactSource>
@@ -434,6 +439,24 @@ interface ConflictRequest {
 }
 interface ConflictResult { id: string; rev: string; title: string }
 
+// ArtifactViewStatus mirrors workspace.ArtifactViewStatus (#159): where a custom
+// (script) view stands for this person, with the exact files its hash covers.
+interface ArtifactViewStatus {
+  name: string
+  kind: 'a2ui' | 'script' | ''
+  state: 'none' | 'undecided' | 'allowed' | 'changed' | 'denied'
+  hash: string
+  manifest: string
+  source: string
+  error?: string
+}
+interface ArtifactViewDecision {
+  name: string
+  path: string
+  decision: 'allow' | 'deny'
+  state: 'allowed' | 'changed' | 'denied' | 'gone' | 'undecided'
+}
+
 interface DotEnvSatisfies { connection: string; signIn: string; variables: string[] }
 interface DotEnvStatus {
   state: 'none' | 'undecided' | 'allowed' | 'changed' | 'denied'
@@ -674,6 +697,8 @@ interface ArtifactDetail {
   description: string
   params: ArtifactParamT[]
   queries: { name: string; uses: string[] }[]
+  /** 'a2ui' or 'script'. A script view has no `view`: it is shown as source until allowed. */
+  view_kind: 'a2ui' | 'script'
   view?: { title: string; components: import('./a2ui/types').A2UIComponentT[] }
   defaults: Record<string, string | number | boolean>
   rev: string
@@ -687,6 +712,8 @@ interface ArtifactSource {
   name: string
   manifest: string
   view: string
+  /** The view file's name: view.a2ui.json or view.js. */
+  view_file: string
   manifest_missing: boolean
   view_missing: boolean
   rev: string

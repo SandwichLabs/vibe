@@ -14,8 +14,10 @@ import (
 	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
-// FileStore keeps artifacts as artifacts/<name>/artifact.yaml and
-// artifacts/<name>/view.a2ui.json under a workspace root.
+// FileStore keeps artifacts as artifacts/<name>/artifact.yaml and one view
+// file (view.a2ui.json for view: a2ui, view.js for view: script) under a
+// workspace root. A folder holding both view files is broken (it lists with an
+// error); a Put that changes the view kind removes the old kind's file.
 //
 // The folder name is the artifact name and must pass filestore.ValidID
 // (lowercase, no "..", no device names). A folder or file that is a symbolic
@@ -98,7 +100,9 @@ func (s *FileStore) checkFolder(name string) error {
 
 type readParts struct {
 	manifest, view filePart
-	modTime        time.Time
+	// viewFile is the name of the view file that is present ("" when none).
+	viewFile string
+	modTime  time.Time
 }
 
 // read loads both files of an artifact. A file that does not exist is an
@@ -112,7 +116,7 @@ func (s *FileStore) read(name string) (readParts, error) {
 	for _, f := range []struct {
 		file string
 		part *filePart
-	}{{ManifestFile, &out.manifest}, {ViewFile, &out.view}} {
+	}{{ManifestFile, &out.manifest}, {ViewFile, &out.view}, {ScriptFile, &out.view}} {
 		data, st, err := filestore.Read(s.root, rel(name, f.file))
 		if errors.Is(err, filestore.ErrNotFound) {
 			continue
@@ -120,7 +124,13 @@ func (s *FileStore) read(name string) (readParts, error) {
 		if err != nil {
 			return readParts{}, err
 		}
+		if f.part == &out.view && out.view.present {
+			return readParts{}, invalid("both %s and %s exist: keep the one the manifest's view kind names", ViewFile, ScriptFile)
+		}
 		*f.part = filePart{data: data, present: true}
+		if f.part == &out.view {
+			out.viewFile = f.file
+		}
 		if st.ModTime.After(out.modTime) {
 			out.modTime = st.ModTime
 		}
@@ -143,8 +153,10 @@ func (s *FileStore) load(name string) (*Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !p.view.present {
-		return nil, invalid("%s is missing", ViewFile)
+	if want := ViewFileOf(m); !p.view.present {
+		return nil, invalid("%s is missing", want)
+	} else if p.viewFile != want {
+		return nil, invalid("view: %s needs %s, but %s is what exists", m.View, want, p.viewFile)
 	}
 	if err := ValidateView(m, p.view.data); err != nil {
 		return nil, err
@@ -239,16 +251,28 @@ func (s *FileStore) write(a *Artifact, prep prepared, cur readParts) error {
 	if err := s.manifestUnchanged(a.Name, cur.manifest); err != nil {
 		return err
 	}
+	viewFile := ViewFileOf(&a.Manifest)
+	sameKind := cur.viewFile == viewFile
+	viewExpect := ""
+	if sameKind {
+		viewExpect = expectOf(cur.view)
+	}
 	viewHash := filestore.HashBytes(prep.view)
-	st, err := filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(a.Name, ViewFile), Data: prep.view, Expect: expectOf(cur.view)}, s.obs)
+	st, err := filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(a.Name, viewFile), Data: prep.view, Expect: viewExpect}, s.obs)
 	if err != nil {
 		return fmt.Errorf("failed to save artifact %q: %w", a.Name, err)
 	}
 	newest := st.ModTime
 	mst, err := filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(a.Name, ManifestFile), Data: prep.manifest, Expect: expectOf(cur.manifest)}, s.obs)
 	if err != nil {
-		s.restoreView(a.Name, cur.view, viewHash)
+		s.restoreView(a.Name, viewFile, cur.view, sameKind, viewHash)
 		return fmt.Errorf("failed to save artifact %q: %w", a.Name, err)
+	}
+	if !sameKind && cur.view.present {
+		// The view kind changed: the old kind's file is no longer used.
+		if err := filestore.Remove(s.root, rel(a.Name, cur.viewFile), expectOf(cur.view), false, s.obs); err != nil {
+			return fmt.Errorf("failed to remove the old view file of artifact %q: %w", a.Name, err)
+		}
 	}
 	if mst.ModTime.After(newest) {
 		newest = mst.ModTime
@@ -284,12 +308,12 @@ func (s *FileStore) manifestUnchanged(name string, was filePart) error {
 // restoreView puts the view the write replaced back, only if it is still the
 // bytes this Put wrote (written is their hash). Errors are ignored: the
 // original failure is the one worth reporting.
-func (s *FileStore) restoreView(name string, was filePart, written string) {
-	if !was.present {
-		_ = filestore.Remove(s.root, rel(name, ViewFile), written, false, s.obs)
+func (s *FileStore) restoreView(name, file string, was filePart, sameKind bool, written string) {
+	if !was.present || !sameKind {
+		_ = filestore.Remove(s.root, rel(name, file), written, false, s.obs)
 		return
 	}
-	_, _ = filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(name, ViewFile), Data: was.data, Expect: written}, s.obs)
+	_, _ = filestore.WriteAtomic(s.root, filestore.Write{Rel: rel(name, file), Data: was.data, Expect: written}, s.obs)
 }
 
 // Source implements Store.
@@ -308,7 +332,7 @@ func (s *FileStore) Source(_ context.Context, name string) (*Source, error) {
 	s.remember(name, rev)
 	return &Source{
 		Name: name, Manifest: string(p.manifest.data), View: string(p.view.data),
-		ManifestMissing: !p.manifest.present, ViewMissing: !p.view.present,
+		ViewFile: p.viewFile, ManifestMissing: !p.manifest.present, ViewMissing: !p.view.present,
 		Rev: rev, UpdatedAt: p.modTime.UTC().Format(time.RFC3339),
 	}, nil
 }
@@ -343,7 +367,7 @@ func (s *FileStore) Delete(_ context.Context, name string, opts ...PutOption) er
 	for _, f := range []struct {
 		file string
 		part filePart
-	}{{ViewFile, cur.view}, {ManifestFile, cur.manifest}} {
+	}{{cur.viewFile, cur.view}, {ManifestFile, cur.manifest}} {
 		if err := filestore.Remove(s.root, rel(name, f.file), expectOf(f.part), false, s.obs); err != nil {
 			return fmt.Errorf("failed to delete artifact %q: %w", name, err)
 		}

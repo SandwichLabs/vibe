@@ -1,6 +1,6 @@
 /**
  * useArtifactSource — the Source tab's state and actions for one data artifact
- * (#162, step 6a): the two files as text (artifact.yaml and view.a2ui.json), a
+ * (#162, step 6a): the two files as text (artifact.yaml and its view file, view.a2ui.json or view.js), a
  * save that sends the one revision over both, the warnings the agent policy
  * gives a saved query, delete, and the changed-on-disk conflict flow
  * (useConflict + ResolveConflict kind "artifact").
@@ -30,6 +30,8 @@ interface Hooks {
 export function useArtifactSource(name: () => string, hooks: Hooks) {
   const manifest = ref('')
   const view = ref('')
+  // The view file's name: view.a2ui.json, or view.js for a custom (script) view.
+  const viewFile = ref('view.a2ui.json')
   // The text last read from or written to disk: what "unsaved" is measured against.
   const base = ref({ manifest: '', view: '' })
   const rev = ref('')
@@ -69,6 +71,7 @@ export function useArtifactSource(name: () => string, hooks: Hooks) {
     warnings.value = [] // they described other text
     manifest.value = src.manifest
     view.value = src.view
+    viewFile.value = src.view_file || 'view.a2ui.json'
     base.value = { manifest: src.manifest, view: src.view }
     rev.value = src.rev
   }
@@ -201,6 +204,7 @@ export function useArtifactSource(name: () => string, hooks: Hooks) {
   onUnmounted(() => { stopGuard?.(); for (const off of offs) off() })
 
   return {
+    viewFile,
     manifest, view, rev, loading, loadError, saving, saveError, notice, warnings, dirty,
     conflict: cf.conflict, conflictBusy: cf.busy,
     load, save, checkOnce, resolveConflict, remove,

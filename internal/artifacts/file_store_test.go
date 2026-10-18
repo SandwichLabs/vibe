@@ -438,13 +438,13 @@ func TestFileStore_RestoreViewOnlyTouchesTheViewThisPutWrote(t *testing.T) {
 			require.NoError(t, os.WriteFile(fsPath(root, "sales", ViewFile), foreign, 0o644))
 
 			// The view this Put wrote was something else: the foreign edit stays.
-			s.restoreView("sales", tc.was, filestore.HashBytes([]byte(goodView)))
+			s.restoreView("sales", ViewFile, tc.was, true, filestore.HashBytes([]byte(goodView)))
 			got, err := os.ReadFile(fsPath(root, "sales", ViewFile))
 			require.NoError(t, err, "not deleted")
 			assert.Equal(t, string(foreign), string(got), "not overwritten")
 
 			// When it is still our write, the rollback does happen.
-			s.restoreView("sales", tc.was, filestore.HashBytes(foreign))
+			s.restoreView("sales", ViewFile, tc.was, true, filestore.HashBytes(foreign))
 			got, err = os.ReadFile(fsPath(root, "sales", ViewFile))
 			if tc.was.present {
 				require.NoError(t, err)

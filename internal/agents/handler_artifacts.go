@@ -20,7 +20,10 @@ import (
 // --- write_artifact / list_artifacts / get_artifact (epic #162, step 3) ---
 //
 // The agent authors a data artifact (artifacts/<name>/artifact.yaml plus
-// view.a2ui.json) and can read back what is stored. It never reads an
+// view.a2ui.json, or view.js for view: script) and can read back what is
+// stored. It can write a script view but never allow one: allow, deny and
+// revoke are the person's, in Studio or the CLI, and no tool or MCP method
+// reaches them. It never reads an
 // artifact's RESULTS: there is no tool that runs an artifact query for the
 // agent. The run path (RunArtifactQuery) belongs to Studio's UI, so an artifact
 // cannot widen what the agent's own run_query could read.
@@ -152,17 +155,34 @@ func (h *Handler) handleGetArtifact(ctx context.Context, req *Request) *Response
 	res := map[string]any{
 		"name": a.Name, "rev": a.Rev, "updated_at": a.UpdatedAt, "manifest": manifest,
 	}
-	if len(a.View) <= artifactViewBudgetBytes {
+	switch {
+	case a.Manifest.View == artifacts.ViewScript:
+		addScriptSource(res, a.View)
+	case len(a.View) <= artifactViewBudgetBytes:
 		var view any
 		if err := json.Unmarshal(a.View, &view); err != nil {
 			return NewErrorResponse(req.ID, ErrInternal, "failed to read artifact "+strconv.Quote(name))
 		}
 		res["view"] = view
-	} else {
+	default:
 		res["view_truncated"] = true
 		res["view_summary"] = viewSummary(a.View)
 	}
 	return NewResponse(req.ID, res)
+}
+
+// addScriptSource returns view.js the way a long query's SQL is returned: whole,
+// or (over artifactViewBudgetBytes, the view cap) not at all, never as a prefix, so a
+// partial script cannot exist for the agent to write back. write_artifact's
+// keep_view_source keeps the stored script.
+func addScriptSource(res map[string]any, src []byte) {
+	if len(src) > artifactViewBudgetBytes {
+		res["view_source"] = nil
+		res["view_source_omitted"] = true
+		res["view_source_length"] = utf8.RuneCount(src)
+		return
+	}
+	res["view_source"] = string(src)
 }
 
 // manifestForAgent renders a manifest as plain data. A query whose SQL is over
@@ -230,13 +250,13 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
 	}
-	view, err := viewFromParam(req.Params["view"])
-	if err != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, "view: "+err.Error())
-	}
 	rev, err := revParam(req.Params)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
+	}
+	view, err := viewFromParams(ctx, store, name, rev, m, req.Params)
+	if err != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, "view: "+err.Error())
 	}
 	if err := keepStoredSQL(ctx, store, name, rev, m, keep); err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
@@ -266,9 +286,13 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 		return h.artifactErrorResponse(req.ID, name, "save", err)
 	}
 	h.logger.Info("agent wrote artifact", "artifact", name, "queries", len(m.Queries))
-	return NewResponse(req.ID, map[string]any{
+	res := map[string]any{
 		"name": name, "saved": true, "rev": a.Rev, "queries_checked": len(m.Queries),
-	})
+	}
+	if m.View == artifacts.ViewScript {
+		res["note"] = "the script view is stored but does not run until the person allows it in Studio; it asks again after every edit"
+	}
+	return NewResponse(req.ID, res)
 }
 
 func conflictMessage(name, rev string) string {
@@ -392,6 +416,51 @@ func scalarText(v any) any {
 		return strconv.FormatBool(x)
 	}
 	return v
+}
+
+// viewFromParams picks the view file's bytes by the manifest's view kind:
+// view (an A2UI page) for a2ui, view_source (the view.js text) or
+// keep_view_source for script. The other kind's parameter is refused, not
+// ignored.
+func viewFromParams(ctx context.Context, store artifacts.Store, name, rev string, m *artifacts.Manifest, params map[string]any) ([]byte, error) {
+	_, hasView := params["view"]
+	_, hasSource := params["view_source"]
+	keep, _ := params["keep_view_source"].(bool)
+	if m.View != artifacts.ViewScript {
+		if hasSource || keep {
+			return nil, errors.New("view_source is only for a manifest with view: script")
+		}
+		return viewFromParam(params["view"])
+	}
+	switch {
+	case hasView:
+		return nil, errors.New("a manifest with view: script takes view_source (the view.js text), not view")
+	case keep && hasSource:
+		return nil, errors.New("send view_source or keep_view_source, not both")
+	case keep:
+		return storedScript(ctx, store, name, rev)
+	}
+	src, ok := params["view_source"].(string)
+	if !ok {
+		return nil, errors.New("view_source must be the text of view.js")
+	}
+	if len(src) > artifacts.MaxScriptBytes {
+		return nil, fmt.Errorf("view_source is over the %d byte limit", artifacts.MaxScriptBytes)
+	}
+	return []byte(src), nil
+}
+
+// storedScript is keep_view_source: the stored view.js byte for byte, only
+// with the rev of the artifact the agent read.
+func storedScript(ctx context.Context, store artifacts.Store, name, rev string) ([]byte, error) {
+	if rev == "" {
+		return nil, errors.New("keep_view_source needs the rev of the artifact you read (get_artifact)")
+	}
+	cur, err := store.Get(ctx, name)
+	if err != nil || cur.Manifest.View != artifacts.ViewScript {
+		return nil, fmt.Errorf("keep_view_source needs the stored artifact %q to exist with view: script", name)
+	}
+	return cur.View, nil
 }
 
 // viewFromParam renders the tool's view object as view.a2ui.json bytes.

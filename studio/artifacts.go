@@ -19,7 +19,7 @@ type ArtifactSummary struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	// View is the view kind ("a2ui").
+	// View is the view kind ("a2ui" or "script").
 	View      string `json:"view"`
 	UpdatedAt string `json:"updated_at"`
 	Rev       string `json:"rev"`
@@ -44,11 +44,14 @@ type ArtifactDetail struct {
 	Description string              `json:"description"`
 	Params      []artifacts.Param   `json:"params"`
 	Queries     []ArtifactQueryInfo `json:"queries"`
-	View        json.RawMessage     `json:"view,omitempty"`
-	Defaults    map[string]any      `json:"defaults"`
-	Rev         string              `json:"rev"`
-	UpdatedAt   string              `json:"updated_at"`
-	Error       string              `json:"error,omitempty"`
+	// ViewKind is "a2ui" or "script". A script view has no View here: it is
+	// shown as source until the person allows it (ArtifactViewState).
+	ViewKind  string          `json:"view_kind"`
+	View      json.RawMessage `json:"view,omitempty"`
+	Defaults  map[string]any  `json:"defaults"`
+	Rev       string          `json:"rev"`
+	UpdatedAt string          `json:"updated_at"`
+	Error     string          `json:"error,omitempty"`
 }
 
 // listArtifacts is ListArtifacts over a store.
@@ -101,8 +104,12 @@ func openArtifact(a *artifacts.Artifact, now time.Time) *ArtifactDetail {
 	for _, q := range a.Manifest.Queries {
 		d.Queries = append(d.Queries, ArtifactQueryInfo{Name: q.Name, Uses: append([]string{}, q.Uses...)})
 	}
-	view, err := artifacts.RenderView(&a.Manifest, a.View)
-	if err == nil {
+	d.ViewKind = a.Manifest.View
+	var view []byte
+	var err error
+	if a.Manifest.View == artifacts.ViewScript {
+		d.Defaults, err = artifacts.Defaults(&a.Manifest, now)
+	} else if view, err = artifacts.RenderView(&a.Manifest, a.View); err == nil {
 		d.Defaults, err = artifacts.Defaults(&a.Manifest, now)
 	}
 	if err != nil {

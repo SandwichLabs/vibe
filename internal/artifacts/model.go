@@ -18,25 +18,28 @@ import (
 )
 
 // Folder and file names. An artifact is artifacts/<name>/artifact.yaml plus
-// artifacts/<name>/view.a2ui.json.
+// one view file: view.a2ui.json (view: a2ui) or view.js (view: script).
 const (
 	Dir          = "artifacts"
 	ManifestFile = "artifact.yaml"
 	ViewFile     = "view.a2ui.json"
+	ScriptFile   = "view.js"
 )
 
 // Caps (bytes unless noted). The byte caps apply before any decode.
 const (
 	MaxManifestBytes = 256 << 10
 	MaxViewBytes     = 1 << 20
-	MaxQueries       = 20
-	MaxParams        = 50
-	MaxSQLBytes      = 64 << 10
-	MaxTextLength    = 1000
-	MaxEnumOptions   = 200
-	MaxTitleLength   = 200
-	MaxDescription   = 2000
-	MaxNameLength    = 64
+	// MaxScriptBytes caps view.js.
+	MaxScriptBytes = 1 << 20
+	MaxQueries     = 20
+	MaxParams      = 50
+	MaxSQLBytes    = 64 << 10
+	MaxTextLength  = 1000
+	MaxEnumOptions = 200
+	MaxTitleLength = 200
+	MaxDescription = 2000
+	MaxNameLength  = 64
 	// maxYAMLNodes bounds the parsed document, independent of its byte size.
 	maxYAMLNodes = 20000
 	// MaxSafeInteger is 2^53: an integer parameter must be within it, since
@@ -48,6 +51,9 @@ const (
 const (
 	Version  = 1
 	ViewA2UI = "a2ui"
+	// ViewScript is a custom view: view.js, run in a Worker only after the
+	// person allows it (see ViewHash and docs/reference/artifacts.md).
+	ViewScript = "script"
 )
 
 // Parameter types (closed).
@@ -68,7 +74,7 @@ type Manifest struct {
 	Description string  `yaml:"description,omitempty" json:"description,omitempty"`
 	Parameters  []Param `yaml:"parameters,omitempty" json:"parameters,omitempty"`
 	Queries     []Query `yaml:"queries" json:"queries"`
-	// View is the view kind: "a2ui" (the default when empty).
+	// View is the view kind: "a2ui" (the default when empty) or "script".
 	View string `yaml:"view,omitempty" json:"view,omitempty"`
 }
 
@@ -111,8 +117,10 @@ type Artifact struct {
 	// two cannot disagree. A successful Put clears it. Never set on a value a
 	// store returns.
 	ManifestText []byte
-	// View is the view document (JSON text), validated against the manifest
-	// (ValidateView): within the cap, one JSON object, a valid A2UI view.
+	// View is the view file's bytes, validated against the manifest
+	// (ValidateView): for view: a2ui the view document (JSON text, one JSON
+	// object, a valid A2UI view); for view: script the view.js source (UTF-8,
+	// within the cap). ViewFileOf names the file.
 	View []byte
 	Rev  string
 	// UpdatedAt is the newer of the two files' modification times (RFC 3339).
@@ -136,4 +144,13 @@ var ErrInvalid = errors.New("invalid artifact")
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
+}
+
+// ViewFileOf is the name of the view file a manifest's view kind keeps beside
+// artifact.yaml.
+func ViewFileOf(m *Manifest) string {
+	if m.View == ViewScript {
+		return ScriptFile
+	}
+	return ViewFile
 }

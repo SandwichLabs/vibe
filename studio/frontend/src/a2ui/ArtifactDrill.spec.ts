@@ -11,7 +11,7 @@ import { useArtifactParams } from '../composables/useArtifactParams'
 import type { A2UIPageT } from './types'
 
 const detail: ArtifactDetail = {
-  name: 'sales', title: 'Sales', description: '', rev: 'r', updated_at: '', queries: [],
+  view_kind: 'a2ui', name: 'sales', title: 'Sales', description: '', rev: 'r', updated_at: '', queries: [],
   params: [
     { name: 'region', type: 'enum', default: '', options: ['East', 'West'] },
     { name: 'top', type: 'integer', default: '10', min: 1, max: 100 },

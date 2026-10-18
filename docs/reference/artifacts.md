@@ -5,8 +5,11 @@ A **data artifact** is a computation plus a view, stored as plain files in the w
 ```
 artifacts/<name>/
 ├── artifact.yaml        title, typed parameters with defaults, NAMED queries over them
-└── view.a2ui.json       a declarative A2UI view (closed schema, validated)
+└── view.a2ui.json       a declarative A2UI view (closed schema, validated)    (view: a2ui, the default)
+    or view.js           a custom view, run in a worker after you allow it     (view: script)
 ```
+
+An artifact has exactly one view file, the one its `view:` names. Both existing, or the wrong one for the kind, makes the folder broken (it lists with an error). There is no fallback A2UI page for a script view: before you allow it, the artifact opens as source. See [Custom views](#custom-views-view-script).
 
 The folder name is the artifact's name. This page describes the file formats and the view rules; the plan and its decisions are in [`../plans/data-artifacts.md`](../plans/data-artifacts.md).
 
@@ -63,7 +66,7 @@ A `date` default is a literal `YYYY-MM-DD` or one of a closed set, resolved on t
 
 ### Caps
 
-`artifact.yaml` 256 KB, `view.a2ui.json` 1 MB, 20 queries, 50 parameters, 200 view components.
+`artifact.yaml` 256 KB, `view.a2ui.json` 1 MB, `view.js` 1 MB (valid UTF-8, not empty, and none of the characters that can make the code differ from what is shown: control characters other than tab, newline and carriage return, DEL, C1 controls, the bidi controls U+202A-202E and U+2066-2069, the line and paragraph separators U+2028/2029 (JavaScript ends a line comment at them), U+200E/200F, U+061C, the soft hyphen U+00AD, the zero-width characters U+200B-200D, U+2060 and U+FEFF, and U+FFF9-FFFC; `artifact.yaml` refuses the same controls, bidi characters and separators), 20 queries, 50 parameters, 200 view components.
 
 ## The view: `view.a2ui.json`
 
@@ -135,13 +138,29 @@ Because step 3 runs every time, a manifest edited by hand, pulled from git or im
 ## Sharing
 
 - **Git.** `artifacts/` is ordinary workspace content; commit it with the rest.
-- **Bundles.** A `.vibe` bundle carries artifacts as two entries each (`artifacts/<name>/artifact.yaml` and `view.a2ui.json`). Import checks structure only; the SQL is vetted when it runs ([workspaces.md](workspaces.md#sharing-without-git-vibe-bundles)).
-- **CLI.** `vibe artifact list [--json]` mirrors the Artifacts list (name, title, view kind, error; never SQL). `vibe export bundle --artifacts a,b` exports. There is no CLI run or write.
+- **Bundles.** A `.vibe` bundle carries artifacts as two entries each (`artifacts/<name>/artifact.yaml` and its view file, `view.a2ui.json` or `view.js`). An allow never travels. Import checks structure only; the SQL is vetted when it runs ([workspaces.md](workspaces.md#sharing-without-git-vibe-bundles)).
+- **CLI.** `vibe artifact list [--json]` mirrors the Artifacts list (name, title, view kind, error; never SQL). `vibe artifact view status|allow|deny|revoke <name>` decides on a script view. `vibe export bundle --artifacts a,b` exports. There is no CLI run or write.
 
 ## Credentials
 
 An artifact holds no credential. A query names a connection; the connection's sign-in is resolved by the session as for any query. A connection password or `.env` value never appears in an artifact error, in `get_artifact` or `list_artifacts`, in a log line or in a bundle (an end-to-end test audits each, `internal/hub/artifacts_e2e_test.go`; it covers credentialed connections that fail before attaching, since no network or database extension is available to a plain `go test`).
 
-## Not built: custom views
+## Custom views: `view: script`
 
-The plan's level 2 (a `view.html` or a worker-drawn view with a query bridge) is **not built**. The Linux spike dropped the iframe design (a sandboxed frame can reach Wails' binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)); a terminable-worker reshape passed on Linux and waits on a macOS run ([#158](https://github.com/SandwichLabs/vibe/issues/158)). A `view.html` in a bundle is refused as an unknown entry. See the spike section of the [plan](../plans/data-artifacts.md#spike-custom-view-isolation-run-2026-10-17).
+A manifest that says `view: script` draws itself with `view.js` instead of an A2UI page, for charts the A2UI components cannot draw. The spike ([plan](../plans/data-artifacts.md#spike-custom-view-isolation-run-2026-10-17)) ruled out an iframe (a sandboxed frame can reach Wails' binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)) and chose a dedicated, terminable Web Worker: it receives rows only through `run(queryName, params)` and returns either an SVG document string (shown as an inert image) or an A2UI page (validated by Go first). A `view.html` is not a thing: a bundle that holds one is refused as an unknown entry.
+
+**Status.** The trust step is built; the worker host is not (the next update). An allowed view shows "Allowed. The view host arrives in the next update." and runs nothing yet.
+
+**Nothing runs until you allow it.** The code in `view.js` is written by someone else or by the agent, so the artifact opens as **source**: a read-only code view of `view.js` and of `artifact.yaml`, with **Allow** and **Deny** and the line "This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries."
+
+- **What an allow covers.** Allow is keyed by the artifact folder's canonical absolute path (symlinks resolved; on macOS and Windows spelled as the file system spells it) plus the `ViewHash`: a sha256 over a version-tagged (`vibe-view-hash/1`), length-prefixed list, entry 0 `artifact.yaml`, then each view file as (path, bytes) sorted by path. Any change to `artifact.yaml` (a query's SQL or connection included) or to `view.js` ends the allow: the view says it **changed since you allowed it** and asks again. Bytes moved from one file to the other change the hash. A clone of the folder at another path, or a copy under another name, is undecided.
+- **What you saw is what you allow.** Allow sends the hash of the bytes on screen, and Go refuses it if the files differ by then. If the files change while you are reading (a reload with a different hash while Allow is armed), Studio keeps showing what you were reading, says "This view changed while you were reading it", and keeps Allow off until you click "Show the new version". The read-only editors draw any remaining control or invisible character as a visible marker, and the CLI prints them as `<U+XXXX>`. The step that runs a view (the next update) serves the bytes it hashed, never a second read.
+- **Deny** holds for that folder until revoked, across edits.
+- **Where decisions live.** In `views.json` beside `dotenv.json` in your own config directory (the same JSON format as `dotenv.json`). Never in the workspace folder, never in a bundle, never in git. **Settings > Workspace > Custom views** lists them with **Revoke**.
+- **Agent edits ask again.** The agent can write a script view (`write_artifact`'s `view_source`) but cannot allow one: there is no tool, MCP method or other path that allows, denies or revokes. Every edit, by anyone, asks again.
+
+**CLI.** `vibe artifact view status|allow|deny|revoke <name>` mirrors the prompt and Settings (as `vibe workspace env` does for `.env`). `status` prints the state, the hash and the source. `allow` shows the source and asks on a terminal; without one it needs `--hash <hash from status> --yes` (you read the source) and is refused if the files changed since. That is scriptable by design: a process that can run your shell can also edit `views.json` directly, so an agent with a shell is outside this feature's threat model. What the feature stops is the agent's tools, MCP and a pulled file allowing a view; it does not stop a program running as you. `vibe artifact list` shows the kind (`script`).
+
+**Sharing.** A script view travels in a bundle as `artifacts/<name>/artifact.yaml` plus `artifacts/<name>/view.js` (the view file must be the one the manifest names), and arrives undecided on the other machine.
+
+**Writing one.** The `data-artifacts` skill describes the worker contract in a few lines: define `draw` (or `run`), call `run(queryName, params)` for rows, return an SVG string or an A2UI page.

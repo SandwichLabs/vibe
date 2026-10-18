@@ -127,7 +127,11 @@ func (m *Mock) Source(_ context.Context, name string) (*Source, error) {
 		m.seen = map[string]string{}
 	}
 	m.seen[name] = rev
-	return &Source{Name: name, Manifest: string(p.manifest), View: string(p.view), Rev: rev}, nil
+	src := &Source{Name: name, Manifest: string(p.manifest), View: string(p.view), Rev: rev, ViewFile: ViewFile}
+	if mf, err := Decode(p.manifest); err == nil {
+		src.ViewFile = ViewFileOf(mf)
+	}
+	return src, nil
 }
 
 func (m *Mock) Delete(_ context.Context, name string, opts ...PutOption) error {
