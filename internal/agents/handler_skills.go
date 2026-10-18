@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/SandwichLabs/vibe/internal/skills"
@@ -79,13 +80,26 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 
 	// rev is the revision the agent's own list_skills / read_skill result
 	// carried. Passing it back makes a save over a skill that changed since
-	// (a git pull, an edit in Studio) a conflict. Without it the store's
-	// last-seen revision applies.
+	// (a git pull, an edit in Studio) a conflict. Without it the write only
+	// creates: WithRev("") keeps the store's last-seen revision from standing
+	// in, so the agent cannot replace a skill it never read (#166).
 	rev, _ := req.Params["rev"].(string)
 
-	newRev, err := skills.SaveUserSkillAt(h.access.Skills(), h.access.Session(), name, description, instructions, tableName, rev)
+	newRev, err := skills.SaveUserSkillAt(h.access.Skills(), h.access.Session(), name, description, instructions, tableName, rev, skills.WithRev(rev))
 	if err != nil {
+		if errors.Is(err, skills.ErrConflict) {
+			return NewErrorResponse(req.ID, ErrInvalidParams, skillConflictMessage(name, rev))
+		}
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 	return NewResponse(req.ID, map[string]any{"name": name, "saved": true, "rev": newRev})
+}
+
+// skillConflictMessage tells the agent how to recover from a refused write:
+// read the skill, then send the rev it returned.
+func skillConflictMessage(name, rev string) string {
+	if rev == "" {
+		return fmt.Sprintf("a skill named %q already exists, so nothing was written. Call read_skill to read it, then send its \"rev\" with your changes (or pick another name).", name)
+	}
+	return fmt.Sprintf("skill %q changed since the rev you sent (a person or another tool edited it) or no longer exists, so nothing was written. Call read_skill again, merge your change into what it returns, and send the new \"rev\".", name)
 }

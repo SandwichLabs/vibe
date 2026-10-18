@@ -260,7 +260,9 @@ func (s *FileStore) Put(_ context.Context, st *Stored, opts ...PutOption) error 
 	if o.hasRev {
 		expect = o.rev
 	}
-	if expect == "" && !o.overwrite {
+	// WithRev("") is create-only: the last-seen fallback must never stand in
+	// for a revision the caller did not supply (#166).
+	if expect == "" && !o.overwrite && !o.hasRev {
 		expect = s.lastSeen(st.Name)
 	}
 	if st.Front == nil {
