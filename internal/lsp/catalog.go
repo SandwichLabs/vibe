@@ -107,7 +107,7 @@ func (s *Schema) Relation(name string) *Relation {
 // Load reads a snapshot. A missing file is an error satisfying
 // errors.Is(err, os.ErrNotExist).
 func Load(path string) (*Catalog, error) {
-	b, err := os.ReadFile(path)
+	b, err := readSnapshotFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +122,8 @@ func Load(path string) (*Catalog, error) {
 }
 
 // Save writes the snapshot atomically (temp file in the same directory, then
-// rename over path), mode 0600. A symbolic link at path is replaced, never
-// written through.
+// rename over path), mode 0600. Nothing is written through a symbolic link:
+// Snapshot refuses one (resolveSnapshot) before it calls Save.
 func (c *Catalog) Save(path string) error {
 	b, err := json.Marshal(c)
 	if err != nil {
@@ -328,8 +328,8 @@ func (s *Source) Catalog() *Catalog {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fi, err := os.Stat(s.path)
-	if err != nil {
+	fi, err := os.Lstat(s.path)
+	if err != nil || !fi.Mode().IsRegular() {
 		s.cat = nil
 		return nil
 	}

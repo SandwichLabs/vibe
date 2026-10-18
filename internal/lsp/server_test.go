@@ -158,14 +158,28 @@ func TestByteOffset(t *testing.T) {
 }
 
 func TestReadMessage_CapsTheBody(t *testing.T) {
-	_, err := readMessage(bufio.NewReader(strings.NewReader("Content-Length: 9223372036854775807\r\n\r\n")))
-	require.Error(t, err)
+	_, err := readMessage(bufio.NewReader(strings.NewReader("Content-Length: 33554433\r\n\r\n" + strings.Repeat("x", maxMessage+1))))
+	require.ErrorIs(t, err, errTooLarge)
 	assert.Contains(t, err.Error(), "limit")
-	_, err = readMessage(bufio.NewReader(strings.NewReader("Content-Length: 33554433\r\n\r\n")))
-	require.Error(t, err)
 	body, err := readMessage(bufio.NewReader(strings.NewReader("Content-Length: 2\r\n\r\n{}")))
 	require.NoError(t, err)
 	assert.Equal(t, "{}", string(body))
+}
+
+func TestServer_OversizedMessageIsDrainedAndServingContinues(t *testing.T) {
+	n := maxMessage + 1
+	big := fmt.Sprintf("Content-Length: %d\r\n\r\n%s", n, strings.Repeat("x", n))
+	var out bytes.Buffer
+	srv := NewServer(strings.NewReader(big+frame(`{"jsonrpc":"2.0","id":9,"method":"shutdown"}`)), &out)
+	require.NoError(t, srv.Run(context.Background()))
+	assert.Contains(t, out.String(), `"id":9`, "the request after the oversized message was answered")
+}
+
+func TestServer_DeclaredLengthPastTheStreamEndsCleanly(t *testing.T) {
+	in := "Content-Length: 9223372036854775807\r\n\r\nshort"
+	_, err := readMessage(bufio.NewReader(strings.NewReader(in)))
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, NewServer(strings.NewReader(in), io.Discard).Run(context.Background()))
 }
 
 func frame(s string) string { return fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(s), s) }
