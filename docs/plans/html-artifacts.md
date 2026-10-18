@@ -1,0 +1,308 @@
+# HTML artifacts: Claude-style pages shared in a workspace
+
+Status: **proposal, 2026-10-18. Not built.** This extends epic #162 (`docs/plans/data-artifacts.md`, called *the base plan* below). Level 1 shipped on 2026-10-17. The base plan's spike finished on macOS (#182): the iframe is dropped, the worker view (`view.js`) is the RESHAPE, and a1 (the meta `frame-src 'self'` on Studio's page) blocks every navigation vector on both platforms. This plan adds a third view kind beside A2UI and the worker view: an **HTML artifact**, a page of the author's own HTML (optionally with script) that works like a Claude artifact. It keeps the base plan's query boundary: a page asks for a named query with values and never sends SQL. Before any step is built, two things are needed: the owner's sign-off, and a spike of its own (step P1).
+
+## Goal
+
+A Claude artifact is a page someone wrote (or Claude wrote). It runs on its own origin, and it can declare a small set of **capabilities**, which the viewer grants when they first use them: a database, calling the model, connectors, saving a file, and a few more (grounding). In Vibe the same idea means the following:
+
+1. **A page, shared by git.** The page lives at `artifacts/<name>/` beside `artifact.yaml`: an HTML template and optional local CSS, JS, fonts and images. A teammate pulls it and opens it. It runs live on *their* connections with *their* credentials. The folder holds no data and no answers (the base plan's rule).
+2. **Data binding in Go, by name.** The page's HTML is a Go `html/template`. Its only data source is `{{ query "by_region" }}`: the manifest's named queries, run through `Handler.RunArtifactQuery` with values bound by `artifacts.Bind`. The template cannot name a connection, write SQL or read a file. Script, when a page has script, uses the same call: `vibe.run("by_region", {from: "2026-01-01"})`.
+3. **Two hosts, chosen by whether the page has script.**
+   - A **static page** (no script) renders *inside* Studio, in a script-less sandboxed frame. Links re-render it in Go with new parameter values. This is classic server-rendered HTML, built on the base plan's `/vibe-view/` middleware and its meta CSP on Studio's page.
+   - A **scripted page** opens in its own **page window**. That window is a native web view Vibe owns, running in a separate helper process with no Wails bridge, no network it can use and no credentials. Capabilities are available only there.
+4. **Capabilities, declared and granted.** A page declares what it needs in the manifest: `state` (a per-artifact document store), `download` (save a file the page made, through a save dialog) and `ask` (a plain completion from the person's configured model). The trust prompt lists the declared capabilities. A page that doesn't declare a capability doesn't get it, and changing the declaration asks again.
+5. **Trust like `.env`, extended to a file set.** Nothing in `html/` renders until the person allows it. The allow is keyed by the artifact's path plus a hash over the manifest and every page file. The agent can write a page but can never allow one.
+
+The A2UI view (level 1) stays as it is. The worker view (`view.js`, the base plan's RESHAPE) gets the manifest value `view: script`, which is new here; the base plan's D2 lists only `a2ui | html`. Once the scripted host passes P1, a scripted page with d3 from `vibe-lib/` does everything `view: script` does, and the static page draws without script. So `view: script` is built only as the **fallback** if the scripted host is dropped, and it can't be dropped too: it is the only custom drawing that renders inside Studio *with* script. In order of increasing power and cost, the view kinds are:
+
+| `view:` | Author writes | Where it renders | Script | Gate |
+|---|---|---|---|---|
+| `a2ui` (shipped) | a closed JSON schema | in Studio | none (Studio's own components) | validation |
+| `script` (base plan, step 9) | `view.js`, returning an SVG or A2UI | in Studio (inert `<img>` or validated A2UI) | in a terminable Worker | allow + hash |
+| `html`, static | an `html/template` page | in Studio, in a script-less sandboxed frame | none | allow + hash |
+| `html`, scripted | template + JS | in its own page window (helper process) | in a web view Vibe owns | allow + hash, capabilities listed |
+
+## On Go templating as the binding layer
+
+Templating is the right way to bind data. The reasons are below, but one limit comes first. **A template does not make the author's HTML safe.** `html/template` escapes *data* by context. The template text itself is the author's markup, and it can contain any `<script>`, `<iframe>` or `<a href>`. So the template decides how data gets in. Whether the page's own markup can run is the host's job, and its CSP decides.
+
+What templating buys:
+
+- **The query boundary becomes structural.** The template's `FuncMap` is the whole API: `query`, `param`, `link` and formatting helpers (H2). No function takes SQL, a connection or a path.
+- **The first render needs no script.** A table, a pivot laid out by hand, an SVG chart built by `range` over rows: all of these work with JavaScript off, which is what lets a static page render inside Studio.
+- **Row data is escaped by context.** A value such as `<img onerror=…>` in a database row is the most likely injection in a shared workspace, because whoever can write to the shared Postgres can write that value. It comes out as text in HTML, as a JSON string inside `<script>`, and as a refused URL inside `href`.
+- **Errors at save.** `template.Parse` with the closed `FuncMap` catches unknown functions and syntax errors when `write_artifact` runs, so the model gets a usable error.
+
+Alternatives considered: a logic-less template (Mustache) has no context-aware escaping in Go and no conditionals for empty results. Client-side binding only (page JS calls `vibe.run`) forces script on every page and loses the in-Studio host. Go's `html/template` is in the standard library, already understood, and contextual.
+
+## Grounding
+
+### Claude artifacts (what we are borrowing)
+
+These come from the artifact runtime contract (0.2.85) and from Anthropic's help centre ([What are artifacts](https://support.claude.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them)).
+
+- **A page on its own origin.** Each artifact is an HTML document served from its own host, so browser storage is per artifact and never reaches other viewers. Script loads only from a short list of CDNs, at pinned versions.
+- **Capabilities are declared, then granted.** The page declares `capabilities: {name: config}`. At run time it calls `await claude.use(name)`, which resolves the capability's frozen namespace, or `null` when it is not granted or not available. *Design for absence*: the page must render without the capability. Consent is lazy: a prompt arrives on the first call, never from `use()`, and a viewer's "no" is final for that page load.
+- **The capabilities**, and what each means for Vibe:
+  - **`db`**: documents in collections, with per-path access rules and a private per-person area. Vibe's `state` (H5).
+  - **`sample`**: ask Claude, billed to the viewer, memoryless. Vibe's `ask` (H5).
+  - **`downloads`**: offer a generated file, behind a confirmation. Vibe's `download` (H5).
+  - **`mcp`**: the viewer's own connectors, with the viewer's credentials. In Vibe this role belongs to the query boundary itself: the viewer's connections, reached only through the manifest's named queries.
+  - **`artifact`**: the page republishes itself. Not in Vibe: a page never writes its own files.
+  - **`assets`**, **`room`**, **`comments`**, **`user`**, **`files`**: uploads, presence, comments, identity and project files. None of these fit (single user, files in git), so they are left out.
+- **Each viewer uses their own access.** Connectors run as the viewer, and usage counts against the viewer's plan. Vibe already works this way: a pulled artifact runs on the puller's connections.
+- **Storage is 20 MB per artifact, text only, with personal and shared scopes kept apart.** The help centre warns viewers to check whether an artifact uses shared storage before entering anything sensitive.
+- **Publishing refuses** pages that impersonate someone, or that collect credentials or payment details under false pretences. In Vibe the equivalent is that a page window can never look like Studio's sign-in (H7).
+
+What we **cannot** borrow is the isolation. A claude.ai artifact runs in a browser with site isolation: a cross-origin frame gets its own process. Vibe runs inside Wails, and the base plan's spike showed what that means for an iframe: on Linux it reaches the full binding IPC (#174), and a `while(true)` in it freezes Studio. The base plan's *Spike* section has the details. So the scripted page cannot be a frame in Studio's window, and the hosts below follow from that.
+
+### Vibe (what is there)
+
+- `artifacts.Bind`, `Handler.RunArtifactQuery` and `checkArtifactStatement` are the one run path. They give a 500-row cap, a 30 s timeout, read-only in every tier and the fixed denial text (base plan, *As built*).
+- Base plan D9 already specifies a Wails `AssetServer.Middleware` under `/vibe-view/<token>/…` with response CSP headers, the path rules that avoid Wails' runtime injection (`assetserver.go:139-183`), and the meta CSP `frame-src 'self'` on Studio's page (candidate a1, verified on Linux).
+- `internal/trustfile` is base plan step 8 and **not yet built**: the allow-by-path-and-hash store, extracted from `internal/dotenv`, with `views.json` beside `dotenv.json`. This plan's H6 is its first consumer.
+- `internal/llm` runs the in-app agent on the configured provider (`docs/reference/llm-config.md`).
+- Wails on macOS checks `isMainFrame` for binding messages (`WailsContext.m:539`, `darwin/frontend.go:174`); on Linux it does not (#174). Its macOS user script is added with `forMainFrameOnly:false` (`WailsContext.m:296`), and the `external` handler applies to every frame. Wails never enables WebKitGTK's web-process sandbox (no `webkit_web_context_set_sandbox_enabled` under `internal/frontend/desktop/linux/`).
+- Wails v2 has one window and owns its web view. Studio links WebKitGTK 4.1 on Linux and WebKit on macOS, so a second native web view needs no new system library.
+- `cmd/studio_gui.go` launches the separate `vibe-studio` binary. A helper mode of that binary is not a CLI command, so "CLI mirrors UI" does not apply to it.
+
+## Decisions
+
+### H1. File layout and manifest
+
+```
+artifacts/<name>/
+├── artifact.yaml
+├── view.a2ui.json        (view: a2ui)
+├── view.js               (view: script)
+└── html/                 (view: html)
+    ├── index.html.tmpl   the entry template; other *.tmpl files are partials
+    ├── app.js            optional; any number of .js/.mjs files makes the page "scripted"
+    ├── style.css
+    └── assets/…          .svg .png .jpg .webp .woff2 .json (static reference data, e.g. a topojson)
+```
+
+```yaml
+view: html
+html:
+  entry: index.html.tmpl          # default; must be a .tmpl directly under html/
+  window: {width: 1200, height: 800}   # scripted pages only; clamped
+  capabilities:                   # scripted pages only; a closed set
+    state: {scope: local}
+    download: {}
+    ask: {}
+```
+
+- **Strict decode as today.** `html` is allowed only with `view: html`. Unknown capability names are refused. A capability on a static page is a validation error ("capabilities need script"), so the declaration never lies about the host.
+- **Static or scripted is derived, not declared.** A page is scripted if `html/` holds any `.js` or `.mjs` file, or if a template contains a `<script>` element or an inline event handler. This uses the same tokenizer `html/template` uses (`golang.org/x/net/html`, already in `go.mod` as an indirect dependency, promoted to direct in step P2). The derived kind is part of the hash, so a page can't switch hosts without asking again.
+- **Caps:** at most 200 files and 5 MB under `html/`; any one file at most 1 MB; templates at most 256 KB each. Allowed extensions are the closed list above. There are no symlinks, no dotfiles, no folders deeper than `html/assets/<dir>/`, and no top-level `_vibe/` or `vibe-lib/` (reserved for the host). A folder that breaks a rule lists with its error and does not render (refuse, don't repair).
+- **No CDN, no network.** A page vendors what it needs into `html/`, where it is hashed and shown at allow. Vibe also serves a small pinned set at `vibe-lib/` (d3 modules, vega + vega-lite, Observable Plot) from the embedded FS, licences in `THIRD_PARTY_NOTICES.md` (base plan open question 5, extended).
+
+### H2. Templates: what a page can reach
+
+- `html/template`, parsed with `Option("missingkey=error")`. The entry template and its partials come only from `html/*.tmpl`; the `ParseFS` root is the artifact folder's `html/`, opened through the store (no symlinks).
+- **The `FuncMap` is the whole API**, and it is closed:
+  - `query "name"` returns `{Columns, Rows, Truncated}` for that named query, with the current parameter values. Queries run lazily and once per render per *(query, values)*, through `RunArtifactQuery`. An error renders as a fixed text block, never the policy's reason.
+  - `param "name"` returns the bound value of a parameter. `params` returns the manifest's declared parameters, with options, for building controls.
+  - `link "name" value …` returns a URL to this page with those parameters overridden. It is the only way to make a self-link that keeps the token path.
+  - Formatting: `number`, `percent`, `date`, `bytes`, `truncate`.
+  - SVG helpers: `scaleLinear`, `scaleBand` and `pathLine` return plain numbers and strings, so a static page can draw a chart without script.
+  - `json` returns the value for a `<script type="application/json">` data block (scripted pages), escaped by `html/template`'s JS context.
+- **No function returns `template.HTML`, `template.JS`, `template.CSS`, `template.URL` or `template.HTMLAttr`.** Data is always escaped. A lint test fails if one is ever added. That test is the single most important line in this plan: one `safeHTML` helper turns any database row into script inside a page that holds capabilities.
+- **Limits.** A render runs with the 30 s query timeout and a 10 MB output cap; the writer errors and the render stops. Template execution itself is bounded by the data (at most 20 queries × 500 rows), and `text/template` caps recursion depth.
+- **Save-time vet.** `write_artifact` parses every template with the closed `FuncMap` (unknown function or bad syntax: refused), checks that every `query` name is a literal naming a manifest query, and checks every `param` and `link` name the same way. A `query` with a computed name is refused at save; at run it is still checked against the manifest. That makes "which queries a page uses" derivable, like the base plan's derived `Uses`.
+
+### H3. The static host: inside Studio
+
+- Served by the base plan's `/vibe-view/` middleware (D9) at `/vibe-view/<token>/page?<params>`, with static files at `/vibe-view/<token>/assets/<path>`. **The token is per (Studio process, artifact)**, not per process as in D9. One page's token opens no other artifact, and the route takes the artifact from the token, never from the path. The path never ends in `/` or `index.html`, so Wails injects no runtime. Response CSP, with `<a>` standing for `<studio-origin>/vibe-view/<token>/assets/`:
+  `sandbox; default-src 'none'; script-src 'none'; style-src <a> 'unsafe-inline'; img-src <a> data:; font-src <a>; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'`
+  Sub-resources can load only from `assets/`, which never runs a query. An `<img src=…/page?…>` or a CSS `url()` pointing at the render route is refused by the CSP. It is also refused by the route itself: `/page` answers only a navigation request (it checks `Sec-Fetch-Dest: iframe` where WebKit sends the header, and otherwise rate-limits renders to 4 in flight and 60 a minute per token). That way a page can't fire renders in a loop.
+  The response also carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. The iframe gets `sandbox=""`, with no `allow-scripts`, `allow-same-origin`, `allow-forms`, `allow-popups` or `allow-top-navigation`.
+- **No script runs in the frame, so (b) and (d) do not apply, but (a) still does.** Without script there is no IPC to post (d), no loop to freeze on (b), and no `location =`. Navigation that needs no script remains:
+  - a person's click on an outside `<a href>`, which the sandbox does not stop;
+  - a `<meta refresh>`. The HTML spec blocks it in a frame sandboxed without `allow-scripts` (the *sandboxed automatic features* flag); the base plan's spike frame had `allow-scripts`, so it doesn't tell us WebKit's behaviour here.
+
+  Both are stopped by the meta CSP `frame-src 'self'` on Studio's page (base plan candidate a1), which blocked all 9 vectors on Linux and on macOS (#182). **So the static host depends on a1**, which ships with it. P1 reruns the vectors for a script-less frame and tries to narrow the meta CSP to the `/vibe-view/` path.
+- **Interactivity without script.** `<a href="{{ link "region" .region }}">` navigates the frame to the same route with new values. There are no forms: the frame has no `allow-forms`, so a form can't submit, and that keeps the sandbox minimal. Go binds them (`artifacts.Bind` refuses bad values) and re-renders. Values are read only from the query string of the `/vibe-view/` route, never from Studio's own state. Parameter controls can also stay as Studio's level-1 components around the frame (`useArtifactParams`); a change reloads the frame with the new query string.
+- **Serve what was hashed.** As base plan D9: the middleware reads the file set once, hashes it with the manifest, compares it with the allowed hash and renders those bytes. A watcher change tears the frame down.
+- **Sizing.** The frame has a fixed height that the person can resize. With no script inside, the frame can't report its own height (`ResizeObserver` needs script).
+
+### H4. The scripted host: a page window Vibe owns
+
+- **A helper process.** `vibe-studio --view-host` is the same binary in a mode that never starts Wails. Studio spawns it with:
+  - a scrubbed environment: only the display and locale variables the toolkit needs (the list comes from step P1). None of `AWS_*`, `*_TOKEN`, `*_PASSWORD` or the workspace `.env` overlay is passed, because the overlay is never in the environment and the helper never sees the parent's;
+  - one dedicated pipe pair (`ExtraFiles`) for a JSON-lines protocol, not stdin/stdout, which GTK may write to; stderr goes to Studio's debug log; no other inherited file descriptors;
+  - on Linux, `SysProcAttr.Pdeathsig = SIGKILL`, so the helper dies with Studio. On macOS the helper exits when its protocol pipe closes;
+  - **no network**, as a structural property and not just a settings list. On Linux the helper starts in its own empty network namespace (`CLONE_NEWUSER|CLONE_NEWNET` through `SysProcAttr.Cloneflags`, or `bwrap --unshare-net` where user namespaces are disabled). On macOS P1 tries a `sandbox-exec` profile with `(deny network*)`, which is deprecated but still enforced. If P1 can't confirm zero DNS queries and zero STUN packets on macOS, the scripted host is dropped there.
+
+  The helper is never given the workspace path, a connection, a credential or a store. It receives the page's bytes over the pipe and serves them from memory.
+- **The native web view is ours, not Wails'.** On Linux it is WebKitGTK through cgo; on macOS, WKWebView through Objective-C. We own the native code (a few hundred lines per platform). `webview/webview` exposes no navigation policy, custom scheme or ephemeral data store, and it registers its own `__webview__` message handler. The helper calls `webkit_web_context_set_sandbox_enabled(TRUE)` before creating the web view, which Wails never does (grounding); P1 confirms the web process is confined. Owning the view gives what Wails withheld (base plan grounding):
+  - **A navigation policy.** The web view refuses every navigation except the initial page and same-page `link` URLs: GTK's `decide-policy` and `WKNavigationDelegate`. It also refuses new windows, downloads the page starts itself, and every permission request (camera, microphone, geolocation, notifications, clipboard read).
+  - **A custom URL scheme.** `vibe-page://<name>/` is served from memory with the response CSP:
+    `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src blob:; frame-src 'none'; form-action 'none'; base-uri 'none'`
+    `connect-src 'self'` lets script `fetch("assets/x.json")`. That is harmless: the scheme handler serves only bytes held in memory, and nothing it serves runs a query. Queries go only through `vibe.run`. The host's own files are on the page's origin too, so `'self'` covers them: `vibe-page://<name>/_vibe/theme.css` and `vibe-page://<name>/vibe-lib/…`. Studio sends the library files the page's templates and scripts reference over the pipe when the window opens, in chunks, outside the 2 MB per-message cap.
+    No `'unsafe-eval'` and no inline script: data reaches script through the `json` block. Libraries that need `eval` (some vega builds) use their CSP-safe build.
+  - **One message handler, main frame only.** It lives in the page's main world, beside the injected `vibe` API: a main-world object can't post to a handler in another content world, and the page is untrusted either way, so an isolated world would buy nothing. Frames are refused by `frame-src 'none'`. The handler also checks `frameInfo.isMainFrame` on macOS; on Linux, where the frame isn't available, there is nothing else to check, because the helper's view holds only the page.
+  - **Ephemeral data.** A non-persistent website data store, so no `localStorage`, IndexedDB or cookies survive the window. A page keeps state only through `state`.
+  - **Off where the platform allows:** WebRTC and media streams (`enable-webrtc`, `enable-media-stream` on WebKitGTK; macOS has only a private preference), DNS prefetch, plugins, the developer inspector (unless a Studio setting turns it on for authors), and spatial navigation. CSP `connect-src` covers neither WebRTC nor DNS prefetch on every WebKit. These settings are a second layer: the empty network namespace or the sandbox profile above is the gate.
+- **The page-side API**, injected by the helper as a user script in the main world before the page runs. It mirrors `claude.use`:
+  ```js
+  const rows = await vibe.run("by_region", { from: "2026-01-01" }) // {columns, rows, truncated}
+  vibe.params()                    // declared parameters, defaults, static options
+  const state = await vibe.use("state")   // namespace or null; same for "download", "ask"
+  ```
+  `vibe.run` is always present. `vibe.use(name)` resolves `null` for anything not declared, and the page must render without it. Theme roles arrive as CSS custom properties (`--vibe-*`) in a host stylesheet at `vibe-page://<name>/_vibe/theme.css`, built from the validated theme.
+- **The bridge in Studio.** Messages go from the page to the helper, over the pipe, to Studio, through `studio/pagehost.go`, a non-binding helper. Studio pins the artifact name when it opens the window: a message never names its artifact. Each message is shape-checked and size-capped (64 KB in, 2 MB out). Limits are 4 calls in flight and 60 a minute per window. Errors are fixed texts, never a path or the policy's reason (base plan *As built*: "a level-2 bridge would have to use fixed text").
+- **Watchdog.** The page host posts a heartbeat. On a missed beat, a crash, or a watcher change to the artifact, Studio kills the helper process and shows "This page stopped responding" or "This page changed" in Studio, with Reopen. Killing the helper takes its web process with it; P1 checks this on both platforms.
+- **The window can't impersonate Studio.** Its native title is always `<artifact title> — Vibe page`; `document.title` is ignored. There is no menu bar beyond Close. It is never full-screen without a person's gesture. Studio never asks for a credential inside a page window, and the user guide says so in the same paragraph as the trust prompt.
+- **The macOS process model.** The helper runs from inside the app bundle with the accessory activation policy, so it shows no second Dock icon. P1 checks focus, Cmd-W, and the window staying above Studio when opened.
+- **The macOS keychain.** Keychain ACLs are per application. A helper that is the same executable as Studio shares Studio's keychain identity, so an escape from the web process into the helper could read Vibe's items without a prompt. (Linux Secret Service has no per-binary ACL at all, so there it is the OS user either way.) The mitigation, chosen if P1's sandbox result is weak, is a separate helper executable in `Contents/MacOS/` with its own identifier.
+
+### H5. Capabilities
+
+Every capability is declared in the manifest, listed in the trust prompt, and resolved through `vibe.use`. Each one maps to a Studio method behind the pipe, never to an agent tool: a page is not a way into the one tool surface.
+
+- **`state`**: a small document store for the page's own state (an annotations list, saved filter sets, a checklist, which cohort is pinned).
+  - API: `get(key)`, `set(key, value)`, `delete(key)`, `list(prefix)`; values are JSON; `onChange(fn)` for other windows of the same artifact.
+  - **v1 scope: `local` only.** The store is `.vibe-local/artifacts/<name>/state.json` (git-ignored, machine-local), compare-and-write through `filestore`, at most 1 MB in total and 64 KB per value, with writes debounced. It is keyed by the artifact's name, not its hash, so state survives an edit and a re-allow.
+  - **`shared` scope is deferred, by decision.** A committed `artifacts/<name>/state/` would let a page copy query results from a person's connection into a file that git then pushes. That breaks *data stays where it lives* and is an exfiltration path through git, with the person's own `git push` as the carrier. The shape that fits *data stays where it lives* is a `state` backed by a **writable connection**: a DuckDB file under `data/`, or a named connection the person made writable, with the base plan's write gates (tier, writable connection, approval). Then shared state is data in a database, not answers in git (*Later*).
+  - Like Claude's `db`, the store's contents are **untrusted input** to the page. Another version of the page wrote them.
+- **`download`**: `save({filename, data, type})`, limited to CSV, JSON, SVG, PNG, PDF and plain text, at most 20 MB. It opens Studio's native save dialog (Wails `runtime.SaveFileDialog`) with the name filled in. The person can cancel, and a save is never silent. It is allowed only from a person's gesture: the injected API reads `navigator.userActivation.isActive` inside the web view, before page script can wrap it. That check only stops a page from saving on load. The page could forge a flag it sends itself, and it can fake a gesture too, so **the save dialog is the real gate**.
+- **`ask`**: `ask(prompt, {system?})` returns `{text}`.
+  - It is a single completion on the person's configured provider (`internal/llm`), with **no tools**: never the agent's registry, never task mode.
+  - It returns `null` when no provider is configured (*AI as collaborator, not dependency*).
+  - Limits: 10 calls a minute, a prompt cap of 32 KB, an output cap of 4,000 tokens.
+  - The trust prompt names the provider: "This page can send text, which may include query results, to <provider>". For a remote provider this is the one capability that moves data off the machine, so it also gets its own toggle in Settings > Workspace > Pages, defaulting to on at allow time and revocable separately. It defaults to on because the agent already sends query results to the same provider, and the prompt names it. A reviewer who disagrees should argue from that.
+  - Calls appear in the agent activity log with the page's name. They are not hidden.
+- **Not offered:** connectors or MCP (the query boundary is the connector), writes of any kind, network, files outside `state`, the agent's tools, the person's identity, presence and comments.
+
+### H6. Trust over a file set
+
+- The base plan's `ViewHash` becomes `PageHash`. It is a sha256 over a **canonical manifest of the file set**. Entry 0 is `artifact.yaml`, length-prefixed, so a pull that changes a query's SQL or connection after allow asks again. Then come the files in `html/`, sorted by path, each as the length-prefixed path, the length-prefixed content and the file's role. The list also includes the derived static/scripted kind and the declared capabilities. A renamed, added, removed or moved file changes the hash, and so does a byte moved across a file boundary.
+- **The allow prompt** shows:
+  - the file list with sizes, and each file in a read-only CodeMirror;
+  - the queries the page uses (H2's derived list), with their connections;
+  - for a scripted page, the declared capabilities, each with a plain line of what it does.
+
+  The person allows or denies. The decision is stored in `views.json` (base plan step 8), never in the folder or a bundle.
+- **The agent can write a page but can't allow one.** There is no tool and no MCP method for it. That includes agent edits: every edit asks again (base plan open question 6, which still stands).
+- **Re-ask on change.** A watcher change to any file in the artifact tears down the static frame or kills the page window, then re-checks the hash.
+
+### H7. Agent and bundle
+
+- **`write_artifact`** gains `html_files: {path: text}`. Text files only: binary assets arrive by git or a bundle, not from the model. It is checked against H1's rules and vetted per H2 at save. `get_artifact` returns the file list and each text file's source (capped as long SQL is). The agent never sees a render: there is no tool that runs a page, as no tool runs an artifact today.
+- The built-in `data-artifacts` skill gets an *HTML pages* section: the `FuncMap`, a static example (a table and an SVG bar chart drawn with `scaleBand`), a scripted example (`vibe.run` with vega-lite from `vibe-lib/`), and the rule that data reaches script only through `{{ json }}`.
+- **Bundles.** Kind `artifact` gains the `html/` entries under H1's rules. They are checked before any write, and the bundle caps of 10 MB per entry and 50 MB in total still apply. A decision never travels with a bundle.
+- **CLI.** `vibe artifact list` shows `html (static)` or `html (scripted)`. `vibe artifact view status|allow|deny|revoke <name>` (base plan D8) covers pages, and `status` lists the capabilities. There is no command to open or run a page: it opens from Studio.
+
+## Steps
+
+The base plan's per-step gates and review rules still apply: Sonnet implements, Opus reviews adversarially, and nothing is committed until APPROVE. Base plan step 8 (trust) comes first, generalised to file sets in H6, and is shared with the worker view. The static host doesn't depend on the macOS worker result.
+
+#### Step P1. Spike: both hosts in the real webview, on Linux and macOS (not committed)
+
+- **Static host:** a `sandbox=""` frame with `script-src 'none'` in the Wails window.
+  - Rerun every D10 vector and confirm none runs: inline `<script>`, `onerror`, `javascript:` URLs, `<meta refresh>`, SVG `<script>`, `<object>`/`<embed>`.
+  - Confirm a person's click on an outside link is blocked by the meta `frame-src` (a1 blocked all 9 scripted vectors on both platforms, #182; this is the script-less case). Try narrowing it to `frame-src <studio-origin>/vibe-view/` and confirm Studio still works.
+  - Links re-render through the middleware, and a `<form>` does not submit.
+  - The `<studio-origin>/vibe-view/<token>/assets/` source matches for styles, images and fonts, although the `sandbox` directive gives the document an opaque origin.
+  - An `<img>` and a CSS `url()` pointing at `/page` are refused by the CSP, and by the route if the CSP lets one through.
+  - On macOS, Wails' `forMainFrameOnly:false` user script does not run in a frame without `allow-scripts`.
+  - The frame navigating itself to `/` and `/index.html` by a link (not probed by #182): Studio's page loads without script, and nothing reaches Go.
+  - Confirm no Wails runtime is injected and no message reaches Go.
+  - Ground truth is the loopback listener and the Go log, as in step 7.
+- **Scripted host:** the helper process with its own web view on both platforms.
+  - `fetch`, XHR, WebSocket, `EventSource`, `sendBeacon`, `<img src=http…>`, CSS `url()` and `@import`, `<link rel=dns-prefetch|preconnect|prefetch>`, `<a ping>`, WebRTC with a STUN server, `window.open`, `location =` and a form submit. Each must produce **no** listener hit, and no DNS query either (watch with `tcpdump port 53`).
+  - The message handler refuses a frame (a `srcdoc` frame, which `frame-src 'none'` should already stop).
+  - **The network gate.** On Linux the helper's network namespace has only `lo`, which the helper can't use to reach Studio's listener. On macOS the `sandbox-exec` profile is applied. In both cases there are zero DNS queries and zero STUN packets, and a `fetch` to the loopback listener gets no hit.
+  - The web process sandbox is on (`/proc/<webprocess>/status` and the bwrap parent on Linux; `sandbox-exec`'s confinement on macOS).
+  - `while(true){}`: the heartbeat is missed, the helper is killed, its web process exits and Studio never stutters.
+  - The helper's environment and file descriptors, read from `/proc/<pid>/environ` and `fd` on Linux and with `ps eww` / `lsof` on macOS.
+  - The macOS Dock and focus behaviour.
+  - A real d3 and a vega-lite chart render under the CSP.
+- **Output:** a *Spike* section appended here, with each check marked Verified or Not verified, and a decision per host. The static host can ship even if the scripted host fails. If the scripted host fails on either platform, it is dropped, and pages stay static plus `view.js`.
+
+#### Step P2. `internal/artifacts`: the `html/` file set, the template vet, `PageHash` (Go only)
+
+- File-set loading through the store: H1's rules, the derived kind, caps, and `Rev` over all files (extending the two-file revision). The template parse uses the closed `FuncMap` (defined in a leaf, `internal/artifacts/pagefuncs`, so the vet and the renderer share it) and derives the queries a page uses. Watcher kinds extend to `artifacts/<name>/html/**`.
+- **Tests:**
+  - Every H1 refusal, plus symlinks and dotfiles.
+  - Derived kind: a `<script>` inside a template, an `onclick=`, and a `.js` file each make the page scripted.
+  - `PageHash` changes when a file is added, removed or renamed, and when a byte moves across a file boundary.
+  - **The FuncMap lint:** reflect over every function and fail if any return type is one of `html/template`'s trusted string types.
+- **Review first:** template paths escaping `html/` (`{{ template "../x" }}` is a name, not a path, so check `ParseFS`'s root); a computed `query` name; the derived kind being fooled (a `<script>` split across partials, an SVG asset with a script, which is served as an `<img>` only).
+
+#### Step P3. Rendering and the static host
+
+- `artifacts.RenderPage(ctx, runner, name, values, w)` with lazy, memoised queries, the output cap and fixed error text. `studio/viewserver.go`, the base plan's step 9 middleware, gets the `/page` route and H3's CSP. `components/StaticPage.vue` hosts the frame, with the level-1 controls around it. Resizable height.
+- **Tests:**
+  - Go: every response under the route has the CSP; one artifact's token can't render or serve another's; `/page` refuses a sub-resource request and rate-limits; there is no injection on the route's paths; a hostile row value comes out as text in HTML, as a string in `{{ json }}`, and as `#ZgotmplZ` in `href`; a parameter in the query string goes through `Bind`; the output cap holds.
+  - Rodney: layout only. The isolation is accepted in the Wails window, as in step 7.
+- **Review first:** any path where data becomes markup; the token-to-artifact mapping; the `link` helper (no `javascript:`; only this route); the frame CSP missing on an error response.
+
+#### Step P4. The page window
+
+- `cmd/vibe-studio` helper mode; `internal/pagehost` holds the pipe protocol, a leaf shared by the helper and Studio. Native code in `studio/pagewindow_{linux,darwin}.go` (cgo, build-tagged like Wails' own). `studio/pagehost.go` covers spawning with a scrubbed environment, the bridge, limits and the watchdog. In Studio: "Open page" and the "stopped responding" / "changed" states.
+- **Tests:**
+  - Go, protocol: message shapes refused, caps, rate limits, artifact pinning (a message that names another artifact is refused by shape, since no field exists for it).
+  - Go, environment: the scrubbed env, asserted on a fake spawn.
+  - Live in the Wails build on both platforms: the P1 hostile page rerun as an allowed page.
+- **Review first:**
+  - an environment or file descriptor reaching the helper;
+  - a navigation the policy lets through (redirects, `about:blank`, `blob:` documents);
+  - the network namespace or sandbox profile missing on any spawn path (a fallback that skips it must fail closed);
+  - the helper outliving Studio;
+  - `document.title` reaching the native title;
+  - `vibe.run` able to reach a query the page's derived list doesn't hold. That is allowed, since it is still a manifest query, but it must be logged.
+
+#### Step P5. Capabilities: `state`, `download`, then `ask`
+
+- **`state`**, local scope (H5), and **`download`**, with the gesture check. **`ask`** comes last, behind its separate toggle and in the activity log.
+- **Tests:**
+  - `state`: the caps; a value over 64 KB refused; compare-and-write under two windows; the file lands in `.vibe-local`, never in the folder.
+  - `download`: refused without `userActivation`, and a cancel resolves with no write.
+  - `ask`: `null` without a provider; no tools are ever sent (assert the request a fake provider receives); the rate limit.
+- **Review first:** any capability reachable without its declaration; `ask` reaching the tool registry; `state` used as a channel between artifacts (keyed by name, so it is per artifact; check that the name comes from Studio, not the page).
+
+#### Step P6. Trust prompt, agent tool, skill, bundle, CLI, docs
+
+- The H6 prompt and Settings > Workspace > Pages; H7's `write_artifact` and `get_artifact` changes, the skill section, bundle entries and `vibe artifact view`. Docs:
+  - `docs/reference/artifacts.md`: an *HTML pages* section with the `FuncMap`, the hosts, the capabilities and the CSPs;
+  - `agent-policy.md`: pages are content and never run for the agent;
+  - `workspaces.md`: layout and bundle entries;
+  - user docs: the trust prompt and the warning about a page asking for a credential;
+  - the `CLAUDE.md` tree and *Key concepts*;
+  - `direction.md` §9.
+- **Rodney:** an agent-written static page shows as source; allow; it renders; edit it on disk and it asks again.
+- **Live in the Wails window:** a scripted page with `state`, `download` and `ask`.
+
+## Security: what the adversarial reviewer should hit
+
+- **Data becoming markup.** This is the attack a shared workspace makes likely: a row in a shared database, or a value in `state`, that carries `<script>`, `javascript:` or `</script>`. Every route in from data must go through `html/template` escaping or `textContent`. No trusted-type helper may exist (H2 lint).
+- **The template as code.** The template is the author's code. Its markup is untrusted (the host's CSP is the gate), and its `FuncMap` is the only API.
+- **The query boundary.** Neither the template nor the script reaches SQL, a connection name or another artifact. Studio pins the artifact by name. Every value goes through `Bind`; every run goes through `RunArtifactQuery`'s gates. Row caps and rate limits hold.
+- **Exits.**
+  - Things that must be **impossible**: network, because the helper has none to use (namespace or sandbox profile, then CSP, then settings); navigation away; a new window; the clipboard read; the Wails bridge; a static page reaching another artifact's render.
+  - Things that may happen only **after consent or a gesture**: `download`, through the save dialog; `ask`, to the named provider; `state`, local disk only.
+  - Things that **remain**, because the person does them: copying text, printing, drag-out, screenshots.
+- **The helper process.** It has no credentials, environment, workspace path or file descriptors beyond its pipes. It is killed on a missed heartbeat or a change, and it dies with Studio. A WebKit compromise inside the helper still runs as the person's OS user. WebKit's own web-process sandbox is the defence in depth: bubblewrap on WebKitGTK, which the helper turns on because Wails doesn't, and the platform sandbox on macOS. P1 confirms it is on. On macOS the helper shares Studio's keychain identity unless it is a separate executable (H4).
+- **Impersonation.** A page window that draws a fake "Sign in to prod_pg" form. The native title is fixed, Studio never asks for a credential in a page, and `ask` and `download` make a typed password leave only with consent. Say so in the trust prompt.
+- **Trust.** `PageHash` covers `artifact.yaml`, every page file, the kind and the capabilities. The served bytes are the hashed bytes. The agent can't allow a page. A clone at another path asks again, and a bundle never carries a decision.
+
+## Later
+
+- **Shared `state`, backed by a writable connection** (a DuckDB file under `data/`, or a named connection), with the write gates. Never committed files (H5).
+- **Embedding a scripted page inside Studio's window.** This would need two things: Wails fixing #174 (main-frame-only IPC on Linux; macOS already drops sub-frame messages, #182), and WebKit site isolation for frames, so a loop can't freeze Studio (the iframe failed (b) on both platforms). Or a move to Wails v3 multi-window. Revisit when either lands.
+- **Binary assets from the agent** (base64, with type sniffing and caps).
+- **A page as a notebook cell**, embedded by name with fixed parameters (the static host only).
+- **Exporting a static page's render to HTML or PDF**, at the person's current parameters. It would be a snapshot made on request, never stored in the folder.
+- **Per-page row caps above 500**, with a hard ceiling (base plan *Later*).
+
+## Open questions
+
+1. **Is a separate window acceptable UX for scripted pages?** An embedded view isn't possible without frame isolation and, on Linux, #174 (*Later*). The static host covers in-Studio pages.
+2. **Native code. Answered:** we own it (H4). `webview/webview` has no navigation policy, custom scheme or ephemeral store, and it registers its own handler. What remains open is the macOS network gate: whether a deprecated `sandbox-exec` profile is acceptable to ship, or whether the helper needs an App Sandbox entitlement of its own.
+3. **The `vibe-lib/` set and versions**, shared with the worker view (base plan open question 5).
+4. **The CSP narrowing to `frame-src …/vibe-view/`** may not be honoured for paths on a custom scheme. If it isn't, `frame-src 'self'` stays, and the static frame can still navigate to Studio's own page. That is harmless without `allow-scripts` (P1 probes it).
+5. **`ask` defaults.** On at allow time (H5 gives the reason). The owner may prefer off for remote providers.
