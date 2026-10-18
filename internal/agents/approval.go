@@ -243,6 +243,9 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 			verb = "Replace"
 		}
 		ar.Summary = fmt.Sprintf("%s data artifact %s", verb, stringParam(req.Params["name"]))
+		if mf, _ := req.Params["manifest"].(map[string]any); stringParam(mf["view"]) == "script" {
+			ar.Summary += " with a script view (it stays inert until you allow it)"
+		}
 		ar.SQL = artifactQueriesText(req.Params["manifest"])
 	case "add_query_cell", "create_dashboard":
 		ar.Rows = -1

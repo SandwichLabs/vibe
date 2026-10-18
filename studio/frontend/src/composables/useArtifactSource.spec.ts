@@ -17,7 +17,7 @@ import { workspaceInfo } from './useWorkspace'
 type MockApp = Partial<Record<keyof AppApi, any>>
 
 const src = (over: Partial<ArtifactSource> = {}): ArtifactSource => ({
-  name: 'orders', manifest: 'title: Orders\n', view: '{}', manifest_missing: false, view_missing: false, rev: 'r1', updated_at: '', ...over,
+  name: 'orders', manifest: 'title: Orders\n', view: '{}', view_file: 'view.a2ui.json', manifest_missing: false, view_missing: false, rev: 'r1', updated_at: '', ...over,
 })
 
 function makeApp(over: MockApp = {}) {

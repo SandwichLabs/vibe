@@ -145,3 +145,20 @@ and `"sql_omitted": true` (and its length), never a partial copy. To keep such
 a query exactly as stored, send `{"name": "<name>", "keep_sql": true}` (plus
 its `connection`) instead of `sql`; this needs the `rev`. To change it, send
 the full new SQL. Do not send `keep_sql` together with `sql`.
+
+## Script views (`view: script`)
+
+Instead of an A2UI page, a manifest may say `view: script` and send the text of
+`view.js` as `view_source` (not `view`) to `write_artifact`. `get_artifact`
+returns it as `view_source` (or `view_source_omitted`, and then
+`keep_view_source: true` plus the `rev` keeps it as stored). Use it only when no
+A2UI component draws what is needed.
+
+The script runs later, in a sandboxed worker with no network, no files and no
+DOM, **only after the person allows it** in Studio. You cannot allow it, and it
+asks again after every edit. It defines `draw` (or `run`) and gets rows only
+through `run(queryName, params)`, which can name only this artifact's own
+queries. It returns either an SVG document string or an A2UI page object (the
+same shape as `view`). The queries and parameters are still the manifest's and
+are vetted as for any artifact. The worker host arrives in a later update, so
+write the script plainly and do not assume the person has seen it run.

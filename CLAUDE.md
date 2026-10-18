@@ -51,7 +51,7 @@ CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapsho
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio)
-studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,import_export,lifecycle,llm,
+studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go (the logic behind the data artifact bindings: list, open, run, edit, save, delete), agent_turn.go (the in-flight chat turn and its cancel),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
@@ -72,6 +72,7 @@ internal/
   secrets/           keychain + env credential store, plus pluggable sign-in methods (`MethodProvider`: aws-sso) (write-only across every boundary)
   awssso/            AWS IAM Identity Center sign-in in Go: SSO profile loading, the shared token cache, role credentials, device-flow login (leaf: AWS SDK + stdlib only; `workspace.NewResolver` wires it as the `aws-sso:PROFILE` sign-in; Studio's banner and `vibe conn credentials sign-in` run the device flow, `aws sso login` shares its token cache)
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
+  trustfile/         the allow-by-path-and-hash, deny-by-path decision store (leaf; JSON in the user config dir, never the workspace or a bundle); used by dotenv (dotenv.json) and by custom artifact views (views.json)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
   skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)
   llm/               in-app agent runner (fantasy), task mode, grounding
@@ -79,7 +80,7 @@ internal/
   lsp/               `vibe lsp`: stdio Language Server (completion, hover) over a catalog snapshot (.vibe-local/catalog.json) the TUI or `vibe lsp snapshot` writes; opens no database and writes no file
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
-  artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json}` under one two-file revision; structure only, SQL vetting lives in `internal/agents`
+  artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json | view.js}` under one two-file revision, and `ViewHash` (the trust hash of a custom view); structure only, SQL vetting lives in `internal/agents`
   a2ui/              component schema + validator (Go validates, Vue renders); `ValidateView` + `ViewComponents` = the context-aware data artifact view schema (controls, pivot, `query`/`drill`; refused by `Validate`)
   bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
   crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
@@ -104,6 +105,8 @@ docs/                see docs/README.md
 **Skills (vibe-app#62).** `SKILL.md` documents (`name`, `description` + markdown). The prompt advertises name and description; the agent fetches bodies with `read_skill`. Built-ins are embedded. Table-bound skills load only when the table has rows.
 
 **Data artifacts (#162, plan `docs/plans/data-artifacts.md`).** A parameterised, live view stored as files: `artifacts/<name>/artifact.yaml` (typed parameters with defaults and *named* queries) plus `view.a2ui.json`. It stores questions, never answers. `artifacts.Bind` turns (query name, raw values) into the manifest's SQL text unchanged plus bound params; a value never becomes SQL text. The store refuses rather than repairs (strict YAML, byte caps before decode, no anchors/aliases), and one `Rev` covers both files. The SQL policy runs in `internal/agents` at save and again at every run, in every tier, so a hand-edited, git-pulled or bundled artifact is held to it too. No tool runs an artifact for the agent (Studio runs it for the person). Level 2 custom views are not built: the spike dropped the iframe and a worker reshape passed on Linux and macOS (see the plan); steps 8-9 wait on sign-off.
+
+**Custom artifact views (`view: script`, #159).** An artifact may name `view.js` instead of `view.a2ui.json`; the code is someone else's or the agent's, so it shows as source and runs nothing until the person allows it. Allow is keyed by the folder's canonical path plus `artifacts.ViewHash` (version-tagged, length-prefixed over `artifact.yaml` and the view files), kept in `views.json` beside `dotenv.json` (`internal/trustfile`), and refused if the files changed since they were shown. No agent tool or MCP method can allow, deny or revoke. The worker that runs an allowed view is step 9.
 
 **A2UI artifacts (vibe-app#67).** `{ title, components[] }`, twenty component types (the original thirteen plus the KINETIC charts `areaChart`, `columnChart`, `ringChart`, `radarChart`, `sankeyChart`, `heatmap`, `streamChart`), closed color enum, unknown fields rejected. `stat` / `table` / every chart take inline data or a live `sql` binding; every chart takes a closed `motion` object (easing preset, speed, stagger, spring tuning), animated in `a2ui/useMotion.ts` and off under reduced motion.
 

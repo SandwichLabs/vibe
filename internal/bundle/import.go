@@ -198,7 +198,7 @@ func storeHas(t Target, kind ItemKind, id string) (bool, error) {
 	paths := []string{entryPath(kind, id)}
 	if kind == KindArtifact {
 		// Either file is enough to be in the way.
-		paths = append(paths, artifacts.Dir+"/"+id+"/"+artifacts.ViewFile)
+		paths = append(paths, artifacts.Dir+"/"+id+"/"+artifacts.ViewFile, artifacts.Dir+"/"+id+"/"+artifacts.ScriptFile)
 	}
 	for _, rel := range paths {
 		_, err := filestore.StatStamp(t.Root(), rel)

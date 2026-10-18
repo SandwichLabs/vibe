@@ -19,9 +19,11 @@ import (
 // or not (a broken artifact can be opened and fixed). Rev covers both files and
 // is what SaveArtifact and ResolveConflict send back.
 type ArtifactSource struct {
-	Name            string `json:"name"`
-	Manifest        string `json:"manifest"`
-	View            string `json:"view"`
+	Name     string `json:"name"`
+	Manifest string `json:"manifest"`
+	View     string `json:"view"`
+	// ViewFile names the view file ("view.a2ui.json" or "view.js").
+	ViewFile        string `json:"view_file"`
 	ManifestMissing bool   `json:"manifest_missing"`
 	ViewMissing     bool   `json:"view_missing"`
 	Rev             string `json:"rev"`
@@ -71,8 +73,11 @@ func getArtifactSource(ctx context.Context, store artifacts.Store, name string) 
 	if err != nil {
 		return nil, err
 	}
+	if src.ViewFile == "" {
+		src.ViewFile = artifacts.ViewFile
+	}
 	return &ArtifactSource{
-		Name: src.Name, Manifest: src.Manifest, View: src.View, ManifestMissing: src.ManifestMissing,
+		Name: src.Name, Manifest: src.Manifest, View: src.View, ViewFile: src.ViewFile, ManifestMissing: src.ManifestMissing,
 		ViewMissing: src.ViewMissing, Rev: src.Rev, UpdatedAt: src.UpdatedAt,
 	}, nil
 }

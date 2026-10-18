@@ -310,3 +310,74 @@ func TestImport_SymlinkedStoreFolderFailsTheItemInsteadOfHanging(t *testing.T) {
 	entries, _ := os.ReadDir(outside)
 	assert.Empty(t, entries, "nothing was written through the link")
 }
+
+const scriptManifest = "version: 1\ntitle: Chart\nview: script\nqueries:\n  - name: q\n    sql: SELECT 1\n"
+const scriptSource = "function draw(ctx) { return '<svg xmlns=\"http://www.w3.org/2000/svg\"/>'; }\n"
+
+func TestArtifact_ScriptViewRoundTripsAndCarriesNoDecision(t *testing.T) {
+	src, _ := newWS(t)
+	require.NoError(t, src.Artifacts().Put(context.Background(),
+		&artifacts.Artifact{Name: "chart", ManifestText: []byte(scriptManifest), View: []byte(scriptSource)}, artifacts.WithRev("")))
+	st, err := src.ArtifactViewState("chart")
+	require.NoError(t, err)
+	require.NoError(t, src.AllowArtifactView("chart", st.Hash))
+
+	res, err := Export(context.Background(), src, ExportOptions{Selection: Selection{Artifacts: []string{"chart"}}})
+	require.NoError(t, err)
+	require.Len(t, res.Manifest.Contents, 2)
+	assert.Equal(t, "artifacts/chart/artifact.yaml", res.Manifest.Contents[0].Path)
+	assert.Equal(t, "artifacts/chart/view.js", res.Manifest.Contents[1].Path)
+	assert.NotContains(t, string(res.Data), "views.json")
+
+	pkg, err := Open(res.Data, "")
+	require.NoError(t, err)
+	dst, _ := newWS(t)
+	out, err := pkg.Import(context.Background(), dst, ImportOptions{})
+	require.NoError(t, err)
+	require.Len(t, out.Outcomes, 1)
+	assert.Equal(t, "created", out.Outcomes[0].Result, out.Outcomes[0].Error)
+
+	js, err := os.ReadFile(filepath.Join(dst.Root(), "artifacts", "chart", "view.js"))
+	require.NoError(t, err)
+	assert.Equal(t, scriptSource, string(js))
+	got, err := dst.ArtifactViewState("chart")
+	require.NoError(t, err)
+	assert.Equal(t, "undecided", got.State, "an allow never travels in a bundle: it shows as source on the other side")
+	assert.Equal(t, st.Hash, got.Hash)
+}
+
+func TestArtifact_ScriptViewFileMustMatchTheManifest(t *testing.T) {
+	cases := map[string]map[string][]byte{
+		"script manifest with a2ui view": {
+			"artifacts/chart/artifact.yaml":  []byte(scriptManifest),
+			"artifacts/chart/view.a2ui.json": []byte(artView),
+		},
+		"a2ui manifest with view.js": {
+			"artifacts/sales/artifact.yaml": []byte(artManifest),
+			"artifacts/sales/view.js":       []byte(scriptSource),
+		},
+		"both view files": {
+			"artifacts/chart/artifact.yaml":  []byte(scriptManifest),
+			"artifacts/chart/view.js":        []byte(scriptSource),
+			"artifacts/chart/view.a2ui.json": []byte(artView),
+		},
+		"empty view.js": {
+			"artifacts/chart/artifact.yaml": []byte(scriptManifest),
+			"artifacts/chart/view.js":       []byte(" \n"),
+		},
+		"view.js over the cap": {
+			"artifacts/chart/artifact.yaml": []byte(scriptManifest),
+			"artifacts/chart/view.js":       []byte(strings.Repeat("a", artifacts.MaxScriptBytes+1)),
+		},
+		"script manifest with no view": {
+			"artifacts/chart/artifact.yaml": []byte(scriptManifest),
+		},
+	}
+	for name, entries := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Open(build(t, entries, nil), "")
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrCorrupt)
+		})
+	}
+}

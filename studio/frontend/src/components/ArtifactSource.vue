@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ArtifactSource — the Source tab of a data artifact (#162, step 6a): artifact.yaml
-// and view.a2ui.json in CodeMirror, Save (Ctrl/Cmd+S), Delete, the conflict banner
+// and its view file (view.a2ui.json or view.js) in CodeMirror, Save (Ctrl/Cmd+S), Delete, the conflict banner
 // and the policy warnings of a saved query. State and actions are
 // useArtifactSource; this renders it. The editors show the file text as it is on
 // disk, so a broken artifact can be fixed here. Every message below is text
@@ -16,7 +16,7 @@ const props = defineProps<{ name: string; active: boolean }>()
 const emit = defineEmits<{ saved: []; gone: [] }>()
 
 const src = useArtifactSource(() => props.name, { saved: () => emit('saved'), gone: () => emit('gone') })
-const { manifest, view, loading, loadError, saving, saveError, notice, warnings, dirty, conflict, conflictBusy } = src
+const { manifest, view, viewFile, loading, loadError, saving, saveError, notice, warnings, dirty, conflict, conflictBusy } = src
 
 type FileTab = 'manifest' | 'view'
 const tab = ref<FileTab>('manifest')
@@ -24,7 +24,7 @@ const manifestEl = ref<HTMLElement | null>(null)
 const viewEl = ref<HTMLElement | null>(null)
 const editors: Partial<Record<FileTab, VibeEditorInstance>> = {}
 
-function mount(which: FileTab, el: HTMLElement | null, lang: 'yaml' | 'json') {
+function mount(which: FileTab, el: HTMLElement | null, lang: 'yaml' | 'json' | 'javascript') {
   if (!el || editors[which]) return
   const text = which === 'manifest' ? manifest : view
   editors[which] = createVibeEditor(el, {
@@ -34,7 +34,17 @@ function mount(which: FileTab, el: HTMLElement | null, lang: 'yaml' | 'json') {
     extraKeymap: [{ key: 'Mod-s', run: () => { void src.save(); return true } }],
   })
 }
-onMounted(() => { mount('manifest', manifestEl.value, 'yaml'); mount('view', viewEl.value, 'json') })
+// view.js is JavaScript, view.a2ui.json is JSON: a change of kind remounts the view editor.
+const viewLang = (): 'javascript' | 'json' => (viewFile.value === 'view.js' ? 'javascript' : 'json')
+let mountedViewLang = viewLang()
+onMounted(() => { mount('manifest', manifestEl.value, 'yaml'); mount('view', viewEl.value, viewLang()) })
+watch(viewFile, () => {
+  if (viewLang() === mountedViewLang) return
+  editors.view?.destroy()
+  delete editors.view
+  mountedViewLang = viewLang()
+  mount('view', viewEl.value, mountedViewLang)
+})
 onBeforeUnmount(() => { for (const e of Object.values(editors)) e?.destroy() })
 
 // A load, reload or resolution replaces the text from outside the editor.
@@ -51,7 +61,7 @@ watch(() => props.active, (a) => { if (a) void src.checkOnce() }, { immediate: t
     <div class="row artifact-src__bar">
       <div class="seg" role="group" aria-label="Artifact file">
         <button type="button" :class="{ on: tab === 'manifest' }" :aria-pressed="tab === 'manifest'" data-testid="source-tab-manifest" @click="tab = 'manifest'">artifact.yaml</button>
-        <button type="button" :class="{ on: tab === 'view' }" :aria-pressed="tab === 'view'" data-testid="source-tab-view" @click="tab = 'view'">view.a2ui.json</button>
+        <button type="button" :class="{ on: tab === 'view' }" :aria-pressed="tab === 'view'" data-testid="source-tab-view" @click="tab = 'view'">{{ viewFile }}</button>
       </div>
       <span v-if="dirty" class="badge badge--warn" data-testid="source-dirty">Unsaved</span>
       <span style="flex: 1;" />

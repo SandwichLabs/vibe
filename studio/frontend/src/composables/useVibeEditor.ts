@@ -1,8 +1,9 @@
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, keymap, highlightSpecialChars } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
 import { sql as sqlLang } from '@codemirror/lang-sql'
 import { json as jsonLang } from '@codemirror/lang-json'
+import { javascript as jsLang } from '@codemirror/lang-javascript'
 import { yaml as yamlLang } from '@codemirror/lang-yaml'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
@@ -82,8 +83,10 @@ interface VibeEditorOptions {
   value?: string
   /** Called whenever the document changes. */
   onChange?: (value: string) => void
-  /** Language mode — 'markdown' (default), 'sql' (notebook sql cells, the Query Explorer), or 'json' / 'yaml' (the artifact Source tab). */
-  lang?: 'markdown' | 'sql' | 'json' | 'yaml'
+  /** Language mode — 'markdown' (default), 'sql' (notebook sql cells, the Query Explorer), or 'json' / 'yaml' / 'javascript' (the artifact Source tab and the custom-view trust prompt). */
+  lang?: 'markdown' | 'sql' | 'json' | 'yaml' | 'javascript'
+  /** Read-only: the text can be selected and copied but not edited (the custom-view trust prompt). */
+  readOnly?: boolean
   /** Extra key bindings layered on top of the default keymap (e.g. Ctrl/Cmd+Enter to run). */
   extraKeymap?: import('@codemirror/view').KeyBinding[]
 }
@@ -115,7 +118,7 @@ export function createVibeEditor(
     }
   })
 
-  const languages = { markdown, sql: sqlLang, json: jsonLang, yaml: yamlLang }
+  const languages = { markdown, sql: sqlLang, json: jsonLang, yaml: yamlLang, javascript: jsLang }
   const languageExtension = languages[options.lang ?? 'markdown']()
   const extraKeymap = options.extraKeymap ?? []
 
@@ -131,6 +134,8 @@ export function createVibeEditor(
       keymap.of([...extraKeymap, ...defaultKeymap, ...historyKeymap]),
       updateListener,
       EditorView.lineWrapping,
+      // Read-only is the trust prompt: show every control and invisible character.
+      ...(options.readOnly ? [EditorState.readOnly.of(true), highlightSpecialChars()] : []),
     ],
   })
 

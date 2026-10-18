@@ -6,6 +6,7 @@ import { App } from '../lib/bindings'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import Icon from './Icon.vue'
 import AgentSettings from './AgentSettings.vue'
+import ArtifactViewDecisions from './ArtifactViewDecisions.vue'
 import { workspaceInfo, isReadOnly, refreshWorkspaceInfo } from '../composables/useWorkspace'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { errorText, settingsError } from '../lib/errors'
@@ -172,6 +173,8 @@ onUnmounted(() => unsub?.())
         </template>
       </div>
     </div>
+
+    <ArtifactViewDecisions />
 
     <AgentSettings />
 

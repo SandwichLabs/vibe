@@ -21,6 +21,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/vibe/internal/trustfile"
 )
 
 // Workspace is an open workspace folder: its configuration (committed, local
@@ -69,6 +70,20 @@ type Workspace interface {
 	// Artifacts is the workspace's artifacts/ folder: data artifacts, one
 	// folder each (artifact.yaml and view.a2ui.json).
 	Artifacts() artifacts.Store
+
+	// ArtifactViewState reports where an artifact's custom view (view: script)
+	// stands for this person: undecided, allowed, changed (edited since the
+	// allow) or denied, with the exact files the hash covers. AllowArtifactView
+	// takes the hash the person was shown and is refused (ErrViewChanged) if the
+	// files differ now. DenyArtifactView and RevokeArtifactView complete the set;
+	// ArtifactViewDecisions lists them for Settings. Decisions live in views.json
+	// in the user config directory, never in the workspace or a bundle, and no
+	// agent tool or MCP method reaches any of these.
+	ArtifactViewState(name string) (ArtifactViewStatus, error)
+	AllowArtifactView(name, hash string) error
+	DenyArtifactView(name string) error
+	RevokeArtifactView(name string) error
+	ArtifactViewDecisions() []ArtifactViewDecision
 
 	// Resolver is the credential resolver (keychain, env, prompt) this
 	// workspace uses. Never nil.
@@ -202,7 +217,8 @@ type workspace struct {
 	warnings       []string
 
 	denv dotenvState
-	res  *secrets.Resolver // opts.resolver with the .env overlay layered on
+	vdec *trustfile.Decisions // custom-view allow/deny decisions (views.json)
+	res  *secrets.Resolver    // opts.resolver with the .env overlay layered on
 
 	crudMu   sync.Mutex // serialises connection CRUD in this process
 	wmu      sync.Mutex
@@ -238,6 +254,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 		return nil, err
 	}
 	w.initDotEnv(w.cfg.ID)
+	w.initArtifactViews(w.cfg.ID)
 	filestore.SweepStaleTemps(root, w.tempDirs(), time.Minute)
 	obs := w.observe
 	w.nb = notebooks.NewFileStore(root, notebooks.WithObserver(obs))

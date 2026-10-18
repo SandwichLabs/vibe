@@ -12,10 +12,11 @@ import (
 
 var artifactCmd = &cobra.Command{
 	Use:   "artifact",
-	Short: "List the workspace's data artifacts",
+	Short: "List the workspace's data artifacts and trust their custom views",
 	Long: `Data artifacts are parameterised, live views kept in the workspace's
 artifacts/<name>/ folders. They are made and edited in Studio (or by an agent
-over MCP); this command only lists them, as Studio's Artifacts list does.`,
+over MCP); "list" shows them as Studio's Artifacts list does, and "view" allows
+or denies a custom script view.`,
 }
 
 var artifactListCmd = &cobra.Command{

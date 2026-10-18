@@ -236,6 +236,7 @@ func (w *Watcher) relevant() []string {
 		for _, s := range subs {
 			add(artifacts.Dir + "/" + s + "/" + artifacts.ManifestFile)
 			add(artifacts.Dir + "/" + s + "/" + artifacts.ViewFile)
+			add(artifacts.Dir + "/" + s + "/" + artifacts.ScriptFile)
 		}
 	}
 	return out
@@ -282,7 +283,7 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindQuery, strings.TrimSuffix(parts[1], queries.Extension), true
 	case len(parts) == 3 && parts[0] == skills.Dir && parts[2] == skills.File && !filestore.IsTemp(parts[1]):
 		return KindSkill, parts[1], true
-	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile) && !filestore.IsTemp(parts[1]):
+	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile || parts[2] == artifacts.ScriptFile) && !filestore.IsTemp(parts[1]):
 		return KindArtifact, parts[1], true
 	}
 	return "", "", false

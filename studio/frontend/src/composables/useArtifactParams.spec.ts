@@ -3,7 +3,7 @@ import { effectScope } from 'vue'
 import { useArtifactParams } from './useArtifactParams'
 
 const detail = (): ArtifactDetail => ({
-  name: 'sales', title: 'Sales', description: '', rev: 'r1', updated_at: '', queries: [],
+  view_kind: 'a2ui', name: 'sales', title: 'Sales', description: '', rev: 'r1', updated_at: '', queries: [],
   params: [
     { name: 'from', type: 'date', default: 'today-90d' },
     { name: 'top', type: 'integer', default: '10', min: 1, max: 100 },

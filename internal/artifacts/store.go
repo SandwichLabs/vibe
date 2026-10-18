@@ -5,7 +5,8 @@ import (
 )
 
 // Store is where a workspace keeps its data artifacts. The file store keeps
-// each as artifacts/<name>/artifact.yaml plus artifacts/<name>/view.a2ui.json;
+// each as artifacts/<name>/artifact.yaml plus one view file (view.a2ui.json or
+// view.js, by the manifest's view kind);
 // the Mock keeps them in memory for tests of packages that depend on one.
 //
 // An artifact is one unit: Rev covers both files, a Put checks it against both
@@ -40,9 +41,12 @@ type Store interface {
 // Source is an artifact's files as text, unvalidated. A file that does not
 // exist is empty with its Missing flag set. Rev covers both, as for Get.
 type Source struct {
-	Name            string
-	Manifest        string
-	View            string
+	Name     string
+	Manifest string
+	View     string
+	// ViewFile is the view file that exists ("view.a2ui.json" or "view.js"),
+	// "" when neither does.
+	ViewFile        string
 	ManifestMissing bool
 	ViewMissing     bool
 	Rev             string

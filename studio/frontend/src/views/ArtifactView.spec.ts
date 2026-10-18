@@ -12,6 +12,7 @@ import ArtifactView from './ArtifactView.vue'
 import ArtifactsView from './ArtifactsView.vue'
 
 const detail = (over: Partial<ArtifactDetail> = {}): ArtifactDetail => ({
+  view_kind: 'a2ui',
   name: 'sales', title: 'Regional sales', description: 'Revenue by region', rev: 'r1', updated_at: '',
   params: [
     { name: 'from', type: 'date', default: 'today-90d' },
@@ -62,6 +63,17 @@ async function mountAt(name: string) {
 }
 
 describe('ArtifactView', () => {
+  it('a script view opens as source with Allow, not as a rendered page, and runs no query', async () => {
+    const app = makeApp(detail({ view_kind: 'script', view: undefined }), {
+      ArtifactViewState: vi.fn(async () => ({ name: 'sales', kind: 'script', state: 'undecided', hash: 'c'.repeat(64), manifest: 'view: script\n', source: 'draw()\n' })),
+    })
+    const w = await mountAt('sales')
+    expect(w.find('[data-testid="view-trust"]').exists()).toBe(true)
+    expect(w.find('[data-testid="view-trust-allow"]').exists()).toBe(true)
+    expect(w.find('.artifact-page').exists()).toBe(false)
+    expect(app.RunArtifactQuery).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => { _resetQueryPoolForTests() })
 
   it('renders the page Go returned, runs each query once, and shows option rows as text', async () => {

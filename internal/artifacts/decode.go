@@ -18,6 +18,9 @@ func Decode(data []byte) (*Manifest, error) {
 	if len(data) > MaxManifestBytes {
 		return nil, invalid("%s is %d bytes, over the %d byte limit", ManifestFile, len(data), MaxManifestBytes)
 	}
+	if r, ok := firstHiddenRune(string(data), false); ok {
+		return nil, invalid("%s contains a control character (U+%04X)", ManifestFile, r)
+	}
 	if err := checkYAMLShape(data); err != nil {
 		return nil, err
 	}

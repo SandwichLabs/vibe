@@ -62,8 +62,8 @@ func validateHeader(m *Manifest) error {
 	if m.View == "" {
 		m.View = ViewA2UI
 	}
-	if m.View != ViewA2UI {
-		return invalid("view must be %q", ViewA2UI)
+	if m.View != ViewA2UI && m.View != ViewScript {
+		return invalid("view must be %q or %q", ViewA2UI, ViewScript)
 	}
 	if len(m.Queries) == 0 {
 		return invalid("an artifact needs at least one query")
@@ -266,14 +266,59 @@ func optionsCycle(p *Param, declared map[string]*Param, queries map[string]*Quer
 // (m must have passed Validate). The error is JSON-path-prefixed, as the
 // agent sees it.
 func ValidateView(m *Manifest, view []byte) error {
+	if m.View == ViewScript {
+		return validateScript(view)
+	}
 	_, err := validatedPage(m, view)
 	return err
+}
+
+// validateScript checks view.js: non-empty, within the cap, valid UTF-8 text
+// without NUL bytes. It is never run here; what it may do is decided by the
+// person's allow (ViewHash) and the worker it runs in.
+func validateScript(src []byte) error {
+	switch {
+	case len(src) > MaxScriptBytes:
+		return invalid("%s is %d bytes, over the %d byte limit", ScriptFile, len(src), MaxScriptBytes)
+	case len(strings.TrimSpace(string(src))) == 0:
+		return invalid("%s is empty", ScriptFile)
+	case !utf8.Valid(src):
+		return invalid("%s must be valid UTF-8 text", ScriptFile)
+	}
+	if r, ok := firstHiddenRune(string(src), true); ok {
+		return invalid("%s contains a control or invisible character (U+%04X), which could make the code differ from what is shown", ScriptFile, r)
+	}
+	return nil
+}
+
+// firstHiddenRune finds a character that can make shown text differ from what
+// runs or is parsed: C0 controls other than tab, newline and carriage return
+// (ESC and NUL included), DEL, C1 controls, the bidi controls and the Unicode
+// line and paragraph separators (U+2028, U+2029: JavaScript ends a line comment
+// at them, while editors and terminals draw them inline or not at all). With
+// invisible it also finds the zero-width characters, the left/right and Arabic
+// marks, the soft hyphen and the interlinear annotation characters.
+func firstHiddenRune(s string, invisible bool) (rune, bool) {
+	for _, r := range s {
+		switch {
+		case r < 0x20 && r != '\t' && r != '\n' && r != '\r', r == 0x7f, r >= 0x80 && r <= 0x9f,
+			r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x2028, r == 0x2029:
+			return r, true
+		case invisible && (r == 0x200e || r == 0x200f || (r >= 0x200b && r <= 0x200d) || r == 0x2060 || r == 0xfeff ||
+			r == 0x00ad || r == 0x061c || (r >= 0xfff9 && r <= 0xfffc)):
+			return r, true
+		}
+	}
+	return 0, false
 }
 
 // RenderView is the view as Go validated it, re-marshalled: the one form a UI
 // renders. A caller must never re-parse the stored bytes itself (Go and
 // JavaScript disagree on, for one, a lone surrogate escape).
 func RenderView(m *Manifest, view []byte) ([]byte, error) {
+	if m.View == ViewScript {
+		return nil, invalid("a view: script artifact has no A2UI page to render")
+	}
 	page, err := validatedPage(m, view)
 	if err != nil {
 		return nil, err
@@ -321,4 +366,19 @@ func checkJSONObject(view []byte) error {
 		return invalid("%s: %v", ViewFile, err)
 	}
 	return nil
+}
+
+// EscapeHidden shows s with every character firstHiddenRune would refuse
+// replaced by a visible <U+XXXX> marker (carriage returns too, which can
+// overwrite a line on a terminal). For printing a file that is broken on disk.
+func EscapeHidden(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if _, hidden := firstHiddenRune(string(r), true); hidden || r == '\r' {
+			fmt.Fprintf(&b, "<U+%04X>", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

@@ -25,6 +25,10 @@ func TestClassify_Artifacts(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, KindArtifact, k)
 	assert.Equal(t, "regional-sales", id)
+	k, id, ok = classify("artifacts/regional-sales/view.js")
+	assert.True(t, ok, "a custom view's script is the artifact's file too")
+	assert.Equal(t, KindArtifact, k)
+	assert.Equal(t, "regional-sales", id)
 
 	for _, rel := range []string{
 		"artifacts/x/" + filestore.TempPrefix + "123", // WriteAtomic's temp file
@@ -32,6 +36,8 @@ func TestClassify_Artifacts(t *testing.T) {
 		"artifacts/x/artifact.yaml~",
 		"artifacts/x/notes.md",
 		"artifacts/x/view.html",
+		"artifacts/x/view.js.swp",
+		"artifacts/x/view.mjs",
 		"artifacts/.hidden/artifact.yaml",
 		"artifacts/artifact.yaml",
 		"artifacts/x/y/artifact.yaml",
