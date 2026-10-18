@@ -1,6 +1,6 @@
 # HTML artifacts: Claude-style pages shared in a workspace
 
-Status: **proposal, 2026-10-18. Not built.** This extends epic #162 (`docs/plans/data-artifacts.md`, called *the base plan* below). Level 1 shipped on 2026-10-17. The base plan's spike finished on macOS (#182): the iframe is dropped, the worker view (`view.js`) is the RESHAPE, and a1 (the meta `frame-src 'self'` on Studio's page) blocks every navigation vector on both platforms. This plan adds a third view kind beside A2UI and the worker view: an **HTML artifact**, a page of the author's own HTML (optionally with script) that works like a Claude artifact. It keeps the base plan's query boundary: a page asks for a named query with values and never sends SQL. Before any step is built, two things are needed: the owner's sign-off, and a spike of its own (step P1).
+Status: **proposal, 2026-10-18. Not built. Spike P1 ran on Linux on 2026-10-18; macOS is pending** (see *Spike P1* at the end). On Linux the static host is GO, with conditions. The scripted host is GO only behind a real network gate. Both sets of conditions are written into H2-H4 below. This extends epic #162 (`docs/plans/data-artifacts.md`, called *the base plan* below). Level 1 shipped on 2026-10-17. The base plan's spike finished on macOS (#182): the iframe is dropped, the worker view (`view.js`) is the RESHAPE, and a1 (the meta `frame-src 'self'` on Studio's page) blocks every navigation vector on both platforms. This plan adds a third view kind beside A2UI and the worker view: an **HTML artifact**, a page of the author's own HTML (optionally with script) that works like a Claude artifact. It keeps the base plan's query boundary: a page asks for a named query with values and never sends SQL. Before any step is built, two things are needed: the owner's sign-off, and a spike of its own (step P1).
 
 ## Goal
 
@@ -112,18 +112,24 @@ html:
 - **No function returns `template.HTML`, `template.JS`, `template.CSS`, `template.URL` or `template.HTMLAttr`.** Data is always escaped. A lint test fails if one is ever added. That test is the single most important line in this plan: one `safeHTML` helper turns any database row into script inside a page that holds capabilities.
 - **Limits.** A render runs with the 30 s query timeout and a 10 MB output cap; the writer errors and the render stops. Template execution itself is bounded by the data (at most 20 queries × 500 rows), and `text/template` caps recursion depth.
 - **Save-time vet.** `write_artifact` parses every template with the closed `FuncMap` (unknown function or bad syntax: refused), checks that every `query` name is a literal naming a manifest query, and checks every `param` and `link` name the same way. A `query` with a computed name is refused at save; at run it is still checked against the manifest. That makes "which queries a page uses" derivable, like the base plan's derived `Uses`.
+- **URL attributes are an allow-list, checked at save (P1).** A template may contain `<link>` only with `rel=stylesheet` and a relative `assets/` href. It may contain no `target`, `ping` or `download` attribute, no `<meta http-equiv>` and no `<base>`. Every `href` and `src` must be a `link` call, a `#fragment` or a literal relative `assets/` path. Absolute URLs, and a templated value in any URL attribute, are refused at save. P1 found that `<link rel=preconnect>` and a `target=_blank` click open a TCP connection (and a DNS lookup for a host name) under every CSP layer, a1 included. Without script, a host name built from a template value would leak data over DNS.
 
 ### H3. The static host: inside Studio
 
 - Served by the base plan's `/vibe-view/` middleware (D9) at `/vibe-view/<token>/page?<params>`, with static files at `/vibe-view/<token>/assets/<path>`. **The token is per (Studio process, artifact)**, not per process as in D9. One page's token opens no other artifact, and the route takes the artifact from the token, never from the path. The path never ends in `/` or `index.html`, so Wails injects no runtime. Response CSP, with `<a>` standing for `<studio-origin>/vibe-view/<token>/assets/`:
   `sandbox; default-src 'none'; script-src 'none'; style-src <a> 'unsafe-inline'; img-src <a> data:; font-src <a>; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'`
-  Sub-resources can load only from `assets/`, which never runs a query. An `<img src=…/page?…>` or a CSS `url()` pointing at the render route is refused by the CSP. It is also refused by the route itself: `/page` answers only a navigation request (it checks `Sec-Fetch-Dest: iframe` where WebKit sends the header, and otherwise rate-limits renders to 4 in flight and 60 a minute per token). That way a page can't fire renders in a loop.
+  Sub-resources can load only from `assets/`, which never runs a query. An `<img src=…/page?…>` or a CSS `url()` pointing at the render route is refused by the CSP. P1 confirmed it: no request arrived in any run. As a second layer, the route rate-limits renders to 4 in flight and 60 a minute per token, so a page can't fire renders in a loop. On WebKitGTK 2.54 the `/vibe-view/` handler receives no `Sec-Fetch-*` headers, so the route can't tell a navigation from a sub-resource and relies on the limit.
   The response also carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. The iframe gets `sandbox=""`, with no `allow-scripts`, `allow-same-origin`, `allow-forms`, `allow-popups` or `allow-top-navigation`.
 - **No script runs in the frame, so (b) and (d) do not apply, but (a) still does.** Without script there is no IPC to post (d), no loop to freeze on (b), and no `location =`. Navigation that needs no script remains:
   - a person's click on an outside `<a href>`, which the sandbox does not stop;
   - a `<meta refresh>`. The HTML spec blocks it in a frame sandboxed without `allow-scripts` (the *sandboxed automatic features* flag); the base plan's spike frame had `allow-scripts`, so it doesn't tell us WebKit's behaviour here.
 
-  Both are stopped by the meta CSP `frame-src 'self'` on Studio's page (base plan candidate a1), which blocked all 9 vectors on Linux and on macOS (#182). **So the static host depends on a1**, which ships with it. P1 reruns the vectors for a script-less frame and tries to narrow the meta CSP to the `/vibe-view/` path.
+  Both are stopped by the meta CSP `frame-src 'self'` on Studio's page (base plan candidate a1), which blocked all 9 vectors on Linux and on macOS (#182). **So the static host depends on a1**, which ships with it. P1 (Linux) confirmed the following:
+  - a1 is required for an outside-link click; without it, the click reached the listener.
+  - `<meta refresh>` is blocked by the script-less sandbox alone.
+  - The narrowed form `frame-src <origin>/vibe-view/` works: Studio boots, the frame and its links work, and a link to `/` or `/index.html` loads nothing.
+
+  a1 ships narrowed. It is emitted into `index.html` at build time for each target origin (`wails://wails.localhost:34115` in dev, `wails://wails` in a build), and P3 re-verifies it in the production build on both platforms. A meta CSP inserted by script was not tested and is not used.
 - **Interactivity without script.** `<a href="{{ link "region" .region }}">` navigates the frame to the same route with new values. There are no forms: the frame has no `allow-forms`, so a form can't submit, and that keeps the sandbox minimal. Go binds them (`artifacts.Bind` refuses bad values) and re-renders. Values are read only from the query string of the `/vibe-view/` route, never from Studio's own state. Parameter controls can also stay as Studio's level-1 components around the frame (`useArtifactParams`); a change reloads the frame with the new query string.
 - **Serve what was hashed.** As base plan D9: the middleware reads the file set once, hashes it with the manifest, compares it with the allowed hash and renders those bytes. A watcher change tears the frame down.
 - **Sizing.** The frame has a fixed height that the person can resize. With no script inside, the frame can't report its own height (`ResizeObserver` needs script).
@@ -131,21 +137,31 @@ html:
 ### H4. The scripted host: a page window Vibe owns
 
 - **A helper process.** `vibe-studio --view-host` is the same binary in a mode that never starts Wails. Studio spawns it with:
-  - a scrubbed environment: only the display and locale variables the toolkit needs (the list comes from step P1). None of `AWS_*`, `*_TOKEN`, `*_PASSWORD` or the workspace `.env` overlay is passed, because the overlay is never in the environment and the helper never sees the parent's;
-  - one dedicated pipe pair (`ExtraFiles`) for a JSON-lines protocol, not stdin/stdout, which GTK may write to; stderr goes to Studio's debug log; no other inherited file descriptors;
+  - a scrubbed environment: only what the toolkit needs. P1 measured it on Linux as `XDG_RUNTIME_DIR`, plus `WAYLAND_DISPLAY` when it isn't `wayland-0`; `GDK_BACKEND`, `HOME` and `DBUS_SESSION_BUS_ADDRESS` were not needed. None of `AWS_*`, `*_TOKEN`, `*_PASSWORD` or the workspace `.env` overlay is passed, because the overlay is never in the environment and the helper never sees the parent's;
+  - one dedicated pipe pair (`ExtraFiles`) for a JSON-lines protocol, not stdin/stdout, which GTK may write to; stderr goes to Studio's debug log; no other inherited file descriptors. **The helper marks the pipe `CLOEXEC` at once**: P1 found that without it, the fd leaks into `WebKitNetworkProcess`, `xdg-dbus-proxy` and the web process;
   - on Linux, `SysProcAttr.Pdeathsig = SIGKILL`, so the helper dies with Studio. On macOS the helper exits when its protocol pipe closes;
-  - **no network**, as a structural property and not just a settings list. On Linux the helper starts in its own empty network namespace (`CLONE_NEWUSER|CLONE_NEWNET` through `SysProcAttr.Cloneflags`, or `bwrap --unshare-net` where user namespaces are disabled). On macOS P1 tries a `sandbox-exec` profile with `(deny network*)`, which is deprecated but still enforced. If P1 can't confirm zero DNS queries and zero STUN packets on macOS, the scripted host is dropped there.
+  - **a tree kill.** The helper runs in its own process group (or PID namespace), and Studio kills the whole group. P1 found that SIGKILL to the helper alone left a spinning `WebKitWebProcess` and its bwrap parents alive at 72% CPU;
+  - **no network**, as a structural property and not just a settings list.
+    - **Linux.** The helper runs under bwrap, or an equivalent clone, with `--unshare-net`, the real uid mapped to itself, and an **allow-listed filesystem view**:
+      - a generated `/etc/nsswitch.conf` of `hosts: files`, and an empty `resolv.conf`;
+      - `--tmpfs /run`, with only `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` bound back (plus the session bus, if P4 measures it as needed);
+      - no system bus, and no avahi, resolved, nscd or sss sockets.
+
+      P1 found that a network namespace alone leaves name resolution open: systemd-resolved's varlink socket answered from inside both a user+net namespace and `bwrap --unshare-net`. WebKit sent it a lookup for a link the navigation policy had refused, so the lookup happens regardless of the policy decision. Hiding only resolved's socket is not enough either: avahi (which multicasts `.local` names on the LAN) and `org.freedesktop.resolve1` on the system bus stay reachable.
+
+      P4 verifies end to end, with WebKit under this exact launcher: no `connect()` to any unix socket outside the allow-list (strace, or fake sockets at every known resolver path). **If a user+net namespace can't be created** (for example under Ubuntu's `apparmor_restrict_unprivileged_userns`), the page window is refused. Unprivileged bwrap needs user namespaces too, so it is no fallback.
+    - **macOS** is unproven. `com.apple.WebKit.Networking` is launched by launchd, not by the helper, so a `sandbox-exec` profile on the helper probably doesn't constrain it. The P1 macOS run leads with exactly that test, then tries `WKWebsiteDataStore.proxyConfigurations` (macOS 14+) pointed at a dead loopback port. If no gate holds, the scripted host is not offered on macOS.
 
   The helper is never given the workspace path, a connection, a credential or a store. It receives the page's bytes over the pipe and serves them from memory.
-- **The native web view is ours, not Wails'.** On Linux it is WebKitGTK through cgo; on macOS, WKWebView through Objective-C. We own the native code (a few hundred lines per platform). `webview/webview` exposes no navigation policy, custom scheme or ephemeral data store, and it registers its own `__webview__` message handler. The helper calls `webkit_web_context_set_sandbox_enabled(TRUE)` before creating the web view, which Wails never does (grounding); P1 confirms the web process is confined. Owning the view gives what Wails withheld (base plan grounding):
+- **The native web view is ours, not Wails'.** On Linux it is WebKitGTK through cgo; on macOS, WKWebView through Objective-C. We own the native code (a few hundred lines per platform). `webview/webview` exposes no navigation policy, custom scheme or ephemeral data store, and it registers its own `__webview__` message handler. The helper calls `webkit_web_context_set_sandbox_enabled(TRUE)` before creating the web view, which Wails never does (grounding). **This is required.** In P1 the web process was unconfined without it. With it, the web process ran under bwrap in its own user, pid and net namespaces, with seccomp, NoNewPrivs and no capabilities. `WebKitNetworkProcess` is not sandboxed either way, so the helper's namespace is what gates the network. The helper must not run with `HOME=/root`, which breaks WebKit's bwrap. Owning the view gives what Wails withheld (base plan grounding):
   - **A navigation policy.** The web view refuses every navigation except the initial page and same-page `link` URLs: GTK's `decide-policy` and `WKNavigationDelegate`. It also refuses new windows, downloads the page starts itself, and every permission request (camera, microphone, geolocation, notifications, clipboard read).
-  - **A custom URL scheme.** `vibe-page://<name>/` is served from memory with the response CSP:
+  - **A custom URL scheme.** `vibe-page://<name>/` is served from memory with the response CSP (P1: a CSP response header is honoured on a WebKitGTK custom scheme; the response's headers must include `Content-Type`, or a script is silently skipped under `nosniff`):
     `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src blob:; frame-src 'none'; form-action 'none'; base-uri 'none'`
     `connect-src 'self'` lets script `fetch("assets/x.json")`. That is harmless: the scheme handler serves only bytes held in memory, and nothing it serves runs a query. Queries go only through `vibe.run`. The host's own files are on the page's origin too, so `'self'` covers them: `vibe-page://<name>/_vibe/theme.css` and `vibe-page://<name>/vibe-lib/…`. Studio sends the library files the page's templates and scripts reference over the pipe when the window opens, in chunks, outside the 2 MB per-message cap.
     No `'unsafe-eval'` and no inline script: data reaches script through the `json` block. Libraries that need `eval` (some vega builds) use their CSP-safe build.
-  - **One message handler, main frame only.** It lives in the page's main world, beside the injected `vibe` API: a main-world object can't post to a handler in another content world, and the page is untrusted either way, so an isolated world would buy nothing. Frames are refused by `frame-src 'none'`. The handler also checks `frameInfo.isMainFrame` on macOS; on Linux, where the frame isn't available, there is nothing else to check, because the helper's view holds only the page.
+  - **One message handler, main frame only.** It lives in the page's main world, beside the injected `vibe` API: a main-world object can't post to a handler in another content world, and the page is untrusted either way, so an isolated world would buy nothing. Frames are refused by `frame-src 'none'`. P1 found that, with a permissive CSP, both a `srcdoc` and a `src` frame can post to the handler. A `srcdoc` frame is stopped by the inherited `script-src`, a `src` frame by `frame-src 'none'`, and both by `decide-policy` (which refuses `about:srcdoc`). The handler also checks `frameInfo.isMainFrame` on macOS; on Linux, where the frame isn't available, there is nothing else to check, because the helper's view holds only the page.
   - **Ephemeral data.** A non-persistent website data store, so no `localStorage`, IndexedDB or cookies survive the window. A page keeps state only through `state`.
-  - **Off where the platform allows:** WebRTC and media streams (`enable-webrtc`, `enable-media-stream` on WebKitGTK; macOS has only a private preference), DNS prefetch, plugins, the developer inspector (unless a Studio setting turns it on for authors), and spatial navigation. CSP `connect-src` covers neither WebRTC nor DNS prefetch on every WebKit. These settings are a second layer: the empty network namespace or the sandbox profile above is the gate.
+  - **Off where the platform allows:** WebRTC and media streams (`enable-webrtc`, `enable-media-stream` on WebKitGTK; macOS has only a private preference), DNS prefetch, plugins, the developer inspector (unless a Studio setting turns it on for authors), and spatial navigation. CSP `connect-src` covers neither WebRTC nor DNS prefetch on every WebKit. **These settings are not a layer.** In WebKitGTK 2.54, `enable-dns-prefetching` and `enable-hyperlink-auditing` are deprecated no-ops (`<a ping>` still fired), and only media stream, localStorage and IndexedDB being off measurably did anything. The network gate above is the gate. At start the helper logs `typeof RTCPeerConnection`: WebRTC isn't built into the Fedora build P1 used, so STUN is unverified on builds that ship it.
 - **The page-side API**, injected by the helper as a user script in the main world before the page runs. It mirrors `claude.use`:
   ```js
   const rows = await vibe.run("by_region", { from: "2026-01-01" }) // {columns, rows, truncated}
@@ -154,7 +170,7 @@ html:
   ```
   `vibe.run` is always present. `vibe.use(name)` resolves `null` for anything not declared, and the page must render without it. Theme roles arrive as CSS custom properties (`--vibe-*`) in a host stylesheet at `vibe-page://<name>/_vibe/theme.css`, built from the validated theme.
 - **The bridge in Studio.** Messages go from the page to the helper, over the pipe, to Studio, through `studio/pagehost.go`, a non-binding helper. Studio pins the artifact name when it opens the window: a message never names its artifact. Each message is shape-checked and size-capped (64 KB in, 2 MB out). Limits are 4 calls in flight and 60 a minute per window. Errors are fixed texts, never a path or the policy's reason (base plan *As built*: "a level-2 bridge would have to use fixed text").
-- **Watchdog.** The page host posts a heartbeat. On a missed beat, a crash, or a watcher change to the artifact, Studio kills the helper process and shows "This page stopped responding" or "This page changed" in Studio, with Reopen. Killing the helper takes its web process with it; P1 checks this on both platforms.
+- **Watchdog.** The page host posts a heartbeat. On a missed beat, a crash, or a watcher change to the artifact, Studio kills the helper process and shows "This page stopped responding" or "This page changed" in Studio, with Reopen. The tree kill above takes the web process with it.
 - **The window can't impersonate Studio.** Its native title is always `<artifact title> — Vibe page`; `document.title` is ignored. There is no menu bar beyond Close. It is never full-screen without a person's gesture. Studio never asks for a credential inside a page window, and the user guide says so in the same paragraph as the trust prompt.
 - **The macOS process model.** The helper runs from inside the app bundle with the accessory activation policy, so it shows no second Dock icon. P1 checks focus, Cmd-W, and the window staying above Studio when opened.
 - **The macOS keychain.** Keychain ACLs are per application. A helper that is the same executable as Studio shares Studio's keychain identity, so an escape from the web process into the helper could read Vibe's items without a prompt. (Linux Secret Service has no per-binary ACL at all, so there it is the OS user either way.) The mitigation, chosen if P1's sandbox result is weak, is a separate helper executable in `Contents/MacOS/` with its own identifier.
@@ -306,3 +322,56 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 3. **The `vibe-lib/` set and versions**, shared with the worker view (base plan open question 5).
 4. **The CSP narrowing to `frame-src …/vibe-view/`** may not be honoured for paths on a custom scheme. If it isn't, `frame-src 'self'` stays, and the static frame can still navigate to Studio's own page. That is harmless without `allow-scripts` (P1 probes it).
 5. **`ask` defaults.** On at allow time (H5 gives the reason). The owner may prefer off for remote providers.
+
+## Spike P1 (Linux run 2026-10-18; macOS pending)
+
+**Setup.** The run used Fedora with WebKitGTK **2.54.1**, the real Wails window for the static host, and a Go + cgo WebKitGTK helper spawned by a stand-in parent for the scripted host. The branch is `spike/html-pages-p1` (throwaway; never merged).
+
+**Method.** Ground truth was a loopback listener that logged every accept, request line and UDP packet, plus the Go log. Every vector set was first run against a control (no CSP, no sandbox) to prove it fires. The scripted host's layers were measured one at a time: CSP and settings only; network namespace only, with a permissive CSP; then both together.
+
+An Opus verifier re-checked the logs and rated the results **trustworthy with corrections**. Those corrections are applied here and in H2-H4.
+
+### Static host (H3)
+
+| Check | Linux (WebKitGTK 2.54.1) |
+|---|---|
+| Inline script, `onerror`, SVG script, `<object>`/`<embed>`, iframes, `poster`, audio, `<base>` | **Blocked.** The control run made 20 listener hits; the H3 CSP + `sandbox=""` + a1 made none. `sandbox=""` alone stops all script, Wails IPC and `BrowserOpenURL` included, but non-script loads still go out, so the CSP is needed. |
+| `javascript:` URL click | **Blocked** under a1, with a real click. The control reached the listener. |
+| `<meta refresh>` (to outside, `javascript:`, self, `/`) | **Blocked** by the script-less sandbox, even without a1. |
+| A person's click on an outside link | **Needs a1.** Without a1 it reached the listener; with a1 there was no hit. |
+| a1 narrowed to `frame-src <origin>/vibe-view/` | **Works**, as a static meta with the dev origin. Studio boots, the frame and its links work, and a link to `/` or `/index.html` loads nothing. |
+| Links re-render the page | **Verified.** |
+| Form submit (GET and POST) | **Blocked.** |
+| `assets/` source under the opaque origin | **Matches.** CSS, PNG and TTF loaded, and `assets/ok.js` was not requested. |
+| `<img>` and CSS `url()` pointing at `/page` | **Blocked by the CSP.** The route can't check `Sec-Fetch-*`, because the handler receives none, so it relies on the rate limit. |
+| The frame navigating to `/` or `/index.html` | Under plain a1: one static GET, no sub-requests, no script, nothing reaches Go. Under narrowed a1: nothing. |
+| Wails runtime injection | **None.** |
+| `<link rel=preconnect>` and a `target=_blank` click | **Open a TCP connection under every layer.** Hence H2's URL allow-list. |
+
+**Decision: GO, with conditions.** a1 ships narrowed and is emitted at build time; the route relies on the rate limit; the H2 URL allow-list applies. P3 re-verifies in a production build on both platforms.
+
+### Scripted host (H4)
+
+| Check | Linux |
+|---|---|
+| CSP response header on a custom scheme | **Honoured.** The headers must include `Content-Type`. |
+| CSP only (no namespace) | Blocks `fetch`, XHR, WebSocket, EventSource, beacon, `<img>`, CSS `url()` and `@import`, `<a ping>` and form submit. It **does not** stop navigation (`location =`, `window.open`, an anchor click, a script-added `<meta refresh>`). |
+| `decide-policy` | **Closes** all five navigation vectors. |
+| Settings (DNS prefetch, hyperlink auditing) | **Inert** (deprecated no-ops). They are not a layer. |
+| Network namespace only (permissive CSP) | The host listener saw **nothing**. The same namespace with a reachable listener showed every vector fires, so the silence came from the namespace. |
+| All layers together | **No hits.** |
+| DNS | **Escapes** through systemd-resolved's varlink socket, under both a user+net namespace and `bwrap --unshare-net`, regardless of the policy decision. A tmpfs over `/run/systemd/resolve` closes that socket, but `/run/avahi-daemon/socket` and the system bus (`org.freedesktop.resolve1`) still connect. Hence H4's allow-listed filesystem view, which **P4 must verify end to end**. |
+| Protocol fd | It **leaks** into `WebKitNetworkProcess`, `xdg-dbus-proxy` and the web process unless it is `CLOEXEC`. With `CLOEXEC`, only the helper holds it. |
+| `while(true){}` | The watchdog fired at 2.0 s, but SIGKILL to the helper **orphaned** a spinning web process and its bwrap parents. A process-group kill or `CLONE_NEWPID` left no orphans. |
+| Web process sandbox | **Off unless `set_sandbox_enabled(TRUE)`.** With it on, the web process runs under bwrap in its own user, pid and net namespaces, with seccomp 2, NoNewPrivs and no capabilities. `WebKitNetworkProcess` is never sandboxed. `HOME=/root` breaks WebKit's bwrap. |
+| Frames posting to the handler | **Possible** with a permissive CSP (both `srcdoc` and `src`). `frame-src 'none'` and `decide-policy` each stop it. |
+| Environment | The minimum is `XDG_RUNTIME_DIR` (plus `WAYLAND_DISPLAY` if it isn't `wayland-0`). Wayland and the session-bus path sockets work inside the namespace. |
+| Native title vs `document.title` | **The title is fixed.** |
+| Ephemeral store | Nothing survived between runs: no localStorage, cookie or IndexedDB. |
+| d3 and vega-lite under the strict CSP | **Render**, with and without the namespace. |
+| WebRTC and STUN | **Not verified.** `RTCPeerConnection` is not built into this WebKitGTK. |
+
+**Decision: GO on Linux, only behind the H4 network gate.** The gate is a user+net namespace plus an allow-listed filesystem view, together with `CLOEXEC`, a tree kill, `set_sandbox_enabled(TRUE)`, the uid mapped to itself, and `frame-src 'none'` plus `decide-policy`. **macOS: pending** the owner's run (`spike/pagehost/mac/P1-MAC-RUN.md` on the spike branch), which leads with whether any gate constrains `com.apple.WebKit.Networking`. If none does, the scripted host is not offered on macOS.
+
+**Scope.** All of these results come from Fedora with WebKitGTK 2.54.1. Before P3 and P4 ship, they are re-run on Ubuntu 24.04 (AppArmor's user namespace restriction) and on the oldest WebKitGTK Vibe supports. Both hosts fail closed.
+
