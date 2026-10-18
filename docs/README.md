@@ -30,6 +30,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | [`plans/data-artifacts.md`](plans/data-artifacts.md) | Plan for epic #162 (data artifacts; level 1 delivered, level 2 not built): parameterised, live views stored as `artifacts/<name>/` files, with named queries bound by value only, agent and MCP tools, Studio controls, pivot and drill-down, and a conditional custom-view level gated on an isolation spike |
 | [`plans/open-source-launch.md`](plans/open-source-launch.md) | The open-source launch plan (epic #51): audit findings, decisions (name, licence, history, reporting, DCO) and the v0.1.0 shape |
 | [`plans/spike-duckdb-hub-findings.md`](plans/spike-duckdb-hub-findings.md) | Findings from the DuckDB hub spike that fed the plan |
+| [`plans/spike-editor-lsp-findings.md`](plans/spike-editor-lsp-findings.md) | Findings from the editor + language server spike (landed in #112): `$EDITOR` hand-off from the TUI and `vibe query -e`, `vibe lsp` over a catalog snapshot, Neovim/Helix setup, and what is left |
 | [`plans/code-mode.md`](plans/code-mode.md) | Proposal: a `run_code` tool where the agent writes a program that calls the Vibe tools in a sandbox, through the same gates (not built; review notes in §13 favour a Starlark or SQL result-handle spike before Monty) |
 | [`plans/monty-client.md`](plans/monty-client.md) | Proposal: the Go client for the Monty worker that Vibe would own, the worker build from source, packaging, tests and the upgrade procedure (deferred by the §13 review) |
 | [`plans/spike-code-mode-findings.md`](plans/spike-code-mode-findings.md) | Research for code mode: Cloudflare, Anthropic, Bifrost and Muse, and the sandboxes a Go process can use (Monty, Starlark, goja, QuickJS, WASI) |
@@ -45,6 +46,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/connections.md`](reference/connections.md) | Every connection type, fields, credentials, read-only, Test, extensions |
 | [`reference/agent-policy.md`](reference/agent-policy.md) | The agent's SQL policy: tiers, the three-gate write rule, file and URL rules, the never-list |
 | [`reference/mcp.md`](reference/mcp.md) | `vibe mcp serve` (stdio/SSE), client config, SSE auth |
+| [`reference/editor.md`](reference/editor.md) | `$EDITOR` from the TUI and `vibe query -e`; `vibe lsp` for Neovim, Helix and eglot |
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |
 | [`reference/notebooks.md`](reference/notebooks.md) | Notebooks and the A2UI component reference |
 | [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down, running, sharing |

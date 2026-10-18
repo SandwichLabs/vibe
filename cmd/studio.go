@@ -111,7 +111,8 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 	}
 
 	app := tui.NewApp(tuiWorkspace{o}, o.Eng, logger,
-		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(tuiNotices(o)...))
+		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(tuiNotices(o)...),
+		tui.WithEditorRoot(o.WS.Root()), tui.WithCatalogSnapshot(tuiSnapshotPath(o, readOnly)))
 	app.LoadData()
 	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithInput(in), tea.WithOutput(out))
 	if _, err := p.Run(); err != nil {
@@ -309,4 +310,14 @@ func init() {
 	studioCmd.Flags().String("agent-listen", "", "agent socket address to listen on")
 	studioCmd.Flags().String("agent-mode", "read-only", "the agent's sandbox: read-only, read-write or full (can only tighten the workspace's own policy)")
 	rootCmd.AddCommand(studioCmd)
+}
+
+// tuiSnapshotPath is the root whose snapshot the TUI keeps for `vibe lsp`: only
+// when it owns the workspace ("" otherwise), since a read-only TUI cannot see
+// the owner's local files and would write a thinner snapshot than the owner's.
+func tuiSnapshotPath(o *openedWorkspace, readOnly bool) string {
+	if readOnly {
+		return ""
+	}
+	return o.WS.Root()
 }

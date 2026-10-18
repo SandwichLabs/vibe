@@ -5,17 +5,21 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/editor"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/usersql"
 	"github.com/spf13/cobra"
 )
 
 var queryCmd = &cobra.Command{
-	Use:   `query "<sql>"`,
+	Use:   `query ["<sql>"]`,
 	Short: "Run one SQL statement against a workspace",
 	Long: `Run one SQL statement through the workspace's DuckDB session and print the
 result. Unqualified names resolve against the workspace's default connection;
@@ -35,10 +39,14 @@ courtesy, ATTACH, DETACH, INSTALL, LOAD, SET and CREATE SECRET are refused with
 an explanation (connections come from the workspace, credentials from your
 keychain). That is a check for common slips, not a security boundary.
 
-Pass "-" as the statement to read it from standard input. Results are capped
+Pass "-" as the statement to read it from standard input. --edit (-e) opens
+the statement (or an empty buffer) in $VISUAL or $EDITOR first, as psql's \e
+does, and runs what you save; quitting the editor with an error (":cq") runs
+nothing. The buffer lives under .vibe-local/edit/ so an editor running
+"vibe lsp" completes connections, tables and columns in it. Results are capped
 at --limit rows (default 1000, 0 for no cap) and the cap is reported on
 standard error.`,
-	Args:         cobra.ExactArgs(1),
+	Args:         cobra.MaximumNArgs(1),
 	RunE:         runQuery,
 	SilenceUsage: true,
 }
@@ -47,6 +55,7 @@ func init() {
 	queryCmd.Flags().StringP("connection", "c", "", "connection whose catalog unqualified names use (default: the workspace's default connection)")
 	queryCmd.Flags().String("format", "table", "output format: table, csv, json")
 	queryCmd.Flags().Int("limit", defaultQueryLimit, "maximum rows to print (0 = no cap)")
+	queryCmd.Flags().BoolP("edit", "e", false, "edit the statement in $VISUAL or $EDITOR before running it")
 	queryCmd.Flags().Bool("read-only", false, "read without taking ownership of the workspace; every connection is attached read-only")
 	addWorkspaceFlag(queryCmd)
 	rootCmd.AddCommand(queryCmd)
@@ -72,13 +81,13 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	if limit < 0 {
 		return fmt.Errorf("--limit must be 0 or more")
 	}
-	sqlText := args[0]
-	if sqlText == "-" {
-		b, err := io.ReadAll(cmd.InOrStdin())
-		if err != nil {
-			return fmt.Errorf("failed to read the statement from standard input: %w", err)
-		}
-		sqlText = string(b)
+	sqlText, err := queryText(cmd, dir, args)
+	if errors.Is(err, errEditUnchanged) {
+		fmt.Fprintln(errW, "the statement was not changed; nothing was run")
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(sqlText) == "" {
 		return fmt.Errorf("no SQL given")
@@ -114,6 +123,58 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(errW, "showing the first %d of %d rows (--limit 0 for all)\n", rs.RowCount(), total)
 	}
 	return nil
+}
+
+// queryText is the statement to run: the argument, standard input for "-",
+// then, with --edit, whatever the person saves in their editor.
+func queryText(cmd *cobra.Command, dir string, args []string) (string, error) {
+	edit, _ := cmd.Flags().GetBool("edit")
+	text := ""
+	if len(args) == 1 {
+		text = args[0]
+	} else if !edit {
+		return "", fmt.Errorf("give the statement to run, \"-\" to read it from standard input, or --edit")
+	}
+	if text == "-" {
+		if edit {
+			return "", fmt.Errorf("--edit reads the statement from your editor, not standard input")
+		}
+		b, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return "", fmt.Errorf("failed to read the statement from standard input: %w", err)
+		}
+		return string(b), nil
+	}
+	if !edit {
+		return text, nil
+	}
+	edited, err := editQuery(dir, text)
+	if err == nil && strings.TrimSpace(text) != "" && strings.TrimSpace(edited) == strings.TrimSpace(text) {
+		return "", errEditUnchanged
+	}
+	return edited, err
+}
+
+// errEditUnchanged says the editor saved the statement as it was given: like
+// the TUI, an unchanged buffer runs nothing.
+var errEditUnchanged = errors.New("statement unchanged")
+
+// editQuery opens text in the person's editor on a scratch buffer under the
+// workspace, so the editor's language server finds vibe.yaml.
+func editQuery(dir, text string) (string, error) {
+	argv, err := editor.Resolve(os.Getenv)
+	if err != nil {
+		return "", err
+	}
+	root, _ := hub.ResolveRoot(dir, "") // no workspace: the open below says so
+	edited, ok, err := editor.Edit(argv, root, text, os.Stdin, os.Stdout, os.Stderr)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("editor exited with an error; nothing was run")
+	}
+	return edited, nil
 }
 
 func connectionNames(o *openedWorkspace) string {
