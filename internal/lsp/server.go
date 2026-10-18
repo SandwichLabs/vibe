@@ -86,7 +86,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
-		if errors.Is(err, errBadFrame) {
+		if errors.Is(err, errBadFrame) || errors.Is(err, errTooLarge) {
 			s.logger.Warn("lsp: skipping a frame", "error", err)
 			continue
 		}
@@ -365,8 +365,12 @@ const maxMessage = 32 << 20
 // header block is consumed and the next frame starts clean.
 var errBadFrame = errors.New("bad frame")
 
+// errTooLarge is a message over maxMessage. Its body has been drained (not
+// parsed, so it has no id to answer), and the next frame starts clean.
+var errTooLarge = errors.New("message too large")
+
 // readMessage reads one Content-Length framed message. A body over maxMessage
-// is a fatal error: it cannot be skipped without reading it.
+// is drained and refused with errTooLarge, so the server keeps serving.
 func readMessage(r *bufio.Reader) ([]byte, error) {
 	hdr, err := textproto.NewReader(r).ReadMIMEHeader()
 	if err != nil {
@@ -377,7 +381,10 @@ func readMessage(r *bufio.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("%w: Content-Length %q", errBadFrame, hdr.Get("Content-Length"))
 	}
 	if n > maxMessage {
-		return nil, fmt.Errorf("message of %d bytes is over the %d byte limit", n, maxMessage)
+		if _, err := io.CopyN(io.Discard, r, int64(n)); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %d bytes is over the %d byte limit", errTooLarge, n, maxMessage)
 	}
 	body := make([]byte, n)
 	if _, err := io.ReadFull(r, body); err != nil {
