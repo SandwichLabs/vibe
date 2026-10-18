@@ -99,7 +99,7 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 // read the skill, then send the rev it returned.
 func skillConflictMessage(name, rev string) string {
 	if rev == "" {
-		return fmt.Sprintf("a skill named %q already exists, so nothing was written. Call read_skill to read it, then send its \"rev\" with your changes (or pick another name).", name)
+		return fmt.Sprintf("a skill named %q already exists, so nothing was written. Call read_skill to read it, then send its \"rev\" with your changes (or pick another name). A skill bound to a table is visible to read_skill and list_skills only while that table has rows.", name)
 	}
 	return fmt.Sprintf("skill %q changed since the rev you sent (a person or another tool edited it) or no longer exists, so nothing was written. Call read_skill again, merge your change into what it returns, and send the new \"rev\".", name)
 }

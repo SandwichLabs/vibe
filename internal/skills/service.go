@@ -296,11 +296,13 @@ var builtinNameSet = func() map[string]bool {
 //
 // It is for a caller that holds a copy across user time (Studio's editor):
 // expectRev is the revision it loaded, and a skill that changed on disk since
-// (a git pull, an editor) is a conflict error, not a silent clobber. With expectRev empty the store's own last-seen revision
-// applies (the agent's create_or_update_skill, which has just listed or read
-// the skill); a file store refuses to write over an existing skill it has
-// never read. opts are passed to the store's Put (Overwrite to write back
-// a skill deleted on disk).
+// (a git pull, an editor) is a conflict error, not a silent clobber. With
+// expectRev empty and no WithRev option the store's own last-seen revision
+// applies (Studio's editor); a file store refuses to write over an existing
+// skill it has never read. The agent's create_or_update_skill always passes
+// WithRev, so for it an empty rev is create-only and last-seen never applies
+// (#166). opts are passed to the store's Put (Overwrite to write back a
+// skill deleted on disk).
 func SaveUserSkillAt(store Store, sess session.Session, name, description, instructions, tableName, expectRev string, opts ...PutOption) (string, error) {
 	if !NamePattern.MatchString(name) {
 		return "", fmt.Errorf("invalid skill name %q: must match %s", name, NamePattern.String())

@@ -90,7 +90,7 @@ A Skill is a markdown document — a name, a one-line description, and full inst
 
 ## Authoring skills
 
-**` + "`create_or_update_skill`" + `** upserts a skill by name (cannot use a built-in's name or the reserved ` + "`task-`" + ` prefix). An optional ` + "`table_name`" + ` gates the skill so it only loads once that table exists and has at least one row — useful for a skill that only makes sense once real data has been imported.
+**` + "`create_or_update_skill`" + `** creates a skill under a new name without a ` + "`rev`" + `; replacing an existing skill needs the ` + "`rev`" + ` from ` + "`read_skill`" + ` or ` + "`list_skills`" + ` (cannot use a built-in's name or the reserved ` + "`task-`" + ` prefix). An optional ` + "`table_name`" + ` gates the skill so it only loads once that table exists and has at least one row — useful for a skill that only makes sense once real data has been imported.
 
 Built-in skills are embedded in the binary; workspace skills live in ` + "`skills/<name>/SKILL.md`" + ` in the workspace folder.`,
 	},
