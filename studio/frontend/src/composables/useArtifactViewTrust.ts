@@ -21,6 +21,8 @@ export function useArtifactViewTrust(name: () => string) {
   const changedWhileReading = ref(false)
   let pending: ArtifactViewStatus | null = null
   const busy = ref(false)
+  // True from the moment the artifact changes on disk until it has been read again: a running view must not outlive the bytes it was allowed for.
+  const refreshing = ref(false)
   const error = ref('')
   let seq = 0
 
@@ -33,8 +35,12 @@ export function useArtifactViewTrust(name: () => string) {
       error.value = ''
     } catch (e) {
       if (mine === seq) { status.value = null; error.value = errorText(e) }
+    } finally {
+      if (mine === seq) refreshing.value = false
     }
   }
+
+  function changed() { refreshing.value = true; void load() }
 
   // adopt shows a fresh read. If an Allow is armed (undecided or changed) on
   // other bytes, the new ones wait behind showNew(): what the person reads must
@@ -64,6 +70,7 @@ export function useArtifactViewTrust(name: () => string) {
     try {
       seq++
       status.value = await call()
+      refreshing.value = false
       pending = null
       changedWhileReading.value = false
     } catch (e) {
@@ -87,11 +94,11 @@ export function useArtifactViewTrust(name: () => string) {
   onMounted(() => {
     void load()
     if (!hasWailsRuntime()) return
-    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifact' && p.id === name()) void load() }))
-    offs.push(EventsOn('workspace:changed', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifactview' && p.id === name()) void load() }))
+    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifact' && p.id === name()) changed() }))
+    offs.push(EventsOn('workspace:changed', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifactview' && p.id === name()) changed() }))
   })
   watch(name, () => { status.value = null; pending = null; changedWhileReading.value = false; void load() })
   onUnmounted(() => { seq++; for (const off of offs) off() })
 
-  return { status, changedWhileReading, showNew, busy, error, allow, deny, revoke, reload: load }
+  return { status, changedWhileReading, showNew, busy, error, refreshing, allow, deny, revoke, reload: load }
 }

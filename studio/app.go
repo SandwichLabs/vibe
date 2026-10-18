@@ -28,6 +28,9 @@ import (
 // MCP server others reach the workspace through (wmcp). Notebooks, queries and
 // skills are plain files behind ws; data writes go straight to the source.
 type App struct {
+	// views serves custom artifact views under /vibe-view/ (viewserver.go).
+	views *viewServer
+
 	ctx    context.Context
 	logger *slog.Logger
 	mu     sync.RWMutex
@@ -205,6 +208,7 @@ func NewApp(logger *slog.Logger) *App {
 		approvals:       agents.NewApprovalQueue(),
 		approvalTimeout: defaultApprovalTimeout,
 	}
+	app.views = newViewServer(viewWorkerJS, viewLibs(), app.viewStillAllowed)
 	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(logger); err == nil {
 		app.prefs = prefs.NewStore(dir)
@@ -219,6 +223,7 @@ func NewApp(logger *slog.Logger) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.views.setBase(ctx)
 	// In production, route frontend events through the live Wails runtime using
 	// the real lifecycle context. Tests inject their own emit sink and never call
 	// startup, so emitEvent stays runtime-free under test.

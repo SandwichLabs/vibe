@@ -20,6 +20,11 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// viewWorkerJS is the host-owned bootstrap every custom view's Worker starts from.
+//
+//go:embed viewhost/worker.js
+var viewWorkerJS []byte
+
 // Version info set via ldflags (`task install:studio`).
 var (
 	version = "dev"
@@ -60,6 +65,8 @@ func main() {
 		Height: 800,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
+			// Serves /vibe-view/ (custom artifact views and pinned libraries).
+			Middleware: app.views.Middleware(),
 		},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,

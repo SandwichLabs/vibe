@@ -221,6 +221,8 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	a.flows.cancelAll()
 	// Previewed bundles were compared with this workspace: forget them.
 	a.bundles.clear()
+	// Custom-view tokens (and the queries running for them) end with the workspace.
+	a.views.clear()
 	// A running chat turn must not outlive the session it is writing to.
 	a.chat.cancelTurn("")
 	if a.ws == nil {

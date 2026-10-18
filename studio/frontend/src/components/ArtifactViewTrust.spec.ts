@@ -1,10 +1,12 @@
 // ArtifactViewTrust (#159): a custom view is shown as source and never runs
-// here; Allow sends back the hash that was on screen; a changed view asks again.
+// until allowed; Allow sends back the hash that was on screen; a changed view asks
+// again. Once allowed it runs in CustomView (#160), torn down at once on a change.
 type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
+const handlers: Record<string, (p?: unknown) => void> = {}
+vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: (ev: string, cb: (p?: unknown) => void) => { handlers[ev] = cb; return () => { delete handlers[ev] } } }))
 
 import ArtifactViewTrust from './ArtifactViewTrust.vue'
 
@@ -27,8 +29,10 @@ function makeApp(initial: ArtifactViewStatus, over: MockApp = {}) {
   return app
 }
 
+const detail = { name: 'chart', title: 'Chart', params: [], queries: [], view_kind: 'script', defaults: {}, rev: 'r1', updated_at: '' } as unknown as ArtifactDetail
+
 async function mountTrust() {
-  const w = mount(ArtifactViewTrust, { props: { name: 'chart' }, global: { stubs: { Icon: true } } })
+  const w = mount(ArtifactViewTrust, { props: { name: 'chart', detail, values: {} }, global: { stubs: { Icon: true, CustomView: { template: '<div data-testid="custom-view-stub" />' } } } })
   await flushPromises()
   return w
 }
@@ -41,18 +45,19 @@ describe('ArtifactViewTrust', () => {
     expect(w.get('[data-testid="view-trust-line"]').text()).toContain("cannot reach the network or your files, and can only run this artifact's queries")
     expect(w.get('[data-testid="view-trust-source"]').text()).toContain('function draw')
     expect(w.get('[data-testid="view-trust-state"]').text()).toContain('Not allowed yet')
-    expect(w.find('[data-testid="view-trust-placeholder"]').exists()).toBe(false)
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(false)
     expect(w.get('[data-testid="view-trust-hash"]').text()).toBe('aaaaaaaaaaaa')
     expect(app.RunArtifactQuery).toBeUndefined()
   })
 
-  it('Allow sends the hash that was on screen, then shows the placeholder', async () => {
+  it('Allow sends the hash that was on screen, then runs the view', async () => {
     const app = makeApp(status())
     const w = await mountTrust()
     await w.get('[data-testid="view-trust-allow"]').trigger('click')
     await flushPromises()
     expect(app.AllowArtifactView).toHaveBeenCalledWith('chart', 'a'.repeat(64))
-    expect(w.get('[data-testid="view-trust-placeholder"]').text()).toContain('Allowed. The view host arrives in the next update.')
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('view host arrives')
     expect(w.find('[data-testid="view-trust-allow"]').exists()).toBe(false)
     expect(w.find('[data-testid="view-trust-revoke"]').exists()).toBe(true)
   })
@@ -93,7 +98,26 @@ describe('ArtifactViewTrust', () => {
     expect(w.get('[data-testid="view-trust-state"]').text()).toContain('Changed since you allowed it')
     expect(w.get('[data-testid="view-trust-line"]').text()).toContain('changed since you allowed it')
     expect(w.find('[data-testid="view-trust-allow"]').exists()).toBe(true)
-    expect(w.find('[data-testid="view-trust-placeholder"]').exists()).toBe(false)
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(false)
+  })
+
+  it('an allowed view is torn down the moment the artifact changes on disk, then asks again', async () => {
+    ;(window as any).runtime = {}
+    let cur = status({ state: 'allowed' })
+    makeApp(cur, { ArtifactViewState: vi.fn(async () => cur) })
+    const w = await mountTrust()
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(true)
+
+    // The watcher event: the view goes before the new state has even been read.
+    cur = status({ state: 'changed', hash: 'c'.repeat(64) })
+    handlers['workspace:changed-on-disk']({ kind: 'artifact', id: 'chart' })
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(false)
+    await flushPromises()
+    expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(false)
+    expect(w.get('[data-testid="view-trust-state"]').text()).toContain('Changed since you allowed it')
+    expect(w.find('[data-testid="view-trust-allow"]').exists()).toBe(true)
+    delete (window as any).runtime
   })
 
   it('a denied view says it will not run and can be revoked', async () => {
