@@ -296,7 +296,10 @@ func TestHandler_CreateOrUpdateSkill_RevFromReadSkillGuardsAgainstStaleWrites(t 
 	require.NotNil(t, r.Error)
 	data, _ := os.ReadFile(p)
 	assert.Contains(t, string(data), "TEAMMATE")
-	// ...and with no rev the current behaviour (last seen) applies.
+	// ...and with no rev it is refused too (create-only, #166), even though
+	// the list above refreshed the store's last-seen revision.
 	r = call("create_or_update_skill", map[string]any{"name": "rules", "description": "d", "instructions": "agent"})
-	assert.Nil(t, r.Error)
+	require.NotNil(t, r.Error)
+	data, _ = os.ReadFile(p)
+	assert.Contains(t, string(data), "TEAMMATE")
 }

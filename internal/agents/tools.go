@@ -97,14 +97,14 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "create_or_update_skill",
-		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the workspace (skills/<name>/SKILL.md) and loaded on demand by the agent. Upserts by name. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
+		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the workspace (skills/<name>/SKILL.md) and loaded on demand by the agent. To replace an existing skill, send the \"rev\" that read_skill or list_skills returned: without one the write only creates, and an existing name is refused. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
 		Category:    "content",
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Lowercase kebab-case name, e.g. \"revenue-rules\" (routing key; must not shadow a built-in or start with \"task-\")"},
 			{Name: "description", Type: "string", Required: true, Desc: "One-line description advertised in the system prompt (<= 300 characters)"},
 			{Name: "instructions", Type: "string", Required: true, Desc: "Full markdown instructions, fetched on demand via read_skill"},
 			{Name: "table_name", Type: "string", Required: false, Desc: "Optional: gate this skill so it only loads once this table exists and has at least one row"},
-			{Name: "rev", Type: "string", Required: false, Desc: "Optional: the \"rev\" that list_skills or read_skill returned for this skill. If the skill changed since, the save is refused instead of overwriting the change"},
+			{Name: "rev", Type: "string", Required: false, Desc: "Required to replace an existing skill: the \"rev\" that read_skill or list_skills returned for it. Without one the write only creates and an existing name is refused; if the skill changed since, the save is refused instead of overwriting the change"},
 		},
 	},
 	{

@@ -66,7 +66,7 @@ Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`)
 | `get_artifact` | introspect | One artifact's manifest and view as data, and its `rev`. A query with very long SQL comes back with `sql: null` and `sql_omitted: true`, never a partial copy (send `keep_sql: true` for it to keep it); never results. |
 | `write_artifact` | content | `name`, `manifest`, `view`, optional `rev`. Refused under `read-only`; asks first when "Ask before changes" is on, so headless MCP refuses it like `create_or_update_skill`. Every query is vetted against the read-only SQL policy before anything is written. |
 
-A client reads the format with `read_skill` `data-artifacts`. `write_artifact` without a `rev` only creates; to replace an artifact send the `rev` from `get_artifact`, and a change made since is a refusal, not an overwrite ([agent-policy.md](agent-policy.md#data-artifacts)). There is no tool that runs an artifact's queries or returns its results.
+A client reads the format with `read_skill` `data-artifacts`. `write_artifact` without a `rev` only creates; to replace an artifact send the `rev` from `get_artifact`, and a change made since is a refusal, not an overwrite ([agent-policy.md](agent-policy.md#data-artifacts)). `create_or_update_skill` follows the same rule: without a `rev` it only creates a new skill name, and replacing a skill needs the `rev` from `read_skill` or `list_skills` (a skill bound to a `table_name` is visible to those only while the table has rows). There is no tool that runs an artifact's queries or returns its results.
 
 ### Take over
 

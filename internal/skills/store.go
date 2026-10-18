@@ -77,7 +77,10 @@ type putOpts struct {
 // Overwrite skips the conflict check.
 func Overwrite() PutOption { return func(o *putOpts) { o.overwrite = true } }
 
-// WithRev sets the revision the caller loaded, overriding s.Rev.
+// WithRev sets the revision the caller loaded, overriding s.Rev. WithRev("")
+// makes the write create-only: an existing skill is a conflict, and the
+// store's last-seen revision never stands in (an agent that never read the
+// skill must not replace it).
 func WithRev(rev string) PutOption {
 	return func(o *putOpts) { o.rev, o.hasRev = rev, true }
 }

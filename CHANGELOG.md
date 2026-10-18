@@ -11,6 +11,7 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Fixed
 
+- **The agent can no longer overwrite a skill it never read.** `create_or_update_skill` without a `rev` now only creates: an existing skill is refused with a message to `read_skill` it and send the `rev` it returned, instead of falling back on the store's last-seen revision (which any skills list in the process refreshed). A stale `rev` is still a conflict. Studio's and the CLI's own saves are unchanged. ([#166](https://github.com/SandwichLabs/vibe/issues/166))
 - **Language server hardening.** `vibe lsp` drains and skips an over-size message (32 MiB) instead of exiting; it refuses a catalog snapshot that is a symbolic link, not a regular file you own, or over 64 MiB (a FIFO there no longer blocks it); and `vibe lsp snapshot -c NAME` exits non-zero for an unknown connection (before the hub is opened) and, after writing the others, for a named connection that could not be connected; a local file left to Studio or the TUI is not a failure. ([#179](https://github.com/SandwichLabs/vibe/issues/179))
 
 ### Changed
