@@ -10,7 +10,8 @@ A **data artifact** is a computation plus a view, stored as plain files in the w
 artifacts/<name>/
 ├── artifact.yaml        title, typed parameters with defaults, NAMED queries over those parameters
 ├── view.a2ui.json       level 1: a declarative A2UI view (closed schema, validated)
-└── view.html            level 2 (conditional): a custom view, untrusted, sandboxed
+├── view.js              level 2 (conditional, the RESHAPE of D10): a worker view returning SVG or A2UI
+└── html/                HTML artifact (proposal, docs/plans/html-artifacts.md): a template page, optionally scripted
 ```
 
 1. **Live, not frozen.** An artifact stores questions (SQL and parameters), never answers. Every query runs when the artifact opens and again when a parameter changes.
@@ -18,6 +19,7 @@ artifacts/<name>/
 3. **One tool surface.** The agent authors artifacts with a `write_artifact` ToolDef dispatched by `agents.Handler`, so MCP clients get the same tool with the same gates. The CLI mirrors only what Studio's UI does.
 4. **Level 1 view.** A2UI grows parameter controls (select, date range, number, text) that re-run the bound queries, a `pivot` (crosstab) component and drill-down. The schema stays closed and validated; model output never reaches a style attribute.
 5. **Level 2 view (conditional).** A custom HTML/JS view, served from its own asset path with a CSP `sandbox` header, no network, no `window.go`, vetted chart libraries bundled same-origin, and one bridge: `run(queryName, params)`. A custom view that arrived by git or a bundle shows as source until the person allows it (path + content hash, decisions outside the folder, like `.env`).
+6. **HTML artifacts (proposal, 2026-10-18).** `docs/plans/html-artifacts.md` adds a further view kind, a Go `html/template` page bound to the same named queries. A static page renders in Studio in a script-less frame; a scripted page with declared capabilities (`state`, `download`, `ask`) opens in a page window Vibe owns. It has its own spike (step P1) and generalises step 8's trust to a file set.
 
 ## Non-goals
 
