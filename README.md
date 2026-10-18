@@ -5,7 +5,7 @@
 [![CI](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/vibe/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**An agentic workspace for the data you already have.**
+**An agentic data workspace**
 
 *by [Sandwich Labs](https://github.com/SandwichLabs)*
 
