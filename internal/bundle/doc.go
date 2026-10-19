@@ -22,5 +22,6 @@
 // stores, so overwrite is a compare-and-write and imported skills can never
 // claim to be built-in.
 //
-// Single-notebook .vnb import and export share CheckNotebook with this path.
+// ContentsOf lists what an export can offer. Single-notebook .vnb import and
+// export (ReadNotebookFile) share CheckNotebook with this path.
 package bundle

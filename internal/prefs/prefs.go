@@ -9,6 +9,8 @@
 // Support on macOS) unless VIBE_CONFIG_DIR overrides it. User-authored theme
 // files live beside it in <config dir>/vibe/themes/*.json — the VS Code model:
 // drop a file in the folder and it shows up in the picker.
+//
+// Recents is the launcher's recent-workspaces list, kept in the same file.
 package prefs
 
 import (

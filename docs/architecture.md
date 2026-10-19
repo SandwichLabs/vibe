@@ -1,6 +1,6 @@
 # Architecture
 
-How Vibe fits together, at the level an outsider or new contributor needs. The contributor map of every package is the tree in [`CLAUDE.md`](../CLAUDE.md); the product reasoning is in [`direction.md`](direction.md).
+How Vibe fits together, at the level an outsider or new contributor needs. The contributor map of every package is the package map in [`CLAUDE.md`](../CLAUDE.md), generated from the Go package comments (`go doc ./internal/<pkg>` for the full text); the product reasoning is in [`direction.md`](direction.md).
 
 ## The idea in one picture
 

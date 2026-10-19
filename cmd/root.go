@@ -1,5 +1,5 @@
 // Package cmd holds the Cobra command tree for the vibe CLI (workspace, query,
-// import, export, conn, config, bundle, mcp, studio).
+// import, export, conn, artifact, config, lsp, mcp, studio, update).
 package cmd
 
 import (

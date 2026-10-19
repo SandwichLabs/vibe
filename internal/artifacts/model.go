@@ -2,7 +2,9 @@
 // parameterised, live view stored as plain files under artifacts/<name>/. It
 // holds the manifest model (artifact.yaml), its strict decoder and structural
 // validator, the binder that turns (query name, raw values) into SQL plus bound
-// parameters, and the store with its one two-file revision.
+// parameters, the store (FileStore, Mock) with its one two-file revision over
+// artifact.yaml and view.a2ui.json or view.js, and ViewHash, the trust hash a
+// person's allow of a custom (script) view is keyed by.
 //
 // It does structure, never SQL policy: whether a query is allowed to run is
 // decided by internal/agents (it cannot be imported from here). Binding never

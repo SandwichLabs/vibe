@@ -27,6 +27,10 @@
 // already controls the process. Only AWS_* endpoint, profile and credential
 // variables are guaranteed to have no effect.
 //
+// Who calls it: workspace.NewResolver wires it as the aws-sso:PROFILE sign-in
+// method (a secrets.MethodProvider); Studio's sign-in banner and
+// `vibe conn credentials sign-in` run the device flow.
+//
 // No value this package returns or logs ever contains an access token, refresh
 // token, client secret or role key: Creds redacts itself under every fmt verb,
 // slog and JSON, and every error carries only the profile name.

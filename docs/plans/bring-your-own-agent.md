@@ -132,7 +132,7 @@ Same process as epic #105: one issue at a time, Sonnet implementer, Opus adversa
 ### Phase C — Studio panel (medium–large)
 - **C1** `internal/extagent`: the ACP client session, process lifecycle (process group, killed on close or quit), mapping events into the panel's model, and the per-session Streamable HTTP endpoint (§4.4) with the stdio fallback. An interface plus mock; contract tests against a fake ACP agent.
 - **C2** Studio UI: the agent picker in Settings → App (stored in `~/.vibe.yaml` `agent.default` / `agent.external.<NAME>`; `docsref` gains a test for `~/.vibe.yaml` keys, or they are documented by hand), the notice dialog and chip, AgentPanel streaming for ACP sessions, the agent-permission card, Stop, and error states (not installed, not signed in, crashed).
-- **C3** Notebook task mode for external agents (the shared recorder, plus the envelope types moving with it) and grounding moved to `internal/agents`, with the badge and "Ask it to verify". Keep the CLAUDE.md architecture tree current.
+- **C3** Notebook task mode for external agents (the shared recorder, plus the envelope types moving with it) and grounding moved to `internal/agents`, with the badge and "Ask it to verify". Keep the package comments current (`task docs` regenerates the CLAUDE.md package map).
 - **C4** Docs and live QA.
 
 ### Deferred

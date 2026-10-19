@@ -29,6 +29,15 @@
 // EffectivePolicy clamps it to the committed ceiling, so a pulled commit can
 // never disable anyone's safeguards.
 //
+// # Entry points
+//
+// Beyond Open and the stores: ConnectionStates (the one typed connection
+// status for the CLI and Studio), TestCredential (the guard behind Test),
+// ApplySettings (the "only tighten" rules), ResolveConflict (Keep mine,
+// Reload or Save as copy over the notebook, query and skill stores),
+// CreateNew, NewResolver (the credential resolver with every sign-in method)
+// and GitInfo (reads .git/HEAD, runs no git).
+//
 // # Secrets
 //
 // Nothing here ever holds a credential. Definitions carry only what a

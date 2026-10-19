@@ -1,19 +1,14 @@
-// Package docsref holds the docs-consistency check for the shipped reference
-// documentation. It is intentionally test-only: there is no production
-// behavior here. The check keeps docs/reference/ honest against the code —
+// Package docsref is the test-only check that keeps the docs honest against
+// the code; there is no production behavior here.
 //
-//   - every A2UI component type registered in internal/a2ui must be
-//     documented in docs/reference/notebooks.md
-//   - every bundled starter template registered in internal/templates must
-//     be documented in docs/reference/
-//
-// #69 retired the page system (docs/reference/pages.md, the directive
-// registry this test used to scrape out of the page parser, and the
-// stale-directive-token check that went with it) in favor of Notebooks/A2UI
-// (docs/reference/notebooks.md). #68 removed internal/automation (macros)
-// along with docs/reference/macros.md, forms.md, and reports.md, so the
-// macro-action and form/report-surface checks that used to live here are
-// gone too.
+//   - every A2UI component type registered in internal/a2ui is documented in
+//     docs/reference/notebooks.md, and every bundled starter template from
+//     internal/templates in docs/reference/ (this file)
+//   - the reference pages for connections, workspaces and the agent policy
+//     match their registries (connections_test.go, workspaces_test.go,
+//     agentpolicy_test.go)
+//   - CLAUDE.md's package map is the one generated from the Go package
+//     comments (packagemap_test.go; `task docs` regenerates it)
 package docsref
 
 import (

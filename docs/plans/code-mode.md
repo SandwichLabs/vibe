@@ -81,7 +81,7 @@ The package has three parts:
 - **`Host`**: an interface with one method, `Call(ctx, tool string, kwargs map[string]any) (any, error)`. The production `Host` sends each call to the agent handler.
 - **`Stubs`**: a function that makes Python type stubs (`.pyi`) from `ToolDef` values. `ParamsToJSONSchema` is the model for this function.
 
-The package does not import `internal/llm`. It imports `internal/agents` only for `ToolDef`, `Request` and `Response`. Add the package to the `CLAUDE.md` architecture tree, because `internal/docsref` (`tree_test.go`) checks the tree.
+The package does not import `internal/llm`. It imports `internal/agents` only for `ToolDef`, `Request` and `Response`. Give the package a package comment and run `task docs`: `internal/docsref` (`packagemap_test.go`) fails on a package with no comment or a stale `CLAUDE.md` package map.
 
 ### 4.2 The `run_code` tool
 

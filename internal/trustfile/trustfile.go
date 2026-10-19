@@ -1,6 +1,7 @@
 // Package trustfile remembers one person's allow and deny decisions about
 // things that arrive in a workspace folder and could act on their behalf: a
-// workspace .env, a custom artifact view. It is a leaf (standard library only).
+// workspace .env (internal/dotenv, dotenv.json) and a custom artifact view
+// (views.json).
 //
 // Allow is keyed by an absolute path plus a content hash, like `direnv allow`:
 // any change to the content ends the allow. Deny is keyed by path alone and

@@ -14,6 +14,9 @@
 //   - prompt: in memory for the life of the process, optionally promoted to
 //     the keychain ("remember").
 //
+// Further methods plug in as a MethodProvider keyed by kind; the one today is
+// aws-sso:PROFILE (internal/awssso, wired by workspace.NewResolver).
+//
 // There is no plaintext-file fallback: with no keychain and no environment
 // variables a connection is "needs credentials", and the message names the
 // env: alternative.

@@ -1,6 +1,10 @@
 // Package agents is the one tool surface for the built-in agent and MCP
 // clients: the ToolDef registry, sandbox tiers, the approval queue, the SQL
 // allow-list policy and the JSON-RPC handler that dispatches tool calls.
+//
+// The handler is split by tool family (handler_*.go). The SQL policy here is
+// the one the agent, MCP clients, notebook cells and saved data artifacts are
+// all held to (docs/reference/agent-policy.md).
 package agents
 
 import (

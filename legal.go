@@ -1,5 +1,7 @@
-// Package vibe is the repository root. Its only job is to embed the licence files so the
-// binaries can show them (Studio's Settings > About) without reading from disk.
+// Package vibe embeds the licence files (LICENSE, NOTICE and the generated
+// THIRD_PARTY_NOTICES.md, `task notices`) so the binaries can show them in
+// Studio's Settings > About without reading from disk. It is the repository
+// root's only package and has no other job.
 package vibe
 
 import _ "embed"

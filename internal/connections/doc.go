@@ -1,8 +1,10 @@
 // Package connections is the connection type registry (plan §4.2, #115): what
-// each kind of connection (postgres, mysql, motherduck, sqlite, ducklake, s3, gcs, r2,
-// azure, iceberg and delta tables, and the
-// local duckdb file that internal/session knows itself) needs, how its secret
-// and attach SQL are emitted, and how it is tested.
+// each kind of connection needs, how its secret and attach SQL are emitted,
+// and how it is tested.
+//
+// The kinds are postgres, mysql, motherduck, sqlite, ducklake, s3, gcs, r2,
+// azure, iceberg and delta tables, and the local duckdb file that
+// internal/session knows itself.
 //
 // The package sits on top of internal/session's ConnectionType seam and
 // internal/secrets; it imports neither internal/workspace nor anything above

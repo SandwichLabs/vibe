@@ -1,6 +1,9 @@
 // Package hub decides which process owns a workspace's DuckDB hub, and lets
 // the others find and reach it (#112, plan §4.4).
 //
+// Open is the one open path for a workspace: the workspace, the hub lock, the
+// DuckDB session and the engine, in that order.
+//
 // DuckDB allows one read-write process or many read-only processes per
 // .duckdb file, never a mix, so exactly one process per workspace owns the hub
 // (Studio, or a headless `vibe mcp serve`). Ownership is a non-blocking flock

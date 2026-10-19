@@ -1,5 +1,8 @@
 // Package engine runs SQL against a DuckDB connection and normalises the
 // result: column metadata, typed values, parameters, row caps and table reads.
+//
+// It also builds the connection tree the catalog panes show (ListCatalog).
+// Identifiers are quoted with session.QuoteIdent, the one quoting function.
 package engine
 
 import (

@@ -48,7 +48,7 @@ We use `monty-go` as a reference. It is MIT. If we copy code from it (for exampl
 
 ### 4.1 Package
 
-Make a new leaf package, `internal/montyclient`. It imports only the standard library, `google.golang.org/protobuf` (already an indirect dependency of Vibe, v1.36.12 [vibe]) and `log/slog`. It does not import `internal/agents`. `internal/codemode` uses it. Add it to the `CLAUDE.md` architecture tree.
+Make a new leaf package, `internal/montyclient`. It imports only the standard library, `google.golang.org/protobuf` (already an indirect dependency of Vibe, v1.36.12 [vibe]) and `log/slog`. It does not import `internal/agents`. `internal/codemode` uses it. Give it a package comment and run `task docs` to add it to the `CLAUDE.md` package map.
 
 ### 4.2 Parts and size
 

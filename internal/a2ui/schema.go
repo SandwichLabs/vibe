@@ -8,6 +8,10 @@
 // error for self-correction and its shape is part of the contract, not an
 // implementation detail.
 //
+// ValidateView and ViewComponents are the context-aware schema of a data
+// artifact's view: the same components plus controls, pivot and the
+// query/drill bindings, which Validate refuses.
+//
 // Rendering does not happen here (#67 scope: Go validates, Vue renders).
 // Colors are a closed enum, never a free string: components are authored by
 // a language model, and letting model output reach a style attribute is a

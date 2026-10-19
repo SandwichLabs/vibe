@@ -1,6 +1,7 @@
-// Package llm wires Vibe's in-app conversational agent to an OpenAI-compatible
-// LLM endpoint (e.g. a local llama-server at http://localhost:8080/v1) using the
-// charmbracelet/fantasy agent framework.
+// Package llm runs Vibe's in-app agent on the charmbracelet/fantasy framework:
+// chat, notebook task mode (task.go) and the grounding guardrails, against the
+// configured provider (Anthropic, OpenAI, Gemini, Ollama, Cloudflare or a local
+// OpenAI-compatible server; docs/reference/llm-config.md).
 //
 // This is the real "wizard layer" agent loop: the model is given the exact set
 // of tools defined in internal/agents (the same registry the MCP server

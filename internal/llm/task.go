@@ -6,6 +6,7 @@
 // codebase's shared-tool-registry design (internal/agents.ToolDef +
 // Handler.Handle, not the bespoke fantasy tools schoolwork-workspace wired
 // directly into its wasm agent).
+
 package llm
 
 import (

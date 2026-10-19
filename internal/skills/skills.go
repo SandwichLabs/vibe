@@ -1,10 +1,12 @@
-// Package skills embeds Vibe's built-in Skills (#62): SKILL.md documents
-// bundled into the binary from internal/skills/<name>/SKILL.md, one
-// directory per skill, agentskills.io-style. This package has no dependency
-// on internal/agents or internal/llm — it just parses frontmatter and
-// exposes a Skill list — so internal/agents can import it (to merge built-ins
-// with the user skills stored in _vibe_skills) without creating an import
-// cycle (internal/llm already imports internal/agents).
+// Package skills is Vibe's SKILL.md layer (#62): the built-in skills embedded
+// in the binary, the file-backed store of a workspace's skills/<name>/SKILL.md
+// (FileStore, Mock), and the service the agent and Studio share (LoadSkills,
+// SaveUserSkillAt, DeleteSkill, WriteImportSkill).
+//
+// Built-ins live in internal/skills/<name>/SKILL.md, one directory per skill,
+// agentskills.io-style. The package has no dependency on internal/agents or
+// internal/llm, so internal/agents can import it to merge built-ins with a
+// workspace's skills without an import cycle.
 //
 // A sibling ADDENDUM.md next to a SKILL.md, if present, is a human's
 // hand-written notes appended under "## Addendum (hand-written)" at load

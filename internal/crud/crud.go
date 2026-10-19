@@ -1,5 +1,6 @@
 // Package crud provides the transactional, type-coercing write-back core
-// behind Studio's (Wails) datasheet bindings.
+// behind Studio's (Wails) datasheet bindings, with table paging (page.go) and
+// the one QBE filter-to-WHERE builder (filter.go).
 //
 // All-string inputs (from the Vue datasheet) are coerced to each column's
 // DuckDB type via CAST(? AS <type>) read from information_schema. Failures

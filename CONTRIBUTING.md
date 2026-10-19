@@ -35,7 +35,7 @@ Notes:
 
 - `task lint` and `task test` pass. If you touched the frontend, `npm run build` and `npm test` in `studio/frontend` pass too.
 - Tests accompany behavior changes. Tests use testify, sit next to the source, and use DuckDB, a `t.TempDir()` file store, or the package mocks.
-- Docs move with code. Keep `docs/reference/` and the architecture tree in `CLAUDE.md` current; `internal/docsref` fails when they drift.
+- Docs move with code. Keep `docs/reference/` current, and describe each Go package in its package comment: `task docs` regenerates the package map in `CLAUDE.md` from those comments, and `internal/docsref` fails when either drifts.
 - UI changes: describe how you checked them in a real browser. [`docs/contributing/rodney.md`](docs/contributing/rodney.md) explains the Rodney QA workflow against the Wails dev server. Include screenshots in the PR.
 
 ### Conventions that reviewers enforce

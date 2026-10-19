@@ -33,6 +33,7 @@ task test         # Go + Vitest tests (alias: task t); task test:frontend is Vit
 task lint         # golangci-lint (task lint:fix to auto-fix)
 task typecheck    # vue-tsc over studio/frontend (`npm run typecheck`); part of `task lint`, blocking in CI, 0 errors
 task studio:dev   # Wails dev server (NOT bare `wails dev`: needs -tags webkit2_41,duckdb_arrow)
+task docs         # regenerate this file's package map from the Go package comments
 task build:studio # Studio desktop app (build:studio:linux on Linux); stamps the version, then restores wails.json
 scripts/gen-icons.sh  # regenerate appicon.png + Linux icons from studio/build/icon/vibe.svg
 go test -v ./internal/workspace/   # one package
@@ -49,50 +50,66 @@ CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapsho
 
 ## Architecture
 
-```
-cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio)
-studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,import_export,lifecycle,llm,
-                     notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go (the logic behind the data artifact bindings: list, open, run, edit, save, delete), viewserver.go + artifact_view_host.go (the /vibe-view/ middleware and per-grant tokens for script views), agent_turn.go (the in-flight chat turn and its cancel),
-                     workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
-                     connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
-                     dotenv.go, templates.go; every exported App method is a thin binding (<= 25
-                     statements counting nested ones; no file/process/SQL work, no filestore write, no
-                     dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
-                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Notebooks/Notebook,
-                     TableBrowser, QueryEditor, ConnectionEditor, Skills, Artifacts/Artifact, Import, Settings, Agent)
-internal/
-  workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
-                     ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard);
-                     ApplySettings (the "only tighten" rules), ResolveConflict (Keep mine / Reload / Save as
-                     copy over the notebook, query and skill stores), CreateNew, GitInfo (reads .git/HEAD, runs no git)
-  connections/       connection type registry and attach SQL
-  connname/          the connection-name rule (catalog alias), a dependency-free leaf
-  session/           the DuckDB hub for a workspace; connection lifecycle and status
-  sandbox/           the three sandbox tiers: Mode, Parse, Rank/Tighter (leaf; shared by workspace policy and agents)
-  secrets/           keychain + env credential store, plus pluggable sign-in methods (`MethodProvider`: aws-sso) (write-only across every boundary)
-  awssso/            AWS IAM Identity Center sign-in in Go: SSO profile loading, the shared token cache, role credentials, device-flow login (leaf: AWS SDK + stdlib only; `workspace.NewResolver` wires it as the `aws-sso:PROFILE` sign-in; Studio's banner and `vibe conn credentials sign-in` run the device flow, `aws sso login` shares its token cache)
-  dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
-  trustfile/         the allow-by-path-and-hash, deny-by-path decision store (leaf; JSON in the user config dir, never the workspace or a bundle); used by dotenv (dotenv.json) and by custom artifact views (views.json)
-  agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
-  skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)
-  llm/               in-app agent runner (fantasy), task mode, grounding
-  editor/            $VISUAL/$EDITOR hand-off for the TUI REPL (ctrl+o, \e) and `vibe query --edit`; scratch buffers in .vibe-local/edit/
-  lsp/               `vibe lsp`: stdio Language Server (completion, hover) over a catalog snapshot (.vibe-local/catalog.json) the TUI or `vibe lsp snapshot` writes; opens no database and writes no file
-  mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
-  notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
-  artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json | view.js}` under one two-file revision, and `ViewHash` (the trust hash of a custom view); structure only, SQL vetting lives in `internal/agents`
-  a2ui/              component schema + validator (Go validates, Vue renders); `ValidateView` + `ViewComponents` = the context-aware data artifact view schema (controls, pivot, `query`/`drill`; refused by `Validate`)
-  bundle/            .vibe bundle v2 export/import, optional age encryption; ContentsOf (what an export offers), ReadNotebookFile
-  crud/, importer/, engine/, usersql/  datasheet CRUD + table paging + the one QBE filter/WHERE builder, CSV/xlsx import, query exec (the one `QuoteIdent` is `session.QuoteIdent`), the connection tree (`engine.ListCatalog`), courtesy SQL checks
-  filestore/, filelock/, storageurl/, storageglob/, jsonenc/, prefs/, config/, templates/, tui/, testsupport/
-                     (storageglob = s3/gcs/r2 wildcard expansion: DuckDB's parser finds the pattern literals, the hub's private lister lists them, the SQL is rewritten to explicit key lists before it runs, #138; testsupport = test fixtures: miniotest (a throwaway MinIO, integration tag only) and ssofake (a loopback AWS IAM Identity Center for tests, `tools/ssofake` and the `ssofake` dev build); jsonenc = the one JSON encoder setup: HTML escaping off, plus Quote; prefs.Recents = the launcher's recent list)
-  selfupdate/        release check + install.sh-driven apply (opt-in, confirmed; manifest-based install detection; Service wires prefs); `vibe update`, Studio's About > Updates
-  buildinfo/         version/commit/date + Go and DuckDB versions for Settings > About (`GetBuildInfo`)
-  docsref/           test keeping docs/reference/ in sync with the a2ui registry, templates and vibe.yaml keys
-editors/            Neovim plugin, Helix and eglot setup for `vibe lsp` (`docs/reference/editor.md`)
-legal.go            repo-root package embedding LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md (`task notices`)
-docs/                see docs/README.md
-```
+One line per Go package, **generated from its package comment** (`task docs`); `internal/docsref` fails when the list is stale or a package has no comment. To change a line, edit the package comment (in `doc.go` or the file named for the package) and run `task docs`. `go doc ./internal/<pkg>` prints the full comment: the entry points, invariants and who calls the package.
+
+<!-- package-map:start -->
+- `legal.go` (module root) — embeds the licence files (LICENSE, NOTICE and the generated THIRD_PARTY_NOTICES.md, `task notices`) so the binaries can show them in Studio's Settings > About without reading from disk.
+- `cmd/` — holds the Cobra command tree for the vibe CLI (workspace, query, import, export, conn, artifact, config, lsp, mcp, studio, update).
+- `cmd/vibe/` — the Vibe command-line entry point; it wires the cmd tree.
+- `internal/a2ui/` — implements the A2UI page schema: the closed, validated contract an agent uses to hand a chart/table/stat page back to the Studio UI.
+- `internal/agents/` — the one tool surface for the built-in agent and MCP clients: the ToolDef registry, sandbox tiers, the approval queue, the SQL allow-list policy and the JSON-RPC handler that dispatches tool calls.
+- `internal/artifacts/` — the file-backed store of data artifacts: a parameterised, live view stored as plain files under artifacts/<name>/.
+- `internal/awssso/` — signs a person in to AWS with an IAM Identity Center (SSO) profile from their ~/.aws/config, in Go, and hands back short-lived role credentials.
+- `internal/buildinfo/` — describes the running build for Settings > About and bug reports: the ldflags-stamped version, commit and date, plus the Go and DuckDB versions it was built with.
+- `internal/bundle/` — reads and writes `.vibe` bundles, format version 2 (#118, plan section 4.6): a zip of a workspace's notebooks, queries, skills and (optionally) connection definitions, with a manifest that carries a SHA-256 for every entry.
+- `internal/config/` — loads Vibe's app-level settings (Viper) and the LLM provider settings, including provider defaults and the keychain-backed API key lookup.
+- `internal/connections/` — the connection type registry (plan §4.2, #115): what each kind of connection needs, how its secret and attach SQL are emitted, and how it is tested.
+- `internal/connname/` — holds the connection-name rule (the name is the catalog alias in SQL).
+- `internal/crud/` — provides the transactional, type-coercing write-back core behind Studio's (Wails) datasheet bindings, with table paging (page.go) and the one QBE filter-to-WHERE builder (filter.go).
+- `internal/docsref/` — the test-only check that keeps the docs honest against the code; there is no production behavior here.
+- `internal/dotenv/` — reads a workspace's .env file and remembers, per person, whether it may be used (direnv-style allow and deny).
+- `internal/editor/` — opens SQL in the person's own editor ($VISUAL, then $EDITOR) for the TUI REPL and `vibe query --edit`, the way git and psql's \e do.
+- `internal/engine/` — runs SQL against a DuckDB connection and normalises the result: column metadata, typed values, parameters, row caps and table reads.
+- `internal/filelock/` — the crash-safe, non-blocking, exclusive advisory file lock behind a workspace's hub lock (#112, internal/hub).
+- `internal/filestore/` — the shared plumbing under the file-backed notebook, query and skill stores (#109, plan §4.1): safe paths that never leave the workspace, atomic writes (temp file + fsync + rename in the same directory), and compare-and-write.
+- `internal/hub/` — decides which process owns a workspace's DuckDB hub, and lets the others find and reach it (#112, plan §4.4).
+- `internal/importer/` — provides backend helpers for reading external data files (CSV, Excel) into a workspace connection's DuckDB session: the import wizard's inspect/preview and its create/replace/append/upsert write path (#82).
+- `internal/jsonenc/` — the one JSON encoder configuration for the files and strings Vibe writes: HTML escaping off (Encode), so < > & stay readable and diffs stay small.
+- `internal/llm/` — runs Vibe's in-app agent on the charmbracelet/fantasy framework: chat, notebook task mode (task.go) and the grounding guardrails, against the configured provider (Anthropic, OpenAI, Gemini, Ollama, Cloudflare or a local OpenAI-compatible server; docs/reference/llm-config.md).
+- `internal/lsp/` — `vibe lsp`: a Language Server Protocol server over stdio that completes and describes a workspace's connections, schemas, tables, views and columns in any editor with an LSP client (Neovim, Helix, VS Code, Zed, Emacs).
+- `internal/mcp/` — serves a workspace's agent tools to external agents over the Model Context Protocol (SSE and stdio) and proxies to the process that owns the workspace hub.
+- `internal/notebooks/` — implements the Notebook contract (#66 part A): a title plus an ordered list of cells of three types (sql, markdown, a2ui), stored one per file in a workspace (notebooks/<id>.vnb, see file_format.go).
+- `internal/prefs/` — stores app-global user preferences for Vibe Studio — the settings that belong to the person, not to any one workspace (theme, appearance).
+- `internal/queries/` — the file-backed store of saved SQL queries (queries/*.sql) and the filter model the table browser shares with them.
+- `internal/sandbox/` — the one definition of the agent's three sandbox tiers: their names, the strict parser for a tier string and the restrictiveness order.
+- `internal/secrets/` — keeps credentials out of files, logs and the agent's reach (plan §4.3, #114).
+- `internal/selfupdate/` — tells a person that a newer Vibe release exists and, only when they confirm, upgrades by running that release's own install.sh.
+- `internal/session/` — the DuckDB "hub" for a workspace (plan §4.4): one DuckDB instance whose attached catalogs are the user's connections, with catalog-aware introspection, cancellable statements, a schema cache and open-time hardening that is read back and fails closed.
+- `internal/session/sessiontest/` — builds Sessions for the tests of packages that depend on one.
+- `internal/skills/` — Vibe's SKILL.md layer (#62): the built-in skills embedded in the binary, the file-backed store of a workspace's skills/<name>/SKILL.md (FileStore, Mock), and the service the agent and Studio share (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill).
+- `internal/storageglob/` — expands wildcards in S3, GCS and R2 URLs for the SQL Vibe runs (#138 follow-up).
+- `internal/storageurl/` — the one place that decides what an object-storage URL is: which schemes count, what a plain URL looks like, whether one lies inside a scope, and whether an Azure URL names the account's own endpoint.
+- `internal/templates/` — holds the built-in workspace templates that "new workspace" and the importer scaffold from.
+- `internal/testsupport/miniotest/` — the integration tests' S3-compatible store: a throwaway MinIO in a container, and the lake the #118 end-to-end tests read from it.
+- `internal/testsupport/ssofake/` — a loopback IAM Identity Center for tests and for the ssofake dev build (tools/ssofake): the OIDC device-authorization endpoints and the portal that turns an access token into role credentials.
+- `internal/trustfile/` — remembers one person's allow and deny decisions about things that arrive in a workspace folder and could act on their behalf: a workspace .env (internal/dotenv, dotenv.json) and a custom artifact view (views.json).
+- `internal/tui/` — Vibe Studio's terminal interface (#69): a SQL REPL, a read-only table browser, and a notebook list.
+- `internal/usersql/` — holds the courtesy checks the CLI and the TUI run on SQL a person types, before it reaches the session.
+- `internal/workspace/` — the folder-shaped unit of a Vibe project (plan §4.1): a directory with a committed vibe.yaml marker, notebooks, queries and skills as plain files, and connection definitions merged from three scopes.
+- `studio/` — the Vibe desktop app: a Wails v2 shell whose bound App exposes the workspace, connections, notebooks and agent to the Vue frontend.
+- `tools/ssofake/` — a loopback AWS IAM Identity Center for driving Vibe Studio's AWS sign-in by hand or from a script (task studio:dev:ssofake, Rodney QA).
+<!-- package-map:end -->
+
+**Studio** (`studio/`, one bound `App`). Files are split by area:
+
+- `app.go` (core) and `app_<area>.go`, the bindings by area: about, agent, artifacts, artifact_views, import_export, lifecycle, llm, notebooks, prefs, queries, skills, tables, update.
+- `workspace_<step>.go` (launch, recents, open, info, create, settings, conflict, mcp) and `connections_<step>.go` (crud, sync, catalog, creds, deps, probe, extensions), plus `secrets.go`, `bundle.go`, `dotenv.go`, `templates.go`.
+- `artifacts.go` and `artifacts_edit.go`: the logic behind the data artifact bindings (list, open, run, edit, save, delete). `viewserver.go` and `artifact_view_host.go`: the `/vibe-view/` middleware and per-grant tokens for script views.
+- `agent_turn.go`: the in-flight chat turn and its cancel. `signin.go`: AWS device sign-in (`StartSignIn`/`CancelSignIn`); `ssodev.go` and the `ssofake`-tagged `ssofake.go` are the dev-build seam.
+- **Thin bindings:** every exported `App` method is at most 25 statements (nested ones counted), does no file, process or SQL work and no filestore write, and uses no dot import or I/O alias (`TestExportedAppMethodsAreThinBindings` and the `thin-binding` ast-grep rule).
+- `frontend/` is Vue 3. Every Go call goes through `src/lib/bindings.ts` (a typed `App` over `AppApi` in `env.d.ts`; the generated `wailsjs/go` is gitignored). Views: Launcher, Dashboard, Notebooks/Notebook, TableBrowser, QueryEditor, ConnectionEditor, Skills, Artifacts/Artifact, Import, Settings, Agent.
+
+**Not Go:** `editors/` (Neovim plugin, Helix and eglot setup for `vibe lsp`, `docs/reference/editor.md`), `tools/` (the ast-grep architecture rules, QA video scripts), `scripts/` (build, packaging and CI checks such as `check-layering.sh`), `docs/` (see `docs/README.md`).
 
 ## Key concepts
 
@@ -124,7 +141,7 @@ docs/                see docs/README.md
 - **Thin views**: a `.vue` file is at most 600 lines and 150 script lines. A view wires composables (`composables/use*.ts`, one per job: `useNotebookSave`, `useTableCrud`, …) and renders; the conflict banner flow is `useConflict`, popup-menu keys `useMenuKeys`, the A2UI live `sql` binding `a2ui/useLiveQuery`. `studio/frontend/scripts/check-vue-size.mjs` enforces it in CI.
 - **Focus is visible**: `theme/bridge.css` owns the `:focus-visible` ring; never `outline: none` without it. Ad-hoc modals use `composables/useModal.ts`.
 - **QA in a real browser**: Rodney against the Wails-bound dev server at `:34115` (see `docs/contributing/rodney.md`); Vitest specs are supplementary, never the acceptance criterion. The older Rodney verification protocol is in `docs/archive/parity-remediation-plan.md` §1.
-- **Docs move with code**: keep `docs/reference/` and the architecture tree above current; `internal/docsref` fails when they drift.
+- **Docs move with code**: keep `docs/reference/` current, and describe a package in its Go package comment (the package map above is generated from it by `task docs`); `internal/docsref` fails when either drifts.
 - **Releases** are `.github/workflows/release.yml`: push a `v*` tag and it builds natively on four runners, stamps the version with ldflags, and creates a draft release. No GoReleaser.
 
 ## Design principles
