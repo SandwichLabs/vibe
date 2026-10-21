@@ -1,6 +1,6 @@
 # P1 on macOS: manual steps for the owner
 
-Same checks as the Linux run (`SPIKE-P1-RESULTS.md`, in the scratchpad), on a Mac. **None of the macOS code here (`pagehost_mac.m`, `parent_mac.py`, `listener_mac.py`) has been compiled or run**; expect a compile error or two. Everything stays on loopback; never look up a real host. A vector is "blocked" only if **no request reached the listener and nothing appeared in a Go/log line**; a console error never counts. Record every result as Verified / Not verified with the log lines, plus macOS version and chip (arm64/Intel).
+Same checks as the Linux run (`SPIKE-P1-RESULTS.md`, in the scratchpad), on a Mac. **Run once on 2026-10-20 (macOS 26.6.2, arm64): results in `P1-MAC-RESULTS.md`; the follow-up variants it used (content rule list, logging proxy, runners) are in `followup/`, with absolute paths from that Mac.** The fixes that run needed are folded in below. Everything stays on loopback; never look up a real host. A vector is "blocked" only if **no request reached the listener and nothing appeared in a Go/log line**; a console error never counts. Record every result as Verified / Not verified with the log lines, plus macOS version and chip (arm64/Intel).
 
 ## 0. Setup
 
@@ -9,9 +9,11 @@ Prerequisites: macOS 14+ (the proxy test needs it; 13 works for the rest), Xcode
 ```
 git fetch origin && git checkout spike/html-pages-p1
 cd studio/frontend && npm ci && cd ../..
-cd spike/pagehost/mac && clang -fobjc-arc -Wall -o pagehost_mac pagehost_mac.m -framework Cocoa -framework WebKit
+cd spike/pagehost/mac && clang -fobjc-arc -Wall -o pagehost_mac pagehost_mac.m -framework Cocoa -framework WebKit -framework Network
 ```
-All commands below run from `spike/pagehost/mac/` unless noted. `studio/frontend/index.html` on the branch already carries the a1 meta; `index.none.html`, `index.a1.html`, `index.narrow.html` here are the variants to copy over it.
+All commands below run from `spike/pagehost/mac/` unless noted.
+
+**Shell notes.** macOS `/bin/bash` is 3.2: no `declare -A` or other bash 4 features in helper scripts (use zsh or plain arrays). In zsh `log` is a builtin, so read the system log with `/usr/bin/log show …` / `/usr/bin/log stream …`. `studio/frontend/index.html` on the branch already carries the a1 meta; `index.none.html`, `index.a1.html`, `index.narrow.html` here are the variants to copy over it.
 
 **Local DNS test zone (needs sudo; loopback only).** `*.localhost` resolves without DNS, so it proves nothing. Instead:
 ```
@@ -84,11 +86,13 @@ Loop over groups: `for g in main open form formget loc locreplace alink alinknam
    - **Clicks:** `click-*` variants wait 3.5 s after `READY_CLICK`; click once anywhere in the window (the frame covers it). Automate with `cliclick c:<x>,<y>` on the window centre if you like.
 3. Variants (`all-variants.txt` is the Linux list; `ipc` is separate). **Added for macOS:** `lnk-dns-prefetch-name` (Cocoa may honour `dns-prefetch`; watch the DNS logger), `lnk-preconnect-name`, `click-outside-name` (outside-link click under a1 with a `spike.test` name: record whether a **`dns query`** appears even though the navigation is blocked), `click-blank-name`.
 
+   **Use the `https://` versions for names** (`inert-sname`, `lnk-dns-prefetch-sname`, `lnk-preconnect-sname`, `click-outside-sname`, `click-blank-sname`). Studio's App Transport Security (the dev `Info.plist` sets only `NSAllowsLocalNetworking`) refuses plain-HTTP names before any DNS lookup, even in the control, so the `http://` `*-name` variants prove nothing; IP literals and `localhost` are exempt. With HTTPS, a leak shows as a `dns query` and often a TLS ClientHello (`tcp-noreq`) carrying the name in SNI.
+
    | Run | index | `SPIKE_MODE` | Purpose |
    |---|---|---|---|
    | ctl | none | `run-control-only=<all>` | no sandbox, no CSP: vectors must fire |
    | nox | none | `run-only=<all>` | H3 CSP + `sandbox=""`, no a1: expect `/v/click-outside` to leak |
-   | a1 | a1 | `run-only=<all>,lnk-dns-prefetch-name,lnk-preconnect-name,click-outside-name,click-blank-name` | the real configuration |
+   | a1 | a1 | `run-only=<all>,inert-sname,lnk-dns-prefetch-sname,lnk-preconnect-sname,click-outside-sname,click-blank-sname` | the real configuration |
    | nar | narrow (edited) | same list | narrowed meta; Studio must still boot (`app-children=1`); a click to `/` loads nothing |
    | sbonly | none | `run-sbonly-only=ipc,inert` | **macOS-only bullet**: Wails' `forMainFrameOnly:false` user script must not run in a frame without `allow-scripts`: no `IPC SpikeProbe frame-raw-ipc`, no `/v/ipc-script-ran`, no `BOOT-IN-FRAME` |
    | ipc ctl | none | `run-control-only=ipc` | detector works: `frame-raw-ipc` appears (or "Blocked request from not main frame" in the dev log, as #182) |

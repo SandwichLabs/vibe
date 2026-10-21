@@ -29,6 +29,8 @@ export async function runSpike() {
     ['click-outside', true], ['click-js', true], ['click-form-get', true], ['click-form-post', true], ['click-rerender', true],
     ['lnk-preconnect', false], ['lnk-dns-prefetch', false], ['lnk-prefetch', false], ['lnk-prerender', false], ['lnk-icon', false], ['lnk-stylesheet', false], ['lnk-preload', false], ['lnk-modulepreload', false],
     ['click-root', true], ['click-index', true], ['click-ping', true], ['click-blank', true], ['click-download', true],
+    ['lnk-dns-prefetch-name', false], ['lnk-preconnect-name', false], ['click-outside-name', true], ['click-blank-name', true],
+    ['inert-sname', false], ['lnk-dns-prefetch-sname', false], ['lnk-preconnect-sname', false], ['click-outside-sname', true], ['click-blank-sname', true],
   ]
   for (const [v, click] of variants) {
     if (only && !only.includes(v)) continue
