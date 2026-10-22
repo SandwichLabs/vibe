@@ -8,7 +8,7 @@ package main
 // store: a page's data requests go back over the pipe, to Studio, which owns
 // the artifact. The page and the pipe are both untrusted from here: every
 // string the page posts is shape-checked again before it is forwarded, and only
-// three message types may come from a page.
+// four message types may come from a page.
 
 import (
 	"encoding/json"
@@ -239,6 +239,8 @@ func (h *pageHelper) pump() {
 		switch m.T {
 		case pagehost.TypeReply:
 			h.reply(m)
+		case pagehost.TypePush:
+			h.nat.eval(pagehost.EventScript(m.Cap, m.Arg))
 		case pagehost.TypeDocr:
 			h.docChunk(m)
 		case pagehost.TypeQuit:
@@ -340,15 +342,22 @@ func (h *pageHelper) docTimeout(id int64) {
 }
 
 // message handles a string the page posted. It is untrusted: only a heartbeat,
-// a run and a capability call may come from a page, each shape-checked again,
+// a run, a capability call and a chunk of a call's argument may come from a page, each shape-checked again,
 // and what fails the check is answered with a fixed code.
 func (h *pageHelper) message(s string) {
 	if len(s) > pagehost.MaxFromHelper {
 		return
 	}
 	m, err := pagehost.Decode([]byte(s), pagehost.FromHelper)
-	if err != nil || (m.T != pagehost.TypeHeartbeat && m.T != pagehost.TypeRun && m.T != pagehost.TypeCall) {
+	if err != nil || (m.T != pagehost.TypeHeartbeat && m.T != pagehost.TypeRun && m.T != pagehost.TypeCall && m.T != pagehost.TypePut) {
 		h.refuse(s)
+		return
+	}
+	// The gesture of a save is the person's own input, seen by the native
+	// widget: the page's say-so (or its API's check) is not enough, since a page
+	// can post to this handler directly. One input pays for one save.
+	if m.T == pagehost.TypeCall && m.Cap == "download" && !h.nat.takeInput() {
+		h.nat.eval(pagehost.ReplyScript(m.ID, false, nil, pagehost.CodeGesture))
 		return
 	}
 	if err := h.out.Send(m); err != nil {

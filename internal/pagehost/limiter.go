@@ -13,6 +13,9 @@ const (
 	// MaxLinesPerSecond bounds every message a window sends, requests or not:
 	// a page that posts faster than this is flooding Studio.
 	MaxLinesPerSecond = 400
+	// MaxPutsPerSecond bounds the chunks of an upload, which are acknowledged one
+	// at a time and so pace themselves: a 20 MB file is about 500 of them.
+	MaxPutsPerSecond = 3000
 )
 
 // Limiter admits at most MaxInFlight requests at once and MaxPerMinute in any
@@ -60,12 +63,54 @@ type Flood struct {
 
 // Hit records one message at now and reports whether the second's count is
 // over MaxLinesPerSecond.
-func (f *Flood) Hit(now time.Time) bool {
+func (f *Flood) Hit(now time.Time) bool { return f.HitLimit(now, MaxLinesPerSecond) }
+
+// HitLimit is Hit with a limit of max messages in the second.
+func (f *Flood) HitLimit(now time.Time, max int) bool { return f.HitN(now, 1, max) }
+
+// MaxPutBytesPerSecond bounds the bytes of upload chunks in a second: the
+// order of what 400 full lines allow (P4), so chunks are no cheaper than lines.
+const MaxPutBytesPerSecond = 32 << 20
+
+// HitN counts n units at now (a message, or its bytes) and reports whether the
+// second's count is over max.
+func (f *Flood) HitN(now time.Time, n, max int) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if s := now.Unix(); s != f.second {
 		f.second, f.n = s, 0
 	}
-	f.n++
-	return f.n > MaxLinesPerSecond
+	f.n += n
+	return f.n > max
+}
+
+// Rate admits at most n events in any window of length per (the `ask`
+// capability's 10 calls a minute).
+type Rate struct {
+	mu     sync.Mutex
+	n      int
+	per    time.Duration
+	starts []time.Time
+}
+
+// NewRate returns a Rate of n events per window.
+func NewRate(n int, per time.Duration) *Rate { return &Rate{n: n, per: per} }
+
+// Allow records an event at now and reports whether it is within the rate.
+func (r *Rate) Allow(now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cut := now.Add(-r.per)
+	keep := r.starts[:0]
+	for _, t := range r.starts {
+		if t.After(cut) {
+			keep = append(keep, t)
+		}
+	}
+	r.starts = keep
+	if len(r.starts) >= r.n {
+		return false
+	}
+	r.starts = append(r.starts, now)
+	return true
 }

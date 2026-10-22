@@ -41,4 +41,14 @@ describe('ArtifactViewDecisions', () => {
     expect(w.find('[data-testid="view-decision-a-chart"]').exists()).toBe(false)
     expect(w.find('[data-testid="view-decision-b-chart"]').exists()).toBe(true)
   })
+
+  it('toggles ask separately for a page that declares it', async () => {
+    const app = makeApp([{ name: 'p', path: '/x/p', decision: 'allow', state: 'allowed', declaresAsk: true, askOn: true }, { name: 'q', path: '/x/q', decision: 'allow', state: 'allowed' }])
+    ;(app as any).SetPageAsk = vi.fn(async () => {})
+    const w = mount(ArtifactViewDecisions)
+    await flushPromises()
+    expect(w.find('[data-testid="view-decision-ask-q"]').exists()).toBe(false)
+    await w.get('[data-testid="view-decision-ask-p"]').setValue(false)
+    expect((app as any).SetPageAsk).toHaveBeenCalledWith('p', false)
+  })
 })

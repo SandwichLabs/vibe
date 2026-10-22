@@ -403,3 +403,19 @@ func TestArtifact_HTMLPageIsNotExportedYet(t *testing.T) {
 	require.Len(t, res.Manifest.Warnings, 1)
 	assert.Contains(t, res.Manifest.Warnings[0], "artifacts/page was skipped")
 }
+
+func TestArtifact_PageStateIsNeverBundled(t *testing.T) {
+	ws, _ := newWS(t)
+	putArtifact(t, ws, "sales", artManifest, artView)
+	dir := filepath.Join(ws.Root(), ".vibe-local", "artifacts", "sales")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"version":1,"values":{"leak":"QUERYRESULT"}}`), 0o644))
+
+	res, err := Export(context.Background(), ws, ExportOptions{Selection: Selection{All: true}})
+	require.NoError(t, err)
+	for _, e := range res.Manifest.Contents {
+		assert.NotContains(t, e.Path, "state", e.Path)
+		assert.NotContains(t, e.Path, ".vibe-local", e.Path)
+	}
+	assert.NotContains(t, string(res.Data), "QUERYRESULT")
+}

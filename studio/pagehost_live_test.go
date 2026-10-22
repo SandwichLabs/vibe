@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -26,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -610,4 +612,122 @@ func pidOf(c helperConn) int {
 		return 0
 	}
 	return p.cmd.Process.Pid
+}
+
+const capsManifest = `version: 1
+title: Caps
+view: html
+queries:
+  - name: report
+    sql: SELECT $msg AS msg
+parameters:
+  - name: msg
+    type: text
+    max_length: 1000
+    default: ""
+html:
+  window:
+    width: 600
+    height: 400
+  capabilities:
+    state: {scope: local}
+    download: {}
+    ask: {}
+`
+
+// TestLive_CapabilitiesInTheRealWindow opens a scripted page that uses state,
+// download and ask in the real helper: state persists across a reopen, a write
+// from another window is pushed to the page, download without a gesture is
+// refused inside the view, ask goes to the (fake) service, and a value over
+// 64 KB is refused.
+func TestLive_CapabilitiesInTheRealWindow(t *testing.T) {
+	needLive(t)
+	app := newOpenApp(t)
+	dir := filepath.Join(app.ws.Root(), artifacts.Dir, "caps")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, artifacts.HTMLDir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, artifacts.ManifestFile), []byte(capsManifest), 0o644))
+	for _, f := range []string{"index.html.tmpl", "app.js"} {
+		b, err := os.ReadFile(filepath.Join("testdata", "pagehost-caps", f))
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, artifacts.HTMLDir, f), b, 0o644))
+	}
+	if app.watchDone != nil {
+		close(app.watchDone)
+		app.watchDone = nil
+	}
+	if app.watcher != nil {
+		_ = app.watcher.Close()
+		app.watcher = nil
+	}
+	st, err := app.ArtifactViewState("caps")
+	require.NoError(t, err)
+	require.Empty(t, st.Error)
+	_, err = app.AllowArtifactView("caps", st.Hash)
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	var msgs []string
+	var asked []string
+	var saved atomic.Int32
+	app.pages.launch = realLaunch
+	app.pages.preflight = func() error { return nil }
+	open := func() {
+		svc := app.pageServices(app.ws, "caps")
+		svc.ask = func(_ context.Context, sys, p string) (string, bool, error) {
+			mu.Lock()
+			asked = append(asked, sys+"/"+p)
+			mu.Unlock()
+			return "hi there", true, nil
+		}
+		svc.save = func(context.Context, string, string, string) (string, error) { saved.Add(1); return "", nil }
+		_, err := app.pages.open(pageOpen{
+			ws: app.ws, name: "caps", base: context.Background(), svc: svc,
+			runner: func(*artifacts.Manifest) artifacts.PageRunner {
+				return func(_ context.Context, q string, v map[string]any) (*artifacts.PageRows, error) {
+					mu.Lock()
+					msgs = append(msgs, fmt.Sprint(v["msg"]))
+					mu.Unlock()
+					return &artifacts.PageRows{Columns: []string{"msg"}, Rows: [][]any{{"ok"}}}, nil
+				}
+			},
+			allowed: func(h string) bool { return app.pageStillAllowed(app.ws, "caps", h) },
+		})
+		require.NoError(t, err)
+	}
+	logText := func() string { mu.Lock(); defer mu.Unlock(); return strings.Join(msgs, "\n") }
+	waitFor := func(s string) {
+		require.Eventually(t, func() bool { return strings.Contains(logText(), s) }, 40*time.Second, 200*time.Millisecond, "%q in:\n%s", s, logText())
+	}
+
+	open()
+	waitFor("count=1")
+	waitFor("ask={\"text\":\"hi there\"}")
+	waitFor("big rejected")
+	waitFor("ready")
+	t.Log("first run:\n" + logText())
+	assert.Contains(t, logText(), "caps state=true download=true ask=true db=false")
+	assert.Contains(t, logText(), "save rejected: Saving a file needs a click or a key press first.", "the host's own replies must not count as a gesture")
+	assert.Contains(t, logText(), "raw save posted")
+	time.Sleep(time.Second) // the raw post, straight to the handler, had its chance to reach Studio
+	assert.EqualValues(t, 0, saved.Load(), "no dialog opened without a physical input, even for a call posted past the API")
+	assert.Equal(t, []string{"be brief/say hi"}, asked)
+
+	// A write from another window of the same artifact is pushed to the page.
+	other, err := app.pages.stateStore(app.ws.Root(), "caps", nil)
+	require.NoError(t, err)
+	require.NoError(t, other.Set("fromOther", json.RawMessage(`{"n":7}`), "another window"))
+	waitFor(`"key":"fromOther"`)
+
+	app.pages.closeArtifact("caps", pageStateClosed)
+	require.Eventually(t, func() bool { return pageCount(app.pages) == 0 }, 10*time.Second, 50*time.Millisecond)
+	mu.Lock()
+	msgs = nil
+	mu.Unlock()
+	open() // the state survived the window
+	waitFor("count=2")
+	app.pages.closeAll()
+	b, err := os.ReadFile(filepath.Join(app.ws.Root(), ".vibe-local", "artifacts", "caps", "state.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"count":2`)
+	assert.Contains(t, string(b), `"fromOther"`)
 }

@@ -27,7 +27,16 @@ func (w *pageWindow) serve() {
 			w.finish(pageStateStopped)
 			return
 		}
-		if w.flood.Hit(time.Now()) {
+		// Upload chunks are paced by their acknowledgements, so they have their own,
+		// higher, bound; a line that claims to be one and is not ends the window below.
+		var flooded bool
+		if bytes.HasPrefix(line, []byte(`{"t":"put"`)) {
+			now := time.Now()
+			flooded = w.putFlood.HitLimit(now, pagehost.MaxPutsPerSecond) || w.putBytes.HitN(now, len(line), w.host.putBytesPerSec())
+		} else {
+			flooded = w.flood.Hit(time.Now())
+		}
+		if flooded {
 			w.finish(pageStateStopped)
 			return
 		}
@@ -55,6 +64,8 @@ func (w *pageWindow) dispatch(m *pagehost.Message) {
 		go w.handleDoc(m)
 	case pagehost.TypeCall:
 		go w.handleCall(m)
+	case pagehost.TypePut:
+		w.handlePut(m)
 	case pagehost.TypeGone:
 		w.finish(pageStateStopped)
 	case pagehost.TypeClosed:
@@ -191,11 +202,4 @@ func (w *pageWindow) finishDoc(id int64, status int, body []byte) {
 	if err := w.send(docMessages(id, status, body)); err != nil {
 		w.finish(pageStateStopped)
 	}
-}
-
-// handleCall is the hook for capabilities (state, download, ask: step P5). Until
-// they are built every call is unavailable, which is also what a capability the
-// page did not declare gets.
-func (w *pageWindow) handleCall(m *pagehost.Message) {
-	w.fail(m.ID, pagehost.CodeUnavailable)
 }

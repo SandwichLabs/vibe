@@ -210,7 +210,7 @@ const (
 // buildWindowSetup renders the page's first document and returns every message
 // that opens the window: open, the files, the document, go. A render that
 // fails refuses the open with the renderer's fixed text.
-func buildWindowSetup(ctx context.Context, run artifacts.PageRunner, page *artifacts.Artifact, req pageOpen, libs fs.FS) ([]*pagehost.Message, error) {
+func buildWindowSetup(ctx context.Context, run artifacts.PageRunner, page *artifacts.Artifact, req pageOpen, libs fs.FS, caps []string) ([]*pagehost.Message, error) {
 	var body bytes.Buffer
 	if err := renderPageQuery(ctx, run, page, req.query, &body); err != nil {
 		var re *artifacts.RenderError
@@ -233,7 +233,7 @@ func buildWindowSetup(ctx context.Context, run artifacts.PageRunner, page *artif
 		w, h = win.Width, win.Height
 	}
 	msgs := []*pagehost.Message{{
-		T: pagehost.TypeOpen, Name: req.name, Title: windowTitle(&page.Manifest, req.name), W: w, H: h, Params: params, Q: req.query,
+		T: pagehost.TypeOpen, Name: req.name, Title: windowTitle(&page.Manifest, req.name), W: w, H: h, Params: params, Q: req.query, Caps: caps,
 	}}
 	for _, f := range files {
 		msgs = append(msgs, fileMessages(f)...)

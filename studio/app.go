@@ -32,6 +32,8 @@ type App struct {
 	views *viewServer
 	// pages owns the page windows of scripted HTML pages (pagehost.go).
 	pages *pageHost
+	// pageApp holds the capability services' App-side state (pagecaps_app.go).
+	pageApp pageAppState
 
 	ctx    context.Context
 	logger *slog.Logger

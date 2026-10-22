@@ -22,6 +22,11 @@ import (
 // folder, and never travels in a bundle.
 const ViewDecisionFile = "views.json"
 
+// PageAskFile remembers, beside views.json, whether this person lets a scripted
+// page use its `ask` capability. Allow is keyed like a view's (folder path and
+// hash); a deny is keyed by path alone and survives edits.
+const PageAskFile = "pageask.json"
+
 // ErrViewChanged means the view's files changed after the person was shown
 // them: the allow is refused so that what runs is what was reviewed.
 var ErrViewChanged = errors.New("the view changed since it was shown; review it again")
@@ -89,6 +94,10 @@ type ArtifactViewDecision struct {
 	// State is the current state of that decision: allowed, changed, denied, or
 	// gone (the artifact is not in this workspace any more).
 	State string `json:"state"`
+	// DeclaresAsk is true for a scripted page that declares `ask`; AskOn says
+	// whether this person lets it (its own toggle, separate from the allow).
+	DeclaresAsk bool `json:"declaresAsk,omitempty"`
+	AskOn       bool `json:"askOn,omitempty"`
 }
 
 // Decision states beyond trustfile's.
@@ -98,11 +107,13 @@ const (
 )
 
 func (w *workspace) initArtifactViews(id string) {
-	path := ""
+	path, askPath := "", ""
 	if w.configDir != "" {
-		path = filepath.Join(filepath.Dir(w.localPath(id)), ViewDecisionFile)
+		dir := filepath.Dir(w.localPath(id))
+		path, askPath = filepath.Join(dir, ViewDecisionFile), filepath.Join(dir, PageAskFile)
 	}
 	w.vdec = trustfile.New(path)
+	w.adec = trustfile.New(askPath)
 }
 
 // viewKey is the decision key of an artifact: the canonical absolute path of
@@ -263,7 +274,65 @@ func (w *workspace) AllowArtifactView(name, hash string) error {
 		}
 		return st.Hash, nil
 	})
+	if err == nil {
+		w.defaultAskOn(name, hash)
+	}
 	return w.decisionErr(err, name)
+}
+
+// defaultAskOn turns the `ask` toggle on for a scripted page that declares it,
+// as the page is allowed (H5: on by default, revocable separately). A person's
+// earlier "off" (a deny, which survives edits) is left alone.
+func (w *workspace) defaultAskOn(name, hash string) {
+	st := w.readView(context.Background(), name)
+	if st.Hash != hash || !declaresAsk(st) {
+		return
+	}
+	key := w.viewKey(name)
+	if w.adec.State(key, hash) == trustfile.StateDenied {
+		return
+	}
+	if err := w.adec.Allow(key, hash); err != nil {
+		w.logger.Debug("page ask toggle not saved", "artifact", name, "error", err)
+	}
+}
+
+func declaresAsk(st ArtifactViewStatus) bool {
+	if st.Kind != artifacts.ViewHTML || st.PageKind != artifacts.PageScripted {
+		return false
+	}
+	for _, c := range st.Capabilities {
+		if c == artifacts.CapAsk {
+			return true
+		}
+	}
+	return false
+}
+
+// PageAskEnabled reports whether the person lets the page, at exactly this
+// hash, use `ask`.
+func (w *workspace) PageAskEnabled(name, hash string) bool {
+	if !filestore.ValidID(name) || hash == "" {
+		return false
+	}
+	return w.adec.State(w.viewKey(name), hash) == trustfile.StateAllowed
+}
+
+// SetPageAsk turns the page's `ask` toggle on (for the page as it is now) or
+// off (until turned on again, whatever edits follow).
+func (w *workspace) SetPageAsk(name string, on bool) error {
+	st, err := w.ArtifactViewState(name)
+	if err != nil {
+		return err
+	}
+	if !declaresAsk(st) {
+		return ErrNoScriptView
+	}
+	key := w.viewKey(name)
+	if on {
+		return w.decisionErr(w.adec.Allow(key, st.Hash), name)
+	}
+	return w.decisionErr(w.adec.Deny(key), name)
 }
 
 // decisionErr maps a trustfile or read error to one of the fixed errors.
@@ -313,6 +382,8 @@ func (w *workspace) ArtifactViewDecisions() []ArtifactViewDecision {
 		}
 		d := ArtifactViewDecision{Name: name, Path: e.Path, Decision: e.Decision}
 		st, _ := w.ArtifactViewState(name)
+		d.DeclaresAsk = declaresAsk(st)
+		d.AskOn = d.DeclaresAsk && w.PageAskEnabled(name, st.Hash)
 		switch {
 		case !customKind(st.Kind):
 			d.State = ViewStateGone

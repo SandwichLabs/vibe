@@ -19,6 +19,12 @@ const (
 	MaxWindow      = 4000
 	maxParamsBytes = 256 << 10
 	maxArgBytes    = 32 << 10
+	// MaxPutText is the most text a put chunk may carry, and MaxUploadBytes the
+	// most text one assembled upload may hold (a 20 MB file as base64, plus its
+	// envelope).
+	MaxPutText     = 60 << 10
+	MaxUploadBytes = 28 << 20
+	maxPushArg     = 80 << 10
 )
 
 func (m *Message) validate() error {
@@ -29,6 +35,10 @@ func (m *Message) validate() error {
 		return m.validateDoc()
 	case TypeCall:
 		return m.validateCall()
+	case TypePut:
+		return m.validatePut()
+	case TypePush:
+		return m.validatePush()
 	case TypeOpen:
 		return m.validateOpen()
 	case TypeFile:
@@ -101,6 +111,35 @@ func (m *Message) validateCall() error {
 	}
 	if len(m.Arg) > maxArgBytes || (len(m.Arg) > 0 && !json.Valid(m.Arg)) {
 		return errors.New("pagehost: bad capability argument")
+	}
+	if m.Up != 0 && (len(m.Arg) > 0 || m.Up < 1 || m.Up > 1<<31) {
+		return errors.New("pagehost: bad capability upload")
+	}
+	return nil
+}
+
+func (m *Message) validatePut() error {
+	if err := m.validateID(); err != nil {
+		return err
+	}
+	if m.Up < 1 || m.Up > 1<<31 {
+		return errors.New("pagehost: bad upload id")
+	}
+	if m.Seq < 0 || m.Seq > 1<<16 {
+		return errors.New("pagehost: bad chunk number")
+	}
+	if len(m.Text) > MaxPutText || !utf8.ValidString(m.Text) {
+		return errors.New("pagehost: bad upload chunk")
+	}
+	return nil
+}
+
+func (m *Message) validatePush() error {
+	if !nameRe.MatchString(m.Cap) || !nameRe.MatchString(m.Op) {
+		return errors.New("pagehost: bad event")
+	}
+	if len(m.Arg) > maxPushArg || (len(m.Arg) > 0 && !json.Valid(m.Arg)) {
+		return errors.New("pagehost: bad event argument")
 	}
 	return nil
 }

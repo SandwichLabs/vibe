@@ -94,6 +94,10 @@ func nativeEval(js string) {
 	C.vibe_host_eval(c)
 }
 
+// nativeTakeInput reports and consumes the person's last physical input in the
+// window, within 5 seconds (any goroutine).
+func nativeTakeInput() bool { return C.vibe_host_take_input() != 0 }
+
 // nativeQuit ends the loop (any goroutine).
 func nativeQuit() { C.vibe_host_quit() }
 
