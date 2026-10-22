@@ -382,26 +382,181 @@ func TestArtifact_ScriptViewFileMustMatchTheManifest(t *testing.T) {
 	}
 }
 
-// An HTML page is not carried by a bundle yet: it is skipped (selection of
-// everything) or refused (named), never exported half, and a bundle that holds
-// html/ entries or a view: html manifest is refused on open.
-func TestArtifact_HTMLPageIsNotExportedYet(t *testing.T) {
-	ws, _ := newWS(t)
-	putArtifact(t, ws, "good", artManifest, artView)
-	m, err := artifacts.Decode([]byte(strings.Replace(artManifest, "\nqueries:", "\nview: html\nqueries:", 1)))
-	require.NoError(t, err)
-	page := &artifacts.Artifact{Name: "page", Manifest: *m, Files: []artifacts.PageFile{{Path: "index.html.tmpl", Data: []byte("<p>x</p>")}}}
-	require.NoError(t, ws.Artifacts().Put(context.Background(), page, artifacts.WithRev("")))
+const pageManifestText = `version: 1
+title: Regional page
+view: html
+parameters:
+  - name: min_id
+    type: integer
+    default: "0"
+queries:
+  - name: rows
+    sql: SELECT 1 AS id WHERE 1 >= $min_id
+`
 
-	_, err = Export(context.Background(), ws, ExportOptions{Selection: Selection{Artifacts: []string{"page"}}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTML page")
+const pageTemplate = `<!doctype html><html><head><link rel="stylesheet" href="assets/style.css"></head><body>{{ range (query "rows").Rows }}<p>{{ index . 0 }}</p>{{ end }}</body></html>`
 
-	res, err := Export(context.Background(), ws, ExportOptions{Selection: Selection{All: true}})
+func putPage(t *testing.T, ws workspace.Workspace, name string, extra ...artifacts.PageFile) {
+	t.Helper()
+	files := append([]artifacts.PageFile{
+		{Path: "index.html.tmpl", Data: []byte(pageTemplate)},
+		{Path: "assets/style.css", Data: []byte("p { color: red; }")},
+		{Path: "assets/logo.png", Data: []byte("\x89PNG\r\n\x1a\n\x00")},
+	}, extra...)
+	require.NoError(t, ws.Artifacts().Put(context.Background(), &artifacts.Artifact{Name: name, ManifestText: []byte(pageManifestText), Files: files}, artifacts.WithRev("")))
+}
+
+// A page travels as its manifest plus one entry per html/ file, byte for byte,
+// and arrives undecided: a bundle never carries an allow.
+func TestArtifact_HTMLPageRoundTripsAndCarriesNoDecision(t *testing.T) {
+	src, _ := newWS(t)
+	putPage(t, src, "page")
+	srcState, err := src.ArtifactViewState("page")
 	require.NoError(t, err)
-	assert.Equal(t, 1, res.Manifest.Counts().Artifacts)
-	require.Len(t, res.Manifest.Warnings, 1)
-	assert.Contains(t, res.Manifest.Warnings[0], "artifacts/page was skipped")
+	require.NoError(t, src.AllowArtifactView("page", srcState.Hash))
+
+	res, err := Export(context.Background(), src, ExportOptions{Selection: Selection{Artifacts: []string{"page"}}})
+	require.NoError(t, err)
+	var paths []string
+	for _, e := range res.Manifest.Contents {
+		paths = append(paths, e.Path)
+	}
+	assert.ElementsMatch(t, []string{
+		"artifacts/page/artifact.yaml", "artifacts/page/html/index.html.tmpl",
+		"artifacts/page/html/assets/style.css", "artifacts/page/html/assets/logo.png",
+	}, paths)
+	assert.Equal(t, 1, res.Manifest.Counts().Artifacts, "a page is one artifact however many entries")
+
+	pkg, err := Open(res.Data, "")
+	require.NoError(t, err)
+	require.Len(t, pkg.Items(), 1)
+	assert.Equal(t, "Regional page", pkg.Items()[0].Title)
+
+	dst, _ := newWS(t)
+	out, err := pkg.Import(context.Background(), dst, ImportOptions{})
+	require.NoError(t, err)
+	require.Len(t, out.Outcomes, 1)
+	assert.Equal(t, "created", out.Outcomes[0].Result, out.Outcomes[0].Error)
+	for _, f := range []string{"artifact.yaml", "html/index.html.tmpl", "html/assets/style.css", "html/assets/logo.png"} {
+		want, err := os.ReadFile(filepath.Join(src.Root(), "artifacts", "page", filepath.FromSlash(f)))
+		require.NoError(t, err)
+		got, err := os.ReadFile(filepath.Join(dst.Root(), "artifacts", "page", filepath.FromSlash(f)))
+		require.NoError(t, err)
+		assert.Equal(t, want, got, f)
+	}
+	st, err := dst.ArtifactViewState("page")
+	require.NoError(t, err)
+	assert.Equal(t, "undecided", st.State, "an allow never travels")
+	assert.Equal(t, srcState.Hash, st.Hash, "the same files hash the same")
+	assert.Equal(t, "static", st.PageKind)
+}
+
+// Everything is checked while the bundle opens, before any store is written.
+func TestArtifact_HTMLPageOpenRefusesWholeBundle(t *testing.T) {
+	good := func() map[string][]byte {
+		return map[string][]byte{
+			"artifacts/page/artifact.yaml":         []byte(pageManifestText),
+			"artifacts/page/html/index.html.tmpl":  []byte(pageTemplate),
+			"artifacts/page/html/assets/style.css": []byte("p{}"),
+		}
+	}
+	cases := map[string]func(map[string][]byte){
+		"a page with a view file too": func(e map[string][]byte) { e["artifacts/page/view.a2ui.json"] = []byte(artView) },
+		"a page with no manifest":     func(e map[string][]byte) { delete(e, "artifacts/page/artifact.yaml") },
+		"a page with no entry":        func(e map[string][]byte) { delete(e, "artifacts/page/html/index.html.tmpl") },
+		"an a2ui manifest with html/": func(e map[string][]byte) {
+			e["artifacts/page/artifact.yaml"] = []byte(strings.Replace(pageManifestText, "view: html\n", "", 1))
+		},
+		"a path escape":        func(e map[string][]byte) { e["artifacts/page/html/../../x/artifact.yaml"] = []byte("x") },
+		"a folder in html/":    func(e map[string][]byte) { e["artifacts/page/html/sub/a.tmpl"] = []byte("x") },
+		"a deep folder":        func(e map[string][]byte) { e["artifacts/page/html/assets/a/b/c.css"] = []byte("x") },
+		"a dotfile":            func(e map[string][]byte) { e["artifacts/page/html/assets/.env"] = []byte("x") },
+		"a reserved folder":    func(e map[string][]byte) { e["artifacts/page/html/vibe-lib/x.js"] = []byte("x") },
+		"an unknown extension": func(e map[string][]byte) { e["artifacts/page/html/assets/a.exe"] = []byte("x") },
+		"a stylesheet at top":  func(e map[string][]byte) { e["artifacts/page/html/style.css"] = []byte("x") },
+		"a template in assets": func(e map[string][]byte) { e["artifacts/page/html/assets/a.tmpl"] = []byte("x") },
+		"an outside link": func(e map[string][]byte) {
+			e["artifacts/page/html/index.html.tmpl"] = []byte(`<a href="https://example.com/">x</a>`)
+		},
+		"a preconnect": func(e map[string][]byte) {
+			e["artifacts/page/html/index.html.tmpl"] = []byte(`<link rel="preconnect" href="https://example.com">`)
+		},
+		"an unknown function": func(e map[string][]byte) { e["artifacts/page/html/index.html.tmpl"] = []byte(`{{ safeHTML "x" }}`) },
+		"a query the manifest lacks": func(e map[string][]byte) {
+			e["artifacts/page/html/index.html.tmpl"] = []byte(`{{ query "nope" }}`)
+		},
+		"a file over the cap": func(e map[string][]byte) {
+			e["artifacts/page/html/assets/big.css"] = []byte(strings.Repeat("a", artifacts.MaxPageFileBytes+1))
+		},
+		"a capability on a static page": func(e map[string][]byte) {
+			e["artifacts/page/artifact.yaml"] = []byte(strings.Replace(pageManifestText, "view: html\n", "view: html\nhtml:\n  capabilities:\n    state: {}\n", 1))
+		},
+		"a case-folded duplicate": func(e map[string][]byte) { e["artifacts/page/html/assets/Style.css"] = []byte("x") },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			entries := good()
+			mutate(entries)
+			_, err := Open(build(t, entries, nil), "")
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrCorrupt)
+		})
+	}
+	t.Run("the good page opens", func(t *testing.T) {
+		_, err := Open(build(t, good(), nil), "")
+		require.NoError(t, err)
+	})
+}
+
+func TestArtifact_HTMLPageConflictsAndOverwrite(t *testing.T) {
+	src, _ := newWS(t)
+	putPage(t, src, "page")
+	data := exportArtifacts(t, src, "page")
+	ctx := context.Background()
+	open := func(t *testing.T) *Package {
+		pkg, err := Open(data, "")
+		require.NoError(t, err)
+		return pkg
+	}
+	newDst := func(t *testing.T) workspace.Workspace {
+		dst, _ := newWS(t)
+		putPage(t, dst, "page", artifacts.PageFile{Path: "extra.js", Data: []byte("1")})
+		return dst
+	}
+	extra := func(dst workspace.Workspace) string {
+		return filepath.Join(dst.Root(), "artifacts", "page", "html", "extra.js")
+	}
+
+	t.Run("rename keeps both", func(t *testing.T) {
+		dst := newDst(t)
+		pkg := open(t)
+		require.True(t, pkg.Preview(ctx, dst).Items[0].Conflict)
+		res, err := pkg.Import(ctx, dst, ImportOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "renamed", res.Outcomes[0].Result, res.Outcomes[0].Error)
+		assert.FileExists(t, extra(dst))
+		assert.FileExists(t, filepath.Join(dst.Root(), "artifacts", "page-2", "html", "assets", "style.css"))
+	})
+	t.Run("overwrite replaces the whole page", func(t *testing.T) {
+		dst := newDst(t)
+		pkg := open(t)
+		pkg.Preview(ctx, dst)
+		res, err := pkg.Import(ctx, dst, ImportOptions{OnConflict: ActionOverwrite})
+		require.NoError(t, err)
+		assert.Equal(t, "overwritten", res.Outcomes[0].Result, res.Outcomes[0].Error)
+		assert.NoFileExists(t, extra(dst), "a file the bundle does not hold is removed with the page it belonged to")
+	})
+	t.Run("overwrite refuses a page that changed since the preview", func(t *testing.T) {
+		dst := newDst(t)
+		pkg := open(t)
+		pkg.Preview(ctx, dst)
+		require.NoError(t, os.WriteFile(extra(dst), []byte("2"), 0o644))
+		res, err := pkg.Import(ctx, dst, ImportOptions{OnConflict: ActionOverwrite})
+		require.NoError(t, err)
+		assert.Equal(t, "failed", res.Outcomes[0].Result)
+		b, _ := os.ReadFile(extra(dst))
+		assert.Equal(t, "2", string(b))
+	})
 }
 
 func TestArtifact_PageStateIsNeverBundled(t *testing.T) {

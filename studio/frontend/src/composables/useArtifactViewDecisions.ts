@@ -7,6 +7,8 @@ import { errorText } from '../lib/errors'
 
 export function useArtifactViewDecisions() {
   const decisions = ref<ArtifactViewDecision[]>([])
+  // Recent uses of the model by pages: names, times and sizes, never text.
+  const activity = ref<AgentActivityEntry[]>([])
   const busy = ref('')
   const error = ref('')
 
@@ -15,6 +17,15 @@ export function useArtifactViewDecisions() {
       decisions.value = await App.ListArtifactViewDecisions()
     } catch {
       decisions.value = []
+    }
+    await refreshActivity()
+  }
+
+  async function refreshActivity() {
+    try {
+      activity.value = (await App.ListAgentActivity()).slice().reverse()
+    } catch {
+      activity.value = []
     }
   }
 
@@ -43,5 +54,5 @@ export function useArtifactViewDecisions() {
     await refresh()
   }
 
-  return { decisions, busy, error, refresh, revoke, setAsk }
+  return { decisions, activity, busy, error, refresh, refreshActivity, revoke, setAsk }
 }

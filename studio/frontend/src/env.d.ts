@@ -128,6 +128,7 @@ interface AppApi {
   OpenArtifactPageWindow(name: string, query: string, theme: Record<string, string>): Promise<PageWindowInfo>
   ClosePageWindow(name: string): Promise<void>
   SetPageAsk(name: string, on: boolean): Promise<void>
+  ListAgentActivity(): Promise<AgentActivityEntry[]>
   RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
@@ -460,8 +461,20 @@ interface ArtifactViewStatus {
   page_kind?: 'static' | 'scripted'
   queries?: string[]
   capabilities?: string[]
+  /** The queries the page can run, with the connection each runs on ("" is the workspace database): every manifest query for a scripted page (script can run any), the templates' for a static one. */
+  query_uses?: { name: string; connection?: string; used?: boolean }[]
+  /** An HTML page's allow-prompt text, read with the hash it describes (never a second read). */
+  disclosure?: PageDisclosure
   files?: ArtifactViewFile[]
   error?: string
+}
+// PageDisclosure mirrors studio.PageDisclosure: the plain-language text of an HTML page's allow prompt.
+interface PageDisclosure {
+  host: string
+  capabilities: { name: string; text: string }[]
+  network: string
+  credential: string
+  askProvider: string
 }
 interface ArtifactViewFile { path: string; role: string; size: number; text?: string }
 // ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
@@ -481,6 +494,9 @@ interface ArtifactViewDecision {
   state: 'allowed' | 'changed' | 'denied' | 'gone' | 'undecided'
   declaresAsk?: boolean
   askOn?: boolean
+  kind?: 'script' | 'html'
+  pageKind?: 'static' | 'scripted'
+  capabilities?: string[]
 }
 
 interface DotEnvSatisfies { connection: string; signIn: string; variables: string[] }

@@ -85,6 +85,7 @@ export function useArtifactViewTrust(name: () => string) {
   const allow = () => {
     const shown = status.value
     if (!shown || changedWhileReading.value) return
+    if (shown.kind === 'html' && !shown.disclosure) return // the prompt text is part of what the person must have seen
     return decide(() => App.AllowArtifactView(name(), shown.hash))
   }
   const deny = () => decide(() => App.DenyArtifactView(name()))

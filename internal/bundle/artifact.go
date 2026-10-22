@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
 )
@@ -13,14 +14,21 @@ import (
 // its view file (view.a2ui.json for view: a2ui, view.js for view: script), both
 // of kind artifact with the same id. They are one item: both present, both
 // valid together, and the view file the one the manifest names, or the bundle
-// is refused. A bundle never carries an allow: a script view arriving by bundle
-// is undecided on the receiving machine and shows as source until allowed.
+// is refused. A view: html page travels as artifact.yaml plus one entry per
+// file under artifacts/<name>/html/, under H1's rules (paths, extensions,
+// caps), and the whole set must pass the page vet together. Everything is
+// checked while the bundle opens, before any store is written. A bundle never
+// carries an allow: a script view or a page arriving by bundle is undecided on
+// the receiving machine and shows as source until allowed. Its state
+// (.vibe-local) never travels either: it is not a store a bundle reads.
 
 // artifactPair collects the two entries of one artifact while a bundle opens.
 type artifactPair struct {
 	manifest, view       []byte
 	manifestEnt, viewEnt *Entry
 	viewFile             string
+	// files are the entries under html/ (path relative to html/).
+	files []artifacts.PageFile
 }
 
 type artifactParts map[string]*artifactPair
@@ -33,6 +41,10 @@ func (ap artifactParts) add(e Entry, b []byte) error {
 	if pr == nil {
 		pr = &artifactPair{}
 		ap[e.ID] = pr
+	}
+	if rest, ok := strings.CutPrefix(e.Path, artifacts.Dir+"/"+e.ID+"/"+artifacts.HTMLDir+"/"); ok {
+		pr.files = append(pr.files, artifacts.PageFile{Path: rest, Data: b})
+		return nil
 	}
 	switch path.Base(e.Path) {
 	case artifacts.ManifestFile:
@@ -55,6 +67,14 @@ func (ap artifactParts) add(e Entry, b []byte) error {
 func (ap artifactParts) items() ([]item, error) {
 	out := make([]item, 0, len(ap))
 	for id, pr := range ap {
+		if len(pr.files) > 0 {
+			it, err := pr.pageItem(id)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, it)
+			continue
+		}
 		if pr.manifestEnt == nil || pr.viewEnt == nil {
 			return nil, corrupt("artifact %q needs %s and a view file (%s or %s)", id, artifacts.ManifestFile, artifacts.ViewFile, artifacts.ScriptFile)
 		}
@@ -65,6 +85,32 @@ func (ap artifactParts) items() ([]item, error) {
 		out = append(out, item{Entry: *pr.manifestEnt, Title: cleanText(title, maxTextRunes), Data: pr.manifest, View: pr.view})
 	}
 	return out, nil
+}
+
+// pageItem is the item of an artifact that travels as a page: the manifest and
+// the files, with no view file, vetted together as the store would.
+func (pr *artifactPair) pageItem(id string) (item, error) {
+	where := artifacts.Dir + "/" + id
+	if pr.manifestEnt == nil || pr.viewEnt != nil {
+		return item{}, corrupt("%s: a page needs %s and its html/ files, and no other view file", where, artifacts.ManifestFile)
+	}
+	title, err := validatePage(id, pr.manifest, pr.files)
+	if err != nil {
+		return item{}, err
+	}
+	return item{Entry: *pr.manifestEnt, Title: cleanText(title, maxTextRunes), Data: pr.manifest, Files: pr.files}, nil
+}
+
+// validatePage is the structural check of a page: the manifest through Decode
+// and the file set through the page vet (H1 and H2), the rules the store
+// applies on every write. SQL policy is the agents package's.
+func validatePage(id string, manifest []byte, files []artifacts.PageFile) (string, error) {
+	where := artifacts.Dir + "/" + id
+	page, err := artifacts.PageFromText(id, manifest, files)
+	if err != nil {
+		return "", corrupt("%s: %v", where, err)
+	}
+	return page.Manifest.Title, nil
 }
 
 // validateArtifact is the structural check: the manifest through
@@ -89,8 +135,13 @@ func validateArtifact(id string, manifest []byte, viewFile string, view []byte) 
 
 // addArtifact exports one artifact from the store's own two files.
 func (ex *exporter) addArtifact(id string, explicit bool) error {
-	manifest, viewFile, view, err := ex.artifactBytes(id)
-	if err == nil {
+	manifest, viewFile, view, files, err := ex.artifactBytes(id)
+	if err == nil && files != nil {
+		_, err = validatePage(id, manifest, files)
+		if err != nil {
+			err = errors.New("it is not a valid page (open it in Studio to see why)")
+		}
+	} else if err == nil {
 		_, err = validateArtifact(id, manifest, viewFile, view)
 		if err != nil {
 			err = errors.New("it is not a valid artifact (open it in Studio to see why)")
@@ -103,27 +154,41 @@ func (ex *exporter) addArtifact(id string, explicit bool) error {
 		ex.warnings = append(ex.warnings, fmt.Sprintf("%s/%s was skipped: %v", artifacts.Dir, id, err))
 		return nil
 	}
-	for _, f := range []struct {
+	type part struct {
 		file string
 		data []byte
-	}{{artifacts.ManifestFile, manifest}, {viewFile, view}} {
+	}
+	parts := []part{{artifacts.ManifestFile, manifest}}
+	if files != nil {
+		for _, f := range files {
+			parts = append(parts, part{artifacts.HTMLDir + "/" + f.Path, f.Data})
+		}
+	} else {
+		parts = append(parts, part{viewFile, view})
+	}
+	for _, f := range parts {
 		ex.items = append(ex.items, exportItem{Entry{Path: artifacts.Dir + "/" + id + "/" + f.file, Kind: KindArtifact, ID: id, SHA256: sha256Hex(f.data), Size: int64(len(f.data))}, f.data})
 	}
 	return nil
 }
 
-func (ex *exporter) artifactBytes(id string) ([]byte, string, []byte, error) {
+// artifactBytes reads an artifact's files for export: the manifest, and the
+// view file, or for a page its files (non-nil, never empty).
+func (ex *exporter) artifactBytes(id string) (manifest []byte, viewFile string, view []byte, files []artifacts.PageFile, err error) {
 	src, err := ex.t.Artifacts().Source(context.Background(), id)
 	if err != nil {
-		return nil, "", nil, err
-	}
-	if src.ViewFile == artifacts.HTMLDir+"/" {
-		return nil, "", nil, errors.New("an HTML page is not exported yet")
+		return nil, "", nil, nil, err
 	}
 	if src.ManifestMissing || src.ViewMissing {
-		return nil, "", nil, errors.New("one of its two files is missing")
+		return nil, "", nil, nil, errors.New("one of its two files is missing")
 	}
-	return []byte(src.Manifest), src.ViewFile, []byte(src.View), nil
+	if src.ViewFile == artifacts.HTMLDir+"/" {
+		if len(src.Files) == 0 {
+			return nil, "", nil, nil, errors.New("its page has no files")
+		}
+		return []byte(src.Manifest), "", nil, src.Files, nil
+	}
+	return []byte(src.Manifest), src.ViewFile, []byte(src.View), nil, nil
 }
 
 // artifactRev is the revision (over both files) of the artifact in the
@@ -140,7 +205,7 @@ func artifactRev(ctx context.Context, t Target, id string) string {
 // creates, an overwrite is a compare-and-write against the revision read at
 // preview.
 func (p *Package) writeArtifact(ctx context.Context, t Target, it item, id string, overwrite bool) (string, error) {
-	a := &artifacts.Artifact{Name: id, ManifestText: it.Data, View: it.View}
+	a := &artifacts.Artifact{Name: id, ManifestText: it.Data, View: it.View, Files: it.Files}
 	opts := []artifacts.PutOption{artifacts.WithRev("")}
 	if overwrite {
 		rev := p.revFor(ctx, t, KindArtifact, id)

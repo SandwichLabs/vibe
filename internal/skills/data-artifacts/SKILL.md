@@ -200,3 +200,160 @@ function draw({params, theme, width, height}) {
 The queries and parameters are still the manifest's and are vetted as for any
 artifact; Studio builds the parameter controls from the manifest, so the script
 draws only the chart.
+
+## HTML pages (`view: html`)
+
+When no A2UI component draws what is needed, and a script view is too small
+(it only returns an SVG), a manifest may say `view: html` and send the page's
+**text files** as `html_files` (a `{path: text}` object, paths relative to
+`html/`) instead of `view`. The page is a Go `html/template` file set stored
+at `artifacts/<name>/html/`. Like every artifact it stores questions, never
+answers: the template asks for a NAMED query of the manifest and never sees SQL
+or a connection.
+
+- **Nothing renders until the person allows it** in Studio (or the CLI). The
+  person reads every file first. You cannot allow a page, run it, or see it
+  render, and **every edit you make asks again**. Say so in your reply.
+- Keep it small and plain. Write the page so a person can read it in a minute:
+  the prompt shows them every file.
+- A page is **static** (no script: it renders inside Studio, and links re-render
+  it with new parameter values) or **scripted** (a `.js` file, a `<script>`, or
+  an `on...=` attribute: it opens in its own window and may use capabilities).
+  The kind is derived from the files, not declared.
+
+Files: `index.html.tmpl` (the entry; other `.tmpl` files directly under `html/`
+are partials), optional `.js`/`.mjs` directly under `html/`, and under
+`assets/` only: `.css`, `.svg`, `.png`, `.jpg`, `.webp`, `.woff2`, `.json`. You
+send text files only; a binary asset already stored is kept when you write
+with the `rev`. At most 200 files, 1 MB each, 256 KB per template. No
+dotfiles, no folder deeper than `assets/<folder>/`. Optional manifest block:
+`"html": {"entry": "index.html.tmpl", "window": {"width": 1000, "height": 700},
+"capabilities": {"state": {"scope": "local"}, "download": {}, "ask": {}}}`
+(window and capabilities are for scripted pages only).
+
+### The template functions (the whole API)
+
+- `query "name"` returns `{Columns, Rows, Truncated}` for that manifest query
+  with the current parameter values (at most 500 rows). `Rows` is a list of
+  rows; read a cell with `index $row 0`. The name must be a literal.
+- `param "name"` is a parameter's current value; `params` lists the declared
+  parameters (`Name`, `Type`, `Label`, `Default`, `Options`) for building
+  controls.
+- `link "name" value ...` is a URL to this page with those parameters set. It
+  is the only way to write an `<a href>` that goes anywhere but `#fragment`.
+- Formatting: `number v [decimals]`, `percent v [decimals]`, `date v [layout]`,
+  `bytes v`, `truncate s n`.
+- Drawing: `scaleLinear d0 d1 r0 r1 v`, `scaleBand n i r0 r1` (returns `.Start`
+  and `.Width`), `pathLine xs ys` (an SVG path).
+- `json v` writes a value as JSON inside a `<script>` block.
+
+There is no function that takes SQL, a path or a URL, none that returns markup,
+and no `safeHTML`: everything is escaped by context. Row values are untrusted:
+a database row can hold `<script>`.
+
+**URLs.** `href`, `src` and the like may only be a `link` call, a `#fragment`
+or a literal relative `assets/...` path. No absolute URLs, no CDN, no
+`<link>` except `rel="stylesheet"` with an `assets/` href, no `target`, `ping`
+or `download`, no `<meta http-equiv>`, `<base>` or HTML comment (use
+`{{/* */}}`). A refused write tells you which rule to fix.
+
+### Static example (a table and an SVG bar chart)
+
+Manifest: `"view": "html"` and two queries, `by_region` (columns `region`,
+`revenue`) and `peak` (one row, one column: `SELECT max(revenue) ...`, so the
+bars scale to the data). Two files, sent as `html_files`:
+
+```html index.html.tmpl
+<!doctype html>
+<html>
+<head><link rel="stylesheet" href="assets/style.css"></head>
+<body>
+{{ $rows := (query "by_region").Rows }}
+<h1>Revenue by region</h1>
+{{ if not $rows }}<p>No rows.</p>{{ else }}
+{{ $peak := index (index (query "peak").Rows 0) 0 }}
+{{ $n := len $rows }}
+<svg viewBox="0 0 400 200" width="400" height="200" role="img" aria-label="Revenue by region">
+{{ range $i, $r := $rows }}
+{{ $b := scaleBand $n $i 0 400 }}
+<rect x="{{ $b.Start }}" y="{{ scaleLinear 0 $peak 180 20 (index $r 1) }}" width="{{ $b.Width }}" height="{{ scaleLinear 0 $peak 0 160 (index $r 1) }}" fill="currentColor"></rect>
+<text x="{{ $b.Start }}" y="196" font-size="10">{{ index $r 0 }}</text>
+{{ end }}
+</svg>
+<table>
+<tr><th>Region</th><th>Revenue</th></tr>
+{{ range $rows }}<tr><td>{{ index . 0 }}</td><td>{{ number (index . 1) 0 }}</td></tr>{{ end }}
+</table>
+{{ end }}
+</body>
+</html>
+```
+
+```css assets/style.css
+body { font-family: system-ui, sans-serif; margin: 1rem; }
+td, th { padding: 0.2rem 0.6rem; text-align: left; }
+```
+
+Add controls with `{{ range params }}` and `link`: `<a href="{{ link "region"
+"EMEA" }}">EMEA</a>` re-renders the page with `region` set to EMEA (a static
+page has no forms and no script).
+
+### Scripted example (vega-lite from `vibe-lib/`)
+
+A scripted page has no network, so it can load only its own files and the
+pinned libraries at `vibe-lib/`: `d3-array`, `d3-color`, `d3-format`,
+`d3-geo`, `d3-interpolate`, `d3-path`, `d3-scale`, `d3-shape`, `d3-time`,
+`d3-time-format`, `vega`, `vega-lite` and `vega-interpreter` (each a
+`<script src="vibe-lib/NAME.js">`, leaving a global such as `vega` and
+`vegaLite`). **Data reaches the script only through a `{{ json }}` block**
+(or `vibe.run`); there is no inline script and no `eval`.
+
+```html index.html.tmpl
+<!doctype html>
+<html>
+<body>
+<div id="chart"></div>
+<script type="application/json" id="rows">{{ json (query "by_region") }}</script>
+<script src="vibe-lib/vega.js"></script>
+<script src="vibe-lib/vega-lite.js"></script>
+<script src="vibe-lib/vega-interpreter.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
+```
+
+```js app.js
+(async () => {
+  const res = JSON.parse(document.getElementById('rows').textContent)
+  const values = res.Rows.map((r) => ({ region: r[0], revenue: r[1] }))
+  const spec = { data: { values }, mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } }
+  const view = new vega.View(vega.parse(vegaLite.compile(spec).spec, null, { ast: true }), { expr: vegaInterpreter.expressionInterpreter, renderer: 'none' })
+  document.getElementById('chart').innerHTML = await view.toSVG()
+  // vibe.run asks for another named query with new values: {columns, rows, truncated}.
+  // await vibe.run('by_region', { from: '2026-01-01' })
+})()
+```
+
+(Setting `innerHTML` to the SVG vega itself produced is fine; never put a
+database value or a `state` value in `innerHTML`: use `textContent`.)
+
+### Capabilities (scripted pages only)
+
+Declare what the page needs in `html.capabilities`; the person sees each one
+in the allow prompt, and a page without a declaration gets nothing. Resolve one
+with `const st = await vibe.use('state')`, which is `null` when it is not
+available: **the page must work without it**.
+
+- `state` (`{"scope": "local"}`): `get(key)`, `set(key, value)`, `delete(key)`,
+  `list(prefix)`, `onChange(fn)`. JSON values, 64 KB each, 1 MB in all, kept on
+  this computer only (never in the folder or git). Its contents are untrusted
+  input: show them with `textContent`.
+- `download`: `save({filename, type, data})` with `type` one of `csv`, `json`,
+  `svg`, `png`, `pdf`, `text`. It opens a save dialog the person confirms, and
+  only from a click or key press.
+- `ask`: `ask(prompt, {system})` returns `{text}` or `null` (no model
+  configured). One completion on the person's own provider, no tools; the
+  prompt may carry query results, so the person is told which provider.
+
+A page can never ask for a credential: do not draw a sign-in form. Studio never
+asks for one inside a page, and the person is told to treat one as an attack.

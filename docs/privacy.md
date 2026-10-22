@@ -26,6 +26,10 @@ This is the one place your data can leave your computer by design, so be clear a
 
 Credentials stay in your OS keychain or environment variables. They never appear in the workspace folder, a `.vibe` bundle, log lines, error messages shown to the UI or the agent, or anything the agent can read.
 
+## HTML pages that ask the model
+
+A scripted HTML page can declare `ask`, which sends text the page chose (it may include query results) to the model provider you set in Settings > App, the same one the agent uses. The prompt that asks you to allow the page names that provider. You can switch `ask` off for one page in Settings > Workspace > Pages, which also lists recent uses (when, how many bytes; never the text). A scripted page on macOS can also open a network connection to an address it chooses, though it cannot read a reply; on Linux it has no network at all. Pages never see your credentials.
+
 ## How to check this yourself
 
 This page was checked against the code (pre-0.1.0 source). The Go code makes outbound requests itself in exactly three places. Two go to addresses you configured, the third to GitHub and only after you opted in or asked:

@@ -56,3 +56,9 @@ func (a *App) SetPageAsk(name string, on bool) error {
 	a.emitEvent("workspace:changed", map[string]any{"kind": "artifactview", "id": name})
 	return nil
 }
+
+// ListAgentActivity is the recent uses of the model by pages, oldest first: the
+// page's name, when, and sizes, never the text.
+func (a *App) ListAgentActivity() []ActivityEntry {
+	return a.pageApp.entries()
+}

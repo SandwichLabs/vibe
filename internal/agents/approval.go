@@ -246,6 +246,9 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 		if mf, _ := req.Params["manifest"].(map[string]any); stringParam(mf["view"]) == "script" {
 			ar.Summary += " with a script view (it stays inert until you allow it)"
 		}
+		if stringParam(mfView(req.Params["manifest"])) == "html" {
+			ar.Summary += " with an HTML page (it stays inert until you allow it)"
+		}
 		ar.SQL = artifactQueriesText(req.Params["manifest"])
 	case "add_query_cell", "create_dashboard":
 		ar.Rows = -1
@@ -312,4 +315,10 @@ func estimateRows(ctx context.Context, db *sql.DB, table, where string) int64 {
 		return -1
 	}
 	return n
+}
+
+// mfView is a write_artifact manifest's view kind (any), for the approval card.
+func mfView(manifest any) any {
+	mf, _ := manifest.(map[string]any)
+	return mf["view"]
 }

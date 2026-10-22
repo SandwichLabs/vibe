@@ -15,6 +15,7 @@ import Icon from './Icon.vue'
 import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
 import CustomView from './CustomView.vue'
 import PageFiles from './PageFiles.vue'
+import PagePrompt from './PagePrompt.vue'
 import StaticPage from './StaticPage.vue'
 import ScriptedPage from './ScriptedPage.vue'
 import { useArtifactViewTrust } from '../composables/useArtifactViewTrust'
@@ -85,11 +86,12 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
         <Icon name="alert" :size="16" />
         <span>
           <template v-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it. </template>
-          <template v-if="isPage && status?.page_kind === 'scripted'">This page has script, written by someone else or by the agent. It runs in its own window that cannot reach your files or other pages, and can only run this artifact's queries. On macOS it can open a network connection to an address it chooses, though it cannot read a reply.</template>
-          <template v-else-if="isPage">This page was written by someone else or by the agent. It runs no script and cannot reach the network or your files; it can only show what this artifact's queries return.</template>
+          <template v-if="isPage">Read the files below before you allow this page. It was written by someone else or by the agent.</template>
           <template v-else>This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
+
+      <PagePrompt v-if="isPage && state !== 'allowed' && status" :status="status" />
 
       <div v-if="changedWhileReading" class="note warn" role="alert" data-testid="view-trust-changed-reading">
         <Icon name="alert" :size="16" />
@@ -98,7 +100,7 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
       </div>
 
       <div class="row view-trust__actions">
-        <button v-if="state !== 'allowed'" type="button" class="btn btn-primary btn-sm" :disabled="busy || changedWhileReading" data-testid="view-trust-allow" @click="allow()">Allow</button>
+        <button v-if="state !== 'allowed'" type="button" class="btn btn-primary btn-sm" :disabled="busy || changedWhileReading || (isPage && !status.disclosure)" data-testid="view-trust-allow" @click="allow()">Allow</button>
         <button v-if="state !== 'denied'" type="button" class="btn btn-sm" :disabled="busy" data-testid="view-trust-deny" @click="deny()">Deny</button>
         <button v-if="state === 'allowed' || state === 'denied'" type="button" class="btn btn-sm" :disabled="busy" data-testid="view-trust-revoke" @click="revoke()">Revoke</button>
       </div>

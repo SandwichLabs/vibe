@@ -64,6 +64,10 @@ type ArtifactViewStatus struct {
 	// what it declares (scripted pages only), for the allow screen.
 	Queries      []string `json:"queries,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	// QueryUses are the queries the page can run with the connection each runs
+	// on ("" is the workspace's default database), for the allow prompt: every
+	// manifest query for a scripted page, the templates' for a static one.
+	QueryUses []ArtifactViewQuery `json:"query_uses,omitempty"`
 	// Files are an HTML page's files as the hash covers them, text files with
 	// their text.
 	Files []ArtifactViewFile `json:"files,omitempty"`
@@ -72,6 +76,18 @@ type ArtifactViewStatus struct {
 	PageFiles []artifacts.PageFile `json:"-"`
 	// Error says why the artifact is unusable (State none).
 	Error string `json:"error,omitempty"`
+}
+
+// ArtifactViewQuery is a manifest query an HTML page uses, with the connection
+// it runs on.
+type ArtifactViewQuery struct {
+	Name       string `json:"name"`
+	Connection string `json:"connection,omitempty"`
+	// Used is true when the page's templates name the query. A scripted page
+	// can run every manifest query with vibe.run, so its list holds them all
+	// (Used false for the ones only script could reach); a static page has no
+	// script, so its list holds only the template's.
+	Used bool `json:"used"`
 }
 
 // ArtifactViewFile is one file of an HTML page, for the allow screen: its
@@ -98,6 +114,12 @@ type ArtifactViewDecision struct {
 	// whether this person lets it (its own toggle, separate from the allow).
 	DeclaresAsk bool `json:"declaresAsk,omitempty"`
 	AskOn       bool `json:"askOn,omitempty"`
+	// Kind is the view kind ("script" or "html"), PageKind a page's derived
+	// host ("static" or "scripted"), Capabilities what a scripted page
+	// declares; all empty for a decision whose artifact is gone.
+	Kind         string   `json:"kind,omitempty"`
+	PageKind     string   `json:"pageKind,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Decision states beyond trustfile's.
@@ -233,6 +255,7 @@ func (w *workspace) readPage(st ArtifactViewStatus, name string, src *artifacts.
 	}
 	st.Hash, st.PageKind = a.Page.Hash, a.Page.Kind
 	st.Queries, st.Capabilities = a.Page.Queries, a.Page.Capabilities
+	st.QueryUses = pageQueryUses(a)
 	st.PageFiles = a.Files
 	st.Source = ""
 	for _, f := range a.Files {
@@ -243,6 +266,23 @@ func (w *workspace) readPage(st ArtifactViewStatus, name string, src *artifacts.
 		st.Files = append(st.Files, vf)
 	}
 	return st
+}
+
+// pageQueryUses is the queries the allow prompt lists: for a scripted page every
+// manifest query (vibe.run reaches any of them), marked when the templates use
+// it; for a static page the queries its templates use.
+func pageQueryUses(a *artifacts.Artifact) []ArtifactViewQuery {
+	used := map[string]bool{}
+	for _, q := range a.Page.Queries {
+		used[q] = true
+	}
+	var out []ArtifactViewQuery
+	for _, mq := range a.Manifest.Queries {
+		if used[mq.Name] || a.Page.Kind == artifacts.PageScripted {
+			out = append(out, ArtifactViewQuery{Name: mq.Name, Connection: mq.Connection, Used: used[mq.Name]})
+		}
+	}
+	return out
 }
 
 // customKind reports whether a manifest view kind is one the person decides on.
@@ -383,6 +423,9 @@ func (w *workspace) ArtifactViewDecisions() []ArtifactViewDecision {
 		d := ArtifactViewDecision{Name: name, Path: e.Path, Decision: e.Decision}
 		st, _ := w.ArtifactViewState(name)
 		d.DeclaresAsk = declaresAsk(st)
+		if customKind(st.Kind) {
+			d.Kind, d.PageKind, d.Capabilities = st.Kind, st.PageKind, st.Capabilities
+		}
 		d.AskOn = d.DeclaresAsk && w.PageAskEnabled(name, st.Hash)
 		switch {
 		case !customKind(st.Kind):
