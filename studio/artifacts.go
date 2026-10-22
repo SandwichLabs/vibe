@@ -44,9 +44,12 @@ type ArtifactDetail struct {
 	Description string              `json:"description"`
 	Params      []artifacts.Param   `json:"params"`
 	Queries     []ArtifactQueryInfo `json:"queries"`
-	// ViewKind is "a2ui" or "script". A script view has no View here: it is
-	// shown as source until the person allows it (ArtifactViewState).
+	// ViewKind is "a2ui", "script" or "html". A script view or an HTML page
+	// has no View here: it is shown as source until the person allows it
+	// (ArtifactViewState). PageKind is an HTML page's derived host, "static"
+	// or "scripted".
 	ViewKind  string          `json:"view_kind"`
+	PageKind  string          `json:"page_kind,omitempty"`
 	View      json.RawMessage `json:"view,omitempty"`
 	Defaults  map[string]any  `json:"defaults"`
 	Rev       string          `json:"rev"`
@@ -103,13 +106,10 @@ func openArtifact(a *artifacts.Artifact, now time.Time) *ArtifactDetail {
 	d.ViewKind = a.Manifest.View
 	var view []byte
 	var err error
-	if a.Manifest.View == artifacts.ViewHTML {
-		// Pages are not rendered yet (docs/plans/html-artifacts.md, step P3).
-		d.Error = "This artifact is an HTML page, which Studio cannot show yet."
-		d.Defaults = map[string]any{}
-		return d
+	if a.Manifest.View == artifacts.ViewHTML && a.Page != nil {
+		d.PageKind = a.Page.Kind
 	}
-	if a.Manifest.View == artifacts.ViewScript {
+	if a.Manifest.View == artifacts.ViewScript || a.Manifest.View == artifacts.ViewHTML {
 		d.Defaults, err = artifacts.Defaults(&a.Manifest, now)
 	} else if view, err = artifacts.RenderView(&a.Manifest, a.View); err == nil {
 		d.Defaults, err = artifacts.Defaults(&a.Manifest, now)
@@ -128,6 +128,16 @@ func openArtifact(a *artifacts.Artifact, now time.Time) *ArtifactDetail {
 // so a call that outlives a workspace switch is refused instead of running the
 // new workspace's artifact of the same name.
 func (h *agentToolHandler) RunArtifactQuery(ctx context.Context, name, query string, values map[string]any) (rs *engine.ResultSet, truncated bool, err error) {
+	return h.runQuery(func() (*engine.ResultSet, bool, error) { return h.inner.RunArtifactQuery(ctx, name, query, values) })
+}
+
+// RunManifestQuery is RunArtifactQuery over a manifest the caller holds (a
+// page that was hashed), behind the same workspace identity check.
+func (h *agentToolHandler) RunManifestQuery(ctx context.Context, name string, m *artifacts.Manifest, query string, values map[string]any) (*engine.ResultSet, bool, error) {
+	return h.runQuery(func() (*engine.ResultSet, bool, error) { return h.inner.RunManifestQuery(ctx, name, m, query, values) })
+}
+
+func (h *agentToolHandler) runQuery(run func() (*engine.ResultSet, bool, error)) (*engine.ResultSet, bool, error) {
 	h.app.mu.RLock()
 	defer h.app.mu.RUnlock()
 
@@ -136,7 +146,7 @@ func (h *agentToolHandler) RunArtifactQuery(ctx context.Context, name, query str
 	}
 	policy := h.app.agentPolicy()
 	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
-	return h.inner.RunArtifactQuery(ctx, name, query, values)
+	return run()
 }
 
 // VetArtifact is agents.Handler.VetArtifact behind the same workspace identity

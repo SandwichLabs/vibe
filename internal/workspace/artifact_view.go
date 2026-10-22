@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/filestore"
@@ -25,8 +26,9 @@ const ViewDecisionFile = "views.json"
 // them: the allow is refused so that what runs is what was reviewed.
 var ErrViewChanged = errors.New("the view changed since it was shown; review it again")
 
-// ErrNoScriptView means the artifact has no usable script view to decide on.
-var ErrNoScriptView = errors.New("this artifact has no script view to decide on")
+// ErrNoScriptView means the artifact has no usable custom view (a script view
+// or an HTML page) to decide on.
+var ErrNoScriptView = errors.New("this artifact has no custom view to decide on")
 
 // ErrDecisionNotSaved means the decision could not be recorded. The detail (it
 // can hold a path) goes to the debug log.
@@ -47,11 +49,34 @@ type ArtifactViewStatus struct {
 	// Allow takes this value back.
 	Hash string `json:"hash"`
 	// Manifest and Source are the artifact.yaml and view.js text that Hash
-	// covers.
+	// covers. A page (kind html) has no Source: its files are Files.
 	Manifest string `json:"manifest"`
 	Source   string `json:"source"`
+	// PageKind is "static" or "scripted" for an HTML page (derived from its
+	// files), "" otherwise.
+	PageKind string `json:"page_kind,omitempty"`
+	// Queries are the manifest queries an HTML page uses, and Capabilities
+	// what it declares (scripted pages only), for the allow screen.
+	Queries      []string `json:"queries,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	// Files are an HTML page's files as the hash covers them, text files with
+	// their text.
+	Files []ArtifactViewFile `json:"files,omitempty"`
+	// PageFiles are the same files' bytes, for the host that renders exactly
+	// what was hashed. Never crosses a boundary.
+	PageFiles []artifacts.PageFile `json:"-"`
 	// Error says why the artifact is unusable (State none).
 	Error string `json:"error,omitempty"`
+}
+
+// ArtifactViewFile is one file of an HTML page, for the allow screen: its
+// path under html/, its role in the hash, its size, and its text when it is
+// text (a binary asset has none).
+type ArtifactViewFile struct {
+	Path string `json:"path"`
+	Role string `json:"role"`
+	Size int    `json:"size"`
+	Text string `json:"text,omitempty"`
 }
 
 // ArtifactViewDecision is one stored decision, for Settings.
@@ -140,7 +165,7 @@ func matchCase(dir, name string) string {
 // an absolute path, so the detail goes to the debug log only.
 const (
 	viewErrNotFound = "there is no such artifact"
-	viewErrUnusable = "this artifact's files are not usable as a script view (open its Source tab in Studio, or run vibe artifact list, to see why)"
+	viewErrUnusable = "this artifact's files are not usable as a custom view (open its Source tab in Studio, or run vibe artifact list, to see why)"
 )
 
 // unusable marks the status as not usable, with a fixed text.
@@ -168,6 +193,9 @@ func (w *workspace) readView(ctx context.Context, name string) ArtifactViewStatu
 		return w.unusable(st, name, err)
 	}
 	st.Kind = m.View
+	if m.View == artifacts.ViewHTML {
+		return w.readPage(st, name, src)
+	}
 	if m.View != artifacts.ViewScript {
 		return st
 	}
@@ -184,6 +212,30 @@ func (w *workspace) readView(ctx context.Context, name string) ArtifactViewStatu
 	st.Hash = h
 	return st
 }
+
+// readPage derives an HTML page's hash and file list from the one read of its
+// files: the same function the host that renders it uses, over the same bytes.
+func (w *workspace) readPage(st ArtifactViewStatus, name string, src *artifacts.Source) ArtifactViewStatus {
+	a, err := artifacts.PageFromText(name, []byte(src.Manifest), src.Files)
+	if err != nil {
+		return w.unusable(st, name, err)
+	}
+	st.Hash, st.PageKind = a.Page.Hash, a.Page.Kind
+	st.Queries, st.Capabilities = a.Page.Queries, a.Page.Capabilities
+	st.PageFiles = a.Files
+	st.Source = ""
+	for _, f := range a.Files {
+		vf := ArtifactViewFile{Path: f.Path, Role: artifacts.PageFileRole(f.Path, a.Page.Entry), Size: len(f.Data)}
+		if artifacts.IsTextPageFile(f.Path) && utf8.Valid(f.Data) {
+			vf.Text = string(f.Data)
+		}
+		st.Files = append(st.Files, vf)
+	}
+	return st
+}
+
+// customKind reports whether a manifest view kind is one the person decides on.
+func customKind(kind string) bool { return kind == artifacts.ViewScript || kind == artifacts.ViewHTML }
 
 // ArtifactViewState reports where the artifact's custom view stands.
 func (w *workspace) ArtifactViewState(name string) (ArtifactViewStatus, error) {
@@ -235,7 +287,7 @@ func (w *workspace) DenyArtifactView(name string) error {
 	if err != nil {
 		return err
 	}
-	if st.Kind != artifacts.ViewScript {
+	if !customKind(st.Kind) {
 		return ErrNoScriptView
 	}
 	return w.decisionErr(w.vdec.Deny(w.viewKey(name)), name)
@@ -262,7 +314,7 @@ func (w *workspace) ArtifactViewDecisions() []ArtifactViewDecision {
 		d := ArtifactViewDecision{Name: name, Path: e.Path, Decision: e.Decision}
 		st, _ := w.ArtifactViewState(name)
 		switch {
-		case st.Kind != artifacts.ViewScript:
+		case !customKind(st.Kind):
 			d.State = ViewStateGone
 		case e.Decision == "deny":
 			d.State = string(trustfile.StateDenied)

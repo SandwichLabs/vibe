@@ -121,3 +121,33 @@ func TestArtifactView_StatusEscapesControlCharacters(t *testing.T) {
 	assert.NotContains(t, out, "\u2028")
 	assert.Contains(t, out, "<U+2028>")
 }
+
+func TestArtifactView_StatusOfAnHTMLPageListsItsFiles(t *testing.T) {
+	ws := newWS(t)
+	dir := filepath.Join(ws, "artifacts", "pg")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte("version: 1\ntitle: P\nview: html\nqueries:\n  - name: q\n    sql: SELECT 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<p>{{ query "q" }}</p>`), 0o644))
+
+	out, stderr, err := runVibe("artifact", "view", "status", "pg", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, out, "pg: not decided")
+	assert.Contains(t, out, "page: static, queries: q")
+	assert.Contains(t, out, "index.html.tmpl (entry,")
+	assert.Contains(t, out, `--- html/index.html.tmpl`)
+	assert.Contains(t, out, `{{ query "q" }}`, "status shows the text that will be allowed")
+
+	out, stderr, err = runVibe("artifact", "view", "status", "pg", "--json", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	var st map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &st))
+	hash, _ := st["hash"].(string)
+	require.Regexp(t, `^[0-9a-f]{64}$`, hash)
+	assert.NotContains(t, out, "PageFiles", "the raw bytes are not part of the JSON")
+
+	_, stderr, err = runVibe("artifact", "view", "allow", "pg", "--hash", hash, "--yes", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	out, _, err = runVibe("artifact", "view", "status", "pg", "--workspace", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "pg: allowed")
+}

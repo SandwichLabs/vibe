@@ -45,9 +45,11 @@ const runtime: ArtifactRuntime = {
 provide(ARTIFACT_RUNTIME, runtime)
 
 const page = computed(() => (detail.value && !detail.value.error ? detail.value.view : undefined))
-// A custom (script) view is shown as source and runs nothing until the person allows it.
-const isScript = computed(() => detail.value?.view_kind === 'script' && !detail.value.error)
-function refresh() { void reload(); runs.rerunAll() }
+// A custom view (script or HTML page) is shown as source and runs nothing until the person allows it.
+const isScript = computed(() => (detail.value?.view_kind === 'script' || detail.value?.view_kind === 'html') && !detail.value.error)
+// A page's frame is drawn again when the tick moves.
+const pageTick = ref(0)
+function refresh() { void reload(); runs.rerunAll(); pageTick.value++ }
 
 // View | Source: the Source tab stays mounted so an unsaved edit survives a flip back.
 const tab = ref<'view' | 'source'>('view')
@@ -84,10 +86,10 @@ const onGone = () => router.push('/artifacts')
       <div v-else-if="loading && !detail" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
       <div v-else-if="detail?.error" class="card card-pad col" style="gap: var(--sh-space-2); border-color: var(--sh-error);" role="alert" data-testid="artifact-errors">
         <strong>This artifact can't be shown yet.</strong>
-        <span class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">Fix <code>artifacts/{{ detail.name }}/artifact.yaml</code> or its view file (<code>view.a2ui.json</code> or <code>view.js</code>); this page updates when the file is saved.</span>
+        <span class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">Fix <code>artifacts/{{ detail.name }}/artifact.yaml</code> or its view file (<code>view.a2ui.json</code>, <code>view.js</code> or <code>html/</code>); this page updates when the file is saved.</span>
         <pre class="sh-mono artifact-errors">{{ detail.error }}</pre>
       </div>
-      <ArtifactViewTrust v-else-if="isScript" :key="name" :name="name" :detail="detail" :values="params.values" />
+      <ArtifactViewTrust v-else-if="isScript" :key="name" :name="name" :detail="detail" :values="params.values" :refresh="pageTick" />
       <template v-else-if="page">
         <div v-if="runs.truncated.value.length" class="sh-mono artifact-note" data-testid="artifact-truncated">
           Showing the first 500 rows of {{ runs.truncated.value.join(', ') }}.

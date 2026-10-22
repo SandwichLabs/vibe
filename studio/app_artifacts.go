@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/engine"
 )
 
 // --- Data artifacts (#162) ---
@@ -44,6 +45,20 @@ func (a *App) RunArtifactQuery(name, query string, values map[string]any) (*A2UI
 // runArtifactQuery is RunArtifactQuery under a parent context (a custom view's
 // grant cancels it when the Worker goes away).
 func (a *App) runArtifactQuery(parent context.Context, name, query string, values map[string]any) (*A2UIQueryResult, error) {
+	return a.runStoredQuery(parent, func(ctx context.Context, h *agentToolHandler) (*engine.ResultSet, bool, error) {
+		return h.RunArtifactQuery(ctx, name, query, values)
+	})
+}
+
+// runPageQuery runs a query of the manifest a page was hashed with (not the
+// file on disk now) under the same gates.
+func (a *App) runPageQuery(parent context.Context, name string, m *artifacts.Manifest, query string, values map[string]any) (*A2UIQueryResult, error) {
+	return a.runStoredQuery(parent, func(ctx context.Context, h *agentToolHandler) (*engine.ResultSet, bool, error) {
+		return h.RunManifestQuery(ctx, name, m, query, values)
+	})
+}
+
+func (a *App) runStoredQuery(parent context.Context, run func(context.Context, *agentToolHandler) (*engine.ResultSet, bool, error)) (*A2UIQueryResult, error) {
 	handler, runSess, err := a.readOnlyRunner()
 	if err != nil {
 		return nil, err
@@ -51,7 +66,7 @@ func (a *App) runArtifactQuery(parent context.Context, name, query string, value
 	ctx, cancel := context.WithTimeout(parent, a2uiQueryTimeout)
 	defer cancel()
 	before := statusSnapshot(runSess)
-	rs, truncated, err := handler.RunArtifactQuery(ctx, name, query, values)
+	rs, truncated, err := run(ctx, handler)
 	a.afterReadOnlyRun(runSess, before)
 	if err != nil {
 		return nil, a.explainReadOnlyDenial(err)

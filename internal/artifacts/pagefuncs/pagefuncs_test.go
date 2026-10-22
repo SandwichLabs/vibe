@@ -63,16 +63,23 @@ func holdsTrusted(t reflect.Type, seen map[reflect.Type]bool) bool {
 // script. It walks every function's result types, structs and containers
 // included.
 func TestNoFunctionReturnsATrustedType(t *testing.T) {
-	funcs := pagefuncs.Funcs(pagefuncs.StubEnv{})
-	require.NotEmpty(t, funcs)
-	for name, f := range funcs {
-		ft := reflect.TypeOf(f)
-		require.Equal(t, reflect.Func, ft.Kind(), name)
-		for i := 0; i < ft.NumOut(); i++ {
-			assert.Falsef(t, holdsTrusted(ft.Out(i), map[reflect.Type]bool{}), "%s returns a trusted type (%v)", name, ft.Out(i))
+	for _, funcs := range []template.FuncMap{pagefuncs.Funcs(pagefuncs.StubEnv{}), pagefuncs.FuncsMetered(pagefuncs.StubEnv{}, unlimited{})} {
+		require.NotEmpty(t, funcs)
+		for name, f := range funcs {
+			ft := reflect.TypeOf(f)
+			require.Equal(t, reflect.Func, ft.Kind(), name)
+			for i := 0; i < ft.NumOut(); i++ {
+				assert.Falsef(t, holdsTrusted(ft.Out(i), map[reflect.Type]bool{}), "%s returns a trusted type (%v)", name, ft.Out(i))
+			}
 		}
 	}
 }
+
+// unlimited is a Meter that never refuses.
+type unlimited struct{}
+
+func (unlimited) Check(int64) error  { return nil }
+func (unlimited) Charge(int64) error { return nil }
 
 func TestTrustedTypeWalkerFindsThem(t *testing.T) {
 	type wrapped struct{ X []map[string]template.HTML }
