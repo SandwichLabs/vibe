@@ -1,6 +1,6 @@
 # HTML artifacts: Claude-style pages shared in a workspace
 
-Status: **proposal, 2026-10-18. Not built. Spike P1 ran on Linux on 2026-10-18; macOS is pending** (see *Spike P1* at the end). On Linux the static host is GO, with conditions. The scripted host is GO only behind a real network gate. Both sets of conditions are written into H2-H4 below. This extends epic #162 (`docs/plans/data-artifacts.md`, called *the base plan* below). Level 1 shipped on 2026-10-17. The base plan's spike finished on macOS (#182): the iframe is dropped, the worker view (`view.js`) is the RESHAPE, and a1 (the meta `frame-src 'self'` on Studio's page) blocks every navigation vector on both platforms. This plan adds a third view kind beside A2UI and the worker view: an **HTML artifact**, a page of the author's own HTML (optionally with script) that works like a Claude artifact. It keeps the base plan's query boundary: a page asks for a named query with values and never sends SQL. Before any step is built, two things are needed: the owner's sign-off, and a spike of its own (step P1).
+Status: **proposal, 2026-10-18; spike P1 done on Linux (2026-10-18) and macOS (2026-10-21). Not built.** See *Spike P1* at the end. The static host is GO on both platforms, with conditions. The scripted host is GO on Linux behind a real network gate. On macOS it is GO behind four filtering layers, with **one accepted leak**: a script-clicked link to an IP address opens an empty TCP connection (owner decision 2026-10-21; the network-free replacement is tracked in #189). The conditions are written into H2-H4 below. This extends epic #162 (`docs/plans/data-artifacts.md`, called *the base plan* below). Level 1 shipped on 2026-10-17. The base plan's spike finished on macOS (#182): the iframe is dropped, the worker view (`view.js`) is the RESHAPE, and a1 (the meta `frame-src 'self'` on Studio's page) blocks every navigation vector on both platforms. This plan adds a third view kind beside A2UI and the worker view: an **HTML artifact**, a page of the author's own HTML (optionally with script) that works like a Claude artifact. It keeps the base plan's query boundary: a page asks for a named query with values and never sends SQL. Before any step is built, two things are needed: the owner's sign-off, and a spike of its own (step P1).
 
 ## Goal
 
@@ -112,7 +112,7 @@ html:
 - **No function returns `template.HTML`, `template.JS`, `template.CSS`, `template.URL` or `template.HTMLAttr`.** Data is always escaped. A lint test fails if one is ever added. That test is the single most important line in this plan: one `safeHTML` helper turns any database row into script inside a page that holds capabilities.
 - **Limits.** A render runs with the 30 s query timeout and a 10 MB output cap; the writer errors and the render stops. Template execution itself is bounded by the data (at most 20 queries × 500 rows), and `text/template` caps recursion depth.
 - **Save-time vet.** `write_artifact` parses every template with the closed `FuncMap` (unknown function or bad syntax: refused), checks that every `query` name is a literal naming a manifest query, and checks every `param` and `link` name the same way. A `query` with a computed name is refused at save; at run it is still checked against the manifest. That makes "which queries a page uses" derivable, like the base plan's derived `Uses`.
-- **URL attributes are an allow-list, checked at save (P1).** A template may contain `<link>` only with `rel=stylesheet` and a relative `assets/` href. It may contain no `target`, `ping` or `download` attribute, no `<meta http-equiv>` and no `<base>`. Every `href` and `src` must be a `link` call, a `#fragment` or a literal relative `assets/` path. Absolute URLs, and a templated value in any URL attribute, are refused at save. P1 found that `<link rel=preconnect>` and a `target=_blank` click open a TCP connection (and a DNS lookup for a host name) under every CSP layer, a1 included. Without script, a host name built from a template value would leak data over DNS.
+- **URL attributes are an allow-list, checked at save (P1).** A template may contain `<link>` only with `rel=stylesheet` and a relative `assets/` href. It may contain no `target`, `ping` or `download` attribute, no `<meta http-equiv>` and no `<base>`. Every `href` and `src` must be a `link` call, a `#fragment` or a literal relative `assets/` path. Absolute URLs, and a templated value in any URL attribute, are refused at save. P1 found that `<link rel=preconnect>` and a `target=_blank` click open a TCP connection (and a DNS lookup for a host name) under every CSP layer, a1 included, on both platforms. On macOS `<link rel=dns-prefetch>` also resolves the name, and with an `https://` name, preconnect and `target=_blank` also send it in the TLS ClientHello (SNI). Without script, a host name built from a template value would leak data over DNS.
 
 ### H3. The static host: inside Studio
 
@@ -129,6 +129,8 @@ html:
   - `<meta refresh>` is blocked by the script-less sandbox alone.
   - The narrowed form `frame-src <origin>/vibe-view/` works: Studio boots, the frame and its links work, and a link to `/` or `/index.html` loads nothing.
 
+  The macOS run confirmed all three, with the same dev origin. It also showed that Wails' all-frames user script does not run in a frame without `allow-scripts`.
+
   a1 ships narrowed. It is emitted into `index.html` at build time for each target origin (`wails://wails.localhost:34115` in dev, `wails://wails` in a build), and P3 re-verifies it in the production build on both platforms. A meta CSP inserted by script was not tested and is not used.
 - **Interactivity without script.** `<a href="{{ link "region" .region }}">` navigates the frame to the same route with new values. There are no forms: the frame has no `allow-forms`, so a form can't submit, and that keeps the sandbox minimal. Go binds them (`artifacts.Bind` refuses bad values) and re-renders. Values are read only from the query string of the `/vibe-view/` route, never from Studio's own state. Parameter controls can also stay as Studio's level-1 components around the frame (`useArtifactParams`); a change reloads the frame with the new query string.
 - **Serve what was hashed.** As base plan D9: the middleware reads the file set once, hashes it with the manifest, compares it with the allowed hash and renders those bytes. A watcher change tears the frame down.
@@ -140,7 +142,7 @@ html:
   - a scrubbed environment: only what the toolkit needs. P1 measured it on Linux as `XDG_RUNTIME_DIR`, plus `WAYLAND_DISPLAY` when it isn't `wayland-0`; `GDK_BACKEND`, `HOME` and `DBUS_SESSION_BUS_ADDRESS` were not needed. None of `AWS_*`, `*_TOKEN`, `*_PASSWORD` or the workspace `.env` overlay is passed, because the overlay is never in the environment and the helper never sees the parent's;
   - one dedicated pipe pair (`ExtraFiles`) for a JSON-lines protocol, not stdin/stdout, which GTK may write to; stderr goes to Studio's debug log; no other inherited file descriptors. **The helper marks the pipe `CLOEXEC` at once**: P1 found that without it, the fd leaks into `WebKitNetworkProcess`, `xdg-dbus-proxy` and the web process;
   - on Linux, `SysProcAttr.Pdeathsig = SIGKILL`, so the helper dies with Studio. On macOS the helper exits when its protocol pipe closes;
-  - **a tree kill.** The helper runs in its own process group (or PID namespace), and Studio kills the whole group. P1 found that SIGKILL to the helper alone left a spinning `WebKitWebProcess` and its bwrap parents alive at 72% CPU;
+  - **a tree kill.** The helper runs in its own process group (or PID namespace), and Studio kills the whole group. P1 found that SIGKILL to the helper alone left a spinning `WebKitWebProcess` and its bwrap parents alive at 72% CPU. On macOS a busy WebContent process died with the SIGKILLed helper (the WebKit XPC services are children of launchd, so a process-group kill wouldn't reach them; P4 re-checks that none survive);
   - **no network**, as a structural property and not just a settings list.
     - **Linux.** The helper runs under bwrap, or an equivalent clone, with `--unshare-net`, the real uid mapped to itself, and an **allow-listed filesystem view**:
       - a generated `/etc/nsswitch.conf` of `hosts: files`, and an empty `resolv.conf`;
@@ -150,7 +152,16 @@ html:
       P1 found that a network namespace alone leaves name resolution open: systemd-resolved's varlink socket answered from inside both a user+net namespace and `bwrap --unshare-net`. WebKit sent it a lookup for a link the navigation policy had refused, so the lookup happens regardless of the policy decision. Hiding only resolved's socket is not enough either: avahi (which multicasts `.local` names on the LAN) and `org.freedesktop.resolve1` on the system bus stay reachable.
 
       P4 verifies end to end, with WebKit under this exact launcher: no `connect()` to any unix socket outside the allow-list (strace, or fake sockets at every known resolver path). **If a user+net namespace can't be created** (for example under Ubuntu's `apparmor_restrict_unprivileged_userns`), the page window is refused. Unprivileged bwrap needs user namespaces too, so it is no fallback.
-    - **macOS** is unproven. `com.apple.WebKit.Networking` is launched by launchd, not by the helper, so a `sandbox-exec` profile on the helper probably doesn't constrain it. The P1 macOS run leads with exactly that test, then tries `WKWebsiteDataStore.proxyConfigurations` (macOS 14+) pointed at a dead loopback port. If no gate holds, the scripted host is not offered on macOS.
+    - **macOS: four filtering layers, one accepted leak.** WebKit's Networking process is started by launchd, not by the helper, so no namespace applies. The helper sets up, before the first load:
+      - the strict CSP and the navigation policy (below);
+      - a `WKContentRuleList` that blocks every URL except `vibe-page:`, compiled at start, with the first load waiting for the compile callback. P1 found that it stops every load, plus `dns-prefetch` and `preconnect`, even under a permissive CSP. No setting or header turns DNS prefetch off (`_setDNSPrefetchingEnabled:NO` and `X-DNS-Prefetch-Control: off` did nothing);
+      - `WKWebsiteDataStore.proxyConfigurations` (macOS 14+) pointed at a dead loopback port. Host names go to the proxy and are never resolved locally;
+      - WebRTC and media devices off with the private preferences `peerConnectionEnabled` and `mediaDevicesEnabled`. P1 measured `RTCPeerConnection` as undefined with them.
+
+      **The accepted leak:** a link to an IP address that page script clicks (`a.click()`) opens an empty TCP connection to the address and port the page chose. WebKit preconnects on the click before the rules or the policy apply, and IP addresses bypass the proxy (verified for loopback and the LAN; public addresses not tested). No request is sent, but the choice of address, port and timing can carry a few bytes per click, and the page can reach hosts on the person's LAN. `sandbox-exec (deny network*)` closed it in P1, but it is deprecated and won't ship. An App Sandbox helper would need a separate signed executable, which waits on a developer account. The owner accepted the leak on 2026-10-21. #189 tracks a network-free model (WASM/WASI) to replace it. Until then:
+      - the trust prompt for a scripted page on macOS says that the page can open a network connection to an address it chooses, though it can't send a request or receive data;
+      - `docs/reference/artifacts.md` states the limitation;
+      - macOS 13 and older, where `proxyConfigurations` doesn't exist, refuse the page window.
 
   The helper is never given the workspace path, a connection, a credential or a store. It receives the page's bytes over the pipe and serves them from memory.
 - **The native web view is ours, not Wails'.** On Linux it is WebKitGTK through cgo; on macOS, WKWebView through Objective-C. We own the native code (a few hundred lines per platform). `webview/webview` exposes no navigation policy, custom scheme or ephemeral data store, and it registers its own `__webview__` message handler. The helper calls `webkit_web_context_set_sandbox_enabled(TRUE)` before creating the web view, which Wails never does (grounding). **This is required.** In P1 the web process was unconfined without it. With it, the web process ran under bwrap in its own user, pid and net namespaces, with seccomp, NoNewPrivs and no capabilities. `WebKitNetworkProcess` is not sandboxed either way, so the helper's namespace is what gates the network. The helper must not run with `HOME=/root`, which breaks WebKit's bwrap. Owning the view gives what Wails withheld (base plan grounding):
@@ -161,7 +172,7 @@ html:
     No `'unsafe-eval'` and no inline script: data reaches script through the `json` block. Libraries that need `eval` (some vega builds) use their CSP-safe build.
   - **One message handler, main frame only.** It lives in the page's main world, beside the injected `vibe` API: a main-world object can't post to a handler in another content world, and the page is untrusted either way, so an isolated world would buy nothing. Frames are refused by `frame-src 'none'`. P1 found that, with a permissive CSP, both a `srcdoc` and a `src` frame can post to the handler. A `srcdoc` frame is stopped by the inherited `script-src`, a `src` frame by `frame-src 'none'`, and both by `decide-policy` (which refuses `about:srcdoc`). The handler also checks `frameInfo.isMainFrame` on macOS; on Linux, where the frame isn't available, there is nothing else to check, because the helper's view holds only the page.
   - **Ephemeral data.** A non-persistent website data store, so no `localStorage`, IndexedDB or cookies survive the window. A page keeps state only through `state`.
-  - **Off where the platform allows:** WebRTC and media streams (`enable-webrtc`, `enable-media-stream` on WebKitGTK; macOS has only a private preference), DNS prefetch, plugins, the developer inspector (unless a Studio setting turns it on for authors), and spatial navigation. CSP `connect-src` covers neither WebRTC nor DNS prefetch on every WebKit. **These settings are not a layer.** In WebKitGTK 2.54, `enable-dns-prefetching` and `enable-hyperlink-auditing` are deprecated no-ops (`<a ping>` still fired), and only media stream, localStorage and IndexedDB being off measurably did anything. The network gate above is the gate. At start the helper logs `typeof RTCPeerConnection`: WebRTC isn't built into the Fedora build P1 used, so STUN is unverified on builds that ship it.
+  - **Off where the platform allows:** WebRTC and media streams (`enable-webrtc`, `enable-media-stream` on WebKitGTK; macOS has only the private preferences), DNS prefetch (on macOS only the content rule list stops it), plugins, the developer inspector (unless a Studio setting turns it on for authors), and spatial navigation. CSP `connect-src` covers neither WebRTC nor DNS prefetch on every WebKit. **These settings are not a layer.** In WebKitGTK 2.54, `enable-dns-prefetching` and `enable-hyperlink-auditing` are deprecated no-ops (`<a ping>` still fired), and only media stream, localStorage and IndexedDB being off measurably did anything. The network gate above is the gate. At start the helper logs `typeof RTCPeerConnection`: WebRTC isn't built into the Fedora build P1 used, so STUN is unverified on builds that ship it.
 - **The page-side API**, injected by the helper as a user script in the main world before the page runs. It mirrors `claude.use`:
   ```js
   const rows = await vibe.run("by_region", { from: "2026-01-01" }) // {columns, rows, truncated}
@@ -173,7 +184,7 @@ html:
 - **Watchdog.** The page host posts a heartbeat. On a missed beat, a crash, or a watcher change to the artifact, Studio kills the helper process and shows "This page stopped responding" or "This page changed" in Studio, with Reopen. The tree kill above takes the web process with it.
 - **The window can't impersonate Studio.** Its native title is always `<artifact title> — Vibe page`; `document.title` is ignored. There is no menu bar beyond Close. It is never full-screen without a person's gesture. Studio never asks for a credential inside a page window, and the user guide says so in the same paragraph as the trust prompt.
 - **The macOS process model.** The helper runs from inside the app bundle with the accessory activation policy, so it shows no second Dock icon. P1 checks focus, Cmd-W, and the window staying above Studio when opened.
-- **The macOS keychain.** Keychain ACLs are per application. A helper that is the same executable as Studio shares Studio's keychain identity, so an escape from the web process into the helper could read Vibe's items without a prompt. (Linux Secret Service has no per-binary ACL at all, so there it is the OS user either way.) The mitigation, chosen if P1's sandbox result is weak, is a separate helper executable in `Contents/MacOS/` with its own identifier.
+- **The macOS keychain.** Keychain ACLs are per application. A helper that is the same executable as Studio shares Studio's keychain identity, so an escape from the web process into the helper could read Vibe's items without a prompt. (Linux Secret Service has no per-binary ACL at all, so there it is the OS user either way.) The mitigation is a separate helper executable in `Contents/MacOS/` with its own identifier. That waits on the developer account too (#189), so for now the helper is the same executable, and this exposure is part of the accepted macOS limitation.
 
 ### H5. Capabilities
 
@@ -231,7 +242,7 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 - **Scripted host:** the helper process with its own web view on both platforms.
   - `fetch`, XHR, WebSocket, `EventSource`, `sendBeacon`, `<img src=http…>`, CSS `url()` and `@import`, `<link rel=dns-prefetch|preconnect|prefetch>`, `<a ping>`, WebRTC with a STUN server, `window.open`, `location =` and a form submit. Each must produce **no** listener hit, and no DNS query either (watch with `tcpdump port 53`).
   - The message handler refuses a frame (a `srcdoc` frame, which `frame-src 'none'` should already stop).
-  - **The network gate.** On Linux the helper's network namespace has only `lo`, which the helper can't use to reach Studio's listener. On macOS the `sandbox-exec` profile is applied. In both cases there are zero DNS queries and zero STUN packets, and a `fetch` to the loopback listener gets no hit.
+  - **The network gate.** On Linux the helper's network namespace has only `lo`, which the helper can't use to reach Studio's listener. On macOS the `sandbox-exec` profile is applied (as built: the content rule list and the proxy instead; see H4). In both cases there are zero DNS queries and zero STUN packets, and a `fetch` to the loopback listener gets no hit.
   - The web process sandbox is on (`/proc/<webprocess>/status` and the bwrap parent on Linux; `sandbox-exec`'s confinement on macOS).
   - `while(true){}`: the heartbeat is missed, the helper is killed, its web process exits and Studio never stutters.
   - The helper's environment and file descriptors, read from `/proc/<pid>/environ` and `fd` on Linux and with `ps eww` / `lsof` on macOS.
@@ -263,11 +274,11 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 - **Tests:**
   - Go, protocol: message shapes refused, caps, rate limits, artifact pinning (a message that names another artifact is refused by shape, since no field exists for it).
   - Go, environment: the scrubbed env, asserted on a fake spawn.
-  - Live in the Wails build on both platforms: the P1 hostile page rerun as an allowed page.
+  - Live in the Wails build on both platforms: the P1 hostile page rerun as an allowed page. On macOS also: the 14-group matrix under the four layers, where only the IP-literal link click may connect; a public IP address through the proxy (a TEST-NET address on a `lo0` alias); the rule list in place before the first load; and refusal on macOS 13.
 - **Review first:**
   - an environment or file descriptor reaching the helper;
   - a navigation the policy lets through (redirects, `about:blank`, `blob:` documents);
-  - the network namespace or sandbox profile missing on any spawn path (a fallback that skips it must fail closed);
+  - the network namespace (Linux) or the rule list and proxy (macOS) missing on any spawn path (a fallback that skips them must fail closed);
   - the helper outliving Studio;
   - `document.title` reaching the native title;
   - `vibe.run` able to reach a query the page's derived list doesn't hold. That is allowed, since it is still a manifest query, but it must be logged.
@@ -284,7 +295,7 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 #### Step P6. Trust prompt, agent tool, skill, bundle, CLI, docs
 
 - The H6 prompt and Settings > Workspace > Pages; H7's `write_artifact` and `get_artifact` changes, the skill section, bundle entries and `vibe artifact view`. Docs:
-  - `docs/reference/artifacts.md`: an *HTML pages* section with the `FuncMap`, the hosts, the capabilities and the CSPs;
+  - `docs/reference/artifacts.md`: an *HTML pages* section with the `FuncMap`, the hosts, the capabilities, the CSPs and the macOS limitation (H4, #189);
   - `agent-policy.md`: pages are content and never run for the agent;
   - `workspaces.md`: layout and bundle entries;
   - user docs: the trust prompt and the warning about a page asking for a credential;
@@ -299,10 +310,10 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 - **The template as code.** The template is the author's code. Its markup is untrusted (the host's CSP is the gate), and its `FuncMap` is the only API.
 - **The query boundary.** Neither the template nor the script reaches SQL, a connection name or another artifact. Studio pins the artifact by name. Every value goes through `Bind`; every run goes through `RunArtifactQuery`'s gates. Row caps and rate limits hold.
 - **Exits.**
-  - Things that must be **impossible**: network, because the helper has none to use (namespace or sandbox profile, then CSP, then settings); navigation away; a new window; the clipboard read; the Wails bridge; a static page reaching another artifact's render.
+  - Things that must be **impossible**: network, because the helper has none to use on Linux (namespace, then CSP, then settings). On macOS every load, lookup and request is blocked, but a script-clicked IP-literal link can open an empty TCP connection (accepted leak, H4, #189); navigation away; a new window; the clipboard read; the Wails bridge; a static page reaching another artifact's render.
   - Things that may happen only **after consent or a gesture**: `download`, through the save dialog; `ask`, to the named provider; `state`, local disk only.
   - Things that **remain**, because the person does them: copying text, printing, drag-out, screenshots.
-- **The helper process.** It has no credentials, environment, workspace path or file descriptors beyond its pipes. It is killed on a missed heartbeat or a change, and it dies with Studio. A WebKit compromise inside the helper still runs as the person's OS user. WebKit's own web-process sandbox is the defence in depth: bubblewrap on WebKitGTK, which the helper turns on because Wails doesn't, and the platform sandbox on macOS. P1 confirms it is on. On macOS the helper shares Studio's keychain identity unless it is a separate executable (H4).
+- **The helper process.** It has no credentials, environment, workspace path or file descriptors beyond its pipes. It is killed on a missed heartbeat or a change, and it dies with Studio. A WebKit compromise inside the helper still runs as the person's OS user. WebKit's own web-process sandbox is the defence in depth: bubblewrap on WebKitGTK, which the helper turns on because Wails doesn't, and the platform sandbox on macOS. P1 confirms it is on. On macOS the helper shares Studio's keychain identity until it becomes a separate executable (H4, #189).
 - **Impersonation.** A page window that draws a fake "Sign in to prod_pg" form. The native title is fixed, Studio never asks for a credential in a page, and `ask` and `download` make a typed password leave only with consent. Say so in the trust prompt.
 - **Trust.** `PageHash` covers `artifact.yaml`, every page file, the kind and the capabilities. The served bytes are the hashed bytes. The agent can't allow a page. A clone at another path asks again, and a bundle never carries a decision.
 
@@ -318,12 +329,12 @@ The base plan's per-step gates and review rules still apply: Sonnet implements, 
 ## Open questions
 
 1. **Is a separate window acceptable UX for scripted pages?** An embedded view isn't possible without frame isolation and, on Linux, #174 (*Later*). The static host covers in-Studio pages.
-2. **Native code. Answered:** we own it (H4). `webview/webview` has no navigation policy, custom scheme or ephemeral store, and it registers its own handler. What remains open is the macOS network gate: whether a deprecated `sandbox-exec` profile is acceptable to ship, or whether the helper needs an App Sandbox entitlement of its own.
+2. **Native code. Answered:** we own it (H4). `webview/webview` has no navigation policy, custom scheme or ephemeral store, and it registers its own handler. The macOS network gate is **answered** too: no `sandbox-exec`; content rules plus a dead proxy, with the IP-literal click leak accepted until #189.
 3. **The `vibe-lib/` set and versions**, shared with the worker view (base plan open question 5).
 4. **The CSP narrowing to `frame-src …/vibe-view/`** may not be honoured for paths on a custom scheme. If it isn't, `frame-src 'self'` stays, and the static frame can still navigate to Studio's own page. That is harmless without `allow-scripts` (P1 probes it).
 5. **`ask` defaults.** On at allow time (H5 gives the reason). The owner may prefer off for remote providers.
 
-## Spike P1 (Linux run 2026-10-18; macOS pending)
+## Spike P1 (Linux run 2026-10-18; macOS run 2026-10-20/21)
 
 **Setup.** The run used Fedora with WebKitGTK **2.54.1**, the real Wails window for the static host, and a Go + cgo WebKitGTK helper spawned by a stand-in parent for the scripted host. The branch is `spike/html-pages-p1` (throwaway; never merged).
 
@@ -348,7 +359,15 @@ An Opus verifier re-checked the logs and rated the results **trustworthy with co
 | Wails runtime injection | **None.** |
 | `<link rel=preconnect>` and a `target=_blank` click | **Open a TCP connection under every layer.** Hence H2's URL allow-list. |
 
-**Decision: GO, with conditions.** a1 ships narrowed and is emitted at build time; the route relies on the rate limit; the H2 URL allow-list applies. P3 re-verifies in a production build on both platforms.
+**macOS (26.6.2, Apple silicon, WKWebView):** the same results row for row, with the same dev origin. The differences:
+
+- `<link rel=dns-prefetch>` also resolves the name. With an `https://` name, preconnect and a `target=_blank` click also send a TLS ClientHello carrying the name.
+- WKWebView sends no `Sec-Fetch-Dest` either.
+- Wails' all-frames user script does not run in a frame without `allow-scripts`.
+- Studio's App Transport Security (`NSAllowsLocalNetworking` only) refuses plain-HTTP names before any lookup. It helps, but it isn't a control to rely on.
+- Content rule lists can't be added, because Wails v2 doesn't expose its WKWebView configuration. So the H2 allow-list is the only defence against hint leaks here.
+
+**Decision: GO on both platforms, with conditions.** a1 ships narrowed and is emitted at build time; the route relies on the rate limit; the H2 URL allow-list applies. P3 re-verifies in a production build on both platforms.
 
 ### Scripted host (H4)
 
@@ -371,7 +390,24 @@ An Opus verifier re-checked the logs and rated the results **trustworthy with co
 | d3 and vega-lite under the strict CSP | **Render**, with and without the namespace. |
 | WebRTC and STUN | **Not verified.** `RTCPeerConnection` is not built into this WebKitGTK. |
 
-**Decision: GO on Linux, only behind the H4 network gate.** The gate is a user+net namespace plus an allow-listed filesystem view, together with `CLOEXEC`, a tree kill, `set_sandbox_enabled(TRUE)`, the uid mapped to itself, and `frame-src 'none'` plus `decide-policy`. **macOS: pending** the owner's run (`spike/pagehost/mac/P1-MAC-RUN.md` on the spike branch), which leads with whether any gate constrains `com.apple.WebKit.Networking`. If none does, the scripted host is not offered on macOS.
+**macOS (26.6.2, Apple silicon), full results in `spike/pagehost/mac/P1-MAC-RESULTS.md` on the spike branch.** No single layer is enough:
+
+| Layer | Closes | Leaves open |
+|---|---|---|
+| Strict CSP + navigation policy | subresources, forms, navigations | `dns-prefetch`, `preconnect`, DNS + TCP on refused navigations |
+| `WKContentRuleList` (block all but `vibe-page:`) | every load, plus `dns-prefetch` and `preconnect` | DNS + TCP on a script-clicked outside link |
+| `proxyConfigurations` (dead loopback port) | host-name resolution | IP addresses (loopback and LAN verified; public not tested) |
+| `sandbox-exec (deny network*)` | all TCP/UDP from the WebKit services | DNS |
+
+With rules + CSP + policy every group was zero except the link click. Adding the proxy closed the click by name, leaving only the IP-literal click (`RP.alink`: one accept, no request). P4 runs the full 14-group matrix on exactly this set. Adding `sandbox-exec` gave zero in all 14 groups. Other checks:
+- The handler refused both frames.
+- The freeze was caught at 2.09 s, and the WebContent process died with the helper.
+- The helper's environment was empty, and the XPC services hold none of the parent's sockets.
+- Storage was ephemeral, and the native title stayed fixed.
+- d3 and vega-lite rendered under the rules.
+- Dock: no icon, and the helper window came to the front. Cmd-W was not tested.
+
+**Decision: GO on Linux, only behind the H4 network gate.** The gate is a user+net namespace plus an allow-listed filesystem view, together with `CLOEXEC`, a tree kill, `set_sandbox_enabled(TRUE)`, the uid mapped to itself, and `frame-src 'none'` plus `decide-policy`. **GO on macOS with the accepted leak** (owner, 2026-10-21): the CSP, the policy, the content rule list and the dead proxy, without `sandbox-exec`, because it is deprecated. The IP-literal click leak is documented (H4) and tracked in #189.
 
 **Scope.** All of these results come from Fedora with WebKitGTK 2.54.1. Before P3 and P4 ship, they are re-run on Ubuntu 24.04 (AppArmor's user namespace restriction) and on the oldest WebKitGTK Vibe supports. Both hosts fail closed.
 
