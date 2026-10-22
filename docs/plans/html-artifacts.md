@@ -79,8 +79,7 @@ artifacts/<name>/
 └── html/                 (view: html)
     ├── index.html.tmpl   the entry template; other *.tmpl files are partials
     ├── app.js            optional; any number of .js/.mjs files makes the page "scripted"
-    ├── style.css
-    └── assets/…          .svg .png .jpg .webp .woff2 .json (static reference data, e.g. a topojson)
+    └── assets/…          style.css and .svg .png .jpg .webp .woff2 .json (static reference data, e.g. a topojson)
 ```
 
 ```yaml
@@ -96,7 +95,7 @@ html:
 
 - **Strict decode as today.** `html` is allowed only with `view: html`. Unknown capability names are refused. A capability on a static page is a validation error ("capabilities need script"), so the declaration never lies about the host.
 - **Static or scripted is derived, not declared.** A page is scripted if `html/` holds any `.js` or `.mjs` file, or if a template contains a `<script>` element or an inline event handler. This uses the same tokenizer `html/template` uses (`golang.org/x/net/html`, already in `go.mod` as an indirect dependency, promoted to direct in step P2). The derived kind is part of the hash, so a page can't switch hosts without asking again.
-- **Caps:** at most 200 files and 5 MB under `html/`; any one file at most 1 MB; templates at most 256 KB each. Allowed extensions are the closed list above. There are no symlinks, no dotfiles, no folders deeper than `html/assets/<dir>/`, and no top-level `_vibe/` or `vibe-lib/` (reserved for the host). A folder that breaks a rule lists with its error and does not render (refuse, don't repair).
+- **Caps:** at most 200 files and 5 MB under `html/`; any one file at most 1 MB; templates at most 256 KB each. Allowed extensions are the closed list above. Only `.tmpl`, `.js` and `.mjs` files sit at the top of `html/`; everything else lives under `assets/`, so nothing unreachable is hashed. There are no symlinks and no dotfiles (`.DS_Store` and `Thumbs.db` are skipped: not hashed, not served), no folders deeper than `html/assets/<dir>/`, and no top-level `_vibe/` or `vibe-lib/` (reserved for the host). A folder that breaks a rule lists with its error and does not render (refuse, don't repair).
 - **No CDN, no network.** A page vendors what it needs into `html/`, where it is hashed and shown at allow. Vibe also serves a small pinned set at `vibe-lib/` (d3 modules, vega + vega-lite, Observable Plot) from the embedded FS, licences in `THIRD_PARTY_NOTICES.md` (base plan open question 5, extended).
 
 ### H2. Templates: what a page can reach
