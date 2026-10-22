@@ -20,7 +20,7 @@ import (
 // value that was escaped to text is fine, and is not rewritten. A scripted
 // page's own script elements and handlers are allowed (they were vetted as
 // the page's code and are what makes it scripted); everything else holds.
-func checkRendered(out []byte, scripted bool) error {
+func checkRendered(out []byte, scripted bool, files map[string]bool) error {
 	z := html.NewTokenizer(strings.NewReader(string(out)))
 	foreign := false
 	for {
@@ -45,14 +45,14 @@ func checkRendered(out []byte, scripted bool) error {
 			if foreign {
 				z.NextIsNotRawText()
 			}
-			if err := checkRenderedTag(name, attrs, scripted); err != nil {
+			if err := checkRenderedTag(name, attrs, scripted, files); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func checkRenderedTag(name string, attrs []attr, scripted bool) error {
+func checkRenderedTag(name string, attrs []attr, scripted bool, files map[string]bool) error {
 	local := name[strings.LastIndexByte(name, ':')+1:]
 	if _, bad := refusedTags[local]; bad || (local == "script" && !scripted) {
 		return errors.New("the rendered page holds a <" + local + "> element")
@@ -65,6 +65,8 @@ func checkRenderedTag(name string, attrs []attr, scripted bool) error {
 			if err := checkCSS(a.val, false); err != nil {
 				return err
 			}
+		case local == "script" && scripted && a.key == "src" && scriptSrcOK(a.val, files):
+			// The page's own script or a vendored library: the code that makes it scripted.
 		case urlAttrs[a.key]:
 			if err := checkRenderedURL(a); err != nil {
 				return err

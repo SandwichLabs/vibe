@@ -1,6 +1,6 @@
 // ArtifactViewTrust for an HTML page (#162): the files are shown, nothing is hosted until
 // the person allows, an allowed static page goes to the script-less frame, and a scripted
-// one waits for its page window.
+// one is handed to its page window (ScriptedPage), never to a frame.
 type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -33,7 +33,7 @@ const detail = { name: 'pg', title: 'Pg', params: [], queries: [], view_kind: 'h
 async function mountTrust() {
   const w = mount(ArtifactViewTrust, {
     props: { name: 'pg', detail, values: {}, refresh: 0 },
-    global: { stubs: { Icon: true, StaticPage: { template: '<div data-testid="static-page-stub" />' }, CustomView: { template: '<div data-testid="custom-view-stub" />' } } },
+    global: { stubs: { Icon: true, ScriptedPage: { template: '<div data-testid="scripted-page-stub" />' }, StaticPage: { template: '<div data-testid="static-page-stub" />' }, CustomView: { template: '<div data-testid="custom-view-stub" />' } } },
   })
   await flushPromises()
   return w
@@ -62,11 +62,21 @@ describe('ArtifactViewTrust, HTML page', () => {
     expect(w.find('[data-testid="custom-view-stub"]').exists()).toBe(false)
   })
 
-  it('an allowed scripted page waits for the page window and hosts no frame', async () => {
+  it('an allowed scripted page goes to its own window and hosts no frame', async () => {
     makeApp(status({ state: 'allowed', page_kind: 'scripted' }))
     const w = await mountTrust()
     expect(w.find('[data-testid="static-page-stub"]').exists()).toBe(false)
-    expect(w.get('[data-testid="view-trust-page-window"]').text()).toContain('opens in a page window')
+    expect(w.find('[data-testid="scripted-page-stub"]').exists()).toBe(true)
+    expect(w.find('iframe').exists()).toBe(false)
+  })
+
+  it('the allow screen of a scripted page says it has script and runs in its own window', async () => {
+    makeApp(status({ page_kind: 'scripted' }))
+    const w = await mountTrust()
+    const line = w.get('[data-testid="view-trust-line"]').text()
+    expect(line).toContain('This page has script')
+    expect(line).toContain('in its own window')
+    expect(line).not.toContain('It runs no script')
   })
 
   it('a denied page says so and hosts nothing', async () => {

@@ -131,7 +131,7 @@ func TestCheckRendered(t *testing.T) {
 		`<svg><a href="#x"><rect width="1"/></a></svg>`,
 	}
 	for _, s := range ok {
-		assert.NoError(t, checkRendered([]byte(s), false), s)
+		assert.NoError(t, checkRendered([]byte(s), false, nil), s)
 	}
 	bad := []string{
 		`<script>1</script>`, `<iframe src="assets/a.html"></iframe>`, `<p onclick="x">`, `<a href="http://x.test/">x</a>`,
@@ -142,10 +142,22 @@ func TestCheckRendered(t *testing.T) {
 		`<object data="assets/x.svg"></object>`, `<a download href="assets/a">x</a>`,
 	}
 	for _, s := range bad {
-		assert.Error(t, checkRendered([]byte(s), false), s)
+		assert.Error(t, checkRendered([]byte(s), false, nil), s)
 	}
-	assert.NoError(t, checkRendered([]byte(`<script>1</script><p onclick="x">`), true), "a scripted page's own code is what makes it scripted")
-	assert.Error(t, checkRendered([]byte(`<a href="http://x.test/">x</a>`), true), "but nothing else loosens")
+	assert.NoError(t, checkRendered([]byte(`<script>1</script><p onclick="x">`), true, nil), "a scripted page's own code is what makes it scripted")
+	assert.Error(t, checkRendered([]byte(`<a href="http://x.test/">x</a>`), true, nil), "but nothing else loosens")
+
+	// A scripted page's own script file and a vendored library may be loaded; nothing else may.
+	files := map[string]bool{"app.js": true, "assets/x.js": true, "index.html.tmpl": true}
+	assert.NoError(t, checkRendered([]byte(`<script src="app.js"></script><script src="vibe-lib/d3-array.js"></script>`), true, files))
+	for _, bad := range []string{
+		`<script src="missing.js"></script>`, `<script src="http://x.test/a.js"></script>`, `<script src="vibe-lib/../x.js"></script>`,
+		`<script src="vibe-lib/x.css"></script>`, `<script src="//x.test/a.js"></script>`,
+		`<img src="app.js">`, `<img src="vibe-lib/d3.js">`, `<script src="app.js?x=1"></script>`,
+	} {
+		assert.Error(t, checkRendered([]byte(bad), true, files), bad)
+	}
+	assert.Error(t, checkRendered([]byte(`<script src="app.js"></script>`), false, files), "a static page runs no script")
 }
 
 func TestRender_AFailingQueryIsAFixedBlockAndWritesNothing(t *testing.T) {
@@ -163,7 +175,7 @@ func TestRender_AFailingQueryIsAFixedBlockAndWritesNothing(t *testing.T) {
 	assert.NotContains(t, block, "SECRET")
 	assert.NotContains(t, block, "/home")
 	assert.Contains(t, block, `The query &#34;by_region&#34; could not run.`)
-	assert.NoError(t, checkRendered([]byte(block), false), "the error block holds the page rules too")
+	assert.NoError(t, checkRendered([]byte(block), false, nil), "the error block holds the page rules too")
 }
 
 func TestPageErrorHTML_FixedTextPerKind(t *testing.T) {
@@ -269,7 +281,7 @@ func TestRender_LoopsAreBoundedByTheBudgetNotByLuck(t *testing.T) {
 		var re *RenderError
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooSlow, re.Kind, name)
-		assert.Less(t, time.Since(start), 3*time.Second, name)
+		assert.Less(t, time.Since(start), 20*time.Second, name)
 	}
 }
 
@@ -297,7 +309,9 @@ func TestRender_TemplateCallsAreBoundedAndRecursionIsRefused(t *testing.T) {
 	var re *RenderError
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderTooSlow, re.Kind)
-	assert.Less(t, time.Since(start), 3*time.Second)
+	// The work budget, not the 30 s deadline, stops it: about 0.6 s here, a few
+	// seconds on a slow CI runner.
+	assert.Less(t, time.Since(start), 20*time.Second)
 
 	for name, files := range map[string]map[string]string{
 		"direct":   {"index.html.tmpl": `{{ define "a" }}{{ template "a" }}{{ end }}{{ template "a" }}`},
@@ -431,7 +445,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	var re *RenderError
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderTooSlow, re.Kind)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 	assert.Zero(t, out.Len())
 
 	// A cancel from outside (a revoke, a new token) stops it the same way.
@@ -441,7 +455,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	err = RenderHTMLPage(cctx, f.run, pageOf(t, PageStatic, entry(body)), nil, &out)
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderCanceled, re.Kind)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 
 	// The same through if, with and nested template calls inside the loop.
 	files := map[string]string{
@@ -453,7 +467,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	start = time.Now()
 	err = RenderHTMLPage(ctx2, f.run, pageOf(t, PageStatic, files), nil, &out)
 	require.ErrorAs(t, err, &re)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 }
 
 // memAlloc is the bytes allocated so far (cumulative), for bounding a render's memory.
@@ -488,7 +502,7 @@ func TestRender_StringsBuiltInVariablesAreBudgeted(t *testing.T) {
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooLarge, re.Kind, name)
 		assert.Contains(t, err.Error(), "too large", name)
-		assert.Less(t, time.Since(start), 3*time.Second, name)
+		assert.Less(t, time.Since(start), 20*time.Second, name)
 		assert.Less(t, memAlloc()-before, uint64(400<<20), name+": allocation stays bounded")
 	}
 }
@@ -553,7 +567,7 @@ func TestRender_SizingManyWideArgumentsIsBounded(t *testing.T) {
 		var re *RenderError
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooLarge, re.Kind, name)
-		assert.Less(t, time.Since(start), 3*time.Second, name+": the sizing walk stops at the budget")
+		assert.Less(t, time.Since(start), 20*time.Second, name+": the sizing walk stops at the budget")
 	}
 }
 

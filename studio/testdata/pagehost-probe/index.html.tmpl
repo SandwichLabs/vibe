@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>probe-title</title>
+<style>body{background:var(--vibe-bg,#fff)}</style></head><body>
+<h1>probe {{ param "group" }}</h1><div id="out"></div><pre id="log" style="white-space:pre-wrap;font-size:11px"></pre>
+<script type="application/json" id="group">{{ json (param "group") }}</script>
+<script type="application/json" id="target">{{ json (param "target") }}</script>
+<script src="vibe-lib/d3-array.js"></script><script src="vibe-lib/d3-color.js"></script><script src="vibe-lib/d3-interpolate.js"></script>
+<script src="vibe-lib/d3-format.js"></script><script src="vibe-lib/d3-time.js"></script><script src="vibe-lib/d3-time-format.js"></script>
+<script src="vibe-lib/d3-scale.js"></script><script src="vibe-lib/d3-path.js"></script><script src="vibe-lib/d3-shape.js"></script>
+<script src="vibe-lib/vega.js"></script><script src="vibe-lib/vega-interpreter.js"></script><script src="vibe-lib/vega-lite.js"></script>
+<script src="probe.js"></script></body></html>

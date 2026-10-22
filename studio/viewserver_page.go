@@ -20,6 +20,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -160,16 +161,22 @@ func (v *viewServer) servePage(w http.ResponseWriter, r *http.Request, token str
 // parser would drop, such as one with a semicolon, is a refusal, not a default)
 // and renders the grant's page.
 func renderPage(g *viewGrant, rawQuery string, out *bytes.Buffer) error {
+	return renderPageQuery(g.ctx, g.run, g.page, rawQuery, out)
+}
+
+// renderPageQuery is renderPage over the pieces a page window also has: the
+// context, the runner pinned to the page's manifest, the page.
+func renderPageQuery(ctx context.Context, run artifacts.PageRunner, page *artifacts.Artifact, rawQuery string, out *bytes.Buffer) error {
 	bad := &artifacts.RenderError{Kind: artifacts.RenderBadValues}
 	q, err := url.ParseQuery(rawQuery)
 	if err != nil {
 		return bad
 	}
-	values, err := artifacts.ParsePageQuery(&g.page.Manifest, q)
+	values, err := artifacts.ParsePageQuery(&page.Manifest, q)
 	if err != nil {
 		return bad
 	}
-	return artifacts.RenderHTMLPage(g.ctx, g.run, g.page, values, out)
+	return artifacts.RenderHTMLPage(ctx, run, page, values, out)
 }
 
 // renderStatus is the HTTP status of a failed render.

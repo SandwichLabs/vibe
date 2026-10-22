@@ -146,7 +146,7 @@ func RenderHTMLPage(ctx context.Context, run PageRunner, a *Artifact, values map
 	if err := root.ExecuteTemplate(out, a.Manifest.HTML.Entry, nil); err != nil {
 		return renderFailure(ctx, env, err)
 	}
-	if err := checkRendered(out.buf.Bytes(), a.Page != nil && a.Page.Kind == PageScripted); err != nil {
+	if err := checkRendered(out.buf.Bytes(), a.Page != nil && a.Page.Kind == PageScripted, pagePaths(a.Files)); err != nil {
 		return &RenderError{Kind: RenderTemplate, cause: err}
 	}
 	if _, err := w.Write(out.buf.Bytes()); err != nil {
@@ -236,3 +236,12 @@ func PageErrorHTML(err error) []byte {
 var errorPage = template.Must(template.New("err").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Page error</title>` +
 	`<style>html{color-scheme:light dark}body{font:14px system-ui,sans-serif;margin:16px;color:CanvasText;background:Canvas}h1{font-size:16px;margin:0 0 8px}</style></head>` +
 	`<body><h1>{{ .Title }}</h1><p>{{ .Line }}</p></body></html>`))
+
+// pagePaths is the set of a page's file paths.
+func pagePaths(files []PageFile) map[string]bool {
+	m := make(map[string]bool, len(files))
+	for _, f := range files {
+		m[f.Path] = true
+	}
+	return m
+}

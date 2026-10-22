@@ -223,6 +223,8 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	a.bundles.clear()
 	// Custom-view tokens (and the queries running for them) end with the workspace.
 	a.views.clear()
+	// Page windows end with the workspace they were opened in.
+	a.pages.closeAll()
 	// A running chat turn must not outlive the session it is writing to.
 	a.chat.cancelTurn("")
 	if a.ws == nil {
@@ -353,6 +355,10 @@ func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 		// banner and Workspace settings re-read it. Values stay as loaded.
 		a.emitEvent("workspace:changed", map[string]any{"kind": "dotenv"})
 		return
+	}
+	if ch.Kind == workspace.KindArtifact {
+		// A page window for an artifact that changed ends at once; Reopen asks again.
+		a.pages.artifactChanged(ch.ID)
 	}
 	a.emitEvent("workspace:changed-on-disk", map[string]any{
 		"kind": string(ch.Kind), "id": ch.ID, "op": string(ch.Op), "path": ch.Path,
