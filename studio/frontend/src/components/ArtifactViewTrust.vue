@@ -8,7 +8,7 @@
 // state leaving "allowed", tears that down at once and this screen asks again.
 // An HTML page (#162) goes through the same screen: its files are listed read-only
 // (PageFiles), and an allowed static page is shown in StaticPage, a script-less
-// frame (a scripted page opens in its own window, which is not built yet).
+// frame, and an allowed scripted page opens in its own window (ScriptedPage).
 // Every string is text.
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
@@ -16,6 +16,7 @@ import { createVibeEditor, type VibeEditorInstance } from '../composables/useVib
 import CustomView from './CustomView.vue'
 import PageFiles from './PageFiles.vue'
 import StaticPage from './StaticPage.vue'
+import ScriptedPage from './ScriptedPage.vue'
 import { useArtifactViewTrust } from '../composables/useArtifactViewTrust'
 import type { ParamValue } from '../a2ui/artifactParams'
 
@@ -84,7 +85,8 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
         <Icon name="alert" :size="16" />
         <span>
           <template v-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it. </template>
-          <template v-if="isPage">This page was written by someone else or by the agent. It runs no script and cannot reach the network or your files; it can only show what this artifact's queries return.</template>
+          <template v-if="isPage && status?.page_kind === 'scripted'">This page has script, written by someone else or by the agent. It runs in its own window that cannot reach your files or other pages, and can only run this artifact's queries. On macOS it can open a network connection to an address it chooses, though it cannot read a reply.</template>
+          <template v-else-if="isPage">This page was written by someone else or by the agent. It runs no script and cannot reach the network or your files; it can only show what this artifact's queries return.</template>
           <template v-else>This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
@@ -104,10 +106,7 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
 
     <template v-if="running && isPage">
       <StaticPage v-if="status?.page_kind === 'static'" :key="status.hash" :name="name" :detail="detail!" :values="values ?? {}" :refresh="refresh" />
-      <div v-else class="note info" role="status" data-testid="view-trust-page-window">
-        <Icon name="info" :size="16" />
-        <span>This page has script, so it opens in a page window. Page windows are not available in this version yet.</span>
-      </div>
+      <ScriptedPage v-else :key="status?.hash" :name="name" :detail="detail!" :values="values ?? {}" />
     </template>
     <CustomView v-else-if="running" :name="name" :detail="detail!" :values="values ?? {}" />
     <div v-else-if="state === 'allowed'" class="note info" role="status" data-testid="view-trust-checking">

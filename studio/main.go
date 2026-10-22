@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/vibe/internal/pagehost"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -36,6 +37,13 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Printf("vibe-studio %s (commit: %s, built: %s)\n", version, commit, date)
 		return
+	}
+
+	// A page window's helper (docs/plans/html-artifacts.md, H4): the same binary,
+	// started by Studio under the platform's network gate. It never starts Wails,
+	// builds no App and reads no workspace; it talks to Studio over two pipes.
+	if len(os.Args) > 1 && os.Args[1] == pagehost.HelperArg {
+		os.Exit(runPageHelper())
 	}
 
 	// The MotherDuck connection test re-executes the running binary with this

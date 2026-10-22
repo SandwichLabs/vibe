@@ -281,6 +281,8 @@ func TestVetPage_URLAttributeAllowList(t *testing.T) {
 		`<style>p { background: url(assets/bg.png) } /* url(http://x) */</style>`,
 		`<style>p { width: {{ param "top" }}px }</style>`,
 		`<meta charset="utf-8"><meta name="viewport" content="width=device-width">`,
+		`<script src="vibe-lib/d3-scale.js"></script>`,
+		`<script src="vibe-lib/vega-lite.js"></script>`,
 	}
 	for _, h := range ok {
 		_, err := vetIndex(t, h)
@@ -321,6 +323,14 @@ func TestVetPage_URLAttributeAllowList(t *testing.T) {
 		`<a href="assets/a.svg" ping="https://x.test/">x</a>`,
 		`<a href="assets/a.svg" download>x</a>`,
 		`<a href="assets/a.svg" TARGET=_blank>x</a>`,
+		`<script src="vibe-lib/x.css"></script>`,
+		`<script src="vibe-lib/../x.js"></script>`,
+		`<script src="vibe-lib/a/b.js"></script>`,
+		`<script src="/vibe-lib/d3.js"></script>`,
+		`<script src="vibe-lib/d3.js?x=1"></script>`,
+		`<script src="vibe-lib/{{ param "top" }}.js"></script>`,
+		`<img src="vibe-lib/d3.js">`,
+		`<link rel="stylesheet" href="vibe-lib/d3.js">`,
 		`<link rel="preconnect" href="https://x.test">`,
 		`<link rel="dns-prefetch" href="//x.test">`,
 		`<link rel="stylesheet" href="https://x.test/a.css">`,

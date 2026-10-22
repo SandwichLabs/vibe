@@ -1,0 +1,16 @@
+#ifndef VIBE_PAGEWINDOW_H
+#define VIBE_PAGEWINDOW_H
+
+/* The calls the Go side makes into the native page window (GTK on Linux, Cocoa
+ * on macOS). vibe_host_run opens the page window and runs its loop until it ends.
+ * prefix is "vibe-page://<name>/" (the one origin the policy allows). */
+int vibe_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script);
+/* vibe_host_eval runs script in the page's main frame; any thread. */
+void vibe_host_eval(const char *js);
+/* vibe_host_respond answers a scheme request (any thread). ok=0 fails the request.
+ * The body is copied before it returns. */
+void vibe_host_respond(unsigned long id, int ok, const char *ctype, const char *csp, const char *body, int len);
+/* vibe_host_quit ends the loop; any thread. */
+void vibe_host_quit(void);
+
+#endif

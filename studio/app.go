@@ -30,6 +30,8 @@ import (
 type App struct {
 	// views serves custom artifact views under /vibe-view/ (viewserver.go).
 	views *viewServer
+	// pages owns the page windows of scripted HTML pages (pagehost.go).
+	pages *pageHost
 
 	ctx    context.Context
 	logger *slog.Logger
@@ -210,6 +212,7 @@ func NewApp(logger *slog.Logger) *App {
 	}
 	app.views = newViewServer(viewWorkerJS, viewLibs(), app.viewStillAllowed)
 	app.views.log = logger
+	app.pages = newPageHost(logger, viewLibs(), app.emitEvent)
 	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(logger); err == nil {
 		app.prefs = prefs.NewStore(dir)

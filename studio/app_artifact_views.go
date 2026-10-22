@@ -79,6 +79,7 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 	// A decision ends the artifact's open tokens at once: a revoke or a deny
 	// must not wait for the next re-check.
 	a.views.dropArtifact(name)
+	a.pages.closeArtifact(name, pageStateChanged)
 	a.emitEvent("workspace:changed", map[string]any{"kind": "artifactview", "id": name})
 	st, err := ws.ArtifactViewState(name)
 	if err != nil {

@@ -124,6 +124,9 @@ interface AppApi {
   ListArtifactViewDecisions(): Promise<ArtifactViewDecision[]>
   OpenArtifactView(name: string, origin: string): Promise<ArtifactViewGrant>
   OpenArtifactPage(name: string, origin: string): Promise<ArtifactPageGrant>
+  PageWindowSupport(): Promise<string>
+  OpenArtifactPageWindow(name: string, query: string, theme: Record<string, string>): Promise<PageWindowInfo>
+  ClosePageWindow(name: string): Promise<void>
   RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
@@ -463,6 +466,8 @@ interface ArtifactViewFile { path: string; role: string; size: number; text?: st
 // ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
 // URL is made from (/vibe-view/<token>/page), bound to one PageHash.
 interface ArtifactPageGrant { token: string; hash: string }
+// PageWindowInfo mirrors studio.PageWindowInfo: a scripted page's window, opened for one PageHash.
+interface PageWindowInfo { name: string; hash: string }
 // ArtifactViewGrant mirrors studio.ArtifactViewGrant (#160): the token an allowed
 // view's Worker URL is made from (/vibe-view/<token>/worker.js), bound to one hash.
 interface ArtifactViewGrant { token: string; hash: string }

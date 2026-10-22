@@ -293,7 +293,7 @@ func (mv *markupVet) checkURL(tag, local string, a attr) error {
 	if hasMark(val) {
 		return invalid("html/%s: the %s attribute of <%s> may not hold a template action beside other text (a URL is a link call, a #fragment or a literal assets/ path)", mv.file, a.key, tag)
 	}
-	if local == "script" && a.key == "src" && mv.files[val] && !strings.Contains(val, "/") && (path.Ext(val) == ".js" || path.Ext(val) == ".mjs") {
+	if local == "script" && a.key == "src" && scriptSrcOK(val, mv.files) {
 		return nil
 	}
 	if !literalPageURL(val) {
@@ -313,4 +313,18 @@ func (mv *markupVet) checkSrcset(tag string, a attr) error {
 		}
 	}
 	return nil
+}
+
+// vibeLibRe is a vendored library the page window serves: vibe-lib/<name>.js.
+// Whether Studio vendors that name is not known here (the host answers 404 for
+// one it does not).
+var vibeLibRe = regexp.MustCompile(`^vibe-lib/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.js$`)
+
+// scriptSrcOK is the one rule for a <script src>: a page's own script file
+// directly under html/, or a vendored library. files holds the page's paths.
+func scriptSrcOK(val string, files map[string]bool) bool {
+	if vibeLibRe.MatchString(val) {
+		return true
+	}
+	return files[val] && !strings.Contains(val, "/") && (path.Ext(val) == ".js" || path.Ext(val) == ".mjs")
 }

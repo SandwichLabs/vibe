@@ -84,6 +84,12 @@ func (a *App) viewStillAllowed(g *viewGrant) bool {
 	return err == nil && st.Kind == want && st.State == stateAllowed && st.Hash == g.hash
 }
 
+// pageStillAllowed is a page window's re-check: the open workspace is the one it
+// was opened in, and the page is allowed at exactly the hash it was opened for.
+func (a *App) pageStillAllowed(ws workspace.Workspace, name, hash string) bool {
+	return a.viewStillAllowed(&viewGrant{name: name, hash: hash, ws: ws, page: &artifacts.Artifact{}})
+}
+
 // validateViewPage is ValidateArtifactViewPage over a store: the page a script
 // view returned, checked against the manifest and re-marshalled.
 func validateViewPage(ctx context.Context, store artifacts.Store, name, page string) (string, error) {
