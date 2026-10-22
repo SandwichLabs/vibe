@@ -172,7 +172,9 @@ func TestArtifactView_StatusOfAScriptedPageListsCapabilities(t *testing.T) {
 	assert.Contains(t, out, "state: keeps small notes for this page on this computer only")
 	assert.Contains(t, out, "download: can offer a file it made")
 	assert.Contains(t, out, "ask: This page can send text, which may include query results, to ")
-	assert.Contains(t, out, "whatever model provider is set up later", "no provider is configured in the test home")
+	// Which provider is named depends on the machine's model setup (the default
+	// local endpoint counts as set up); the no-provider wording is pinned in
+	// studio/page_disclosure_test.go.
 
 	list, _, err := runVibe("artifact", "list", "--workspace", ws)
 	require.NoError(t, err)
