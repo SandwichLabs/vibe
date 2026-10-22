@@ -370,3 +370,34 @@ func TestPageAsk_OnlyForAScriptedPageThatDeclaresIt(t *testing.T) {
 	assert.False(t, ws.PageAskEnabled("static", st.Hash))
 	assert.False(t, ws.PageAskEnabled("../x", st.Hash))
 }
+
+func TestArtifactViewStatus_PageQueriesAndDecisionsCarryTheKind(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	askPage(t, ws, "pg", "vibe.use('ask')")
+	st := viewState(t, ws, "pg")
+	require.Len(t, st.QueryUses, 1)
+	assert.Equal(t, ArtifactViewQuery{Name: "q", Used: true}, st.QueryUses[0], "the default database has an empty connection")
+	require.NoError(t, ws.AllowArtifactView("pg", st.Hash))
+	d := ws.ArtifactViewDecisions()
+	require.Len(t, d, 1)
+	assert.Equal(t, "html", d[0].Kind)
+	assert.Equal(t, "scripted", d[0].PageKind)
+	assert.Equal(t, []string{"ask", "state"}, d[0].Capabilities)
+}
+
+// A scripted page can run every manifest query with vibe.run, so the prompt
+// lists them all; a static page lists only what its templates name.
+func TestArtifactViewStatus_ScriptedPageListsEveryQueryItCanRun(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	m := "version: 1\ntitle: P\nview: html\nqueries:\n  - name: harmless\n    sql: SELECT 1\n  - name: secrets\n    connection: prod_pg\n    sql: SELECT 2\n"
+	put := func(name, tmpl string, extra ...artifacts.PageFile) {
+		files := append([]artifacts.PageFile{{Path: "index.html.tmpl", Data: []byte(tmpl)}}, extra...)
+		require.NoError(t, ws.Artifacts().Put(context.Background(), &artifacts.Artifact{Name: name, ManifestText: []byte(m), Files: files}, artifacts.Overwrite()))
+	}
+	put("scripted", `<p>{{ query "harmless" }}</p><script src="app.js"></script>`, artifacts.PageFile{Path: "app.js", Data: []byte("vibe.run('secrets')")})
+	put("static", `<p>{{ query "harmless" }}</p>`)
+
+	got := viewState(t, ws, "scripted").QueryUses
+	assert.Equal(t, []ArtifactViewQuery{{Name: "harmless", Used: true}, {Name: "secrets", Connection: "prod_pg", Used: false}}, got)
+	assert.Equal(t, []ArtifactViewQuery{{Name: "harmless", Used: true}}, viewState(t, ws, "static").QueryUses)
+}

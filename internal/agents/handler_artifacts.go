@@ -117,6 +117,9 @@ func (h *Handler) handleListArtifacts(ctx context.Context, req *Request) *Respon
 		row["title"] = a.Manifest.Title
 		row["description"] = a.Manifest.Description
 		row["view"] = viewKind(a.Manifest.View)
+		if a.Page != nil {
+			row["page_kind"] = a.Page.Kind
+		}
 		row["parameters"] = len(a.Manifest.Parameters)
 		row["queries"] = len(a.Manifest.Queries)
 		row["rev"] = a.Rev
@@ -157,10 +160,10 @@ func (h *Handler) handleGetArtifact(ctx context.Context, req *Request) *Response
 	}
 	switch {
 	case a.Manifest.View == artifacts.ViewHTML:
-		// A page's files are not shown to the agent yet (nothing renders them
-		// for it either); say what it is and stop.
+		// A page is content: its files come back as text (nothing renders
+		// them for the agent, and no tool runs a page).
 		res["view_kind"] = artifacts.ViewHTML
-		res["note"] = "this artifact is an HTML page; its files cannot be read or changed with this tool"
+		res["page"] = pageFilesForAgent(a)
 	case a.Manifest.View == artifacts.ViewScript:
 		addScriptSource(res, a.View)
 	case len(a.View) <= artifactViewBudgetBytes:
@@ -255,18 +258,22 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
 	}
-	if m.View == artifacts.ViewHTML {
-		// HTML pages are shown to the person before they run, and the agent
-		// has no way to write or allow one yet.
-		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: view: html pages cannot be written by this tool; use view a2ui or script")
-	}
 	rev, err := revParam(req.Params)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
-	view, err := viewFromParams(ctx, store, name, rev, m, req.Params)
+	var view []byte
+	var files []artifacts.PageFile
+	if m.View == artifacts.ViewHTML {
+		files, err = h.pageFilesFromParams(ctx, store, name, rev, req.Params)
+	} else {
+		if _, has := req.Params["html_files"]; has {
+			return NewErrorResponse(req.ID, ErrInvalidParams, "html_files is only for a manifest with view: html")
+		}
+		view, err = viewFromParams(ctx, store, name, rev, m, req.Params)
+	}
 	if err != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, "view: "+err.Error())
+		return NewErrorResponse(req.ID, ErrInvalidParams, "view: "+scrubStoreText(err.Error()))
 	}
 	if err := keepStoredSQL(ctx, store, name, rev, m, keep); err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
@@ -279,6 +286,14 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	if err := artifacts.ValidateView(m, view); err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, scrubStoreText(err.Error()))
 	}
+	var page *artifacts.PageInfo
+	if m.View == artifacts.ViewHTML {
+		// Files, templates and URL attributes against H1 and H2 now, so the
+		// model gets a usable error; the store repeats the vet on every write.
+		if page, err = artifacts.VetPage(m, files); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, "html_files: "+scrubStoreText(err.Error()))
+		}
+	}
 	if err := h.VetArtifact(ctx, m); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
@@ -288,7 +303,7 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	// stand in for a rev the agent did not supply, or the agent could replace a
 	// person's version of an artifact it never read (the store sees every
 	// artifact Studio or a listing has loaded).
-	a := &artifacts.Artifact{Name: name, Manifest: *m, View: view}
+	a := &artifacts.Artifact{Name: name, Manifest: *m, View: view, Files: files}
 	if err := store.Put(ctx, a, artifacts.WithRev(rev)); err != nil {
 		if errors.Is(err, artifacts.ErrConflict) {
 			return NewErrorResponse(req.ID, ErrInvalidParams, conflictMessage(name, rev))
@@ -301,6 +316,10 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	}
 	if m.View == artifacts.ViewScript {
 		res["note"] = "the script view is stored but does not run until the person allows it in Studio; it asks again after every edit"
+	}
+	if page != nil {
+		res["note"] = pageNote
+		res["page_kind"], res["queries_used"], res["capabilities"] = page.Kind, nonNil(page.Queries), nonNil(page.Capabilities)
 	}
 	return NewResponse(req.ID, res)
 }

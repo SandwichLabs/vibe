@@ -191,8 +191,15 @@ func classify(name string) (ItemKind, string, error) {
 			return KindSkill, parts[1], nil
 		}
 	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile || parts[2] == artifacts.ScriptFile):
-		// No other file name: there is no view.html, and an allow never travels.
+		// No other file name directly in the folder: there is no view.html,
+		// and an allow never travels.
 		if filestore.ValidID(parts[1]) {
+			return KindArtifact, parts[1], nil
+		}
+	case len(parts) >= 4 && parts[0] == artifacts.Dir && parts[2] == artifacts.HTMLDir:
+		// A page file, under H1's layout rules (names, folders, extensions),
+		// checked here so a hostile archive never reaches a store with one.
+		if filestore.ValidID(parts[1]) && artifacts.CheckPageFilePath(strings.Join(parts[3:], "/")) == nil {
 			return KindArtifact, parts[1], nil
 		}
 	}

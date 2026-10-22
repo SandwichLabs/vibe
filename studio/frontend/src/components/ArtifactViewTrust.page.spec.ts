@@ -9,9 +9,14 @@ vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 
 import ArtifactViewTrust from './ArtifactViewTrust.vue'
 
+const disclosure: PageDisclosure = {
+  host: 'This page has no script. It shows inside Studio.',
+  capabilities: [], network: '', credential: 'Vibe never asks for a password, key or token inside a page.', askProvider: '',
+}
+
 const status = (over: Partial<ArtifactViewStatus> = {}): ArtifactViewStatus => ({
   name: 'pg', kind: 'html', state: 'undecided', hash: 'b'.repeat(64), page_kind: 'static',
-  manifest: 'version: 1\ntitle: Pg\nview: html\n', source: '', queries: ['big'],
+  manifest: 'version: 1\ntitle: Pg\nview: html\n', source: '', queries: ['big'], disclosure,
   files: [{ path: 'index.html.tmpl', role: 'entry', size: 12, text: '<p>hi</p>' }], ...over,
 })
 
@@ -44,7 +49,7 @@ describe('ArtifactViewTrust, HTML page', () => {
     makeApp(status())
     const w = await mountTrust()
     expect(w.text()).toContain('HTML page')
-    expect(w.get('[data-testid="view-trust-line"]').text()).toContain('It runs no script and cannot reach the network or your files')
+    expect(w.get('[data-testid="page-prompt-host"]').text()).toContain('This page has no script')
     expect(w.text()).not.toContain('runs code written by someone else')
     expect(w.findAll('.page-files__item').map((i) => i.get('.page-files__path').text())).toEqual(['artifact.yaml', 'index.html.tmpl'])
     expect(w.get('[data-testid="view-trust-state"]').text()).toContain('Not allowed yet')
@@ -70,13 +75,44 @@ describe('ArtifactViewTrust, HTML page', () => {
     expect(w.find('iframe').exists()).toBe(false)
   })
 
-  it('the allow screen of a scripted page says it has script and runs in its own window', async () => {
-    makeApp(status({ page_kind: 'scripted' }))
+  it('the allow screen lists every query a script can run with its connection, the capabilities and the warnings', async () => {
+    makeApp(status({
+      page_kind: 'scripted',
+      query_uses: [{ name: 'big', connection: 'prod_pg', used: true }, { name: 'secrets', connection: 'prod_pg', used: false }, { name: 'small', used: true }],
+      disclosure: {
+        host: 'This page has script.', network: 'On macOS a scripted page can open a network connection.', credential: disclosure.credential, askProvider: 'Anthropic (m)',
+        capabilities: [{ name: 'state', text: 'state: keeps small notes' }, { name: 'ask', text: 'ask: This page can send text, which may include query results, to Anthropic (m).' }],
+      },
+    }))
     const w = await mountTrust()
-    const line = w.get('[data-testid="view-trust-line"]').text()
-    expect(line).toContain('This page has script')
-    expect(line).toContain('in its own window')
-    expect(line).not.toContain('It runs no script')
+    const qs = w.get('[data-testid="page-prompt-queries"]').text()
+    expect(qs).toContain('big on prod_pg')
+    expect(w.get('[data-testid="page-prompt-query-secrets"]').text()).toContain('secrets on prod_pg')
+    expect(w.get('[data-testid="page-prompt-query-secrets"]').text()).toContain('script only')
+    expect(w.get('[data-testid="page-prompt-query-small"]').text()).toContain('small on the workspace database')
+    expect(w.get('[data-testid="page-prompt-cap-ask"]').text()).toContain('to Anthropic (m)')
+    expect(w.get('[data-testid="page-prompt-cap-state"]').text()).toContain('keeps small notes')
+    expect(w.get('[data-testid="page-prompt-network"]').text()).toContain('network connection')
+    expect(w.get('[data-testid="page-prompt-credential"]').text()).toContain('never asks for a password')
+    expect(w.text()).toContain('queries it can run')
+  })
+
+  it('fails closed without the prompt text: says so, lists the declared capabilities, and keeps Allow off', async () => {
+    const app = makeApp(status({ page_kind: 'scripted', disclosure: undefined, capabilities: ['ask', 'download'] }))
+    const w = await mountTrust()
+    expect(w.get('[data-testid="page-prompt-missing"]').text()).toContain('could not be loaded')
+    expect(w.get('[data-testid="page-prompt-caps"]').text()).toContain('ask')
+    expect(w.text()).not.toContain('declares no capabilities')
+    expect(w.find('[data-testid="page-prompt-credential"]').exists()).toBe(false)
+    expect(w.get('[data-testid="view-trust-allow"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-testid="view-trust-allow"]').trigger('click')
+    expect(app.AllowArtifactView).not.toHaveBeenCalled()
+  })
+
+  it('shows no prompt once the page is allowed', async () => {
+    makeApp(status({ state: 'allowed' }))
+    const w = await mountTrust()
+    expect(w.find('[data-testid="page-prompt"]').exists()).toBe(false)
   })
 
   it('a denied page says so and hosts nothing', async () => {

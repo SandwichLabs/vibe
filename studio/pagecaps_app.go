@@ -40,6 +40,12 @@ func (p *pageAppState) add(e ActivityEntry) {
 	}
 }
 
+func (p *pageAppState) entries() []ActivityEntry {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]ActivityEntry(nil), p.log...)
+}
+
 // pageServices builds the services of one artifact's windows. The artifact is
 // fixed here, by Studio: nothing a page sends names one.
 func (a *App) pageServices(ws workspace.Workspace, name string) pageServices {
@@ -103,4 +109,12 @@ func (a *App) recordActivity(e ActivityEntry) {
 	a.pageApp.add(e)
 	a.logger.Info("agent activity", "source", e.Source, "artifact", e.Name, "kind", e.Kind, "outcome", e.Outcome, "prompt_bytes", e.PromptBytes, "reply_bytes", e.ReplyBytes)
 	a.emitEvent("agent:activity", map[string]any{"source": e.Source, "name": e.Name, "kind": e.Kind, "at": e.At.Format(time.RFC3339), "outcome": e.Outcome})
+}
+
+// askConfigured reports whether a model provider is usable for `ask` now.
+func (a *App) askConfigured() bool {
+	a.mu.RLock()
+	cfg := a.llmConfig("read-only", true)
+	a.mu.RUnlock()
+	return llm.Configured(cfg)
 }

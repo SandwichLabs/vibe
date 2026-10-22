@@ -2,22 +2,26 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/vibe/internal/llm"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 var artifactViewCmd = &cobra.Command{
 	Use:   "view",
-	Short: "Allow or deny an artifact's custom (script) view",
+	Short: "Allow or deny an artifact's custom view or HTML page",
 	Long: `An artifact whose manifest says "view: script" draws itself with view.js,
 code written by someone else or by an agent. Vibe shows it as source and only
 runs it after you allow it (the view runs in a worker that cannot reach the
@@ -29,6 +33,11 @@ network or your files, and can only run this artifact's own queries):
            the source and asks; otherwise pass --hash and --yes from "status".
   deny     never run it, until revoked. Edits do not ask again.
   revoke   forget the decision (the next open asks again).
+
+An HTML page (view: html) goes through the same commands: status lists its
+kind (static or scripted), the queries it uses with their connections, the
+capabilities it declares (state, download, ask) in plain words, every file and
+its source. No command opens or runs a page: it opens from Studio.
 
 Your decision is kept in your own config directory (views.json), not in the
 workspace folder, and never travels in a bundle. An agent cannot allow a view.`,
@@ -103,7 +112,7 @@ func confirmViewAllow(cmd *cobra.Command, ws workspace.Workspace, name string) (
 	}
 	printViewStatus(os.Stderr, st, true)
 	if st.Kind == "html" {
-		fmt.Fprint(os.Stderr, "This page was written by someone else or by an agent. It runs no script and can only show this artifact's query results. Allow it? [y/N]: ")
+		fmt.Fprint(os.Stderr, "This page was written by someone else or by an agent. Allow it? [y/N]: ")
 	} else {
 		fmt.Fprint(os.Stderr, "This view runs code written by someone else or by an agent. Allow it? [y/N]: ")
 	}
@@ -168,12 +177,49 @@ func printViewAfter(cmd *cobra.Command, ws workspace.Workspace, name string) err
 	return nil
 }
 
-// printPageStatus lists an HTML page's files, and with withSource shows every
-// text file, so what the person reads is what the hash covers.
+// printPageStatus lists an HTML page's host, the queries it uses with their
+// connections, the declared capabilities with their plain lines, and its
+// files; with withSource it shows every text file, so what the person reads is
+// what the hash covers.
 func printPageStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bool) {
-	fmt.Fprintf(w, "  page: %s, queries: %s\n", st.PageKind, strings.Join(st.Queries, ", "))
+	fmt.Fprintf(w, "  page: %s\n", st.PageKind)
+	fmt.Fprintf(w, "  %s\n", artifacts.HostLine(st.PageKind))
+	if st.PageKind == artifacts.PageScripted {
+		fmt.Fprintln(w, "  queries it can run (a script can run any of them, not only the ones its templates name):")
+	} else {
+		fmt.Fprintln(w, "  queries it uses:")
+	}
+	for _, q := range st.QueryUses {
+		conn := q.Connection
+		if conn == "" {
+			conn = "the workspace database"
+		}
+		note := ""
+		if st.PageKind == artifacts.PageScripted {
+			note = ", script only"
+			if q.Used {
+				note = ", used by its templates"
+			}
+		}
+		fmt.Fprintf(w, "    %s (on %s%s)\n", q.Name, conn, note)
+	}
+	if len(st.QueryUses) == 0 {
+		fmt.Fprintln(w, "    none")
+	}
+	if st.PageKind == artifacts.PageScripted {
+		target := cliAskTarget(context.Background())
+		fmt.Fprintf(w, "  capabilities: %s\n", dash(strings.Join(st.Capabilities, ", ")))
+		for _, c := range st.Capabilities {
+			fmt.Fprintf(w, "    %s\n", artifacts.CapabilityLine(c, target))
+		}
+		if runtime.GOOS == "darwin" {
+			fmt.Fprintf(w, "  %s\n", artifacts.NetworkDisclosure)
+		}
+	}
+	fmt.Fprintf(w, "  %s\n", artifacts.CredentialLine)
+	fmt.Fprintln(w, "  files:")
 	for _, f := range st.Files {
-		fmt.Fprintf(w, "  %s (%s, %d bytes)\n", f.Path, f.Role, f.Size)
+		fmt.Fprintf(w, "    %s (%s, %d bytes)\n", f.Path, f.Role, f.Size)
 	}
 	if !withSource {
 		return
@@ -185,4 +231,16 @@ func printPageStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bo
 		}
 	}
 	fmt.Fprintln(w, "---")
+}
+
+// cliAskTarget names the model `ask` would use, with Studio's own test of
+// "usable" (llm.Configured: a cloud provider needs its key, a local one an
+// endpoint), or "" when none is.
+func cliAskTarget(ctx context.Context) string {
+	cfg := config.Load().LLM
+	key, _ := config.ResolveLLMKey(ctx, llmKeyStore(), cfg)
+	if !llm.Configured(llm.Config{Provider: cfg.Provider, Endpoint: cfg.Endpoint, AccountID: cfg.AccountID, Gateway: cfg.Gateway, Model: cfg.Model, APIKey: key}) {
+		return ""
+	}
+	return cfg.AskTarget()
 }

@@ -7,10 +7,13 @@ vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 
 import ArtifactViewDecisions from './ArtifactViewDecisions.vue'
 
+let activity: AgentActivityEntry[] = []
+
 function makeApp(list: ArtifactViewDecision[]) {
   let cur = list
   const app: MockApp = {
     ListArtifactViewDecisions: vi.fn(async () => cur),
+    ListAgentActivity: vi.fn(async () => activity),
     RevokeArtifactView: vi.fn(async (n: string) => { cur = cur.filter((d) => d.name !== n); return {} }),
   }
   ;(globalThis as any).window = (globalThis as any).window || {}
@@ -23,7 +26,7 @@ describe('ArtifactViewDecisions', () => {
     makeApp([])
     const w = mount(ArtifactViewDecisions)
     await flushPromises()
-    expect(w.get('[data-testid="view-decisions-empty"]').text()).toContain('No custom artifact views')
+    expect(w.get('[data-testid="view-decisions-empty"]').text()).toContain('No pages or custom views')
   })
 
   it('lists decisions and revokes one', async () => {
@@ -50,5 +53,21 @@ describe('ArtifactViewDecisions', () => {
     expect(w.find('[data-testid="view-decision-ask-q"]').exists()).toBe(false)
     await w.get('[data-testid="view-decision-ask-p"]').setValue(false)
     expect((app as any).SetPageAsk).toHaveBeenCalledWith('p', false)
+  })
+
+  it('shows the kind and capabilities of a page, and recent model use without any text', async () => {
+    activity = [
+      { at: '2026-10-22T10:00:00Z', source: 'page', name: 'older', kind: 'ask', promptBytes: 12, replyBytes: 0, outcome: 'no model' },
+      { at: '2026-10-22T11:00:00Z', source: 'page', name: 'newer', kind: 'ask', promptBytes: 40, replyBytes: 99, outcome: 'ok' },
+    ]
+    makeApp([{ name: 'p', path: '/x/p', decision: 'allow', state: 'allowed', kind: 'html', pageKind: 'scripted', capabilities: ['ask', 'state'] }])
+    const w = mount(ArtifactViewDecisions)
+    await flushPromises()
+    expect(w.get('[data-testid="view-decision-kind-p"]').text()).toBe('Scripted page')
+    expect(w.get('[data-testid="view-decision-caps-p"]').text()).toBe('ask, state')
+    expect(w.get('[data-testid="page-activity-0"]').text()).toContain('newer')
+    expect(w.get('[data-testid="page-activity-0"]').text()).toContain('sent 40 bytes, got 99 bytes')
+    expect(w.get('[data-testid="page-activity-1"]').text()).toContain('no model')
+    activity = []
   })
 })

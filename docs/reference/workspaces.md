@@ -40,7 +40,8 @@ acme-analytics/
 ├── artifacts/
 │   └── regional-sales/       one folder per data artifact, see "Data artifacts" below
 │       ├── artifact.yaml     title, typed parameters, named queries
-│       └── view.a2ui.json    the A2UI view (or view.js for `view: script`, a custom view you must allow)
+│       ├── view.a2ui.json    the A2UI view (or view.js for `view: script`, a custom view you must allow)
+│       └── html/             instead of a view file, for `view: html`: template, script and assets of an HTML page you must allow
 ├── data/                     local files and local .duckdb files
 ├── .gitignore                .vibe-local/, data/*.duckdb, data/*.duckdb.wal
 ├── .gitattributes            *.vnb text eol=lf
@@ -285,7 +286,7 @@ Saving is lossless: frontmatter keys Vibe does not know (`allowed-tools`, `licen
 
 ### Data artifacts: `artifacts/<name>/`
 
-A data artifact is two files in a folder named for it: `artifact.yaml` (the manifest: title, typed parameters with defaults, named queries) and its view file: `view.a2ui.json` (the A2UI view) or, with `view: script`, `view.js` (a custom view that runs only after you allow it; your allow or deny is kept in `views.json` in your user config directory, beside `dotenv.json`, never in the folder). The name is a store id (1 to 64 lowercase letters, digits, `-` and `_`). Anything else in the folder is left alone. Both files are one unit: one revision covers them, and a folder with only one of them lists with an error. The formats, caps and view rules are in [artifacts.md](artifacts.md); `vibe artifact list` prints each artifact's name, title, view kind and, for a broken one, why (the same facts Studio's list shows, never a query).
+A data artifact is two files in a folder named for it (an HTML page is `artifact.yaml` plus an `html/` folder, see [artifacts.md](artifacts.md#html-pages-view-html-static-pages-render-in-studio); its machine-local `state` lives in `.vibe-local/artifacts/<name>/state.json`, never in the folder): `artifact.yaml` (the manifest: title, typed parameters with defaults, named queries) and its view file: `view.a2ui.json` (the A2UI view) or, with `view: script`, `view.js` (a custom view that runs only after you allow it; your allow or deny is kept in `views.json` in your user config directory, beside `dotenv.json`, never in the folder). The name is a store id (1 to 64 lowercase letters, digits, `-` and `_`). Anything else in the folder is left alone. Both files are one unit: one revision covers them, and a folder with only one of them lists with an error. The formats, caps and view rules are in [artifacts.md](artifacts.md); `vibe artifact list` prints each artifact's name, title, view kind and, for a broken one, why (the same facts Studio's list shows, never a query).
 
 ## Editing from outside, and conflicts
 
@@ -329,8 +330,8 @@ The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, 
 | `vibe query "<sql>" [-c conn] [--format table\|csv\|json] [--limit N] [--read-only]` | One statement through the session. `-c` makes that connection's catalog the default for unqualified names. `-` reads the statement from standard input. `--limit` defaults to 1000 (0 for all), and a cap is reported on standard error. |
 | `vibe import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. A `.vibe` file is routed to `vibe import bundle`. |
 | `vibe export bundle [-o file.vibe] [--notebooks a,b] [--queries ...] [--skills ...] [--artifacts a,b] [--with-connections] [--with-local-connections a,b] [--encrypt] [--force]` | Write a `.vibe` bundle of the workspace's content (everything unless some are named). Takes no hub lock: it only reads files. See "Sharing without git". |
-| `vibe artifact list [--json] [--workspace DIR]` | The workspace's data artifacts: name, title, view kind (`a2ui` or `script`) and (for a broken one) the error, as Studio's Artifacts list shows them. Reads files only; there is no `vibe artifact run` or `write`. |
-| `vibe artifact view status\|allow\|deny\|revoke <name> [--hash H] [--json] [--workspace DIR]` | A `view: script` artifact's trust decision, as the Studio prompt and Settings > Workspace make it: `status` shows state, hash and source; `allow` shows the source and asks (or takes `--hash` from `status` with `--yes`) and is refused if the files changed since; `deny` holds until `revoke`. Kept in `views.json` in your config directory. |
+| `vibe artifact list [--json] [--workspace DIR]` | The workspace's data artifacts: name, title, view kind (`a2ui`, `script`, `html (static)` or `html (scripted)`) and (for a broken one) the error, as Studio's Artifacts list shows them. Reads files only; there is no `vibe artifact run` or `write`. |
+| `vibe artifact view status\|allow\|deny\|revoke <name> [--hash H] [--json] [--workspace DIR]` | A `view: script` artifact's or HTML page's trust decision, as the Studio prompt and Settings > Workspace > Pages make it: `status` shows state, hash and source (for a page also its kind, queries with their connections, declared capabilities and files); `allow` shows the source and asks (or takes `--hash` from `status` with `--yes`) and is refused if the files changed since; `deny` holds until `revoke`. Kept in `views.json` in your config directory. |
 | `vibe export notebook <id> [-o file.vnb]` / `vibe import notebook <file.vnb> [--on-conflict ...]` | One notebook, through the same checks as a bundle. |
 | `vibe import bundle <file.vibe> [--on-conflict rename\|overwrite\|skip] [--with-connections all\|a,b] [--dry-run]` | Import a bundle into the workspace. |
 | `vibe export <[conn.]table> \| --sql "<query>" [-o file]` | See `import-office.md`. |
@@ -358,10 +359,11 @@ queries/<id>.sql
 skills/<name>/SKILL.md
 artifacts/<name>/artifact.yaml
 artifacts/<name>/view.a2ui.json   (or artifacts/<name>/view.js for view: script)
+artifacts/<name>/html/<path>      (one entry per file, instead of a view file, for view: html)
 connections.yaml            (optional)
 ```
 
-A data artifact is two entries of kind `artifact` with the same `id` (its name): `artifact.yaml` and the view file its manifest names (`view.a2ui.json`, or `view.js` for `view: script`). They are one item in the preview, in the export counts and in Replace, and a bundle that holds only one of the two, both view files, or the wrong view file for the manifest's kind is refused. There is no `artifacts/<name>/view.html` entry, and a bundle never carries an allow: a script view arrives undecided and opens as source.
+A data artifact is two entries of kind `artifact` with the same `id` (its name): `artifact.yaml` and the view file its manifest names (`view.a2ui.json`, or `view.js` for `view: script`). They are one item in the preview, in the export counts and in Replace, and a bundle that holds only one of the two, both view files, or the wrong view file for the manifest's kind is refused. A page (`view: html`) is `artifact.yaml` plus one entry per file under `html/`, with no other view file; the file set must pass the same layout and template rules as the store (paths, extensions, caps, the closed template functions, the URL allow-list) while the bundle opens, so a bad page refuses the whole bundle before anything is written. There is no `artifacts/<name>/view.html` entry, and a bundle never carries an allow or a page's `.vibe-local` state: a script view or a page arrives undecided and opens as source.
 
 `manifest.json` has `kind: "vibe/bundle"`, `formatVersion: 2`, `createdAt`, `createdBy` (the app version), `workspaceName`, `warnings`, and `contents`: one `{path, kind, id, sha256, size}` per entry. The entries are the stores' own file bytes, so an export followed by an import into an empty workspace gives byte-identical files. `connections.yaml` is `version: 1` plus `connections:` and nothing else.
 
@@ -375,7 +377,7 @@ Studio: **Import .vibe…** in the workspace menu imports into the open workspac
 
 Import treats the file as hostile:
 
-- The set of entry names is closed: the closed list of entries above (`manifest.json`, `notebooks/<id>.vnb`, `queries/<id>.sql`, `skills/<name>/SKILL.md`, the two files of `artifacts/<name>/`, `connections.yaml`). Absolute paths, `..`, backslashes, drive letters, directories, symlinks, nested paths, encrypted zip entries and any unknown file refuse the whole bundle. Ids and skill names must pass the stores' own id rules.
+- The set of entry names is closed: the closed list of entries above (`manifest.json`, `notebooks/<id>.vnb`, `queries/<id>.sql`, `skills/<name>/SKILL.md`, the files of `artifacts/<name>/` (the manifest and a view file, or the manifest and its `html/` files), `connections.yaml`). Absolute paths, `..`, backslashes, drive letters, directories, symlinks, nested paths, encrypted zip entries and any unknown file refuse the whole bundle. Ids and skill names must pass the stores' own id rules.
 - Every entry's SHA-256 and size must match the manifest, and the manifest must list exactly the entries in the archive.
 - Caps: 10 MB per entry, 50 MB unpacked in all, 2,000 entries, 64 MB on disk. Declared sizes are checked before decompression and the real byte count is enforced while reading, so a zip bomb is refused. An encrypted bundle's scrypt work factor is capped at 18, the value Vibe itself encrypts with; a header asking for more is refused ("this bundle was made with settings Vibe won't use").
 - Each document is parsed by its own store's rules (`notebooks.Coerce`, `queries.Decode`, `skills.Decode`, and for an artifact `artifacts.Decode` plus `artifacts.ValidateView` over the pair) before anything is written; an artifact is written through its store with the same compare-and-write as the rest. A skill can never claim `source: built-in` (it is imported as an ordinary skill, with a warning) and cannot take a built-in's name; every skill that arrives in a bundle is saved with `source: import` and badged **Imported** in the Skills view.

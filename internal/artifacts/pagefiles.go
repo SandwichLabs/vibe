@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -68,35 +69,51 @@ func validPageSegment(s string) bool {
 // in html/; the extension from the closed list; nothing named like the host's
 // reserved folders. It returns the role.
 func checkPageFilePath(p string) (string, error) {
+	qp := asciiPath(p)
 	if len(p) > maxPagePathLen || p != path.Clean(p) || strings.HasPrefix(p, "/") {
-		return "", invalid("html/%s is not a plain relative path", truncateForError(p))
+		return "", invalid("html/%s is not a plain relative path", asciiPath(truncateForError(p)))
 	}
 	segs := strings.Split(p, "/")
 	for _, s := range segs {
 		if !validPageSegment(s) {
-			return "", invalid("html/%s: %q is not a usable name (letters, digits, . _ -; no dotfiles)", truncateForError(p), s)
+			return "", invalid("html/%s: %s is not a usable name (letters, digits, . _ -; no dotfiles)", asciiPath(truncateForError(p)), strconv.QuoteToASCII(s))
 		}
 	}
 	if segs[0] == reservedVibeDir || segs[0] == reservedVibeLibDir {
-		return "", invalid("html/%s: %s is reserved for the host", p, segs[0])
+		return "", invalid("html/%s: %s is reserved for the host", qp, segs[0])
 	}
 	if len(segs) > 1 && segs[0] != assetsDir {
-		return "", invalid("html/%s: only %s/ may hold folders", p, assetsDir)
+		return "", invalid("html/%s: only %s/ may hold folders", qp, assetsDir)
 	}
 	if len(segs) > 3 {
-		return "", invalid("html/%s is nested too deep (at most %s/<folder>/<file>)", p, assetsDir)
+		return "", invalid("html/%s is nested too deep (at most %s/<folder>/<file>)", qp, assetsDir)
 	}
 	role, ok := extRoles[path.Ext(p)]
 	if !ok {
-		return "", invalid("html/%s: files may end in .tmpl .js .mjs .css .svg .png .jpg .webp .woff2 or .json", p)
+		return "", invalid("html/%s: files may end in .tmpl .js .mjs .css .svg .png .jpg .webp .woff2 or .json", qp)
 	}
 	if ext := path.Ext(p); len(segs) == 1 && ext != ".tmpl" && ext != ".js" && ext != ".mjs" {
-		return "", invalid("html/%s: only .tmpl, .js and .mjs files go directly under html/; put it in %s/ (nothing else there could be reached)", p, assetsDir)
+		return "", invalid("html/%s: only .tmpl, .js and .mjs files go directly under html/; put it in %s/ (nothing else there could be reached)", qp, assetsDir)
 	}
 	if path.Ext(p) == ".tmpl" && len(segs) > 1 {
-		return "", invalid("html/%s: templates belong directly under html/", p)
+		return "", invalid("html/%s: templates belong directly under html/", qp)
 	}
 	return role, nil
+}
+
+// CheckPageFilePath applies H1's layout rules to one path relative to html/
+// (names, folders, extension, reserved folders). A bundle uses it to refuse an
+// entry before anything is written.
+func CheckPageFilePath(p string) error {
+	_, err := checkPageFilePath(p)
+	return err
+}
+
+// asciiPath is a file path as ASCII text with every control, bidi or non-ASCII
+// character escaped, so an error naming it can never carry one to a reader.
+func asciiPath(p string) string {
+	q := strconv.QuoteToASCII(p)
+	return q[1 : len(q)-1]
 }
 
 func truncateForError(s string) string {
@@ -125,7 +142,7 @@ func checkPageFiles(entry string, files []PageFile) (map[string]string, error) {
 			return nil, err
 		}
 		if folded[strings.ToLower(f.Path)] {
-			return nil, invalid("html/%s repeats a path (paths are compared without regard to case)", f.Path)
+			return nil, invalid("html/%s repeats a path (paths are compared without regard to case)", asciiPath(f.Path))
 		}
 		folded[strings.ToLower(f.Path)] = true
 		if err := checkPageFileSize(f); err != nil {
@@ -152,7 +169,7 @@ func checkPageFileSize(f PageFile) error {
 		limit = MaxTemplateBytes
 	}
 	if len(f.Data) > limit {
-		return invalid("html/%s is %d bytes, over the %d byte limit", f.Path, len(f.Data), limit)
+		return invalid("html/%s is %d bytes, over the %d byte limit", asciiPath(f.Path), len(f.Data), limit)
 	}
 	return nil
 }

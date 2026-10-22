@@ -744,3 +744,13 @@ func TestVetPage_ExpansionBudgetIsPerPage(t *testing.T) {
 		t.Fatal("VetPage is still running after 10 seconds")
 	}
 }
+
+func TestCheckPageFilePath_ErrorsCarryNoRawControlOrBidi(t *testing.T) {
+	for _, p := range []string{"a\x00b.tmpl", "x‮.tmpl", "assets/ .css", "bad\x1b[2J/x.css"} {
+		err := CheckPageFilePath(p)
+		require.Error(t, err)
+		for _, r := range err.Error() {
+			assert.True(t, r >= 0x20 && r < 0x7f, "non-ASCII or control %U in %q", r, err.Error())
+		}
+	}
+}

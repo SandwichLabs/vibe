@@ -15,8 +15,10 @@ import (
 
 // ArtifactViewState says where an artifact's custom view stands (none,
 // undecided, allowed, changed, denied) and returns the exact files its hash
-// covers, so what the person reads is what Allow approves.
-func (a *App) ArtifactViewState(name string) (*workspace.ArtifactViewStatus, error) {
+// covers, so what the person reads is what Allow approves. For an HTML page it
+// carries the allow prompt's text (Disclosure), built from the same read as the
+// hash, so the words and the hash on screen are never from two reads.
+func (a *App) ArtifactViewState(name string) (*ArtifactViewStatusView, error) {
 	ws, _, _, err := a.snapshot()
 	if err != nil {
 		return nil, err
@@ -25,7 +27,7 @@ func (a *App) ArtifactViewState(name string) (*workspace.ArtifactViewStatus, err
 	if err != nil {
 		return nil, viewError(err)
 	}
-	return &st, nil
+	return a.statusView(st), nil
 }
 
 // viewError is what crosses the bridge: one of the workspace's fixed errors,
@@ -44,17 +46,17 @@ func viewError(err error) error {
 
 // AllowArtifactView approves the view whose hash the person was shown. It is
 // refused when the files changed since.
-func (a *App) AllowArtifactView(name, hash string) (*workspace.ArtifactViewStatus, error) {
+func (a *App) AllowArtifactView(name, hash string) (*ArtifactViewStatusView, error) {
 	return a.decideArtifactView(name, func(ws workspace.Workspace) error { return ws.AllowArtifactView(name, hash) })
 }
 
 // DenyArtifactView records that the view must not run, until revoked.
-func (a *App) DenyArtifactView(name string) (*workspace.ArtifactViewStatus, error) {
+func (a *App) DenyArtifactView(name string) (*ArtifactViewStatusView, error) {
 	return a.decideArtifactView(name, func(ws workspace.Workspace) error { return ws.DenyArtifactView(name) })
 }
 
 // RevokeArtifactView forgets the decision; the next open asks again.
-func (a *App) RevokeArtifactView(name string) (*workspace.ArtifactViewStatus, error) {
+func (a *App) RevokeArtifactView(name string) (*ArtifactViewStatusView, error) {
 	return a.decideArtifactView(name, func(ws workspace.Workspace) error { return ws.RevokeArtifactView(name) })
 }
 
@@ -68,7 +70,7 @@ func (a *App) ListArtifactViewDecisions() ([]workspace.ArtifactViewDecision, err
 	return ws.ArtifactViewDecisions(), nil
 }
 
-func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error) (*workspace.ArtifactViewStatus, error) {
+func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error) (*ArtifactViewStatusView, error) {
 	ws, _, _, err := a.snapshot()
 	if err != nil {
 		return nil, err
@@ -85,7 +87,7 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 	if err != nil {
 		return nil, viewError(err)
 	}
-	return &st, nil
+	return a.statusView(st), nil
 }
 
 // OpenArtifactView issues the token a custom view's Worker is loaded by

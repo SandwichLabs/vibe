@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -22,7 +23,10 @@ type item struct {
 	Title string
 	Data  []byte
 	// View is the second file of a data artifact (Data is its manifest).
-	View     []byte
+	View []byte
+	// Files are the html/ files of an artifact that is a page (Data is its
+	// manifest, View is nil).
+	Files    []artifacts.PageFile
 	Warnings []string
 }
 
