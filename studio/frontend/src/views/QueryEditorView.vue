@@ -110,7 +110,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
             @keydown="handleKeydown"
             style="width: 100%; height: 180px; resize: none; background: var(--vibe-editor-bg); color: var(--vibe-editor-fg); border: 2px solid var(--vibe-border); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
             placeholder="Enter SQL query…"
-            spellcheck="false"
+            autocapitalize="off" autocorrect="off" spellcheck="false"
             data-testid="sql-input"
           ></textarea>
         </div>
@@ -168,7 +168,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
     <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false" role="dialog" aria-modal="true" aria-label="Save query">
       <div ref="saveModalEl" class="card card-pad" style="width: 100%; max-width: 384px;">
         <h3 class="card-title" style="margin-bottom: 16px;">Save query</h3>
-        <input v-model="saveTitle" placeholder="Query name" aria-label="Query name" class="field-input" style="margin-bottom: 16px;" @keyup.enter="saveQuery" />
+        <input v-model="saveTitle" placeholder="Query name" aria-label="Query name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="field-input" style="margin-bottom: 16px;" @keyup.enter="saveQuery" />
         <div class="row" style="gap: 12px; justify-content: flex-end;">
           <button @click="showSaveModal = false" class="btn btn-ghost">Cancel</button>
           <button @click="saveQuery" class="btn btn-primary">Save</button>

@@ -98,7 +98,7 @@ const {
           </div>
           <div>
             <label class="field-label">Table name</label>
-            <input data-testid="table-name" v-model="tableName" class="field-input" placeholder="my_table" />
+            <input data-testid="table-name" v-model="tableName" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="my_table" />
           </div>
           <div v-if="inspection" class="sh-meta" style="align-self: flex-end;">{{ inspection.row_count }} row(s)</div>
         </div>

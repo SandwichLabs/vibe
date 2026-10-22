@@ -94,6 +94,10 @@ func (h *pageHost) putBytesPerSec() int {
 // order, within the caps: anything else is a helper that is not behaving, and
 // the window ends.
 func (w *pageWindow) handlePut(m *pagehost.Message) {
+	if w.ctx.Err() != nil {
+		w.fail(m.ID, pagehost.CodeRefused) // the window is closing: nothing lands
+		return
+	}
 	w.upMu.Lock()
 	now := time.Now()
 	for id, old := range w.uploads {
@@ -158,7 +162,7 @@ func (w *pageWindow) handleCall(m *pagehost.Message) {
 		w.fail(m.ID, pagehost.CodeRefused)
 		return
 	}
-	if !ok {
+	if !ok || w.ctx.Err() != nil { // a closing window changes nothing
 		w.fail(m.ID, pagehost.CodeRefused)
 		return
 	}

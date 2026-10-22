@@ -94,7 +94,7 @@ const {
         <h3><ConnTypeTile :type="typeId" /> {{ typeLabel(typeId) }} <span class="label">Connection</span></h3>
         <div class="field">
           <label class="field-label" for="f-name">Name</label>
-          <input id="f-name" v-model="f.name" class="field-input" :readonly="!isNew" autocomplete="off" spellcheck="false" aria-describedby="f-name-h" data-testid="f-name" />
+          <input id="f-name" v-model="f.name" class="field-input" :readonly="!isNew" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="f-name-h" data-testid="f-name" />
           <div id="f-name-h" class="help">How you'll refer to it in SQL: <code>{{ f.name || 'prod_pg' }}<template v-if="spec?.capabilities.catalog">{{ exampleTail }}</template></code>. <template v-if="isNew">Lowercase letters, numbers and underscores. It can't be changed after you save.</template><template v-else>It can't be changed after saving.</template></div>
         </div>
 
@@ -102,7 +102,7 @@ const {
           <div class="field">
             <label class="field-label" :for="`f-${fd.name}`">{{ fd.label }}<span v-if="fd.required" aria-hidden="true"> *</span></label>
             <div style="display: flex; gap: 8px;">
-              <input :id="`f-${fd.name}`" :value="val(fd)" class="field-input" style="flex: 1;" :type="fd.kind === 'number' ? 'number' : 'text'" autocomplete="off" spellcheck="false" :aria-describedby="fd.help || fd.name === 'database' ? `f-${fd.name}-h` : undefined" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
+              <input :id="`f-${fd.name}`" :value="val(fd)" class="field-input" style="flex: 1;" :type="fd.kind === 'number' ? 'number' : 'text'" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :aria-describedby="fd.help || fd.name === 'database' ? `f-${fd.name}-h` : undefined" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
             </div>
             <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
             <div v-if="fd.name === 'scope' && handoff.wholeBucket.value" class="help">
@@ -151,7 +151,7 @@ const {
                 <option value="">{{ fd.default ? `Default (${fd.default})` : 'Default' }}</option>
                 <option v-for="c in fd.choices" :key="c" :value="c">{{ c }}</option>
               </select>
-              <input v-else :id="`f-${fd.name}`" class="field-input" :value="val(fd)" autocomplete="off" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
+              <input v-else :id="`f-${fd.name}`" class="field-input" :value="val(fd)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :data-testid="`f-${fd.name}`" @input="setVal(fd, ($event.target as HTMLInputElement).value)" />
               <div v-if="fd.help" class="help">{{ fd.help }}</div>
             </div>
           </div>
@@ -184,7 +184,7 @@ const {
         <template v-else-if="method === 'keychain'">
           <div v-for="c in readableCreds" :key="c.name" class="field">
             <label class="field-label" :for="`f-c-${c.name}`">{{ c.label }}<span v-if="c.required" aria-hidden="true"> *</span></label>
-            <input :id="`f-c-${c.name}`" class="field-input" autocomplete="off" spellcheck="false" :value="typed[KEY[c.name]]" :data-testid="`f-c-${c.name}`" @input="typed[KEY[c.name]] = ($event.target as HTMLInputElement).value" />
+            <input :id="`f-c-${c.name}`" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :value="typed[KEY[c.name]]" :data-testid="`f-c-${c.name}`" @input="typed[KEY[c.name]] = ($event.target as HTMLInputElement).value" />
             <div v-if="c.help" class="help">{{ c.help }}</div>
           </div>
           <CredentialField
@@ -205,7 +205,7 @@ const {
         <template v-else-if="method === 'env'">
           <div class="field">
             <label class="field-label" for="f-envprefix">Variable prefix</label>
-            <input id="f-envprefix" v-model="envPrefix" class="field-input" autocomplete="off" spellcheck="false" data-testid="f-envprefix" />
+            <input id="f-envprefix" v-model="envPrefix" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-testid="f-envprefix" />
           </div>
           <div v-for="v in envVars" :key="v.name" class="envvar" data-testid="envvar">
             <code>{{ v.name }}</code>

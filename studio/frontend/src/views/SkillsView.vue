@@ -112,7 +112,7 @@ function sourceBadgeClass(source: string) {
         />
         <div class="col" style="gap: 4px;">
           <label class="sh-label" style="margin: 0;">Name</label>
-          <input v-model="formName" :disabled="!!editingOriginalName" placeholder="e.g. revenue-rules" class="field-input" style="width: 100%;" data-testid="skill-name-input" />
+          <input v-model="formName" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :disabled="!!editingOriginalName" placeholder="e.g. revenue-rules" class="field-input" style="width: 100%;" data-testid="skill-name-input" />
         </div>
         <div class="col" style="gap: 4px; margin-top: var(--sh-space-3);">
           <label class="sh-label" style="margin: 0;">Description</label>
@@ -124,7 +124,7 @@ function sourceBadgeClass(source: string) {
         </div>
         <div class="col" style="gap: 4px; margin-top: var(--sh-space-3);">
           <label class="sh-label" style="margin: 0;">Bound table (optional)</label>
-          <input v-model="formTableName" placeholder="Only load while this table has rows" class="field-input" style="width: 100%;" data-testid="skill-table-input" />
+          <input v-model="formTableName" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Only load while this table has rows" class="field-input" style="width: 100%;" data-testid="skill-table-input" />
         </div>
         <p v-if="formNameError" style="font-size: var(--sh-fs-xs); margin-top: var(--sh-space-2); font-weight: 600; color: var(--sh-error);">{{ formNameError }}</p>
         <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-4);">

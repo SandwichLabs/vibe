@@ -74,7 +74,7 @@ const stateLine = computed(() => {
   <div ref="root" data-testid="sso-signin">
     <div class="field">
       <label class="field-label" for="f-sso-profile">AWS profile</label>
-      <input id="f-sso-profile" v-model="profile" class="field-input" autocomplete="off" spellcheck="false" aria-describedby="f-sso-h" :aria-invalid="!valid" data-testid="f-sso-profile" />
+      <input id="f-sso-profile" v-model="profile" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="f-sso-h" :aria-invalid="!valid" data-testid="f-sso-profile" />
       <div id="f-sso-h" class="help">The name of an IAM Identity Center (SSO) profile in <code>~/.aws/config</code>. Only the name is saved, on this computer. Nothing secret is stored: short-lived keys are made when Vibe connects.</div>
       <div v-if="!valid" role="alert" class="help err-text" data-testid="sso-profile-invalid">Use letters, numbers and <code>_ . + @ -</code>, starting with a letter or number.</div>
     </div>

@@ -95,12 +95,13 @@ function reset() { for (const n of paramNames.value) rt?.params.reset(n) }
 
     <input
       v-else-if="component.type === 'numberInput'" :id="`${uid}-0`" type="text" inputmode="decimal"
+      autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
       class="field-input a2ui-control__input" :value="shown(primary.name)" :aria-invalid="!!err(primary.name)"
       :aria-describedby="err(primary.name) ? `${uid}-e0` : undefined" @input="typed(primary.name, $event, true)"
     />
 
     <input
-      v-else :id="`${uid}-0`" type="text" class="field-input a2ui-control__input" :value="shown(primary.name)"
+      v-else :id="`${uid}-0`" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" class="field-input a2ui-control__input" :value="shown(primary.name)"
       :maxlength="primary.max_length || 1000" :aria-invalid="!!err(primary.name)"
       :aria-describedby="err(primary.name) ? `${uid}-e0` : undefined" @input="typed(primary.name, $event, true)"
     />

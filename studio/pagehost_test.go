@@ -462,6 +462,7 @@ func TestPageWindow_ClosingTheWorkspaceEndsEveryWindow(t *testing.T) {
 
 func TestPageWindow_TheHelperSayingClosedOrGoneOrDyingEndsIt(t *testing.T) {
 	app, _, ev := scriptedWindow(t)
+	app.pages.quitGrace = 10 * time.Millisecond
 	seen := 0
 	for _, c := range []struct {
 		do   func(*fakeHelper)
@@ -491,7 +492,7 @@ func TestPageWindow_TheHelperSayingClosedOrGoneOrDyingEndsIt(t *testing.T) {
 		require.Eventually(t, func() bool { return len(ev.states()) > seen }, 5*time.Second, 10*time.Millisecond)
 		seen = len(ev.states())
 		assert.Equal(t, c.want, ev.states()[seen-1])
-		assert.True(t, fh.killed.Load(), "the tree is killed")
+		assert.Eventually(t, fh.killed.Load, 2*time.Second, 5*time.Millisecond, "the tree is killed")
 		assert.Zero(t, pageCount(app.pages))
 	}
 }

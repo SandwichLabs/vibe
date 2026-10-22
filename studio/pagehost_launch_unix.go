@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,11 +24,16 @@ type procConn struct {
 	cleanup    func()
 	done       chan struct{}
 	killOnce   sync.Once
+	exitCode   int
 }
 
 func (p *procConn) Read(b []byte) (int, error)  { return p.fromHelper.Read(b) }
 func (p *procConn) Write(b []byte) (int, error) { return p.toHelper.Write(b) }
 func (p *procConn) Done() <-chan struct{}       { return p.done }
+
+// ExitCode is how the helper ended: its exit status, or -1 when a signal ended
+// it (the tree kill, a crash). It is read after Done closes.
+func (p *procConn) ExitCode() int { return p.exitCode }
 
 // Kill ends the helper's whole process group: the helper, and on Linux the
 // bubblewrap parents and the web process under them. P1 found that killing the
@@ -85,6 +91,8 @@ func startHelper(logger *slog.Logger, build commandBuilder) (helperConn, error) 
 		return nil, err
 	}
 	cmd.Stderr = &debugLog{logger: logger}
+	// The helper's cwd is not Studio's (a workspace folder, when started from one).
+	cmd.Dir = "/"
 	if err := cmd.Start(); err != nil {
 		logger.Debug("page window: the helper did not start", "error", err)
 		closeAll()
@@ -98,6 +106,12 @@ func startHelper(logger *slog.Logger, build commandBuilder) (helperConn, error) 
 	p := &procConn{toHelper: toW, fromHelper: fromR, cmd: cmd, cleanup: cleanup, done: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
+		p.exitCode = cmd.ProcessState.ExitCode()
+		if parent, ok := studioRulesParent(); ok && runtime.GOOS == "darwin" {
+			// Studio ends a helper with SIGKILL, so its own cleanup never ran: remove its
+			// rule-list folder here. The path is Studio's directory and the pid it started.
+			removeRulesDir(parent, cmd.Process.Pid)
+		}
 		cleanup()
 		close(p.done)
 	}()

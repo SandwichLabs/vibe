@@ -278,12 +278,8 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to write %s: %w", out, err)
 	}
 	w := cmd.OutOrStdout()
-	counts := map[bundle.ItemKind]int{}
-	for _, e := range res.Manifest.Contents {
-		counts[e.Kind]++
-	}
-	// A data artifact is two entries.
-	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills, %d data artifacts to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], counts[bundle.KindArtifact]/2, out)
+	counts := exportCounts(res.Manifest.Contents)
+	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills, %d data artifacts to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], counts[bundle.KindArtifact], out)
 	if counts[bundle.KindConnections] > 0 {
 		fmt.Fprint(w, " (with connection definitions)")
 	}
@@ -401,4 +397,20 @@ func printImportResult(w io.Writer, res bundle.Result) {
 	if len(res.Outcomes) == 0 {
 		fmt.Fprintln(w, "Nothing to import.")
 	}
+}
+
+// exportCounts counts what an export holds by item, not by file: a data artifact
+// is one item however many files it has (a manifest and a view, or a whole HTML
+// page).
+func exportCounts(contents []bundle.Entry) map[bundle.ItemKind]int {
+	seen := map[string]bool{}
+	counts := map[bundle.ItemKind]int{}
+	for _, e := range contents {
+		key := string(e.Kind) + "/" + e.ID
+		if !seen[key] {
+			counts[e.Kind]++
+		}
+		seen[key] = true
+	}
+	return counts
 }

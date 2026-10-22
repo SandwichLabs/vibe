@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SandwichLabs/vibe/internal/bundle"
 )
 
 const cliArtifactManifest = "version: 1\ntitle: Sales by region\nqueries:\n  - name: rows\n    sql: SELECT secret_column FROM secret_table\n"
@@ -77,4 +79,29 @@ func TestArtifactList_ShowsAnHTMLPageWithItsHost(t *testing.T) {
 	out, stderr, err := runVibe("artifact", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Regexp(t, `page\s+\S.*html \(scripted\)`, out)
+}
+
+func TestBundleExport_CountsArtifactsNotFiles(t *testing.T) {
+	ws := newWS(t)
+	seedArtifacts(t, ws)
+	dir := filepath.Join(ws, "artifacts", "page")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(cliArtifactManifest+"view: html\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte("<p>hi</p>"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "app.js"), []byte("1"), 0o644))
+	out := filepath.Join(t.TempDir(), "two.vibe")
+	stdout, stderr, err := runVibe("export", "bundle", "-o", out, "--artifacts", "sales,page", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, stdout, "2 data artifacts", "a page with three files is one artifact")
+}
+
+func TestExportCounts_ArtifactIsOneItemHoweverManyFiles(t *testing.T) {
+	counts := exportCounts([]bundle.Entry{
+		{Kind: bundle.KindArtifact, ID: "a"}, {Kind: bundle.KindArtifact, ID: "a"}, {Kind: bundle.KindArtifact, ID: "a"},
+		{Kind: bundle.KindArtifact, ID: "b"}, {Kind: bundle.KindArtifact, ID: "b"},
+		{Kind: bundle.KindNotebook, ID: "n"}, {Kind: bundle.KindConnections},
+	})
+	assert.Equal(t, 2, counts[bundle.KindArtifact])
+	assert.Equal(t, 1, counts[bundle.KindNotebook])
+	assert.Equal(t, 1, counts[bundle.KindConnections])
 }

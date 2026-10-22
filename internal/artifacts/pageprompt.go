@@ -6,7 +6,7 @@ package artifacts
 // of the configured model provider.
 
 // NetworkDisclosure is shown on macOS for a scripted page (H4, #189).
-const NetworkDisclosure = "On macOS a scripted page can open a network connection to an address it chooses, including a computer on your network or this one, though it cannot read a reply. " +
+const NetworkDisclosure = "On macOS a scripted page can use a link to open a network connection to an address it chooses, including a computer on your network or this one, though it cannot read a reply. " +
 	"Every other load, lookup and request is blocked, but this one gap exists until the page window can be isolated further."
 
 // CredentialLine is shown for every page.

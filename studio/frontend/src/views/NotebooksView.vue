@@ -156,7 +156,7 @@ onMounted(async () => {
     <div v-if="showNewModal" class="modal-overlay" @click.self="showNewModal = false" role="dialog" aria-modal="true" aria-label="New notebook">
       <div class="card card-pad" style="width: 100%; max-width: 384px;">
         <h3 class="card-title" style="margin: 0 0 var(--sh-space-4);">New notebook</h3>
-        <input v-model="newTitle" placeholder="Notebook title" class="field-input" :class="{ 'field-input-error': titleError }" @keyup.enter="createNotebook" @input="titleError = false" autofocus />
+        <input v-model="newTitle" placeholder="Notebook title" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="field-input" :class="{ 'field-input-error': titleError }" @keyup.enter="createNotebook" @input="titleError = false" autofocus />
         <p v-if="titleError" style="font-size: var(--sh-fs-xs); margin-top: var(--sh-space-1); font-weight: 600; color: var(--sh-error);">Title is required</p>
         <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-4);">
           <button @click="showNewModal = false" class="btn btn-ghost">Cancel</button>

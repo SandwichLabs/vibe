@@ -112,7 +112,7 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div class="field">
             <label for="nw-name">Name</label>
-            <input id="nw-name" ref="nameEl" v-model="name" class="field-input" :disabled="busy" aria-describedby="nw-name-h" autocomplete="off" data-testid="nw-name" />
+            <input id="nw-name" ref="nameEl" v-model="name" class="field-input" :disabled="busy" aria-describedby="nw-name-h" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-testid="nw-name" />
             <div id="nw-name-h" class="help">Shown in the window title and the workspace menu.</div>
           </div>
           <div class="field">
@@ -128,6 +128,7 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
                 :aria-invalid="dirTaken || !!error ? 'true' : undefined"
                 :aria-describedby="dirTaken || error ? 'nw-err' : 'nw-loc-h'"
                 autocomplete="off"
+                autocapitalize="off" autocorrect="off" spellcheck="false"
                 data-testid="nw-location"
               />
               <button class="btn" type="button" style="flex: none;" :disabled="busy" @click="choose">Choose…</button>

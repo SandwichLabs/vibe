@@ -53,12 +53,12 @@ useModalKeys(open, () => close(), root)
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
               <div class="field">
                 <label for="bi-name">Workspace name</label>
-                <input id="bi-name" v-model="wsName" class="field-input" autocomplete="off" :disabled="busy" data-testid="bi-ws-name" />
+                <input id="bi-name" v-model="wsName" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :disabled="busy" data-testid="bi-ws-name" />
               </div>
               <div class="field">
                 <label for="bi-loc">Where to put it</label>
                 <div class="row" style="gap: 8px;">
-                  <input id="bi-loc" v-model="parentDir" class="field-input" autocomplete="off" :disabled="busy" data-testid="bi-ws-location" />
+                  <input id="bi-loc" v-model="parentDir" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" :disabled="busy" data-testid="bi-ws-location" />
                   <button class="btn" type="button" style="flex: none;" :disabled="busy" @click="choose">Choose…</button>
                 </div>
               </div>

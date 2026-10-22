@@ -48,7 +48,11 @@ export function useArtifactViewTrust(name: () => string) {
   function adopt(s: ArtifactViewStatus) {
     const cur = status.value
     const armed = !!cur && !!cur.hash && (cur.state === 'undecided' || cur.state === 'changed')
-    if (armed && s.hash !== cur!.hash) {
+    // Only a read that would be asked about anew waits: bytes that are allowed again
+    // (a file edited and then restored) or denied leave nothing to approve, so they
+    // are shown at once and the "changed" notice clears.
+    const asksAgain = s.state === 'undecided' || s.state === 'changed'
+    if (armed && asksAgain && s.hash !== cur!.hash) {
       pending = s
       changedWhileReading.value = true
       return

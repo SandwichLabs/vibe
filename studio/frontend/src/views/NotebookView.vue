@@ -41,6 +41,10 @@ defineExpose({
         <input
           v-model="title"
           class="field-input"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
           data-testid="notebook-title"
           style="font-weight: 700; font-size: var(--sh-fs-lg); border: none; background: transparent; min-width: 240px;"
           placeholder="Untitled notebook"

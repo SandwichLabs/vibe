@@ -53,4 +53,15 @@ describe('useArtifactViewTrust', () => {
     expect(api().status.value?.state).toBe('changed')
     expect(api().changedWhileReading.value).toBe(false)
   })
+
+  it('an edited file that is restored clears "changed" on the next read', async () => {
+    const { api } = setup([st('h1', 'allowed'), st('h2', 'changed'), st('h1', 'allowed')])
+    await flushPromises()
+    await api().reload()
+    expect(api().status.value?.state).toBe('changed')
+    await api().reload() // the file is back to the bytes that were allowed
+    expect(api().status.value?.state).toBe('allowed')
+    expect(api().status.value?.hash).toBe('h1')
+    expect(api().changedWhileReading.value).toBe(false)
+  })
 })
