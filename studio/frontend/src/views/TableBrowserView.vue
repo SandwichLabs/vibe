@@ -121,6 +121,10 @@ const vFocus = {
             <input
               v-model="cond.value"
               class="field-input fbf-value flex-1"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
               :disabled="cond.op === 'is_null' || cond.op === 'is_not_null'"
               placeholder="value"
             />
@@ -197,6 +201,10 @@ const vFocus = {
                         v-else
                         v-model="editValue"
                         class="cell-input"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        autocorrect="off"
+                        spellcheck="false"
                         :disabled="savingCell"
                         @keydown.enter.prevent="saveEdit"
                         @keydown.esc.prevent="cancelEdit"
@@ -257,10 +265,10 @@ const vFocus = {
     <div v-if="showNewTableModal" class="modal-overlay" @click.self="showNewTableModal = false" role="dialog" aria-modal="true" aria-label="Create table">
       <div ref="newTableEl" class="card card-pad w-full max-w-lg">
         <h3 class="card-title mb-4">Create table</h3>
-        <input v-model="newTableName" placeholder="Table name" class="field-input mb-4" />
+        <input v-model="newTableName" placeholder="Table name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="field-input mb-4" />
         <div class="space-y-2 mb-4">
           <div v-for="(col, i) in newTableCols" :key="i" class="flex gap-2">
-            <input v-model="col.name" placeholder="Column name" class="field-input flex-1" />
+            <input v-model="col.name" placeholder="Column name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="field-input flex-1" />
             <select v-model="col.type" class="field-input w-28">
               <option>TEXT</option>
               <option>INTEGER</option>
@@ -285,7 +293,7 @@ const vFocus = {
         <div class="space-y-3 mb-4">
           <div v-for="col in tableInfo.columns" :key="col.name">
             <label class="field-label">{{ col.name }} <span class="text-[var(--sh-graphite)]">({{ col.type }})</span></label>
-            <input v-model="newRowValues[col.name]" class="field-input" />
+            <input v-model="newRowValues[col.name]" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
           </div>
         </div>
         <div class="flex gap-3 justify-end">

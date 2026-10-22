@@ -24,7 +24,7 @@ func (w *pageWindow) serve() {
 	for {
 		line, err := lr.Next()
 		if err != nil {
-			w.finish(pageStateStopped)
+			w.helperGone()
 			return
 		}
 		// Upload chunks are paced by their acknowledgements, so they have their own,
@@ -69,7 +69,7 @@ func (w *pageWindow) dispatch(m *pagehost.Message) {
 	case pagehost.TypeGone:
 		w.finish(pageStateStopped)
 	case pagehost.TypeClosed:
-		w.finish(pageStateClosed)
+		w.end(pageStateClosed, true)
 	}
 }
 

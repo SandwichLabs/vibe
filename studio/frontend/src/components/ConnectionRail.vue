@@ -70,7 +70,7 @@ defineExpose({ rows, toggleDrawer, refreshConn, expanded })
       <div class="rail-filter">
         <label class="sr" for="rail-filter-input">Filter tables and columns</label>
         <Icon name="search" :size="14" />
-        <input id="rail-filter-input" ref="filterEl" v-model="filter" type="text" placeholder="Filter tables and columns" autocomplete="off" data-testid="rail-filter" />
+        <input id="rail-filter-input" ref="filterEl" v-model="filter" type="text" placeholder="Filter tables and columns" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-testid="rail-filter" />
       </div>
 
       <div ref="treeEl" class="tree" role="tree" aria-label="Connections" data-testid="rail-tree">

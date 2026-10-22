@@ -104,7 +104,7 @@ const {
 
         <div v-if="formInfo?.hasEndpoint" class="field">
           <label for="llm-endpoint">Endpoint</label>
-          <input id="llm-endpoint" v-model="form.endpoint" class="field-input" type="url" spellcheck="false" autocomplete="off"
+          <input id="llm-endpoint" v-model="form.endpoint" class="field-input" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
             :disabled="!!env.endpoint" data-testid="llm-endpoint" @change="maybeLoadModels" />
           <div v-if="env.endpoint" class="help">Set by <code>{{ env.endpoint }}</code>.</div>
           <div v-else-if="form.provider === 'ollama'" class="help">For Ollama Cloud use <code>https://ollama.com/v1</code> and save an API key below.</div>
@@ -113,7 +113,7 @@ const {
         <template v-if="formInfo?.hasAccount">
           <div class="field">
             <label for="llm-account">Account ID</label>
-            <input id="llm-account" v-model="form.accountId" class="field-input" spellcheck="false" autocomplete="off"
+            <input id="llm-account" v-model="form.accountId" class="field-input" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
               :placeholder="view.accountIdFromEnv ? 'Using CLOUDFLARE_ACCOUNT_ID' : '32-character account ID'"
               :disabled="!!env.accountId" :aria-invalid="!!accountError" aria-describedby="llm-account-h" data-testid="llm-account" />
             <div id="llm-account-h" class="help">
@@ -124,7 +124,7 @@ const {
           </div>
           <div class="field">
             <label for="llm-gateway">Gateway <span class="sh-micro">(optional)</span></label>
-            <input id="llm-gateway" v-model="form.gateway" class="field-input" spellcheck="false" autocomplete="off" placeholder="default"
+            <input id="llm-gateway" v-model="form.gateway" class="field-input" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="default"
               :disabled="!!env.gateway" :aria-invalid="!!gatewayError" data-testid="llm-gateway" />
             <div class="help">
               <template v-if="env.gateway">Set by <code>{{ env.gateway }}</code>.</template>
@@ -141,7 +141,7 @@ const {
               <option value="" disabled>Pick a model</option>
               <option v-for="m in ollamaOptions" :key="m" :value="m">{{ m }}</option>
             </select>
-            <input v-else id="llm-model" v-model="form.model" class="field-input" style="flex: 1;" spellcheck="false" autocomplete="off"
+            <input v-else id="llm-model" v-model="form.model" class="field-input" style="flex: 1;" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
               list="llm-model-list" :placeholder="modelPlaceholder" :disabled="!!env.model" data-testid="llm-model" />
             <button v-if="listsModels" class="btn btn-sm" type="button" :disabled="models.loading || busy" data-testid="llm-load-models" @click="loadModels">
               {{ models.loading ? 'Loading' : models.loaded ? 'Refresh' : 'Load models' }}

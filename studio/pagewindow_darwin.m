@@ -45,20 +45,35 @@
 #define EXIT_NO_PROXY_PORT 6
 
 static NSString *gRulesDir = nil;
+
+// Studio hands the helper the folder to keep the rule list in (its own temporary
+// directory), so it can remove the folder after it reaps the helper; the helper's
+// environment holds nothing else. Without it the helper uses its own temporary directory.
+static NSString *rulesParent(void) {
+  const char *p = getenv("VIBE_RULES_PARENT");
+  if (p && p[0] == '/') return @(p);
+  return NSTemporaryDirectory();
+}
 static id gActivity = nil; // keeps the helper out of App Nap while the window lives
 
-// The throwaway rule-list store lives in the temp directory; remove it when the process exits.
+// The throwaway rule-list store lives in the temp directory; remove it when the process
+// exits. Studio kills the helper without letting this run, so Studio also removes the
+// folder after it reaps the helper, and a helper sweeps stale ones at start (Go side,
+// pagehost_rules.go).
 static void removeRulesDir(void) {
   if (gRulesDir) [[NSFileManager defaultManager] removeItemAtPath:gRulesDir error:nil];
 }
 
-// The proxy the data store points at must refuse every connection at once, which is what
-// P1 measured (port 9 with nothing listening: an immediate reset). Instead of trusting a
+// The proxy the data store points at must be one nothing answers. Instead of trusting a
 // fixed port (port 9 could be anyone's), bind a loopback socket of our own and never
-// listen on it: a bound, non-listening port resets every connect, and nobody else can take
-// it while we hold it. Never listen(): a listener that never accepts makes connects hang
-// instead, a timeout path P1 never measured, which could fail over to a direct connection.
-// The socket is close-on-exec and lives as long as the helper.
+// listen on it: nobody else can take the port while we hold it. P1 measured an immediate
+// reset, but the owner's run on macOS 26.6.2 measured otherwise: a connect to a bound,
+// non-listening port hangs about 7.8 s and then fails with ETIMEDOUT. A host-name load
+// therefore hangs until it times out instead of failing at once. It does not fail over to
+// a direct connection (125 s holds saw no lookup and no connection), which
+// nw_proxy_config_set_failover_allowed(false) is there to guarantee. Never listen(): a
+// listener that never accepts makes connects hang the same way and gives a stranger a
+// port to talk to. The socket is close-on-exec and lives as long as the helper.
 static int deadProxyPort(void) {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) return 0;
@@ -87,6 +102,23 @@ static NSString *const kBlockRules =
 @implementation VibeWebView
 - (void)willOpenMenu:(NSMenu *)menu withEvent:(NSEvent *)event {
   [menu removeAllItems];
+}
+// Nothing can be dropped on the page: a dropped file would hand it the file's name,
+// size, type and modified time. The view takes no drag types, and refuses a drag
+// that arrives anyway.
+- (void)registerForDraggedTypes:(NSArray<NSPasteboardType> *)types {
+}
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+  return NSDragOperationNone;
+}
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
+  return NSDragOperationNone;
+}
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)sender {
+  return NO;
+}
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+  return NO;
 }
 @end
 
@@ -212,14 +244,16 @@ static VibeHost *gHost = nil;
 
 @end
 
-// The window's menu: only Close (Cmd-W). The app is an accessory, so no menu bar
-// shows, but the key equivalent still reaches the window.
+// The window's menu: Close (Cmd-W) and Quit (Cmd-Q), which are the same thing: the
+// page window closes, Studio is told it was closed, and Studio is not touched. The app
+// is an accessory, so no menu bar shows, but the key equivalents still reach the window.
 static void installCloseMenu(void) {
   NSMenu *bar = [NSMenu new];
   NSMenuItem *top = [NSMenuItem new];
   [bar addItem:top];
   NSMenu *m = [[NSMenu alloc] initWithTitle:@"Window"];
   [m addItem:[[NSMenuItem alloc] initWithTitle:@"Close" action:@selector(performClose:) keyEquivalent:@"w"]];
+  [m addItem:[[NSMenuItem alloc] initWithTitle:@"Quit" action:@selector(performClose:) keyEquivalent:@"q"]];
   top.submenu = m;
   [NSApp setMainMenu:bar];
 }
@@ -265,6 +299,7 @@ static NSWindow *makeWindow(VibeHost *host, NSString *title, int width, int heig
   w.title = title;
   w.delegate = host;
   w.releasedWhenClosed = NO;
+  [w unregisterDraggedTypes];
   return w;
 }
 
@@ -324,7 +359,7 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
     // The rule list is compiled into a throwaway store, added before the first
     // load, and the first load waits for it. A list that does not compile is no
     // page window: the helper exits.
-    gRulesDir = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"vibe-rules-%d", getpid()]];
+    gRulesDir = [rulesParent() stringByAppendingPathComponent:[NSString stringWithFormat:@"vibe-rules-%d", getpid()]];
     atexit(removeRulesDir);
     NSURL *dir = [NSURL fileURLWithPath:gRulesDir];
     WKContentRuleListStore *store = [WKContentRuleListStore storeWithURL:dir];

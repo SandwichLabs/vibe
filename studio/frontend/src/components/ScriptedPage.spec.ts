@@ -101,6 +101,17 @@ describe('ScriptedPage', () => {
     expect(app.OpenArtifactPageWindow).toHaveBeenCalledTimes(2)
   })
 
+  it('says a setup failure is a setup failure, not a hang, and offers Reopen', async () => {
+    const w = await mountPage()
+    await w.get('[data-testid="scripted-page-open"]').trigger('click')
+    await flushPromises()
+    handlers['pagewindow:state']({ name: 'pg', state: 'setup', hash: 'h1' })
+    await flushPromises()
+    expect(w.get('[data-testid="scripted-page-setup"]').text()).toBe('This page window could not be set up on this Mac.')
+    expect(w.find('[data-testid="scripted-page-stopped"]').exists()).toBe(false)
+    expect(w.find('[data-testid="scripted-page-reopen"]').exists()).toBe(true)
+  })
+
   it('says "This page changed" and offers Reopen, which asks Go to check again', async () => {
     const w = await mountPage()
     await w.get('[data-testid="scripted-page-open"]').trigger('click')

@@ -30,6 +30,17 @@ const (
 	helperBadSetup = 4
 )
 
+// Exit codes the macOS helper uses when it cannot make its own layers
+// (pagewindow_darwin.m): the rule list does not compile, or the proxy socket
+// cannot be bound. Studio shows these as a setup failure, not as a hang.
+const (
+	helperRulesFailed = 5
+	helperNoProxyPort = 6
+)
+
+// isSetupFailure says a helper's exit code means it could not set itself up.
+func isSetupFailure(code int) bool { return code == helperRulesFailed || code == helperNoProxyPort }
+
 // docWait is how long a navigation waits for Studio to render its document.
 const docWait = 35 * time.Second
 
@@ -101,6 +112,7 @@ func runPageHelper() int {
 	if !nativeAvailable || helperPreflight() != nil {
 		return helperRefused
 	}
+	sweepStaleRules()
 	h := newPageHelper(in, out)
 	if err := h.receiveSetup(); err != nil {
 		return helperBadSetup

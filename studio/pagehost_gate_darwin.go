@@ -10,7 +10,7 @@ package main
 // proxy (pagewindow_darwin.m). One leak is accepted and disclosed: a link to an
 // IP address that page script clicks opens an empty TCP connection (#189).
 //
-// What this file does is the launch: a scrubbed (empty) environment, only the two
+// What this file does is the launch: a scrubbed environment (one variable, the rule-list folder's parent), only the two
 // pipes, its own process group, and a refusal below macOS 14, where the proxy
 // setting does not exist.
 
@@ -27,7 +27,7 @@ import (
 // errPageNeedsNewerMac is why a Mac below 14 gets no page window.
 var errPageNeedsNewerMac = errors.New("page windows need macOS 14 or later")
 
-// gatedCommand builds the helper's command line. The environment is empty: the
+// gatedCommand builds the helper's command line. The environment is that one variable: the
 // P1 run measured that WKWebView needs none of it.
 func gatedCommand(exe string, in, out *os.File, _ func(string) string) (*exec.Cmd, func(), error) {
 	if err := pageHostPreflight(); err != nil {
@@ -40,7 +40,12 @@ func gatedCommand(exe string, in, out *os.File, _ func(string) string) (*exec.Cm
 		return nil, nil, errPageNeedsRestart
 	}
 	cmd := exec.Command(resolved, "--view-host")
+	// The one variable: where to keep the rule list, so Studio can remove it after
+	// the helper is reaped (pagehost_rules.go). Nothing of the person's environment.
 	cmd.Env = []string{}
+	if parent, ok := studioRulesParent(); ok {
+		cmd.Env = append(cmd.Env, rulesParentEnv+"="+parent)
+	}
 	cmd.ExtraFiles = []*os.File{in, out}
 	// No Pdeathsig on macOS: the helper exits when its pipe closes. A process
 	// group takes the helper; the WebKit XPC services are launchd's children and

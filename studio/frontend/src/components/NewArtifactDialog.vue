@@ -45,7 +45,7 @@ async function submit() {
     <form ref="root" class="card card-pad" style="width: 100%; max-width: 420px;" data-testid="new-artifact-dialog" @submit.prevent="submit">
       <h3 class="card-title" style="margin: 0 0 var(--sh-space-3);">New artifact</h3>
       <label class="sh-label" for="new-artifact-name" style="margin: 0;">Name</label>
-      <input id="new-artifact-name" v-model="name" class="field-input" style="width: 100%;" placeholder="e.g. weekly-sales" autocomplete="off" spellcheck="false" data-testid="new-artifact-name" />
+      <input id="new-artifact-name" v-model="name" class="field-input" style="width: 100%;" placeholder="e.g. weekly-sales" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-testid="new-artifact-name" />
       <p class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin: var(--sh-space-2) 0 0;">
         Creates <code>artifacts/{{ name.trim() || '&lt;name&gt;' }}/</code> with a small working example to edit.
       </p>

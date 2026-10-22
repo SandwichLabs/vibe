@@ -7,6 +7,7 @@
  *   opening      asked for, waiting for the page to load
  *   open         the page loaded
  *   stopped      "This page stopped responding" (a missed heartbeat, a crash)
+ *   setup        "This page window could not be set up on this Mac." (the helper could not make its network gate)
  *   changed      "This page changed" (a file or the decision changed; ask again)
  *   closed       the person closed it
  * Reopen asks again, and Go checks the page is still allowed at the hash it was
@@ -25,7 +26,7 @@ export function onMac(): boolean {
   return typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || '')
 }
 
-export type PageWindowState = 'unavailable' | 'idle' | 'opening' | 'open' | 'stopped' | 'changed' | 'closed'
+export type PageWindowState = 'unavailable' | 'idle' | 'opening' | 'open' | 'stopped' | 'setup' | 'changed' | 'closed'
 
 /** The --vibe-* roles of the window the person is looking at, from which Go builds the page's host stylesheet. */
 function themeRoles(root: HTMLElement = document.documentElement): Record<string, string> {
@@ -74,7 +75,7 @@ export function usePageWindow(name: () => string, detail: () => ArtifactDetail, 
       if (hash && p.hash && p.hash !== hash) return // an older window's end
       // A reopen ends the old window first; its "closed" is not the new window's.
       if (state.value === 'opening' && p.state === 'closed') return
-      if (p.state === 'open' || p.state === 'stopped' || p.state === 'changed' || p.state === 'closed') state.value = p.state
+      if (p.state === 'open' || p.state === 'stopped' || p.state === 'setup' || p.state === 'changed' || p.state === 'closed') state.value = p.state
     }))
   })
   // The window belongs to the artifact on screen, not to this component: it is

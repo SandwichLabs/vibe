@@ -38,7 +38,7 @@ func (a *App) OpenArtifactPageWindow(name, query string, theme map[string]string
 
 // ClosePageWindow closes the named artifact's page window, if one is open.
 func (a *App) ClosePageWindow(name string) {
-	a.pages.closeArtifact(name, pageStateClosed)
+	a.pages.closeWindowByPerson(name)
 }
 
 // SetPageAsk turns a scripted page's `ask` capability on or off for this person,

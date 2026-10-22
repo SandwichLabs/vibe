@@ -122,7 +122,7 @@ onUnmounted(() => unsub?.())
       <div class="card card-pad col" style="gap: var(--sh-space-4);">
         <div>
           <label class="field-label" for="ws-name">Name</label>
-          <input id="ws-name" v-model="name" class="field-input" data-testid="ws-name-input" />
+          <input id="ws-name" v-model="name" class="field-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-testid="ws-name-input" />
         </div>
         <div>
           <label class="field-label" for="ws-folder">Folder</label>

@@ -308,6 +308,10 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
   g_signal_connect(g_view, "key-press-event", G_CALLBACK(on_key), NULL);
   g_signal_connect(g_view, "key-release-event", G_CALLBACK(on_key_up), NULL);
   g_signal_connect(g_view, "touch-event", G_CALLBACK(on_touch), NULL);
+  /* Nothing can be dropped on the page: a dropped file would hand it the file's name,
+   * size, type and modified time (found in the macOS QA). With no drag destination the
+   * widget accepts no drag at all. */
+  gtk_drag_dest_unset(GTK_WIDGET(g_view));
 
   /* The native title is fixed, set once. Nothing listens to the web view's own
    * title, so the document's title never reaches the window. */

@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"os"
+	"runtime"
 	"strconv"
 	"syscall"
 
@@ -36,4 +37,13 @@ func claimHelperPipes() (in, out *os.File, err error) {
 		return nil, nil, errors.New("the helper was not given its pipes")
 	}
 	return in, out, nil
+}
+
+// sweepStaleRules removes the rule-list folders earlier helpers left behind (macOS
+// only: Studio's kill skips their own cleanup). Only folders of the helper's own
+// naming pattern, in its own temporary directory, whose process is gone.
+func sweepStaleRules() {
+	if parent, ok := rulesParentFor(os.Getenv); ok && runtime.GOOS == "darwin" {
+		sweepStaleRulesDirs(parent, os.Getpid(), pidAlive)
+	}
 }

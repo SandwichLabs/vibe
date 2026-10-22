@@ -100,7 +100,7 @@ An artifact can be an HTML page, written by a teammate (it arrives with `git pul
 
 - **What kind it is.** A page with no script shows inside Studio. A page with script opens in its own window, which cannot reach your files, your credentials or your other pages.
 - **The queries it can run**, and the connection each one runs on. For a page with script that is every query of the artifact, since a script can run any of them.
-- **What it asks to be allowed to do** (scripted pages): keep small notes on this computer, offer you a file through a save dialog, or send text to your model provider (the prompt names the provider; the text may include query results). On macOS the prompt also says that a scripted page can open a network connection to an address it chooses, though it cannot read a reply.
+- **What it asks to be allowed to do** (scripted pages): keep small notes on this computer, offer you a file through a save dialog, or send text to your model provider (the prompt names the provider; the text may include query results). On macOS the prompt also says that a scripted page can use a link to open a network connection to an address it chooses, though it cannot read a reply.
 - Every file, to read.
 
 **Studio never asks you for a password, key or token inside a page.** A page that asks for one is trying to steal it: close it and deny it. Edit the page, or let an agent edit it, and Studio asks again. Change your mind in **Settings > Workspace > Pages**, or with `vibe artifact view revoke NAME`.

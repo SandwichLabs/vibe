@@ -41,6 +41,12 @@ const (
 	// pageSetupTimeout is how long a new helper may take to read its setup (the
 	// page's files and libraries) before it is killed.
 	pageSetupTimeout = 10 * time.Second
+	// pageQuitGrace is how long a helper is given to exit after being asked to
+	// quit (the person closed the window), before the tree is killed.
+	pageQuitGrace = time.Second
+	// helperReapWait is how long the manager waits, when a helper's pipe closes,
+	// for the process to be reaped so its exit code can be read.
+	helperReapWait = 500 * time.Millisecond
 	// pageVerdictCache is how long a positive "still allowed" is reused by the
 	// bridge, as the static route does.
 	pageVerdictCache = 500 * time.Millisecond
@@ -50,6 +56,7 @@ const (
 const (
 	pageStateOpen    = "open"    // the page loaded
 	pageStateStopped = "stopped" // it stopped responding, crashed or broke the protocol
+	pageStateSetup   = "setup"   // the helper could not make its own network gate (macOS)
 	pageStateChanged = "changed" // the artifact or its decision changed
 	pageStateClosed  = "closed"  // the person closed it, or a new window replaced it
 )
@@ -83,6 +90,7 @@ type pageHost struct {
 	libs      fs.FS
 	beatLimit time.Duration
 	grace     time.Duration
+	quitGrace time.Duration
 
 	// openMu serialises opens, so the cap and one-window-per-artifact hold. gen
 	// moves when closeAll ends every window, and gens[name] when a revoke or a
@@ -91,8 +99,11 @@ type pageHost struct {
 	openMu sync.Mutex
 	mu     sync.Mutex
 	wins   map[string]*pageWindow
-	gen    uint64
-	gens   map[string]uint64
+	// closing are windows the person closed that are within their quit grace: out of
+	// wins, but a revoke, a change or a close-all still kills them at once.
+	closing map[*pageWindow]struct{}
+	gen     uint64
+	gens    map[string]uint64
 	// stores are the state stores by workspace and artifact, asks the ask
 	// limiter by artifact (pagecaps.go).
 	stores stateStores
@@ -105,7 +116,7 @@ type pageHost struct {
 func newPageHost(logger *slog.Logger, libs fs.FS, emit func(event string, data ...any)) *pageHost {
 	return &pageHost{
 		launch: launcherFor(recordExe()), preflight: pageHostPreflight, logger: logger, emit: emit, libs: libs,
-		beatLimit: pageBeatTimeout, grace: pageStartGrace, wins: map[string]*pageWindow{}, gens: map[string]uint64{},
+		beatLimit: pageBeatTimeout, grace: pageStartGrace, quitGrace: pageQuitGrace, wins: map[string]*pageWindow{}, closing: map[*pageWindow]struct{}{}, gens: map[string]uint64{},
 	}
 }
 
@@ -158,6 +169,9 @@ type pageWindow struct {
 
 	once  sync.Once
 	final string
+	// escalate closes when something else ends a closing window at once.
+	escalate     chan struct{}
+	escalateOnce sync.Once
 }
 
 // open starts a window for the named artifact, which must be an allowed,
@@ -199,7 +213,7 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 	}
 	w := &pageWindow{host: h, name: req.name, hash: hash, page: page, conn: conn, out: pagehost.NewWriter(conn, pagehost.ToHelper),
 		run: run, allowed: req.allowed, ctx: ctx, cancel: cancel, started: time.Now(),
-		svc: req.svc, caps: map[string]bool{}, uploads: map[int64]*upload{}}
+		escalate: make(chan struct{}), svc: req.svc, caps: map[string]bool{}, uploads: map[int64]*upload{}}
 	for _, n := range granted {
 		w.caps[n] = true
 	}
@@ -285,11 +299,36 @@ func (h *pageHost) closeArtifact(name, state string) {
 	h.endWindow(name, state)
 }
 
+// closeWindowByPerson ends the named window because the person pressed Close
+// window: the helper is asked to quit first (so it can clean up after itself), and
+// killed if it has not gone within pageQuitGrace.
+func (h *pageHost) closeWindowByPerson(name string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.gens[name]++
+	w := h.wins[name]
+	h.mu.Unlock()
+	if w != nil {
+		w.end(pageStateClosed, true)
+	}
+}
+
 // endWindow ends the named artifact's window without disturbing opens in flight.
 func (h *pageHost) endWindow(name, state string) {
 	h.mu.Lock()
 	w := h.wins[name]
+	var hurry []*pageWindow
+	for c := range h.closing {
+		if c.name == name {
+			hurry = append(hurry, c)
+		}
+	}
 	h.mu.Unlock()
+	for _, c := range hurry {
+		c.hurry()
+	}
 	if w != nil {
 		w.finish(state)
 	}
@@ -306,7 +345,14 @@ func (h *pageHost) closeAll() {
 	for _, w := range h.wins {
 		all = append(all, w)
 	}
+	hurry := make([]*pageWindow, 0, len(h.closing))
+	for c := range h.closing {
+		hurry = append(hurry, c)
+	}
 	h.mu.Unlock()
+	for _, c := range hurry {
+		c.hurry()
+	}
 	for _, w := range all {
 		w.finish(pageStateClosed)
 	}
@@ -329,12 +375,48 @@ func (w *pageWindow) send(msgs []*pagehost.Message) error {
 // kill ends the helper and everything under it.
 func (w *pageWindow) kill() { w.conn.Kill() }
 
-// finish ends the window once, whatever the cause: the first state wins.
-func (w *pageWindow) finish(state string) {
+// quitThenKill asks the helper to exit and kills the tree if it has not within
+// the grace. The request is sent apart, so a helper that does not read cannot
+// hold up the kill.
+func (w *pageWindow) quitThenKill() {
+	go func() { _ = w.out.Send(&pagehost.Message{T: pagehost.TypeQuit}) }()
+	t := time.NewTimer(w.host.quitGrace)
+	defer t.Stop()
+	select {
+	case <-w.conn.Done():
+	case <-w.escalate:
+	case <-t.C:
+	}
+	w.kill()
+	w.host.mu.Lock()
+	delete(w.host.closing, w)
+	w.host.mu.Unlock()
+}
+
+// hurry ends a window that is within its quit grace now.
+func (w *pageWindow) hurry() { w.escalateOnce.Do(func() { close(w.escalate) }) }
+
+// finish ends the window once, whatever the cause: the first state wins. The
+// helper's tree is killed at once.
+func (w *pageWindow) finish(state string) { w.end(state, false) }
+
+// end is finish, with the option to let the helper exit by itself for a moment
+// first (the person closed the window: nothing is wrong, so there is no hurry).
+func (w *pageWindow) end(state string, graceful bool) {
 	w.once.Do(func() {
 		w.final = state
 		w.cancel()
-		w.kill()
+		if graceful {
+			w.host.mu.Lock()
+			if w.host.closing == nil {
+				w.host.closing = map[*pageWindow]struct{}{}
+			}
+			w.host.closing[w] = struct{}{}
+			w.host.mu.Unlock()
+			go w.quitThenKill()
+		} else {
+			w.kill()
+		}
 		if w.unsub != nil {
 			w.unsub()
 		}
@@ -365,9 +447,36 @@ func (h *pageHost) report(w *pageWindow, state string) {
 func (w *pageWindow) reap() {
 	select {
 	case <-w.conn.Done():
-		w.finish(pageStateStopped)
+		w.finish(endedState(w.conn))
 	case <-w.ctx.Done():
 	}
+}
+
+// helperGone ends the window because the helper's pipe closed. A helper's pipe
+// closes just before the process is reaped, so it waits a moment for the exit
+// code, which tells a failed setup from a crash.
+func (w *pageWindow) helperGone() {
+	t := time.NewTimer(helperReapWait)
+	defer t.Stop()
+	select {
+	case <-w.conn.Done():
+	case <-t.C:
+	}
+	w.finish(endedState(w.conn))
+}
+
+// endedState is the state of a helper that exited on its own: stopped, unless
+// it exited with one of the codes for "could not set up its network gate".
+func endedState(c helperConn) string {
+	select {
+	case <-c.Done():
+	default:
+		return pageStateStopped // still running (or not yet reaped): no exit code to read
+	}
+	if e, ok := c.(interface{ ExitCode() int }); ok && isSetupFailure(e.ExitCode()) {
+		return pageStateSetup
+	}
+	return pageStateStopped
 }
 
 // watch is the watchdog: the page posts a beat every 500 ms, and a window that
