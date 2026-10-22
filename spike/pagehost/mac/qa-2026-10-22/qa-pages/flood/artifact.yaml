@@ -1,0 +1,15 @@
+version: 1
+title: Flood
+view: html
+parameters:
+  - name: msg
+    type: text
+    max_length: 1000
+    default: ""
+queries:
+  - name: probe
+    sql: SELECT $msg AS msg
+html:
+  window:
+    width: 500
+    height: 300

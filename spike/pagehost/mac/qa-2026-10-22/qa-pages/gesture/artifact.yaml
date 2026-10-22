@@ -1,0 +1,17 @@
+version: 1
+title: Gesture
+view: html
+parameters:
+  - name: msg
+    type: text
+    max_length: 1000
+    default: ""
+queries:
+  - name: report
+    sql: SELECT $msg AS msg
+html:
+  window:
+    width: 600
+    height: 500
+  capabilities:
+    download: {}

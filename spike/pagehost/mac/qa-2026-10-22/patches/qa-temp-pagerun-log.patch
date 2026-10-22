@@ -1,0 +1,21 @@
+diff --git a/studio/pagehost_bridge.go b/studio/pagehost_bridge.go
+index 2128f3f..faac35b 100644
+--- a/studio/pagehost_bridge.go
++++ b/studio/pagehost_bridge.go
+@@ -12,6 +12,8 @@ import (
+ 	"bytes"
+ 	"encoding/json"
+ 	"errors"
++	"fmt"
++	"os"
+ 	"time"
+ 
+ 	"github.com/SandwichLabs/vibe/internal/artifacts"
+@@ -102,6 +104,7 @@ func (w *pageWindow) handleRun(m *pagehost.Message) {
+ 		w.fail(m.ID, pagehost.CodeRefused)
+ 		return
+ 	}
++	fmt.Fprintf(os.Stderr, "QA-PAGERUN %s %s q=%s v=%v\n", time.Now().Format("15:04:05.000"), w.name, m.Q, m.V) // QA TEMP, never committed
+ 	if !queryListed(w.page, m.Q) && w.host.logger != nil {
+ 		// Allowed, since it is still a manifest query, but it is logged (P4 review).
+ 		w.host.logger.Info("a page ran a query its templates do not use", "artifact", w.name, "query", m.Q)

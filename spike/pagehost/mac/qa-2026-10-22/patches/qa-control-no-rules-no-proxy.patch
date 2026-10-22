@@ -1,0 +1,22 @@
+diff --git a/studio/pagewindow_darwin.m b/studio/pagewindow_darwin.m
+index 0d041f6..eb82a34 100644
+--- a/studio/pagewindow_darwin.m
++++ b/studio/pagewindow_darwin.m
+@@ -240,7 +240,7 @@ static void installCloseMenu(void) {
+     nw_proxy_config_t pc = nw_proxy_config_create_http_connect(ep, NULL);
+     // Never fall back to a direct connection when the proxy refuses.
+     nw_proxy_config_set_failover_allowed(pc, false);
+-    cfg.websiteDataStore.proxyConfigurations = @[ pc ];
++    // QA CONTROL: cfg.websiteDataStore.proxyConfigurations = @[ pc ];
+   } else {
+     exit(EXIT_NO_PROXY_API);
+   }
+@@ -330,7 +330,7 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title,
+     WKContentRuleListStore *store = [WKContentRuleListStore storeWithURL:dir];
+     [store compileContentRuleListForIdentifier:@"vibe-page-block" encodedContentRuleList:kBlockRules completionHandler:^(WKContentRuleList *list, NSError *err) {
+       if (!list) exit(EXIT_RULES_FAILED);
+-      [host.view.configuration.userContentController addContentRuleList:list];
++      // QA CONTROL: [host.view.configuration.userContentController addContentRuleList:list];
+       // These two lines, in this order, are how a Mac run shows the rule list was in
+       // place before the first load (they carry no page data).
+       NSLog(@"vibe page: rule list added, first load next");

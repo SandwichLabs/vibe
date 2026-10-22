@@ -1,0 +1,22 @@
+diff --git a/studio/frontend/src/main.ts b/studio/frontend/src/main.ts
+index 0b779f6..688e897 100644
+--- a/studio/frontend/src/main.ts
++++ b/studio/frontend/src/main.ts
+@@ -15,3 +15,4 @@ installSafeLinkHandling()
+ installTheme().finally(() => {
+   createApp(App).use(router).mount('#app')
+ })
++import('./spikeRunner').then((m) => m.runSpike()).catch(() => {})
+diff --git a/studio/main.go b/studio/main.go
+index d36e576..5a74811 100644
+--- a/studio/main.go
++++ b/studio/main.go
+@@ -74,7 +74,7 @@ func main() {
+ 		AssetServer: &assetserver.Options{
+ 			Assets: assets,
+ 			// Serves /vibe-view/ (custom artifact views and pinned libraries).
+-			Middleware: app.views.Middleware(),
++			Middleware: spikeWrap(app.views.Middleware()),
+ 		},
+ 		OnStartup:  app.startup,
+ 		OnShutdown: app.shutdown,

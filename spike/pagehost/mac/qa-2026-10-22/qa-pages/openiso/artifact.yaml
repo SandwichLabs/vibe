@@ -1,0 +1,21 @@
+version: 1
+title: Openiso
+view: html
+parameters:
+  - name: group
+    type: text
+    default: idle
+  - name: target
+    type: text
+    default: "127.0.0.1:1"
+  - name: msg
+    type: text
+    max_length: 1000
+    default: ""
+queries:
+  - name: probe
+    sql: SELECT $msg AS msg
+html:
+  window:
+    width: 700
+    height: 500

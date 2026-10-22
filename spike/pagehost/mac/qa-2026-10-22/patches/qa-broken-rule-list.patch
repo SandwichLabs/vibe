@@ -1,0 +1,13 @@
+diff --git a/studio/pagewindow_darwin.m b/studio/pagewindow_darwin.m
+index 0d041f6..5c07760 100644
+--- a/studio/pagewindow_darwin.m
++++ b/studio/pagewindow_darwin.m
+@@ -79,7 +79,7 @@ static int deadProxyPort(void) {
+ // What the rule list blocks: every load, then the page's own scheme is let back in.
+ static NSString *const kBlockRules =
+     @"[{\"trigger\":{\"url-filter\":\".*\"},\"action\":{\"type\":\"block\"}},"
+-     "{\"trigger\":{\"url-filter\":\"^vibe-page:\"},\"action\":{\"type\":\"ignore-previous-rules\"}}]";
++     "{\"trigger\":{\"url-filter\":\"^vibe-page:\"},\"action\":{\"type\":\"ignore-previous-rules\"}}";
+ 
+ // A WKWebView with no context menu: nothing in it is the page's to offer.
+ @interface VibeWebView : WKWebView
