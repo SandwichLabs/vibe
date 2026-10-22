@@ -62,13 +62,9 @@ func listArtifacts(ctx context.Context, store artifacts.Store) ([]ArtifactSummar
 	}
 	out := make([]ArtifactSummary, 0, len(list))
 	for _, a := range list {
-		kind := a.Manifest.View
-		if kind == "" && a.Error == "" {
-			kind = artifacts.ViewA2UI
-		}
 		out = append(out, ArtifactSummary{
 			Name: a.Name, Title: a.Manifest.Title, Description: a.Manifest.Description,
-			View: kind, UpdatedAt: a.UpdatedAt, Rev: a.Rev, Error: a.Error,
+			View: artifacts.ViewLabel(&a), UpdatedAt: a.UpdatedAt, Rev: a.Rev, Error: a.Error,
 		})
 	}
 	return out, nil
@@ -107,6 +103,12 @@ func openArtifact(a *artifacts.Artifact, now time.Time) *ArtifactDetail {
 	d.ViewKind = a.Manifest.View
 	var view []byte
 	var err error
+	if a.Manifest.View == artifacts.ViewHTML {
+		// Pages are not rendered yet (docs/plans/html-artifacts.md, step P3).
+		d.Error = "This artifact is an HTML page, which Studio cannot show yet."
+		d.Defaults = map[string]any{}
+		return d
+	}
 	if a.Manifest.View == artifacts.ViewScript {
 		d.Defaults, err = artifacts.Defaults(&a.Manifest, now)
 	} else if view, err = artifacts.RenderView(&a.Manifest, a.View); err == nil {

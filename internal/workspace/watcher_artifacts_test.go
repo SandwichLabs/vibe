@@ -132,3 +132,103 @@ func TestWatcher_ArtifactFolderExistingAtStartIsWatched(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(artifactManifest+"description: edited\n"), 0o644))
 	assert.Equal(t, Change{Kind: KindArtifact, Op: OpChanged, ID: "pre", Path: "artifacts/pre/artifact.yaml"}, next(t, w))
 }
+
+func TestClassify_ArtifactPageFiles(t *testing.T) {
+	for _, rel := range []string{
+		"artifacts/p/html/index.html.tmpl",
+		"artifacts/p/html/assets/style.css",
+		"artifacts/p/html/assets/img/logo.svg",
+	} {
+		k, id, ok := classify(rel)
+		assert.True(t, ok, rel)
+		assert.Equal(t, KindArtifact, k)
+		assert.Equal(t, "p", id)
+	}
+	for _, rel := range []string{
+		"artifacts/p/html",                      // the folder itself
+		"artifacts/p/html/.index.html.tmpl.swp", // an editor's swap file
+		"artifacts/p/html/index.html.tmpl~",     // a backup
+		"artifacts/p/html/assets/.hidden.json",  // a dotfile
+		"artifacts/p/html/.git/config",          // a hidden folder
+		"artifacts/p/html/a/b/c/d/e.json",       // deeper than the layout
+		"artifacts/.p/html/index.html.tmpl",     // a hidden artifact folder
+		"artifacts/p/htm/index.html.tmpl",       // not the page folder
+		"skills/p/html/index.html.tmpl",         // not artifacts
+		"artifacts/p/html/" + filestore.TempPrefix + "x",
+	} {
+		_, _, ok := classify(rel)
+		assert.False(t, ok, rel)
+	}
+}
+
+func TestWatcher_ArtifactPageFilesAreReported(t *testing.T) {
+	ws, root := newWorkspace(t)
+	w := startWatcher(t, ws)
+
+	// A git pull drops the artifact folder with a page inside, nested folders too.
+	dir := filepath.Join(root, "artifacts", "page")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html", "assets", "img"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(artifactManifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte("<p>x</p>"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "assets", "img", "a.json"), []byte("{}"), 0o644))
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		c := next(t, w)
+		assert.Equal(t, KindArtifact, c.Kind)
+		assert.Equal(t, "page", c.ID)
+		seen[c.Path] = true
+	}
+	assert.True(t, seen["artifacts/page/html/index.html.tmpl"])
+	assert.True(t, seen["artifacts/page/html/assets/img/a.json"])
+
+	// Edits at every depth are watched; swap files and dotfiles are not.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "assets", "img", "a.json"), []byte(`{"a":1}`), 0o644))
+	assert.Equal(t, Change{Kind: KindArtifact, Op: OpChanged, ID: "page", Path: "artifacts/page/html/assets/img/a.json"}, next(t, w))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", ".index.html.tmpl.swp"), []byte("x"), 0o644))
+	expectQuiet(t, w)
+
+	// A folder made later under html/ is watched too.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html", "assets", "later"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "assets", "later", "b.json"), []byte("{}"), 0o644))
+	assert.Equal(t, Change{Kind: KindArtifact, Op: OpCreated, ID: "page", Path: "artifacts/page/html/assets/later/b.json"}, next(t, w))
+}
+
+func TestWatcher_ArtifactPageExistingAtStartIsWatched(t *testing.T) {
+	ws, root := newWorkspace(t)
+	dir := filepath.Join(root, "artifacts", "pre", "html", "assets")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "pre", "artifact.yaml"), []byte(artifactManifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s.css"), []byte("p{}"), 0o644))
+	w := startWatcher(t, ws)
+	expectQuiet(t, w)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s.css"), []byte("p{color:red}"), 0o644))
+	assert.Equal(t, Change{Kind: KindArtifact, Op: OpChanged, ID: "pre", Path: "artifacts/pre/html/assets/s.css"}, next(t, w))
+}
+
+func TestWatcher_OwnPageWritesAreIgnored(t *testing.T) {
+	ws, _ := newWorkspace(t)
+	ctx := context.Background()
+	w := startWatcher(t, ws)
+	m, err := artifacts.Decode([]byte(artifactManifest + "view: html\n"))
+	require.NoError(t, err)
+	a := &artifacts.Artifact{Name: "mine", Manifest: *m, Files: []artifacts.PageFile{
+		{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "q" }}</p>`)},
+		{Path: "assets/s.css", Data: []byte("p{}")},
+	}}
+	require.NoError(t, ws.Artifacts().Put(ctx, a))
+	a.Files[1].Data = []byte("p{color:red}")
+	require.NoError(t, ws.Artifacts().Put(ctx, a))
+	require.NoError(t, ws.Artifacts().Delete(ctx, "mine"))
+	expectQuiet(t, w)
+}
+
+func TestWorkspace_TempDirsCoverArtifactPages(t *testing.T) {
+	ws, root := newWorkspace(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "one", "html", "assets", "img"), 0o755))
+	w, ok := ws.(*workspace)
+	require.True(t, ok)
+	dirs := w.tempDirs()
+	assert.Contains(t, dirs, "artifacts/one/html")
+	assert.Contains(t, dirs, "artifacts/one/html/assets")
+	assert.Contains(t, dirs, "artifacts/one/html/assets/img")
+}

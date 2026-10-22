@@ -115,7 +115,7 @@ func TestDecode_Refusals(t *testing.T) {
 		"empty":                    "",
 		"two documents":            "version: 1\ntitle: T\n" + q + "---\nversion: 1\n",
 		"no queries":               "version: 1\ntitle: T\n",
-		"view html":                "version: 1\ntitle: T\nview: html\n" + q,
+		"view pdf":                 "version: 1\ntitle: T\nview: pdf\n" + q,
 		"anchor":                   "version: 1\ntitle: &t T\n" + q,
 		"alias":                    "version: 1\ntitle: T\ndescription: &d x\nparameters: []\nqueries:\n  - name: q\n    sql: *d\n",
 		"merge key":                "version: 1\ntitle: T\nqueries:\n  - &base {name: q, sql: SELECT 1}\n  - <<: *base\n    name: r\n",

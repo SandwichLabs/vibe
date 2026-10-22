@@ -66,3 +66,15 @@ func TestBundle_ArtifactsRoundTripThroughTheCLI(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
 }
+
+func TestArtifactList_ShowsAnHTMLPageWithItsHost(t *testing.T) {
+	ws := newWS(t)
+	dir := filepath.Join(ws, "artifacts", "page")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(cliArtifactManifest+"view: html\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte("<p>hi</p>"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "app.js"), []byte("1"), 0o644))
+	out, stderr, err := runVibe("artifact", "list", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	assert.Regexp(t, `page\s+\S.*html \(scripted\)`, out)
+}

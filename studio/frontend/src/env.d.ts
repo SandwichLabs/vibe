@@ -446,7 +446,7 @@ interface ConflictResult { id: string; rev: string; title: string }
 // (script) view stands for this person, with the exact files its hash covers.
 interface ArtifactViewStatus {
   name: string
-  kind: 'a2ui' | 'script' | ''
+  kind: 'a2ui' | 'script' | 'html' | ''
   state: 'none' | 'undecided' | 'allowed' | 'changed' | 'denied'
   hash: string
   manifest: string
@@ -703,8 +703,8 @@ interface ArtifactDetail {
   description: string
   params: ArtifactParamT[]
   queries: { name: string; uses: string[] }[]
-  /** 'a2ui' or 'script'. A script view has no `view`: it is shown as source until allowed. */
-  view_kind: 'a2ui' | 'script'
+  /** 'a2ui', 'script' or 'html' (an HTML page is not shown yet; the detail carries an error). A script view has no `view`: it is shown as source until allowed. */
+  view_kind: 'a2ui' | 'script' | 'html'
   view?: { title: string; components: import('./a2ui/types').A2UIComponentT[] }
   defaults: Record<string, string | number | boolean>
   rev: string

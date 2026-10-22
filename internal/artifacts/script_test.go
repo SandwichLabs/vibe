@@ -108,7 +108,7 @@ func TestValidateView_Script(t *testing.T) {
 
 func TestManifest_ViewKindIsClosed(t *testing.T) {
 	a := newArtifact(t, "x")
-	a.Manifest.View = "html"
+	a.Manifest.View = "pdf"
 	_, err := Encode(&a.Manifest)
 	require.ErrorIs(t, err, ErrInvalid)
 	a.Manifest.View = ViewScript

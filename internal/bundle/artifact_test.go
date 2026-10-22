@@ -381,3 +381,25 @@ func TestArtifact_ScriptViewFileMustMatchTheManifest(t *testing.T) {
 		})
 	}
 }
+
+// An HTML page is not carried by a bundle yet: it is skipped (selection of
+// everything) or refused (named), never exported half, and a bundle that holds
+// html/ entries or a view: html manifest is refused on open.
+func TestArtifact_HTMLPageIsNotExportedYet(t *testing.T) {
+	ws, _ := newWS(t)
+	putArtifact(t, ws, "good", artManifest, artView)
+	m, err := artifacts.Decode([]byte(strings.Replace(artManifest, "\nqueries:", "\nview: html\nqueries:", 1)))
+	require.NoError(t, err)
+	page := &artifacts.Artifact{Name: "page", Manifest: *m, Files: []artifacts.PageFile{{Path: "index.html.tmpl", Data: []byte("<p>x</p>")}}}
+	require.NoError(t, ws.Artifacts().Put(context.Background(), page, artifacts.WithRev("")))
+
+	_, err = Export(context.Background(), ws, ExportOptions{Selection: Selection{Artifacts: []string{"page"}}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTML page")
+
+	res, err := Export(context.Background(), ws, ExportOptions{Selection: Selection{All: true}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Manifest.Counts().Artifacts)
+	require.Len(t, res.Manifest.Warnings, 1)
+	assert.Contains(t, res.Manifest.Warnings[0], "artifacts/page was skipped")
+}

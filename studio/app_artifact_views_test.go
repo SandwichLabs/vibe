@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,4 +95,37 @@ func TestArtifactViews_SourceTabCanSwitchTheViewKind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "view.js", again.ViewFile)
 	assert.NoFileExists(t, filepath.Join(app.ws.Root(), "artifacts", "orders", "view.a2ui.json"))
+}
+
+// An HTML page (docs/plans/html-artifacts.md) is listed with its derived host,
+// opens to a plain "not shown yet" error, and has no script view to allow.
+func TestArtifactViews_HTMLPageListsAndOpensCleanly(t *testing.T) {
+	app := newOpenApp(t)
+	m, err := artifacts.Decode([]byte(studioArtifactManifest + "view: html\n"))
+	require.NoError(t, err)
+	page := &artifacts.Artifact{Name: "pg", Manifest: *m, Files: []artifacts.PageFile{
+		{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "big" }}</p>`)},
+	}}
+	require.NoError(t, app.ws.Artifacts().Put(context.Background(), page, artifacts.WithRev("")))
+
+	list, err := app.ListArtifacts()
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, "html (static)", list[0].View)
+	assert.Empty(t, list[0].Error)
+
+	d, err := app.GetArtifact("pg")
+	require.NoError(t, err)
+	assert.Equal(t, "html", d.ViewKind)
+	assert.NotEmpty(t, d.Error)
+	assert.Empty(t, d.View)
+
+	st, err := app.ArtifactViewState("pg")
+	require.NoError(t, err)
+	assert.Equal(t, "html", st.Kind)
+	assert.Equal(t, "none", st.State, "no script view decision applies to a page yet")
+	_, err = app.DenyArtifactView("pg")
+	require.Error(t, err)
+	_, err = app.AllowArtifactView("pg", "anything")
+	require.Error(t, err)
 }

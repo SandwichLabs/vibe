@@ -44,8 +44,11 @@ type Source struct {
 	Name     string
 	Manifest string
 	View     string
+	// Files is the page file set of a view: html artifact, as on disk (nil
+	// for the other kinds).
+	Files []PageFile
 	// ViewFile is the view file that exists ("view.a2ui.json" or "view.js"),
-	// "" when neither does.
+	// "html/" for a view: html artifact, "" when none does.
 	ViewFile        string
 	ManifestMissing bool
 	ViewMissing     bool
@@ -85,6 +88,10 @@ func applyPutOpts(opts []PutOption) putOpts {
 type prepared struct {
 	manifest []byte
 	view     []byte
+	// files is the page file set of a view: html artifact (nil for the other
+	// kinds), sorted by path.
+	files []PageFile
+	page  *PageInfo
 }
 
 // prepare validates a for storing and renders its two files. The name rule
@@ -106,5 +113,18 @@ func prepare(a *Artifact) (prepared, error) {
 	if err := ValidateView(&a.Manifest, a.View); err != nil {
 		return prepared{}, err
 	}
-	return prepared{manifest: manifest, view: a.View}, nil
+	if a.Manifest.View != ViewHTML {
+		if len(a.Files) > 0 {
+			return prepared{}, invalid("page files are only for a manifest with view: %s", ViewHTML)
+		}
+		return prepared{manifest: manifest, view: a.View}, nil
+	}
+	page, err := VetPage(&a.Manifest, a.Files)
+	if err != nil {
+		return prepared{}, err
+	}
+	if err := sealPage(manifest, a.Files, page); err != nil {
+		return prepared{}, err
+	}
+	return prepared{manifest: manifest, files: sortedFiles(a.Files), page: page}, nil
 }
