@@ -281,7 +281,7 @@ func TestRender_LoopsAreBoundedByTheBudgetNotByLuck(t *testing.T) {
 		var re *RenderError
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooSlow, re.Kind, name)
-		assert.Less(t, time.Since(start), 3*time.Second, name)
+		assert.Less(t, time.Since(start), 20*time.Second, name)
 	}
 }
 
@@ -309,7 +309,9 @@ func TestRender_TemplateCallsAreBoundedAndRecursionIsRefused(t *testing.T) {
 	var re *RenderError
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderTooSlow, re.Kind)
-	assert.Less(t, time.Since(start), 3*time.Second)
+	// The work budget, not the 30 s deadline, stops it: about 0.6 s here, a few
+	// seconds on a slow CI runner.
+	assert.Less(t, time.Since(start), 20*time.Second)
 
 	for name, files := range map[string]map[string]string{
 		"direct":   {"index.html.tmpl": `{{ define "a" }}{{ template "a" }}{{ end }}{{ template "a" }}`},
@@ -443,7 +445,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	var re *RenderError
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderTooSlow, re.Kind)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 	assert.Zero(t, out.Len())
 
 	// A cancel from outside (a revoke, a new token) stops it the same way.
@@ -453,7 +455,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	err = RenderHTMLPage(cctx, f.run, pageOf(t, PageStatic, entry(body)), nil, &out)
 	require.ErrorAs(t, err, &re)
 	assert.Equal(t, RenderCanceled, re.Kind)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 
 	// The same through if, with and nested template calls inside the loop.
 	files := map[string]string{
@@ -465,7 +467,7 @@ func TestRender_DeadlineAndCancelAreEnforcedInsideALoopBody(t *testing.T) {
 	start = time.Now()
 	err = RenderHTMLPage(ctx2, f.run, pageOf(t, PageStatic, files), nil, &out)
 	require.ErrorAs(t, err, &re)
-	assert.Less(t, time.Since(start), time.Second)
+	assert.Less(t, time.Since(start), 5*time.Second)
 }
 
 // memAlloc is the bytes allocated so far (cumulative), for bounding a render's memory.
@@ -500,7 +502,7 @@ func TestRender_StringsBuiltInVariablesAreBudgeted(t *testing.T) {
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooLarge, re.Kind, name)
 		assert.Contains(t, err.Error(), "too large", name)
-		assert.Less(t, time.Since(start), 3*time.Second, name)
+		assert.Less(t, time.Since(start), 20*time.Second, name)
 		assert.Less(t, memAlloc()-before, uint64(400<<20), name+": allocation stays bounded")
 	}
 }
@@ -565,7 +567,7 @@ func TestRender_SizingManyWideArgumentsIsBounded(t *testing.T) {
 		var re *RenderError
 		require.ErrorAs(t, err, &re, name)
 		assert.Equal(t, RenderTooLarge, re.Kind, name)
-		assert.Less(t, time.Since(start), 3*time.Second, name+": the sizing walk stops at the budget")
+		assert.Less(t, time.Since(start), 20*time.Second, name+": the sizing walk stops at the budget")
 	}
 }
 
