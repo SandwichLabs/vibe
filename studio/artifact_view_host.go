@@ -67,7 +67,8 @@ func openViewGrant(vs *viewServer, ws workspace.Workspace, name, origin string) 
 const stateAllowed = "allowed"
 
 // viewStillAllowed is the view server's re-check: the grant belongs to the open
-// workspace and its artifact is allowed at exactly the hash that was served.
+// workspace and its artifact (a script view or an HTML page, by the grant) is
+// allowed at exactly the hash that was served.
 func (a *App) viewStillAllowed(g *viewGrant) bool {
 	a.mu.RLock()
 	ws := a.ws
@@ -76,7 +77,11 @@ func (a *App) viewStillAllowed(g *viewGrant) bool {
 		return false
 	}
 	st, err := ws.ArtifactViewState(g.name)
-	return err == nil && st.Kind == artifacts.ViewScript && st.State == stateAllowed && st.Hash == g.hash
+	want := artifacts.ViewScript
+	if g.page != nil {
+		want = artifacts.ViewHTML
+	}
+	return err == nil && st.Kind == want && st.State == stateAllowed && st.Hash == g.hash
 }
 
 // validateViewPage is ValidateArtifactViewPage over a store: the page a script

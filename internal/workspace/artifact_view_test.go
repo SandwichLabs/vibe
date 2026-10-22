@@ -261,3 +261,63 @@ func TestArtifactView_ErrorsCarryNoPaths(t *testing.T) {
 	}
 	assert.Equal(t, viewErrUnusable, viewState(t, ws, "broken").Error)
 }
+
+const viewPageManifest = "version: 1\ntitle: P\nview: html\nqueries:\n  - name: q\n    sql: SELECT 1\n"
+
+// pageArtifact writes a view: html artifact through the store.
+func pageArtifact(t *testing.T, ws Workspace, name string, files ...artifacts.PageFile) {
+	t.Helper()
+	a := &artifacts.Artifact{Name: name, ManifestText: []byte(viewPageManifest), Files: files}
+	require.NoError(t, ws.Artifacts().Put(context.Background(), a, artifacts.Overwrite()))
+}
+
+func TestArtifactView_HTMLPageHasAFileListAndTheSameDecisionFlow(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	idx := artifacts.PageFile{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "q" }}</p>`)}
+	logo := artifacts.PageFile{Path: "assets/logo.png", Data: []byte("\x89PNG\r\n\x1a\n....")}
+	pageArtifact(t, ws, "pg", idx, logo)
+
+	st := viewState(t, ws, "pg")
+	assert.Equal(t, "html", st.Kind)
+	assert.Equal(t, "undecided", st.State)
+	assert.Equal(t, "static", st.PageKind)
+	assert.Equal(t, []string{"q"}, st.Queries)
+	assert.Empty(t, st.Source, "a page has files, not one source")
+	require.Len(t, st.Files, 2)
+	assert.Equal(t, ArtifactViewFile{Path: "assets/logo.png", Role: "image", Size: len(logo.Data)}, st.Files[0], "a binary file has no text")
+	assert.Equal(t, ArtifactViewFile{Path: "index.html.tmpl", Role: "entry", Size: len(idx.Data), Text: string(idx.Data)}, st.Files[1])
+	require.Len(t, st.PageFiles, 2)
+
+	// The hash is PageHash over exactly these bytes.
+	a, err := artifacts.PageFromText("pg", []byte(st.Manifest), st.PageFiles)
+	require.NoError(t, err)
+	assert.Equal(t, a.Page.Hash, st.Hash)
+
+	require.NoError(t, ws.AllowArtifactView("pg", st.Hash))
+	assert.Equal(t, "allowed", viewState(t, ws, "pg").State)
+
+	// Any file's one byte, or a file added, asks again.
+	pageArtifact(t, ws, "pg", artifacts.PageFile{Path: idx.Path, Data: append(idx.Data, ' ')}, logo)
+	assert.Equal(t, "changed", viewState(t, ws, "pg").State)
+	require.NoError(t, ws.DenyArtifactView("pg"))
+	assert.Equal(t, "denied", viewState(t, ws, "pg").State)
+	d := ws.ArtifactViewDecisions()
+	require.Len(t, d, 1)
+	assert.Equal(t, "pg", d[0].Name)
+	assert.Equal(t, "denied", d[0].State)
+	require.NoError(t, ws.RevokeArtifactView("pg"))
+	assert.Empty(t, ws.ArtifactViewDecisions())
+}
+
+func TestArtifactView_APageThatFailsTheVetIsUnusableNotAllowable(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	dir := filepath.Join(ws.Root(), "artifacts", "bad")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "html"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(viewPageManifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<a href="http://x.test/">x</a>`), 0o644))
+	st := viewState(t, ws, "bad")
+	assert.NotEmpty(t, st.Error)
+	assert.Empty(t, st.Hash)
+	assert.NotContains(t, st.Error, ws.Root(), "a fixed text, not the path")
+	assert.Error(t, ws.AllowArtifactView("bad", "anything"))
+}

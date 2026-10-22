@@ -123,6 +123,7 @@ interface AppApi {
   RevokeArtifactView(name: string): Promise<ArtifactViewStatus>
   ListArtifactViewDecisions(): Promise<ArtifactViewDecision[]>
   OpenArtifactView(name: string, origin: string): Promise<ArtifactViewGrant>
+  OpenArtifactPage(name: string, origin: string): Promise<ArtifactPageGrant>
   RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
@@ -451,8 +452,17 @@ interface ArtifactViewStatus {
   hash: string
   manifest: string
   source: string
+  /** An HTML page's derived host; its files (text ones with their text), the queries it uses and the capabilities it declares. */
+  page_kind?: 'static' | 'scripted'
+  queries?: string[]
+  capabilities?: string[]
+  files?: ArtifactViewFile[]
   error?: string
 }
+interface ArtifactViewFile { path: string; role: string; size: number; text?: string }
+// ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
+// URL is made from (/vibe-view/<token>/page), bound to one PageHash.
+interface ArtifactPageGrant { token: string; hash: string }
 // ArtifactViewGrant mirrors studio.ArtifactViewGrant (#160): the token an allowed
 // view's Worker URL is made from (/vibe-view/<token>/worker.js), bound to one hash.
 interface ArtifactViewGrant { token: string; hash: string }
@@ -703,8 +713,10 @@ interface ArtifactDetail {
   description: string
   params: ArtifactParamT[]
   queries: { name: string; uses: string[] }[]
-  /** 'a2ui', 'script' or 'html' (an HTML page is not shown yet; the detail carries an error). A script view has no `view`: it is shown as source until allowed. */
+  /** 'a2ui', 'script' or 'html' A script view or an HTML page has no `view`: it is shown as source until allowed. */
   view_kind: 'a2ui' | 'script' | 'html'
+  /** An HTML page's derived host. */
+  page_kind?: 'static' | 'scripted'
   view?: { title: string; components: import('./a2ui/types').A2UIComponentT[] }
   defaults: Record<string, string | number | boolean>
   rev: string

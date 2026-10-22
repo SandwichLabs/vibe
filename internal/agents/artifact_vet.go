@@ -190,7 +190,17 @@ func (h *Handler) RunArtifactQuery(ctx context.Context, name, query string, valu
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to load artifact %q: %w", name, err)
 	}
-	sqlText, connection, params, err := artifacts.Bind(&a.Manifest, query, values, time.Now())
+	return h.RunManifestQuery(ctx, name, &a.Manifest, query, values)
+}
+
+// RunManifestQuery is RunArtifactQuery over a manifest the caller already
+// holds: the HTML page host renders the files that were hashed, so its queries
+// must be the hashed manifest's too, not whatever artifact.yaml says by the
+// time a lazy query runs. Every other check is the same: the lexical vet and
+// the connection check, Bind, the read-only gate, the row cap. name is only a
+// label for the log.
+func (h *Handler) RunManifestQuery(ctx context.Context, name string, m *artifacts.Manifest, query string, values map[string]any) (*engine.ResultSet, bool, error) {
+	sqlText, connection, params, err := artifacts.Bind(m, query, values, time.Now())
 	if err != nil {
 		return nil, false, err
 	}

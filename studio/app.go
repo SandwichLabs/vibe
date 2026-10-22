@@ -209,6 +209,7 @@ func NewApp(logger *slog.Logger) *App {
 		approvalTimeout: defaultApprovalTimeout,
 	}
 	app.views = newViewServer(viewWorkerJS, viewLibs(), app.viewStillAllowed)
+	app.views.log = logger
 	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(logger); err == nil {
 		app.prefs = prefs.NewStore(dir)

@@ -39,7 +39,7 @@ func printViewStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bo
 	case st.Error != "":
 		fmt.Fprintf(w, "%s: cannot be used (%s)\n", st.Name, oneLine(st.Error))
 		return
-	case st.Kind != "script":
+	case st.Kind != "script" && st.Kind != "html":
 		fmt.Fprintf(w, "%s: view kind %q, nothing to allow\n", st.Name, st.Kind)
 		return
 	}
@@ -54,6 +54,10 @@ func printViewStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bo
 		fmt.Fprintf(w, "%s: not decided (the view does not run)\n", st.Name)
 	}
 	fmt.Fprintf(w, "  hash: %s\n", st.Hash)
+	if st.Kind == "html" {
+		printPageStatus(w, st, withSource)
+		return
+	}
 	if withSource {
 		fmt.Fprintf(w, "--- artifact.yaml\n%s\n--- view.js\n%s\n---\n", artifacts.EscapeHidden(strings.TrimRight(st.Manifest, "\n")), artifacts.EscapeHidden(strings.TrimRight(st.Source, "\n")))
 	}
@@ -95,10 +99,14 @@ func confirmViewAllow(cmd *cobra.Command, ws workspace.Workspace, name string) (
 		return "", err
 	}
 	if st.Hash == "" {
-		return "", errors.New("this artifact has no script view to allow")
+		return "", errors.New("this artifact has no custom view to allow")
 	}
 	printViewStatus(os.Stderr, st, true)
-	fmt.Fprint(os.Stderr, "This view runs code written by someone else or by an agent. Allow it? [y/N]: ")
+	if st.Kind == "html" {
+		fmt.Fprint(os.Stderr, "This page was written by someone else or by an agent. It runs no script and can only show this artifact's query results. Allow it? [y/N]: ")
+	} else {
+		fmt.Fprint(os.Stderr, "This view runs code written by someone else or by an agent. Allow it? [y/N]: ")
+	}
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
 		return "", errors.New("not allowed")
@@ -158,4 +166,23 @@ func printViewAfter(cmd *cobra.Command, ws workspace.Workspace, name string) err
 	}
 	printViewStatus(cmd.OutOrStdout(), st, false)
 	return nil
+}
+
+// printPageStatus lists an HTML page's files, and with withSource shows every
+// text file, so what the person reads is what the hash covers.
+func printPageStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bool) {
+	fmt.Fprintf(w, "  page: %s, queries: %s\n", st.PageKind, strings.Join(st.Queries, ", "))
+	for _, f := range st.Files {
+		fmt.Fprintf(w, "  %s (%s, %d bytes)\n", f.Path, f.Role, f.Size)
+	}
+	if !withSource {
+		return
+	}
+	fmt.Fprintf(w, "--- artifact.yaml\n%s\n", artifacts.EscapeHidden(strings.TrimRight(st.Manifest, "\n")))
+	for _, f := range st.Files {
+		if f.Text != "" {
+			fmt.Fprintf(w, "--- html/%s\n%s\n", f.Path, artifacts.EscapeHidden(strings.TrimRight(f.Text, "\n")))
+		}
+	}
+	fmt.Fprintln(w, "---")
 }

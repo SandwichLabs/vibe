@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,15 +97,10 @@ func TestArtifactViews_SourceTabCanSwitchTheViewKind(t *testing.T) {
 }
 
 // An HTML page (docs/plans/html-artifacts.md) is listed with its derived host,
-// opens to a plain "not shown yet" error, and has no script view to allow.
-func TestArtifactViews_HTMLPageListsAndOpensCleanly(t *testing.T) {
+// opens to the page's kind, and is shown as files until the person allows it.
+func TestArtifactViews_HTMLPageListsAndAsksBeforeItRuns(t *testing.T) {
 	app := newOpenApp(t)
-	m, err := artifacts.Decode([]byte(studioArtifactManifest + "view: html\n"))
-	require.NoError(t, err)
-	page := &artifacts.Artifact{Name: "pg", Manifest: *m, Files: []artifacts.PageFile{
-		{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "big" }}</p>`)},
-	}}
-	require.NoError(t, app.ws.Artifacts().Put(context.Background(), page, artifacts.WithRev("")))
+	writePage(t, app, "pg", pageIndex, nil)
 
 	list, err := app.ListArtifacts()
 	require.NoError(t, err)
@@ -117,15 +111,58 @@ func TestArtifactViews_HTMLPageListsAndOpensCleanly(t *testing.T) {
 	d, err := app.GetArtifact("pg")
 	require.NoError(t, err)
 	assert.Equal(t, "html", d.ViewKind)
-	assert.NotEmpty(t, d.Error)
-	assert.Empty(t, d.View)
+	assert.Equal(t, "static", d.PageKind)
+	assert.Empty(t, d.Error)
+	assert.Empty(t, d.View, "a page has no A2UI view")
+	assert.Contains(t, d.Defaults, "min_qty")
 
 	st, err := app.ArtifactViewState("pg")
 	require.NoError(t, err)
 	assert.Equal(t, "html", st.Kind)
-	assert.Equal(t, "none", st.State, "no script view decision applies to a page yet")
-	_, err = app.DenyArtifactView("pg")
+	assert.Equal(t, "undecided", st.State)
+	assert.Equal(t, "static", st.PageKind)
+	assert.Equal(t, []string{"big"}, st.Queries)
+	require.Len(t, st.Files, 1)
+	assert.Equal(t, "index.html.tmpl", st.Files[0].Path)
+	assert.Equal(t, "entry", st.Files[0].Role)
+	assert.Equal(t, pageIndex, st.Files[0].Text, "the allow screen shows the text the hash covers")
+
+	_, err = app.OpenArtifactPage("pg", testOrigin)
+	require.ErrorIs(t, err, errViewNotAllowed, "undecided")
+	_, err = app.AllowArtifactView("pg", "not-the-hash")
 	require.Error(t, err)
-	_, err = app.AllowArtifactView("pg", "anything")
+	st, err = app.AllowArtifactView("pg", st.Hash)
+	require.NoError(t, err)
+	assert.Equal(t, "allowed", st.State)
+	_, err = app.OpenArtifactPage("pg", testOrigin)
+	require.NoError(t, err)
+
+	// Any edit asks again.
+	writePage(t, app, "pg", pageIndex+"<p>edit</p>", nil)
+	_, err = app.OpenArtifactPage("pg", testOrigin)
+	require.ErrorIs(t, err, errViewNotAllowed, "changed")
+	st, _ = app.ArtifactViewState("pg")
+	assert.Equal(t, "changed", st.State)
+
+	st, err = app.DenyArtifactView("pg")
+	require.NoError(t, err)
+	assert.Equal(t, "denied", st.State)
+	st, err = app.RevokeArtifactView("pg")
+	require.NoError(t, err)
+	assert.Equal(t, "undecided", st.State)
+
+	decisions, err := app.ListArtifactViewDecisions()
+	require.NoError(t, err)
+	assert.Empty(t, decisions)
+}
+
+func TestArtifactViews_ADecisionOnAPlainArtifactIsRefused(t *testing.T) {
+	app := appWithArtifact(t)
+	st, err := app.ArtifactViewState("orders")
+	require.NoError(t, err)
+	assert.Equal(t, "none", st.State)
+	_, err = app.DenyArtifactView("orders")
+	require.Error(t, err)
+	_, err = app.AllowArtifactView("orders", "anything")
 	require.Error(t, err)
 }

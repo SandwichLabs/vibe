@@ -10,6 +10,8 @@ package main
 //	/vibe-view/<token>/worker.js   the host-owned bootstrap (viewhost/worker.js)
 //	/vibe-view/<token>/view.js     the artifact's view, the bytes that were hashed
 //	/vibe-view/lib/<file>.js       one pinned library from the embedded build
+//	/vibe-view/<token>/page?...    a static HTML page, rendered in Go (viewserver_page.go)
+//	/vibe-view/<token>/assets/...  a file of that page's html/assets/
 //
 // A token is 32 random bytes, issued by OpenArtifactView after it re-checked the
 // trust decision, and is bound to one artifact name, one ViewHash and one
@@ -28,13 +30,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
@@ -64,6 +69,13 @@ type viewGrant struct {
 	ws any
 	// script is the view.js that was hashed, held so what runs is what was hashed.
 	script []byte
+	// page, run and limit make this the grant of a static HTML page (the files
+	// that were hashed, the runner that answers its queries, the render rate
+	// limit); okUntil is when the last positive re-check stops being trusted.
+	page    *artifacts.Artifact
+	run     artifacts.PageRunner
+	limit   renderLimiter
+	okUntil time.Time
 	// ctx ends when the token is dropped or replaced, the workspace changes or
 	// the decision stops allowing it: the queries run for this grant stop with it.
 	ctx    context.Context
@@ -77,6 +89,14 @@ type viewServer struct {
 	// stillAllowed re-checks that the grant's artifact is, right now, allowed at
 	// the grant's hash in the open workspace.
 	stillAllowed func(*viewGrant) bool
+	// verdictTTL is how long a page grant's positive re-check is reused: a page
+	// makes a request per asset, and each re-check reads and vets the whole file
+	// set. What is served never depends on it (the held bytes are the hashed
+	// bytes); it bounds how late a revoke or an edit is noticed. Zero rechecks
+	// every request.
+	verdictTTL time.Duration
+	// log receives the causes of failed renders (debug only; never shown).
+	log *slog.Logger
 	// base is the parent of every grant's context: the app's lifecycle context
 	// once Studio has started, so shutdown stops a view's queries too.
 	base context.Context
@@ -89,7 +109,7 @@ type viewServer struct {
 // newViewServer builds the server. libs is the directory of pinned libraries
 // (files directly in it), worker the bootstrap script.
 func newViewServer(worker []byte, libs fs.FS, stillAllowed func(*viewGrant) bool) *viewServer {
-	return &viewServer{worker: worker, libs: libs, stillAllowed: stillAllowed, grants: map[string]*viewGrant{}}
+	return &viewServer{worker: worker, libs: libs, stillAllowed: stillAllowed, grants: map[string]*viewGrant{}, verdictTTL: pageVerdictTTL}
 }
 
 // setBase makes ctx the parent of grants issued from now on.
@@ -166,13 +186,40 @@ func (v *viewServer) lookup(token string) *viewGrant {
 	if g == nil {
 		return nil
 	}
+	if g.page != nil && v.verdictTTL > 0 {
+		v.mu.Lock()
+		fresh := time.Now().Before(g.okUntil)
+		v.mu.Unlock()
+		if fresh {
+			return g
+		}
+	}
 	if v.stillAllowed != nil && !v.stillAllowed(g) {
 		v.mu.Lock()
 		v.dropLocked(token)
 		v.mu.Unlock()
 		return nil
 	}
+	if g.page != nil {
+		v.mu.Lock()
+		g.okUntil = time.Now().Add(v.verdictTTL)
+		v.mu.Unlock()
+	}
 	return g
+}
+
+// dropArtifact drops every token of the named artifact (its decision changed).
+func (v *viewServer) dropArtifact(name string) {
+	if v == nil {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for t, g := range v.grants {
+		if g.name == name {
+			v.dropLocked(t)
+		}
+	}
 }
 
 // Middleware is the AssetServer middleware: /vibe-view/ is answered here, every
@@ -208,12 +255,12 @@ func (v *viewServer) serve(w http.ResponseWriter, r *http.Request) {
 	// and swaps a 404 there for its own page: answer these 400, never 404.
 	if strings.HasSuffix(p, "/") || strings.HasSuffix(p, "/index.html") ||
 		strings.ContainsAny(p, "\\\x00") || strings.Contains(p, "//") || path.Clean(p) != p {
-		reply(w, r, http.StatusBadRequest, denyCSP, "", nil)
+		reply(w, r, http.StatusBadRequest, pageDenyCSP, "", nil)
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		reply(w, r, http.StatusMethodNotAllowed, denyCSP, "", nil)
+		reply(w, r, http.StatusMethodNotAllowed, pageDenyCSP, "", nil)
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(p, viewPrefix+"/"), "/")
@@ -222,8 +269,12 @@ func (v *viewServer) serve(w http.ResponseWriter, r *http.Request) {
 		v.serveLib(w, r, parts[1])
 	case len(parts) == 2 && viewTokenRe.MatchString(parts[0]) && (parts[1] == "worker.js" || parts[1] == "view.js"):
 		v.serveToken(w, r, parts[0], parts[1])
+	case len(parts) == 2 && viewTokenRe.MatchString(parts[0]) && parts[1] == "page":
+		v.servePage(w, r, parts[0])
+	case len(parts) >= 3 && viewTokenRe.MatchString(parts[0]) && parts[1] == "assets":
+		v.serveAsset(w, r, parts[0], strings.Join(parts[1:], "/"))
 	default:
-		reply(w, r, http.StatusNotFound, denyCSP, "", nil)
+		reply(w, r, http.StatusNotFound, pageDenyCSP, "", nil)
 	}
 }
 
@@ -242,7 +293,7 @@ func (v *viewServer) serveLib(w http.ResponseWriter, r *http.Request, file strin
 
 func (v *viewServer) serveToken(w http.ResponseWriter, r *http.Request, token, file string) {
 	g := v.lookup(token)
-	if g == nil {
+	if g == nil || g.page != nil {
 		reply(w, r, http.StatusNotFound, denyCSP, "", nil)
 		return
 	}

@@ -6,18 +6,26 @@
 // allowed and then edited says so and asks again. An allowed view runs in
 // CustomView (the Worker host, #160); a change to the artifact on disk, or the
 // state leaving "allowed", tears that down at once and this screen asks again.
+// An HTML page (#162) goes through the same screen: its files are listed read-only
+// (PageFiles), and an allowed static page is shown in StaticPage, a script-less
+// frame (a scripted page opens in its own window, which is not built yet).
 // Every string is text.
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
 import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
 import CustomView from './CustomView.vue'
+import PageFiles from './PageFiles.vue'
+import StaticPage from './StaticPage.vue'
 import { useArtifactViewTrust } from '../composables/useArtifactViewTrust'
 import type { ParamValue } from '../a2ui/artifactParams'
 
-const props = defineProps<{ name: string; detail?: ArtifactDetail | null; values?: Record<string, ParamValue> }>()
+const props = defineProps<{ name: string; detail?: ArtifactDetail | null; values?: Record<string, ParamValue>; refresh?: number }>()
 const { status, changedWhileReading, showNew, busy, error, refreshing, allow, deny, revoke } = useArtifactViewTrust(() => props.name)
 
 const state = computed(() => status.value?.state ?? 'none')
+const isPage = computed(() => status.value?.kind === 'html')
+// Once allowed the page's files fold away; the editor is made only when they are opened.
+const pageSrcOpen = ref(false)
 const shortHash = computed(() => (status.value?.hash ?? '').slice(0, 12))
 
 type FileTab = 'script' | 'manifest'
@@ -53,7 +61,7 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
 <template>
   <div class="col view-trust" data-testid="view-trust">
     <div class="row view-trust__bar">
-      <strong>Custom view</strong>
+      <strong>{{ isPage ? 'HTML page' : 'Custom view' }}</strong>
       <span v-if="state === 'allowed'" class="badge badge--success" data-testid="view-trust-state"><span class="dot"></span>Allowed</span>
       <span v-else-if="state === 'denied'" class="badge badge--error" data-testid="view-trust-state"><span class="dot"></span>Denied</span>
       <span v-else-if="state === 'changed'" class="badge badge--warn" data-testid="view-trust-state"><span class="dot"></span>Changed since you allowed it</span>
@@ -70,19 +78,20 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
     <template v-if="status && !status.error">
       <div v-if="state === 'denied'" class="note warn" role="status" data-testid="view-trust-denied">
         <Icon name="alert" :size="16" />
-        <span>You denied this view, so it will not run, even after edits. Revoke the decision to be asked again.</span>
+        <span>You denied this {{ isPage ? 'page' : 'view' }}, so it will not run, even after edits. Revoke the decision to be asked again.</span>
       </div>
       <div v-else-if="state !== 'allowed'" class="note warn" role="status" data-testid="view-trust-line">
         <Icon name="alert" :size="16" />
         <span>
-          <template v-if="state === 'changed'">This view changed since you allowed it. Read it again before you allow it. </template>
-          This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.
+          <template v-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it. </template>
+          <template v-if="isPage">This page was written by someone else or by the agent. It runs no script and cannot reach the network or your files; it can only show what this artifact's queries return.</template>
+          <template v-else>This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
 
       <div v-if="changedWhileReading" class="note warn" role="alert" data-testid="view-trust-changed-reading">
         <Icon name="alert" :size="16" />
-        <span>This view changed while you were reading it. Allow is off until you look at the new version.</span>
+        <span>This {{ isPage ? 'page' : 'view' }} changed while you were reading it. Allow is off until you look at the new version.</span>
         <button type="button" class="btn btn-sm" data-testid="view-trust-show-new" @click="showNew()">Show the new version</button>
       </div>
 
@@ -93,13 +102,25 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
       </div>
     </template>
 
-    <CustomView v-if="running" :name="name" :detail="detail!" :values="values ?? {}" />
+    <template v-if="running && isPage">
+      <StaticPage v-if="status?.page_kind === 'static'" :key="status.hash" :name="name" :detail="detail!" :values="values ?? {}" :refresh="refresh" />
+      <div v-else class="note info" role="status" data-testid="view-trust-page-window">
+        <Icon name="info" :size="16" />
+        <span>This page has script, so it opens in a page window. Page windows are not available in this version yet.</span>
+      </div>
+    </template>
+    <CustomView v-else-if="running" :name="name" :detail="detail!" :values="values ?? {}" />
     <div v-else-if="state === 'allowed'" class="note info" role="status" data-testid="view-trust-checking">
       <Icon name="info" :size="16" />
-      <span>Checking the view…</span>
+      <span>Checking the {{ isPage ? 'page' : 'view' }}…</span>
     </div>
 
-    <component :is="state === 'allowed' ? 'details' : 'div'" class="col view-trust__src" data-testid="view-trust-src" @toggle="remeasure">
+    <component :is="state === 'allowed' ? 'details' : 'div'" v-if="isPage && status && !status.error" class="col view-trust__src" data-testid="view-trust-page-src" @toggle="pageSrcOpen = ($event.target as HTMLDetailsElement).open">
+      <summary v-if="state === 'allowed'" class="view-trust__summary">View source</summary>
+      <PageFiles v-if="state !== 'allowed' || pageSrcOpen" :manifest="status.manifest" :files="status.files ?? []" />
+    </component>
+
+    <component :is="state === 'allowed' ? 'details' : 'div'" v-show="!isPage" class="col view-trust__src" data-testid="view-trust-src" @toggle="remeasure">
     <summary v-if="state === 'allowed'" class="view-trust__summary">View source</summary>
     <div class="seg view-trust__tabs" role="group" aria-label="Custom view file">
       <button type="button" :class="{ on: tab === 'script' }" :aria-pressed="tab === 'script'" data-testid="view-trust-tab-script" @click="tab = 'script'">view.js</button>
