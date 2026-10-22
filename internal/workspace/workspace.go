@@ -578,8 +578,28 @@ func (w *workspace) tempDirs() []string {
 		if subs, err := filestore.ListSubdirs(w.root, parent); err == nil {
 			for _, s := range subs {
 				dirs = append(dirs, parent+"/"+s)
+				if parent == artifacts.Dir {
+					dirs = w.appendPageDirs(dirs, parent+"/"+s+"/"+artifacts.HTMLDir, 0)
+				}
 			}
 		}
+	}
+	return dirs
+}
+
+// appendPageDirs adds a page's folders (html/, html/assets/, html/assets/<folder>/)
+// that exist, so an interrupted write's temp file in one of them is swept.
+func (w *workspace) appendPageDirs(dirs []string, rel string, depth int) []string {
+	subs, err := filestore.ListSubdirs(w.root, rel)
+	if err != nil {
+		return dirs
+	}
+	dirs = append(dirs, rel)
+	if depth >= 2 {
+		return dirs
+	}
+	for _, s := range subs {
+		dirs = w.appendPageDirs(dirs, rel+"/"+s, depth+1)
 	}
 	return dirs
 }

@@ -156,6 +156,11 @@ func (h *Handler) handleGetArtifact(ctx context.Context, req *Request) *Response
 		"name": a.Name, "rev": a.Rev, "updated_at": a.UpdatedAt, "manifest": manifest,
 	}
 	switch {
+	case a.Manifest.View == artifacts.ViewHTML:
+		// A page's files are not shown to the agent yet (nothing renders them
+		// for it either); say what it is and stop.
+		res["view_kind"] = artifacts.ViewHTML
+		res["note"] = "this artifact is an HTML page; its files cannot be read or changed with this tool"
 	case a.Manifest.View == artifacts.ViewScript:
 		addScriptSource(res, a.View)
 	case len(a.View) <= artifactViewBudgetBytes:
@@ -249,6 +254,11 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	m, keep, err := manifestFromParam(req.Params["manifest"])
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
+	}
+	if m.View == artifacts.ViewHTML {
+		// HTML pages are shown to the person before they run, and the agent
+		// has no way to write or allow one yet.
+		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: view: html pages cannot be written by this tool; use view a2ui or script")
 	}
 	rev, err := revParam(req.Params)
 	if err != nil {

@@ -117,6 +117,9 @@ func (ex *exporter) artifactBytes(id string) ([]byte, string, []byte, error) {
 	if err != nil {
 		return nil, "", nil, err
 	}
+	if src.ViewFile == artifacts.HTMLDir+"/" {
+		return nil, "", nil, errors.New("an HTML page is not exported yet")
+	}
 	if src.ManifestMissing || src.ViewMissing {
 		return nil, "", nil, errors.New("one of its two files is missing")
 	}

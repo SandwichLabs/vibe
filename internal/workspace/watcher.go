@@ -35,7 +35,8 @@ const (
 	KindQuery    ChangeKind = "query"
 	KindSkill    ChangeKind = "skill"
 	// KindArtifact is a data artifact: either of artifacts/<name>/'s two
-	// files (ID is the artifact name; Path says which file).
+	// files, or a file under artifacts/<name>/html/ of a page (ID is the
+	// artifact name; Path says which file).
 	KindArtifact ChangeKind = "artifact"
 	KindConfig   ChangeKind = "config"
 	// KindDotEnv is the workspace's .env. The change carries no content; ask
@@ -79,7 +80,7 @@ func WithDebounce(d time.Duration) WatchOption { return func(o *watchOpts) { o.d
 // recursive on Linux, so every directory that can hold a watched file is
 // registered on its own: the root (for vibe.yaml and the content directories
 // appearing later), notebooks/, queries/, skills/, artifacts/, each
-// skills/<name>/ and artifacts/<name>/ and .vibe-local/, and directories created afterwards are added as they appear.
+// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/) and .vibe-local/, and directories created afterwards are added as they appear.
 //
 // Its own stores' writes are ignored by content hash: a store announces the
 // hash of what it is about to write, and the watcher drops any event whose
@@ -207,6 +208,9 @@ func (w *Watcher) addSubdirs(parent string) {
 	if subs, err := filestore.ListSubdirs(w.root, parent); err == nil {
 		for _, s := range subs {
 			w.addDir(filepath.Join(w.root, parent, s))
+			if parent == artifacts.Dir {
+				w.addHTMLTree(filepath.Join(w.root, parent, s, artifacts.HTMLDir), 0)
+			}
 		}
 	}
 }
@@ -237,6 +241,7 @@ func (w *Watcher) relevant() []string {
 			add(artifacts.Dir + "/" + s + "/" + artifacts.ManifestFile)
 			add(artifacts.Dir + "/" + s + "/" + artifacts.ViewFile)
 			add(artifacts.Dir + "/" + s + "/" + artifacts.ScriptFile)
+			out = append(out, w.htmlFiles(filepath.Join(w.root, artifacts.Dir, s, artifacts.HTMLDir), 0)...)
 		}
 	}
 	return out
@@ -285,8 +290,71 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindSkill, parts[1], true
 	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile || parts[2] == artifacts.ScriptFile) && !filestore.IsTemp(parts[1]):
 		return KindArtifact, parts[1], true
+	case len(parts) >= 4 && len(parts) <= 6 && isArtifactHTMLPath(parts):
+		// A page file of a view: html artifact (artifacts/<name>/html/**).
+		return KindArtifact, parts[1], true
 	}
 	return "", "", false
+}
+
+// isArtifactHTMLPath reports whether parts is artifacts/<name>/html/... with no
+// hidden or temporary segment anywhere (an editor's swap file is not a change).
+func isArtifactHTMLPath(parts []string) bool {
+	if len(parts) < 3 || parts[0] != artifacts.Dir || parts[2] != artifacts.HTMLDir {
+		return false
+	}
+	for _, p := range parts[1:] {
+		if filestore.IsTemp(p) || artifacts.IgnoredPageFile(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// isArtifactHTMLDir reports whether parts names a folder the layout allows
+// under a page: html/, html/assets/ or html/assets/<folder>/.
+func isArtifactHTMLDir(parts []string) bool {
+	return len(parts) >= 3 && len(parts) <= 5 && isArtifactHTMLPath(parts)
+}
+
+// addHTMLTree watches a page folder and the folders under it the layout
+// allows (html/, html/assets/, html/assets/<folder>/); depth is that of abs
+// below html/.
+func (w *Watcher) addHTMLTree(abs string, depth int) {
+	w.addDir(abs) // a no-op when already watched
+	if depth >= 2 {
+		return
+	}
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() && !filestore.IsTemp(e.Name()) { // IsDir is false for a symlink
+			w.addHTMLTree(filepath.Join(abs, e.Name()), depth+1)
+		}
+	}
+}
+
+// htmlFiles lists the watched page files under abs (a folder of a page).
+func (w *Watcher) htmlFiles(abs string, depth int) []string {
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if filestore.IsTemp(e.Name()) {
+			continue
+		}
+		switch {
+		case e.Type().IsRegular():
+			out = append(out, filepath.Join(abs, e.Name()))
+		case e.IsDir() && depth < 2:
+			out = append(out, w.htmlFiles(filepath.Join(abs, e.Name()), depth+1)...)
+		}
+	}
+	return out
 }
 
 func (w *Watcher) rel(abs string) (string, bool) {
@@ -375,7 +443,8 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 func (w *Watcher) handleNewDir(abs, rel string) bool {
 	parts := strings.Split(rel, "/")
 	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir)) ||
-		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1]))
+		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1])) ||
+		isArtifactHTMLDir(parts)
 	if !isWatchedDir || !w.addDir(abs) {
 		return false
 	}
@@ -384,6 +453,12 @@ func (w *Watcher) handleNewDir(abs, rel string) bool {
 	// skills/<name>/ and artifacts/<name>/ levels and report what is there.
 	if len(parts) == 1 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) {
 		w.addSubdirs(parts[0])
+	}
+	if len(parts) == 2 && parts[0] == artifacts.Dir {
+		w.addHTMLTree(filepath.Join(abs, artifacts.HTMLDir), 0)
+	}
+	if isArtifactHTMLDir(parts) {
+		w.addHTMLTree(abs, len(parts)-3)
 	}
 	queued := false
 	for _, p := range w.relevant() {

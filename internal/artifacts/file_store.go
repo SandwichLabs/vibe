@@ -102,8 +102,24 @@ type readParts struct {
 	manifest, view filePart
 	// viewFile is the name of the view file that is present ("" when none).
 	viewFile string
-	modTime  time.Time
+	// files is the page file set (nil unless the manifest decodes to view:
+	// html), sorted by path.
+	files []PageFile
+	// stale is the content of an html/ folder beside a manifest that is not
+	// view: html (nil when none, or when it cannot be read). It is not part of
+	// the revision or the artifact, but a Put that makes the artifact a page
+	// must see it, or its files would join the page unseen.
+	stale   []PageFile
+	modTime time.Time
 }
+
+// pageFiles is every file on disk under html/, whatever the manifest says.
+func (p readParts) pageFiles() []PageFile {
+	return append(append([]PageFile(nil), p.files...), p.stale...)
+}
+
+// rev is the artifact's one revision as it is on disk now.
+func (p readParts) rev() string { return revisionWithFiles(p.manifest, p.view, p.files) }
 
 // read loads both files of an artifact. A file that does not exist is an
 // absent part; one that is a symbolic link, not a regular file or too large is
@@ -135,7 +151,39 @@ func (s *FileStore) read(name string) (readParts, error) {
 			out.modTime = st.ModTime
 		}
 	}
+	if err := s.readPage(name, &out); err != nil {
+		return readParts{}, err
+	}
 	return out, nil
+}
+
+// readPage reads the page files when the manifest on disk is a view: html one.
+// A manifest that does not decode is left to the caller to report; its files
+// are not read.
+func (s *FileStore) readPage(name string, out *readParts) error {
+	var m *Manifest
+	var err error
+	if out.manifest.present {
+		m, err = Decode(out.manifest.data)
+	}
+	if !out.manifest.present || err != nil || m.View != ViewHTML {
+		if files, _, rerr := readPageFiles(s.root, name); rerr == nil {
+			out.stale = files
+		}
+		return nil
+	}
+	files, mod, err := readPageFiles(s.root, name)
+	if err != nil {
+		return err
+	}
+	out.files = files
+	if files == nil {
+		out.files = []PageFile{} // an html artifact: its revision covers a (missing) page
+	}
+	if mod.After(out.modTime) {
+		out.modTime = mod
+	}
+	return nil
 }
 
 func (s *FileStore) load(name string) (*Artifact, error) {
@@ -153,6 +201,9 @@ func (s *FileStore) load(name string) (*Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
+	if m.View == ViewHTML {
+		return s.loadPage(name, m, p)
+	}
 	if want := ViewFileOf(m); !p.view.present {
 		return nil, invalid("%s is missing", want)
 	} else if p.viewFile != want {
@@ -164,6 +215,25 @@ func (s *FileStore) load(name string) (*Artifact, error) {
 	return &Artifact{
 		Name: name, Manifest: *m, View: p.view.data,
 		Rev: revision(p.manifest, p.view), UpdatedAt: p.modTime.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+// loadPage builds a view: html artifact: no view file may exist beside the
+// html/ folder, and the file set must pass the page vet.
+func (s *FileStore) loadPage(name string, m *Manifest, p readParts) (*Artifact, error) {
+	if p.view.present {
+		return nil, invalid("view: html keeps its page under %s/: remove %s", HTMLDir, p.viewFile)
+	}
+	page, err := VetPage(m, p.files)
+	if err != nil {
+		return nil, err
+	}
+	if err := sealPage(p.manifest.data, p.files, page); err != nil {
+		return nil, err
+	}
+	return &Artifact{
+		Name: name, Manifest: *m, Files: p.files, Page: page,
+		Rev: p.rev(), UpdatedAt: p.modTime.UTC().Format(time.RFC3339),
 	}, nil
 }
 
@@ -231,7 +301,7 @@ func (s *FileStore) Put(_ context.Context, a *Artifact, opts ...PutOption) error
 	if err != nil {
 		return fmt.Errorf("failed to save artifact %q: %w", a.Name, err)
 	}
-	curRev := revision(cur.manifest, cur.view)
+	curRev := cur.rev()
 	if !o.overwrite && expect != curRev {
 		return &filestore.ConflictError{
 			Path: Dir + "/" + a.Name, Missing: curRev == "", Existing: expect == "", Want: expect, Got: curRev,
@@ -250,6 +320,9 @@ func (s *FileStore) Put(_ context.Context, a *Artifact, opts ...PutOption) error
 func (s *FileStore) write(a *Artifact, prep prepared, cur readParts) error {
 	if err := s.manifestUnchanged(a.Name, cur.manifest); err != nil {
 		return err
+	}
+	if a.Manifest.View == ViewHTML {
+		return s.writeHTML(a, prep, cur)
 	}
 	viewFile := ViewFileOf(&a.Manifest)
 	sameKind := cur.viewFile == viewFile
@@ -277,7 +350,14 @@ func (s *FileStore) write(a *Artifact, prep prepared, cur readParts) error {
 	if mst.ModTime.After(newest) {
 		newest = mst.ModTime
 	}
+	if cur.files != nil {
+		// The kind changed away from view: html: its page files are unused.
+		if err := s.removePageFiles(a.Name, cur.files); err != nil {
+			return err
+		}
+	}
 	a.Rev = RevOf(prep.manifest, prep.view)
+	a.Files, a.Page = nil, nil
 	a.ManifestText = nil // consumed: a reused value must encode its Manifest next time
 	a.UpdatedAt = newest.UTC().Format(time.RFC3339)
 	s.remember(a.Name, a.Rev)
@@ -328,13 +408,17 @@ func (s *FileStore) Source(_ context.Context, name string) (*Source, error) {
 	if !p.manifest.present && !p.view.present {
 		return nil, fmt.Errorf("artifact %q: %w", name, ErrNotFound)
 	}
-	rev := revision(p.manifest, p.view)
+	rev := p.rev()
 	s.remember(name, rev)
-	return &Source{
+	src := &Source{
 		Name: name, Manifest: string(p.manifest.data), View: string(p.view.data),
 		ViewFile: p.viewFile, ManifestMissing: !p.manifest.present, ViewMissing: !p.view.present,
 		Rev: rev, UpdatedAt: p.modTime.UTC().Format(time.RFC3339),
-	}, nil
+	}
+	if p.files != nil {
+		src.Files, src.ViewFile, src.ViewMissing = p.files, HTMLDir+"/", false
+	}
+	return src, nil
 }
 
 // Delete implements Store. It refuses (with ErrConflict) when the artifact
@@ -357,7 +441,7 @@ func (s *FileStore) Delete(_ context.Context, name string, opts ...PutOption) er
 	if o.hasRev {
 		expect = o.rev
 	}
-	if now := revision(cur.manifest, cur.view); expect != "" && now != "" && expect != now {
+	if now := cur.rev(); expect != "" && now != "" && expect != now {
 		return fmt.Errorf("failed to delete artifact %q: %w", name, &filestore.ConflictError{Path: Dir + "/" + name, Want: expect, Got: now})
 	}
 	// Each file goes only if it is still the bytes just read, so a writer in
@@ -368,9 +452,15 @@ func (s *FileStore) Delete(_ context.Context, name string, opts ...PutOption) er
 		file string
 		part filePart
 	}{{cur.viewFile, cur.view}, {ManifestFile, cur.manifest}} {
+		if f.file == "" {
+			continue // no view file (a view: html artifact keeps html/ instead)
+		}
 		if err := filestore.Remove(s.root, rel(name, f.file), expectOf(f.part), false, s.obs); err != nil {
 			return fmt.Errorf("failed to delete artifact %q: %w", name, err)
 		}
+	}
+	if err := s.removePageFiles(name, cur.pageFiles()); err != nil {
+		return fmt.Errorf("failed to delete artifact %q: %w", name, err)
 	}
 	filestore.RemoveEmptyDir(s.root, Dir+"/"+name)
 	s.mu.Lock()

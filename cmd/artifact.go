@@ -42,11 +42,7 @@ type artifactRow struct {
 func artifactRows(list []artifacts.Artifact) []artifactRow {
 	rows := make([]artifactRow, 0, len(list))
 	for _, a := range list {
-		kind := a.Manifest.View
-		if kind == "" && a.Error == "" {
-			kind = artifacts.ViewA2UI
-		}
-		rows = append(rows, artifactRow{Name: a.Name, Title: a.Manifest.Title, View: kind, Error: a.Error})
+		rows = append(rows, artifactRow{Name: a.Name, Title: a.Manifest.Title, View: artifacts.ViewLabel(&a), Error: a.Error})
 	}
 	return rows
 }

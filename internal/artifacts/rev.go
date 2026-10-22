@@ -40,3 +40,43 @@ func revision(manifest, view filePart) string {
 func RevOf(manifest, view []byte) string {
 	return revision(filePart{manifest, true}, filePart{view, true})
 }
+
+// revisionWithFiles is the one revision of a view: html artifact: the pair
+// revision (the view part is absent for such an artifact) extended over every
+// file under html/, each length-prefixed (path, then bytes) in path order, so
+// a change to any one file, a renamed, added or removed file, or a byte moved
+// across a file boundary changes it. files == nil means the artifact has no
+// page files and the pair revision is returned unchanged, which keeps every
+// existing revision stable.
+func revisionWithFiles(manifest, view filePart, files []PageFile) string {
+	base := revision(manifest, view)
+	if files == nil {
+		return base
+	}
+	h := sha256.New()
+	put := func(b []byte) {
+		var n [8]byte
+		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
+		h.Write(n[:])
+		h.Write(b)
+	}
+	put([]byte("vibe-page-rev/1"))
+	put([]byte(base))
+	var n [8]byte
+	binary.BigEndian.PutUint64(n[:], uint64(len(files)))
+	h.Write(n[:])
+	for _, f := range sortedFiles(files) {
+		put([]byte(f.Path))
+		put(f.Data)
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
+}
+
+// pageRevOf is the revision of a prepared artifact as the stores compute it
+// for what is on disk (for view: html, no view file exists).
+func pageRevOf(p prepared) string {
+	if p.files != nil {
+		return revisionWithFiles(filePart{p.manifest, true}, filePart{}, p.files)
+	}
+	return RevOf(p.manifest, p.view)
+}

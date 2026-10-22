@@ -7,9 +7,10 @@ artifacts/<name>/
 ├── artifact.yaml        title, typed parameters with defaults, NAMED queries over them
 └── view.a2ui.json       a declarative A2UI view (closed schema, validated)    (view: a2ui, the default)
     or view.js           a custom view, run in a worker after you allow it     (view: script)
+    or html/             an HTML page (templates, CSS, JS, assets)             (view: html; not rendered yet)
 ```
 
-An artifact has exactly one view file, the one its `view:` names. Both existing, or the wrong one for the kind, makes the folder broken (it lists with an error). There is no fallback A2UI page for a script view: before you allow it, the artifact opens as source. See [Custom views](#custom-views-view-script).
+An artifact has exactly one view, the one its `view:` names (a file, or for `view: html` the `html/` folder). Both existing, or the wrong one for the kind, makes the folder broken (it lists with an error). There is no fallback A2UI page for a script view: before you allow it, the artifact opens as source. See [Custom views](#custom-views-view-script).
 
 The folder name is the artifact's name. This page describes the file formats and the view rules; the plan and its decisions are in [`../plans/data-artifacts.md`](../plans/data-artifacts.md).
 
@@ -249,3 +250,72 @@ connect-src 'none'; worker-src 'none'; img-src 'none'; base-uri 'none'; form-act
 `<origin>` is the page's own origin, which the page passes in (`location.protocol//location.host`: `wails://wails.localhost:34115` in `task studio:dev`, `wails://wails` in a built app on Linux and macOS, `http://wails.localhost` on Windows); Go accepts only a plain `http`, `https` or `wails` origin and puts nothing else in a header. A path source needs a host, so `'self'` could not be narrowed to these paths. The spike showed the Worker's own response CSP is what holds `connect-src 'none'`: `fetch`, XHR, WebSocket, EventSource, `importScripts` of anything but those paths, and nested workers are all blocked. No path ends in `/` or `index.html` (Wails would inject its runtime into it), and a request under `/vibe-view/` that would match that injection is answered 400, never 404 (Wails would swap a 404 for its own page). There is no directory listing, a path with `..`, `//` or a backslash is 400, nothing from the workspace is reachable except through a token, and only `GET` and `HEAD` are accepted.
 
 The Worker holds one `MessagePort`, handed over in its first message and kept in the bootstrap's closure; every later message uses it, never a broadcast. Studio's page owns the artifact name for every `run`.
+
+## HTML pages: `view: html` (stored and vetted; not rendered yet)
+
+> **Status.** The file set, the manifest block, the save-time vet and the trust hash exist, and an HTML page lists as `html (static)` or `html (scripted)`. **Nothing renders a page yet**: Studio opens it to a "cannot show it yet" message, the agent cannot read or write one, a bundle skips it, and there is no allow prompt. Rendering, the two hosts and the capabilities are later steps of [`../plans/html-artifacts.md`](../plans/html-artifacts.md) (P3 to P6). This section describes what is real now.
+
+An HTML page is a Go `html/template` page of your own markup, with optional CSS, JS and assets, whose only data source is the manifest's named queries. Like every artifact it stores questions, never answers.
+
+```
+artifacts/<name>/
+├── artifact.yaml
+└── html/
+    ├── index.html.tmpl     the entry template (html.entry); other *.tmpl files are partials
+    ├── app.js              optional; any .js/.mjs file makes the page "scripted"
+    └── assets/…            style.css, images, fonts, data; at most assets/<folder>/<file>
+```
+
+```yaml
+view: html
+html:
+  entry: index.html.tmpl        # default; a .tmpl directly under html/
+  window: {width: 1200, height: 800}   # scripted pages only; 200 to 4000
+  capabilities:                 # scripted pages only; the closed set below
+    state: {scope: local}       # scope is "local" (the only one built)
+    download: {}
+    ask: {}
+```
+
+The block is strict like the rest of the manifest: `html:` only goes with `view: html`, an unknown key or capability is refused, and **capabilities and a window need script** (a static page declares none, so the manifest never promises something the page's host does not offer).
+
+### The file set
+
+A folder that breaks any rule below lists with its error and does not run; nothing is repaired.
+
+- Extensions: `.tmpl` (only directly under `html/`), `.js`, `.mjs` (directly under `html/` or in `assets/`), and `.css`, `.svg`, `.png`, `.jpg`, `.webp`, `.woff2`, `.json` (in `assets/` only, so nothing hashed is unreachable). Names use letters, digits, `.`, `_`, `-`; no dotfile (`.DS_Store` and `Thumbs.db` are skipped: not hashed, not served, not an error), no symbolic link (files are opened without following one), no duplicate path (case-insensitive). A stale `html/` folder beside a manifest that is not `view: html` is ignored until the artifact becomes a page; then its files are replaced or removed with the rest.
+- Layout: files directly in `html/`, in `html/assets/`, or in `html/assets/<folder>/`; no other folder. `_vibe` and `vibe-lib` are reserved for the host.
+- Caps: 200 files, 5 MB in all, 1 MB per file, 256 KB per template. Text files are UTF-8 with no control, bidi or invisible characters; images and fonts must start with their format's magic bytes; `.json` must be one JSON value; an SVG must be inert: a script, an event handler, a `javascript:` URL, a DOCTYPE or entity, a processing instruction other than the XML declaration, a `foreignObject`, `set`/`animate`, a link or `url()` that is not a `#fragment` or a literal `assets/` path are all refused.
+- One `Rev` covers `artifact.yaml` and every file (path and bytes, in path order), so a change to any of them is a conflict for a stale writer. A change on disk under `html/**` is reported by the file watcher as a change to the artifact.
+
+### Static or scripted
+
+The kind is **derived**, never declared: a page is *scripted* if `html/` holds any `.js`/`.mjs` file, a template holds a `<script>` element (also in `<svg>`, or inside an `{{if}}` branch or a partial), or any element has an `on*` attribute. Otherwise it is *static*. Templates are read as markup with every `{{ ... }}` replaced by a marker (both branches of `{{if}}` and `{{range}}` stay visible), using the HTML tokenizer `html/template` is built on. A `{{template}}` call is replaced by the callee's own markup **at the call site**, because a partial runs inside its caller's context (it may close the caller's `<style>`, or open an `<svg>`); a `{{range}}` body is read twice, since it may repeat; if `<svg>` or `<math>` appears anywhere, the whole page is read as foreign content from the first byte. A call cycle, or a page whose expansion (all templates together) is over 5000 calls or 2 MB, is refused, and a template the entry never reaches is read on its own. A template that cannot be read that way is refused: an action inside a tag name or between a tag's attributes (so a tag cannot be spelled by data or split across partials), an action right after `<`, a template that ends inside a tag, and any HTML comment (use `{{/* */}}`; `html/template` strips comments, which can join the text around one into a tag). `<noscript>`, `<xmp>`, `<noembed>` and `<noframes>` are refused: the tokenizer reads them as text, but a page without script shows their content as markup. Inside `<svg>`/`<math>` no element's content is treated as raw text and `<style>` text has its entities decoded, as in a browser. A template action may not fill an SVG paint attribute (`fill`, `stroke`, `filter`, `mask`, `clip-path`, `marker-*`, `cursor`, ...), and any attribute that holds `url(` gets the CSS rules below.
+
+### The template functions
+
+The function map is closed, and one leaf package (`internal/artifacts/pagefuncs`) defines it for both the save-time vet and the renderer:
+
+| Function | Returns |
+|---|---|
+| `query "name"` | `{Columns, Rows, Truncated}` of that manifest query |
+| `param "name"` | the bound value of a parameter |
+| `params` | the declared parameters, for building controls |
+| `link "name" value …` | a URL to this page with those parameters overridden |
+| `number`, `percent`, `date`, `bytes`, `truncate` | formatted text (`date` takes `iso`, `short`, `long` or `month`, never a Go layout) |
+| `scaleLinear`, `scaleBand`, `pathLine` | numbers and path text, to draw SVG without script |
+| `json v` | the value as plain data, for a `<script type="application/json">` block |
+
+**No function returns `template.HTML`, `JS`, `CSS`, `URL`, `HTMLAttr`, `JSStr` or `Srcset`** (nor a type holding one): data is always escaped by context, and a lint test walks every function's result types to keep it so. The builtin `call` is refused, and so is chaining a function result (`{{ call.X }}`). The functions also normalise what an environment hands them (a named string type, or a trusted type hidden in a row, becomes a plain string).
+
+### The save-time vet
+
+Saving a page (the store's `Put`, and every read of one) runs the vet; a failure is the error the author sees.
+
+- Every template parses against the closed function map with `missingkey=error`, and `html/template`'s context escaper is run over every template, so an escaping error is found at save, not at render. The vet **never executes a page**: each template is run through a synthetic root whose first action fails, which is after the escaper has done its work and before anything of the page runs (so `{{ range 3000000000 }}` or a doubling chain of calls costs nothing). The renderer (P3) has no such luck and must bound a render itself: a context cannot interrupt an empty `range`.
+- `query`, `param` and `link` take **quoted literal names** that the manifest declares (a computed, piped or variable name is refused); `{{template "x"}}` must name a file or a `{{define}}`, and a template name may be defined only once. The queries and parameters a page uses are derived from this (`PageInfo.Queries`, `.Params`).
+- **URL attributes are an allow-list.** `href`, `src`, `srcset`, `poster`, `action`, `formaction`, `xlink:href` (and a few older ones) must be a `link` call, a `#fragment`, or a literal relative `assets/` path; a `<script src>` may also name a top-level `.js` of the page. No absolute URL, no templated value beside other text, and no other action. No `target`, `ping`, `download` or `srcdoc` attribute; `<link>` only as `rel="stylesheet"` with a literal `assets/` href; no `<meta http-equiv>`, `<base>`, `<iframe>`, `<frame>`, `<object>`, `<embed>`. CSS (a `style` attribute, a `<style>` element, a `.css` file) may load only `url(assets/…)` or `url(#…)`: no backslash escape, `@import`, or `image-set()`-style function, and no action inside `url()`. This closes the hint and click paths that open a connection under every CSP layer found in the spike.
+
+### Trust hash
+
+`artifacts.PageHash` is what an allow will be keyed by: a SHA-256 over `artifact.yaml`, the derived kind, the declared capabilities, and every file as path, bytes and role, sorted by path, every field length-prefixed (tag `vibe-page-hash/1`). A renamed, added, removed or moved file, a byte moved across a boundary, a role change, or a switch between static and scripted all change it. The stores return it as `Page.Hash` with every read of a page. `ViewHash` (for `view: script`) is unchanged.

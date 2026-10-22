@@ -26,7 +26,7 @@ func (m *Mock) revOf(name string) string {
 	if !ok {
 		return ""
 	}
-	return RevOf(p.manifest, p.view)
+	return pageRevOf(p)
 }
 
 func (m *Mock) build(name string) (*Artifact, error) {
@@ -35,12 +35,22 @@ func (m *Mock) build(name string) (*Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	rev := RevOf(p.manifest, p.view)
+	rev := pageRevOf(p)
 	if m.seen == nil {
 		m.seen = map[string]string{}
 	}
 	m.seen[name] = rev
-	return &Artifact{Name: name, Manifest: *mf, View: append([]byte(nil), p.view...), Rev: rev}, nil
+	a := &Artifact{Name: name, Manifest: *mf, View: append([]byte(nil), p.view...), Rev: rev}
+	if mf.View == ViewHTML {
+		if a.Page, err = VetPage(mf, p.files); err != nil {
+			return nil, err
+		}
+		if err = sealPage(p.manifest, p.files, a.Page); err != nil {
+			return nil, err
+		}
+		a.View, a.Files = nil, copyFiles(p.files)
+	}
+	return a, nil
 }
 
 func (m *Mock) List(context.Context) ([]Artifact, error) {
@@ -102,8 +112,10 @@ func (m *Mock) Put(_ context.Context, a *Artifact, opts ...PutOption) error {
 		m.byName = map[string]prepared{}
 	}
 	prep.view = append([]byte(nil), prep.view...)
+	prep.files = copyFiles(prep.files)
 	m.byName[a.Name] = prep
-	a.Rev = RevOf(prep.manifest, prep.view)
+	a.Rev = pageRevOf(prep)
+	a.Page = prep.page
 	a.ManifestText = nil
 	if m.seen == nil {
 		m.seen = map[string]string{}
@@ -122,7 +134,7 @@ func (m *Mock) Source(_ context.Context, name string) (*Source, error) {
 	if !ok {
 		return nil, fmt.Errorf("artifact %q: %w", name, ErrNotFound)
 	}
-	rev := RevOf(p.manifest, p.view)
+	rev := pageRevOf(p)
 	if m.seen == nil {
 		m.seen = map[string]string{}
 	}
@@ -130,6 +142,9 @@ func (m *Mock) Source(_ context.Context, name string) (*Source, error) {
 	src := &Source{Name: name, Manifest: string(p.manifest), View: string(p.view), Rev: rev, ViewFile: ViewFile}
 	if mf, err := Decode(p.manifest); err == nil {
 		src.ViewFile = ViewFileOf(mf)
+		if mf.View == ViewHTML {
+			src.Files = copyFiles(p.files)
+		}
 	}
 	return src, nil
 }
@@ -151,4 +166,15 @@ func (m *Mock) Delete(_ context.Context, name string, opts ...PutOption) error {
 	delete(m.byName, name)
 	delete(m.seen, name)
 	return nil
+}
+
+func copyFiles(files []PageFile) []PageFile {
+	if files == nil {
+		return nil
+	}
+	out := make([]PageFile, len(files))
+	for i, f := range files {
+		out[i] = PageFile{Path: f.Path, Data: append([]byte(nil), f.Data...)}
+	}
+	return out
 }

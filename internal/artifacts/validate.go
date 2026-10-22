@@ -62,8 +62,11 @@ func validateHeader(m *Manifest) error {
 	if m.View == "" {
 		m.View = ViewA2UI
 	}
-	if m.View != ViewA2UI && m.View != ViewScript {
-		return invalid("view must be %q or %q", ViewA2UI, ViewScript)
+	if m.View != ViewA2UI && m.View != ViewScript && m.View != ViewHTML {
+		return invalid("view must be %q, %q or %q", ViewA2UI, ViewScript, ViewHTML)
+	}
+	if err := validateHTMLSpec(m); err != nil {
+		return err
 	}
 	if len(m.Queries) == 0 {
 		return invalid("an artifact needs at least one query")
@@ -269,6 +272,12 @@ func ValidateView(m *Manifest, view []byte) error {
 	if m.View == ViewScript {
 		return validateScript(view)
 	}
+	if m.View == ViewHTML {
+		if len(view) > 0 {
+			return invalid("view: html keeps its page under %s/, not in a view file", HTMLDir)
+		}
+		return nil
+	}
 	_, err := validatedPage(m, view)
 	return err
 }
@@ -316,8 +325,8 @@ func firstHiddenRune(s string, invisible bool) (rune, bool) {
 // renders. A caller must never re-parse the stored bytes itself (Go and
 // JavaScript disagree on, for one, a lone surrogate escape).
 func RenderView(m *Manifest, view []byte) ([]byte, error) {
-	if m.View == ViewScript {
-		return nil, invalid("a view: script artifact has no A2UI page to render")
+	if m.View == ViewScript || m.View == ViewHTML {
+		return nil, invalid("a view: %s artifact has no A2UI page to render", m.View)
 	}
 	page, err := validatedPage(m, view)
 	if err != nil {
