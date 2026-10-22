@@ -40,12 +40,6 @@ func (p *pageAppState) add(e ActivityEntry) {
 	}
 }
 
-func (p *pageAppState) entries() []ActivityEntry {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]ActivityEntry(nil), p.log...)
-}
-
 // pageServices builds the services of one artifact's windows. The artifact is
 // fixed here, by Studio: nothing a page sends names one.
 func (a *App) pageServices(ws workspace.Workspace, name string) pageServices {

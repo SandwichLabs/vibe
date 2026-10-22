@@ -128,7 +128,6 @@ interface AppApi {
   OpenArtifactPageWindow(name: string, query: string, theme: Record<string, string>): Promise<PageWindowInfo>
   ClosePageWindow(name: string): Promise<void>
   SetPageAsk(name: string, on: boolean): Promise<void>
-  ListAgentActivity(): Promise<AgentActivityEntry[]>
   RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
