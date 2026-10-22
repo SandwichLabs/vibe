@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+
+	"github.com/SandwichLabs/vibe/internal/jsonenc"
 )
 
 // HelperArg is the first argument that puts the Studio binary in helper mode.
@@ -44,7 +46,8 @@ const (
 	TypeReady     = "ready"  // the first document finished loading
 	TypeRun       = "run"    // vibe.run(query, values)
 	TypeDoc       = "doc"    // a navigation asks for the entry document with a new query string
-	TypeCall      = "call"   // vibe.use(name).op(arg): capabilities (not built)
+	TypeCall      = "call"   // vibe.use(name).op(arg): a capability call
+	TypePut       = "put"    // one chunk of a capability argument too big for a call (acked with a reply)
 	TypeGone      = "gone"   // the web process died
 	TypeClosed    = "closed" // the person closed the window
 
@@ -52,7 +55,8 @@ const (
 	TypeOpen  = "open"  // title, size, parameters, query string
 	TypeFile  = "file"  // one chunk of one served file
 	TypeGo    = "go"    // everything is sent: open the window
-	TypeReply = "reply" // the answer to a run or a call
+	TypeReply = "reply" // the answer to a run, a put or a call
+	TypePush  = "push"  // an event for the page from a capability (state: another window wrote)
 	TypeDocr  = "docr"  // one chunk of an entry document
 	TypeQuit  = "quit"  // close the window and exit
 )
@@ -66,6 +70,8 @@ const (
 	CodeTooLarge    = "toolarge"
 	CodeUnavailable = "unavailable"
 	CodeStopped     = "stopped"
+	CodeGesture     = "gesture"
+	CodeModel       = "model"
 )
 
 // ErrorText is the fixed text a page sees for an error code.
@@ -76,6 +82,8 @@ var ErrorText = map[string]string{
 	CodeTooLarge:    "That result is too large.",
 	CodeUnavailable: "That is not available.",
 	CodeStopped:     "This page was stopped.",
+	CodeGesture:     "Saving a file needs a click or a key press first.",
+	CodeModel:       "The model could not answer.",
 }
 
 // Message is every message of the protocol; which fields a type may carry, and
@@ -89,10 +97,13 @@ type Message struct {
 	Q string `json:"q,omitempty"`
 	// V holds the values of a run: scalars only.
 	V map[string]any `json:"v,omitempty"`
-	// Cap, Op and Arg are a capability call (reserved).
-	Cap string          `json:"cap,omitempty"`
-	Op  string          `json:"op,omitempty"`
-	Arg json.RawMessage `json:"arg,omitempty"`
+	// Cap, Op and Arg are a capability call; Up names an upload (put chunks)
+	// whose assembled text is the argument; Text is a put's chunk.
+	Cap  string          `json:"cap,omitempty"`
+	Op   string          `json:"op,omitempty"`
+	Arg  json.RawMessage `json:"arg,omitempty"`
+	Up   int64           `json:"up,omitempty"`
+	Text string          `json:"s,omitempty"`
 
 	// Open.
 	Name   string          `json:"name,omitempty"`
@@ -144,7 +155,8 @@ var shapes = map[string]shape{
 	TypeReady:     {dir: FromHelper},
 	TypeRun:       {dir: FromHelper, required: []string{"id", "q"}, optional: []string{"v"}},
 	TypeDoc:       {dir: FromHelper, required: []string{"id"}, optional: []string{"q"}},
-	TypeCall:      {dir: FromHelper, required: []string{"id", "cap", "op"}, optional: []string{"arg"}},
+	TypeCall:      {dir: FromHelper, required: []string{"id", "cap", "op"}, optional: []string{"arg", "up"}},
+	TypePut:       {dir: FromHelper, required: []string{"id", "up", "s"}, optional: []string{"seq", "last"}},
 	TypeGone:      {dir: FromHelper},
 	TypeClosed:    {dir: FromHelper},
 
@@ -152,6 +164,7 @@ var shapes = map[string]shape{
 	TypeFile:  {dir: ToHelper, required: []string{"path", "ct"}, optional: []string{"seq", "last", "data"}},
 	TypeGo:    {dir: ToHelper},
 	TypeReply: {dir: ToHelper, required: []string{"id", "ok"}, optional: []string{"code", "result"}},
+	TypePush:  {dir: ToHelper, required: []string{"cap", "op"}, optional: []string{"arg"}},
 	TypeDocr:  {dir: ToHelper, required: []string{"status"}, optional: []string{"id", "seq", "last", "data"}},
 	TypeQuit:  {dir: ToHelper},
 }
@@ -240,10 +253,13 @@ func Encode(m *Message, dir Direction) ([]byte, error) {
 	if sh, ok := shapes[m.T]; !ok || sh.dir != dir {
 		return nil, fmt.Errorf("pagehost: unknown message type %q", truncate(m.T))
 	}
-	b, err := json.Marshal(m)
+	// HTML escaping off: a "<" in a value stays one byte, so a message is the
+	// size its fields were measured at (the pipe is not HTML).
+	b, err := jsonenc.Encode(m, "")
 	if err != nil {
 		return nil, fmt.Errorf("pagehost: failed to encode: %w", err)
 	}
+	b = bytes.TrimRight(b, "\n")
 	if len(b) >= dir.max() {
 		return nil, errors.New("pagehost: message too large")
 	}

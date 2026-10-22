@@ -84,6 +84,12 @@ type Workspace interface {
 	DenyArtifactView(name string) error
 	RevokeArtifactView(name string) error
 	ArtifactViewDecisions() []ArtifactViewDecision
+	// PageAskEnabled and SetPageAsk are the separate toggle of a scripted page's
+	// `ask` capability (H5): on by default when the page is allowed, revocable on
+	// its own, kept in pageask.json beside views.json. An edit that changes the
+	// page's hash turns it off until the next allow.
+	PageAskEnabled(name, hash string) bool
+	SetPageAsk(name string, on bool) error
 
 	// Resolver is the credential resolver (keychain, env, prompt) this
 	// workspace uses. Never nil.
@@ -218,6 +224,7 @@ type workspace struct {
 
 	denv dotenvState
 	vdec *trustfile.Decisions // custom-view allow/deny decisions (views.json)
+	adec *trustfile.Decisions // the `ask` capability toggle of scripted pages (pageask.json)
 	res  *secrets.Resolver    // opts.resolver with the .env overlay layered on
 
 	crudMu   sync.Mutex // serialises connection CRUD in this process

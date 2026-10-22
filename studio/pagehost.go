@@ -25,6 +25,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/vibe/internal/pagestate"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -92,6 +93,13 @@ type pageHost struct {
 	wins   map[string]*pageWindow
 	gen    uint64
 	gens   map[string]uint64
+	// stores are the state stores by workspace and artifact, asks the ask
+	// limiter by artifact (pagecaps.go).
+	stores stateStores
+	asks   map[string]*pagehost.Rate
+	saves  map[string]*saveThrottle
+	// putLimit is the bytes of upload chunks a window may send in a second (0: the default).
+	putLimit int
 }
 
 func newPageHost(logger *slog.Logger, libs fs.FS, emit func(event string, data ...any)) *pageHost {
@@ -112,6 +120,8 @@ type pageOpen struct {
 	runner  func(*artifacts.Manifest) artifacts.PageRunner
 	allowed func(hash string) bool
 	base    context.Context
+	// svc is what the capabilities call (pagecaps.go).
+	svc pageServices
 }
 
 // pageWindow is one open window. The artifact is pinned here, at open: no
@@ -128,10 +138,20 @@ type pageWindow struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 
-	limit   pagehost.Limiter
-	flood   pagehost.Flood
-	started time.Time
-	beat    atomic.Int64
+	svc     pageServices
+	caps    map[string]bool
+	store   *pagestate.Store
+	unsub   func()
+	upMu    sync.Mutex
+	uploads map[int64]*upload
+
+	limit pagehost.Limiter
+	flood pagehost.Flood
+	// putFlood counts upload chunks apart from other lines (pagehost_bridge.go).
+	putFlood pagehost.Flood
+	putBytes pagehost.Flood
+	started  time.Time
+	beat     atomic.Int64
 
 	verdictMu sync.Mutex
 	verdictAt time.Time
@@ -166,7 +186,8 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 	}
 	ctx, cancel := context.WithCancel(base)
 	run := req.runner(&page.Manifest)
-	setup, err := buildWindowSetup(ctx, run, page, req, h.libs)
+	granted := grantedCaps(page, req.svc, hash)
+	setup, err := buildWindowSetup(ctx, run, page, req, h.libs, granted)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -177,7 +198,23 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 		return nil, err
 	}
 	w := &pageWindow{host: h, name: req.name, hash: hash, page: page, conn: conn, out: pagehost.NewWriter(conn, pagehost.ToHelper),
-		run: run, allowed: req.allowed, ctx: ctx, cancel: cancel, started: time.Now()}
+		run: run, allowed: req.allowed, ctx: ctx, cancel: cancel, started: time.Now(),
+		svc: req.svc, caps: map[string]bool{}, uploads: map[int64]*upload{}}
+	for _, n := range granted {
+		w.caps[n] = true
+	}
+	if w.caps[artifacts.CapState] && req.svc.state != nil {
+		store, serr := req.svc.state()
+		if serr != nil {
+			cancel()
+			conn.Kill()
+			return nil, errPageWindowSetup
+		}
+		w.store = store
+	}
+	if w.store == nil {
+		delete(w.caps, artifacts.CapState)
+	}
 	// A helper that wedges before reading its setup would hold openMu, and with it
 	// every later open: give it pageSetupTimeout, then kill it.
 	stall := time.AfterFunc(pageSetupTimeout, w.kill)
@@ -198,6 +235,7 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 		cancel()
 		return nil, errViewNotAllowed
 	}
+	w.subscribeState()
 	go w.serve()
 	go w.watch()
 	go w.reap()
@@ -272,6 +310,7 @@ func (h *pageHost) closeAll() {
 	for _, w := range all {
 		w.finish(pageStateClosed)
 	}
+	h.flushStates(true)
 }
 
 // artifactChanged is the watcher's word that a file of the artifact changed on
@@ -296,6 +335,14 @@ func (w *pageWindow) finish(state string) {
 		w.final = state
 		w.cancel()
 		w.kill()
+		if w.unsub != nil {
+			w.unsub()
+		}
+		if w.store != nil {
+			if err := w.store.Flush(); err != nil && w.host.logger != nil {
+				w.host.logger.Debug("page state not flushed", "artifact", w.name, "error", err)
+			}
+		}
 		w.host.mu.Lock()
 		if w.host.wins[w.name] == w {
 			delete(w.host.wins, w.name)

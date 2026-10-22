@@ -30,6 +30,44 @@ static char *g_prefix = NULL;
 static GHashTable *g_pending = NULL;
 static int g_loaded = 0;
 
+/* The person's input, seen by the native widget before the page can see it. A
+ * page that posts straight to the message handler cannot make one of these: the
+ * gesture the `download` capability needs is checked here, outside the web
+ * process (vibe_host_take_input). One physical input is one unit; a held key's
+ * repeats are not new inputs, and Escape is not one. */
+static gint64 g_input_us = 0;
+static guint8 g_keys_down[256 / 8]; /* hardware keycodes now held, to tell a fresh press from an auto-repeat */
+#define INPUT_WINDOW_US (5 * G_USEC_PER_SEC)
+
+static void note_input(void) { __atomic_store_n(&g_input_us, g_get_monotonic_time(), __ATOMIC_SEQ_CST); }
+
+int vibe_host_take_input(void) {
+  gint64 t = __atomic_exchange_n(&g_input_us, 0, __ATOMIC_SEQ_CST);
+  return t != 0 && g_get_monotonic_time() - t <= INPUT_WINDOW_US;
+}
+
+static gboolean on_button(GtkWidget *w, GdkEventButton *e, gpointer ud) {
+  if (e->type == GDK_BUTTON_PRESS) note_input();
+  return FALSE;
+}
+static gboolean on_key(GtkWidget *w, GdkEventKey *e, gpointer ud) {
+  if (e->keyval == GDK_KEY_Escape) return FALSE;
+  guint k = e->hardware_keycode & 0xff;
+  if (g_keys_down[k / 8] & (1u << (k % 8))) return FALSE; /* auto-repeat of a key still held */
+  g_keys_down[k / 8] |= (1u << (k % 8));
+  note_input();
+  return FALSE;
+}
+static gboolean on_key_up(GtkWidget *w, GdkEventKey *e, gpointer ud) {
+  guint k = e->hardware_keycode & 0xff;
+  g_keys_down[k / 8] &= ~(1u << (k % 8));
+  return FALSE;
+}
+static gboolean on_touch(GtkWidget *w, GdkEventTouch *e, gpointer ud) {
+  if (e->type == GDK_TOUCH_BEGIN) note_input();
+  return FALSE;
+}
+
 static void on_message(WebKitUserContentManager *m, WebKitJavascriptResult *r, gpointer ud) {
   JSCValue *v = webkit_javascript_result_get_js_value(r);
   if (!jsc_value_is_string(v)) return;
@@ -151,6 +189,12 @@ static GtkWidget *on_create(WebKitWebView *v, WebKitNavigationAction *a, gpointe
 static gboolean on_ctxmenu(WebKitWebView *v, WebKitContextMenu *m, GdkEvent *e, WebKitHitTestResult *h, gpointer ud) { return TRUE; }
 static gboolean on_dialog(WebKitWebView *v, WebKitScriptDialog *d, gpointer ud) { return TRUE; }
 static gboolean on_fullscreen(WebKitWebView *v, gpointer ud) { return TRUE; }
+/* <input type=file> opens no chooser: the page has no files to choose from, and
+ * a GTK chooser over the helper's allow-listed view would show the wrong tree. */
+static gboolean on_file_chooser(WebKitWebView *v, WebKitFileChooserRequest *r, gpointer ud) {
+  webkit_file_chooser_request_cancel(r);
+  return TRUE;
+}
 static void on_download(WebKitWebContext *c, WebKitDownload *d, gpointer ud) { webkit_download_cancel(d); }
 static void on_crash(WebKitWebView *v, WebKitWebProcessTerminationReason r, gpointer ud) {
   vibePageEvent(EV_WEBGONE);
@@ -254,9 +298,16 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
   g_signal_connect(g_view, "create", G_CALLBACK(on_create), NULL);
   g_signal_connect(g_view, "context-menu", G_CALLBACK(on_ctxmenu), NULL);
   g_signal_connect(g_view, "script-dialog", G_CALLBACK(on_dialog), NULL);
+  g_signal_connect(g_view, "run-file-chooser", G_CALLBACK(on_file_chooser), NULL);
   g_signal_connect(g_view, "enter-fullscreen", G_CALLBACK(on_fullscreen), NULL);
   g_signal_connect(g_view, "web-process-terminated", G_CALLBACK(on_crash), NULL);
   g_signal_connect(g_view, "load-changed", G_CALLBACK(on_load), NULL);
+  /* Before WebKit's own handlers (these signals run last in the class handler). */
+  gtk_widget_add_events(GTK_WIDGET(g_view), GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_TOUCH_MASK);
+  g_signal_connect(g_view, "button-press-event", G_CALLBACK(on_button), NULL);
+  g_signal_connect(g_view, "key-press-event", G_CALLBACK(on_key), NULL);
+  g_signal_connect(g_view, "key-release-event", G_CALLBACK(on_key_up), NULL);
+  g_signal_connect(g_view, "touch-event", G_CALLBACK(on_touch), NULL);
 
   /* The native title is fixed, set once. Nothing listens to the web view's own
    * title, so the document's title never reaches the window. */

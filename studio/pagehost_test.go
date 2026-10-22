@@ -365,7 +365,7 @@ func TestPageWindow_LimitsFiveInFlightAndSixtyAMinute(t *testing.T) {
 	assert.Equal(t, pagehost.CodeLimit, r.Code, "the 61st in a minute")
 }
 
-func TestPageWindow_CallsAreUnavailableUntilCapabilitiesAreBuilt(t *testing.T) {
+func TestPageWindow_ACallToAnUndeclaredCapabilityIsUnavailable(t *testing.T) {
 	app, fh, _ := scriptedWindow(t)
 	_, err := app.OpenArtifactPageWindow("pg", "", nil)
 	require.NoError(t, err)

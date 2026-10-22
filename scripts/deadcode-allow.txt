@@ -18,3 +18,5 @@ internal/session/testing.go:[0-9]+:[0-9]+: unreachable func: UnhardenedForTests$
 # reaches through the nativeHooks interface (studio/pagewindow_cgo.go -> pageHelper, the page window helper).
 studio/pagewindow_cgo\.go:[0-9]+:[0-9]+: unreachable func: (currentHooks|vibePage[A-Za-z]+)$
 studio/pagehelper\.go:[0-9]+:[0-9]+: unreachable func: pageHelper\.(serve|serveDoc|docTimeout|message|refuse|event)$
+studio/pagenative\.go:[0-9]+:[0-9]+: unreachable func: realNative\.takeInput$
+studio/pagewindow_cgo\.go:[0-9]+:[0-9]+: unreachable func: nativeTakeInput$

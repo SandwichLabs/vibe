@@ -215,7 +215,7 @@ func TestFlood(t *testing.T) {
 }
 
 func TestErrorTextsAreFixed(t *testing.T) {
-	for _, code := range []string{CodeLimit, CodeQuery, CodeRefused, CodeTooLarge, CodeUnavailable, CodeStopped} {
+	for _, code := range []string{CodeLimit, CodeQuery, CodeRefused, CodeTooLarge, CodeUnavailable, CodeStopped, CodeGesture, CodeModel} {
 		text := ErrorText[code]
 		assert.NotEmpty(t, text, code)
 		assert.NotContains(t, text, "/", "a text names no path: %s", code)
@@ -229,7 +229,8 @@ func TestAPIScript(t *testing.T) {
 	assert.NotContains(t, js, "eval(")
 	assert.Contains(t, js, "window.webkit.messageHandlers.vibe")
 	assert.Contains(t, js, `Object.defineProperty(window, 'vibe'`)
-	assert.Contains(t, js, "use: function (name) { return P.resolve(null); }", "no capability is granted in this step")
+	assert.Contains(t, js, `var CAPS = parse("[]")`, "no capability is granted unless Studio names it")
+	assert.NotContains(t, APIScript(params, []string{"</script>"}), "</script", "caps arrive as a string literal too")
 	assert.NotContains(t, js, "@PARAMS@")
 	assert.NotContains(t, js, "@ERRORS@")
 }
@@ -239,4 +240,73 @@ func TestReplyScript(t *testing.T) {
 	assert.True(t, strings.HasPrefix(ok, "window.__vibeReply(7,true,JSON.parse(\""), "the result is data handed to JSON.parse: %s", ok)
 	bad := ReplyScript(7, false, nil, CodeLimit)
 	assert.Equal(t, `window.__vibeReply(7,false,"limit")`, bad)
+}
+
+func TestPutPushAndUploadShapes(t *testing.T) {
+	good := []string{
+		`{"t":"put","id":1,"up":2,"s":"abc"}`,
+		`{"t":"put","id":1,"up":2,"s":"abc","seq":3,"last":true}`,
+		`{"t":"call","id":1,"cap":"state","op":"set","up":2}`,
+	}
+	for _, g := range good {
+		_, err := Decode([]byte(g), FromHelper)
+		assert.NoError(t, err, g)
+	}
+	bad := []string{
+		`{"t":"put","id":1,"s":"abc"}`, // no upload id
+		`{"t":"put","id":1,"up":0,"s":"abc"}`,
+		`{"t":"put","id":1,"up":2,"s":"abc","path":"x"}`,               // a field it does not own
+		`{"t":"call","id":1,"cap":"state","op":"set","up":2,"arg":{}}`, // an argument and an upload
+		`{"t":"call","id":1,"cap":"state","op":"set","up":-1}`,
+		`{"t":"push","cap":"state","op":"change"}`, // a push is Studio's, not a page's
+	}
+	for _, b := range bad {
+		_, err := Decode([]byte(b), FromHelper)
+		assert.Error(t, err, b)
+	}
+	_, err := Decode([]byte(`{"t":"push","cap":"state","op":"change","arg":{"key":"a"}}`), ToHelper)
+	assert.NoError(t, err)
+	_, err = Decode([]byte(`{"t":"push","cap":"st ate","op":"change"}`), ToHelper)
+	assert.Error(t, err)
+	_, err = Decode([]byte(`{"t":"put","id":1,"up":2,"s":"abc"}`), ToHelper)
+	assert.Error(t, err, "Studio never sends a put")
+	big := `{"t":"put","id":1,"up":2,"s":"` + strings.Repeat("a", MaxPutText+1) + `"}`
+	_, err = Decode([]byte(big), FromHelper)
+	assert.Error(t, err)
+}
+
+func TestEventScriptHandsDataOverAsALiteral(t *testing.T) {
+	js := EventScript("state", []byte(`{"key":"</script>","value":{"__proto__":1}}`))
+	assert.True(t, strings.HasPrefix(js, `window.__vibeEvent("state",JSON.parse("`), js)
+	assert.NotContains(t, js, "</script")
+}
+
+func TestRateAllowsNPerWindow(t *testing.T) {
+	r := NewRate(3, time.Minute)
+	now := time.Unix(1000, 0)
+	assert.True(t, r.Allow(now))
+	assert.True(t, r.Allow(now.Add(time.Second)))
+	assert.True(t, r.Allow(now.Add(2*time.Second)))
+	assert.False(t, r.Allow(now.Add(3*time.Second)))
+	assert.True(t, r.Allow(now.Add(61*time.Second)), "the first aged out")
+}
+
+func TestEncodeDoesNotGrowHTMLCharacters(t *testing.T) {
+	val := `"` + strings.Repeat("<&>", 20000) + `"` // 60 KB
+	line, err := Encode(&Message{T: TypePush, Cap: "state", Op: "change", Arg: json.RawMessage(`{"key":"k","value":` + val + `}`)}, ToHelper)
+	require.NoError(t, err, "a push of a 60 KB value of < & > is still under its cap")
+	assert.Less(t, len(line), 80<<10)
+	ok := true
+	line, err = Encode(&Message{T: TypeReply, ID: 1, OK: &ok, Result: json.RawMessage(val)}, ToHelper)
+	require.NoError(t, err)
+	assert.Contains(t, string(line), "<&>")
+}
+
+func TestEncodeKeepsALineSeparatorValueTheSizeItWasMeasuredAt(t *testing.T) {
+	// The state store keeps U+2028 in the 6-byte escaped form, so a 60 KB value
+	// is 60 KB in a push too.
+	val := `"` + strings.Repeat(` `, 10000) + `"`
+	line, err := Encode(&Message{T: TypePush, Cap: "state", Op: "change", Arg: json.RawMessage(`{"key":"k","value":` + val + `}`)}, ToHelper)
+	require.NoError(t, err)
+	assert.Less(t, len(line), 80<<10)
 }

@@ -17,3 +17,4 @@ func nativeRun(nativeConfig, nativeHooks) error  { return errNoNativeView }
 func nativeRespond(uint64, bool, string, []byte) {}
 func nativeEval(string)                          {}
 func nativeQuit()                                {}
+func nativeTakeInput() bool                      { return false }

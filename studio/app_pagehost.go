@@ -30,7 +30,7 @@ func (a *App) OpenArtifactPageWindow(name, query string, theme map[string]string
 		return nil, err
 	}
 	return a.pages.open(pageOpen{
-		ws: ws, name: name, query: query, theme: theme, base: a.ctxOrBackground(),
+		ws: ws, name: name, query: query, theme: theme, base: a.ctxOrBackground(), svc: a.pageServices(ws, name),
 		runner:  func(m *artifacts.Manifest) artifacts.PageRunner { return a.pageRunner(name, m) },
 		allowed: func(hash string) bool { return a.pageStillAllowed(ws, name, hash) },
 	})
@@ -39,4 +39,26 @@ func (a *App) OpenArtifactPageWindow(name, query string, theme map[string]string
 // ClosePageWindow closes the named artifact's page window, if one is open.
 func (a *App) ClosePageWindow(name string) {
 	a.pages.closeArtifact(name, pageStateClosed)
+}
+
+// SetPageAsk turns a scripted page's `ask` capability on or off for this person,
+// separately from the allow decision. A window that is open when it is turned
+// off is closed, so the change takes effect at once.
+func (a *App) SetPageAsk(name string, on bool) error {
+	ws, _, _, err := a.snapshot()
+	if err != nil {
+		return err
+	}
+	if err := ws.SetPageAsk(name, on); err != nil {
+		return viewError(err)
+	}
+	a.pages.closeArtifact(name, pageStateChanged)
+	a.emitEvent("workspace:changed", map[string]any{"kind": "artifactview", "id": name})
+	return nil
+}
+
+// ListAgentActivity is the recent uses of the model by pages, oldest first: the
+// page's name, when, and sizes, never the text.
+func (a *App) ListAgentActivity() []ActivityEntry {
+	return a.pageApp.entries()
 }

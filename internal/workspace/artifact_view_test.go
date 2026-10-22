@@ -321,3 +321,52 @@ func TestArtifactView_APageThatFailsTheVetIsUnusableNotAllowable(t *testing.T) {
 	assert.NotContains(t, st.Error, ws.Root(), "a fixed text, not the path")
 	assert.Error(t, ws.AllowArtifactView("bad", "anything"))
 }
+
+const askPageManifest = viewPageManifest + "html:\n  capabilities:\n    ask: {}\n    state: {scope: local}\n"
+
+func askPage(t *testing.T, ws Workspace, name, js string) {
+	t.Helper()
+	a := &artifacts.Artifact{Name: name, ManifestText: []byte(askPageManifest), Files: []artifacts.PageFile{
+		{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "q" }}</p><script src="app.js"></script>`)},
+		{Path: "app.js", Data: []byte(js)},
+	}}
+	require.NoError(t, ws.Artifacts().Put(context.Background(), a, artifacts.Overwrite()))
+}
+
+func TestPageAsk_OnAtAllowRevocableSeparatelyAndOffAfterAnEdit(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	askPage(t, ws, "pg", "vibe.use('ask')")
+	st := viewState(t, ws, "pg")
+	assert.False(t, ws.PageAskEnabled("pg", st.Hash), "not before the page is allowed")
+	require.NoError(t, ws.AllowArtifactView("pg", st.Hash))
+	assert.True(t, ws.PageAskEnabled("pg", st.Hash), "on by default at allow time")
+	d := ws.ArtifactViewDecisions()
+	require.Len(t, d, 1)
+	assert.True(t, d[0].DeclaresAsk)
+	assert.True(t, d[0].AskOn)
+
+	require.NoError(t, ws.SetPageAsk("pg", false))
+	assert.False(t, ws.PageAskEnabled("pg", st.Hash))
+	assert.Equal(t, "allowed", viewState(t, ws, "pg").State, "the page itself stays allowed")
+
+	// An edit and a new allow do not turn a person's "off" back on.
+	askPage(t, ws, "pg", "vibe.use('ask'); 1")
+	st2 := viewState(t, ws, "pg")
+	require.NoError(t, ws.AllowArtifactView("pg", st2.Hash))
+	assert.False(t, ws.PageAskEnabled("pg", st2.Hash))
+	require.NoError(t, ws.SetPageAsk("pg", true))
+	assert.True(t, ws.PageAskEnabled("pg", st2.Hash))
+	// An edit alone ends it, since the hash moved.
+	askPage(t, ws, "pg", "vibe.use('ask'); 2")
+	assert.False(t, ws.PageAskEnabled("pg", viewState(t, ws, "pg").Hash))
+}
+
+func TestPageAsk_OnlyForAScriptedPageThatDeclaresIt(t *testing.T) {
+	ws, _, _ := memWorkspace(t, nil)
+	pageArtifact(t, ws, "static", artifacts.PageFile{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "q" }}</p>`)})
+	assert.ErrorIs(t, ws.SetPageAsk("static", true), ErrNoScriptView)
+	st := viewState(t, ws, "static")
+	require.NoError(t, ws.AllowArtifactView("static", st.Hash))
+	assert.False(t, ws.PageAskEnabled("static", st.Hash))
+	assert.False(t, ws.PageAskEnabled("../x", st.Hash))
+}

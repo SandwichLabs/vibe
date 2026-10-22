@@ -127,6 +127,8 @@ interface AppApi {
   PageWindowSupport(): Promise<string>
   OpenArtifactPageWindow(name: string, query: string, theme: Record<string, string>): Promise<PageWindowInfo>
   ClosePageWindow(name: string): Promise<void>
+  SetPageAsk(name: string, on: boolean): Promise<void>
+  ListAgentActivity(): Promise<AgentActivityEntry[]>
   RunArtifactViewQuery(token: string, query: string, values: Record<string, unknown>): Promise<A2UIQueryResult>
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
@@ -466,6 +468,8 @@ interface ArtifactViewFile { path: string; role: string; size: number; text?: st
 // ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
 // URL is made from (/vibe-view/<token>/page), bound to one PageHash.
 interface ArtifactPageGrant { token: string; hash: string }
+// AgentActivityEntry mirrors studio.ActivityEntry: one use of the model by a page (names and sizes, never text).
+interface AgentActivityEntry { at: string; source: string; name: string; kind: string; promptBytes: number; replyBytes: number; outcome: string }
 // PageWindowInfo mirrors studio.PageWindowInfo: a scripted page's window, opened for one PageHash.
 interface PageWindowInfo { name: string; hash: string }
 // ArtifactViewGrant mirrors studio.ArtifactViewGrant (#160): the token an allowed
@@ -476,6 +480,8 @@ interface ArtifactViewDecision {
   path: string
   decision: 'allow' | 'deny'
   state: 'allowed' | 'changed' | 'denied' | 'gone' | 'undecided'
+  declaresAsk?: boolean
+  askOn?: boolean
 }
 
 interface DotEnvSatisfies { connection: string; signIn: string; variables: string[] }

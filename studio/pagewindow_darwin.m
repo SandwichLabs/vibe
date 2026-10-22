@@ -21,6 +21,8 @@
 // WebRTC and media devices are off through private preferences (settings, not a layer).
 
 #import <Cocoa/Cocoa.h>
+#include <stdatomic.h>
+#include <time.h>
 #import <WebKit/WebKit.h>
 #import <Network/Network.h>
 #include <stdlib.h>
@@ -186,6 +188,8 @@ static VibeHost *gHost = nil;
 - (void)webView:(WKWebView *)webView requestDeviceOrientationAndMotionPermissionForOrigin:(WKSecurityOrigin *)o initiatedByFrame:(WKFrameInfo *)f decisionHandler:(void (^)(WKPermissionDecision))h API_AVAILABLE(macos(13.0)) {
   h(WKPermissionDecisionDeny);
 }
+// An <input type=file> opens no panel: the page has no files to choose from.
+- (void)webView:(WKWebView *)w runOpenPanelWithParameters:(WKOpenPanelParameters *)p initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(NSArray<NSURL *> *))h { h(nil); }
 - (void)webView:(WKWebView *)w runJavaScriptAlertPanelWithMessage:(NSString *)m initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(void))h { h(); }
 - (void)webView:(WKWebView *)w runJavaScriptConfirmPanelWithMessage:(NSString *)m initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(BOOL))h { h(NO); }
 - (void)webView:(WKWebView *)w runJavaScriptTextInputPanelWithPrompt:(NSString *)p defaultText:(NSString *)d initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(NSString *))h { h(nil); }
@@ -264,12 +268,34 @@ static NSWindow *makeWindow(VibeHost *host, NSString *title, int width, int heig
   return w;
 }
 
+// The person's input, seen by the app before the page can see it (the `download`
+// capability's gesture, checked outside the web process). A local monitor sees
+// this process's events only. One physical input is one unit; Escape and a
+// held key's repeats are not inputs.
+static _Atomic uint64_t gInputNS = 0;
+#define INPUT_WINDOW_NS (5ull * 1000000000ull)
+
+static void installInputMonitor(void) {
+  NSEventMask mask = NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown | NSEventMaskOtherMouseDown | NSEventMaskKeyDown;
+  [NSEvent addLocalMonitorForEventsMatchingMask:mask handler:^NSEvent *(NSEvent *ev) {
+    if (ev.type == NSEventTypeKeyDown && (ev.isARepeat || ev.keyCode == 53)) return ev;
+    atomic_store(&gInputNS, clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
+    return ev;
+  }];
+}
+
+int vibe_host_take_input(void) {
+  uint64_t t = atomic_exchange(&gInputNS, 0);
+  return t != 0 && clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - t <= INPUT_WINDOW_NS;
+}
+
 int vibe_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script) {
   @autoreleasepool {
     [NSApplication sharedApplication];
     // No second Dock icon (P1: ApplicationType=UIElement).
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     installCloseMenu();
+    installInputMonitor();
     // A page that sits behind other windows must keep posting its heartbeat: without
     // this App Nap can slow the helper until the watchdog kills a healthy page.
     gActivity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Vibe page window"];

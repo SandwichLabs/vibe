@@ -30,5 +30,18 @@ export function useArtifactViewDecisions() {
     await refresh()
   }
 
-  return { decisions, busy, error, refresh, revoke }
+  /** Turn a scripted page's `ask` capability on or off, separately from its allow. */
+  async function setAsk(name: string, on: boolean) {
+    busy.value = name
+    error.value = ''
+    try {
+      await App.SetPageAsk(name, on)
+    } catch (e) {
+      error.value = errorText(e)
+    }
+    busy.value = ''
+    await refresh()
+  }
+
+  return { decisions, busy, error, refresh, revoke, setAsk }
 }

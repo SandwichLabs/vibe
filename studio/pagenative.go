@@ -50,6 +50,9 @@ type nativeOps interface {
 	respond(id uint64, ok bool, ct string, body []byte)
 	eval(js string)
 	quit()
+	// takeInput reports and consumes a physical input of the person in the last
+	// 5 seconds (the gesture of the download capability, seen outside the page).
+	takeInput() bool
 }
 
 // realNative calls the platform's window.
@@ -58,5 +61,6 @@ type realNative struct{}
 func (realNative) respond(id uint64, ok bool, ct string, body []byte) {
 	nativeRespond(id, ok, ct, body)
 }
-func (realNative) eval(js string) { nativeEval(js) }
-func (realNative) quit()          { nativeQuit() }
+func (realNative) eval(js string)  { nativeEval(js) }
+func (realNative) quit()           { nativeQuit() }
+func (realNative) takeInput() bool { return nativeTakeInput() }

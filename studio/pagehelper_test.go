@@ -19,6 +19,7 @@ type fakeNative struct {
 	responses map[uint64]fakeResponse
 	evals     []string
 	quits     int
+	inputs    int // physical inputs the fake person has given
 	changed   chan struct{}
 }
 
@@ -43,6 +44,15 @@ func (n *fakeNative) eval(js string) {
 	n.evals = append(n.evals, js)
 	n.mu.Unlock()
 	n.changed <- struct{}{}
+}
+func (n *fakeNative) takeInput() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.inputs > 0 {
+		n.inputs--
+		return true
+	}
+	return false
 }
 func (n *fakeNative) quit() {
 	n.mu.Lock()
@@ -301,4 +311,47 @@ func TestHelper_EventsBecomeMessagesOnce(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{pagehost.TypeReady, pagehost.TypeGone, pagehost.TypeClosed}, got)
+}
+
+// The gesture of a save is the native input the helper saw, not the page's say-so:
+// a page that posts the call straight to the message handler (no injected API)
+// gets nothing through without a physical input, and one input pays for one call.
+func TestHelper_ADownloadCallNeedsANativeInputAndConsumesIt(t *testing.T) {
+	r := newHelperRig(t)
+	r.setup(t, "", nil)
+	h := r.h
+	call := func(id int) string {
+		return `{"t":"call","id":` + itoa(id) + `,"cap":"download","op":"save","arg":{"filename":"a","type":"csv","enc":"text","data":"x"}}`
+	}
+	next := func() *pagehost.Message {
+		select {
+		case m := <-r.toStudio:
+			return m
+		case <-time.After(300 * time.Millisecond):
+			return nil
+		}
+	}
+	h.message(call(1))
+	assert.Nil(t, next(), "no physical input: nothing reaches Studio")
+	require.Eventually(t, func() bool { return len(r.nat.evalsCopy()) == 1 }, time.Second, 5*time.Millisecond)
+	assert.Contains(t, r.nat.evalsCopy()[0], `"gesture"`, "the page is told, with the fixed code")
+
+	r.nat.mu.Lock()
+	r.nat.inputs = 1
+	r.nat.mu.Unlock()
+	h.message(call(2))
+	m := next()
+	require.NotNil(t, m)
+	assert.Equal(t, "download", m.Cap)
+	h.message(call(3))
+	assert.Nil(t, next(), "one input paid for one save")
+	// Other capabilities do not ask for one.
+	h.message(`{"t":"call","id":4,"cap":"state","op":"get","arg":{"key":"a"}}`)
+	require.NotNil(t, next())
+}
+
+func (n *fakeNative) evalsCopy() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.evals...)
 }

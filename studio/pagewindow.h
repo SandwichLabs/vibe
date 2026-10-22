@@ -10,6 +10,11 @@ void vibe_host_eval(const char *js);
 /* vibe_host_respond answers a scheme request (any thread). ok=0 fails the request.
  * The body is copied before it returns. */
 void vibe_host_respond(unsigned long id, int ok, const char *ctype, const char *csp, const char *body, int len);
+/* vibe_host_take_input reports whether the person gave the window a physical
+ * input (a click, a key press that is not Escape or a repeat, a touch) in the
+ * last 5 seconds, and consumes it: one input is one yes. It is the gesture the
+ * `download` capability needs, seen by the native widget, not the page; any thread. */
+int vibe_host_take_input(void);
 /* vibe_host_quit ends the loop; any thread. */
 void vibe_host_quit(void);
 
