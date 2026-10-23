@@ -366,7 +366,7 @@ func (a *App) afterBundleImport(res bundle.Result) {
 	// lists to refresh.
 	a.emitNotebooksChanged("", nil)
 	a.emitEvent("data:changed")
-	// Same for artifacts: the Artifacts list and an open artifact listen for
+	// Same for artifacts: the Library and an open artifact listen for
 	// the watcher's on-disk event, which the store's own writes never raise.
 	for _, o := range res.Outcomes {
 		if o.Kind == bundle.KindArtifact && o.Error == "" && o.Result != "skipped" {

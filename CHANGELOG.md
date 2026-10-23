@@ -4,6 +4,14 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **A Library for notebooks, live views and pages.** Studio's Notebooks and Artifacts entries are now one **Library**: a single list with a type column, chips (All, Notebooks, Live views, Pages, and Chart scripts once you have one), a name filter and sorting. **New** asks what kind first, with the kinds side by side and described in plain words, then asks for a title or name; pages and chart scripts start from a small working example and open as source until you allow them. **Or describe it and let the agent build it** hands your description to the agent. Home shows Library counts by type, each opening the Library on that type. Dialogs now keep Tab and Shift+Tab focus inside them.
+
+### Changed
+
+- **`#/notebooks` and `#/artifacts` redirect to the Library**, keeping their query, so old links work. Storage, bundles, MCP tools and the CLI are unchanged (`vibe artifact list` still lists artifacts only). The `create_dashboard` tool description now says it adds a dashboard cell to a notebook and points to `write_artifact` for a live view.
+
 ## [0.2.0] - 2026-10-23
 
 ### Added

@@ -5,7 +5,7 @@
  * owns loading; this owns what is known about the file on disk:
  *
  *  - id / sessionId: captured ONCE at load time. vue-router reuses the component
- *    across /notebooks/:id -> /notebooks/:id2, so a debounced save must never
+ *    across /library/notebook/:id -> /library/notebook/:id2, so a debounced save must never
  *    read the live route (it would overwrite the wrong notebook), and the
  *    session id lets the backend refuse a save aimed at a file that has since
  *    been closed or swapped.

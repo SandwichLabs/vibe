@@ -717,7 +717,7 @@ interface A2UIQueryResult {
 }
 
 // ArtifactSummary mirrors studio.ArtifactSummary (#162): one data artifact in
-// the Artifacts list. A folder that could not be read still lists, with `error`.
+// the Library. A folder that could not be read still lists, with `error`.
 interface ArtifactSummary {
   name: string
   title: string

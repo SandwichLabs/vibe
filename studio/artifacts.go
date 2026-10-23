@@ -14,7 +14,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/filestore"
 )
 
-// ArtifactSummary is one data artifact as the Artifacts list shows it. A folder
+// ArtifactSummary is one data artifact as the Library shows it. A folder
 // that could not be read as an artifact still lists, with Error set.
 type ArtifactSummary struct {
 	Name        string `json:"name"`
