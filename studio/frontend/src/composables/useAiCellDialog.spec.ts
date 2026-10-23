@@ -390,3 +390,19 @@ describe('Apply keeps the original cell\'s connection when the proposal has none
     expect(host.replaceCell).toHaveBeenCalledWith('c1', expect.objectContaining({ sql: 'SELECT 2', connection: 'prod_pg' }))
   })
 })
+
+describe('useAiCellDialog openCreate(description)', () => {
+  it('carries the description as a prefill, runs nothing, and clears it on close or a plain open', () => {
+    const askTask = setBinding(async () => ({ outcome: 'unresolved' }))
+    const d = useAiCellDialog(makeHost())
+    d.openCreate('revenue by region')
+    expect(d.state.dialogState).toBe('prompt')
+    expect(d.state.prefill).toBe('revenue by region')
+    expect(askTask).not.toHaveBeenCalled()
+    d.close()
+    expect(d.state.prefill).toBe('')
+    d.openCreate('x')
+    d.openCreate()
+    expect(d.state.prefill).toBe('')
+  })
+})

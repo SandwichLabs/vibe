@@ -170,6 +170,8 @@ export function useAiCellDialog(host: DialogHost) {
     // "Loaded tables: ..." before the user even submits (review fix,
     // finding 7) — it is also what's actually sent with the request.
     tables: [] as string[],
+    // prefill is the description openCreate was handed (the New dialog's "describe it"); the prompt box starts with it, nothing runs until Generate.
+    prefill: '',
     applyNote: '', // set after an apply that inserted-beside due to drift; the host shows this then clears it
   })
 
@@ -195,6 +197,7 @@ export function useAiCellDialog(host: DialogHost) {
     state.targetSnapshot = null
     state.titleOverride = null
     state.tables = []
+    state.prefill = ''
   }
 
   async function loadTables() {
@@ -206,8 +209,9 @@ export function useAiCellDialog(host: DialogHost) {
     }
   }
 
-  function openCreate() {
+  function openCreate(description?: string) {
     reset()
+    state.prefill = description ?? ''
     state.applyNote = '' // clear any note left over from a PRIOR session's apply
     state.mode = 'create'
     state.taskId = nextTaskId()

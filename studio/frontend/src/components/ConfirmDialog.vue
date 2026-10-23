@@ -63,3 +63,9 @@ useModalKeys(toRef(props, 'visible'), () => emit('cancel'), root, () => (props.v
     </div>
   </div>
 </template>
+
+<style scoped>
+/* The danger button's offset shadow is its look; a keyboard ring joins it
+   instead of being replaced by it. */
+.btn-destructive:focus-visible { box-shadow: var(--sh-focus-ring), var(--sh-shadow-error); }
+</style>

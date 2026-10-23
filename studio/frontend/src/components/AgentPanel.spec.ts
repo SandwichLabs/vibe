@@ -10,11 +10,17 @@ import { router } from '../router/index'
 
 // Drive the stream by capturing the EventsOn handler.
 let streamHandler: ((p: any) => void) | null = null
+let closedHandler: (() => void) | null = null
 vi.mock('../wailsjs/runtime/runtime', () => ({
-  EventsOn: (_n: string, cb: (p: any) => void) => { streamHandler = cb; return () => { streamHandler = null } },
+  EventsOn: (n: string, cb: (p: any) => void) => {
+    if (n === 'workspace:closed') { closedHandler = cb as () => void; return () => {} }
+    streamHandler = cb
+    return () => { streamHandler = null }
+  },
 }))
 
 import AgentPanel from './AgentPanel.vue'
+import panelSrc from './AgentPanel.vue?raw'
 import { useAgentChat } from '../composables/useAgentChat'
 
 function setBinding(impl: (turnId: string, msg: string, pinned: string, history: any[]) => Promise<any>) {
@@ -116,5 +122,114 @@ describe('AgentPanel (W0.5)', () => {
     const pin = wrapper.find('[data-testid="agent-pin"]')
     expect(pin.exists()).toBe(true)
     expect(pin.text()).toContain('tables')
+  })
+})
+
+describe('AgentPanel prefill (library L7)', () => {
+  beforeEach(() => { streamHandler = null; useAgentChat().resetAll() })
+  const input = (w: any) => w.find('[data-testid="agent-input"]').element as HTMLTextAreaElement
+
+  it('fills an empty box with the draft and sends nothing', async () => {
+    setBinding(async () => ({ text: '', steps: [] }))
+    const w = await mountPanel()
+    await w.setProps({ prefill: { text: 'Build a live view: x', n: 1 } })
+    await flushPromises()
+    expect(input(w).value).toBe('Build a live view: x')
+    expect((window as any).go.main.App.AgentChatStream).not.toHaveBeenCalled()
+  })
+
+  it('never overwrites text the person typed, but replaces an unchanged earlier prefill', async () => {
+    setBinding(async () => ({ text: '', steps: [] }))
+    const w = await mountPanel()
+    await w.setProps({ prefill: { text: 'first', n: 1 } })
+    await w.setProps({ prefill: { text: 'second', n: 2 } })
+    expect(input(w).value).toBe('second')
+    await w.find('[data-testid="agent-input"]').setValue('my own question')
+    await w.setProps({ prefill: { text: 'third', n: 3 } })
+    expect(input(w).value).toBe('my own question')
+    // The refused draft is kept behind a notice and replaces the box only on click.
+    expect(w.get('[data-testid="agent-pending-draft"]').text()).toContain('waiting')
+    await w.get('[data-testid="agent-use-draft"]').trigger('click')
+    expect(input(w).value).toBe('third')
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(false)
+  })
+
+  it('keeps a draft refused while sending behind the notice; a turn ending never fills or focuses the box', async () => {
+    let release: (v: any) => void = () => {}
+    setBinding(() => new Promise((r) => { release = r }))
+    const w = await mountPanel()
+    await w.find('[data-testid="agent-input"]').setValue('go')
+    await w.find('[data-testid="agent-send"]').trigger('click')
+    await flushPromises()
+    await w.setProps({ prefill: { text: 'late draft', n: 1 } })
+    expect(input(w).value).toBe('')
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(true)
+    const other = document.createElement('input')
+    document.body.appendChild(other)
+    other.focus()
+    release({ text: 'done', steps: [] })
+    await flushPromises()
+    expect(input(w).value).toBe('')
+    expect(document.activeElement).toBe(other)
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(true)
+    expect((window as any).go.main.App.AgentChatStream).toHaveBeenCalledTimes(1)
+    other.remove()
+  })
+
+  it('does not land a pending draft over text typed in the meantime', async () => {
+    let release: (v: any) => void = () => {}
+    setBinding(() => new Promise((r) => { release = r }))
+    const w = await mountPanel()
+    await w.find('[data-testid="agent-input"]').setValue('go')
+    await w.find('[data-testid="agent-send"]').trigger('click')
+    await flushPromises()
+    await w.setProps({ prefill: { text: 'late draft', n: 1 } })
+    await w.find('[data-testid="agent-input"]').setValue('typed while waiting')
+    release({ text: 'done', steps: [] })
+    await flushPromises()
+    expect(input(w).value).toBe('typed while waiting')
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(true)
+  })
+
+  it('puts the caret at the start after a prefill', async () => {
+    setBinding(async () => ({ text: '', steps: [] }))
+    const w = await mountPanel()
+    await w.setProps({ prefill: { text: 'a long drafted request', n: 1 } })
+    await flushPromises()
+    expect(input(w).selectionStart).toBe(0)
+    expect(input(w).selectionEnd).toBe(0)
+  })
+
+  it('drops the draft and the pending notice when the workspace closes', async () => {
+    ;(window as any).runtime = {}
+    setBinding(async () => ({ text: '', steps: [] }))
+    const w = await mountPanel()
+    delete (window as any).runtime
+    await w.find('[data-testid="agent-input"]').setValue('mine')
+    await w.setProps({ prefill: { text: 'x', n: 1 } })
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(true)
+    closedHandler!()
+    await flushPromises()
+    expect(input(w).value).toBe('')
+    expect(w.find('[data-testid="agent-pending-draft"]').exists()).toBe(false)
+  })
+
+  it('Enter does not send on key repeat or while composing', async () => {
+    setBinding(async () => ({ text: 'ok', steps: [] }))
+    const w = await mountPanel()
+    await w.find('[data-testid="agent-input"]').setValue('hello')
+    await w.find('[data-testid="agent-input"]').trigger('keydown', { key: 'Enter', repeat: true })
+    await w.find('[data-testid="agent-input"]').trigger('keydown', { key: 'Enter', isComposing: true })
+    expect((window as any).go.main.App.AgentChatStream).not.toHaveBeenCalled()
+    await w.find('[data-testid="agent-input"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect((window as any).go.main.App.AgentChatStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('submit is the only caller of send', () => {
+    const calls = panelSrc.match(/\bsend\(/g) ?? []
+    expect(calls).toHaveLength(1)
+    const submit = panelSrc.slice(panelSrc.indexOf('async function submit()'))
+    expect(submit.slice(0, submit.indexOf('\n}\n'))).toContain('await send(text)')
   })
 })

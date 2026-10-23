@@ -71,8 +71,13 @@ const gitLine = computed(() => (info.value?.isGit ? info.value.gitBranch || 'det
 // Views (e.g. the Query Explorer's "Ask agent" button) open the wizard panel
 // via this window event — the shell owns the panel, so this is the one
 // cross-component trigger.
-function openAgentFromEvent() {
+// The event may carry `detail.draft`, an unsent request for the panel's input
+// (the New dialog's "describe it"); the panel decides whether it may use it.
+const prefill = ref<{ text: string; n: number } | null>(null)
+function openAgentFromEvent(e?: Event) {
   agentOpen.value = true
+  const draft = (e as CustomEvent<{ draft?: string }> | undefined)?.detail?.draft
+  if (typeof draft === 'string' && draft) prefill.value = { text: draft, n: (prefill.value?.n ?? 0) + 1 }
 }
 
 
@@ -183,7 +188,7 @@ watch(() => info.value?.name, (name) => {
       </div>
     </main>
 
-    <AgentPanel :open="agentOpen" @close="agentOpen = false" />
+    <AgentPanel :open="agentOpen" :prefill="prefill" @close="agentOpen = false" />
     <McpApprovals />
     <ConnectionDialogs />
 

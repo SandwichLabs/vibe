@@ -15,6 +15,7 @@ import { App, hasBinding } from '../lib/bindings'
 import { backToLibrary, libraryPath } from '../lib/libraryRoutes'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from './usePendingSaves'
+import { takePendingAsk } from './usePendingAsk'
 import { useNotebookCells } from './useNotebookCells'
 import { useNotebookSave } from './useNotebookSave'
 import { useNotebookSync } from './useNotebookSync'
@@ -59,6 +60,7 @@ export function useNotebookEditor() {
     nb.beginLoad()
     loading.value = true
     notFound.value = false
+    const ask = takePendingAsk(id)
     save.begin(id)
     // A fresh load already reflects current server state once it resolves —
     // anything queued for whatever was loading/loaded before this is moot.
@@ -83,6 +85,8 @@ export function useNotebookEditor() {
       nb.mountEditors()
       nb.setupCellObserver()
       if (hasWailsRuntime()) App.SetActiveNotebook(id)
+      // A notebook made from "describe it" opens its AI cell dialog with the description (taken at the start, used once the load succeeded).
+      if (ask !== null) nb.aiCellDialog.openCreate(ask)
       await nb.runAll()
       await sync.replayPending(id)
     } catch (e: any) {

@@ -93,4 +93,88 @@ describe('useModalKeys', () => {
     expect(mid.defaultPrevented).toBe(false)
     wrapper.unmount()
   })
+
+  it('leaves Tab alone while focus is in a different modal, including one nested in the root', async () => {
+    const open = ref(true)
+    const root = ref<HTMLElement | null>(null)
+    const Comp = defineComponent({
+      setup() {
+        useModalKeys(open, () => {}, root)
+        return () => h('div', { 'aria-modal': 'true' }, [h('div', { ref: root }, [
+          h('button', { id: 'a' }, 'a'),
+          h('div', { 'aria-modal': 'true', id: 'nested' }, [h('button', { id: 'n1' }, 'n1')]),
+          h('button', { id: 'z' }, 'z'),
+        ])])
+      },
+    })
+    const w = mount(Comp, { attachTo: document.body })
+    await nextTick(); await nextTick()
+    document.getElementById('n1')!.focus()
+    const e = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    document.dispatchEvent(e)
+    expect(e.defaultPrevented).toBe(false)
+    // Lost focus (body) is still pulled back in.
+    ;(document.activeElement as HTMLElement).blur()
+    const lost = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    document.dispatchEvent(lost)
+    expect(lost.defaultPrevented).toBe(true)
+    expect(document.activeElement?.id).toBe('a')
+    w.unmount()
+  })
+
+  it('treats only the checked radio of a native group as a tab stop', async () => {
+    const open = ref(true)
+    const root = ref<HTMLElement | null>(null)
+    const Comp = defineComponent({
+      setup() {
+        useModalKeys(open, () => {}, root)
+        const radio = (id: string, checked = false) => h('input', { id, type: 'radio', name: 'g', checked })
+        return () => h('div', { ref: root }, [h('button', { id: 'first' }, 'f'), radio('r1'), radio('r2', true), radio('r3'), h('button', { id: 'last' }, 'l')])
+      },
+    })
+    const w = mount(Comp, { attachTo: document.body })
+    await nextTick(); await nextTick()
+    // Tab from the last button wraps to the first; Shift+Tab from first wraps to last (r1..r3 are not the ends).
+    document.getElementById('last')!.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', cancelable: true }))
+    expect(document.activeElement?.id).toBe('first')
+    w.unmount()
+    // A group whose checked radio is the last stop: Tab from it wraps.
+    const Comp2 = defineComponent({
+      setup() {
+        useModalKeys(open, () => {}, root)
+        return () => h('div', { ref: root }, [h('button', { id: 'b1' }, 'b'), h('input', { id: 'q1', type: 'radio', name: 'q' }), h('input', { id: 'q2', type: 'radio', name: 'q', checked: true })])
+      },
+    })
+    const w2 = mount(Comp2, { attachTo: document.body })
+    await nextTick(); await nextTick()
+    document.getElementById('q2')!.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', cancelable: true }))
+    expect(document.activeElement?.id).toBe('b1')
+    // q1 (unchecked sibling) is not a stop: Shift+Tab from b1 lands on the checked q2.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true }))
+    expect(document.activeElement?.id).toBe('q2')
+    w2.unmount()
+  })
+
+  it('uses fallbackFocus when focus was on the body (no opener) at open', async () => {
+    const open = ref(false)
+    const root = ref<HTMLElement | null>(null)
+    const fb = ref<HTMLElement | null>(null)
+    const Comp = defineComponent({
+      setup() {
+        useModalKeys(open, () => {}, root, undefined, () => fb.value)
+        return () => h('div', [h('button', { id: 'fb', ref: fb }, 'fb'), open.value ? h('div', { ref: root }, [h('button', { id: 'in' }, 'in')]) : null])
+      },
+    })
+    const w = mount(Comp, { attachTo: document.body })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    expect(document.activeElement).toBe(document.body)
+    open.value = true
+    await nextTick(); await nextTick()
+    open.value = false
+    await nextTick(); await nextTick()
+    expect(document.activeElement?.id).toBe('fb')
+    w.unmount()
+  })
 })
