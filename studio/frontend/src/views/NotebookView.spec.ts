@@ -320,7 +320,7 @@ describe('NotebookView', () => {
   })
 
   // Review fix, step 4a #3: vue-router reuses this component instance
-  // across a /notebooks/A -> /notebooks/B navigation — only route.params.id
+  // across a /library/notebook/A -> /library/notebook/B navigation — only route.params.id
   // changes. Before the fix, the debounced save still in flight (or one
   // that fired after cells.value had already been replaced with B's cells)
   // built its payload from the LIVE route id, so A's edit could be written

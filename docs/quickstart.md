@@ -86,7 +86,7 @@ and press **Run** (Ctrl+Enter, Cmd+Enter on a Mac). The connections rail on the 
 
 ### Make a notebook
 
-1. Choose **Notebooks**, then **New notebook**, give it a title and press **Create**.
+1. Choose **Library**, then **New**, pick **Notebook**, give it a title and press **Create**. (The same dialog starts a live view or a page.)
 2. Use **SQL** to add a SQL cell, paste a query and press its **Run** button.
 3. Add a **Markdown** cell for notes. **Run all** re-runs everything.
 

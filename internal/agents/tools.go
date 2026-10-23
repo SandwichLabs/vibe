@@ -387,7 +387,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "create_dashboard",
-		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. See the <a2ui> system prompt block for the component schema. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title.",
+		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. See the <a2ui> system prompt block for the component schema. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title. This is a dashboard cell in a notebook, not a live-view artifact; for a saved live view use write_artifact.",
 		Category:    "content",
 		Params: []ParamDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},

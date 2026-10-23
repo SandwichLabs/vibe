@@ -240,7 +240,7 @@ func TestBundleStore_TakeIsAtomic(t *testing.T) {
 }
 
 // The store's own writes are not seen by the watcher, so an import tells the
-// Artifacts list (and an open artifact) with the event they listen for.
+// Library (and an open artifact) with the event they listen for.
 func TestBundle_ImportEmitsArtifactChangedOnDisk(t *testing.T) {
 	src := newOpenApp(t)
 	view := []byte(`{"title":"T","components":[{"id":"t","type":"table","query":"rows"}]}`)

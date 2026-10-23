@@ -27,6 +27,8 @@ inter-cell references — the database is the only shared state. Notebooks
 replace the old page system (vibe-app#66/vibe-app#69); this file replaces the retired
 `pages.md`.
 
+In Studio, notebooks live in the **Library** (`#/library`, the rail entry that also lists live views and pages; the **Notebooks** chip filters to them). **New** there offers Notebook first; a notebook opens at `#/library/notebook/<id>`, and the old `#/notebooks` paths redirect.
+
 ## Cell types
 
 Every cell has an `id` and a `type` of `sql`, `markdown`, or `a2ui`. Every
@@ -104,7 +106,8 @@ changes" is on; vibe-app#111):
   in Studio, else it creates a new notebook titled from `label`.
 - **`create_dashboard`** — appends a whole A2UI page (multiple components)
   as one a2ui cell, with the same notebook-targeting rules as
-  `add_query_cell`.
+  `add_query_cell`. It is a dashboard cell in a notebook; for a saved live
+  view, use `write_artifact`.
 
 There is no `create_page`/`update_page`/`get_page`/`list_pages` tool — those
 were retired with the page system. Asking the agent to "make me a page" or

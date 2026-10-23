@@ -147,7 +147,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
         <div class="empty-hero" style="padding-top: 36px;">
           <span class="glyph"><Icon name="folderOpen" :size="48" /></span>
           <h2>Pick a folder to start</h2>
-          <p class="lead">A workspace is just a folder. Your notebooks, saved queries and skills are kept in it as ordinary files, so you can back it up or share it with git. Your data stays wherever it is now.</p>
+          <p class="lead">A workspace is just a folder. Your notebooks, live views and pages, saved queries and skills are kept in it as ordinary files, so you can back it up or share it with git. Your data stays wherever it is now.</p>
           <div class="row" style="gap: 14px; margin-top: 6px;">
             <button ref="newBtn" class="btn btn-primary" type="button" data-testid="new-workspace" @click="newWorkspaceOpen = true">
               <Icon name="plus" :size="16" /> New workspace…
@@ -165,7 +165,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
           <div class="body"><div class="ttl">Couldn't open that</div><div class="sub">{{ error }}</div></div>
         </div>
         <div class="hero-mini">
-          <div class="card"><b>Notebooks</b><span>Questions about your data that you can re-run any time. Answers are never frozen.</span></div>
+          <div class="card"><b>Library</b><span>Notebooks, live views and pages that re-run on open. Answers are never frozen.</span></div>
           <div class="card"><b>Connections</b><span>Point Vibe at Postgres, MotherDuck, SQLite files or cloud storage. Add them whenever you're ready.</span></div>
           <div class="card"><b>The agent</b><span>Ask in plain words. It reads freely and asks you before it changes anything.</span></div>
         </div>
@@ -173,7 +173,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
 
       <!-- A. Recents -->
       <template v-else-if="loaded">
-        <p class="lead">Open a folder to work on your data. Notebooks, saved queries and skills live in that folder as plain files.</p>
+        <p class="lead">Open a folder to work on your data. Notebooks, live views, pages, saved queries and skills live in that folder as plain files.</p>
         <div class="cols">
           <section aria-labelledby="recent-h">
             <div class="sec-title" style="margin-top: 0;"><h2 id="recent-h">Recent workspaces</h2><span class="label">Last opened first</span></div>

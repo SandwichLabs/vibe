@@ -1,6 +1,6 @@
 # Library: notebooks and artifacts in one place
 
-Status: **proposed (2026-10-23), not built.** The owner asked to "have notebooks as a type of artifact instead of a separate notebooks and artifacts menu; a little design so the selection of the type is easy when adding one manually." A Fable judge reviewed the first proposal and the owner accepted its recommendations; they are decisions L1-L9 below. This is a Studio UI change only. It builds on epic #162 (`docs/plans/data-artifacts.md`, *the base plan*, and `docs/plans/html-artifacts.md`, *the pages plan*).
+Status: **built (2026-10-23, steps L1-L5).** See *As built* at the end. The owner asked to "have notebooks as a type of artifact instead of a separate notebooks and artifacts menu; a little design so the selection of the type is easy when adding one manually." A Fable judge reviewed the first proposal and the owner accepted its recommendations; they are decisions L1-L9 below. This is a Studio UI change only. It builds on epic #162 (`docs/plans/data-artifacts.md`, *the base plan*, and `docs/plans/html-artifacts.md`, *the pages plan*).
 
 ## Goal
 
@@ -219,3 +219,15 @@ The Library list:
 2. **Chart scripts chip.** Shown only when present (L5). Alternative: fold chart scripts into *Pages* with a `script view` tag. Chosen this way so the filter never hides a kind. *Recommendation:* as proposed; a chip that appears with its first item is the smallest honest rule.
 3. **Allow on a starter.** A page or chart script made from Vibe's own starter opens as source with **Allow** (one click; it shows what Allow means). Auto-allowing the embedded starter bytes is possible (the person made it, the hash is known) but adds a second allow path; not proposed. *Recommendation:* keep the one path. The first thing a person edits is the starter, and the hash moves then anyway; the starter is the cheapest place to learn what the prompt is.
 4. **Saved queries in the Library later?** Kept out (L2). If people ask, a *Queries* chip that opens the Query Editor is cheap. *Recommendation:* keep out at 0.3.0; revisit only on a request.
+
+## As built
+
+Built in five steps (L1 starters and counts, L2 list and routes, L3 the New dialog, L4 describe-it, L5 Home, launcher and docs), as planned except for these:
+
+- **The script starter is `html/app.js`.** The `html-script` starter is the page starter plus an `html/app.js` that calls `vibe.run` again; `script` is a `view.js` that draws a one-bar SVG. All four kinds share one manifest body (two date parameters, one query).
+- **The describe row sits last in tab order** under the picker, and acts on the type chosen in step 1. For a notebook it creates the notebook and opens its AI cell dialog with the description filled in (nothing runs until Generate); for the other types it opens the agent panel with an unsent request naming the kind and `write_artifact`. It never auto-sends and never overwrites typed text; a draft that cannot be placed waits behind a "Use it" notice.
+- **No auto-land of drafts.** An artifact the agent writes shows up in the Library through its `data:changed` reload; Studio does not navigate to it.
+- **`useModalKeys` now traps Tab app-wide.** Every modal that passes a root keeps Tab and Shift+Tab inside it, handles nested modals and native radio groups; `AiCellDialog` uses it and `ConfirmDialog`'s destructive button gets a focus ring.
+- **Home.** `DashboardData.artifact_counts` is counting only (a helper beside `listArtifacts`; no new binding). The Library tiles are Notebooks, Live views, Pages and (only when non-zero) Chart scripts, each opening `/library?type=...`; a broken artifact counts once under `broken`, which Home shows as a "needs fixing" line linking to the Library (the "All" chip is where broken artifacts list). **New notebook** opens `/library?new=notebook`.
+- **`create_dashboard`** keeps its name (open question 1, option a); its description gained one sentence pointing to `write_artifact` for a live view.
+- **Chart scripts chip** appears with the first item (open question 2); starters keep the single allow path (3); queries stay out of the Library (4).

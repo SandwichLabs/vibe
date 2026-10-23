@@ -126,8 +126,8 @@ export function useNotebookEditor() {
   watch(() => cells.value.map((c) => `${c.id}:${c.type}:${c.source}:${c.view}:${c.viewPinned}:${c.label}:${c.collapsed}:${c.connection}:${JSON.stringify(c.motion)}`).join('|'), save.scheduleSave)
   watch(() => cells.value.length, save.scheduleSave)
 
-  // vue-router reuses this component instance across a /notebooks/:id ->
-  // /notebooks/:id2 navigation, so switching notebooks must flush THIS notebook's
+  // vue-router reuses this component instance across a /library/notebook/:id ->
+  // /library/notebook/:id2 navigation, so switching notebooks must flush THIS notebook's
   // edits (captured under its own id, before anything changes), tear down its
   // editors/observer/in-flight queries, and only THEN load the new one.
   watch(

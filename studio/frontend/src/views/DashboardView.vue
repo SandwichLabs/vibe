@@ -3,9 +3,9 @@ import { App } from '../lib/bindings'
 // Studio Home. Backed directly by GetDashboard's live counts and the workspace's
 // own tables (the default connection's, design #106 item 8), refreshed on
 // "data:changed". Titled with the workspace's name.
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { libraryPath } from '../lib/libraryRoutes'
+import { libraryPath, type LibraryType } from '../lib/libraryRoutes'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
 import { errorText } from '../lib/errors'
@@ -17,11 +17,26 @@ const description = ref('')
 const tableCount = ref(0)
 const notebookCount = ref(0)
 const queryCount = ref(0)
+const liveCount = ref(0)
+const pageCount = ref(0)
+const scriptCount = ref(0)
+const brokenCount = ref(0)
 const localTables = ref<string[]>([])
 const defaultConnection = ref('')
 const readOnly = ref(false)
 const loading = ref(true)
 const errorMessage = ref('')
+
+// The Library tiles: Chart scripts appear only once there is one (as the chip does).
+const libraryTiles = computed(() => {
+  const tiles: { type: LibraryType; label: string; count: number }[] = [
+    { type: 'notebook', label: 'Notebooks', count: notebookCount.value },
+    { type: 'live', label: 'Live views', count: liveCount.value },
+    { type: 'page', label: 'Pages', count: pageCount.value },
+  ]
+  if (scriptCount.value > 0) tiles.push({ type: 'script', label: 'Chart scripts', count: scriptCount.value })
+  return tiles
+})
 
 let loadGen = 0
 
@@ -37,6 +52,10 @@ async function load() {
     tableCount.value = d?.table_count ?? 0
     notebookCount.value = d?.notebook_count ?? 0
     queryCount.value = d?.query_count ?? 0
+    liveCount.value = d?.artifact_counts?.live ?? 0
+    pageCount.value = d?.artifact_counts?.page ?? 0
+    scriptCount.value = d?.artifact_counts?.script ?? 0
+    brokenCount.value = d?.artifact_counts?.broken ?? 0
     localTables.value = d?.local_tables ?? []
     defaultConnection.value = d?.default_connection ?? ''
     readOnly.value = !!d?.read_only
@@ -88,20 +107,32 @@ onUnmounted(() => {
 
     <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
 
-    <div v-else class="dashboard-stats" data-testid="dashboard-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 8px;">
+    <div v-else class="dashboard-stats" data-testid="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px; margin-bottom: 8px;">
       <div class="card" style="padding: 20px;">
         <div class="sh-meta">Tables</div>
         <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ tableCount }}</div>
       </div>
-      <div class="card" style="padding: 20px;">
-        <div class="sh-meta">Notebooks</div>
-        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ notebookCount }}</div>
-      </div>
+      <button
+        v-for="t in libraryTiles"
+        :key="t.type"
+        type="button"
+        class="card"
+        style="padding: 20px; text-align: left; cursor: pointer; color: var(--sh-ink);"
+        :data-testid="`library-tile-${t.type}`"
+        @click="router.push(libraryPath(t.type))"
+      >
+        <div class="sh-meta">{{ t.label }}</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ t.count }}</div>
+      </button>
       <div class="card" style="padding: 20px;">
         <div class="sh-meta">Saved queries</div>
         <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 32px;">{{ queryCount }}</div>
       </div>
     </div>
+    <p v-if="!loading && brokenCount > 0" class="help" data-testid="library-broken" style="margin-bottom: 8px;">
+      {{ brokenCount }} {{ brokenCount === 1 ? 'artifact needs' : 'artifacts need' }} fixing.
+      <a href="#" @click.prevent="router.push(libraryPath())">Open the Library</a>
+    </p>
 
     <div v-if="!loading" class="sec-title" style="margin-top: 32px;">
       <h2>Your tables</h2>
@@ -133,12 +164,12 @@ onUnmounted(() => {
       <span class="label">Jump back in</span>
     </div>
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push(libraryPath('notebook'))">
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push(libraryPath())" data-testid="library-card">
         <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
           <Icon name="layers" :size="22" />
         </div>
-        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Notebooks</div>
-        <div class="sh-meta" style="margin-top: 4px;">SQL, markdown & A2UI cells</div>
+        <div style="font-family: var(--sh-font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.015em; margin-top: 12px;">Library</div>
+        <div class="sh-meta" style="margin-top: 4px;">Notebooks, live views & pages</div>
       </div>
       <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-subj-science);" @click="router.push('/tables')">
         <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">

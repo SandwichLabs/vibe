@@ -45,21 +45,21 @@ ast-grep scan -c tools/ast-grep/sgconfig.yml cmd internal studio  # architecture
 
 Keep the Wails CLI at the `github.com/wailsapp/wails/v2` version in go.mod (v2.16.0; CI and release pin it as `WAILS_VERSION`). Wails v2.16 loads Go 1.27, so the old `WAILS_GOTOOLCHAIN` pin (vibe-app#92) is gone.
 
-CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapshot`), `import`, `export`, `conn`, `artifact` (`artifact list`, mirrors the Artifacts list), `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
+CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapshot`), `import`, `export`, `conn`, `artifact` (`artifact list`, mirrors the Library's artifact kinds), `config` (`config llm` mirrors Settings → App's provider picker; keys stay on `config llm-key`; `config updates` mirrors the About > Updates toggle), `update` (check, then install after confirmation), `studio` (`--gui` for desktop), `mcp serve`. `init` aliases `workspace init`. Old container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are hidden stubs that point to `vibe workspace init`.
 
 ## Architecture
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio)
 studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,import_export,lifecycle,llm,
-                     notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go (the logic behind the data artifact bindings: list, open, run, edit, save, delete), viewserver{,_page}.go + artifact_view_host.go + artifact_page_host.go (the /vibe-view/ middleware and per-grant tokens for script views and static HTML pages), pagehost{,_bridge,_files,_launch_unix,_gate_linux,_gate_darwin}.go + pagecaps{,_state,_download,_ask,_app}.go (the `state`, `download` and `ask` capabilities) + pagehelper{,_unix}.go + pagewindow_{cgo.go,linux.c,darwin.m} + app_pagehost.go (page windows of scripted HTML pages: the manager and bridge in Studio, helper mode `--view-host`, the Linux bubblewrap network gate, the native WebKitGTK/WKWebView view), agent_turn.go (the in-flight chat turn and its cancel),
+                     notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go + artifact_starters.go (the New dialog's starter files by kind; the logic behind the data artifact bindings: list, open, run, edit, save, delete), viewserver{,_page}.go + artifact_view_host.go + artifact_page_host.go (the /vibe-view/ middleware and per-grant tokens for script views and static HTML pages), pagehost{,_bridge,_files,_launch_unix,_gate_linux,_gate_darwin}.go + pagecaps{,_state,_download,_ask,_app}.go (the `state`, `download` and `ask` capabilities) + pagehelper{,_unix}.go + pagewindow_{cgo.go,linux.c,darwin.m} + app_pagehost.go (page windows of scripted HTML pages: the manager and bridge in Studio, helper mode `--view-host`, the Linux bubblewrap network gate, the native WebKitGTK/WKWebView view), agent_turn.go (the in-flight chat turn and its cancel),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
-                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Notebooks/Notebook,
-                     TableBrowser, QueryEditor, ConnectionEditor, Skills, Artifacts/Artifact, Import, Settings, Agent)
+                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Library (the one list of notebooks, live views, pages and chart scripts, with the New type picker)/Notebook/Artifact,
+                     TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
                      ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard);
