@@ -110,14 +110,15 @@ func (a *App) CheckArtifact(name string) ([]string, error) {
 	return checkArtifact(a.ctxOrBackground(), env, name)
 }
 
-// NewArtifact creates artifacts/<name> from a small working starter; a name
-// already in use is refused.
-func (a *App) NewArtifact(name string) (*ArtifactSource, error) {
+// NewArtifact creates artifacts/<name> from a small working starter of kind
+// ("a2ui" or empty, "html", "html-script" or "script"); a name already in use
+// or an unknown kind is refused.
+func (a *App) NewArtifact(name, kind string) (*ArtifactSource, error) {
 	store, err := a.artifactStore()
 	if err != nil {
 		return nil, err
 	}
-	return newArtifact(a.ctxOrBackground(), store, name)
+	return newArtifact(a.ctxOrBackground(), store, name, kind)
 }
 
 // DeleteArtifact removes both files of an artifact, only if they are still at

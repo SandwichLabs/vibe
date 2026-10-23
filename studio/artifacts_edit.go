@@ -142,53 +142,34 @@ func checkArtifact(ctx context.Context, env artifactEnv, name string) ([]string,
 	return vetWarnings(ctx, env, &a.Manifest), nil
 }
 
-// starterManifest and starterView are what New artifact creates: one query, one
-// stat, one date parameter, so the first thing a person sees works and shows how
-// the pieces connect.
-const starterManifest = `version: 1
-title: %s
-description: A starting point. Edit the query and the view.
-parameters:
-  - name: from
-    type: date
-    default: today-30d
-  - name: to
-    type: date
-    default: today
-queries:
-  - name: span
-    sql: SELECT ($to::DATE - $from::DATE) + 1 AS days
-`
-
-const starterView = `{
-  "title": "Starter",
-  "components": [
-    {"id": "controls", "type": "container", "layout": "row"},
-    {"id": "dates", "type": "dateRange", "parent": "controls", "start": "from", "end": "to", "label": "Dates"},
-    {"id": "days", "type": "stat", "label": "Days in range", "query": "span"}
-  ]
-}
-`
-
-// newArtifact creates artifacts/<name> from the starter and returns its source.
-// An existing name is refused (create-only), never overwritten.
-func newArtifact(ctx context.Context, store artifacts.Store, name string) (*ArtifactSource, error) {
+// newArtifact creates artifacts/<name> from the starter of kind (see
+// artifact_starters.go) and returns its source. An existing name is refused
+// (create-only), never overwritten; so is a kind that is not a starter. The
+// store vets the page files and the view on the way in, and a starter that
+// fails it is a bug the tests catch.
+func newArtifact(ctx context.Context, store artifacts.Store, name, kind string) (*ArtifactSource, error) {
 	if err := validArtifactName(name); err != nil {
 		return nil, err
 	}
-	manifest := fmt.Sprintf(starterManifest, name)
-	m, err := artifacts.Decode([]byte(manifest))
+	st, err := starterFor(name, kind)
 	if err != nil {
 		return nil, err
 	}
-	a := &artifacts.Artifact{Name: name, Manifest: *m, ManifestText: []byte(manifest), View: []byte(starterView)}
+	m, err := artifacts.Decode([]byte(st.manifest))
+	if err != nil {
+		return nil, err
+	}
+	a := &artifacts.Artifact{Name: name, Manifest: *m, ManifestText: []byte(st.manifest), View: []byte(st.view), Files: st.files}
 	if err := store.Put(ctx, a, artifacts.WithRev("")); err != nil {
 		if errors.Is(err, artifacts.ErrConflict) {
 			return nil, fmt.Errorf("an artifact named %q already exists", name)
 		}
 		return nil, err
 	}
-	return &ArtifactSource{Name: name, Manifest: manifest, View: starterView, Rev: a.Rev, UpdatedAt: time.Now().UTC().Format(time.RFC3339)}, nil
+	return &ArtifactSource{
+		Name: name, Manifest: st.manifest, View: st.view, ViewFile: artifacts.ViewFileOf(m), Rev: a.Rev,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
 }
 
 // deleteArtifact removes an artifact if it is still at rev. A delete without a

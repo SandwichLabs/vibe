@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/agents"
@@ -19,7 +20,8 @@ type ArtifactSummary struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	// View is the view kind ("a2ui" or "script").
+	// View is the view kind: "a2ui", "script", "html (static)" or "html (scripted)"
+	// (artifacts.ViewLabel); empty for a broken artifact.
 	View      string `json:"view"`
 	UpdatedAt string `json:"updated_at"`
 	Rev       string `json:"rev"`
@@ -71,6 +73,39 @@ func listArtifacts(ctx context.Context, store artifacts.Store) ([]ArtifactSummar
 		})
 	}
 	return out, nil
+}
+
+// ArtifactCounts is how many artifacts of each Library kind a workspace has
+// (Home's tiles). A broken artifact counts once, under Broken, whatever kind
+// it was meant to be, as the list shows it.
+type ArtifactCounts struct {
+	Live   int `json:"live"`
+	Page   int `json:"page"`
+	Script int `json:"script"`
+	Broken int `json:"broken"`
+}
+
+// countArtifacts counts a listing by kind. A store that cannot list counts as
+// none: Home shows zeros rather than failing.
+func countArtifacts(ctx context.Context, store artifacts.Store) ArtifactCounts {
+	var c ArtifactCounts
+	list, err := listArtifacts(ctx, store)
+	if err != nil {
+		return c
+	}
+	for _, a := range list {
+		switch {
+		case a.Error != "":
+			c.Broken++
+		case a.View == artifacts.ViewScript:
+			c.Script++
+		case strings.HasPrefix(a.View, artifacts.ViewHTML):
+			c.Page++
+		case a.View == artifacts.ViewA2UI:
+			c.Live++
+		}
+	}
+	return c
 }
 
 // getArtifact is GetArtifact over a store. A missing artifact is an error; one

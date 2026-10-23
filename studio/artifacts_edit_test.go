@@ -97,19 +97,145 @@ func TestSaveArtifact_KeepsTheManifestAsTyped(t *testing.T) {
 func TestNewArtifact_StarterRunsCleanAndAnExistingNameIsRefused(t *testing.T) {
 	store := &artifacts.Mock{}
 	ctx := context.Background()
-	src, err := newArtifact(ctx, store, "fresh")
+	src, err := newArtifact(ctx, store, "fresh", "a2ui")
 	require.NoError(t, err)
 	got, err := store.Get(ctx, "fresh")
 	require.NoError(t, err, "the starter passes the structural checks")
 	assert.Equal(t, "fresh", got.Manifest.Title)
 	assert.Equal(t, src.Rev, got.Rev)
+	assert.Equal(t, artifacts.ViewFile, src.ViewFile)
 
-	_, err = newArtifact(ctx, store, "fresh")
+	_, err = newArtifact(ctx, store, "fresh", "a2ui")
 	require.ErrorContains(t, err, "already exists")
-	_, err = newArtifact(ctx, store, "Not A Name")
+	_, err = newArtifact(ctx, store, "Not A Name", "a2ui")
 	require.Error(t, err)
-	_, err = newArtifact(ctx, store, strings.Repeat("a", 65))
+	_, err = newArtifact(ctx, store, strings.Repeat("a", 65), "a2ui")
 	require.Error(t, err)
+
+	_, err = newArtifact(ctx, store, "null", "a2ui")
+	require.NoError(t, err, "a name that YAML reads as null still makes a titled artifact")
+
+	empty, err := newArtifact(ctx, store, "plain", "")
+	require.NoError(t, err, "an empty kind is the live view starter")
+	assert.Equal(t, starterView, empty.View)
+}
+
+// starterStores runs a check over the Mock and a FileStore in a temp dir.
+func starterStores(t *testing.T) map[string]artifacts.Store {
+	t.Helper()
+	return map[string]artifacts.Store{"mock": &artifacts.Mock{}, "file": artifacts.NewFileStore(t.TempDir())}
+}
+
+func TestNewArtifact_EveryStarterPassesTheStoresVetOnBothStores(t *testing.T) {
+	ctx := context.Background()
+	for storeName, store := range starterStores(t) {
+		for _, kind := range starterKinds {
+			t.Run(storeName+"/"+kind, func(t *testing.T) {
+				src, err := newArtifact(ctx, store, "s-"+kind, kind)
+				require.NoError(t, err, "Put runs Decode, ValidateView and VetPage")
+				a, err := store.Get(ctx, "s-"+kind)
+				require.NoError(t, err)
+				assert.Equal(t, src.Rev, a.Rev)
+				assert.Empty(t, a.Error)
+				require.NoError(t, artifacts.Validate(&a.Manifest))
+				switch kind {
+				case starterHTML, starterHTMLScript:
+					require.NotNil(t, a.Page)
+					require.NoError(t, artifacts.ValidateView(&a.Manifest, nil))
+					_, err := artifacts.VetPage(&a.Manifest, a.Files)
+					require.NoError(t, err, "the real page vet, not a copy")
+					want := artifacts.PageStatic
+					if kind == starterHTMLScript {
+						want = artifacts.PageScripted
+					}
+					assert.Equal(t, want, a.Page.Kind)
+					assert.Equal(t, []string{"span"}, a.Page.Queries)
+					assert.Empty(t, a.Page.Capabilities, "no capabilities declared")
+				case starterScript:
+					assert.Equal(t, artifacts.ViewScript, a.Manifest.View)
+					assert.Equal(t, starterScriptJS, string(a.View))
+					_, err := artifacts.ViewHash([]byte(src.Manifest), []artifacts.ViewPart{{Path: artifacts.ScriptFile, Data: a.View}})
+					require.NoError(t, err)
+				default:
+					require.NoError(t, artifacts.ValidateView(&a.Manifest, a.View))
+				}
+			})
+		}
+	}
+}
+
+func TestNewArtifact_StarterSourcesNameNoNetworkAddress(t *testing.T) {
+	for _, kind := range starterKinds {
+		st, err := starterFor("x", kind)
+		require.NoError(t, err)
+		all := st.manifest + st.view
+		for _, f := range st.files {
+			all += string(f.Data)
+		}
+		// The SVG namespace names a vocabulary; nothing fetches it.
+		all = strings.ReplaceAll(all, "http://www.w3.org/2000/svg", "")
+		for _, bad := range []string{"http://", "https://", "//cdn", "@import", "#fff", "#000"} {
+			assert.NotContains(t, all, bad, kind)
+		}
+	}
+}
+
+func TestNewArtifact_UnknownKindAndExistingNameWriteNothing(t *testing.T) {
+	ctx := context.Background()
+	for storeName, store := range starterStores(t) {
+		for _, kind := range []string{"pdf", "HTML", "../x", "a2ui/../..", " script"} {
+			_, err := newArtifact(ctx, store, "nope", kind)
+			require.Error(t, err, storeName+" "+kind)
+			assert.ErrorContains(t, err, "a2ui, html, html-script, script")
+		}
+		list, err := store.List(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, list, storeName)
+
+		first, err := newArtifact(ctx, store, "taken", "html")
+		require.NoError(t, err)
+		_, err = newArtifact(ctx, store, "taken", "script")
+		require.ErrorContains(t, err, "already exists")
+		got, err := store.Get(ctx, "taken")
+		require.NoError(t, err)
+		assert.Equal(t, first.Rev, got.Rev, storeName+": the first artifact is untouched")
+		assert.Equal(t, artifacts.ViewHTML, got.Manifest.View)
+	}
+}
+
+func TestNewArtifactBinding_StartersVetCleanAndScriptedOnesStartUndecided(t *testing.T) {
+	app := newOpenApp(t)
+	for _, kind := range starterKinds {
+		name := "b-" + kind
+		src, err := app.NewArtifact(name, kind)
+		require.NoError(t, err)
+		assert.Equal(t, name, src.Name)
+		warnings, err := app.CheckArtifact(name)
+		require.NoError(t, err)
+		assert.Empty(t, warnings, kind+": the agent's read policy has no complaint")
+
+		st, err := app.ArtifactViewState(name)
+		require.NoError(t, err)
+		switch kind {
+		case starterHTMLScript, starterScript:
+			assert.Equal(t, "undecided", st.State, kind+": opens as source with Allow, never auto-allowed")
+		case starterHTML:
+			assert.Equal(t, "undecided", st.State, kind)
+			assert.Equal(t, artifacts.PageStatic, st.PageKind)
+		default:
+			assert.Equal(t, "none", st.State)
+		}
+	}
+	html, err := app.GetArtifact("b-html-script")
+	require.NoError(t, err)
+	assert.Equal(t, artifacts.PageScripted, html.PageKind)
+	list, err := app.ListArtifacts()
+	require.NoError(t, err)
+	labels := map[string]string{}
+	for _, it := range list {
+		labels[it.Name] = it.View
+	}
+	assert.Equal(t, map[string]string{"b-a2ui": "a2ui", "b-html": "html (static)", "b-html-script": "html (scripted)", "b-script": "script"}, labels)
 }
 
 func TestDeleteArtifact_NeedsTheRevisionSeenAndRefusesAnOutsideEdit(t *testing.T) {

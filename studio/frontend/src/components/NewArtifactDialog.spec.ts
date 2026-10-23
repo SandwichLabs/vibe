@@ -18,7 +18,7 @@ describe('NewArtifactDialog', () => {
     await w.find('[data-testid=new-artifact-name]').setValue('weekly-sales')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(NewArtifact).toHaveBeenCalledWith('weekly-sales')
+    expect(NewArtifact).toHaveBeenCalledWith('weekly-sales', 'a2ui')
     expect(w.emitted('created')?.[0]).toEqual(['weekly-sales'])
   })
 
