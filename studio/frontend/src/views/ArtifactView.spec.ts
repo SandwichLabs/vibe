@@ -1,15 +1,15 @@
-// ArtifactView / ArtifactsView (#162): the list, the view with its controls, the
+// ArtifactView (#162): the view with its controls, the
 // broken-artifact state, and the rule that a view never reaches a raw sql binding.
 type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from '../router/index'
+import { artifactPath } from '../lib/libraryRoutes'
 import { _resetQueryPoolForTests } from '../a2ui/query'
 
 vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 
 import ArtifactView from './ArtifactView.vue'
-import ArtifactsView from './ArtifactsView.vue'
 
 const detail = (over: Partial<ArtifactDetail> = {}): ArtifactDetail => ({
   view_kind: 'a2ui',
@@ -55,7 +55,7 @@ function makeApp(d: ArtifactDetail, over: MockApp = {}) {
 }
 
 async function mountAt(name: string) {
-  await router.push(`/artifacts/${name}`)
+  await router.push(artifactPath(name))
   await router.isReady()
   const w = mount(ArtifactView, { global: { plugins: [router], stubs: { Icon: true } } })
   await flushPromises()
@@ -182,31 +182,5 @@ describe('ArtifactView', () => {
     const w = await mountAt('sales')
     expect(w.text()).toContain('QUERY ERROR: Binder Error: no column')
     expect(w.get('[data-testid="artifact-truncated"]').text()).toContain('by_region')
-  })
-})
-
-describe('ArtifactsView', () => {
-  it('lists good and broken artifacts', async () => {
-    makeApp(detail(), {
-      ListArtifacts: vi.fn(async () => [
-        { name: 'broken', title: '', description: '', view: '', updated_at: '', rev: '', error: 'invalid artifact: bad' },
-        { name: 'sales', title: 'Regional sales', description: 'Revenue', view: 'a2ui', updated_at: '', rev: 'r' },
-      ]),
-    })
-    await router.push('/artifacts')
-    const w = mount(ArtifactsView, { global: { plugins: [router], stubs: { Icon: true } } })
-    await flushPromises()
-    const rows = w.findAll('[data-testid="artifact-row"]')
-    expect(rows.map((r) => r.attributes('data-artifact-name'))).toEqual(['broken', 'sales'])
-    expect(rows[0].text()).toContain('invalid artifact: bad')
-    expect(rows[1].text()).toContain('Regional sales')
-  })
-
-  it('says how to make one when there are none', async () => {
-    makeApp(detail())
-    await router.push('/artifacts')
-    const w = mount(ArtifactsView, { global: { plugins: [router], stubs: { Icon: true } } })
-    await flushPromises()
-    expect(w.find('[data-testid="artifacts-empty"]').exists()).toBe(true)
   })
 })

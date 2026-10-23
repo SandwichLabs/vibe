@@ -7,6 +7,7 @@
 // them. Error text is text interpolation only.
 import { computed, provide, ref, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { backToLibrary, libraryPath } from '../lib/libraryRoutes'
 import Icon from '../components/Icon.vue'
 import A2UIPage from '../a2ui/A2UIPage.vue'
 import ArtifactSource from '../components/ArtifactSource.vue'
@@ -55,14 +56,14 @@ function refresh() { void reload(); runs.rerunAll(); pageTick.value++ }
 const tab = ref<'view' | 'source'>('view')
 // A save changes the files: re-read the artifact and run its queries again.
 const onSaved = refresh
-const onGone = () => router.push('/artifacts')
+const onGone = () => router.push(libraryPath())
 </script>
 
 <template>
   <div class="col" style="height: 100%; gap: 0;">
     <div class="row" style="justify-content: space-between; align-items: center; padding: var(--sh-space-3) var(--sh-space-6); border-bottom: var(--sh-border);">
       <div class="row" style="gap: var(--sh-space-3); align-items: center; min-width: 0;">
-        <button type="button" class="btn btn-ghost btn-sm" aria-label="Back to artifacts" title="Back to artifacts" @click="router.push('/artifacts')"><Icon name="arrowLeft" :size="14" /></button>
+        <button type="button" class="btn btn-ghost btn-sm" aria-label="Back to the library" title="Back to the library" @click="backToLibrary(router, libraryPath())"><Icon name="arrowLeft" :size="14" /></button>
         <div style="min-width: 0;">
           <h2 class="card-title" style="margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" data-testid="artifact-title">{{ detail?.title || name }}</h2>
           <div v-if="detail?.description" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">{{ detail.description }}</div>

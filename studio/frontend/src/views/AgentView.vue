@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { notebookPath } from '../lib/libraryRoutes'
 import Icon from '../components/Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
 import AgentTranscript from '../components/AgentTranscript.vue'
@@ -13,7 +14,7 @@ const router = useRouter()
 const { messages, sending, stoppable, send, reset, cancel, setScrollHandler, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
-  router.push(`/notebooks/${id}`)
+  router.push(notebookPath(id))
 }
 
 const draft = ref('')

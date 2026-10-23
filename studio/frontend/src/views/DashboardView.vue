@@ -5,6 +5,7 @@ import { App } from '../lib/bindings'
 // "data:changed". Titled with the workspace's name.
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { libraryPath } from '../lib/libraryRoutes'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import Icon from '../components/Icon.vue'
 import { errorText } from '../lib/errors'
@@ -71,7 +72,7 @@ onUnmounted(() => {
         <button class="btn" @click="router.push('/import')">
           <Icon name="download" :size="16" /> Import data
         </button>
-        <button class="btn btn-primary" @click="router.push('/notebooks?new=1')">
+        <button class="btn btn-primary" @click="router.push(libraryPath(undefined, 'notebook'))">
           <Icon name="plus" :size="16" /> New notebook
         </button>
       </div>
@@ -132,7 +133,7 @@ onUnmounted(() => {
       <span class="label">Jump back in</span>
     </div>
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push('/notebooks')">
+      <div class="card" style="padding: 20px 20px 18px 28px; cursor: pointer; border-left: 6px solid var(--sh-teal);" @click="router.push(libraryPath('notebook'))">
         <div style="width: 40px; height: 40px; border: 1.5px solid var(--sh-ink); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); display: inline-flex; align-items: center; justify-content: center;">
           <Icon name="layers" :size="22" />
         </div>

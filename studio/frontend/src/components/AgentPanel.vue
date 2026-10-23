@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { notebookPath } from '../lib/libraryRoutes'
 import Icon from './Icon.vue'
 import { useAgentChat } from '../composables/useAgentChat'
 import AgentTranscript from './AgentTranscript.vue'
@@ -18,7 +19,7 @@ const router = useRouter()
 const { messages, sending, stoppable, pinnedContext, send, pin, unpin, reset, cancel, setScrollHandler, resolveApproval } = useAgentChat()
 
 function openNotebook(id: string) {
-  router.push(`/notebooks/${id}`)
+  router.push(notebookPath(id))
   emit('close')
 }
 
