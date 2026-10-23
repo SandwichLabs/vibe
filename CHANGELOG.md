@@ -4,10 +4,19 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 ### Added
 
 - **Edit queries in your own editor, and a language server.** In the terminal UI, `ctrl+o` (or `\e`) opens the input in `$VISUAL`/`$EDITOR`, and `vibe query -e` does the same from the shell; the editor runs without a shell, on a private scratch file under `.vibe-local/edit/`. `vibe lsp` is a stdio Language Server for `.sql` files in a workspace (connections, schemas, tables, views, columns through aliases, DuckDB functions, hover). It reads a names-and-types snapshot, `.vibe-local/catalog.json`, that the TUI keeps current and `vibe lsp snapshot` writes on demand, so it opens no database and never takes the lock; completion is empty until one of them has written it. Neovim plugin, Helix and eglot setup in `editors/`. See `docs/reference/editor.md`. ([#112](https://github.com/SandwichLabs/vibe/pull/112))
 - **Data artifacts.** A parameterised, live view stored as files in `artifacts/<name>/` (`artifact.yaml` with typed parameters and named queries, plus an A2UI `view.a2ui.json`). Parameter controls (select, date range, number, text), a `pivot` crosstab and drill-down re-run only the queries that use a changed parameter. Studio has an Artifacts list, a view and a Source tab with conflict handling; the agent and MCP clients author with `write_artifact`, `list_artifacts` and `get_artifact` (no tool runs an artifact); `.vibe` bundles carry them; `vibe artifact list` and `vibe export bundle --artifacts` mirror the UI. A value is only ever a bound parameter, and every query is checked against the read-only SQL policy when it is saved and again on every run, so a hand-edited, pulled or bundled artifact is held to it too. See `docs/reference/artifacts.md`. ([#162](https://github.com/SandwichLabs/vibe/issues/162))
+- **Custom script views for data artifacts.** An artifact can name `view.js` instead of an A2UI view (`view: script`). The code runs in a terminable Web Worker under a deny-all CSP, gets rows only through the artifact's named queries, and returns an SVG (shown as an inert image) or an A2UI page that Go validates. It shows as source until you allow it; the decision is keyed by the folder's path and a hash of its files, kept in your config directory (`views.json`), and asked again after any change. The agent can never allow a view. `vibe artifact view status|allow|deny|revoke` mirrors Studio. ([#159](https://github.com/SandwichLabs/vibe/issues/159), [#160](https://github.com/SandwichLabs/vibe/issues/160))
+- **HTML pages: Claude-style artifacts in a workspace.** An artifact can be a page of your own HTML (`view: html`, files under `html/`), bound to its named queries through a closed Go `html/template` function set; data is always escaped and a page never sends SQL. Pages are checked when they are saved (no network-reaching URL, no `<link>` but a local stylesheet, no `target`) and rendered with time, work and memory budgets.
+  - **Static pages** render inside Studio in a script-less, sandboxed frame.
+  - **Pages with script** open in their own window, run by a helper process that has no workspace, credentials or store. On Linux it runs inside bubblewrap with no network at all (a user and network namespace and an allow-listed filesystem view). On macOS it runs in a WKWebView behind a strict CSP, a navigation policy, a content rule list and a dead proxy.
+  - **Capabilities** a page may declare: `state` (small notes kept on this computer), `download` (Studio's save dialog, only after a real click or key press) and `ask` (one completion on your model provider with no tools, behind its own toggle).
+  - **The allow prompt** lists the page's files, every query it can run with its connection, its capabilities in plain words (naming the provider for `ask`) and, on macOS, the network limitation below. Settings > Workspace > Pages lists decisions, the `ask` toggle and recent model use.
+  - The agent and MCP clients write pages with `write_artifact` (`html_files`) and read them with `get_artifact`; no tool renders, runs or allows a page. `.vibe` bundles carry pages, never a decision or a page's state. See `docs/reference/artifacts.md`. ([#162](https://github.com/SandwichLabs/vibe/issues/162))
 
 ### Fixed
 
@@ -16,7 +25,14 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Changed
 
-- The data artifact plan records that custom (level 2) views are not built: the sandboxed-iframe design was dropped after the Linux isolation spike (a frame can reach the Wails binding IPC, [#174](https://github.com/SandwichLabs/vibe/issues/174)); a worker reshape awaits a macOS run ([#158](https://github.com/SandwichLabs/vibe/issues/158)).
+- **Go 1.27.3**, for a standard-library advisory (GO-2026-6809, distrusted intermediate certificates in `crypto/x509`). ([#190](https://github.com/SandwichLabs/vibe/pull/190))
+- macOS text substitutions (auto-capitalisation, autocorrect) are off in Studio's name and parameter fields.
+
+### Known limitations
+
+- **Page windows have platform requirements.** On Linux they need a Wayland session, bubblewrap and unprivileged user namespaces; X11-only sessions, and Ubuntu with `apparmor_restrict_unprivileged_userns`, refuse with a message. On macOS they need macOS 14 or later.
+- **On macOS a page with script can use a link to open a network connection** to an address it chooses (a script-clicked link to an IP address, with or without `target=_blank`); it cannot read a reply. The allow prompt says so, and the page-window helper shares Studio's keychain identity. A network-free replacement is tracked in [#189](https://github.com/SandwichLabs/vibe/issues/189).
+- **Artifact query results have no byte cap** yet (rows are capped at 500): one very large cell is read in full. HTML pages cap what a template sees at 16 MB. ([#193](https://github.com/SandwichLabs/vibe/issues/193))
 
 ## [0.1.4] - 2026-10-16
 
@@ -119,7 +135,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/SandwichLabs/vibe/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/SandwichLabs/vibe/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/SandwichLabs/vibe/compare/v0.1.1...v0.1.2
