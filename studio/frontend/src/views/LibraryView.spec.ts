@@ -1,5 +1,5 @@
 // LibraryView (docs/plans/library.md L5): the merged list, chips, filter, sort,
-// partial failure, opening, and the temporary New buttons.
+// partial failure, opening, and the New button.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { router } from '../router/index'
@@ -99,15 +99,34 @@ describe('LibraryView', () => {
     expect(w.get('[data-testid="library-empty-filter"]').text()).toContain('Nothing matches')
   })
 
-  it('?new=notebook opens the notebook dialog once and leaves the URL clean', async () => {
+  it('?new=1 opens the picker on Notebook once and leaves the URL clean', async () => {
     const w = await mountAt('/notebooks?new=1')
-    expect(w.find('[data-testid="new-notebook-dialog"]').exists()).toBe(true)
+    expect(w.find('[data-testid="new-item-dialog"]').exists()).toBe(true)
+    expect(w.get('[data-testid="type-notebook"]').attributes('aria-checked')).toBe('true')
     expect(router.currentRoute.value.query.new).toBeUndefined()
   })
 
-  it('New live view opens the artifact dialog', async () => {
+  it('?new=page and ?new=script preselect those cards', async () => {
+    let w = await mountAt('/library?new=page')
+    expect(w.get('[data-testid="type-page"]').attributes('aria-checked')).toBe('true')
+    w.unmount()
+    w = await mountAt('/library?new=script')
+    expect(w.get('[data-testid="type-script"]').attributes('aria-checked')).toBe('true')
+  })
+
+  it('the one New button opens the picker', async () => {
     const w = await mountAt('/library')
-    await w.get('[data-testid="artifact-new"]').trigger('click')
-    expect(w.find('[data-testid="new-artifact-dialog"]').exists()).toBe(true)
+    expect(w.find('[data-testid="new-item-dialog"]').exists()).toBe(false)
+    await w.get('[data-testid="new-item"]').trigger('click')
+    expect(w.find('[data-testid="new-item-dialog"]').exists()).toBe(true)
+  })
+
+  it('an empty chip offers New for that type, preselected', async () => {
+    setApp({ ListArtifacts: vi.fn(async () => []) })
+    const w = await mountAt('/library?type=page')
+    const b = w.get('[data-testid="empty-new"]')
+    expect(b.text()).toContain('New page')
+    await b.trigger('click')
+    expect(w.get('[data-testid="type-page"]').attributes('aria-checked')).toBe('true')
   })
 })
