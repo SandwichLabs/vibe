@@ -30,7 +30,7 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    await App.NewArtifact(n)
+    await App.NewArtifact(n, 'a2ui')
     emit('created', n)
   } catch (e) {
     error.value = errorText(e)

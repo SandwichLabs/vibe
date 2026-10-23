@@ -417,6 +417,9 @@ type DashboardData struct {
 	TableCount    int    `json:"table_count"`
 	QueryCount    int    `json:"query_count"`
 	SkillCount    int    `json:"skill_count"`
+	// ArtifactCounts counts the workspace's artifacts by Library kind (live
+	// views, pages, chart scripts) and the ones that need fixing.
+	ArtifactCounts ArtifactCounts `json:"artifact_counts"`
 	// LocalTables are the tables of the workspace's default connection (its own
 	// `local` database unless the workspace says otherwise), as qualified names
 	// the datasheet accepts (design #106 item 8: Home lists them).
@@ -452,6 +455,7 @@ func (a *App) GetDashboard() (*DashboardData, error) {
 	if sk, err := a.ws.Skills().List(ctx); err == nil {
 		d.SkillCount = len(sk)
 	}
+	d.ArtifactCounts = countArtifacts(ctx, a.ws.Artifacts())
 	if tabs, err := a.sess.ListTables(ctx, "", ""); err == nil {
 		d.TableCount = len(tabs)
 		for _, t := range tabs {

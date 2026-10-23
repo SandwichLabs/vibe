@@ -133,7 +133,7 @@ interface AppApi {
   ValidateArtifactViewPage(name: string, page: string): Promise<string>
   SaveArtifact(name: string, manifest: string, view: string, rev: string): Promise<ArtifactSaveResult>
   CheckArtifact(name: string): Promise<string[]>
-  NewArtifact(name: string): Promise<ArtifactSource>
+  NewArtifact(name: string, kind: string): Promise<ArtifactSource>
   DeleteArtifact(name: string, rev: string): Promise<void>
   ListQueries(): Promise<QuerySummary[]>
   GetQuery(id: string): Promise<QueryDetail>
@@ -683,6 +683,15 @@ interface QueryDetail {
   rev?: string
 }
 
+// ArtifactCounts mirrors studio.ArtifactCounts: artifacts by Library kind; a
+// broken artifact counts once, under broken.
+interface ArtifactCounts {
+  live: number
+  page: number
+  script: number
+  broken: number
+}
+
 interface DashboardData {
   title: string
   description: string
@@ -690,6 +699,7 @@ interface DashboardData {
   table_count: number
   query_count: number
   skill_count: number
+  artifact_counts: ArtifactCounts
   local_tables: string[]
   default_connection: string
   read_only: boolean

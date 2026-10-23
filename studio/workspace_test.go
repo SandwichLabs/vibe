@@ -636,6 +636,7 @@ func TestListCatalogGroups_AndDashboardLocalTables(t *testing.T) {
 	assert.Equal(t, "App Test", d.Title)
 	assert.Equal(t, []string{"local.main.people"}, d.LocalTables)
 	assert.Equal(t, 1, d.TableCount)
+	assert.Equal(t, ArtifactCounts{}, d.ArtifactCounts, "a workspace with no artifacts counts none")
 
 	// The qualified name flows straight to the datasheet.
 	data, err := app.GetTableData("local.main.people", 1, 10, "", "")

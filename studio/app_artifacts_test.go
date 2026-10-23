@@ -181,3 +181,20 @@ func TestRunArtifactQuery_DoesNotEmitCatalogChanged(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, ev.count("catalog:changed"))
 }
+
+func TestGetDashboard_CountsArtifactsByKindAndABrokenOneOnce(t *testing.T) {
+	app := appWithArtifact(t) // one live view
+	for name, kind := range map[string]string{"p1": "html", "p2": "html-script", "s1": "script"} {
+		_, err := app.NewArtifact(name, kind)
+		require.NoError(t, err)
+	}
+	writeStudioArtifact(t, app, "broken", "version: 1\nunknown_key: 1\n", studioArtifactView)
+
+	d, err := app.GetDashboard()
+	require.NoError(t, err)
+	assert.Equal(t, ArtifactCounts{Live: 1, Page: 2, Script: 1, Broken: 1}, d.ArtifactCounts)
+}
+
+func TestCountArtifacts_AFailingStoreCountsNone(t *testing.T) {
+	assert.Equal(t, ArtifactCounts{}, countArtifacts(context.Background(), &artifacts.Mock{Err: assert.AnError}))
+}
