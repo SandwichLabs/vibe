@@ -16,6 +16,7 @@ const {
   loadedNotebookIdForView, backToList, exportNotebook, onAiCellApplied, handleWorkspaceClosed, reloadFromDisk,
 } = useNotebookEditor()
 const { saveState, conflict, conflictBusy } = save
+const openerButton = () => document.querySelector<HTMLElement>('[data-testid=ai-cell-open-create]')
 
 // Exposed for component tests (NotebookView.spec.ts) to drive cell state
 // directly rather than reach through the CodeMirror mock for every interaction.
@@ -117,6 +118,6 @@ defineExpose({
     <div v-if="infoMessage" class="info-toast" data-testid="ai-cell-info-toast" @click="infoMessage = ''">{{ infoMessage }}</div>
     <div v-if="statusMessage" class="status-toast" data-testid="notebook-status" @click="statusMessage = ''">{{ statusMessage }}</div>
 
-    <AiCellDialog v-if="AI_CELL_ENABLED" :dialog="nb.aiCellDialog" @applied="onAiCellApplied" />
+    <AiCellDialog v-if="AI_CELL_ENABLED" :dialog="nb.aiCellDialog" :fallback-focus="openerButton" @applied="onAiCellApplied" />
   </div>
 </template>

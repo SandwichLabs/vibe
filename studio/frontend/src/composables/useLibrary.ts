@@ -2,7 +2,8 @@
  * useLibrary: the Library list (docs/plans/library.md L5). One merged list
  * from ListNotebooks and ListArtifacts, loaded together; either failing shows
  * its error and keeps the other's rows. It reloads when a notebook or an
- * artifact changes on disk (an editor, git, an agent over MCP). The type chip
+ * artifact changes on disk (an editor, git, an agent over MCP) or the in-app
+ * agent changes data (`data:changed`). The type chip
  * lives in the URL (?type=) so Back keeps it; the name filter and sort do not.
  */
 import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
@@ -43,11 +44,15 @@ export function useLibrary(type: Ref<LibraryType | null>) {
   onMounted(() => {
     void load()
     if (!hasWailsRuntime()) return
-    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => {
-      if (p?.kind !== 'artifact' && p?.kind !== 'notebook') return
+    const schedule = () => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { timer = undefined; void load() }, RELOAD_COALESCE_MS)
+    }
+    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => {
+      if (p?.kind === 'artifact' || p?.kind === 'notebook') schedule()
     }))
+    // An agent tool that changed data (write_artifact among them) in this process.
+    offs.push(EventsOn('data:changed', schedule))
   })
   onUnmounted(() => {
     gone = true

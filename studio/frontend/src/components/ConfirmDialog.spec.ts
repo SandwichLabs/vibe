@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ConfirmDialog from './ConfirmDialog.vue'
+import src from './ConfirmDialog.vue?raw'
 
 describe('ConfirmDialog', () => {
   it('defaults to the destructive (red) confirm button', () => {
@@ -107,5 +108,12 @@ describe('ConfirmDialog', () => {
     const cancelBtn = wrapper.findAll('button').find((b) => b.text() === 'Cancel')!
     expect(document.activeElement).toBe(cancelBtn.element)
     wrapper.unmount()
+  })
+
+  it('the danger button keeps a focus ring on top of its offset shadow', () => {
+    const rule = src.match(/\.btn-destructive:focus-visible\s*{([^}]*)}/)?.[1] ?? ''
+    expect(rule).toContain('var(--sh-focus-ring)')
+    expect(rule).toContain('var(--sh-shadow-error)')
+    expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 })

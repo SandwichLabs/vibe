@@ -5,12 +5,15 @@ import { App, hasBinding } from '../lib/bindings'
 // so NotebookView.spec.ts-style tests can exercise apply/cap rules against
 // the composable directly without mounting this component, while a Vitest
 // component test can still drive it end to end.
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import { useModalKeys } from '../composables/useModal'
 import type { useAiCellDialog } from '../composables/useAiCellDialog'
 
 const props = defineProps<{
   dialog: ReturnType<typeof useAiCellDialog>
+  // Where focus goes on close when the opener is detached (the notebook's Generate with AI button).
+  fallbackFocus?: () => HTMLElement | null | undefined
 }>()
 
 // applied carries the dialog's applyNote (review fix, finding 6: e.g. "The
@@ -80,14 +83,10 @@ function onClose() {
   props.dialog.close()
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.dialog.state.dialogState !== 'closed') {
-    e.preventDefault()
-    onClose()
-  }
-}
-onMounted(() => document.addEventListener('keydown', onKeydown))
-onUnmounted(() => document.removeEventListener('keydown', onKeydown))
+// Escape closes (cancelling a running task), Tab stays inside the dialog and
+// focus returns to the opener (useModalKeys).
+const open = computed(() => props.dialog.state.dialogState !== 'closed')
+const root = ref<HTMLElement | null>(null)
 
 // Focus management (review fix, finding 9): focus the relevant input
 // whenever the dialog ENTERS a state that has one, after Vue has actually
@@ -96,14 +95,16 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 const promptEl = ref<HTMLTextAreaElement | null>(null)
 const refineEl = ref<HTMLInputElement | null>(null)
 const answerEl = ref<HTMLInputElement | null>(null)
+useModalKeys(open, onClose, root, () => promptEl.value ?? refineEl.value ?? answerEl.value, () => props.fallbackFocus?.())
 watch(
-  () => props.dialog.state.dialogState,
-  async (s) => {
+  // taskId too: a close-then-open in one tick leaves dialogState at 'prompt', but mints a new id.
+  () => [props.dialog.state.dialogState, props.dialog.state.taskId] as const,
+  async ([s]) => {
     // A fresh open (any prior state -> 'prompt') must never carry over
     // draftText from a previous dialog session — this component instance
     // stays mounted across open/close (only the v-if inside THIS template
     // toggles), so draftText is otherwise still whatever was last typed.
-    if (s === 'prompt') draftText.value = ''
+    if (s === 'prompt') draftText.value = props.dialog.state.prefill
     await nextTick()
     if (s === 'prompt') promptEl.value?.focus()
     else if (s === 'proposal') refineEl.value?.focus()
@@ -113,8 +114,8 @@ watch(
 </script>
 
 <template>
-  <div v-if="dialog.state.dialogState !== 'closed'" class="modal-overlay" @click.self="onClose" data-testid="ai-cell-dialog">
-    <div class="card card-pad" style="width: 100%; max-width: 560px; max-height: 80vh; overflow: auto;">
+  <div v-if="dialog.state.dialogState !== 'closed'" class="modal-overlay" role="dialog" aria-modal="true" :aria-label="title" @click.self="onClose" data-testid="ai-cell-dialog">
+    <div ref="root" class="card card-pad" style="width: 100%; max-width: 560px; max-height: 80vh; overflow: auto;">
       <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: var(--sh-space-3);">
         <h3 class="card-title" style="font-size: 18px; display: flex; align-items: center; gap: var(--sh-space-2);">
           <Icon name="sparkle" :size="16" />

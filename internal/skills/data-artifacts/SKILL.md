@@ -17,6 +17,11 @@ Use an artifact instead of `create_dashboard` when the person needs controls
 (a date range, a region picker) or wants to drill into rows. For a one-off
 chart in a notebook, `create_dashboard` or `add_query_cell` is simpler.
 
+In Studio's New dialog (and in the requests it drafts for the person) the kinds
+have plain names: a **Live view** is the default A2UI view (no `view:` key, or
+`view: a2ui`), a **Page** is `view: html`, and a **Chart script** is
+`view: script`. When a request names one of them, author that kind.
+
 ## The manifest
 
 ```

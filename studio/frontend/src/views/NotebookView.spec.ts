@@ -36,6 +36,7 @@ vi.mock('vue-router', async () => {
 })
 
 import NotebookView from './NotebookView.vue'
+import { setPendingAsk } from '../composables/usePendingAsk'
 
 const BAR_NOTEBOOK = {
   schemaVersion: 1,
@@ -101,6 +102,41 @@ describe('NotebookView', () => {
   afterEach(() => {
     for (const w of mountedWrappers) w.unmount()
     mountedWrappers = []
+  })
+
+  it('a pending ask for this notebook opens the AI cell dialog filled in, once, and runs nothing', async () => {
+    const app = makeApp({ AgentTask: vi.fn() })
+    setPendingAsk('nb1', 'revenue by region')
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect((wrapper.find('[data-testid="ai-cell-prompt"]').element as HTMLTextAreaElement).value).toBe('revenue by region')
+    expect(app.AgentTask).not.toHaveBeenCalled()
+    wrapper.unmount()
+    mountedWrappers = []
+    const again = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect(again.find('[data-testid="ai-cell-dialog"]').exists()).toBe(false)
+  })
+
+  it('a failed load takes the pending ask and opens no dialog', async () => {
+    makeApp({ GetNotebook: vi.fn(async () => { throw new Error('gone') }) })
+    setPendingAsk('nb1', 'x')
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="ai-cell-dialog"]').exists()).toBe(false)
+    const { takePendingAsk } = await import('../composables/usePendingAsk')
+    expect(takePendingAsk('nb1')).toBeNull()
+  })
+
+  it('a pending ask for another notebook is left alone', async () => {
+    makeApp()
+    setPendingAsk('other', 'x')
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="ai-cell-dialog"]').exists()).toBe(false)
   })
 
   it('loads and runs sql cells on open, auto-fitting a chart view', async () => {

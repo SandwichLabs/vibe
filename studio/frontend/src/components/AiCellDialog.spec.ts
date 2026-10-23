@@ -130,3 +130,65 @@ async function flushPromises() {
   await new Promise((r) => setTimeout(r, 0))
   await new Promise((r) => setTimeout(r, 0))
 }
+
+describe('AiCellDialog.vue keyboard and prefill', () => {
+  it('starts the prompt with the prefill, and the next plain open starts empty', async () => {
+    const dialog = useAiCellDialog(makeHost())
+    const wrapper = mount(AiCellDialog, { props: { dialog }, attachTo: document.body })
+    dialog.openCreate('weekly sales')
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    const box = () => wrapper.find('[data-testid="ai-cell-prompt"]').element as HTMLTextAreaElement
+    expect(box().value).toBe('weekly sales')
+    dialog.close()
+    dialog.openCreate()
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    expect(box().value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('is a modal: Tab wraps inside it, and Escape closes it and returns focus to the opener', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const dialog = useAiCellDialog(makeHost())
+    const wrapper = mount(AiCellDialog, { props: { dialog }, attachTo: document.body })
+    expect(wrapper.find('[data-testid="ai-cell-dialog"]').exists()).toBe(false)
+    dialog.openCreate()
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="ai-cell-dialog"]').attributes('aria-modal')).toBe('true')
+    // Generate is disabled while empty, so the last stop is the prompt box; Tab wraps to the close button.
+    const prompt = wrapper.get('[data-testid="ai-cell-prompt"]').element as HTMLElement
+    expect(document.activeElement).toBe(prompt)
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    document.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="ai-cell-close"]').element)
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    document.dispatchEvent(esc)
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    expect(esc.defaultPrevented).toBe(true)
+    expect(dialog.state.dialogState).toBe('closed')
+    expect(document.activeElement).toBe(opener)
+    wrapper.unmount()
+    opener.remove()
+  })
+})
+
+describe('AiCellDialog.vue fallback focus', () => {
+  it('restores focus to the fallback when the opener was removed meanwhile', async () => {
+    const opener = document.createElement('button')
+    const fallback = document.createElement('button')
+    document.body.append(opener, fallback)
+    opener.focus()
+    const dialog = useAiCellDialog(makeHost())
+    const wrapper = mount(AiCellDialog, { props: { dialog, fallbackFocus: () => fallback }, attachTo: document.body })
+    dialog.openCreate()
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    opener.remove()
+    dialog.close()
+    await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(fallback)
+    wrapper.unmount()
+    fallback.remove()
+  })
+})

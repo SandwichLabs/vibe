@@ -10,13 +10,16 @@ import { App } from '../lib/bindings'
 import { errorText } from '../lib/errors'
 import { artifactPath, notebookPath, type LibraryType } from '../lib/libraryRoutes'
 import { nameProblem, starterKind, titleTooLong } from '../lib/newItem'
+import { agentDraft, openAgent } from '../lib/agentDraft'
+import { setPendingAsk } from './usePendingAsk'
 
-export function useNewItem(open: Ref<boolean>, preselect: Ref<LibraryType | null | undefined>, onCreated: (to: string) => void) {
-  const step = ref<'type' | 'name'>('type')
+export function useNewItem(open: Ref<boolean>, preselect: Ref<LibraryType | null | undefined>, onCreated: (to: string) => void, onDescribed: () => void = () => {}) {
+  const step = ref<'type' | 'name' | 'describe'>('type')
   const type = ref<LibraryType>('notebook')
   const withScript = ref(false)
   const advanced = ref(false)
   const value = ref('')
+  const description = ref('')
   const error = ref('')
   const busy = ref(false)
 
@@ -27,6 +30,7 @@ export function useNewItem(open: Ref<boolean>, preselect: Ref<LibraryType | null
     advanced.value = type.value === 'script'
     withScript.value = false
     value.value = ''
+    description.value = ''
     error.value = ''
     busy.value = false
   }, { immediate: true })
@@ -37,6 +41,34 @@ export function useNewItem(open: Ref<boolean>, preselect: Ref<LibraryType | null
 
   function next() { step.value = 'name'; error.value = '' }
   function back() { step.value = 'type'; error.value = '' }
+  function describe() { step.value = 'describe'; error.value = '' }
+
+  // Describe it (L7). A notebook is created and opened with its AI cell dialog
+  // filled in (usePendingAsk); the other kinds open the agent panel with an
+  // unsent request. Nothing is sent from here.
+  async function submitDescribe() {
+    if (busy.value) return
+    const text = description.value.trim()
+    if (!text) { error.value = 'Describe what you want first.'; return }
+    if (!isNotebook.value) {
+      openAgent(agentDraft(type.value, text, withScript.value))
+      onDescribed()
+      return
+    }
+    const problem = nameProblem('notebook', value.value)
+    if (problem) { error.value = problem; return }
+    busy.value = true
+    error.value = ''
+    try {
+      const nb = await App.CreateNotebook(value.value)
+      setPendingAsk(nb.id, text)
+      onCreated(notebookPath(nb.id))
+    } catch (e) {
+      error.value = 'Failed to create notebook: ' + errorText(e)
+    } finally {
+      busy.value = false
+    }
+  }
 
   async function submit() {
     if (busy.value) return
@@ -61,5 +93,5 @@ export function useNewItem(open: Ref<boolean>, preselect: Ref<LibraryType | null
     }
   }
 
-  return { step, type, withScript, advanced, value, error, busy, isNotebook, warnLong, slug, next, back, submit }
+  return { step, type, withScript, advanced, value, description, error, busy, isNotebook, warnLong, slug, next, back, describe, submit, submitDescribe }
 }
