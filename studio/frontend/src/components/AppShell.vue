@@ -37,9 +37,8 @@ const info = computed(() => workspaceInfo.value)
 // route for deep links.
 const navItems = [
   { path: '/', label: 'Home', icon: 'home' },
-  { path: '/notebooks', label: 'Notebooks', icon: 'layers' },
+  { path: '/library', label: 'Library', icon: 'layers' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
-  { path: '/artifacts', label: 'Artifacts', icon: 'barChart' },
   { path: '/skills', label: 'Skills', icon: 'bookOpen' },
   { path: '/agent', label: 'Agent', icon: 'bot' },
   { path: '/import', label: 'Import', icon: 'download' },

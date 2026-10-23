@@ -12,6 +12,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { App, hasBinding } from '../lib/bindings'
+import { backToLibrary, libraryPath } from '../lib/libraryRoutes'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from './usePendingSaves'
 import { useNotebookCells } from './useNotebookCells'
@@ -49,7 +50,7 @@ export function useNotebookEditor() {
   const sync = useNotebookSync({
     loading, title, save, nb,
     reload: reloadFromDisk,
-    leave: () => { router.push('/notebooks') },
+    leave: () => { router.push(libraryPath('notebook')) },
     status: (m) => { statusMessage.value = m },
     info: (m) => { infoMessage.value = m },
   })
@@ -141,7 +142,7 @@ export function useNotebookEditor() {
   )
 
   function backToList() {
-    router.push('/notebooks')
+    backToLibrary(router, libraryPath('notebook'))
   }
 
   async function exportNotebook() {
