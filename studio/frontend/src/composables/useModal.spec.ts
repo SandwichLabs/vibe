@@ -72,4 +72,25 @@ describe('useModalKeys', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(close).not.toHaveBeenCalled()
   })
+
+  it('Tab and Shift+Tab wrap inside the root', async () => {
+    const { wrapper, open } = harness()
+    open.value = true
+    await nextTick(); await nextTick()
+    const second = document.getElementById('second')!
+    second.focus()
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    document.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(true)
+    expect(document.activeElement?.id).toBe('first')
+    const back = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    document.dispatchEvent(back)
+    expect(document.activeElement?.id).toBe('second')
+    // In the middle the browser's own Tab is left alone.
+    document.getElementById('first')!.focus()
+    const mid = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    document.dispatchEvent(mid)
+    expect(mid.defaultPrevented).toBe(false)
+    wrapper.unmount()
+  })
 })

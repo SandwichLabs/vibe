@@ -19,7 +19,26 @@ const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([
 export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<HTMLElement | null>, initialFocus?: () => HTMLElement | null | undefined) {
   let previouslyFocused: Element | null = null
 
+  // Tab and Shift+Tab wrap inside the modal root so focus never reaches the page behind it.
+  // A modal stacked above this one holds the focus itself, so only act when focus is in
+  // this root or in no modal at all.
+  function trapTab(e: KeyboardEvent) {
+    const el = root?.value
+    if (!el) return
+    const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.tabIndex >= 0 && !n.closest('[hidden]'))
+    const active = document.activeElement as HTMLElement | null
+    const inside = !!active && el.contains(active)
+    if (!inside && active?.closest('[aria-modal="true"]')) return
+    if (items.length === 0) { e.preventDefault(); return }
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!inside) { e.preventDefault(); (e.shiftKey ? last : first).focus() }
+    else if (e.shiftKey && (active === first || active === el)) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+  }
+
   function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Tab' && open.value) { trapTab(e); return }
     if (e.key === 'Escape' && open.value) {
       e.preventDefault()
       e.stopPropagation()

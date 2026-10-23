@@ -18,8 +18,8 @@ export interface LibraryItem {
   error?: string
 }
 
-const TYPE_LABEL: Record<LibraryType, string> = { notebook: 'Notebook', live: 'Live view', page: 'Page', script: 'Chart script' }
-const TYPE_ICON: Record<LibraryType, string> = { notebook: 'layers', live: 'barChart', page: 'fileText', script: 'pieChart' }
+export const TYPE_LABEL: Record<LibraryType, string> = { notebook: 'Notebook', live: 'Live view', page: 'Page', script: 'Chart script' }
+export const TYPE_ICON: Record<LibraryType, string> = { notebook: 'layers', live: 'barChart', page: 'fileText', script: 'pieChart' }
 const CHIP_LABEL: Record<LibraryType, string> = { notebook: 'Notebooks', live: 'Live views', page: 'Pages', script: 'Chart scripts' }
 
 /** Maps ArtifactSummary.view (artifacts.ViewLabel) to a type. */

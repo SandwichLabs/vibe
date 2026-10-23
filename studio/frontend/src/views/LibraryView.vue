@@ -1,36 +1,36 @@
 <script setup lang="ts">
 // LibraryView: every notebook and artifact in one list (docs/plans/library.md
 // L5). It wires useLibrary and renders; titles, names and errors come from
-// files and reach the page by interpolation only. New opens the existing two
-// dialogs until Step L3 replaces them with the type picker.
+// files and reach the page by interpolation only. New opens the type
+// picker (NewItemDialog), preselected from ?new= or the open chip.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
-import NewArtifactDialog from '../components/NewArtifactDialog.vue'
-import NewNotebookDialog from '../components/NewNotebookDialog.vue'
+import NewItemDialog from '../components/NewItemDialog.vue'
 import { useLibrary } from '../composables/useLibrary'
 import { useNotebookActions } from '../composables/useNotebookActions'
 import { artifactPath, isLibraryType, libraryPath, notebookPath, type LibraryType } from '../lib/libraryRoutes'
-import { CHIP_LABEL_LOWER, fullTime, relativeTime, type LibraryItem } from '../lib/libraryItems'
+import { CHIP_LABEL_LOWER, TYPE_LABEL, fullTime, relativeTime, type LibraryItem } from '../lib/libraryItems'
 
 const route = useRoute()
 const router = useRouter()
 const type = computed<LibraryType | null>(() => (isLibraryType(route.query.type) ? route.query.type : null))
 const { all, items, chips, errors, loading, filter, sortBy, reload } = useLibrary(type)
 const actions = useNotebookActions({ reload, open: (id) => { void router.push(notebookPath(id)) } })
-const newKind = ref<'notebook' | 'artifact' | null>(null)
+const newOpen = ref(false)
+const newType = ref<LibraryType | null>(null)
 const filterEl = ref<HTMLInputElement | null>(null)
 
 function open(i: LibraryItem) { void router.push(i.source === 'notebook' ? notebookPath(i.id) : artifactPath(i.id)) }
 function setType(t: LibraryType | null) { if (t !== type.value) void router.push(libraryPath(t ?? undefined)) }
-function created(to: string) { newKind.value = null; void reload(); void router.push(to) }
+function openNew(t: LibraryType | null) { newType.value = t; newOpen.value = true }
+function created(to: string) { newOpen.value = false; void reload(); void router.push(to) }
 
-// ?new=notebook|1 or ?new=live opens a dialog once; the URL then drops it so Back never reopens it.
+// ?new=<type> (or 1: a notebook) opens the picker once; the URL then drops it so Back never reopens it.
 watch(() => route.query.new, (n) => {
   if (n === undefined) return
-  if (n === 'notebook' || n === '1') newKind.value = 'notebook'
-  else if (n === 'live') newKind.value = 'artifact'
+  openNew(n === '1' ? 'notebook' : isLibraryType(n) ? n : null)
   const { new: _drop, ...rest } = route.query
   void router.replace({ path: route.path, query: rest })
 }, { immediate: true })
@@ -53,8 +53,7 @@ onUnmounted(() => document.removeEventListener('keydown', onSlash))
       <h2 class="sh-label" style="margin: 0;">Library</h2>
       <div class="row" style="gap: var(--sh-space-2);">
         <button type="button" class="btn btn-ghost btn-sm" :disabled="actions.importing.value" @click="actions.importNotebook"><Icon name="upload" :size="14" /> Import notebook</button>
-        <button type="button" class="btn btn-primary btn-sm" data-testid="new-notebook" @click="newKind = 'notebook'"><Icon name="plus" :size="14" /> New notebook</button>
-        <button type="button" class="btn btn-primary btn-sm" data-testid="artifact-new" @click="newKind = 'artifact'"><Icon name="plus" :size="14" /> New live view</button>
+        <button type="button" class="btn btn-primary btn-sm" data-testid="new-item" @click="openNew(type)"><Icon name="plus" :size="14" /> New</button>
       </div>
     </div>
 
@@ -78,8 +77,7 @@ onUnmounted(() => document.removeEventListener('keydown', onSlash))
       <div v-else-if="items.length === 0 && (all.length > 0 || errors.length === 0)" class="lib-empty" data-testid="library-empty-filter">
         <div v-if="filter.trim()" class="sh-mono" style="color: var(--sh-graphite);">Nothing matches “{{ filter.trim() }}”.</div>
         <div v-else class="sh-mono" style="color: var(--sh-graphite);">No {{ CHIP_LABEL_LOWER[type ?? 'notebook'] }} yet</div>
-        <button v-if="!filter.trim() && type === 'notebook'" type="button" class="btn btn-primary btn-sm" @click="newKind = 'notebook'"><Icon name="plus" :size="14" /> New notebook</button>
-        <button v-else-if="!filter.trim() && type === 'live'" type="button" class="btn btn-primary btn-sm" @click="newKind = 'artifact'"><Icon name="plus" :size="14" /> New live view</button>
+        <button v-if="!filter.trim() && type" type="button" class="btn btn-primary btn-sm" data-testid="empty-new" @click="openNew(type)"><Icon name="plus" :size="14" /> New {{ TYPE_LABEL[type].toLowerCase() }}</button>
       </div>
       <ul v-else class="col" style="gap: var(--sh-space-2); list-style: none; margin: 0; padding: 0;">
         <li v-for="i in items" :key="i.key" class="card lib-row" :class="{ 'lib-row--broken': !!i.error }">
@@ -96,8 +94,7 @@ onUnmounted(() => document.removeEventListener('keydown', onSlash))
       </ul>
     </div>
 
-    <NewNotebookDialog :visible="newKind === 'notebook'" @close="newKind = null" @created="(id) => created(notebookPath(id))" />
-    <NewArtifactDialog :visible="newKind === 'artifact'" @close="newKind = null" @created="(n) => created(artifactPath(n))" />
+    <NewItemDialog :visible="newOpen" :initial-type="newType" @close="newOpen = false" @created="created" />
     <ConfirmDialog :visible="!!actions.pendingDeleteId.value" title="Delete Notebook" confirm-label="Delete" message="Delete this notebook? This cannot be undone." @confirm="actions.confirmDelete" @cancel="actions.pendingDeleteId.value = null" />
     <div v-if="actions.message.value" class="error-toast">{{ actions.message.value }}</div>
   </div>
