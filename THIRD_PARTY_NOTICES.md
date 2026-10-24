@@ -13,7 +13,7 @@ Every module linked into the `vibe` CLI or Vibe Studio on linux and macOS (amd64
 
 #### Apache-2.0
 
-- charm.land/fantasy v0.45.2
+- charm.land/fantasy v0.45.3
 
 ```text
 Apache License
@@ -197,29 +197,29 @@ Apache License
 #### Apache-2.0
 
 - cloud.google.com/go v0.123.0
-- cloud.google.com/go/auth v0.23.2
+- cloud.google.com/go/auth v0.24.0
 - cloud.google.com/go/auth/oauth2adapt v0.2.8
 - cloud.google.com/go/compute/metadata v0.9.0
-- github.com/aws/aws-sdk-go-v2 v1.45.1
+- github.com/aws/aws-sdk-go-v2 v1.47.1
 - github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20
-- github.com/aws/aws-sdk-go-v2/config v1.33.1
-- github.com/aws/aws-sdk-go-v2/credentials v1.20.1
-- github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.19.1
-- github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.1
-- github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.1
-- github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.1
+- github.com/aws/aws-sdk-go-v2/config v1.33.6
+- github.com/aws/aws-sdk-go-v2/credentials v1.20.6
+- github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1
+- github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4
+- github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4
+- github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4
 - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19
-- github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.1
-- github.com/aws/aws-sdk-go-v2/service/signin v1.7.1
-- github.com/aws/aws-sdk-go-v2/service/sso v1.35.1
-- github.com/aws/aws-sdk-go-v2/service/ssooidc v1.40.1
-- github.com/aws/aws-sdk-go-v2/service/sts v1.47.1
+- github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4
+- github.com/aws/aws-sdk-go-v2/service/signin v1.10.1
+- github.com/aws/aws-sdk-go-v2/service/sso v1.38.1
+- github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1
+- github.com/aws/aws-sdk-go-v2/service/sts v1.51.1
 - github.com/go-logr/stdr v1.2.2
 - github.com/google/flatbuffers v25.12.19+incompatible
 - github.com/google/s2a-go v0.1.9
-- github.com/googleapis/enterprise-certificate-proxy v0.3.21
+- github.com/googleapis/enterprise-certificate-proxy v0.3.22
 - go.opentelemetry.io/auto/sdk v1.2.1
-- google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5
+- google.golang.org/genproto/googleapis/rpc v0.0.0-20260911204522-f61a6ca850bd
 - google.golang.org/grpc v1.84.0
 
 ```text
@@ -691,7 +691,7 @@ Distributed under MIT License.
 
 #### Apache-2.0
 
-- github.com/aws/smithy-go v1.28.1
+- github.com/aws/smithy-go v1.28.2
 - github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 - github.com/spf13/afero v1.15.0
 - github.com/spf13/cobra v1.10.2
@@ -1500,7 +1500,7 @@ Apache License
 
 #### Apache-2.0
 
-- github.com/wailsapp/wails/v2 v2.16.0
+- github.com/wailsapp/wails/v2 v2.17.0
 
 ```text
 Apache License
@@ -2158,7 +2158,7 @@ Apache License
 
 #### Apache-2.0
 
-- google.golang.org/genai v1.70.0
+- google.golang.org/genai v1.71.0
 
 ```text
 Apache License
@@ -2591,14 +2591,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - filippo.io/hpke v0.4.0
 - golang.org/x/crypto v0.58.0
 - golang.org/x/exp v0.0.0-20260112195511-716be5621a96
-- golang.org/x/mod v0.41.0
+- golang.org/x/mod v0.42.0
 - golang.org/x/net v0.61.0
-- golang.org/x/oauth2 v0.36.0
+- golang.org/x/oauth2 v0.37.0
 - golang.org/x/sync v0.24.0
 - golang.org/x/sys v0.49.0
 - golang.org/x/term v0.47.0
 - golang.org/x/text v0.43.0
-- golang.org/x/time v0.15.0
+- golang.org/x/time v0.16.0
 
 ```text
 Copyright 2009 The Go Authors.
@@ -2666,8 +2666,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/aws/aws-sdk-go-v2 v1.45.1
-- github.com/aws/smithy-go v1.28.1
+- github.com/aws/aws-sdk-go-v2 v1.47.1
+- github.com/aws/smithy-go v1.28.2
 
 ```text
 Copyright (c) 2009 The Go Authors. All rights reserved.
@@ -2835,7 +2835,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- github.com/googleapis/gax-go/v2 v2.24.0
+- github.com/googleapis/gax-go/v2 v2.24.1
 
 ```text
 Copyright 2016, Google Inc.
@@ -3038,7 +3038,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- google.golang.org/api v0.294.0
+- google.golang.org/api v0.298.0
 
 ```text
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -3072,7 +3072,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- google.golang.org/api v0.294.0
+- google.golang.org/api v0.298.0
 
 ```text
 Copyright (c) 2013 Joshua Tacoma. All rights reserved.
@@ -3160,7 +3160,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #### MIT
 
-- github.com/anthropics/anthropic-sdk-go v1.68.0
+- github.com/anthropics/anthropic-sdk-go v1.75.0
 
 ```text
 Copyright 2023 Anthropic, PBC.
@@ -3347,7 +3347,7 @@ SOFTWARE.
 
 - github.com/charmbracelet/x/ansi v0.11.6
 - github.com/charmbracelet/x/cellbuf v0.0.15
-- github.com/charmbracelet/x/exp/slice v0.0.0-20250904123553-b4e2667e5ad5
+- github.com/charmbracelet/x/exp/slice v0.1.0
 - github.com/charmbracelet/x/term v0.2.2
 
 ```text
@@ -3492,6 +3492,34 @@ Copyright (c) 2016 Felix Geisendörfer (felix@debuggable.com)
 
 #### MIT
 
+- github.com/gabriel-vasile/mimetype v1.4.16
+
+```text
+MIT License
+
+Copyright (c) 2018 Gabriel Vasile
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+#### MIT
+
 - github.com/go-viper/mapstructure/v2 v2.5.0
 
 ```text
@@ -3631,7 +3659,7 @@ SOFTWARE.
 #### MIT
 
 - github.com/kaptinlin/jsonpointer v0.4.28
-- github.com/kaptinlin/jsonschema v0.9.9
+- github.com/kaptinlin/jsonschema v0.9.10
 
 ```text
 MIT License
@@ -4096,7 +4124,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #### MIT
 
-- github.com/mark3labs/mcp-go v1.2.1
+- github.com/mark3labs/mcp-go v1.3.0
 
 ```text
 MIT License
@@ -4532,35 +4560,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #### MIT
 
-- github.com/wailsapp/mimetype v1.4.1
-
-```text
-MIT License
-
-Copyright (c) 2018-2020 Gabriel Vasile
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-#### MIT
-
-- github.com/wailsapp/wails/v2 v2.16.0
+- github.com/wailsapp/wails/v2 v2.17.0
 
 ```text
 MIT License
@@ -4730,7 +4730,7 @@ limitations under the License.
 ## Frontend packages
 
 The production dependencies in studio/frontend/package-lock.json (build-time tools are not listed). Only some end up in the
-bundle; the list is the conservative superset. 137 packages: 0BSD 1, Apache-2.0 1, Apache-2.0 (elected from (MPL-2.0 OR Apache-2.0)) 1, BSD-2-Clause 1, BSD-3-Clause 36, ISC 27, MIT 69, Unlicense 1.
+bundle; the list is the conservative superset. 139 packages: 0BSD 1, Apache-2.0 1, Apache-2.0 (elected from (MPL-2.0 OR Apache-2.0)) 1, BSD-2-Clause 1, BSD-3-Clause 35, ISC 27, MIT 72, Unlicense 1.
 Where a package offers a choice of licences (dompurify: MPL-2.0 OR Apache-2.0) Vibe elects the permissive alternative named below.
 
 #### 0BSD
@@ -5526,7 +5526,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - vega-dataflow 6.1.3
 - vega-encode 5.2.2
 - vega-event-selector 4.0.0
-- vega-expression 6.1.0
 - vega-expression 6.2.2
 - vega-force 5.1.3
 - vega-format 2.1.3
@@ -5585,7 +5584,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #### BSD-3-Clause
 
-- vega-lite 6.4.3
+- vega-lite 6.5.0
 
 ```text
 Copyright (c) 2015, University of Washington Interactive Data Lab.
@@ -6094,10 +6093,11 @@ THE SOFTWARE.
 - @codemirror/lang-json 6.0.2
 - @codemirror/lang-markdown 6.5.2
 - @codemirror/lang-sql 6.10.0
-- @codemirror/language 6.12.4
+- @codemirror/language 6.13.1
 - @codemirror/lint 6.9.5
 - @codemirror/state 6.7.6
-- @codemirror/view 6.43.13
+- @codemirror/streamparser 6.0.0
+- @codemirror/view 6.43.14
 
 ```text
 MIT License
@@ -6403,6 +6403,8 @@ The package ships no licence file. package.json declares the MIT licence (author
 - ansi-styles 6.2.3
 - get-east-asian-width 1.7.0
 - string-width 7.2.0
+- string-width 7.2.0
+- string-width 8.3.0
 - strip-ansi 7.2.0
 - wrap-ansi 9.0.2
 
@@ -9142,7 +9144,7 @@ THE SOFTWARE.
 
 #### MIT
 
-- yargs 18.0.0
+- yargs 18.2.0
 
 ```text
 MIT License
@@ -9204,7 +9206,7 @@ For more information, please refer to <http://unlicense.org>
 Apache-2.0 section 4(d) asks that the NOTICE file of an Apache-licensed work be reproduced. These are the NOTICE files
 shipped by the Go modules and npm packages above.
 
-#### charm.land/fantasy v0.45.2
+#### charm.land/fantasy v0.45.3
 
 ```text
 Copyright 2025-2026 Charmbracelet, Inc.
@@ -9232,7 +9234,7 @@ This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 ```
 
-#### github.com/aws/aws-sdk-go-v2 v1.45.1
+#### github.com/aws/aws-sdk-go-v2 v1.47.1
 
 ```text
 AWS SDK for Go
@@ -9240,7 +9242,7 @@ Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 Copyright 2014-2015 Stripe, Inc.
 ```
 
-#### github.com/aws/smithy-go v1.28.1
+#### github.com/aws/smithy-go v1.28.2
 
 ```text
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
