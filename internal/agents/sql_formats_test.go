@@ -329,7 +329,7 @@ func TestPolicy_MotherDuckLocationSuffix(t *testing.T) {
 			}},
 		}},
 	}}
-	for _, n := range []string{"ORDER_BY (L)", "TOP_N (L)", "HASH_GROUP_BY (R)"} {
+	for _, n := range []string{"ORDER_BY (L)", "TOP_N (L)", "HASH_GROUP_BY (R)", "BATCH_DOWNLOAD_SINK (R)", "BATCH_UPLOAD_SINK (L)"} {
 		plan.Children = append(plan.Children, planNode{Name: n})
 	}
 	assert.Empty(t, checkPlanNode(&plan, &readers), "a MotherDuck read is allowed")

@@ -128,8 +128,10 @@ var allowedPlanOperators = nameSet(
 	"COPY_TO_FILE", "BATCH_COPY_TO_FILE",
 	// MotherDuck's hybrid execution moves rows between this computer and its
 	// server for a query that touches an attached md: catalog. The names come
-	// from the extension's binary (DuckDB 1.4.1 build), not from a live run and not re-checked on 1.5.6 (no MotherDuck account here).
+	// from the extension's binaries (the DuckDB 1.4.1 and 1.5.6 builds), not from a live run; the
+	// BATCH_ sinks are the order-preserving forms 1.5.6 plans for an ORDER BY (one was reported live).
 	"DOWNLOAD_BRIDGE", "DOWNLOAD_SINK", "DOWNLOAD_SOURCE", "UPLOAD_BRIDGE", "UPLOAD_SINK", "UPLOAD_SOURCE", "HYBRID",
+	"BATCH_DOWNLOAD_SINK", "BATCH_UPLOAD_SINK",
 	// Generator and catalog functions (mirrors allowedTableFunctions).
 	"RANGE", "GENERATE_SERIES", "GENERATE_SUBSCRIPTS",
 	"DUCKDB_TABLES", "DUCKDB_COLUMNS", "DUCKDB_VIEWS", "DUCKDB_SCHEMAS",
