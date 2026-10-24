@@ -4,6 +4,8 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-24
+
 ### Added
 
 - **A Library for notebooks, live views and pages.** Studio's Notebooks and Artifacts entries are now one **Library**: a single list with a type column, chips (All, Notebooks, Live views, Pages, and Chart scripts once you have one), a name filter and sorting. **New** asks what kind first, with the kinds side by side and described in plain words, then asks for a title or name; pages and chart scripts start from a small working example and open as source until you allow them. **Or describe it and let the agent build it** hands your description to the agent. Home shows Library counts by type, each opening the Library on that type. Dialogs now keep Tab and Shift+Tab focus inside them.
@@ -11,6 +13,11 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 ### Changed
 
 - **`#/notebooks` and `#/artifacts` redirect to the Library**, keeping their query, so old links work. Storage, bundles, MCP tools and the CLI are unchanged (`vibe artifact list` still lists artifacts only). The `create_dashboard` tool description now says it adds a dashboard cell to a notebook and points to `write_artifact` for a live view.
+- Dependency updates: the AWS SDK for Go, `fantasy` and other Go minor/patch releases ([#191](https://github.com/SandwichLabs/vibe/pull/191)); CodeMirror and Vega-Lite 6.5 in Studio ([#188](https://github.com/SandwichLabs/vibe/pull/188)).
+
+### Known limitations
+
+- Unchanged from 0.2.0: page windows' platform requirements, the macOS page network limitation ([#189](https://github.com/SandwichLabs/vibe/issues/189)) and no byte cap on artifact query results ([#193](https://github.com/SandwichLabs/vibe/issues/193)).
 
 ## [0.2.0] - 2026-10-23
 
@@ -143,7 +150,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/SandwichLabs/vibe/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/SandwichLabs/vibe/compare/v0.1.2...v0.1.3
