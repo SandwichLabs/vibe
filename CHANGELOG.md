@@ -4,6 +4,12 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-24
+
+### Fixed
+
+- **The agent can read MotherDuck tables with `ORDER BY` again.** On DuckDB 1.5.6 the MotherDuck extension plans an ordered read with `BATCH_DOWNLOAD_SINK`, which the agent's SQL policy did not know, so `run_query` refused it as "a plan operator the agent's policy does not know". It and `BATCH_UPLOAD_SINK` are now allowed alongside the sinks they stand in for. ([#207](https://github.com/SandwichLabs/vibe/pull/207))
+
 ## [0.3.0] - 2026-10-24
 
 ### Added
@@ -150,7 +156,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/SandwichLabs/vibe/compare/v0.1.3...v0.1.4
