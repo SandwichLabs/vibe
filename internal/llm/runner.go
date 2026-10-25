@@ -40,8 +40,13 @@ const (
 	SandboxFull      = string(agents.ModeFull)
 )
 
-// maxSteps bounds the tool-calling loop so a confused model can't spin forever.
-const maxSteps = 8
+// maxSteps bounds the chat tool-calling loop so a confused model can't spin
+// forever. It shares task mode's budget: building a data artifact the way the
+// data-artifacts skill describes (connections, describe, preview, read the
+// skill, write, fix, write again) takes 10-12 sequential calls on a model that
+// does not batch, so the old 8 ended turns mid-task. The prompt states this
+// number (see budgetLine) and a turn that hits it says so (stepLimitNote).
+const maxSteps = taskMaxSteps
 
 // Provider identifiers for the LLM backend.
 const (
@@ -133,24 +138,20 @@ const baseSystemPrompt = `You are the Vibe wizard — the agent layer of Vibe, a
 Prefer reading the schema (introspect_schema, describe_table) before writing SQL or making changes. Keep answers concise and practical. When you create or change schema, briefly confirm what you did.`
 
 // systemPromptFor builds a capability-aware system prompt so the model knows
-// exactly what it can do given the active sandbox. It lists every tool in the
-// shared agents registry (the same list a MCP client sees) and flags the ones
-// the current sandbox will refuse, so the model doesn't wrongly claim to be
-// read-only when it has real write tools, nor try a tool that will bounce.
-func systemPromptFor(sandbox string, ask bool, skillsBlock string) string {
+// exactly what it can do given the active sandbox. The provider already
+// receives every tool definition, so the prompt carries only a compact map
+// (grouping and order of use) and the names the sandbox will refuse, so the
+// model doesn't wrongly claim to be read-only when it has real write tools,
+// nor try a tool that will bounce. dataDir is the absolute workspace data/
+// folder ("" when unknown).
+func systemPromptFor(sandbox string, ask bool, skillsBlock, dataDir string) string {
 	var b strings.Builder
 	b.WriteString(baseSystemPrompt)
 
 	sc := &agents.SandboxConfig{Mode: agents.SandboxMode(sandbox)}
 
-	b.WriteString("\n\nYour available tools:\n")
-	for _, td := range agents.ListToolsForMode(agents.ModeChat) {
-		fmt.Fprintf(&b, "- %s: %s", td.Name, td.Description)
-		if sc.Check(td.Name) != nil {
-			b.WriteString(" [NOT PERMITTED in your current sandbox — calling this will be denied]")
-		}
-		b.WriteString("\n")
-	}
+	b.WriteString(toolMapBlock(sc))
+	b.WriteString(budgetLine())
 
 	// Three-tier capability framing (review fix for #63: the old binary
 	// writeCapable/else conflated "full" with "any write access at all" and
@@ -169,12 +170,13 @@ func systemPromptFor(sandbox string, ask bool, skillsBlock string) string {
 		b.WriteString("\nYou currently have READ-ONLY access: you can inspect the schema and run read-only queries (SELECT, WITH…SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE via run_query) but cannot write or modify anything — INSERT/UPDATE/DELETE and every schema/content tool will be denied. You CAN still propose_schema — it renders a draft inline in chat and never modifies anything by itself, but you cannot follow up with create_table in this sandbox. If the user asks to change data or the schema, explain that they can enable more access in the agent settings, and offer the SQL they could run themselves.\n")
 	}
 	if dataWrite {
-		b.WriteString("\nA NOTEBOOK is a JSON document of sql/markdown/a2ui cells; there are no directives or page markup anymore. Use add_query_cell to append a single read-only SQL statement as a new cell (it auto-fits a table/bar/line/stat view the first time it runs). Use create_dashboard to append a full A2UI page (multiple components in one cell) — see the <a2ui> block below for the component schema. Use these for ANY request for a \"page\", \"dashboard\", \"screen\", \"overview\", \"notebook\", or interactive view; there is no create_page tool.\n")
+		b.WriteString("\nA NOTEBOOK is a JSON document of sql/markdown/a2ui cells. In chat you can append two kinds: add_query_cell appends a single read-only SQL statement as a sql cell (it auto-fits a view, such as a table, bar, line or stat, the first time it runs), and create_dashboard appends a full A2UI page (multiple components in one cell) — see the <a2ui> block below for the component schema. Chat has NO tool that writes a markdown cell: put prose in your reply, or tell the user to add a markdown cell themselves. Use these for ANY request for a \"page\", \"dashboard\", \"screen\", \"overview\", \"notebook\", or interactive view; there is no create_page tool.\n")
 	}
 	if ask && sc.Mode != agents.ModeReadOnly {
 		b.WriteString("\nEvery change you make (rows, tables, saved queries, notebooks, skills) is shown to the user for approval before it runs. Call the tool normally. If it comes back declined, nothing changed: say so, and don't retry unless the user asks again.\n")
 	}
-	b.WriteString("\nCONNECTIONS AND FILES — data lives in connections (call list_connections: name, type, status, read_only, local or remote). Name tables as connection.schema.table (introspect_schema takes a connection). You may ATTACH, SET, INSTALL, LOAD, run postgres_query/postgres_execute or read secrets or settings in NO sandbox; do not try. Read a file only with a literal absolute path inside the workspace data/ folder (list_connections returns its path), e.g. read_csv('/path/to/workspace/data/sales.csv'); a path built with ||, a variable or an expression is refused, as is any other folder or URL (a URL is allowed only inside a storage connection's scope; on s3/gcs/r2 a * or ** wildcard works, e.g. read_parquet('s3://bucket/dir/*.parquet'), FROM 's3://bucket/dir/**/*.csv' or glob('s3://bucket/dir/**'): Vibe lists the matching objects when the query runs, at most 10000, a snapshot of that moment, and only * and ** are wildcards). A write needs the sandbox to allow it, the connection to be writable (not read_only), and the user's approval, which is always asked for a connection that is not a local file. A refusal tells you why: read it and change the query instead of retrying it.\n")
+	b.WriteString("\nCONNECTIONS AND FILES — data lives in connections (call list_connections: name, type, status, read_only, local or remote). Name tables as connection.schema.table (introspect_schema takes a connection). You may ATTACH, SET, INSTALL, LOAD, run postgres_query/postgres_execute or read secrets or settings in NO sandbox; do not try. Read a file only with a literal absolute path inside the workspace data/ folder (" + dataDirSentence(dataDir) + "), e.g. read_csv('" + dataDirExample(dataDir) + "/sales.csv'); a path built with ||, a variable or an expression is refused, as is any other folder or URL (a URL is allowed only inside a storage connection's scope; on s3/gcs/r2 a * or ** wildcard works, e.g. read_parquet('s3://bucket/dir/*.parquet'), FROM 's3://bucket/dir/**/*.csv' or glob('s3://bucket/dir/**'): Vibe lists the matching objects when the query runs, at most 10000, a snapshot of that moment, and only * and ** are wildcards). A write needs the sandbox to allow it, the connection to be writable (not read_only), and the user's approval, which is always asked for a connection that is not a local file. A refusal tells you why: read it and change the query instead of retrying it.\n")
+	b.WriteString(sqlStyleBlock)
 	b.WriteString("\nSCHEMA DESIGN — when the user describes their business or asks you to design or sketch a database, call propose_schema with the COMPLETE draft: every table with its columns, plus the relationships linking them. Use the friendly field types: ID (the primary key — start every table with one), Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link (a reference to another table's ID — pair it with an entry in relationships), Pick (one of a small set of choices). propose_schema renders the draft inline in chat as a readable table-by-table summary (there is no diagram screen) — after it returns, briefly describe what you proposed and ask the user to confirm (\"Want me to build this?\"). When the user asks for changes, re-call propose_schema with the full updated draft; ask at most one short clarifying question after proposing. Only once the user clearly confirms (\"yes\", \"build it\", \"looks good\", ...) do you create it: call create_table once per table, PARENTS BEFORE CHILDREN (a table referenced by a Link must be created before the table that links to it), with every Link declared as an inline foreign key in the child column's type string, e.g. a Link column becomes {\"name\": \"customer_id\", \"type\": \"INTEGER REFERENCES customers(id)\"}. Do not call create_table before the user confirms, and do not silently skip confirmation even if the request sounded like an instruction to build immediately — always show the draft first.\n")
 
 	// present_data / the A2UI component schema (#67). This is chat-mode only
@@ -287,7 +289,7 @@ func (r *Runner) buildAgent(ctx context.Context, cfg Config, rec *recorder, with
 		return nil, err
 	}
 	opts := []fantasy.AgentOption{
-		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox, cfg.AskBeforeWrites, r.skillsBlockFor(ctx))),
+		fantasy.WithSystemPrompt(systemPromptFor(cfg.Sandbox, cfg.AskBeforeWrites, r.skillsBlockFor(ctx), r.dataDirFor(ctx))),
 		fantasy.WithTools(r.buildTools(rec)...),
 		fantasy.WithStopConditions(fantasy.StepCountIs(maxSteps)),
 	}
@@ -447,9 +449,17 @@ func (r *Runner) ChatStream(ctx context.Context, cfg Config, message, pinnedCont
 	}
 
 	convo := conversationMessages(promptMessages, result)
-	groundedText, groundSteps, groundErr := r.maybeGroundText(ctx, cfg, rec.steps, convo, text, emit)
+	exhausted := chatStepsExhausted(result)
+	groundedText, groundSteps, groundErr := text, []ToolStep(nil), error(nil)
+	if !exhausted { // the text is partial; a recheck would only spend more calls
+		groundedText, groundSteps, groundErr = r.maybeGroundText(ctx, cfg, rec.steps, convo, text, emit)
+	}
 	if groundErr != nil {
 		r.logger.Warn("grounding recheck failed, returning ungrounded answer", "error", scrubKey(groundErr, cfg.APIKey))
+	}
+
+	if exhausted {
+		groundedText = appendStepLimitNote(groundedText)
 	}
 
 	emit(StreamEvent{Kind: "final", Text: groundedText})

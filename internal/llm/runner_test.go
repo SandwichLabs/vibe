@@ -459,18 +459,18 @@ func TestDefaultModelFor(t *testing.T) {
 }
 
 func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
-	full := systemPromptFor(SandboxFull, false, "")
+	full := systemPromptFor(SandboxFull, false, "", "")
 	assert.Contains(t, full, "create_table")
 	assert.Contains(t, full, "FULL WRITE ACCESS")
 	assert.NotContains(t, full, "READ-ONLY access:")
 	assert.NotContains(t, full, "READ-WRITE access to DATA AND CONTENT")
 	assert.NotContains(t, full, "NOT PERMITTED", "every tool must be permitted under full sandbox")
 
-	rw := systemPromptFor(SandboxReadWrite, false, "")
+	rw := systemPromptFor(SandboxReadWrite, false, "", "")
 	// Under the unified agents.SandboxConfig, schema/page categories (e.g.
 	// create_table) require full, not just read-write — a deliberate
 	// tightening from the old runner-only gate so Studio chat and MCP agree.
-	assert.Contains(t, rw, "create_table: Create a new table in a writable connection (the default connection unless the name is qualified) [NOT PERMITTED")
+	assert.Contains(t, deniedLine(rw), "create_table")
 	// Prompt honesty (review fix): read-write must not claim "FULL WRITE
 	// ACCESS" when schema/page tools are actually denied — it should
 	// describe exactly what it can do (data reads/writes) and can't
@@ -480,12 +480,12 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 	assert.Contains(t, rw, "CANNOT change the schema")
 	assert.Contains(t, rw, "A NOTEBOOK is", "read-write can write notebook cells (#111)")
 	// run_query itself is never blanket-denied — its gating is per-statement,
-	// documented in the tool's own description below.
+	// documented in the run_query tool definition the provider receives.
 	assert.False(t, runQueryLineDenied(rw), "run_query must never be flagged NOT PERMITTED — gating is per-statement")
 
-	ro := systemPromptFor(SandboxReadOnly, false, "")
+	ro := systemPromptFor(SandboxReadOnly, false, "", "")
 	assert.Contains(t, ro, "READ-ONLY access:")
-	assert.Contains(t, ro, "create_table: Create a new table in a writable connection (the default connection unless the name is qualified) [NOT PERMITTED")
+	assert.Contains(t, deniedLine(ro), "create_table")
 	assert.NotContains(t, ro, "FULL WRITE ACCESS")
 	assert.NotContains(t, ro, "READ-WRITE access to DATA AND CONTENT")
 
@@ -496,7 +496,7 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 		assert.Contains(t, prompt, "propose_schema")
 		assert.Contains(t, prompt, "SCHEMA DESIGN")
 		assert.Contains(t, prompt, "Link (a reference to another table's ID")
-		assert.NotContains(t, prompt, "propose_schema [NOT PERMITTED", "propose_schema must be permitted in every sandbox")
+		assert.NotContains(t, deniedLine(prompt), "propose_schema", "propose_schema must be permitted in every sandbox")
 		assert.False(t, runQueryLineDenied(prompt), "run_query must never be flagged NOT PERMITTED — gating is per-statement")
 	}
 }
@@ -504,27 +504,32 @@ func TestSystemPromptFor_WriteAccessAwareness(t *testing.T) {
 func TestSystemPromptFor_AskBeforeWrites(t *testing.T) {
 	const askSentence = "Every change you make"
 
-	askOn := systemPromptFor(SandboxReadWrite, true, "")
+	askOn := systemPromptFor(SandboxReadWrite, true, "", "")
 	assert.Contains(t, askOn, askSentence)
 
-	askOff := systemPromptFor(SandboxReadWrite, false, "")
+	askOff := systemPromptFor(SandboxReadWrite, false, "", "")
 	assert.NotContains(t, askOff, askSentence)
 
 	// Read-only never writes anything, so the approval sentence would be
 	// noise even with ask on.
-	roAskOn := systemPromptFor(SandboxReadOnly, true, "")
+	roAskOn := systemPromptFor(SandboxReadOnly, true, "", "")
 	assert.NotContains(t, roAskOn, askSentence)
 }
 
-// runQueryLineDenied reports whether the "- run_query: ..." line in a
-// system prompt carries the "[NOT PERMITTED" suffix.
-func runQueryLineDenied(prompt string) bool {
+// deniedLine returns the "NOT PERMITTED ..." line of a system prompt ("" when
+// the sandbox denies nothing).
+func deniedLine(prompt string) string {
 	for _, line := range strings.Split(prompt, "\n") {
-		if strings.HasPrefix(line, "- run_query:") {
-			return strings.Contains(line, "[NOT PERMITTED")
+		if strings.HasPrefix(line, "NOT PERMITTED") {
+			return line
 		}
 	}
-	return false
+	return ""
+}
+
+// runQueryLineDenied reports whether run_query is on the NOT PERMITTED line.
+func runQueryLineDenied(prompt string) bool {
+	return strings.Contains(deniedLine(prompt), "run_query")
 }
 
 func TestWithPinned(t *testing.T) {

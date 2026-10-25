@@ -36,6 +36,28 @@ This is the preferred style here — it's harder to get wrong when you add or
 remove a column later. Likewise `ORDER BY ALL` sorts by every selected
 column left to right.
 
+## Alias every column, and always with AS
+
+- Give every aggregate and expression an alias, or the result column is named
+  after the expression (`count_star()`, `sum(revenue)`), which is awkward to
+  chart or reference: `SELECT count(*) AS n, sum(revenue) AS revenue`.
+- Write the `AS`. A bare alias that is a SQL keyword or type name is a parser
+  error: `SELECT count(*) days FROM t` fails with `syntax error at or near
+  "days"`, while `SELECT count(*) AS days FROM t` works. Many keywords and
+  type names fail bare (`days`, `minutes`, `hours`, `year`, `value`, `name`,
+  `type`, `time`, ...); always write `AS`.
+
+## Parameters
+
+`run_query` binds named parameters: write `$name` in the SQL and pass
+`{"name": value}` in `params`. A name used twice is bound twice, and `?`
+placeholders are not supported there.
+
+```sql
+SELECT * FROM customers WHERE LOWER(state) = LOWER($state);
+-- params: {"state": "CA"}
+```
+
 ## Dates and times
 
 - `date_trunc('month', order_date)` buckets a timestamp to the start of its
@@ -72,7 +94,8 @@ FROM orders) WHERE rn = 1` you'd need on an engine without it.
 ## String gotchas
 
 - String comparison is case-sensitive by default (`'CA' != 'ca'`). Use
-  `LOWER(col) = LOWER(?)` or `ILIKE` when matching user-typed or
+  `LOWER(col) = LOWER($state)` (a `run_query` named parameter, see above) or
+  `ILIKE` when matching user-typed or
   inconsistently-cased data — check with a `GROUP BY` first (see
   `data-profiling`) rather than assuming.
 - `||` concatenates; `NULL || anything` is `NULL`, not the other operand —
