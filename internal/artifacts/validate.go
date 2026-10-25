@@ -29,26 +29,61 @@ func validName(kind, name string) error {
 // Validate checks a manifest's structure: names, types, defaults, caps, that
 // every $name a query uses is declared, and the options_query links. It fills
 // each Query's Uses and the default view kind. It never looks at what the SQL
-// means: that is the agent SQL policy's job (internal/agents).
+// means: that is the agent SQL policy's job (internal/agents). It returns the
+// first problem ValidateAll finds.
 func Validate(m *Manifest) error {
-	if err := validateHeader(m); err != nil {
-		return err
+	if errs := ValidateAll(m); len(errs) > 0 {
+		return errs[0]
 	}
-	declared, err := validateParams(m)
-	if err != nil {
-		return err
-	}
-	queries, err := validateQueries(m, declared)
-	if err != nil {
-		return err
-	}
-	return validateOptionsQueries(m, declared, queries)
+	return nil
 }
 
-func validateHeader(m *Manifest) error {
-	if m.Version != Version {
-		return invalid("version must be %d", Version)
+// ValidateAll is Validate without stopping at the first problem: one error per
+// failing check (the header's checks, each parameter, each query, each
+// options_query link), in the order Validate would meet them, so a caller can
+// show the whole list at once. Validate's error is always the first of these.
+func ValidateAll(m *Manifest) []error {
+	errs := validateHeader(m)
+	declared, perr := validateParams(m)
+	errs = append(errs, perr...)
+	queries, qerr := validateQueries(m, declared)
+	errs = append(errs, qerr...)
+	return append(errs, validateOptionsQueries(m, declared, queries)...)
+}
+
+// validateHeader collects the header's independent checks. The view kind and
+// the html block come first because the default view kind is filled here.
+func validateHeader(m *Manifest) []error {
+	var errs []error
+	add := func(err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
+	if m.Version != Version {
+		add(invalid("version must be %d", Version))
+	}
+	add(validateTitle(m))
+	if m.View == "" {
+		m.View = ViewA2UI
+	}
+	if m.View != ViewA2UI && m.View != ViewScript && m.View != ViewHTML {
+		add(invalid("view must be %q, %q or %q", ViewA2UI, ViewScript, ViewHTML))
+	}
+	add(validateHTMLSpec(m))
+	switch {
+	case len(m.Queries) == 0:
+		add(invalid("an artifact needs at least one query"))
+	case len(m.Queries) > MaxQueries:
+		add(invalid("%d queries, over the limit of %d", len(m.Queries), MaxQueries))
+	}
+	if len(m.Parameters) > MaxParams {
+		add(invalid("%d parameters, over the limit of %d", len(m.Parameters), MaxParams))
+	}
+	return errs
+}
+
+func validateTitle(m *Manifest) error {
 	title := strings.TrimSpace(m.Title)
 	if title == "" || utf8.RuneCountInString(title) > MaxTitleLength || strings.ContainsAny(title, "\n\r\x00") {
 		return invalid("title is required: one line, at most %d characters", MaxTitleLength)
@@ -59,45 +94,30 @@ func validateHeader(m *Manifest) error {
 	if utf8.RuneCountInString(m.Description) > MaxDescription || strings.ContainsRune(m.Description, 0) {
 		return invalid("description is over %d characters", MaxDescription)
 	}
-	if m.View == "" {
-		m.View = ViewA2UI
-	}
-	if m.View != ViewA2UI && m.View != ViewScript && m.View != ViewHTML {
-		return invalid("view must be %q, %q or %q", ViewA2UI, ViewScript, ViewHTML)
-	}
-	if err := validateHTMLSpec(m); err != nil {
-		return err
-	}
-	if len(m.Queries) == 0 {
-		return invalid("an artifact needs at least one query")
-	}
-	if len(m.Queries) > MaxQueries {
-		return invalid("%d queries, over the limit of %d", len(m.Queries), MaxQueries)
-	}
-	if len(m.Parameters) > MaxParams {
-		return invalid("%d parameters, over the limit of %d", len(m.Parameters), MaxParams)
-	}
 	return nil
 }
 
-func validateParams(m *Manifest) (map[string]*Param, error) {
+func validateParams(m *Manifest) (map[string]*Param, []error) {
 	declared := map[string]*Param{}
 	folded := map[string]bool{}
+	var errs []error
 	for i := range m.Parameters {
 		p := &m.Parameters[i]
 		if err := validName("parameter", p.Name); err != nil {
-			return nil, err
+			errs = append(errs, err)
+			continue
 		}
 		if folded[strings.ToLower(p.Name)] {
-			return nil, invalid("parameter %q is declared twice (names are compared without regard to case)", p.Name)
+			errs = append(errs, invalid("parameter %q is declared twice (names are compared without regard to case)", p.Name))
+			continue
 		}
 		folded[strings.ToLower(p.Name)] = true
 		declared[p.Name] = p
 		if err := validateParam(p); err != nil {
-			return nil, err
+			errs = append(errs, err)
 		}
 	}
-	return declared, nil
+	return declared, errs
 }
 
 // fixedNow is the clock the structural check resolves date defaults on: only
@@ -178,24 +198,27 @@ func validateEnum(p *Param) error {
 	return nil
 }
 
-func validateQueries(m *Manifest, declared map[string]*Param) (map[string]*Query, error) {
+func validateQueries(m *Manifest, declared map[string]*Param) (map[string]*Query, []error) {
 	byName := map[string]*Query{}
 	folded := map[string]bool{}
+	var errs []error
 	for i := range m.Queries {
 		q := &m.Queries[i]
 		if err := validName("query", q.Name); err != nil {
-			return nil, err
+			errs = append(errs, err)
+			continue
 		}
 		if folded[strings.ToLower(q.Name)] {
-			return nil, invalid("query %q is declared twice (names are compared without regard to case)", q.Name)
+			errs = append(errs, invalid("query %q is declared twice (names are compared without regard to case)", q.Name))
+			continue
 		}
 		folded[strings.ToLower(q.Name)] = true
 		byName[q.Name] = q
 		if err := validateQuery(q, declared); err != nil {
-			return nil, err
+			errs = append(errs, err)
 		}
 	}
-	return byName, nil
+	return byName, errs
 }
 
 func validateQuery(q *Query, declared map[string]*Param) error {
@@ -222,7 +245,9 @@ func validateQuery(q *Query, declared map[string]*Param) error {
 // validateOptionsQueries checks that each enum's options_query names a query,
 // that the query does not use the parameter it feeds, and that no chain of
 // options queries loops back (a feeds b feeds a).
-func validateOptionsQueries(m *Manifest, declared map[string]*Param, queries map[string]*Query) error {
+func validateOptionsQueries(m *Manifest, declared map[string]*Param, queries map[string]*Query) []error {
+	var errs []error
+	linked := true
 	for i := range m.Parameters {
 		p := &m.Parameters[i]
 		if p.OptionsQuery == "" {
@@ -230,24 +255,30 @@ func validateOptionsQueries(m *Manifest, declared map[string]*Param, queries map
 		}
 		q, ok := queries[p.OptionsQuery]
 		if !ok {
-			return invalid("parameter %q: options_query %q is not a query of this artifact", p.Name, p.OptionsQuery)
+			errs = append(errs, invalid("parameter %q: options_query %q is not a query of this artifact", p.Name, p.OptionsQuery))
+			linked = false
+			continue
 		}
 		for _, u := range q.Uses {
 			if u == p.Name {
-				return invalid("parameter %q: its options_query %q may not use $%s", p.Name, q.Name, p.Name)
+				errs = append(errs, invalid("parameter %q: its options_query %q may not use $%s", p.Name, q.Name, p.Name))
+				linked = false
 			}
 		}
 	}
+	if !linked {
+		return errs
+	}
 	for i := range m.Parameters {
 		if err := optionsCycle(&m.Parameters[i], declared, queries, map[string]bool{}); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errs
 }
 
 func optionsCycle(p *Param, declared map[string]*Param, queries map[string]*Query, path map[string]bool) error {
-	if p.OptionsQuery == "" {
+	if p == nil || p.OptionsQuery == "" {
 		return nil
 	}
 	if path[p.Name] {
@@ -255,7 +286,11 @@ func optionsCycle(p *Param, declared map[string]*Param, queries map[string]*Quer
 	}
 	path[p.Name] = true
 	defer delete(path, p.Name)
-	for _, u := range queries[p.OptionsQuery].Uses {
+	q := queries[p.OptionsQuery]
+	if q == nil {
+		return nil
+	}
+	for _, u := range q.Uses {
 		if err := optionsCycle(declared[u], declared, queries, path); err != nil {
 			return err
 		}

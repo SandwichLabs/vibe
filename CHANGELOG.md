@@ -7,6 +7,11 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 ### Added
 
 - **A built-in `a2ui` skill** gives MCP clients the A2UI component schema (`read_skill a2ui`): every type and field, which are valid in a notebook dashboard and which only in a data artifact view (controls, `pivot`, `query`, `drill`). It is generated from the validator's registries when read, so it cannot drift. The `create_dashboard`, `present_data` and `write_artifact` descriptions, the `a2ui` help topic and the MCP instructions point to it.
+- **`write_artifact` catches render-time mistakes at save.** The reply lists each query's result columns (`queries: [{name, columns: [{name, type}]}]`), and a pivot, drill or chart that names a column the query does not return, a page template that passes `date` a Go layout or reads a field of a row (`.activity`), an inline `<script>`, and a `view.js` with unbalanced brackets or unclosed strings are refused with the component path, the bad name and the columns available.
+
+### Changed
+
+- `write_artifact` reports every problem in one reply (at most 20) instead of the first, accepts `view` and `manifest` as JSON text, and keeps a numeric or boolean parameter default as a number or boolean in `artifact.yaml` and `get_artifact`. Pages already on disk are not re-checked when loaded.
 
 ### Fixed
 

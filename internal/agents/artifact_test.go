@@ -136,7 +136,7 @@ func TestWriteArtifact_LandsAsFiles(t *testing.T) {
 	manifest, err := os.ReadFile(filepath.Join(fx.root, "artifacts", "sales", "artifact.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "min_id")
-	assert.Contains(t, string(manifest), `default: "0"`, "a numeric default is stored as its text")
+	assert.Contains(t, string(manifest), "default: 0\n", "an integer default is written as an integer")
 	view, err := os.ReadFile(filepath.Join(fx.root, "artifacts", "sales", "view.a2ui.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(view), `"query": "rows"`)

@@ -160,6 +160,9 @@ func newArtifact(ctx context.Context, store artifacts.Store, name, kind string) 
 		return nil, err
 	}
 	a := &artifacts.Artifact{Name: name, Manifest: *m, ManifestText: []byte(st.manifest), View: []byte(st.view), Files: st.files}
+	if err := vetFreshPage(m, st.files); err != nil {
+		return nil, err
+	}
 	if err := store.Put(ctx, a, artifacts.WithRev("")); err != nil {
 		if errors.Is(err, artifacts.ErrConflict) {
 			return nil, fmt.Errorf("an artifact named %q already exists", name)
@@ -170,6 +173,18 @@ func newArtifact(ctx context.Context, store artifacts.Store, name, kind string) 
 		Name: name, Manifest: st.manifest, View: st.view, ViewFile: artifacts.ViewFileOf(m), Rev: a.Rev,
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+// vetFreshPage holds page files a person is creating now to the write-time
+// rules (artifacts.VetPageForWrite). Stored pages, bundle imports and conflict
+// resolution go through the store's lenient load-time vet instead, so a page
+// already on disk or in a bundle is never refused for an old mistake.
+func vetFreshPage(m *artifacts.Manifest, files []artifacts.PageFile) error {
+	if m.View != artifacts.ViewHTML {
+		return nil
+	}
+	_, err := artifacts.VetPageForWrite(m, files)
+	return err
 }
 
 // deleteArtifact removes an artifact if it is still at rev. A delete without a

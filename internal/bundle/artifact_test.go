@@ -574,3 +574,26 @@ func TestArtifact_PageStateIsNeverBundled(t *testing.T) {
 	}
 	assert.NotContains(t, string(res.Data), "QUERYRESULT")
 }
+
+// A page that already exists with a render-time mistake (an inline script, a
+// bad date layout, a field read on a row) is only held to the load-time vet by
+// a bundle: the preview opens it and the import writes it, the same outcome.
+func TestArtifact_HTMLPageWithOldMistakesRoundTrips(t *testing.T) {
+	src, _ := newWS(t)
+	old := `<p>{{ date (param "min_id") "2006-01-02" }}{{ range (query "rows").Rows }}{{ .name }}{{ end }}</p><script>alert(1)</script>`
+	require.NoError(t, src.Artifacts().Put(context.Background(), &artifacts.Artifact{Name: "old", ManifestText: []byte(pageManifestText),
+		Files: []artifacts.PageFile{{Path: "index.html.tmpl", Data: []byte(old)}}}, artifacts.WithRev("")))
+	res, err := Export(context.Background(), src, ExportOptions{Selection: Selection{Artifacts: []string{"old"}}})
+	require.NoError(t, err)
+
+	pkg, err := Open(res.Data, "")
+	require.NoError(t, err, "the preview opens it")
+	dst, _ := newWS(t)
+	out, err := pkg.Import(context.Background(), dst, ImportOptions{})
+	require.NoError(t, err)
+	require.Len(t, out.Outcomes, 1)
+	assert.Equal(t, "created", out.Outcomes[0].Result, out.Outcomes[0].Error)
+	got, err := os.ReadFile(filepath.Join(dst.Root(), "artifacts", "old", "html", "index.html.tmpl"))
+	require.NoError(t, err)
+	assert.Equal(t, old, string(got))
+}
