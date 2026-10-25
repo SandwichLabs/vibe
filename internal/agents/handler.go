@@ -526,6 +526,8 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 		return h.handleProposeSchema(ctx, req)
 	case "save_query":
 		return h.handleSaveQuery(ctx, req)
+	case "run_saved_query":
+		return h.handleRunSavedQuery(ctx, req)
 
 	// A2UI artifacts (#67)
 	case "present_data":

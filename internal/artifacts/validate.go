@@ -449,3 +449,12 @@ func EscapeHidden(s string) string {
 	}
 	return b.String()
 }
+
+// ValidateParameters checks parameter declarations alone, the way a manifest's
+// are checked (names, types, defaults, constraints), one error per problem. A
+// saved query's declared parameters reuse it so both kinds of file agree on
+// what a parameter is.
+func ValidateParameters(ps []Param) []error {
+	_, errs := validateParams(&Manifest{Parameters: ps})
+	return errs
+}

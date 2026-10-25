@@ -13,7 +13,9 @@ package crud
 // concatenated raw.
 
 import (
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/session"
@@ -37,6 +39,9 @@ type FilterSpec struct {
 
 // filterOps maps a FilterCondition.Op to its SQL comparison operator. Value-less
 // operators (is_null/is_not_null) are handled separately.
+// plainNumber is the only text a json.Number may carry to be written bare.
+var plainNumber = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
+
 var filterOps = map[string]string{
 	"eq":   "=",
 	"neq":  "<>",
@@ -148,6 +153,14 @@ func sqlLiteral(v any) string {
 		return fmt.Sprintf("%d", t)
 	case float32, float64:
 		return fmt.Sprintf("%v", t)
+	case json.Number:
+		// A plain decimal keeps its own text, so no digit is lost to a
+		// float64; anything else is quoted, so a json.Number built from
+		// unchecked text can never become SQL.
+		if plainNumber.MatchString(string(t)) {
+			return string(t)
+		}
+		return session.QuoteLiteral(string(t))
 	case string:
 		return session.QuoteLiteral(t)
 	default:

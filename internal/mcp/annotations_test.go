@@ -37,8 +37,7 @@ func TestToolAnnotations_MatchTheCategory(t *testing.T) {
 		case "data", "schema":
 			assert.False(t, *a.ReadOnlyHint, td.Name)
 			assert.True(t, *a.DestructiveHint, td.Name)
-			// save_query and build_query write only queries/*.sql.
-			assert.Equal(t, !localWriters[td.Name], *a.OpenWorldHint, "a connection may be remote: "+td.Name)
+			assert.True(t, *a.OpenWorldHint, "a connection may be remote: "+td.Name)
 		default:
 			t.Fatalf("tool %s has category %q: decide its annotations in annotationsFor", td.Name, td.Category)
 		}

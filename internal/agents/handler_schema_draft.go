@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/a2ui"
-	"github.com/SandwichLabs/vibe/internal/queries"
 )
 
 // --- Schema Builder draft + saved-SQL query handlers (ported from
@@ -105,23 +104,4 @@ func (h *Handler) handleProposeSchema(_ context.Context, req *Request) *Response
 
 	h.logger.Info("proposed schema draft", "tables", len(tables), "relationships", len(relationships))
 	return NewResponse(req.ID, page)
-}
-
-// handleSaveQuery persists a named, already-written SQL string to the
-// query store (queries/*.sql in a workspace, _vibe_queries in a .vibe; studio's SaveQueryOn binding does the same thing).
-// Unlike build_query it does not render SQL from QBE conditions.
-func (h *Handler) handleSaveQuery(ctx context.Context, req *Request) *Response {
-	title, _ := req.Params["title"].(string)
-	sqlStr, _ := req.Params["sql"].(string)
-
-	q := &queries.Query{
-		Title:      title,
-		SQL:        sqlStr,
-		Engine:     "duckdb",
-		Parameters: []queries.Param{},
-	}
-	if err := h.access.Queries().Create(ctx, q); err != nil {
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to save query: %v", err))
-	}
-	return NewResponse(req.ID, map[string]any{"id": q.ID, "title": title, "saved": true})
 }

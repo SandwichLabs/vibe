@@ -81,7 +81,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "list_queries",
-		Description: "List all saved queries in the workspace",
+		Description: "List the workspace's saved queries. Each has an id and a rev (send both to save_query to change it, or the id to run_saved_query), its name, sql, description, connection and declared parameters. An empty workspace gives an empty list.",
 		Category:    "introspect",
 		Params:      []ParamDef{},
 	},
@@ -242,21 +242,24 @@ var Tools = []ToolDef{
 	},
 
 	// Query Wizard tool (plan §2.4 / §4.3). Builds a named query from a QBE-style
-	// filter spec and persists it to the _vibe_queries registry.
+	// filter spec and saves it to queries/ like save_query: a content tool.
 	{
 		Name:        "build_query",
-		Description: "Query Wizard (QBE): build and save a named query over a table from SQL-free filter conditions. Conditions are objects {column, op, value}; op is one of eq | neq | lt | gt | lte | gte | like | is_null | is_not_null. The rendered SQL is persisted to the named-query registry and runnable via run_query.",
-		Category:    "schema",
+		Description: "Query Wizard (QBE): build and save a named query over a table from SQL-free filter conditions. Conditions are objects {column, op, value}; op is one of eq | neq | lt | gt | lte | gte | like | is_null | is_not_null. A value for a numeric or boolean column is written as a number or boolean, not a string. The rendered SQL is checked like save_query's, saved to queries/, and returned; run it with run_saved_query using the returned id. A title that is already taken is refused with the existing id (send id and rev to replace it).",
+		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name/title for the saved query"},
 			{Name: "table", Type: "string", Required: true, Desc: "Table the query selects from"},
 			{Name: "conditions", Type: "array", Required: false, Desc: "QBE filter conditions: objects {column, op, value}", Items: &ParamDef{Type: "object", Fields: []ParamDef{
 				{Name: "column", Type: "string", Required: true, Desc: "Column to filter on"},
 				{Name: "op", Type: "string", Required: true, Desc: "eq | neq | lt | gt | lte | gte | like | is_null | is_not_null"},
-				{Name: "value", Type: "string", Required: false, Desc: "Comparison value (ignored for is_null/is_not_null)"},
+				{Name: "value", Type: "string", Required: false, Desc: "Comparison value (ignored for is_null/is_not_null); typed by the column: \"15\" for an integer column becomes the number 15"},
 			}}},
 			{Name: "combinator", Type: "string", Required: false, Desc: "How to join conditions: AND | OR (default AND)"},
 			{Name: "columns", Type: "array", Required: false, Desc: "Projection column names (default: all columns)", Items: &ParamDef{Type: "string"}},
+			{Name: "id", Type: "string", Required: false, Desc: "Id of an existing saved query to replace (from list_queries). Omit to create."},
+			{Name: "rev", Type: "string", Required: false, Desc: "The rev list_queries returned for that id. Required with id."},
 		},
 	},
 
@@ -311,19 +314,36 @@ var Tools = []ToolDef{
 		},
 	},
 
-	// save_query (ported from internal/llm's wizard-only tool, #63). Unlike
-	// build_query (QBE conditions rendered to SQL), this persists an
-	// already-written SQL string as-is, mirroring studio's SaveQueryOn binding.
-	// No "description" param: queries.Query (the _vibe_queries row type) has
-	// no description column to persist it into (review fix — a param that
-	// silently did nothing was worse than no param).
+	// save_query persists an already-written SQL string (build_query renders one
+	// from QBE conditions). A content tool: it writes queries/<id>.sql, vets the
+	// SQL at save like a notebook cell or an artifact, and keeps a title from
+	// being saved twice.
 	{
 		Name:        "save_query",
-		Description: "Save a named SQL query for reuse. The SQL may be any valid DuckDB query; it is persisted as-is (not rendered from QBE conditions — use build_query for that).",
-		Category:    "schema",
+		Description: "Save a named read-only SQL query for reuse (queries/<id>.sql). The SQL is checked like a run: one statement, a plain read (no INSERT/UPDATE/DELETE/DDL), and it must bind against the schema, so a bad column is refused with the binder's candidates. Write a value that varies as $name and declare it in parameters ({name, type, default}); every $name must be declared and every declared name used, and run_saved_query binds the value. A title already in use is refused with the existing id: to replace a query send its id and the rev from list_queries (without them save_query only creates). Run it with run_saved_query. Not for rendering QBE conditions: use build_query.",
+		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "title", Type: "string", Required: true, Desc: "Name for the saved query."},
-			{Name: "sql", Type: "string", Required: true, Desc: "The SQL the query runs."},
+			{Name: "sql", Type: "string", Required: true, Desc: "One read-only statement. Write varying values as $name, never as a string spliced in."},
+			{Name: "description", Type: "string", Required: false, Desc: "One line on what the query answers."},
+			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the query runs on; unqualified table names resolve there. Must be a registered connection (list_connections). Defaults to the workspace default."},
+			{Name: "parameters", Type: "array", Required: false, Desc: "Declared $name parameters: objects {name, type, default}. type is text | number | integer | date | boolean; default is a string such as \"15\", \"true\" or \"2026-01-31\" (a date may also be today, today-<n>d, start-of-month or start-of-year).", Items: &ParamDef{Type: "object", Fields: []ParamDef{
+				{Name: "name", Type: "string", Required: true, Desc: "Parameter name used as $name in the SQL"},
+				{Name: "type", Type: "string", Required: true, Desc: "text | number | integer | date | boolean"},
+				{Name: "default", Type: "string", Required: true, Desc: "Value used when a run sends none, and the one the check binds"},
+			}}},
+			{Name: "id", Type: "string", Required: false, Desc: "Id of an existing saved query to replace (from list_queries). Omit to create."},
+			{Name: "rev", Type: "string", Required: false, Desc: "The rev list_queries returned for that id. Required with id."},
+		},
+	},
+	{
+		Name:        "run_saved_query",
+		Description: "Run a saved query by id (see list_queries) and return its rows like run_query. Send values for its declared parameters as params {name: value}; a name you omit takes its default. It goes through run_query's gates, on the query's own connection, and runs reads only.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "id", Type: "string", Required: true, Desc: "Saved query id, from list_queries"},
+			{Name: "params", Type: "object", Required: false, Desc: "Values for the query's declared parameters: {name: value}, typed as declared (a number for number/integer, true/false for boolean, a string for text/date)"},
 		},
 	},
 

@@ -20,10 +20,10 @@ The tier is the person's `sandbox` setting, clamped to the team limit in `vibe.y
 | `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INSERT ... ON CONFLICT` into a writable catalog | no | yes | yes |
 | `CREATE`, `DROP`, `ALTER` of tables, views, sequences, schemas, indexes, macros, types on a writable catalog | no | no | yes |
 | `COPY (...) TO '<literal path in data/>'` | no | no | yes |
-| Content tools: `add_query_cell`, `create_dashboard`, `create_or_update_skill`, `write_artifact` (workspace files, not data) | no | yes | yes |
+| Content tools: `add_query_cell`, `create_dashboard`, `create_or_update_skill`, `write_artifact`, `save_query`, `build_query` (workspace files, not data) | no | yes | yes |
 | Everything in the never-list | no | no | **no** |
 
-Record tools follow the same tiers. `create_record`, `update_record`, `delete_record` and `bulk_insert` are data tools. `create_table`, `add_column`, `drop_table`, `import_csv`, `build_query` and `save_query` are schema tools, so they need `full`. `build_query` and `save_query` write a named query into `queries/`, and `propose_schema` only shows a draft schema in chat and changes nothing. The read-only helpers `list_notebooks`, `get_notebook`, `list_queries`, `list_skills` and `help_search` are introspect tools, allowed in every tier.
+Record tools follow the same tiers. `create_record`, `update_record`, `delete_record` and `bulk_insert` are data tools. `create_table`, `add_column`, `drop_table` and `import_csv` are schema tools, so they need `full`. `build_query` and `save_query` write a named query into `queries/`; they are content tools like `write_artifact`, so `read-write` may use them, and their SQL is held to the read-only policy at save (see [mcp.md](mcp.md#saved-queries)). `run_saved_query` runs a saved query by id through `run_query`'s read gates, reads only. `propose_schema` only shows a draft schema in chat and changes nothing. The read-only helpers `list_notebooks`, `get_notebook`, `list_queries`, `run_saved_query`, `list_skills` and `help_search` are introspect tools, allowed in every tier.
 
 ### Data artifacts
 
