@@ -45,6 +45,11 @@ type Server struct {
 	listener   net.Listener
 	logger     *slog.Logger
 
+	// name and version are the serverInfo of initialize; instructions, when
+	// set, supplies its instructions text.
+	name, version string
+	instructions  func(ctx context.Context) string
+
 	// token is a random bearer credential generated fresh on every Start
 	// (#64/#70 security review: the SSE MCP server listens on localhost
 	// HTTP with no auth, reachable by ANY page open in the user's browser —
@@ -67,23 +72,70 @@ type Server struct {
 // (never above its own policy). Unknown values are rejected with 400.
 const SandboxHeader = "X-Vibe-Sandbox"
 
+// Option configures a Server.
+type Option func(*Server)
+
+// WithServerInfo sets the name and version the server reports in initialize's
+// serverInfo. Without it the server calls itself DefaultServerName at version
+// "dev".
+func WithServerInfo(name, version string) Option {
+	return func(s *Server) { s.name, s.version = name, version }
+}
+
+// WithInstructions sets the function that supplies the server instructions
+// every client gets in its initialize response (or, on protocol 2026-07-28, in
+// its server/discover result). It runs once per initialize or discover, so a
+// client that connects later sees whatever the function reports then; one
+// already connected keeps the text it was given. Whether that tracks a setting
+// the person changed meanwhile depends on the function: Studio's refreshes its
+// policy first, while a headless server fixes its policy when it starts.
+func WithInstructions(f func(ctx context.Context) string) Option {
+	return func(s *Server) { s.instructions = f }
+}
+
+// DefaultServerName is the serverInfo name when none is set.
+const DefaultServerName = "Vibe"
+
 // New creates a new MCP server backed by the given tool-dispatch Handler.
-func New(handler Handler, logger *slog.Logger) *Server {
-	return &Server{
+func New(handler Handler, logger *slog.Logger, opts ...Option) *Server {
+	s := &Server{
 		handler: handler,
 		logger:  logger,
+		name:    DefaultServerName,
+		version: "dev",
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // buildMCPServer creates the underlying *server.MCPServer and registers
 // every ModeMCP tool against it. Shared by Start (SSE transport) and
 // ServeStdio (stdio transport) so a stdio and an SSE client see byte
 // identical tool lists — one registration path, not two.
-func (s *Server) buildMCPServer(extra ...server.ServerOption) *server.MCPServer {
+func (s *Server) buildMCPServer(hooks *server.Hooks) *server.MCPServer {
+	if hooks == nil {
+		hooks = &server.Hooks{}
+	}
+	if s.instructions != nil {
+		// Set per initialize, not at build time, so a client that connects after
+		// the person changed a setting is told the current state.
+		hooks.AddAfterInitialize(func(ctx context.Context, _ any, _ *mcp.InitializeRequest, result *mcp.InitializeResult) {
+			result.Instructions = s.instructions(s.withSessionCeiling(ctx))
+		})
+		// Protocol 2026-07-28 has no initialize: a client calls server/discover,
+		// whose result would otherwise carry the (empty) static instructions.
+		// Its serverInfo comes from the server's name and version.
+		hooks.AddAfterDiscover(func(ctx context.Context, _ any, _ *mcp.DiscoverRequest, result *mcp.DiscoverResult) {
+			result.Instructions = s.instructions(s.withSessionCeiling(ctx))
+		})
+	}
 	mcpServer := server.NewMCPServer(
-		"Vibe Studio",
-		"1.0.0",
-		append([]server.ServerOption{server.WithToolCapabilities(true)}, extra...)...,
+		s.name,
+		s.version,
+		server.WithToolCapabilities(true),
+		server.WithHooks(hooks),
 	)
 	for _, tool := range agents.ListToolsForMode(agents.ModeMCP) {
 		mcpTool := toolDefToMCPTool(tool)
@@ -114,7 +166,7 @@ func (s *Server) Start(addr string) error {
 	hooks.AddOnUnregisterSession(func(_ context.Context, sess server.ClientSession) {
 		s.sessionCeil.Delete(sess.SessionID())
 	})
-	s.mcpServer = s.buildMCPServer(server.WithHooks(hooks))
+	s.mcpServer = s.buildMCPServer(hooks)
 
 	token, err := generateToken()
 	if err != nil {
@@ -181,7 +233,7 @@ func (s *Server) Start(addr string) error {
 // process spawned this one (e.g. Claude Desktop), there is no HTTP surface
 // for a browser to reach.
 func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) error {
-	mcpServer := s.buildMCPServer()
+	mcpServer := s.buildMCPServer(nil)
 	stdioServer := server.NewStdioServer(mcpServer)
 	errLogger := slog.NewLogLogger(s.logger.Handler(), slog.LevelError)
 	stdioServer.SetErrorLogger(errLogger)
@@ -354,6 +406,19 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// withSessionCeiling binds the sandbox ceiling the session's client asked for
+// (a proxy's --sandbox) to ctx, tighten-only.
+func (s *Server) withSessionCeiling(ctx context.Context) context.Context {
+	if sess := server.ClientSessionFromContext(ctx); sess != nil {
+		if v, ok := s.sessionCeil.Load(sess.SessionID()); ok {
+			if mode, ok := v.(agents.SandboxMode); ok {
+				return agents.WithSandboxCeiling(ctx, mode)
+			}
+		}
+	}
+	return ctx
+}
+
 // makeToolHandler returns an MCP tool handler that dispatches to the agents handler.
 func (s *Server) makeToolHandler(toolName string) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -371,17 +436,10 @@ func (s *Server) makeToolHandler(toolName string) server.ToolHandlerFunc {
 			Params:  params,
 		}
 
-		if sess := server.ClientSessionFromContext(ctx); sess != nil {
-			if v, ok := s.sessionCeil.Load(sess.SessionID()); ok {
-				if mode, ok := v.(agents.SandboxMode); ok {
-					ctx = agents.WithSandboxCeiling(ctx, mode)
-				}
-			}
-		}
-		resp := s.handler.Handle(ctx, req)
+		resp := s.handler.Handle(s.withSessionCeiling(ctx), req)
 
 		if resp.Error != nil {
-			return mcp.NewToolResultError(resp.Error.Message), nil
+			return errorResult(resp.Error), nil
 		}
 
 		data, err := json.Marshal(resp.Result)
@@ -416,5 +474,18 @@ func toolDefToMCPTool(td agents.ToolDef) mcp.Tool {
 		})
 	}
 
+	opts = append(opts, mcp.WithToolAnnotation(annotationsFor(td)))
 	return mcp.NewTool(td.Name, opts...)
+}
+
+// errorResult is the tool error for a refused call. Its text is the message; a
+// refusal that carries data (a valid request that only lacks an approval) also
+// returns it as structuredContent so a client can act on it without parsing
+// the sentence.
+func errorResult(e *agents.Error) *mcp.CallToolResult {
+	res := mcp.NewToolResultError(e.Message)
+	if e.Data != nil {
+		res.StructuredContent = e.Data
+	}
+	return res
 }

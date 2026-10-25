@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/SandwichLabs/vibe/internal/sandbox"
@@ -140,7 +141,7 @@ func (sc *SandboxConfig) Check(method string) error {
 	}
 
 	if !allowed[tool.Category] {
-		return fmt.Errorf("method %q (category %q) is not allowed in %s mode", method, tool.Category, sc.Mode)
+		return errors.New(tierRefusal(method, tool.Category, sc.Mode))
 	}
 
 	return nil
@@ -187,4 +188,25 @@ func (h *Handler) sandboxFor(ctx context.Context) *SandboxConfig {
 	next := *cur
 	next.Mode = tight
 	return &next
+}
+
+type dryRunKey struct{}
+
+// withDryRun marks ctx so a content tool validates its request exactly as it
+// would to write it, then stops just before the write and reports success
+// without touching the workspace. Handle uses it to tell an invalid request
+// from a valid one that only lacks the person's approval.
+func withDryRun(ctx context.Context) context.Context {
+	return context.WithValue(ctx, dryRunKey{}, true)
+}
+
+func isDryRun(ctx context.Context) bool {
+	v, _ := ctx.Value(dryRunKey{}).(bool)
+	return v
+}
+
+// dryRunOK is what a content handler returns in a dry run once the request
+// passed every check and only the write is left.
+func dryRunOK(id any) *Response {
+	return NewResponse(id, map[string]any{"dry_run": true, "valid": true})
 }

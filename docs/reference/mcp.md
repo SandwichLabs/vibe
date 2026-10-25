@@ -50,9 +50,32 @@ The effective policy is the workspace's: this person's chosen tier (default **re
 
 A write needs three gates (tier, writable connection, the person's approval); [agent-policy.md](agent-policy.md#writes-need-three-gates) owns that rule and its exact messages. What it means over MCP, where there is no one to show an approval card to:
 
-- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Workspace → The agent**; there is no flag or environment variable that bypasses it from the MCP side.
+- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Workspace → The agent → On this computer → "Ask me before it changes data"**; there is no flag or environment variable that bypasses it from the MCP side.
+- **A content write is validated first, then refused as "valid, needs approval".** `write_artifact`, `add_query_cell`, `create_dashboard` and `create_or_update_skill` run all of their checks (decode, schema, the read-only SQL vet, the table gate, a stale or missing `rev`) before the approval gate, with nothing written. An invalid request gets its normal validation error, so the agent can fix it and try again. A valid one, when nobody can approve, is refused with "your request is valid and ready, but it was NOT saved yet ... Ask the person to approve it", error code -32001 and a structured payload, `structuredContent: {"valid": true, "needs_approval": true, "nothing_written": true}`, next to the text. The text says it writes `artifacts/<name>/` (or `skills/<name>/SKILL.md`, or a notebook) in the workspace folder, not "the local database". With an approver (Studio's card) nothing changes: the card is shown first and the write follows the person's OK.
+- **A tier refusal says what is needed.** `method "write_artifact" (category "content") is not allowed in read-only mode: it writes files in the workspace folder (artifacts, notebooks, skills), which needs the read-write tier ("Change rows"), and this workspace's agent is at read-only ("Look only"). Nothing was changed. To allow it, set the agent to "Change rows" (read-write) or higher in Vibe Studio → Settings → Workspace → The agent → On this computer, or restart the MCP server without a tighter --sandbox.` The tier buttons in Studio are "Look only" (`read-only`), "Change rows" (`read-write`) and "Full control" (`full`).
 - **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**, because approval is forced for those connections. Nothing is changed.
 - To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `vibe mcp serve` proxies to it.
+
+### What a client is told on connect
+
+`initialize` returns real `serverInfo` and `instructions`, the same on stdio and SSE:
+
+- **`serverInfo`**: name `Vibe Studio` when Studio serves it and `vibe mcp serve` when the headless server does (the hub-lock app name), and the build's version (`dev` for an unstamped build).
+- **`instructions`**: a short orientation, well under 2 KB (Claude Code truncates at 2,048 characters): the workspace name and folder; the sandbox tier and the "Ask before changes" state **at connect time**, with what that means (refused with no one to approve; or an approval card in Studio; or direct), and where the person changes it; the absolute `data/` folder (file readers read only there, by absolute path); the connection names (names only, no types, URLs or credentials; at most 12, then "and N more"); and a pointer to `help_search ""` and to `read_skill` `duckdb-sql` and `data-artifacts`.
+
+The text is built when each client connects, on `initialize` or, for a client on protocol 2026-07-28, on `server/discover`; a `--sandbox` ceiling on a proxied session is reflected. In Studio it follows the saved settings, so a client that connects after the person changed the tier or the gate sees the new state. A headless `vibe mcp serve` fixes its policy when it starts and never re-reads it, so a change applies only after a restart (the refusal text and the instructions say so). A client already connected keeps the text it was given. Over stdio the process stderr also gets a one-line notice when the gate is on, which a client does not show the model.
+
+### Tool annotations
+
+`tools/list` carries MCP annotations derived from each tool's category (`internal/mcp/annotations.go`), so a client can auto-approve reads and warn on writes:
+
+| Category | `readOnlyHint` | `destructiveHint` | `idempotentHint` | `openWorldHint` |
+|---|---|---|---|---|
+| introspect | true | false | true | false, except `introspect_schema` and `describe_table` (they read a connection's catalog, which may be remote): true |
+| content | false | false (a replace needs the `rev` it read, so it cannot clobber a newer version) | true for `write_artifact` and `create_or_update_skill` (a replace needs the `rev` it read), else false | false (files in the workspace folder) |
+| data, schema | false | true | true for `update_record` and `delete_record`, else false | true (a connection may be remote), except `save_query` and `build_query`, which write only `queries/*.sql`: false |
+
+`run_query` is a data tool, so it is destructive even though a `SELECT` is not: the hint describes what the tool may do.
 
 Reads are not gated by approval; what the agent may read, and the never-list, are in [agent-policy.md](agent-policy.md). Every denial returns its reason as a tool error, and `list_connections` tells a client what is connected.
 
@@ -64,7 +87,7 @@ Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`)
 |---|---|---|
 | `list_artifacts` | introspect | Name, title, description, parameter and query counts, `rev`; a broken folder is listed with its error. |
 | `get_artifact` | introspect | One artifact's manifest and view as data, and its `rev`. A query with very long SQL comes back with `sql: null` and `sql_omitted: true`, never a partial copy (send `keep_sql: true` for it to keep it); for `view: script` the `view.js` text comes back as `view_source` (over about 30 KB: `view_source: null`, `view_source_omitted: true`, kept with `keep_view_source: true` and the `rev`); never results. |
-| `write_artifact` | content | `name`, `manifest`, `view` (an A2UI page; for `view: a2ui`) or `view_source` (the `view.js` text, at most 1 MB; for `view: script`), optional `keep_view_source`, optional `rev`. Refused under `read-only`; asks first when "Ask before changes" is on, so headless MCP refuses it like `create_or_update_skill`. Every query is vetted against the read-only SQL policy before anything is written. |
+| `write_artifact` | content | `name`, `manifest`, `view` (an A2UI page; for `view: a2ui`) or `view_source` (the `view.js` text, at most 1 MB; for `view: script`), optional `keep_view_source`, optional `rev`. Refused under `read-only`; asks first when "Ask before changes" is on, so headless MCP refuses it like `create_or_update_skill`, but only after validating it (a valid request is told it is ready and needs approval). Every query is vetted against the read-only SQL policy before anything is written. |
 
 A script view written over MCP is stored but **never runs until the person allows it in Studio or the CLI**: there is no tool, method or other path for a client to allow, deny or revoke a view, and every edit asks again ([artifacts.md](artifacts.md#custom-views-view-script)). A client reads the format with `read_skill` `data-artifacts`. `write_artifact` without a `rev` only creates; to replace an artifact send the `rev` from `get_artifact`, and a change made since is a refusal, not an overwrite ([agent-policy.md](agent-policy.md#data-artifacts)). `create_or_update_skill` follows the same rule: without a `rev` it only creates a new skill name, and replacing a skill needs the `rev` from `read_skill` or `list_skills` (a skill bound to a `table_name` is visible to those only while the table has rows). There is no tool that runs an artifact's queries or returns its results.
 

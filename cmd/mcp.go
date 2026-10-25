@@ -111,6 +111,7 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 		Out:       out,
 		Err:       os.Stderr,
 		Logger:    logger,
+		Version:   version,
 	})
 	if errors.Is(err, context.Canceled) {
 		err = nil

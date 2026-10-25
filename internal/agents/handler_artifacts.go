@@ -298,6 +298,10 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 		return NewErrorResponse(req.ID, ErrPermission, err.Error())
 	}
 
+	if isDryRun(ctx) {
+		return artifactDryRun(ctx, req.ID, store, name, rev)
+	}
+
 	// The revision the agent read (get_artifact / list_artifacts), or none.
 	// WithRev("") is create-only: the store's own last-seen revision must never
 	// stand in for a rev the agent did not supply, or the agent could replace a
@@ -322,6 +326,26 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 		res["page_kind"], res["queries_used"], res["capabilities"] = page.Kind, nonNil(page.Queries), nonNil(page.Capabilities)
 	}
 	return NewResponse(req.ID, res)
+}
+
+// artifactDryRun is the end of a dry run: everything above passed, so only a
+// stale or missing rev could still make the real write fail. It reads the
+// stored artifact and reports that conflict the way the write would; it writes
+// nothing.
+func artifactDryRun(ctx context.Context, id any, store artifacts.Store, name, rev string) *Response {
+	cur, err := store.Get(ctx, name)
+	switch {
+	case err == nil && (rev == "" || cur.Rev != rev):
+		return NewErrorResponse(id, ErrInvalidParams, conflictMessage(name, rev))
+	case errors.Is(err, artifacts.ErrNotFound):
+		if rev != "" {
+			return NewErrorResponse(id, ErrInvalidParams, conflictMessage(name, rev))
+		}
+	case err != nil:
+		// A stored artifact that cannot be read is not a request that is ready.
+		return NewErrorResponse(id, ErrInvalidParams, fmt.Sprintf("artifact %q is stored but cannot be read, so nothing was checked as ready: %s", name, scrubStoreText(err.Error())))
+	}
+	return dryRunOK(id)
 }
 
 func conflictMessage(name, rev string) string {

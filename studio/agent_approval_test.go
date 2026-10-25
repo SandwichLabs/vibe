@@ -532,3 +532,25 @@ func TestStartMCP_WritesGoThroughApprovalCard(t *testing.T) {
 	require.Nil(t, resp.Error, "%+v", resp.Error)
 	assert.Equal(t, 0, orderVoidCount(t, app))
 }
+
+// Studio's MCP instructions are built from the handler's policy; refreshPolicy
+// brings that up to the saved settings, so a client that connects after the
+// person changed the gate is told the current state.
+func TestStartMCP_RefreshPolicyFollowsSavedSettings(t *testing.T) {
+	app := newOpenApp(t)
+	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "full", AskBeforeWrites: true}))
+	_, err := app.StartMCP()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = app.StopMCP() })
+
+	app.mu.RLock()
+	h := app.mcpTool
+	app.mu.RUnlock()
+	require.NotNil(t, h)
+
+	require.NoError(t, app.SetAgentConfig(AgentConfig{Sandbox: "read-write", AskBeforeWrites: false}))
+	h.refreshPolicy()
+	p := h.inner.Policy(context.Background())
+	assert.Equal(t, agents.ModeReadWrite, p.Mode)
+	assert.False(t, p.AskBeforeWrites)
+}

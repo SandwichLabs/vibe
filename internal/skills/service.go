@@ -301,7 +301,55 @@ var builtinNameSet = func() map[string]bool {
 	return m
 }()
 
-// SaveUserSkillAt validates and upserts a user-authored skill with
+// ValidateUserSkill runs every check SaveUserSkillAt makes before it writes:
+// the name, the description, the instructions and the table gate. It writes
+// nothing, so a caller can tell a valid request from an invalid one first.
+func ValidateUserSkill(sess session.Session, name, description, instructions, tableName string) error {
+	if !NamePattern.MatchString(name) {
+		return fmt.Errorf("invalid skill name %q: must match %s", name, NamePattern.String())
+	}
+	if strings.HasPrefix(name, TaskPrefix) {
+		return fmt.Errorf("the %q prefix is reserved for built-in task-mode skills", TaskPrefix)
+	}
+	if builtinNameSet[name] {
+		return fmt.Errorf("%q is a built-in skill name and cannot be shadowed by a user skill", name)
+	}
+	if strings.TrimSpace(description) == "" {
+		return fmt.Errorf("description is required")
+	}
+	// A description with a newline could close the <skill> tag's single
+	// line and forge additional prompt structure (see RenderSkillsBlock's
+	// sanitization, which is defense in depth — this is the primary gate:
+	// reject it at write time so it never reaches storage as multi-line).
+	if strings.ContainsAny(description, "\n\r") {
+		return fmt.Errorf("description must be a single line (no newlines)")
+	}
+	if len([]rune(description)) > MaxDescriptionLen {
+		return fmt.Errorf("description must be at most %d characters", MaxDescriptionLen)
+	}
+	if strings.TrimSpace(instructions) == "" {
+		return fmt.Errorf("instructions is required")
+	}
+	if len(instructions) > MaxInstructionsLen {
+		return fmt.Errorf("instructions must be at most %d bytes", MaxInstructionsLen)
+	}
+	if tableName != "" {
+		if skillDB(sess) == nil {
+			return fmt.Errorf("table_name %q given but no database connection available to verify it", tableName)
+		}
+		exists, err := catalogTableExists(sess, tableName)
+		if err != nil {
+			return fmt.Errorf("failed to verify table_name %q: %w", tableName, err)
+		}
+		if !exists {
+			return fmt.Errorf("table_name %q does not name an existing table", tableName)
+		}
+	}
+
+	return nil
+}
+
+// SaveUserSkillAt validates (ValidateUserSkill) and upserts a user-authored skill with
 // source='user'. Shared by the create_or_update_skill agent tool and Studio's
 // SaveSkill binding, so the two entry points can never drift on validation
 // (name shape, reserved prefix, built-in shadow, size caps, no newlines in
@@ -319,45 +367,8 @@ var builtinNameSet = func() map[string]bool {
 // (#166). opts are passed to the store's Put (Overwrite to write back a
 // skill deleted on disk).
 func SaveUserSkillAt(store Store, sess session.Session, name, description, instructions, tableName, expectRev string, opts ...PutOption) (string, error) {
-	if !NamePattern.MatchString(name) {
-		return "", fmt.Errorf("invalid skill name %q: must match %s", name, NamePattern.String())
-	}
-	if strings.HasPrefix(name, TaskPrefix) {
-		return "", fmt.Errorf("the %q prefix is reserved for built-in task-mode skills", TaskPrefix)
-	}
-	if builtinNameSet[name] {
-		return "", fmt.Errorf("%q is a built-in skill name and cannot be shadowed by a user skill", name)
-	}
-	if strings.TrimSpace(description) == "" {
-		return "", fmt.Errorf("description is required")
-	}
-	// A description with a newline could close the <skill> tag's single
-	// line and forge additional prompt structure (see RenderSkillsBlock's
-	// sanitization, which is defense in depth — this is the primary gate:
-	// reject it at write time so it never reaches storage as multi-line).
-	if strings.ContainsAny(description, "\n\r") {
-		return "", fmt.Errorf("description must be a single line (no newlines)")
-	}
-	if len([]rune(description)) > MaxDescriptionLen {
-		return "", fmt.Errorf("description must be at most %d characters", MaxDescriptionLen)
-	}
-	if strings.TrimSpace(instructions) == "" {
-		return "", fmt.Errorf("instructions is required")
-	}
-	if len(instructions) > MaxInstructionsLen {
-		return "", fmt.Errorf("instructions must be at most %d bytes", MaxInstructionsLen)
-	}
-	if tableName != "" {
-		if skillDB(sess) == nil {
-			return "", fmt.Errorf("table_name %q given but no database connection available to verify it", tableName)
-		}
-		exists, err := catalogTableExists(sess, tableName)
-		if err != nil {
-			return "", fmt.Errorf("failed to verify table_name %q: %w", tableName, err)
-		}
-		if !exists {
-			return "", fmt.Errorf("table_name %q does not name an existing table", tableName)
-		}
+	if err := ValidateUserSkill(sess, name, description, instructions, tableName); err != nil {
+		return "", err
 	}
 
 	// Source is set to 'user' unconditionally on every upsert (including one

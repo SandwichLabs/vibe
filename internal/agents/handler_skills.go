@@ -65,7 +65,7 @@ func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 // handleCreateOrUpdateSkill is the authoring tool for user skills (category
 // "content": see internal/agents/tools.go for why "content", not "schema", was
 // chosen).
-func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Response {
+func (h *Handler) handleCreateOrUpdateSkill(ctx context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
 	description, _ := req.Params["description"].(string)
 	instructions, _ := req.Params["instructions"].(string)
@@ -81,6 +81,10 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 	// in, so the agent cannot replace a skill it never read (#166).
 	rev, _ := req.Params["rev"].(string)
 
+	if isDryRun(ctx) {
+		return h.skillDryRun(ctx, req.ID, name, description, instructions, tableName, rev)
+	}
+
 	newRev, err := skills.SaveUserSkillAt(h.access.Skills(), h.access.Session(), name, description, instructions, tableName, rev, skills.WithRev(rev))
 	if err != nil {
 		if errors.Is(err, skills.ErrConflict) {
@@ -89,6 +93,27 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 	return NewResponse(req.ID, map[string]any{"name": name, "saved": true, "rev": newRev})
+}
+
+// skillDryRun is the end of a dry run: the same checks the write makes, then
+// the conflict the write would hit (an existing skill without its rev, or a
+// stale rev), with nothing written.
+func (h *Handler) skillDryRun(ctx context.Context, id any, name, description, instructions, tableName, rev string) *Response {
+	if err := skills.ValidateUserSkill(h.access.Session(), name, description, instructions, tableName); err != nil {
+		return NewErrorResponse(id, ErrInvalidParams, err.Error())
+	}
+	cur, err := h.access.Skills().Get(ctx, name)
+	switch {
+	case err == nil && (rev == "" || cur.Rev != rev):
+		return NewErrorResponse(id, ErrInvalidParams, skillConflictMessage(name, rev))
+	case errors.Is(err, skills.ErrNotFound):
+		if rev != "" {
+			return NewErrorResponse(id, ErrInvalidParams, skillConflictMessage(name, rev))
+		}
+	case err != nil:
+		return NewErrorResponse(id, ErrInvalidParams, fmt.Sprintf("skill %q is stored but cannot be read, so nothing was checked as ready: %s", name, scrubStoreText(err.Error())))
+	}
+	return dryRunOK(id)
 }
 
 // skillConflictMessage tells the agent how to recover from a refused write:
