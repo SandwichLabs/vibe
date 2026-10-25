@@ -21,12 +21,13 @@ func TestListToolsForMode_TaskOnlyToolsHiddenFromChatAndMCP(t *testing.T) {
 		for _, td := range ListToolsForMode(mode) {
 			names[td.Name] = true
 		}
-		for _, taskOnly := range []string{"preview_query", "write_cell", "need_more_info"} {
+		for _, taskOnly := range []string{"write_cell", "need_more_info"} {
 			assert.False(t, names[taskOnly], "mode %q must not list %q", mode, taskOnly)
 		}
 		// Chat/MCP-visible tools must still be there.
 		assert.True(t, names["add_query_cell"])
 		assert.True(t, names["create_dashboard"])
+		assert.True(t, names["preview_query"], "preview_query is a read, offered everywhere (#220)")
 		assert.True(t, names["introspect_schema"])
 	}
 }
@@ -123,8 +124,11 @@ func TestHandler_TaskMode_RunQueryDeniesWrite(t *testing.T) {
 
 func TestIsModeVisible(t *testing.T) {
 	assert.True(t, IsModeVisible("preview_query", ModeTask))
-	assert.False(t, IsModeVisible("preview_query", ModeChat))
-	assert.False(t, IsModeVisible("preview_query", ""))
+	assert.True(t, IsModeVisible("preview_query", ModeChat), "preview_query is a read, offered in chat and MCP too (#220)")
+	assert.True(t, IsModeVisible("preview_query", ""))
+	assert.True(t, IsModeVisible("write_cell", ModeTask))
+	assert.False(t, IsModeVisible("write_cell", ModeChat))
+	assert.False(t, IsModeVisible("write_cell", ""))
 	assert.True(t, IsModeVisible("introspect_schema", ""), "unrestricted tools are visible in every mode, including the zero value")
 	assert.False(t, IsModeVisible("no-such-tool", ModeTask))
 }

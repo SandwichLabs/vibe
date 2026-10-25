@@ -156,6 +156,9 @@ func (h *Handler) resolveActiveNotebook() string {
 
 // markPreviewed records sql (trimmed) as successfully previewed this turn.
 func (h *Handler) markPreviewed(connection, sql string) {
+	if h.mode != ModeTask {
+		return // only write_cell reads the set; a long-lived handler must not grow it
+	}
 	h.previewedMu.Lock()
 	if h.previewedSQL == nil {
 		h.previewedSQL = make(map[string]bool, 4)
@@ -406,6 +409,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 
 	userDB := h.access.DuckDBDB()
 	ar := describeWrite(ctx, req, userDB, class)
+	h.describeCellEdit(ctx, req, &ar)
 	if sqlText != "" {
 		ar.SQL = sqlText
 	}
@@ -558,6 +562,14 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 		return h.handleAddQueryCell(ctx, req)
 	case "create_dashboard":
 		return h.handleCreateDashboard(ctx, req)
+	case "add_markdown_cell":
+		return h.handleAddMarkdownCell(ctx, req)
+	case "update_cell":
+		return h.handleUpdateCell(ctx, req)
+	case "delete_cell":
+		return h.handleDeleteCell(ctx, req)
+	case "move_cell":
+		return h.handleMoveCell(ctx, req)
 
 	default:
 		return NewErrorResponse(req.ID, ErrMethodNotFound, fmt.Sprintf("unknown method: %q", req.Method))

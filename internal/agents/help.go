@@ -36,7 +36,7 @@ var HelpEntries = []HelpEntry{
 		Topic:   "notebooks",
 		Title:   "Notebooks",
 		Summary: "Notebook files, cell types, views, and the tools that author them.",
-		Tags:    []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat", "area", "columns", "rings", "radar", "sankey", "heatmap"},
+		Tags:    []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat", "area", "columns", "rings", "radar", "sankey", "heatmap", "rev", "edit", "update", "delete", "move", "add_query_cell", "add_markdown_cell", "update_cell", "delete_cell", "move_cell", "get_notebook"},
 		Content: `# Notebooks
 
 A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.vnb`" + ` file in the workspace. There is no page markup and no inter-cell references — the connections are the only shared state.
@@ -53,9 +53,15 @@ A sql or a2ui cell's ` + "`sql`" + ` is always read-only (INSERT/UPDATE/DELETE/D
 
 ## Authoring
 
-- **` + "`add_query_cell`" + `** appends a single sql cell to a notebook (creates one if none is targeted/open).
+- **` + "`add_query_cell`" + `** appends a single sql cell (one read-only statement; ` + "`view`" + ` must be one of the views above) to a notebook, creating one if none is targeted/open.
+- **` + "`add_markdown_cell`" + `** appends a markdown cell, or inserts it after ` + "`after_cell_id`" + `.
 - **` + "`create_dashboard`" + `** appends a whole A2UI page (multiple components) as one a2ui cell.
-- **` + "`list_notebooks`" + `** / **` + "`get_notebook`" + `** are the read-only path: list every notebook, or fetch one notebook's cells as data (raw sql/markdown source, or a title/component-count summary for an a2ui cell) — never rendered output.
+- **` + "`list_notebooks`" + `** / **` + "`get_notebook`" + `** are the read-only path: list every notebook, or fetch one notebook's cells as data — each cell's id and type, a sql cell's source, view, label and connection, a markdown cell's source, an a2ui cell's whole page — plus the notebook's ` + "`rev`" + `. Never rendered output.
+
+## Editing
+
+- **` + "`update_cell`" + `** changes one cell in place (sql/label/view/connection, markdown or page, whichever fits the cell's type), **` + "`delete_cell`" + `** removes one, **` + "`move_cell`" + `** reorders (` + "`after_cell_id`" + ` or ` + "`position`" + `). Each takes the notebook's ` + "`rev`" + ` from ` + "`get_notebook`" + `: a notebook that changed since is refused and nothing is written, so call ` + "`get_notebook`" + ` again and re-apply. Every result carries the new ` + "`rev`" + `.
+- New content is checked as the add tools check it: SQL is one read-only statement, a page is validated and its sql bindings vetted.
 
 There is no create_page/update_page/get_page/list_pages tool; those were retired with the page system.`,
 	},

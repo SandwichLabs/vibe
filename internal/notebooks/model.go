@@ -54,6 +54,10 @@ const maxCells = 500
 // container on every save.
 const maxCellSourceBytes = 256 * 1024
 
+// MaxCellSourceBytes is maxCellSourceBytes for callers that refuse an oversized
+// cell up front instead of letting Coerce truncate it with a warning.
+const MaxCellSourceBytes = maxCellSourceBytes
+
 // maxDataBoundComponents caps the TOTAL number of live (sql-bound) A2UI
 // components across every a2ui cell in one notebook, not just per cell
 // (review fix, step 4a: a single notebook could otherwise pack 500 a2ui

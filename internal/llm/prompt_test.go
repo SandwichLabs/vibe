@@ -36,7 +36,7 @@ func TestSystemPromptFor_SizeAndContent(t *testing.T) {
 			assert.NotContains(t, p, td.Description, "description of %s repeated", td.Name)
 		}
 		// Task-only tools are never promised in chat.
-		for _, n := range []string{"write_cell", "need_more_info", "preview_query"} {
+		for _, n := range []string{"write_cell", "need_more_info"} {
 			assert.NotContains(t, p, n)
 		}
 
@@ -47,7 +47,8 @@ func TestSystemPromptFor_SizeAndContent(t *testing.T) {
 		assert.Contains(t, p, "AS days")
 		assert.Contains(t, p, "$name", "run_query binds $name")
 		if sandbox != SandboxReadOnly {
-			assert.Contains(t, p, "NO tool that writes a markdown cell")
+			assert.Contains(t, p, "add_markdown_cell")
+			assert.NotContains(t, p, "NO tool that writes a markdown cell")
 		}
 	}
 	assert.GreaterOrEqual(t, maxSteps, 16)

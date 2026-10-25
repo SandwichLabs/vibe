@@ -449,6 +449,32 @@ describe('NotebookView', () => {
     expect(sent.rev).toBe('r2')
   })
 
+  // #220: an agent's update_cell / delete_cell / move_cell changes existing cells,
+  // which an append merge cannot show; the open copy reloads, as for a change on disk.
+  it('reloads the open notebook when an agent edited its cells and nothing is unsaved', async () => {
+    const base = { ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: 'r1' }
+    let calls = 0
+    makeApp({
+      GetNotebook: vi.fn(async () => {
+        calls++
+        const nb = JSON.parse(JSON.stringify(base))
+        if (calls > 1) {
+          nb.cells = [{ id: 'agent-edit', type: 'markdown', collapsed: false, source: 'edited by the agent' }]
+          nb.rev = 'r2'
+        }
+        return nb
+      }),
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleNotebooksChanged({ notebookId: 'nb1', changed: true })
+    await flushPromises()
+    await flushPromises()
+    expect(vm.cells.map((c: any) => c.id)).toEqual(['agent-edit'])
+  })
+
   it('keeps the old rev, and says so, when the remote notebook changed in some other way too', async () => {
     const base = { ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: 'r1' }
     const appended = { id: 'new1', type: 'markdown', collapsed: false, source: 'agent cell' }

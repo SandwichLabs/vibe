@@ -32,7 +32,7 @@ func TestToolAnnotations_MatchTheCategory(t *testing.T) {
 			assert.True(t, *a.IdempotentHint, td.Name)
 		case "content":
 			assert.False(t, *a.ReadOnlyHint, td.Name)
-			assert.False(t, *a.DestructiveHint, td.Name)
+			assert.Equal(t, destructiveContentTools[td.Name], *a.DestructiveHint, td.Name)
 			assert.False(t, *a.OpenWorldHint, "content stays in the workspace folder: "+td.Name)
 		case "data", "schema":
 			assert.False(t, *a.ReadOnlyHint, td.Name)

@@ -96,14 +96,21 @@ statement — as long as the statement itself only reads.
 ## AI authoring
 
 The in-app agent and MCP clients share one tool surface (`internal/agents`).
-Two tools write notebook content (category `content`, with
+These tools write notebook content (category `content`, with
 `create_or_update_skill`: denied under `read-only`, allowed under
 `read-write` and `full`, and asked for like any change when "Ask before
-changes" is on; vibe-app#111):
+changes" is on; vibe-app#111). Each checks the whole request first and honours
+a dry run, so an invalid request is refused with nothing written:
 
 - **`add_query_cell`** — appends a single sql cell. `notebook_id` is
   optional: it appends to that notebook, else to the notebook currently open
-  in Studio, else it creates a new notebook titled from `label`.
+  in Studio, else it creates a new notebook titled from `label`. `sql` must be
+  one read-only statement (one trailing semicolon is fine; two statements are
+  refused, since a cell shows one result), and an unknown `view` is refused
+  with the list in `notebooks.Views` instead of being saved as a table.
+- **`add_markdown_cell`** — appends a markdown cell (at most 256 KB), or
+  inserts it after `after_cell_id`. `notebook_id` works as for
+  `add_query_cell`; a new notebook is titled from the first line.
 - **`create_dashboard`** — appends a whole A2UI page (multiple components)
   as one a2ui cell, with the same notebook-targeting rules as
   `add_query_cell`. It is a dashboard cell in a notebook; for a saved live
@@ -116,6 +123,42 @@ changes" is on; vibe-app#111):
   generated from the component registry (the notebook dashboard types and the
   artifact view types, labelled).
 
+### Reading and editing cells
+
+`get_notebook` returns the notebook's `rev` and every cell as data: its `id`
+and `type`; for a sql cell `source`, `view`, `view_pinned`, `label` and
+`connection`; for a markdown cell `source`; for an a2ui cell the whole `page`,
+in the shape `create_dashboard` and `update_cell` take. `sql` and `markdown`
+sources are cut at 4000 characters, and a notebook larger than the tool-result
+budget (`RowResultBudgetChars`, 15 000 characters) stops early and lists the
+omitted cell ids under `truncated.omitted`; `get_notebook` with `cell_id`
+returns that one cell uncut.
+
+Three tools change a notebook's existing cells. Each takes `notebook_id`,
+`cell_id` and the `rev` that `get_notebook` returned, and the notebook is
+saved with compare-and-write against it: a notebook that changed since
+(a person, a git pull, another tool) is refused with "changed since the rev you
+sent ... call get_notebook again" and nothing is written. The result carries
+the new `rev`.
+
+- **`update_cell`** — sends only the fields that fit the cell's type: `sql`,
+  `label`, `view`, `connection` for a sql cell (the SQL is vetted exactly as
+  `add_query_cell` vets it, on the cell's connection; a changed `connection`
+  re-vets the stored SQL), `markdown` for a markdown cell, `page` (the whole new
+  page, validated and its `sql` bindings vetted as `create_dashboard` does) for
+  an a2ui cell. A field that does not fit the type is refused, not ignored.
+  Setting `view` pins it; an empty `label` clears it.
+- **`delete_cell`** — removes the cell.
+- **`move_cell`** — `after_cell_id` or `position` (0 = first), exactly one.
+
+Studio reloads an open notebook after any of these (the conflict banner shows
+instead when the open copy holds unsaved edits), and merges a plain append in
+without disturbing an edit in progress.
+
+`preview_query` (below) is offered in chat and over MCP as well: it runs a
+read-only statement and returns the row count, columns, a row sample and the
+`suggestedView`, which is how an agent picks the `view` for a cell.
+
 There is no `create_page`/`update_page`/`get_page`/`list_pages` tool — those
 were retired with the page system. Asking the agent to "make me a page" or
 "build a dashboard" routes to `add_query_cell`/`create_dashboard` instead.
@@ -124,7 +167,7 @@ were retired with the page system. Asking the agent to "make me a page" or
 
 When a notebook cell is authored through the AI-cell dialog ("task mode"),
 the agent runs under a stricter loop than ordinary chat: it must call
-**`preview_query`** (a dry run against the real engine, showing sample rows)
+**`preview_query`** (also available in chat and over MCP; a dry run against the real engine, showing sample rows)
 before any terminal action — either **`write_cell`** (commit the proposed
 cell) or **`need_more_info`** (ask a clarifying question instead of
 guessing). The result handed back to the UI is an envelope built from the

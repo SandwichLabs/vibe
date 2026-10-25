@@ -97,8 +97,8 @@ func TestBuildMCPToolsEntry_ListsOnlyRegisteredMCPTools(t *testing.T) {
 	for _, td := range ListToolsForMode(ModeMCP) {
 		assert.Contains(t, entry.Content, "**"+td.Name+"**", "mcp-tools topic is missing registered tool %q", td.Name)
 	}
-	// And nothing task-only (preview_query/write_cell/need_more_info) leaks in.
-	for _, name := range []string{"preview_query", "write_cell", "need_more_info"} {
+	// And nothing task-only (write_cell/need_more_info) leaks in.
+	for _, name := range []string{"write_cell", "need_more_info"} {
 		assert.NotContains(t, entry.Content, "**"+name+"**", "mcp-tools topic must not advertise task-only tool %q", name)
 	}
 }
