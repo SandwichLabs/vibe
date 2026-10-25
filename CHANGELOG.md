@@ -4,6 +4,20 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-25
+
+### Fixed
+
+- **Editing a skill no longer corrupts its `SKILL.md`.** `read_skill` put a trust preamble in front of the skill text, and an agent that edited the text and saved it back wrote the preamble into the file, one more copy per edit. `read_skill` now returns the preamble in its own `framing` field, and `create_or_update_skill` strips any copies before saving. ([#224](https://github.com/SandwichLabs/vibe/pull/224))
+- **The in-app agent no longer stops silently partway through a task.** A chat turn was capped at 8 tool calls, fewer than building an artifact takes. It now gets 20, like the notebook cell dialog, is told its budget, and if it still runs out the reply ends with "Stopped after 20 steps ... Ask me to continue." ([#223](https://github.com/SandwichLabs/vibe/pull/223))
+- Agent tool results return `[]` instead of `null` for empty lists (a zero-row query, no saved queries, no warnings). `create_record` no longer returns `last_insert_id`, which DuckDB always reported as 0. ([#224](https://github.com/SandwichLabs/vibe/pull/224))
+- Messages and help that pointed to Settings → Workspace → MCP or "Settings -> Start MCP Server" now name the real place, Settings → Workspace → Claude and other tools. ([#224](https://github.com/SandwichLabs/vibe/pull/224))
+
+### Changed
+
+- **The in-app agent's system prompt is about 40% smaller** (about 7 KB less per turn): it no longer repeats each tool's description, which the model already receives with the tool. It now tells the agent the workspace's `data/` folder path, to alias every aggregate with `AS` (bare aliases like `days`, `name` or `type` are DuckDB syntax errors), and that `run_query` parameters are `$name`. The built-in `duckdb-sql` skill says the same. ([#223](https://github.com/SandwichLabs/vibe/pull/223))
+- `help_search` with an empty query returns a short index of topics; asking for a topic by name returns just that topic. The component and view lists in the help are generated from the code, and there is a new `artifacts` topic. ([#224](https://github.com/SandwichLabs/vibe/pull/224))
+
 ## [0.3.1] - 2026-10-24
 
 ### Fixed
@@ -156,7 +170,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/SandwichLabs/vibe/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SandwichLabs/vibe/compare/v0.1.4...v0.2.0
