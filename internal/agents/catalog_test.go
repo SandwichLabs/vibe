@@ -193,17 +193,16 @@ func TestWriteTools_ResolvedNamesAndLegacyDottedTable(t *testing.T) {
 	assert.Equal(t, 1, n)
 }
 
-// A table that is not there describes as success with columns null (the old
-// shape), found by the typed session.ErrNoSuchTable, not by message text; any
+// A table that is not there describes as success with an empty columns list, found by the typed session.ErrNoSuchTable, not by message text; any
 // other failure (an unusable name) is a real error.
-func TestDescribeTable_MissingIsNullColumnsOtherFailuresAreErrors(t *testing.T) {
+func TestDescribeTable_MissingIsEmptyColumnsOtherFailuresAreErrors(t *testing.T) {
 	h, _ := newCatalogHandler(t)
 
 	m := resultMap(t, call(h, "describe_table", map[string]any{"table": "nope"}))
 	assert.Equal(t, "nope", m["table"])
 	cols, present := m["columns"]
 	require.True(t, present)
-	assert.Equal(t, []map[string]any(nil), cols)
+	assert.Equal(t, []map[string]any{}, cols)
 
 	bad := call(h, "describe_table", map[string]any{"table": "a.b.c.d"})
 	require.NotNil(t, bad.Error, "an unparseable table name is an error, not an empty list")

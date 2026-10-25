@@ -932,3 +932,10 @@ func TestSkills_TableBoundOnSecondCatalog(t *testing.T) {
 	assert.Contains(t, instr, "total", "the skill describes the other catalog's table")
 	assert.NotContains(t, instr, "seven")
 }
+
+func TestStripTrustFraming(t *testing.T) {
+	assert.Equal(t, "body", StripTrustFraming("body"))
+	assert.Equal(t, "\n\nbody", StripTrustFraming(TrustFraming+"\n\nbody"))
+	assert.Equal(t, "\n\nbody", StripTrustFraming("  \n"+TrustFraming+"\n\n  "+TrustFraming+"\n\nbody"))
+	assert.Equal(t, "see "+TrustFraming, StripTrustFraming("see "+TrustFraming), "only leading copies")
+}

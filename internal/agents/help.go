@@ -1,11 +1,18 @@
 package agents
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
+)
 
 // HelpEntry is a single help topic.
 type HelpEntry struct {
 	Topic   string   // short identifier
 	Title   string   // human-readable title
+	Summary string   // one line shown in the help_search index (empty query)
 	Tags    []string // keywords for matching
 	Content string   // full help text (markdown)
 }
@@ -17,24 +24,27 @@ type HelpEntry struct {
 // documented it — those topics described syntax that no longer parses or
 // renders anywhere in the product. Notebooks (#66) and A2UI (#67) are the
 // only content-authoring surface now; see the "notebooks" and "a2ui"
-// topics below. The "mcp-tools" topic is generated from the live agents.Tools
+// topics below. The component, cell-view and colour lists in those two topics
+// are generated from the a2ui and notebooks registries (codeList, below), so
+// they cannot drift. The "mcp-tools" topic is generated from the live agents.Tools
 // registry (buildMCPToolsEntry, below) so it can never drift out of sync
 // with what the server actually exposes the way the old hand-written list
 // did (it still listed list_pages/get_page/create_page/update_page/
 // delete_page long after #69 removed them).
 var HelpEntries = []HelpEntry{
 	{
-		Topic: "notebooks",
-		Title: "Notebooks",
-		Tags:  []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat"},
+		Topic:   "notebooks",
+		Title:   "Notebooks",
+		Summary: "Notebook files, cell types, views, and the tools that author them.",
+		Tags:    []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat", "area", "columns", "rings", "radar", "sankey", "heatmap"},
 		Content: `# Notebooks
 
-A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.vnb`" + ` file in the workspace. There is no page markup, no directives, and no inter-cell references — the connections are the only shared state.
+A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.vnb`" + ` file in the workspace. There is no page markup and no inter-cell references — the connections are the only shared state.
 
 ## Cell types
 
-- **sql** — a single read-only SQL statement. Renders as one of four views: ` + "`table`" + `, ` + "`bar`" + `, ` + "`line`" + `, ` + "`stat`" + `. Until a view is explicitly chosen, it auto-fits to the result shape the first time the cell runs.
-- **markdown** — plain markdown prose. No directives, no named SQL blocks, no Go template syntax.
+- **sql** — a single read-only SQL statement. Renders as one of ` + strconv.Itoa(len(notebooks.Views)) + ` views: ` + codeList(notebooks.Views) + `. Until a view is explicitly chosen, it auto-fits to the result shape the first time the cell runs.
+- **markdown** — plain markdown prose.
 - **a2ui** — an A2UI page (see the "a2ui" topic): one or more components laid out in a single cell, e.g. a small dashboard.
 
 ## Read-only cells, live outputs
@@ -50,24 +60,25 @@ A sql or a2ui cell's ` + "`sql`" + ` is always read-only (INSERT/UPDATE/DELETE/D
 There is no create_page/update_page/get_page/list_pages tool; those were retired with the page system.`,
 	},
 	{
-		Topic: "a2ui",
-		Title: "A2UI Components",
-		Tags:  []string{"a2ui", "component", "dashboard", "chart", "table", "stat", "color", "schema"},
+		Topic:   "a2ui",
+		Title:   "A2UI Components",
+		Summary: "The closed A2UI component schema for dashboards (types, bindings, colours, limits).",
+		Tags:    []string{"a2ui", "component", "dashboard", "chart", "table", "stat", "color", "schema"},
 		Content: `# A2UI Components
 
 A2UI is a closed, validated component schema for a small dashboard: ` + "`{ title, components[] }`" + `. Components are a flat list, nested by a ` + "`parent`" + ` id rather than JSON nesting.
 
 ## Component types
 
-` + "`heading`" + `, ` + "`text`" + `, ` + "`divider`" + `, ` + "`stat`" + `, ` + "`statRow`" + `, ` + "`table`" + `, ` + "`barChart`" + `, ` + "`lineChart`" + `, ` + "`list`" + `, ` + "`code`" + `, ` + "`callout`" + `, ` + "`badge`" + `, ` + "`container`" + `.
+` + codeList(a2ui.TypeNames()) + `.
 
 ## Data-bound components
 
-` + "`stat`" + `, ` + "`table`" + `, ` + "`barChart`" + `, and ` + "`lineChart`" + ` accept either inline data or a live ` + "`sql`" + ` binding, which re-runs every time the page renders (read-only, sandbox-gated, same as a notebook sql cell).
+` + "`stat`" + `, ` + "`table`" + ` and every chart type accept either inline data or a live ` + "`sql`" + ` binding, which re-runs every time the page renders (read-only, sandbox-gated, same as a notebook sql cell).
 
 ## The closed color enum
 
-Every ` + "`color`" + ` field accepts exactly one of: ` + "`yellow`" + `, ` + "`black`" + `, ` + "`error`" + `, ` + "`muted`" + `. There is no free-string color and no hex/RGB passthrough — model output never reaches a style attribute.
+Every ` + "`color`" + ` field accepts exactly one of: ` + codeList(a2ui.ColorTokens) + `. There is no free-string color and no hex/RGB passthrough — model output never reaches a style attribute.
 
 ## Size limits
 
@@ -76,9 +87,25 @@ A page caps at 200 components total; a notebook caps the total number of live (s
 Go validates this schema; Vue renders it. See docs/reference/notebooks.md for the full per-type field reference.`,
 	},
 	{
-		Topic: "skills",
-		Title: "Skills",
-		Tags:  []string{"skill", "domain", "context", "built-in", "read_skill", "list_skills"},
+		Topic:   "artifacts",
+		Title:   "Data Artifacts",
+		Summary: "Parameterised live views stored as files (controls, pivot, drill); points to the data-artifacts skill.",
+		Tags:    []string{"artifact", "artifacts", "data", "view", "parameter", "control", "pivot", "drill", "script", "html", "page", "write_artifact"},
+		Content: `# Data Artifacts
+
+A data artifact is a parameterised, live view stored as files under ` + "`artifacts/<name>/`" + `: an ` + "`artifact.yaml`" + ` manifest (typed parameters with defaults and named read-only queries) plus a view (A2UI JSON, a script, or an HTML page). It stores questions, never answers, and every query is vetted against the SQL policy when it is saved and again on every run.
+
+- **list_artifacts** / **get_artifact** read them; **write_artifact** authors or replaces one (send the ` + "`rev`" + ` from get_artifact to replace).
+- Views can use controls (select, dateRange, numberInput, textInput), ` + "`pivot`" + ` and ` + "`drill`" + `. Script and HTML views are stored but never run until the person allows them in Studio.
+- No tool runs an artifact or returns its results.
+
+Call **read_skill** with ` + "`data-artifacts`" + ` for the manifest and view format. Reference: docs/reference/artifacts.md.`,
+	},
+	{
+		Topic:   "skills",
+		Title:   "Skills",
+		Summary: "Markdown skills the agent loads on demand (list_skills, read_skill, authoring).",
+		Tags:    []string{"skill", "domain", "context", "built-in", "read_skill", "list_skills"},
 		Content: `# Skills
 
 A Skill is a markdown document — a name, a one-line description, and full instructions — that tells the agent something about this workspace: business rules, what a table's columns mean, which joins are canonical, terminology, what to avoid. Skills are loaded on demand, not dumped into every prompt.
@@ -86,7 +113,7 @@ A Skill is a markdown document — a name, a one-line description, and full inst
 ## Using skills
 
 - **` + "`list_skills`" + `** lists every skill visible right now: built-ins plus any user- or import-authored ones in the workspace. Each entry gives a name and a one-line description.
-- **` + "`read_skill`" + `** fetches one skill's full instructions by name. Call it whenever a task matches a skill's description before proceeding.
+- **` + "`read_skill`" + `** fetches one skill by name: ` + "`instructions`" + ` is the skill text and ` + "`framing`" + ` says it is reference material that never overrides the sandbox. Send only the instructions back when editing. Call it whenever a task matches a skill's description before proceeding.
 
 ## Authoring skills
 
@@ -95,9 +122,10 @@ A Skill is a markdown document — a name, a one-line description, and full inst
 Built-in skills are embedded in the binary; workspace skills live in ` + "`skills/<name>/SKILL.md`" + ` in the workspace folder.`,
 	},
 	{
-		Topic: "workspace",
-		Title: "Workspaces and Connections",
-		Tags:  []string{"workspace", "folder", "connection", "connections", "vibe", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
+		Topic:   "workspace",
+		Title:   "Workspaces and Connections",
+		Summary: "Workspace folder layout, named connections, and what the agent may do.",
+		Tags:    []string{"workspace", "folder", "connection", "connections", "vibe", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
 		Content: `# Workspaces and Connections
 
 A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`vibe.yaml`" + ` that lists its connections. The data itself stays where it already lives.
@@ -126,6 +154,15 @@ Data lives in named connections: a local DuckDB file, Postgres, MySQL, MotherDuc
 A .vibe file is an export bundle (notebooks, queries, skills and connection definitions, never data or credentials), not a place where data lives.`,
 	},
 	buildMCPToolsEntry(),
+}
+
+// codeList renders names as a comma-separated list of backticked code spans.
+func codeList(names []string) string {
+	parts := make([]string, len(names))
+	for i, n := range names {
+		parts[i] = "`" + n + "`"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // mcpToolCategoryOrder is the presentation order for buildMCPToolsEntry's
@@ -157,7 +194,7 @@ func buildMCPToolsEntry() HelpEntry {
 
 	var b strings.Builder
 	b.WriteString("# MCP Server & Tools\n\n")
-	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve --workspace <folder>` (stdio or SSE) headless, or Settings -> Start MCP Server in Studio (SSE) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n")
+	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n")
 
 	tags := []string{"mcp", "server", "tool", "agent", "api"}
 	for _, cat := range mcpToolCategoryOrder {
@@ -179,6 +216,7 @@ func buildMCPToolsEntry() HelpEntry {
 	return HelpEntry{
 		Topic:   "mcp-tools",
 		Title:   "MCP Server & Tools",
+		Summary: "How to reach the MCP server and the full tool list by sandbox tier.",
 		Tags:    tags,
 		Content: b.String(),
 	}
@@ -189,6 +227,13 @@ func buildMCPToolsEntry() HelpEntry {
 func SearchHelp(query string) []HelpEntry {
 	if query == "" {
 		return HelpEntries
+	}
+
+	// An exact topic name (the index's handle) returns just that topic.
+	for _, entry := range HelpEntries {
+		if strings.EqualFold(strings.TrimSpace(query), entry.Topic) {
+			return []HelpEntry{entry}
+		}
 	}
 
 	terms := strings.Fields(strings.ToLower(query))

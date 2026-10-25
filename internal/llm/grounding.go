@@ -77,19 +77,17 @@ func assertsFact(text string) bool {
 
 // groundingTools are the tool calls that count as "looked at the data this
 // turn" — run_query and preview_query (both execute real SQL against the
-// container), describe_table (only when it actually returned sample rows —
-// today's describe_table never does, so this key is future-proofing, not
-// dead: see the #70 report), and present_data when called with a live "sql"
-// binding rather than inline data.
+// container), and present_data when called with a live "sql" binding rather
+// than inline data. describe_table never returns rows, so it does not ground.
 var groundingTools = map[string]bool{
 	"run_query":     true,
 	"preview_query": true,
 }
 
 // usedGroundingTool reports whether any recorded tool step this turn counts
-// as grounding — see groundingTools. present_data and describe_table need
-// their Input inspected (only a live sql-bound call/sample grounds), so
-// they're handled here rather than by name alone.
+// as grounding — see groundingTools. present_data needs its Input inspected
+// (only a live sql-bound call grounds), so it is handled here rather than by
+// name alone.
 func usedGroundingTool(steps []ToolStep) bool {
 	for _, s := range steps {
 		if s.IsError {
@@ -99,9 +97,6 @@ func usedGroundingTool(steps []ToolStep) bool {
 			return true
 		}
 		if s.Tool == "present_data" && toolInputHasNonEmptyString(s.Input, "sql") {
-			return true
-		}
-		if s.Tool == "describe_table" && toolOutputHasSample(s.Output) {
 			return true
 		}
 	}
@@ -115,15 +110,6 @@ func toolInputHasNonEmptyString(input, key string) bool {
 	}
 	v, ok := params[key].(string)
 	return ok && strings.TrimSpace(v) != ""
-}
-
-func toolOutputHasSample(output string) bool {
-	var result map[string]any
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		return false
-	}
-	_, ok := result["sample"]
-	return ok
 }
 
 // writeToolCategories are the agents.ToolDef categories that always perform

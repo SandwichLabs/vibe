@@ -286,7 +286,7 @@ func TestServeNamesAHolderThatIsNotServingMCP(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHubHeld)
 	assert.Contains(t, err.Error(), fmt.Sprintf("Studio (pid %d)", os.Getpid()))
 	assert.Contains(t, err.Error(), "MCP server is off")
-	assert.Contains(t, err.Error(), "Settings → Workspace → MCP")
+	assert.Contains(t, err.Error(), "Settings → Workspace → Claude and other tools")
 }
 
 func TestServeSSERefusedWhenAnotherProcessOwns(t *testing.T) {

@@ -39,7 +39,6 @@ func TestUsedGroundingTool(t *testing.T) {
 	assertUsed(t, []ToolStep{{Tool: "present_data", Input: `{"title":"x"}`}}, false)
 	assertUsed(t, []ToolStep{{Tool: "present_data", Input: `{"sql":"SELECT 1"}`}}, true)
 	assertUsed(t, []ToolStep{{Tool: "describe_table", Output: `{"table":"t","columns":[]}`}}, false)
-	assertUsed(t, []ToolStep{{Tool: "describe_table", Output: `{"sample":[{"id":1}]}`}}, true)
 }
 
 // TestMightBeParamRejection_OnlyNamesReasoningParam is a review-fix test

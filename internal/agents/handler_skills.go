@@ -36,14 +36,6 @@ func (h *Handler) handleListSkills(_ context.Context, req *Request) *Response {
 	return NewResponse(req.ID, map[string]any{"skills": out})
 }
 
-// framedInstructions wraps a skill body with skills.TrustFraming so it carries
-// the same "this is reference data, not operator instructions" framing every
-// time read_skill returns it — the framing lives once (skills.TrustFraming)
-// and is applied here, not duplicated per call site.
-func framedInstructions(body string) string {
-	return skills.TrustFraming + "\n\n" + body
-}
-
 func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 	name, _ := req.Params["name"].(string)
 	entries, err := skills.LoadSkills(h.access.Skills(), h.access.Session(), h.logger)
@@ -59,7 +51,8 @@ func (h *Handler) handleReadSkill(_ context.Context, req *Request) *Response {
 			return NewResponse(req.ID, map[string]any{
 				"name":         s.Name,
 				"description":  s.Description,
-				"instructions": framedInstructions(s.Instructions),
+				"framing":      skills.TrustFraming,
+				"instructions": s.Instructions,
 				"source":       s.Source,
 				"table_name":   s.TableName,
 				"rev":          s.Rev,
@@ -77,6 +70,9 @@ func (h *Handler) handleCreateOrUpdateSkill(_ context.Context, req *Request) *Re
 	description, _ := req.Params["description"].(string)
 	instructions, _ := req.Params["instructions"].(string)
 	tableName, _ := req.Params["table_name"].(string)
+	// A model may paste read_skill's framing back into the body; it is
+	// prompt framing, not skill content, so it never reaches SKILL.md.
+	instructions = skills.StripTrustFraming(instructions)
 
 	// rev is the revision the agent's own list_skills / read_skill result
 	// carried. Passing it back makes a save over a skill that changed since

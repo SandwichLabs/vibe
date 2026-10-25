@@ -42,8 +42,11 @@ func (h *Handler) handleCreateRecord(ctx context.Context, req *Request) *Respons
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to create record: %v", err))
 	}
 
-	lastID, _ := result.LastInsertId()
-	return NewResponse(req.ID, map[string]any{"last_insert_id": lastID})
+	// DuckDB has no last-insert id (LastInsertId is always 0), so none is
+	// reported: the result says how many rows went in. Read the new row back
+	// with run_query when the key matters.
+	n, _ := result.RowsAffected()
+	return NewResponse(req.ID, map[string]any{"created": true, "rows_affected": n})
 }
 
 func (h *Handler) handleUpdateRecord(ctx context.Context, req *Request) *Response {
