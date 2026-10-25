@@ -58,7 +58,7 @@ var paintAttrs = map[string]bool{
 // allow-list, the CSS rules for style, and the scripted test. It reports
 // whether the template is scripted. A skeleton that ends inside a tag or a
 // comment is refused, because the tokenizer drops such a tail silently.
-func vetMarkup(file string, sk *skeleton, files map[string]bool) ([]string, error) {
+func vetMarkup(file string, sk *skeleton, files map[string]bool, strict bool) ([]string, error) {
 	src := sk.text.String()
 	// A "<" followed by an action would let data supply the tag name that the
 	// tokenizer cannot see ("<" then "script" from a database row is a
@@ -66,7 +66,7 @@ func vetMarkup(file string, sk *skeleton, files map[string]bool) ([]string, erro
 	if strings.Contains(src, "<"+string(markOpen)) || strings.Contains(src, "</"+string(markOpen)) {
 		return nil, invalid("html/%s: a template action cannot directly follow \"<\" or \"</\" (data would be building a tag name)", file)
 	}
-	mv := &markupVet{file: file, root: file, sk: sk, files: files, origins: map[string]bool{}}
+	mv := &markupVet{file: file, root: file, sk: sk, files: files, origins: map[string]bool{}, strict: strict}
 	// An <svg> or <math> anywhere in the expansion may be in force before a
 	// <style> that precedes it in the text (a range body runs again, a branch
 	// may be taken first): read everything as foreign content from the start.
@@ -114,6 +114,8 @@ type markupVet struct {
 	sk      *skeleton
 	files   map[string]bool
 	origins map[string]bool // files that made the page scripted
+	// strict adds the write-time rules (an inline <script> is refused).
+	strict bool
 	// foreign is set once an <svg> or <math> start tag was seen: from then on
 	// no element's content is treated as raw text (the HTML parser does not
 	// in foreign content, so a <script> inside <svg><style> is a script).
@@ -201,6 +203,11 @@ func (mv *markupVet) checkTag(name string, attrs []attr) error {
 		return invalid("html/%s: <%s>: %s", mv.file, name, why)
 	}
 	if local == "script" {
+		if mv.strict {
+			if err := mv.checkInlineScript(attrs); err != nil {
+				return err
+			}
+		}
 		mv.origins[mv.file] = true
 	}
 	for _, a := range attrs {
@@ -327,4 +334,39 @@ func scriptSrcOK(val string, files map[string]bool) bool {
 		return true
 	}
 	return files[val] && !strings.Contains(val, "/") && (path.Ext(val) == ".js" || path.Ext(val) == ".mjs")
+}
+
+// checkInlineScript refuses a <script> that holds code in the page: the page's
+// Content-Security-Policy has script-src 'self' and no 'unsafe-inline', so it
+// would never run. Code goes in a .js file under html/ loaded by
+// <script src="app.js">; data goes in a <script type="application/json">
+// block written with {{ json ... }}, which is not code and is allowed.
+func (mv *markupVet) checkInlineScript(attrs []attr) error {
+	if _, has := attrOf(attrs, "src"); has {
+		return nil
+	}
+	typ, _ := attrOf(attrs, "type")
+	if hasMark(typ) || !isScriptMIME(typ) {
+		return nil
+	}
+	return invalid("html/%s: an inline <script> never runs: the page's Content-Security-Policy allows scripts only from the page's own .js files, so inline code is blocked. "+
+		"Move the code to a file such as html/app.js and load it with <script src=\"app.js\"></script> (a page with a script file is a scripted page, which the person allows in Studio); "+
+		"to pass data to it, write <script type=\"application/json\" id=\"data\">{{ json (query \"name\") }}</script> and read it with JSON.parse(document.getElementById(\"data\").textContent)", mv.file)
+}
+
+// isScriptMIME reports whether a <script type> value is one the browser runs
+// as code: empty, "module", or a JavaScript MIME type. Any other type makes the
+// element an inert data block.
+func isScriptMIME(typ string) bool {
+	t := strings.ToLower(strings.TrimSpace(typ))
+	if t == "" || t == "module" {
+		return true
+	}
+	switch t {
+	case "text/javascript", "application/javascript", "application/x-javascript", "text/ecmascript", "application/ecmascript",
+		"text/jscript", "text/livescript", "text/x-javascript", "text/x-ecmascript", "text/javascript1.0", "text/javascript1.1",
+		"text/javascript1.2", "text/javascript1.3", "text/javascript1.4", "text/javascript1.5", "text/jscript1.0", "application/x-ecmascript":
+		return true
+	}
+	return false
 }

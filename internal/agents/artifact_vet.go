@@ -29,43 +29,95 @@ func (e *ArtifactVetError) Error() string {
 	return "the artifact's queries did not pass the agent's read policy:\n" + strings.Join(e.Problems, "\n")
 }
 
+// ArtifactColumn is one result column of a vetted query.
+type ArtifactColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// ArtifactQueryColumns is what one query returns, in column order.
+type ArtifactQueryColumns struct {
+	Name    string           `json:"name"`
+	Columns []ArtifactColumn `json:"columns"`
+}
+
 // VetArtifact runs every query of m (structurally valid already) through the
 // same read-only policy a run goes through, with each parameter at its default:
 // the connection is validated, the lexical checks run, then wildcard expansion,
 // classification and the read-only gate (readOnlyVerdict). A refusal is an
 // *ArtifactVetError naming each failing query and the policy's reason.
 func (h *Handler) VetArtifact(ctx context.Context, m *artifacts.Manifest) error {
+	_, err := h.VetArtifactColumns(ctx, m)
+	return err
+}
+
+// VetArtifactColumns is VetArtifact that also returns each passing query's
+// result columns (name and DuckDB type), read by binding the query under the
+// policy that just passed it with a zero-row limit: no row is read. A query
+// whose columns could not be read is left out of the list (not an error: the
+// policy passed it).
+func (h *Handler) VetArtifactColumns(ctx context.Context, m *artifacts.Manifest) ([]ArtifactQueryColumns, error) {
 	var problems []string
+	var out []ArtifactQueryColumns
 	for _, q := range m.Queries {
-		if err := h.vetArtifactQuery(ctx, m, q.Name); err != nil {
+		cols, err := h.vetArtifactQuery(ctx, m, q.Name)
+		if err != nil {
 			problems = append(problems, fmt.Sprintf("query %q: %s", q.Name, redactForAgent(err.Error())))
+			continue
+		}
+		if cols != nil {
+			out = append(out, ArtifactQueryColumns{Name: q.Name, Columns: cols})
 		}
 	}
 	if len(problems) > 0 {
-		return &ArtifactVetError{Problems: problems}
+		return nil, &ArtifactVetError{Problems: problems}
 	}
-	return nil
+	return out, nil
 }
 
 // vetArtifactQuery vets one query with its defaults bound, on the connection
-// it will run on.
-func (h *Handler) vetArtifactQuery(ctx context.Context, m *artifacts.Manifest, name string) error {
+// it will run on, and reads its result columns.
+func (h *Handler) vetArtifactQuery(ctx context.Context, m *artifacts.Manifest, name string) ([]ArtifactColumn, error) {
 	sqlText, connection, params, err := artifacts.Bind(m, name, nil, time.Now())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	runConn, err := h.checkArtifactStatement(sqlText, connection)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, _, reason, err := h.readOnlyVerdict(ctx, runConn, sqlText, params)
+	runSQL, runCtx, reason, err := h.readOnlyVerdict(ctx, runConn, sqlText, params)
 	if err != nil {
 		if errors.Is(err, ErrReadOnlyBindingDenied) && reason != "" {
-			return errors.New(reason)
+			return nil, errors.New(reason)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return h.describeQueryColumns(runCtx, runConn, runSQL, params), nil
+}
+
+// describeQueryColumns binds a statement the policy has passed and returns its
+// result columns, or nil when they cannot be read. It runs the statement under
+// "LIMIT 0", the shape a run wraps its row cap in, so the engine plans and
+// returns the column list but reads no rows.
+func (h *Handler) describeQueryColumns(ctx context.Context, connection, runSQL string, params map[string]any) []ArtifactColumn {
+	exec, err := h.executorFor(connection)
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, previewQueryTimeout)
+	defer cancel()
+	wrapped := fmt.Sprintf("SELECT * FROM (%s\n) AS _a2ui_cols LIMIT 0", strings.TrimSuffix(strings.TrimSpace(runSQL), ";"))
+	rs, err := exec(ctx, wrapped, params)
+	if err != nil || rs == nil {
+		h.logger.Debug("artifact query columns not read", "error", err)
+		return nil
+	}
+	cols := make([]ArtifactColumn, len(rs.Columns))
+	for i, c := range rs.Columns {
+		cols[i] = ArtifactColumn{Name: c.Name, Type: c.Type}
+	}
+	return cols
 }
 
 // checkArtifactStatement is the part of the vet that needs no database and

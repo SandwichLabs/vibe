@@ -405,7 +405,7 @@ func TestStaticPage_ABodyRenderedWhileTheFilesChangedIsNotDelivered(t *testing.T
 
 func TestOpenArtifactPage_RefusesAScriptedPageAndAScriptView(t *testing.T) {
 	app := pageApp(t)
-	writePage(t, app, "sc", pageIndex+`<script>1</script>`, nil)
+	writePage(t, app, "sc", pageIndex+`<script src="app.js"></script>`, map[string]string{"app.js": "1"})
 	st, err := app.ArtifactViewState("sc")
 	require.NoError(t, err)
 	require.Empty(t, st.Error)

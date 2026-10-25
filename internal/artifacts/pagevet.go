@@ -50,7 +50,20 @@ type PageInfo struct {
 // The templates are read as skeletons (see pageskel.go): the author's markup
 // with each action replaced by a marker, tokenized with the HTML tokenizer
 // html/template itself is built on.
-func VetPage(m *Manifest, files []PageFile) (*PageInfo, error) {
+func VetPage(m *Manifest, files []PageFile) (*PageInfo, error) { return vetPage(m, files, false) }
+
+// VetPageForWrite is VetPage plus the rules that only a write is held to: a
+// literal date layout that is not a name, a field read on a query row, and an
+// inline <script>. They catch a page that parses and passes every safety rule
+// but fails (or never runs) when it renders. They are not part of VetPage
+// because VetPage also runs when a stored page is loaded, and a page already
+// on disk must still list, load and be repairable; the stores and the agent
+// call this one when a page is written.
+func VetPageForWrite(m *Manifest, files []PageFile) (*PageInfo, error) {
+	return vetPage(m, files, true)
+}
+
+func vetPage(m *Manifest, files []PageFile, strict bool) (*PageInfo, error) {
 	if m.View != ViewHTML || m.HTML == nil {
 		return nil, invalid("the manifest is not a view: %s", ViewHTML)
 	}
@@ -65,7 +78,7 @@ func VetPage(m *Manifest, files []PageFile) (*PageInfo, error) {
 			return nil, err
 		}
 	}
-	v := &pageVet{m: m, files: map[string]bool{}, queries: map[string]bool{}, params: map[string]bool{}, names: map[string]string{}, trees: map[string]*parse.Tree{}}
+	v := &pageVet{strict: strict, m: m, files: map[string]bool{}, queries: map[string]bool{}, params: map[string]bool{}, names: map[string]string{}, trees: map[string]*parse.Tree{}}
 	for _, f := range files {
 		v.files[f.Path] = true
 	}
@@ -83,8 +96,13 @@ func VetPage(m *Manifest, files []PageFile) (*PageInfo, error) {
 	if err := v.checkIncludes(); err != nil {
 		return nil, err
 	}
-	if err := v.vetMarkup(entry, scripted); err != nil {
-		return nil, err
+	// The lint findings and the markup rules are independent: report both.
+	var lint []string
+	if strict {
+		lint = lintPageTemplates(v.names, v.trees)
+	}
+	if err := v.vetMarkup(entry, scripted); err != nil || len(lint) > 0 {
+		return nil, pageProblems(lint, err)
 	}
 	if err := escapeCheck(files, roles); err != nil {
 		return nil, err
@@ -124,6 +142,7 @@ func sortedKeys(m map[string]bool) []string {
 }
 
 type pageVet struct {
+	strict  bool
 	m       *Manifest
 	files   map[string]bool
 	queries map[string]bool
@@ -190,7 +209,7 @@ func (v *pageVet) vetMarkup(entry string, scripted map[string]bool) error {
 		if err != nil {
 			return err
 		}
-		origins, err := vetMarkup(v.names[name], sk, v.files)
+		origins, err := vetMarkup(v.names[name], sk, v.files, v.strict)
 		if err != nil {
 			return err
 		}
@@ -415,4 +434,22 @@ func sealPage(manifest []byte, files []PageFile, info *PageInfo) error {
 	}
 	info.Hash = h
 	return nil
+}
+
+// pageProblemsError is several problems found in one pass over a page.
+type pageProblemsError struct{ list []string }
+
+func (e *pageProblemsError) Error() string {
+	return ErrInvalid.Error() + ": " + strings.Join(e.list, "\n")
+}
+func (e *pageProblemsError) Unwrap() error { return ErrInvalid }
+
+// pageProblems joins the lint findings and the first markup error (which may
+// be nil) into one error.
+func pageProblems(lint []string, markup error) error {
+	list := append([]string(nil), lint...)
+	if markup != nil {
+		list = append(list, strings.TrimPrefix(markup.Error(), ErrInvalid.Error()+": "))
+	}
+	return &pageProblemsError{list: list}
 }

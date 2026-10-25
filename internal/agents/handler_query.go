@@ -62,17 +62,9 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	if userDB == nil {
 		return nil, false, fmt.Errorf("DuckDB not available")
 	}
-	exec := func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
-		return h.engine.Execute(ctx, q, p)
-	}
-	if connection != "" {
-		ce, ok := h.engine.(ConnectionEngine)
-		if !ok {
-			return nil, false, fmt.Errorf("connections are not available here")
-		}
-		exec = func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
-			return ce.ExecuteIn(ctx, connection, q, p)
-		}
+	exec, err := h.executorFor(connection)
+	if err != nil {
+		return nil, false, err
 	}
 	orig := sqlStr
 	sqlStr, ctx, _, err = h.readOnlyVerdict(ctx, connection, orig, params)
@@ -82,7 +74,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 
 	if maxRows > 0 {
 		trimmed := strings.TrimSuffix(strings.TrimSpace(sqlStr), ";")
-		wrapped := fmt.Sprintf("SELECT * FROM (%s) AS _a2ui_limit LIMIT %d", trimmed, maxRows+1)
+		wrapped := fmt.Sprintf("SELECT * FROM (%s\n) AS _a2ui_limit LIMIT %d", trimmed, maxRows+1)
 		if rs, err = exec(ctx, wrapped, params); err == nil {
 			rs.Rows = dropDuckLakeInternalRows(rs.Rows)
 			if len(rs.Rows) > maxRows {
@@ -104,6 +96,24 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		truncated = true
 	}
 	return rs, truncated, nil
+}
+
+// executorFor returns the function that runs a statement on the named
+// connection's catalog ("" is the session default). It does no policy check:
+// callers run readOnlyVerdict first.
+func (h *Handler) executorFor(connection string) (func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error), error) {
+	if connection == "" {
+		return func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
+			return h.engine.Execute(ctx, q, p)
+		}, nil
+	}
+	ce, ok := h.engine.(ConnectionEngine)
+	if !ok {
+		return nil, fmt.Errorf("connections are not available here")
+	}
+	return func(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
+		return ce.ExecuteIn(ctx, connection, q, p)
+	}, nil
 }
 
 // readOnlyVerdict is the policy half of every render-time read: connect what

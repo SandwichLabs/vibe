@@ -137,6 +137,40 @@ The view:
 Call `write_artifact` with `name: "regional-sales"`, that `manifest` and that
 `view`.
 
+## What `write_artifact` checks, and what it returns
+
+Everything below is checked when you save, not when the person opens the
+artifact, and **all problems come back in one reply** (numbered, at most 20),
+so fix them together and send again. Nothing is written until the whole request
+is clean.
+
+- **Result columns.** A saved artifact's reply has `queries: [{"name": "...",
+  "columns": [{"name": "region", "type": "VARCHAR"}, ...]}]`: what each query
+  returns with its parameters at their defaults (read by binding the query with
+  a zero-row limit; no data is read). Name columns by their alias
+  (`sum(x) AS revenue` is `revenue`).
+- **Pivot and drill.** `rows`, `columns`, `value` and `drill.column` must each
+  be a column of the component's query; the error names the component
+  (`components[3].rows[0]`), the bad name and the columns that exist.
+- **Charts.** A chart reads its columns by position, so its query must return
+  enough of them: `stat` 1, `barChart`, `lineChart`, `areaChart`, `columnChart`,
+  `radarChart`, `ringChart` 2 (a label, then values), `streamChart` 1, `heatmap`
+  and `sankeyChart` 3.
+- **Pages.** `date` takes a layout *name*, one of `iso`, `short`, `long`,
+  `month`, never a Go layout like `"2006-01-02"`. A query row is an array of
+  cells, so `{{ index . 0 }}`, not `{{ .region }}` (`$q.Columns` lists the
+  names). An inline `<script>` is refused because the page's policy blocks it:
+  put the code in a `.js` file (`<script src="app.js">`, which makes it a
+  scripted page) and pass data with `<script type="application/json">{{ json
+  (query "q") }}</script>`.
+- **Script views.** `view.js` must have balanced brackets and closed strings,
+  templates and regular expressions, and define `draw`. This is a structural
+  check, not a full parse: a logic error still shows when the person allows and
+  opens it.
+- **Forms.** `view` and `manifest` may be sent as objects or as JSON text. A
+  numeric or boolean default (`"default": 0`) is kept as a number or boolean in
+  `artifact.yaml` and in `get_artifact`.
+
 ## Editing an existing artifact
 
 `list_artifacts`, then `get_artifact` for the one to change. Edit what it
@@ -222,7 +256,7 @@ or a connection.
 - Keep it small and plain. Write the page so a person can read it in a minute:
   the prompt shows them every file.
 - A page is **static** (no script: it renders inside Studio, and links re-render
-  it with new parameter values) or **scripted** (a `.js` file, a `<script>`, or
+  it with new parameter values) or **scripted** (a `.js` file, a `<script src>`, or
   an `on...=` attribute: it opens in its own window and may use capabilities).
   The kind is derived from the files, not declared.
 

@@ -66,13 +66,19 @@ var absPathRe = regexp.MustCompile(`(?:^|[\s'"(=])((?:/|[A-Za-z]:[\\/])[^\s'"):,
 // scrubStoreText is for text that came from the file system or the store: it
 // redacts credentials, replaces any absolute path with <path> (an I/O error
 // wraps the real one) and caps the length.
-func scrubStoreText(s string) string {
+func scrubStoreText(s string) string { return scrubStoreTextN(s, 400) }
+
+// scrubFeedbackText is scrubStoreText with room for a validator's whole
+// message (a list of findings), which the model needs in full to fix them all.
+func scrubFeedbackText(s string) string { return scrubStoreTextN(s, 2000) }
+
+func scrubStoreTextN(s string, limit int) string {
 	s = redactForAgent(s)
 	s = absPathRe.ReplaceAllStringFunc(s, func(m string) string {
 		loc := absPathRe.FindStringSubmatchIndex(m)
 		return m[:loc[2]] + "<path>"
 	})
-	out, cut := truncateRunes(s, 400)
+	out, cut := truncateRunes(s, limit)
 	if cut {
 		out += "..."
 	}
@@ -209,6 +215,15 @@ func manifestForAgent(m *artifacts.Manifest) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
 	}
+	// A default is returned as its type's value (0, not "0"), as write_artifact
+	// accepts it.
+	if ps, ok := out["parameters"].([]any); ok && len(ps) == len(m.Parameters) {
+		for i, p := range ps {
+			if pm, ok := p.(map[string]any); ok {
+				pm["default"] = artifacts.TypedDefault(&m.Parameters[i])
+			}
+		}
+	}
 	queries := make([]map[string]any, 0, len(m.Queries))
 	for _, q := range m.Queries {
 		row := map[string]any{"name": q.Name, "sql": q.SQL, "uses": q.Uses}
@@ -278,25 +293,14 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	if err := keepStoredSQL(ctx, store, name, rev, m, keep); err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, "manifest: "+err.Error())
 	}
-	// Structure first (names, types, defaults, caps, the view against the
-	// manifest), then the SQL policy, then the compare-and-write.
-	if err := artifacts.Validate(m); err != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, scrubStoreText(err.Error()))
+	// Every check runs, whatever another found, and the findings come back
+	// together (artifactChecks). A dry run takes this same path, so a request
+	// that cannot be approved reports the same feedback.
+	rep, vet := h.artifactChecks(ctx, m, view, files)
+	if !rep.empty() {
+		return rep.response(req.ID)
 	}
-	if err := artifacts.ValidateView(m, view); err != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, scrubStoreText(err.Error()))
-	}
-	var page *artifacts.PageInfo
-	if m.View == artifacts.ViewHTML {
-		// Files, templates and URL attributes against H1 and H2 now, so the
-		// model gets a usable error; the store repeats the vet on every write.
-		if page, err = artifacts.VetPage(m, files); err != nil {
-			return NewErrorResponse(req.ID, ErrInvalidParams, "html_files: "+scrubStoreText(err.Error()))
-		}
-	}
-	if err := h.VetArtifact(ctx, m); err != nil {
-		return NewErrorResponse(req.ID, ErrPermission, err.Error())
-	}
+	page := vet.page
 
 	if isDryRun(ctx) {
 		return artifactDryRun(ctx, req.ID, store, name, rev)
@@ -317,6 +321,7 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	h.logger.Info("agent wrote artifact", "artifact", name, "queries", len(m.Queries))
 	res := map[string]any{
 		"name": name, "saved": true, "rev": a.Rev, "queries_checked": len(m.Queries),
+		"queries": queriesForAgent(vet.cols),
 	}
 	if m.View == artifacts.ViewScript {
 		res["note"] = "the script view is stored but does not run until the person allows it in Studio; it asks again after every edit"
@@ -363,7 +368,7 @@ func conflictMessage(name, rev string) string {
 // get_artifact returns as sql_omitted for a long query): those names come back
 // in keep and the handler substitutes the stored SQL.
 func manifestFromParam(v any) (m *artifacts.Manifest, keep []string, err error) {
-	obj, ok := v.(map[string]any)
+	obj, ok := objectOrJSONText(v)
 	if !ok {
 		return nil, nil, errors.New("must be an object with title, parameters and queries")
 	}
@@ -518,15 +523,32 @@ func storedScript(ctx context.Context, store artifacts.Store, name, rev string) 
 
 // viewFromParam renders the tool's view object as view.a2ui.json bytes.
 func viewFromParam(v any) ([]byte, error) {
-	obj, ok := v.(map[string]any)
+	obj, ok := objectOrJSONText(v)
 	if !ok {
-		return nil, errors.New("must be an A2UI page object: {\"title\": ..., \"components\": [...]}")
+		return nil, errors.New("must be an A2UI page object: {\"title\": ..., \"components\": [...]} (or that object as JSON text)")
 	}
 	out, err := jsonenc.Encode(obj, "  ")
 	if err != nil {
 		return nil, errors.New("is not valid JSON data")
 	}
 	return out, nil
+}
+
+// objectOrJSONText accepts a JSON object, or a string holding one (some MCP
+// clients send an object argument as its JSON text).
+func objectOrJSONText(v any) (map[string]any, bool) {
+	if obj, ok := v.(map[string]any); ok {
+		return obj, true
+	}
+	text, ok := v.(string)
+	if !ok {
+		return nil, false
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(text), &obj); err != nil || obj == nil {
+		return nil, false
+	}
+	return obj, true
 }
 
 // revParam reads the optional rev: absent is "", present must be a string.
