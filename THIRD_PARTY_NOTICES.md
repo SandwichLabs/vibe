@@ -4816,7 +4816,7 @@ END OF TERMS AND CONDITIONS
 
 #### Apache-2.0 (elected from (MPL-2.0 OR Apache-2.0))
 
-- dompurify 3.4.16
+- dompurify 3.4.17
 
 ```text
 Apache License
