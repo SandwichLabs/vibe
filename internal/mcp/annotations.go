@@ -12,14 +12,7 @@ import (
 var connectionReaders = map[string]bool{
 	"introspect_schema": true,
 	"describe_table":    true,
-}
-
-// localWriters are data/schema-category tools that write only workspace files
-// (queries/*.sql), never a connection, so they do not reach outside the
-// workspace folder.
-var localWriters = map[string]bool{
-	"save_query":  true,
-	"build_query": true,
+	"run_saved_query":   true,
 }
 
 // idempotentTools are the writes where sending the same call twice leaves the
@@ -29,6 +22,8 @@ var localWriters = map[string]bool{
 // and DDL are not listed.
 var idempotentTools = map[string]bool{
 	"write_artifact":         true,
+	"save_query":             true,
+	"build_query":            true,
 	"create_or_update_skill": true,
 	"update_record":          true,
 	"delete_record":          true,
@@ -48,8 +43,8 @@ var idempotentTools = map[string]bool{
 // existing name.
 //
 // openWorldHint says whether the tool reaches outside the workspace folder.
-// Content and most introspect tools stay inside it (false), as do save_query
-// and build_query, which write only queries/*.sql. Other data and schema
+// Content and most introspect tools stay inside it (false), save_query and
+// build_query among them (they write only queries/*.sql). Data and schema
 // tools run on a connection, which may be a remote database or bucket, and
 // introspect_schema / describe_table read a connection's catalog, so those are
 // true. A tool that merely classifies SQL against a connection (add_query_cell)
@@ -57,7 +52,7 @@ var idempotentTools = map[string]bool{
 func annotationsFor(td agents.ToolDef) mcp.ToolAnnotation {
 	readOnly := td.Category == "introspect"
 	destructive := td.Category == "data" || td.Category == "schema"
-	openWorld := (destructive && !localWriters[td.Name]) || connectionReaders[td.Name]
+	openWorld := destructive || connectionReaders[td.Name]
 	idempotent := readOnly || idempotentTools[td.Name]
 	return mcp.ToolAnnotation{
 		ReadOnlyHint:    mcp.ToBoolPtr(readOnly),

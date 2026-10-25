@@ -80,8 +80,9 @@ func assertsFact(text string) bool {
 // container), and present_data when called with a live "sql" binding rather
 // than inline data. describe_table never returns rows, so it does not ground.
 var groundingTools = map[string]bool{
-	"run_query":     true,
-	"preview_query": true,
+	"run_query":       true,
+	"run_saved_query": true,
+	"preview_query":   true,
 }
 
 // usedGroundingTool reports whether any recorded tool step this turn counts

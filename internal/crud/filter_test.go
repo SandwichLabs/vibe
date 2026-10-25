@@ -2,6 +2,7 @@ package crud
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -254,4 +255,10 @@ func TestPage_SkipCountAndCount(t *testing.T) {
 	assert.Positive(t, page(PageRequest{}).TotalRows)
 	_ = ctx
 	_ = ref
+}
+
+func TestSQLLiteral_JSONNumberOnlyBareWhenPlain(t *testing.T) {
+	assert.Equal(t, "12345678901234567.89", sqlLiteral(json.Number("12345678901234567.89")))
+	assert.Equal(t, "-1e5", sqlLiteral(json.Number("-1e5")))
+	assert.Equal(t, "'1; DROP TABLE t'", sqlLiteral(json.Number("1; DROP TABLE t")))
 }

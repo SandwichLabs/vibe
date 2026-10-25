@@ -50,7 +50,7 @@ func tierNeeded(category string) SandboxMode {
 func categoryWhat(category string) string {
 	switch category {
 	case "content":
-		return "writes files in the workspace folder (artifacts, notebooks, skills)"
+		return "writes files in the workspace folder (artifacts, notebooks, skills, saved queries)"
 	case "data":
 		return "changes rows in a connection"
 	case "schema":
@@ -79,6 +79,8 @@ func contentTarget(req *Request) string {
 		return "artifacts/" + nameOr(req, "<name>") + "/ in the workspace folder"
 	case "create_or_update_skill":
 		return "skills/" + nameOr(req, "<name>") + "/SKILL.md in the workspace folder"
+	case "save_query", "build_query":
+		return "a saved query in queries/ in the workspace folder"
 	default:
 		return "a notebook in the workspace folder"
 	}

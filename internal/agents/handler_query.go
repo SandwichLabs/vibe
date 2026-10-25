@@ -188,6 +188,20 @@ func discardedReadsMsg(reads, total int) string {
 }
 
 func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
+	return h.runQuery(ctx, req, runTarget{})
+}
+
+// runTarget narrows one run of the run_query pipeline. The zero value is
+// run_query itself: the workspace default connection, any statement the
+// sandbox and approval gates allow. run_saved_query sets a connection (the
+// saved query's own) and readsOnly, so a stored statement that has become a
+// write is refused rather than run or put in front of the person.
+type runTarget struct {
+	connection string
+	readsOnly  bool
+}
+
+func (h *Handler) runQuery(ctx context.Context, req *Request, tgt runTarget) *Response {
 	sqlStr, errResp := sqlParam(req)
 	if errResp != nil {
 		return errResp
@@ -212,7 +226,7 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	if errResp != nil {
 		return errResp
 	}
-	connectErr := h.connectReferenced(ctx, "", sqlStr)
+	connectErr := h.connectReferenced(ctx, tgt.connection, sqlStr)
 	sb := h.sandboxFor(ctx)
 	// Wildcards on s3/gcs/r2 are expanded before the policy looks at the
 	// statement; what is vetted, approved-for and run is the expanded text.
@@ -220,10 +234,19 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	if err != nil {
 		return NewErrorResponse(req.ID, expandErrorCode(err), "run_query: "+err.Error())
 	}
-	v := h.classify(runCtx, userDB, runSQL, params)
+	v, err := h.classifyIn(runCtx, tgt.connection, runSQL, params)
+	if err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, err.Error())
+	}
 	class := v.Class
+	if tgt.readsOnly && (class == sqlClassWrite || class == sqlClassDDL) {
+		return NewErrorResponse(req.ID, ErrPermission, notAReadMsg(v.gateReason()))
+	}
 	if err := sb.checkSQLClass(v.Class, v.gateReason()); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
+	}
+	if tgt.readsOnly && class != sqlClassRead {
+		return NewErrorResponse(req.ID, ErrPermission, notAReadMsg(v.gateReason()))
 	}
 	// The second write gate: every connection the statement changes must be
 	// writable.
@@ -250,7 +273,11 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 		}
 	}
 
-	rs, err := h.engine.Execute(runCtx, runSQL, params)
+	exec, err := h.executorFor(tgt.connection)
+	if err != nil {
+		return NewErrorResponse(req.ID, ErrInternal, err.Error())
+	}
+	rs, err := exec(runCtx, runSQL, params)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query execution failed: %v", err))
 	}
@@ -344,4 +371,14 @@ func namedPlaceholders(prefix string, vals []any) (placeholders []string, params
 		params[name] = v
 	}
 	return placeholders, params
+}
+
+// notAReadMsg is the refusal when a saved query, which runs reads only in every
+// tier, is no longer a plain read.
+func notAReadMsg(reason string) string {
+	msg := "a saved query runs reads only, and this one is no longer a plain read (it changes data or schema, or runs several statements)"
+	if reason != "" {
+		msg += ": " + reason
+	}
+	return msg
 }

@@ -57,11 +57,29 @@ func contentCases() []contentCase {
 			invalid: map[string]any{"page": map[string]any{"title": "T", "components": []any{map[string]any{"id": "a", "type": "nope"}}}},
 			written: notebookCount,
 		},
+		{
+			tool:    "save_query",
+			valid:   map[string]any{"title": "Named rows", "sql": "SELECT id, name FROM t WHERE id >= 1"},
+			invalid: map[string]any{"title": "Named rows", "sql": "DELETE FROM t"},
+			written: queryCount,
+		},
+		{
+			tool:    "build_query",
+			valid:   map[string]any{"name": "Big ids", "table": "t", "conditions": []any{map[string]any{"column": "id", "op": "gt", "value": "1"}}},
+			invalid: map[string]any{"name": "Big ids", "table": "t", "conditions": []any{map[string]any{"column": "nope", "op": "gt", "value": "1"}}},
+			written: queryCount,
+		},
 	}
 }
 
 func notebookCount(t *testing.T, fx *artifactFixture) int {
 	list, err := fx.h.access.Notebooks().List(context.Background())
+	require.NoError(t, err)
+	return len(list)
+}
+
+func queryCount(t *testing.T, fx *artifactFixture) int {
+	list, err := fx.h.access.Queries().List(context.Background())
 	require.NoError(t, err)
 	return len(list)
 }

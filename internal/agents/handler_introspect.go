@@ -79,22 +79,6 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 	return NewResponse(req.ID, map[string]any{"table": table, "columns": columns})
 }
 
-func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response {
-	list, err := h.access.Queries().List(ctx)
-	if err != nil {
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list queries: %v", err))
-	}
-	queries := make([]map[string]any, 0, len(list))
-	for _, q := range list {
-		queries = append(queries, map[string]any{
-			"name":   q.Title,
-			"sql":    q.SQL,
-			"engine": q.Engine,
-		})
-	}
-	return NewResponse(req.ID, map[string]any{"queries": queries})
-}
-
 func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
 	query := ""
 	if q, ok := req.Params["query"].(string); ok {
