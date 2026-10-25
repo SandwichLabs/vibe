@@ -163,7 +163,7 @@ func TestBuildTools_MatchesAgentsRegistryByName(t *testing.T) {
 		want = append(want, td.Name)
 	}
 
-	assert.ElementsMatch(t, want, got, "runner tool list must be exactly the agents.Handler ToolDef list, filtered to chat-visible tools (task-only tools like write_cell/preview_query/need_more_info must never appear in chat)")
+	assert.ElementsMatch(t, want, got, "runner tool list must be exactly the agents.Handler ToolDef list, filtered to chat-visible tools (task-only tools like write_cell/need_more_info must never appear in chat)")
 	assert.NotEmpty(t, got)
 }
 

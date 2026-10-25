@@ -51,3 +51,38 @@ func TestNotifyAgentToolChange(t *testing.T) {
 		})
 	}
 }
+
+// Agent notebook tools tell an open notebook what happened: an appended cell is
+// merged in by id, an edit, delete, move or mid-list insert makes it reload.
+func TestNotifyAgentToolChange_NotebookEvents(t *testing.T) {
+	cases := []struct {
+		name   string
+		method string
+		result map[string]any
+		want   NotebooksChangedEvent
+	}{
+		{"add_query_cell appends", "add_query_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1"}, NotebooksChangedEvent{NotebookID: "nb", AppendedCellIDs: []string{"c1"}}},
+		{"add_markdown_cell appends", "add_markdown_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1"}, NotebooksChangedEvent{NotebookID: "nb", AppendedCellIDs: []string{"c1"}}},
+		{"add_markdown_cell mid-list reloads", "add_markdown_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1", "inserted": true}, NotebooksChangedEvent{NotebookID: "nb", Changed: true}},
+		{"update_cell reloads", "update_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1"}, NotebooksChangedEvent{NotebookID: "nb", Changed: true}},
+		{"delete_cell reloads", "delete_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1"}, NotebooksChangedEvent{NotebookID: "nb", Changed: true}},
+		{"move_cell reloads", "move_cell", map[string]any{"notebook_id": "nb", "cell_id": "c1"}, NotebooksChangedEvent{NotebookID: "nb", Changed: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &App{logger: testLogger()}
+			var got []NotebooksChangedEvent
+			app.emit = func(name string, args ...any) {
+				if name != "notebooks:changed" {
+					return
+				}
+				require.Len(t, args, 1)
+				ev, ok := args[0].(NotebooksChangedEvent)
+				require.True(t, ok)
+				got = append(got, ev)
+			}
+			app.notifyAgentToolChange(tc.method, tc.result)
+			assert.Equal(t, []NotebooksChangedEvent{tc.want}, got)
+		})
+	}
+}

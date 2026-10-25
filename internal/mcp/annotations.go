@@ -13,6 +13,16 @@ var connectionReaders = map[string]bool{
 	"introspect_schema": true,
 	"describe_table":    true,
 	"run_saved_query":   true,
+	"preview_query":     true,
+}
+
+// destructiveContentTools are content tools that remove or replace content a
+// person may have written: delete_cell drops a cell and update_cell overwrites
+// one (both guarded by the notebook rev, but the content is gone once saved).
+// They stay workspace-local, so openWorld is unaffected.
+var destructiveContentTools = map[string]bool{
+	"delete_cell": true,
+	"update_cell": true,
 }
 
 // idempotentTools are the writes where sending the same call twice leaves the
@@ -33,8 +43,9 @@ var idempotentTools = map[string]bool{
 // source of truth for what a tool may do:
 //
 //   - introspect: read-only, not destructive, idempotent.
-//   - content: writes files in the workspace folder; not read-only, not
-//     destructive (a replace needs the rev it read, so it cannot clobber).
+//   - content: writes files in the workspace folder; not read-only. Not
+//     destructive (a replace needs the rev it read, so it cannot clobber),
+//     except delete_cell and update_cell, which remove or overwrite a cell.
 //   - data and schema: may change or drop what a connection holds, so
 //     destructive. run_query is here too: its SQL may be a write.
 //
@@ -51,8 +62,9 @@ var idempotentTools = map[string]bool{
 // does not change or read its data and stays false.
 func annotationsFor(td agents.ToolDef) mcp.ToolAnnotation {
 	readOnly := td.Category == "introspect"
-	destructive := td.Category == "data" || td.Category == "schema"
-	openWorld := destructive || connectionReaders[td.Name]
+	connectionWriter := td.Category == "data" || td.Category == "schema"
+	destructive := connectionWriter || destructiveContentTools[td.Name]
+	openWorld := connectionWriter || connectionReaders[td.Name]
 	idempotent := readOnly || idempotentTools[td.Name]
 	return mcp.ToolAnnotation{
 		ReadOnlyHint:    mcp.ToBoolPtr(readOnly),

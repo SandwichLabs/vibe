@@ -27,10 +27,11 @@ func toolGroups() []toolGroup {
 	return []toolGroup{
 		{"Look first", "start here; read before you write", []string{"list_connections", "introspect_schema", "describe_table", "list_notebooks", "get_notebook", "list_queries", "list_artifacts", "get_artifact", "help_search"}},
 		{"Skills", "read_skill before relying on one", []string{"list_skills", "read_skill", "create_or_update_skill"}},
-		{"Query", "", []string{"run_query", "run_saved_query"}},
+		{"Query", "", []string{"run_query", "run_saved_query", "preview_query"}},
 		{"Rows", "", []string{"create_record", "update_record", "delete_record", "bulk_insert"}},
 		{"Schema", "propose_schema first, then create_table once the user confirms", []string{"propose_schema", "create_table", "add_column", "drop_table", "import_csv"}},
-		{"Build and show", "", []string{"build_query", "save_query", "present_data", "add_query_cell", "create_dashboard", "write_artifact"}},
+		{"Build and show", "", []string{"build_query", "save_query", "present_data", "add_query_cell", "add_markdown_cell", "create_dashboard", "write_artifact"}},
+		{"Edit a notebook", "get_notebook first for the rev", []string{"update_cell", "delete_cell", "move_cell"}},
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
@@ -20,24 +19,35 @@ import (
 // notebooks.Coerce (via notebooks.Save) exactly like every other notebook
 // write, so a malformed cell can never be smuggled in.
 
+// existingTarget returns the notebook a cell write targets when one exists:
+// explicitID if given, else the Studio-tracked active notebook. found is false
+// when neither names one (the caller then creates a notebook, or refuses).
+func (h *Handler) existingTarget(ctx context.Context, store notebooks.Store, explicitID string) (nb notebooks.Notebook, found bool, err error) {
+	id := strings.TrimSpace(explicitID)
+	if id == "" {
+		id = strings.TrimSpace(h.resolveActiveNotebook())
+	}
+	if id == "" {
+		return notebooks.Notebook{}, false, nil
+	}
+	nb, warnings, err := store.Get(ctx, id)
+	if err != nil {
+		return notebooks.Notebook{}, false, fmt.Errorf("notebook %q not found: %w", id, err)
+	}
+	for _, w := range warnings {
+		h.logger.Warn("notebook coercion warning", "notebook_id", id, "warning", w)
+	}
+	return nb, true, nil
+}
+
 // resolveTargetNotebook returns the notebook to append to: explicitID if
 // given, else the Studio-tracked active notebook (h.resolveActiveNotebook()), else
 // a brand-new notebook titled fallbackTitle. Mirrors the contract
 // add_query_cell/create_dashboard's ToolDef descriptions promise.
 func (h *Handler) resolveTargetNotebook(ctx context.Context, store notebooks.Store, explicitID, fallbackTitle string) (notebooks.Notebook, error) {
-	id := strings.TrimSpace(explicitID)
-	if id == "" {
-		id = strings.TrimSpace(h.resolveActiveNotebook())
-	}
-	if id != "" {
-		nb, warnings, err := store.Get(ctx, id)
-		if err != nil {
-			return notebooks.Notebook{}, fmt.Errorf("notebook %q not found: %w", id, err)
-		}
-		for _, w := range warnings {
-			h.logger.Warn("notebook coercion warning", "notebook_id", id, "warning", w)
-		}
-		return nb, nil
+	nb, found, err := h.existingTarget(ctx, store, explicitID)
+	if err != nil || found {
+		return nb, err
 	}
 	title := strings.TrimSpace(fallbackTitle)
 	if title == "" {
@@ -50,14 +60,8 @@ func (h *Handler) resolveTargetNotebook(ctx context.Context, store notebooks.Sto
 // existing notebook (named, or the one open in Studio) that notebook must
 // load; a new notebook is created only by the real write.
 func (h *Handler) notebookDryRun(ctx context.Context, req *Request, store notebooks.Store) *Response {
-	id := strings.TrimSpace(stringParam(req.Params["notebook_id"]))
-	if id == "" {
-		id = strings.TrimSpace(h.resolveActiveNotebook())
-	}
-	if id != "" {
-		if _, _, err := store.Get(ctx, id); err != nil {
-			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("notebook %q not found: %v", id, err))
-		}
+	if _, _, err := h.existingTarget(ctx, store, stringParam(req.Params["notebook_id"])); err != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 	return dryRunOK(req.ID)
 }
@@ -67,11 +71,18 @@ func (h *Handler) notebookDryRun(ctx context.Context, req *Request, store notebo
 // notebook and any coercion warnings.
 func saveWithNewCell(ctx context.Context, store notebooks.Store, nb notebooks.Notebook, cell notebooks.Cell) (notebooks.Notebook, []string, error) {
 	nb.Cells = append(nb.Cells, cell)
+	return saveNotebook(ctx, store, nb)
+}
+
+// saveNotebook persists nb through notebooks.Save/Coerce. nb.Rev (the revision
+// it was loaded at) rides along, so a store with compare-and-write refuses it
+// when the notebook changed since.
+func saveNotebook(ctx context.Context, store notebooks.Store, nb notebooks.Notebook, opts ...notebooks.SaveOption) (notebooks.Notebook, []string, error) {
 	raw, err := json.Marshal(nb)
 	if err != nil {
 		return notebooks.Notebook{}, nil, fmt.Errorf("failed to marshal notebook: %w", err)
 	}
-	return store.Save(ctx, raw)
+	return store.Save(ctx, raw, opts...)
 }
 
 // sqlVetFailure is one refused notebook SQL: the JSON-RPC code and the message
@@ -113,6 +124,9 @@ func (h *Handler) vetNotebookSQL(ctx context.Context, rawConnection, sqlStr, wha
 		}
 		return "", &sqlVetFailure{ErrPermission, msg}
 	}
+	if v.Statements > 1 {
+		return "", &sqlVetFailure{ErrInvalidParams, fmt.Sprintf("%s take a single statement, but this has %d: put each statement in its own cell (one trailing semicolon is fine)", what, v.Statements)}
+	}
 	return connection, nil
 }
 
@@ -140,6 +154,10 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		return NewErrorResponse(req.ID, ErrInvalidParams, "sql is required")
 	}
 
+	view, verr := optionalCellView(req.Params["view"])
+	if verr != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, verr.Error())
+	}
 	if _, errResp := h.duckDB(req.ID); errResp != nil {
 		return errResp
 	}
@@ -165,8 +183,8 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	cell.Source = sqlStr
 	cell.Connection = connection
 	cell.Label = label
-	if view := strings.TrimSpace(stringParam(req.Params["view"])); view != "" {
-		cell.View = normalizeCellView(view)
+	if view != "" {
+		cell.View = view
 		cell.ViewPinned = true
 	}
 
@@ -179,6 +197,7 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 		"notebook_id": saved.ID,
 		"cell_id":     cell.ID,
 		"title":       saved.Title,
+		"rev":         saved.Rev,
 		"warnings":    warnings,
 	})
 }
@@ -218,135 +237,7 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 		"notebook_id": saved.ID,
 		"cell_id":     cell.ID,
 		"title":       saved.Title,
+		"rev":         saved.Rev,
 		"warnings":    warnings,
 	})
-}
-
-// --- list_notebooks / get_notebook (read-only, introspect category) ---
-//
-// These are the read path a chat/task/MCP client uses to see a workspace's
-// notebooks without going through Studio at all — e.g. `vibe mcp serve`. Both are introspect-category (chat and MCP visible in every
-// sandbox mode, including read-only) and return DATA, never rendered
-// output: a sql/markdown cell's raw source, or a summary for an a2ui cell
-// (there is no HTML/markdown renderer in this package to render it with).
-
-// notebookCellSourceBudgetRunes caps how much of a single cell's source text
-// (sql or markdown) is handed back per notebook cell, so one notebook with a
-// handful of huge markdown cells can't blow the tool-result budget the way
-// an unbounded run_query result could (see budget.go's RowResultBudgetChars
-// for the equivalent on the data side). Generous enough for any real cell —
-// this is a safety cap, not a normal-case truncation.
-const notebookCellSourceBudgetRunes = 4000
-
-func (h *Handler) handleListNotebooks(ctx context.Context, req *Request) *Response {
-	list, err := h.access.Notebooks().List(ctx)
-	if err != nil {
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list notebooks: %v", err))
-	}
-	out := make([]map[string]any, 0, len(list))
-	for _, nb := range list {
-		out = append(out, map[string]any{
-			"id":         nb.ID,
-			"title":      nb.Title,
-			"cell_count": nb.CellCount,
-			"updated_at": nb.UpdatedAt,
-		})
-	}
-	return NewResponse(req.ID, map[string]any{"notebooks": out})
-}
-
-func (h *Handler) handleGetNotebook(ctx context.Context, req *Request) *Response {
-	id := strings.TrimSpace(stringParam(req.Params["id"]))
-	if id == "" {
-		return NewErrorResponse(req.ID, ErrInvalidParams, "id is required")
-	}
-
-	nb, warnings, err := h.access.Notebooks().Get(ctx, id)
-	if err != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("notebook %q not found: %v", id, err))
-	}
-	for _, w := range warnings {
-		h.logger.Warn("notebook coercion warning on get_notebook", "notebook_id", id, "warning", w)
-	}
-
-	// Stop adding cells once the combined output reaches roughly
-	// RowResultBudgetChars — the same tool-result budget run_query enforces
-	// on rows (budget.go), applied here so a notebook with hundreds of
-	// cells can't blow the same context/UI-event budget a giant run_query
-	// result would. Always include at least one cell even if it alone
-	// exceeds the budget (budgetRows' same reasoning: handing back zero
-	// cells for a notebook that has real ones is worse than one visibly
-	// large cell), and report exactly how much was cut via "truncated".
-	cells := make([]map[string]any, 0, len(nb.Cells))
-	used := 0
-	for _, c := range nb.Cells {
-		cell := map[string]any{"id": c.ID, "type": string(c.Type)}
-		switch c.Type {
-		case notebooks.CellSQL:
-			source, truncated := truncateRunes(c.Source, notebookCellSourceBudgetRunes)
-			cell["source"] = source
-			cell["view"] = c.View
-			cell["label"] = c.Label
-			if truncated {
-				cell["source_truncated"] = true
-			}
-		case notebooks.CellMarkdown:
-			source, truncated := truncateRunes(c.Source, notebookCellSourceBudgetRunes)
-			cell["source"] = source
-			if truncated {
-				cell["source_truncated"] = true
-			}
-		case notebooks.CellA2UI:
-			// No renderer here (Go validates, Vue renders — #67) — a summary,
-			// not the full component tree, keeps this from ballooning on a
-			// large dashboard cell while still telling the caller it's there.
-			title, count := "", 0
-			if c.Page != nil {
-				title = c.Page.Title
-				count = len(c.Page.Components)
-			}
-			cell["title"] = title
-			cell["component_count"] = count
-		}
-
-		size := estimateCellJSONSize(cell)
-		if len(cells) > 0 && used+size > RowResultBudgetChars {
-			break
-		}
-		cells = append(cells, cell)
-		used += size
-	}
-
-	result := map[string]any{
-		"id":         nb.ID,
-		"title":      nb.Title,
-		"updated_at": nb.UpdatedAt,
-		"cells":      cells,
-	}
-	if len(cells) < len(nb.Cells) {
-		result["truncated"] = map[string]any{"shown": len(cells), "total": len(nb.Cells)}
-	}
-	return NewResponse(req.ID, result)
-}
-
-// estimateCellJSONSize approximates a cell map's size once JSON-encoded in
-// the tool result, for get_notebook's running budget check. Best-effort: a
-// marshal failure (shouldn't happen for these plain map[string]any values)
-// just estimates 0, which only risks slightly overrunning the budget on a
-// single pathological cell, never underrunning it enough to matter.
-func estimateCellJSONSize(cell map[string]any) int {
-	b, err := json.Marshal(cell)
-	if err != nil {
-		return 0
-	}
-	return len(b)
-}
-
-// truncateRunes caps s at maxRunes runes, reporting whether it cut anything.
-func truncateRunes(s string, maxRunes int) (string, bool) {
-	if utf8.RuneCountInString(s) <= maxRunes {
-		return s, false
-	}
-	r := []rune(s)
-	return string(r[:maxRunes]), true
 }

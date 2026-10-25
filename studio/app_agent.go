@@ -583,14 +583,31 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 	// merges only that id, never "every remote id it doesn't already have",
 	// which is what let a locally-deleted cell come back.
 	switch method {
-	case "add_query_cell", "create_dashboard":
+	case "add_query_cell", "create_dashboard", "add_markdown_cell":
+		a.emitCellsAdded(method, result)
+	case "update_cell", "delete_cell", "move_cell":
 		resultMap, _ := result.(map[string]any)
-		notebookID, _ := resultMap["notebook_id"].(string)
-		cellID, _ := resultMap["cell_id"].(string)
-		if notebookID == "" || cellID == "" {
-			a.logger.Warn("agent tool change: missing notebook_id/cell_id in result, not emitting notebooks:changed", "method", method)
-			return
+		if notebookID, _ := resultMap["notebook_id"].(string); notebookID != "" {
+			a.emitNotebookEdited(notebookID)
 		}
-		a.emitNotebooksChanged(notebookID, []string{cellID})
 	}
+}
+
+// emitCellsAdded announces a cell an agent tool appended. A markdown cell
+// inserted before the end (add_markdown_cell's after_cell_id) is an edit of
+// the order, not an append, so the open copy reloads instead of merging it in
+// at the end.
+func (a *App) emitCellsAdded(method string, result any) {
+	resultMap, _ := result.(map[string]any)
+	notebookID, _ := resultMap["notebook_id"].(string)
+	cellID, _ := resultMap["cell_id"].(string)
+	if notebookID == "" || cellID == "" {
+		a.logger.Warn("agent tool change: missing notebook_id/cell_id in result, not emitting notebooks:changed", "method", method)
+		return
+	}
+	if inserted, _ := resultMap["inserted"].(bool); inserted {
+		a.emitNotebookEdited(notebookID)
+		return
+	}
+	a.emitNotebooksChanged(notebookID, []string{cellID})
 }

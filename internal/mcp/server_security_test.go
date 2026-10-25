@@ -189,7 +189,7 @@ func TestIsLoopbackHost(t *testing.T) {
 // initialize + tools/list request written to a pipe standing in for stdin
 // must produce ONLY newline-delimited JSON-RPC on the output writer, and
 // tools/list must never include a task-only tool like write_cell (ModeMCP
-// filtering — #64's "assert write_cell/preview_query absent" QA step,
+// filtering — #64's "assert write_cell absent" QA step,
 // proven here at the unit level rather than only live).
 func TestServeStdio_JSONOnlyOnStdout(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
@@ -224,7 +224,7 @@ func TestServeStdio_JSONOnlyOnStdout(t *testing.T) {
 		if strings.Contains(line, `"tools":`) {
 			sawToolsList = true
 			assert.NotContains(t, line, `"write_cell"`, "write_cell is task-only and must not appear in the MCP tool list")
-			assert.NotContains(t, line, `"preview_query"`, "preview_query is task-only and must not appear in the MCP tool list")
+			assert.NotContains(t, line, `"need_more_info"`, "need_more_info is task-only and must not appear in the MCP tool list")
 		}
 	}
 	assert.True(t, sawToolsList, "expected a tools/list response on stdout")

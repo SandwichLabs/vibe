@@ -250,9 +250,20 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 			ar.Summary += " with an HTML page (it stays inert until you allow it)"
 		}
 		ar.SQL = artifactQueriesText(req.Params["manifest"])
-	case "add_query_cell", "create_dashboard":
+	case "add_query_cell", "create_dashboard", "add_markdown_cell":
 		ar.Rows = -1
 		ar.Summary = "Add a cell to a notebook"
+	case "update_cell":
+		ar.Rows = -1
+		ar.Summary = fmt.Sprintf("Change cell %s in notebook %s", stringParam(req.Params["cell_id"]), stringParam(req.Params["notebook_id"]))
+		ar.SQL = stringParam(req.Params["sql"])
+	case "delete_cell":
+		ar.Rows = -1
+		ar.Destructive = true
+		ar.Summary = fmt.Sprintf("Delete cell %s from notebook %s", stringParam(req.Params["cell_id"]), stringParam(req.Params["notebook_id"]))
+	case "move_cell":
+		ar.Rows = -1
+		ar.Summary = fmt.Sprintf("Move cell %s in notebook %s", stringParam(req.Params["cell_id"]), stringParam(req.Params["notebook_id"]))
 	case "run_query":
 		ar.Rows = -1
 		ar.SQL = stringParam(req.Params["sql"])

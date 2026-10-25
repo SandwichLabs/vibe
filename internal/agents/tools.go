@@ -73,10 +73,11 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "get_notebook",
-		Description: "Get one notebook's cells as data: each cell's type plus its raw sql/markdown source (or a title/component-count summary for an a2ui cell) — never rendered output. Long cell sources are truncated.",
+		Description: "Get one notebook's cells as data, never rendered output, plus the notebook's \"rev\" (send it back to update_cell, delete_cell and move_cell). Every cell has its id and type. A sql cell has its source, view, view_pinned, label and connection; a markdown cell its source; an a2ui cell its whole page (the same object create_dashboard and update_cell take). Long sql/markdown sources are cut at 4000 characters, and a notebook larger than the result budget stops early and lists the omitted cell ids under \"truncated\": pass cell_id to fetch one cell whole.",
 		Category:    "introspect",
 		Params: []ParamDef{
 			{Name: "id", Type: "string", Required: true, Desc: "Notebook id, from list_notebooks"},
+			{Name: "cell_id", Type: "string", Required: false, Desc: "Return only this cell, uncut. Use it for a cell the full read omitted or cut."},
 		},
 	},
 	{
@@ -347,19 +348,19 @@ var Tools = []ToolDef{
 		},
 	},
 
-	// --- Task mode (#66 part B): notebook cell authoring. preview_query,
-	// write_cell, and need_more_info are Modes: []string{"task"} — visible
-	// only to internal/llm's Task() loop, never to chat or MCP (see
-	// ListToolsForMode). They are "introspect" category so they're never
+	// --- Task mode (#66 part B): notebook cell authoring. write_cell and
+	// need_more_info are Modes: []string{"task"} — visible only to
+	// internal/llm's Task() loop, never to chat or MCP (see
+	// ListToolsForMode). preview_query is a read like run_query and is
+	// offered everywhere (#220). They are "introspect" category so they're never
 	// denied by sandbox mode: previewing/proposing a cell never mutates the
 	// database, and the user still has to click Apply for anything to be
 	// persisted.
 
 	{
 		Name:        "preview_query",
-		Description: "Run a SELECT (read-only) query and preview its shape before committing it as a notebook cell: row count, columns with types, a sample of rows (budgeted to fit the response), and a suggestedView (table/bar/line/stat; area/columns/rings/radar/sankey/heatmap also listed in viewFit) computed from the actual result shape. ALWAYS preview a query before calling write_cell with cell_type \"sql\" — write_cell rejects sql it has not been shown working.",
+		Description: "Run a SELECT (read-only) query and preview its shape before committing it as a notebook cell: row count, columns with types, a sample of rows (budgeted to fit the response), and a suggestedView (table/bar/line/stat; area/columns/rings/radar/sankey/heatmap also listed in viewFit) computed from the actual result shape. Use it to pick the view for add_query_cell or update_cell. In task mode, ALWAYS preview a query before calling write_cell with cell_type \"sql\" — write_cell rejects sql it has not been shown working.",
 		Category:    "introspect",
-		Modes:       []string{"task"},
 		Params: []ParamDef{
 			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only statement (SELECT, WITH...SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE)"},
 			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the cell runs on; unqualified table names resolve there. Defaults to the workspace default. See list_connections."},
@@ -410,6 +411,58 @@ var Tools = []ToolDef{
 			{Name: "connection", Type: "string", Required: false, Desc: "Connection (catalog) the cell runs on; must be a registered connection (see list_connections). Defaults to the workspace default."},
 			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat | area | columns | rings | radar | sankey | heatmap (default: auto-fit to the result shape the first time it runs)"},
 			{Name: "label", Type: "string", Required: false, Desc: "Short label for the cell (also used as the new notebook's title, if one is created)"},
+		},
+	},
+	{
+		Name:        "add_markdown_cell",
+		Description: "Append a markdown cell (prose, headings, notes) to a notebook, or insert it after_cell_id. Goes into notebook_id if given, else the notebook currently open in Studio, else a new notebook titled from the first line. To change or remove a cell you already wrote, use update_cell or delete_cell.",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "markdown", Type: "string", Required: true, Desc: "The cell's markdown text (at most 256 KB)"},
+			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
+			{Name: "after_cell_id", Type: "string", Required: false, Desc: "Insert after this cell (needs an existing notebook); omit to append at the end."},
+		},
+	},
+	{
+		Name:        "update_cell",
+		Description: "Change one notebook cell in place. Send the notebook's \"rev\" from get_notebook: a notebook that changed since is refused (nothing written) and you re-read it. Send only the fields that apply to the cell's type: sql, label, view, connection for a sql cell (sql and connection are vetted exactly as add_query_cell does); markdown for a markdown cell; page (the whole new page) for an a2ui cell (validated and its sql bindings vetted as create_dashboard does). A parameter that does not fit the cell's type is refused, not ignored. Cell ids and the rev come from get_notebook; the result carries the new rev. A source marked source_truncated in the full read is cut: fetch that cell with get_notebook cell_id before replacing its source.",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "notebook_id", Type: "string", Required: true, Desc: "Notebook id (list_notebooks)"},
+			{Name: "cell_id", Type: "string", Required: true, Desc: "The cell to change (get_notebook)"},
+			{Name: "rev", Type: "string", Required: true, Desc: "The notebook's rev as get_notebook returned it"},
+			{Name: "sql", Type: "string", Required: false, Desc: "New SQL for a sql cell: a single read-only statement"},
+			{Name: "markdown", Type: "string", Required: false, Desc: "New text for a markdown cell"},
+			{Name: "page", Type: "object", Required: false, Desc: `The whole new A2UI page for an a2ui cell: {"title": "...", "components": [...]}`},
+			{Name: "label", Type: "string", Required: false, Desc: "New label for a sql cell (empty clears it)"},
+			{Name: "view", Type: "string", Required: false, Desc: "table | bar | line | stat | area | columns | rings | radar | sankey | heatmap (sql cell; pins the view)"},
+			{Name: "connection", Type: "string", Required: false, Desc: "Connection the sql cell runs on (empty means the workspace default); the SQL is re-vetted on it"},
+		},
+	},
+	{
+		Name:        "delete_cell",
+		Description: "Remove one cell from a notebook. Send the notebook's \"rev\" from get_notebook; a changed notebook is refused and nothing is removed. The result carries the new rev.",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "notebook_id", Type: "string", Required: true, Desc: "Notebook id (list_notebooks)"},
+			{Name: "cell_id", Type: "string", Required: true, Desc: "The cell to remove (get_notebook)"},
+			{Name: "rev", Type: "string", Required: true, Desc: "The notebook's rev as get_notebook returned it"},
+		},
+	},
+	{
+		Name:        "move_cell",
+		Description: "Reorder a notebook: move one cell after another cell (after_cell_id) or to a position (0 = first). Send exactly one of the two, and the notebook's \"rev\" from get_notebook; a changed notebook is refused. The result carries the new rev.",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "notebook_id", Type: "string", Required: true, Desc: "Notebook id (list_notebooks)"},
+			{Name: "cell_id", Type: "string", Required: true, Desc: "The cell to move (get_notebook)"},
+			{Name: "rev", Type: "string", Required: true, Desc: "The notebook's rev as get_notebook returned it"},
+			{Name: "after_cell_id", Type: "string", Required: false, Desc: "Place the cell right after this one"},
+			{Name: "position", Type: "integer", Required: false, Desc: "Final index of the cell, from 0 (first)"},
 		},
 	},
 	{

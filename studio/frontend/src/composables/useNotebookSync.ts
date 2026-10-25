@@ -19,6 +19,8 @@ import type { useNotebookCells } from './useNotebookCells'
 interface NotebooksChangedPayload {
   notebookId: string
   appendedCellIds?: string[]
+  /** An agent tool edited, removed, moved or inserted existing cells. */
+  changed?: boolean
 }
 
 interface NotebookSyncOptions {
@@ -67,6 +69,12 @@ export function useNotebookSync(opts: NotebookSyncOptions) {
   }
 
   async function applyNotebooksChanged(payload: NotebooksChangedPayload) {
+    // An agent edit of existing cells: handled like a change on disk (quiet
+    // reload when nothing is unsaved, the conflict banner otherwise).
+    if (payload.changed) {
+      await handleChangedOnDisk({ kind: 'notebook', id: payload.notebookId, op: 'changed' }, true)
+      return
+    }
     if (!payload.appendedCellIds || payload.appendedCellIds.length === 0) return
 
     const requestedId = save.id()
@@ -105,7 +113,7 @@ export function useNotebookSync(opts: NotebookSyncOptions) {
   // handleChangedOnDisk: something other than this window wrote a file in the
   // workspace. For THIS notebook: with no unsaved edit it is quietly reloaded;
   // with one, the conflict banner shows and nothing is overwritten.
-  async function handleChangedOnDisk(p: { kind: string; id: string; op: string }) {
+  async function handleChangedOnDisk(p: { kind: string; id: string; op: string }, byAgent = false) {
     if (p?.kind !== 'notebook' || !save.id() || p.id !== save.id()) return
     const hasEdit = save.hasEdit()
     if (p.op === 'deleted') {
@@ -119,7 +127,7 @@ export function useNotebookSync(opts: NotebookSyncOptions) {
     }
     if (!hasEdit && !save.conflict.value) {
       await opts.reload()
-      opts.info(`"${opts.title.value || 'This notebook'}" changed on disk and was reloaded.`)
+      opts.info(`"${opts.title.value || 'This notebook'}" ${byAgent ? 'was updated by the agent' : 'changed on disk'} and was reloaded.`)
       return
     }
     save.raiseConflict(false)

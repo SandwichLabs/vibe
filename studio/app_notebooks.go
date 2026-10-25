@@ -33,12 +33,23 @@ import (
 type NotebooksChangedEvent struct {
 	NotebookID      string   `json:"notebookId"`
 	AppendedCellIDs []string `json:"appendedCellIds,omitempty"`
+	// Changed is set when an agent tool edited, removed, moved or inserted a
+	// cell of the notebook (update_cell, delete_cell, move_cell, a markdown
+	// cell added mid-list): the open copy is reloaded, or the conflict banner
+	// raised when it holds unsaved edits, the same as a change on disk.
+	Changed bool `json:"changed,omitempty"`
 }
 
 // emitNotebooksChanged emits "notebooks:changed" with the shared payload
 // shape — see NotebooksChangedEvent.
 func (a *App) emitNotebooksChanged(notebookID string, appendedCellIDs []string) {
 	a.emitEvent("notebooks:changed", NotebooksChangedEvent{NotebookID: notebookID, AppendedCellIDs: appendedCellIDs})
+}
+
+// emitNotebookEdited emits "notebooks:changed" for an agent edit of existing
+// cells (see NotebooksChangedEvent.Changed).
+func (a *App) emitNotebookEdited(notebookID string) {
+	a.emitEvent("notebooks:changed", NotebooksChangedEvent{NotebookID: notebookID, Changed: true})
 }
 
 // ListNotebooks returns every notebook's summary, newest-updated first.

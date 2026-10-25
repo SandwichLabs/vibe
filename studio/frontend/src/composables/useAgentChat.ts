@@ -170,12 +170,12 @@ function parsePresentDataPage(tool: string | undefined, output: string | undefin
   return undefined
 }
 
-// parseNotebookLink parses add_query_cell/create_dashboard's tool_done
+// parseNotebookLink parses add_query_cell/create_dashboard/add_markdown_cell's tool_done
 // output ({notebook_id, cell_id, title, warnings}) into the {id, title} the
 // panel's "Open notebook" link needs, or undefined for anything else (a
 // denied/errored call, a non-matching tool, or unparseable output).
 function parseNotebookLink(tool: string | undefined, output: string | undefined, isError: boolean | undefined): { id: string; title: string } | undefined {
-  if ((tool !== 'add_query_cell' && tool !== 'create_dashboard') || isError || !output) return undefined
+  if ((tool !== 'add_query_cell' && tool !== 'create_dashboard' && tool !== 'add_markdown_cell') || isError || !output) return undefined
   try {
     const parsed = JSON.parse(output)
     if (parsed && typeof parsed.notebook_id === 'string' && parsed.notebook_id) {

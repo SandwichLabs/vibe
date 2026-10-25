@@ -35,7 +35,6 @@ func TestBuildTaskTools_HasTaskOnlyToolsChatDoesNot(t *testing.T) {
 		name := tl.Info().Name
 		assert.NotEqual(t, "write_cell", name)
 		assert.NotEqual(t, "need_more_info", name)
-		assert.NotEqual(t, "preview_query", name)
 	}
 }
 
