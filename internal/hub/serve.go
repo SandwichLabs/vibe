@@ -246,7 +246,7 @@ func serveProxy(ctx context.Context, root string, holder *Holder, opts ServeOpti
 
 func noMCPMessage(h *Holder) string {
 	if h.App == AppStudio {
-		return fmt.Sprintf("Studio (pid %d) has this workspace open but its MCP server is off. Turn it on in Settings → Workspace → MCP, or close Studio.", h.PID)
+		return fmt.Sprintf("Studio (pid %d) has this workspace open but its MCP server is off. Turn it on in Settings → Workspace → Claude and other tools, or close Studio.", h.PID)
 	}
 	return fmt.Sprintf("%s has this workspace open and is not sharing MCP with other processes. Close it first.", h)
 }

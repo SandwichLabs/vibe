@@ -31,6 +31,10 @@ func init() {
 	}
 }
 
+// TypeNames returns the chat component types in presentation order (a copy),
+// so docs and help topics are generated from the registry, not retyped.
+func TypeNames() []string { return append([]string(nil), typeOrder...) }
+
 // isColorEnum reports whether spec is exactly the shared color enum — those
 // fields are documented once, globally, rather than inline per type.
 func isColorEnum(spec fieldSpec) bool {

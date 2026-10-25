@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -59,14 +60,14 @@ func (h *Handler) handleDescribeTable(ctx context.Context, req *Request) *Respon
 	connectErr := h.connectReferenced(ctx, "", table)
 	desc, err := sess.DescribeTable(ctx, table)
 	if err != nil {
-		// A missing table was an empty column list before; keep that shape.
+		// A missing table is a success with an empty column list.
 		if errors.Is(err, session.ErrNoSuchTable) && connectErr == nil {
-			return NewResponse(req.ID, map[string]any{"table": table, "columns": []map[string]any(nil)})
+			return NewResponse(req.ID, map[string]any{"table": table, "columns": []map[string]any{}})
 		}
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to describe table: %v", withConnectError(err, connectErr)))
 	}
 
-	var columns []map[string]any
+	columns := make([]map[string]any, 0, len(desc.Columns))
 	for _, c := range desc.Columns {
 		columns = append(columns, map[string]any{
 			"name":     c.Name,
@@ -83,7 +84,7 @@ func (h *Handler) handleListQueries(ctx context.Context, req *Request) *Response
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("failed to list queries: %v", err))
 	}
-	var queries []map[string]any
+	queries := make([]map[string]any, 0, len(list))
 	for _, q := range list {
 		queries = append(queries, map[string]any{
 			"name":   q.Title,
@@ -100,6 +101,9 @@ func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
 		query = q
 	}
 
+	if strings.TrimSpace(query) == "" {
+		return NewResponse(req.ID, helpIndexResult())
+	}
 	entries := SearchHelp(query)
 
 	results := make([]map[string]any, len(entries))
@@ -111,4 +115,18 @@ func (h *Handler) handleHelpSearch(_ context.Context, req *Request) *Response {
 		}
 	}
 	return NewResponse(req.ID, map[string]any{"results": results, "count": len(results)})
+}
+
+// helpIndexResult is the empty-query answer of help_search: a compact index
+// (topic, title, one line each) instead of every topic in full.
+func helpIndexResult() map[string]any {
+	results := make([]map[string]any, len(HelpEntries))
+	for i, e := range HelpEntries {
+		results[i] = map[string]any{"topic": e.Topic, "title": e.Title, "summary": e.Summary}
+	}
+	return map[string]any{
+		"results": results,
+		"count":   len(results),
+		"note":    "Index only. Pass a topic value (e.g. \"mcp-tools\") or keywords as help_search query for the full text.",
+	}
 }

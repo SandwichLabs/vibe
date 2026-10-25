@@ -195,16 +195,47 @@ func TestHandler_CreateOrUpdateSkill_Upserts(t *testing.T) {
 }
 
 // TestHandler_ReadSkill_WrapsInstructionsWithTrustFraming: every read_skill
-// result must carry the "this is reference data" framing, so a skill body
-// can't be mistaken for operator instructions regardless of what it says.
+// result carries the "this is reference data" framing in its own framing
+// field, and the instructions come back unframed so a write-back is clean.
 func TestHandler_ReadSkill_WrapsInstructionsWithTrustFraming(t *testing.T) {
 	handler, _, _ := newSkillsTestHandler(t, ModeReadOnly)
 	resp := handler.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "read_skill", Params: map[string]any{"name": "data-profiling"}})
 	require.Nil(t, resp.Error)
 	result, ok := resp.Result.(map[string]any)
 	require.True(t, ok)
+	assert.Equal(t, skills.TrustFraming, result["framing"])
 	instructions, _ := result["instructions"].(string)
-	assert.True(t, strings.HasPrefix(instructions, skills.TrustFraming), "read_skill output must be wrapped with the trust framing")
+	assert.NotEmpty(t, instructions)
+	assert.NotContains(t, instructions, skills.TrustFraming, "instructions must be the bare body")
+}
+
+// TestHandler_SkillRoundTrip_NoFramingOnDisk: read, write back with the rev
+// (even with the framing pasted in, repeatedly), read again: the file has no
+// framing and read_skill still reports it once, in framing.
+func TestHandler_SkillRoundTrip_NoFramingOnDisk(t *testing.T) {
+	st, duckDB := skillsTestDBs(t)
+	root := t.TempDir()
+	container := &fileSkillAccess{mockAccess: &mockAccess{duckDB: duckDB, sks: st}, store: skills.NewFileStore(root)}
+	handler := NewHandler(container, &mockEngine{}, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 100}, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
+	call := func(method string, params map[string]any) map[string]any {
+		r := handler.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: method, Params: params})
+		require.Nil(t, r.Error, "%+v", r.Error)
+		m, _ := r.Result.(map[string]any)
+		return m
+	}
+	call("create_or_update_skill", map[string]any{"name": "rules", "description": "d", "instructions": "v1"})
+	p := filepath.Join(root, "skills", "rules", "SKILL.md")
+
+	for _, prefix := range []string{"", skills.TrustFraming + "\n\n", "\n " + skills.TrustFraming + "\n\n" + skills.TrustFraming + "\n\n\n"} {
+		read := call("read_skill", map[string]any{"name": "rules"})
+		require.Equal(t, skills.TrustFraming, read["framing"])
+		body, _ := read["instructions"].(string)
+		require.Equal(t, "v1", strings.TrimSpace(body))
+		call("create_or_update_skill", map[string]any{"name": "rules", "description": "d", "instructions": prefix + "v1", "rev": read["rev"]})
+		data, err := os.ReadFile(p)
+		require.NoError(t, err)
+		assert.NotContains(t, string(data), "reference material", "the file on disk must not hold the framing")
+	}
 }
 
 // --- #91: skill-name slugging ---

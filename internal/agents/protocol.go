@@ -3,6 +3,7 @@ package agents
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/SandwichLabs/vibe/internal/secrets"
 )
@@ -54,8 +55,33 @@ func NewResponse(id any, result any) *Response {
 	return &Response{
 		JSONRPC: "2.0",
 		ID:      id,
-		Result:  result,
+		Result:  emptyListsNotNull(result),
 	}
+}
+
+// emptyListsNotNull replaces every nil slice that is a value of a result map
+// (recursing into nested maps and lists of maps) with an empty slice of the
+// same type, so a tool result says [] for "none" and never null. Byte slices
+// are left alone. It does not look inside [][]any or []any: those hold SQL
+// result rows and cells, where a NULL list value is data and must stay null
+// (only a nil rows slice itself becomes []). Results that are not maps pass
+// through unchanged.
+func emptyListsNotNull(result any) any {
+	v := reflect.ValueOf(result)
+	if v.IsValid() && v.Kind() == reflect.Slice && v.IsNil() && v.Type().Elem().Kind() != reflect.Uint8 {
+		return reflect.MakeSlice(v.Type(), 0, 0).Interface()
+	}
+	switch m := result.(type) {
+	case map[string]any:
+		for k, e := range m {
+			m[k] = emptyListsNotNull(e)
+		}
+	case []map[string]any:
+		for _, e := range m {
+			emptyListsNotNull(e)
+		}
+	}
+	return result
 }
 
 // NewErrorResponse creates an error JSON-RPC 2.0 response.

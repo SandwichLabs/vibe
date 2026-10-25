@@ -1,10 +1,14 @@
 package agents
 
 import (
+	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,5 +100,81 @@ func TestBuildMCPToolsEntry_ListsOnlyRegisteredMCPTools(t *testing.T) {
 	// And nothing task-only (preview_query/write_cell/need_more_info) leaks in.
 	for _, name := range []string{"preview_query", "write_cell", "need_more_info"} {
 		assert.NotContains(t, entry.Content, "**"+name+"**", "mcp-tools topic must not advertise task-only tool %q", name)
+	}
+}
+
+// The generated lists in the notebooks and a2ui topics must name every entry
+// of the registries they are built from.
+func TestHelpTopics_ListsMatchRegistries(t *testing.T) {
+	byTopic := map[string]string{}
+	for _, e := range HelpEntries {
+		byTopic[e.Topic] = e.Content
+	}
+	for _, v := range notebooks.Views {
+		assert.Contains(t, byTopic["notebooks"], "`"+v+"`", "notebooks topic must list view %q", v)
+	}
+	for name := range a2ui.Components {
+		assert.Contains(t, byTopic["a2ui"], "`"+name+"`", "a2ui topic must list component %q", name)
+	}
+	for _, c := range a2ui.ColorTokens {
+		assert.Contains(t, byTopic["a2ui"], "`"+c+"`", "a2ui topic must list colour %q", c)
+	}
+}
+
+func TestHelpTopics_NoStaleWording(t *testing.T) {
+	for _, e := range HelpEntries {
+		assert.NotContains(t, e.Content, "Start MCP Server", e.Topic)
+		assert.NotContains(t, strings.ToLower(e.Content), "no directives", e.Topic)
+		assert.NotEmpty(t, e.Summary, "topic %q needs a one-line summary for the index", e.Topic)
+	}
+	for _, td := range Tools {
+		assert.NotContains(t, strings.ToLower(td.Description), "directive", td.Name)
+		for _, p := range td.Params {
+			assert.NotContains(t, strings.ToLower(p.Desc), "directive", td.Name+"."+p.Name)
+		}
+	}
+}
+
+func TestSearchHelpArtifacts(t *testing.T) {
+	results := SearchHelp("pivot drill")
+	require.NotEmpty(t, results)
+	assert.Equal(t, "artifacts", results[0].Topic)
+	assert.Contains(t, results[0].Content, "data-artifacts")
+	assert.Contains(t, results[0].Content, "docs/reference/artifacts.md")
+}
+
+func TestHandleHelpSearch_EmptyQueryIsCompactIndex(t *testing.T) {
+	h, _, _ := newSkillsTestHandler(t, ModeReadOnly)
+	resp := h.Handle(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "help_search", Params: map[string]any{"query": ""}})
+	require.Nil(t, resp.Error)
+	raw, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	assert.Less(t, len(raw), 2500, "the index must be compact")
+	assert.NotContains(t, string(raw), `"content"`)
+	assert.Contains(t, string(raw), `"topic":"artifacts"`)
+	assert.Contains(t, string(raw), `"summary"`)
+}
+
+func TestNewResponse_NilListsBecomeEmptyArrays(t *testing.T) {
+	resp := NewResponse(1, map[string]any{
+		"rows":     [][]any(nil),
+		"warnings": []string(nil),
+		"queries":  []map[string]any(nil),
+		"nested":   map[string]any{"cols": []string(nil)},
+	})
+	raw, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "null")
+	assert.Contains(t, string(raw), `"rows":[]`)
+	assert.Contains(t, string(raw), `"nested":{"cols":[]}`)
+}
+
+func TestSearchHelp_ExactTopicNameReturnsOnlyThatTopic(t *testing.T) {
+	for _, e := range HelpEntries {
+		for _, q := range []string{e.Topic, " " + strings.ToUpper(e.Topic) + " "} {
+			got := SearchHelp(q)
+			require.Len(t, got, 1, q)
+			assert.Equal(t, e.Topic, got[0].Topic)
+		}
 	}
 }

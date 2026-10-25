@@ -549,6 +549,10 @@ func TestHandler_CreateAndDeleteRecord(t *testing.T) {
 	}
 	resp := handler.Handle(ctx, req)
 	assert.Nil(t, resp.Error)
+	created, _ := resp.Result.(map[string]any)
+	assert.Equal(t, true, created["created"])
+	assert.Equal(t, int64(1), created["rows_affected"])
+	assert.NotContains(t, created, "last_insert_id", "DuckDB has no last-insert id; the field would always be 0")
 
 	// Delete
 	req = &Request{
