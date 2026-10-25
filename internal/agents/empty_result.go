@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
+	"time"
 
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -24,155 +24,123 @@ import (
 // anyway) and must never execute anything beyond a handful of read-only,
 // internally-constructed SELECT DISTINCT probes against real
 // (information_schema-verified) columns — never the caller's SQL text
-// itself beyond regex-extracted identifiers, and every identifier is
+// itself beyond parser-extracted identifiers, and every identifier is
 // quoted via session.QuoteIdent before it reaches a query string.
 const emptyResultMaxDistinctValues = 40
 const emptyResultMaxValuesShown = 25
 
-var (
-	literalEqRe = regexp.MustCompile(`(?i)([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|<>|!=)\s*'((?:[^']|'')*)'`)
-	literalInRe = regexp.MustCompile(`(?i)([A-Za-z_][A-Za-z0-9_]*)\s+IN\s*\(\s*((?:'(?:[^']|'')*'\s*,?\s*)+)\)`)
-	quotedValRe = regexp.MustCompile(`'((?:[^']|'')*)'`)
-)
+// emptyResultDeadline bounds all the probes of one note.
+const emptyResultDeadline = 4 * time.Second
 
-type literalPredicate struct {
-	column string
-	values []string
-}
-
-// literalPredicates extracts `col = 'literal'`/`col <> 'literal'`/`col IN
-// ('a','b')` comparisons from sql. Deliberately a regex over SQL text
-// rather than a parser: this only ever generates an advisory hint, so a
-// missed clause just means one less hint, never an incorrect one.
-func literalPredicates(sqlText string) []literalPredicate {
-	found := map[string]*literalPredicate{}
-	order := []string{}
-	add := func(col, val string) {
-		key := strings.ToLower(col)
-		p, ok := found[key]
-		if !ok {
-			p = &literalPredicate{column: col}
-			found[key] = p
-			order = append(order, key)
-		}
-		unescaped := strings.ReplaceAll(val, "''", "'")
-		for _, v := range p.values {
-			if v == unescaped {
-				return
-			}
-		}
-		p.values = append(p.values, unescaped)
+// explainEmptyResult returns advisory text to append to a zero-row run_query
+// response, or "" when there is nothing useful to say (no literal comparisons
+// found, every literal is actually present, or a column can't be resolved to
+// exactly one of the statement's own tables). rows is the result the query
+// returned: an empty result, or the single 0 of an ungrouped count(*), is what
+// the note explains.
+//
+// The statement is parsed by DuckDB (the same hardened parser the SQL policy
+// uses) and each compared column is resolved against the tables the statement
+// itself names, catalog-qualified: through the alias it was written with, or,
+// for a bare name, only when exactly one of those tables has that column
+// (#216). userDB is queried read-only, using only information_schema-verified
+// table/column names, each part quoted via session.QuoteIdent.
+func explainEmptyResult(ctx context.Context, userDB *sql.DB, sqlText string, rows [][]any) string {
+	if userDB == nil {
+		return ""
 	}
-
-	for _, m := range literalEqRe.FindAllStringSubmatch(sqlText, -1) {
-		add(m[1], m[2])
+	ctx, cancel := context.WithTimeout(ctx, emptyResultDeadline)
+	defer cancel()
+	shape, ok := statementShape(ctx, sqlText)
+	if !ok || len(shape.preds) == 0 {
+		return ""
 	}
-	for _, m := range literalInRe.FindAllStringSubmatch(sqlText, -1) {
-		for _, vm := range quotedValRe.FindAllStringSubmatch(m[2], -1) {
-			add(m[1], vm[1])
-		}
-	}
-
-	out := make([]literalPredicate, 0, len(order))
-	for _, k := range order {
-		out = append(out, *found[k])
-	}
-	return out
-}
-
-// explainEmptyResult returns advisory text to append to a zero-row
-// run_query response, or "" when there is nothing useful to say (no literal
-// comparisons found, every literal is actually present, or a column can't
-// be resolved). userDB is queried read-only, using only
-// information_schema-verified table/column names, quoted via
-// session.QuoteIdent.
-func explainEmptyResult(ctx context.Context, userDB *sql.DB, sqlText string) string {
-	preds := literalPredicates(sqlText)
-	if len(preds) == 0 || userDB == nil {
+	what := "matched 0 rows"
+	switch {
+	case len(rows) == 0:
+	case shape.countOnly && isZeroCount(rows):
+		what = "counted 0 rows"
+	default:
 		return ""
 	}
 
 	var notes []string
-	for _, pred := range preds {
-		table, ok := resolveColumnTable(ctx, userDB, pred.column)
+	for _, pred := range shape.preds {
+		tbl, ok := shape.resolve(ctx, userDB, pred)
 		if !ok {
 			continue
 		}
-		actual, ok := distinctValues(ctx, userDB, table, pred.column)
-		if !ok || len(actual) == 0 {
+		if !localCatalog(ctx, userDB, tbl.catalog) {
 			continue
 		}
-		have := map[string]bool{}
-		for _, v := range actual {
-			have[v] = true
+		if note := mismatchNote(ctx, userDB, tbl, pred); note != "" {
+			notes = append(notes, note)
 		}
-		var missed []string
-		for _, v := range pred.values {
-			if !have[v] {
-				missed = append(missed, v)
-			}
-		}
-		if len(missed) == 0 {
-			continue
-		}
-		shownN := len(actual)
-		if shownN > emptyResultMaxValuesShown {
-			shownN = emptyResultMaxValuesShown
-		}
-		shown := make([]string, shownN)
-		for i := 0; i < shownN; i++ {
-			shown[i] = fmt.Sprintf("'%s'", actual[i])
-		}
-		more := ""
-		if len(actual) > emptyResultMaxValuesShown {
-			more = fmt.Sprintf(", … (%d distinct)", len(actual))
-		}
-		missedQuoted := make([]string, len(missed))
-		for i, v := range missed {
-			missedQuoted[i] = fmt.Sprintf("'%s'", v)
-		}
-		notes = append(notes, fmt.Sprintf("  %s: you compared against %s, but this column holds %s%s",
-			pred.column, strings.Join(missedQuoted, ", "), strings.Join(shown, ", "), more))
 	}
 	if len(notes) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("This query matched 0 rows, and at least one literal compared against does not appear in the data:\n%s\nRe-run with a value the column actually holds before drawing any conclusion. Do not report \"none\" or \"never\" as a finding based on this empty result.",
-		strings.Join(notes, "\n"))
+	return fmt.Sprintf("This query %s, and at least one literal compared against does not appear in the data:\n%s\nRe-run with a value the column actually holds before drawing any conclusion. Do not report \"none\" or \"never\" as a finding based on this empty result.",
+		what, strings.Join(notes, "\n"))
 }
 
-// resolveColumnTable finds which table (in the default catalog's default
-// schema) has a column with this name, case-insensitively. Returns ok=false when zero or
-// ambiguous matches are found — better to say nothing than guess wrong.
-func resolveColumnTable(ctx context.Context, db *sql.DB, column string) (string, bool) {
-	rows, err := db.QueryContext(ctx,
-		"SELECT table_name FROM information_schema.columns WHERE table_catalog = current_database() AND table_schema = current_schema() AND lower(column_name) = lower($1) LIMIT 2",
-		column)
-	if err != nil {
-		return "", false
+// isZeroCount reports whether rows is the single 0 an ungrouped count returns.
+func isZeroCount(rows [][]any) bool {
+	if len(rows) != 1 || len(rows[0]) != 1 {
+		return false
 	}
-	defer rows.Close()
+	switch v := rows[0][0].(type) {
+	case int64:
+		return v == 0
+	case int:
+		return v == 0
+	case int32:
+		return v == 0
+	case uint64:
+		return v == 0
+	}
+	return false
+}
 
-	var table string
-	n := 0
-	for rows.Next() {
-		if err := rows.Scan(&table); err != nil {
-			return "", false
+// mismatchNote is the line for one compared column: the literals it was
+// compared with that the column does not hold, next to what it does hold.
+func mismatchNote(ctx context.Context, db *sql.DB, tbl probeTable, pred literalPredicate) string {
+	actual, ok := distinctValues(ctx, db, tbl, tbl.column)
+	if !ok || len(actual) == 0 {
+		return ""
+	}
+	have := map[string]bool{}
+	for _, v := range actual {
+		have[v] = true
+	}
+	var missed []string
+	for _, v := range pred.values {
+		if !have[v] {
+			missed = append(missed, fmt.Sprintf("'%s'", v))
 		}
-		n++
 	}
-	if n != 1 {
-		return "", false
+	if len(missed) == 0 {
+		return ""
 	}
-	return table, true
+	shownN := min(len(actual), emptyResultMaxValuesShown)
+	shown := make([]string, shownN)
+	for i := range shown {
+		shown[i] = fmt.Sprintf("'%s'", actual[i])
+	}
+	more := ""
+	if len(actual) > emptyResultMaxValuesShown {
+		more = fmt.Sprintf(", … (%d distinct)", len(actual))
+	}
+	return fmt.Sprintf("  %s (%s): you compared against %s, but this column holds %s%s",
+		tbl.column, tbl.String(), strings.Join(missed, ", "), strings.Join(shown, ", "), more)
 }
 
 // distinctValues returns the distinct string values a column holds, or
 // ok=false when the column has too many distinct values to be a useful
 // hint (an id or free-text column) or the probe query fails.
-func distinctValues(ctx context.Context, db *sql.DB, table, column string) ([]string, bool) {
+func distinctValues(ctx context.Context, db *sql.DB, tbl probeTable, column string) ([]string, bool) {
 	qCol := session.QuoteIdent(column)
-	qTable := session.QuoteIdent(table)
+	qTable := tbl.quoted()
 
 	var n int
 	err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(DISTINCT %s) FROM %s", qCol, qTable)).Scan(&n)

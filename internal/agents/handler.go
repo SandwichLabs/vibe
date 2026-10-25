@@ -435,7 +435,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 		}
 		if req.Method == "run_query" {
 			v := h.classify(ctx, userDB, runSQL, params)
-			if err := fresh.checkSQLClass(v.Class, v.Reason); err != nil {
+			if err := fresh.checkSQLClass(v.Class, v.gateReason()); err != nil {
 				return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf(
 					"the agent's access changed while this was waiting for approval: %s", err.Error()))
 			}

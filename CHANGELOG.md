@@ -4,6 +4,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Security
+
+- **The agent can no longer read a DuckLake's internal metadata through PRAGMA arguments.** `PRAGMA storage_info`, `PRAGMA table_info` and their `pragma_*` table-function and `CALL` forms took any table name, so pointed at a lake's internal catalog they returned its schema and value statistics (including the start of the lake's data path), although a direct `SELECT` of it was refused. Their argument must now be one string literal naming a table, and it gets the same checks as a table reference. `pragma_storage_info('t')` is now allowed alongside `PRAGMA storage_info`.
+
 ### Added
 
 - **A built-in `a2ui` skill** gives MCP clients the A2UI component schema (`read_skill a2ui`): every type and field, which are valid in a notebook dashboard and which only in a data artifact view (controls, `pivot`, `query`, `drill`). It is generated from the validator's registries when read, so it cannot drift. The `create_dashboard`, `present_data` and `write_artifact` descriptions, the `a2ui` help topic and the MCP instructions point to it.
@@ -11,10 +15,13 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Changed
 
+- SQL errors for the agent: a bare keyword alias (`count(*) days`) gets a hint to write `AS days`; errors show the agent's own SQL instead of the policy's `EXPLAIN` wrapper, with a cast hint when a `$param` type is ambiguous; a `?` placeholder says parameters are named (`$name`); non-string `sql` says so; the PIVOT and UNPIVOT statement forms point to the `FROM ... PIVOT (...)` forms; `pg_catalog` views get a message pointing to `information_schema`; `CREATE TEMP TABLE` under read-write explains why it needs the full tier.
 - `write_artifact` reports every problem in one reply (at most 20) instead of the first, accepts `view` and `manifest` as JSON text, and keeps a numeric or boolean parameter default as a number or boolean in `artifact.yaml` and `get_artifact`. Pages already on disk are not re-checked when loaded.
 
 ### Fixed
 
+- The note that explains an empty result now resolves a column against the tables the statement reads (catalog, schema and alias), instead of the first table with that column name in the default catalog, so it no longer lists another table's values; it stays silent when the owner is ambiguous, skips remote connections, and also explains a `count(*)` that returned 0.
+- `run_query` refuses a script that runs a read before its last statement (`SELECT 1; SELECT 2`), which silently returned only the last result; write scripts are unchanged.
 - `create_dashboard` now vets every `sql`-bound component like `add_query_cell` does (read-only, binds against the schema) and refuses a bad column, a write or `getenv()`, listing each failure by component path, instead of saving a dashboard that breaks when it renders.
 
 ## [0.3.2] - 2026-10-25

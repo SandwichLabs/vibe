@@ -85,6 +85,7 @@ func TestPolicy_Reads(t *testing.T) {
 		{"comment mentioning attach", "SELECT 1 /* ATTACH 'x' */ -- LOAD x\n", sqlClassRead, ""},
 		{"string mentioning drop", "SELECT 'DROP TABLE t; ATTACH x' AS note", sqlClassRead, ""},
 		{"multi-statement of reads", "SELECT 1; SELECT * FROM t", sqlClassRead, ""},
+		{"pragma_storage_info is the table-function form of PRAGMA storage_info", "SELECT * FROM pragma_storage_info('t')", sqlClassRead, ""},
 		{"scalar macro", "SELECT m_one()", sqlClassRead, ""},
 		{"table macro over a table", "SELECT * FROM t_ok()", sqlClassRead, ""},
 		{"view over a data file", "SELECT * FROM v_ok", sqlClassRead, ""},
@@ -652,11 +653,12 @@ func TestPolicy_MoreNeverListCases(t *testing.T) {
 	fx := newPolicyFixture(t, ModeFull)
 	fx.exec(`CREATE MACRO owner_reader(p) AS TABLE SELECT * FROM read_csv(p)`)
 	runPolicyCases(t, fx, []policyCase{
+		{"pg_catalog compatibility view", "SELECT count(*) FROM pg_catalog.pg_tables", sqlClassOther, "pg_catalog"},
+		{"UNPIVOT statement", "UNPIVOT t ON a INTO NAME m VALUE g", sqlClassOther, "FROM <table> UNPIVOT"},
 		{"UPDATE EXTENSIONS", "UPDATE EXTENSIONS", sqlClassOther, "update"},
 		{"UPDATE EXTENSIONS with a list", "UPDATE EXTENSIONS (httpfs)", sqlClassOther, "update"},
 		{"bare duckdb_secrets", "SELECT * FROM duckdb_secrets", sqlClassOther, "secrets are managed"},
 		{"bare system relation not on the list", "SELECT * FROM duckdb_extensions", sqlClassOther, "not found"},
-		{"pragma_storage_info", "SELECT * FROM pragma_storage_info('t')", sqlClassOther, "allow-list"},
 		{"system catalog qualified", "SELECT * FROM system.main.duckdb_settings", sqlClassOther, ""},
 		{"COPY to a database file", "COPY t TO '%DATA%/out.duckdb'", sqlClassOther, "database or extension"},
 		{"COPY to an extension file", "COPY t TO '%DATA%/evil.duckdb_extension'", sqlClassOther, "database or extension"},

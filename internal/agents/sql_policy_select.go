@@ -252,6 +252,20 @@ func (a *analyzer) tableFunc(fn map[string]any, st *walkState) {
 			return
 		}
 		st.readers++
+	case tableArgFuncs[lname]:
+		children, _ := fn["children"].([]any)
+		if len(children) != 1 {
+			st.fail("%s() takes one table name written as a string literal", lname)
+			return
+		}
+		name, ok := constString(children[0])
+		if !ok {
+			st.fail("%s() takes one table name written as a string literal", lname)
+			return
+		}
+		if r := a.vetTableArg(lname, name); r != "" {
+			st.fail("%s", r)
+		}
 	case allowedTableFunctions[lname]:
 	default:
 		if def, ok := a.functions().macros[lname]; ok && a.functions().tmacro[lname] {
@@ -346,6 +360,10 @@ func (a *analyzer) resolveRef(catalogName, schema, table string, st *walkState) 
 	if a.refDenied(catalogName, schema, st) {
 		return
 	}
+	if strings.EqualFold(schema, "pg_catalog") && (catalogName == "" || strings.EqualFold(catalogName, "system")) {
+		st.fail("%s", pgCatalogMsg)
+		return
+	}
 	full := dotJoin(catalogName, schema, table)
 	fileish := looksLikeFile(full)
 	if done := a.refHandledByCatalogName(catalogName, schema, table, fileish, st); done {
@@ -384,8 +402,40 @@ func (a *analyzer) resolveRef(catalogName, schema, table string, st *walkState) 
 			return
 		}
 	}
+	if catalogName == "" && schema == "" && pgViewNames[strings.ToLower(table)] {
+		st.fail("%s", pgCatalogMsg)
+		return
+	}
 	st.fail("%s", unresolvedTableDeniedMsg(catalogName, schema, table))
 }
+
+// pgViewNames are the pg_catalog views DuckDB lets a bare name reach.
+var pgViewNames = nameSet("pg_tables", "pg_views", "pg_class", "pg_namespace", "pg_attribute", "pg_database", "pg_indexes", "pg_type", "pg_settings")
+
+// tableArgFuncs are the introspection functions (and PRAGMAs) that take a table
+// name as a string: DuckDB resolves it as a table reference, so it is held to
+// the same rules, or the string would reach a table the agent may not read (a
+// DuckLake's internal catalog, a MySQL server schema) by that door.
+var tableArgFuncs = nameSet("pragma_storage_info", "pragma_table_info", "storage_info", "table_info")
+
+// vetTableArg checks the table name a table-argument function or PRAGMA takes
+// as the table reference it stands for. It returns the refusal, or "".
+func (a *analyzer) vetTableArg(fn, name string) string {
+	parts, _, ok := parseNameFromString(name)
+	if !ok {
+		return fmt.Sprintf("%s() takes a table name (catalog.schema.table), not %q", fn, name)
+	}
+	st := &walkState{cte: map[string]bool{}}
+	a.checkRef(parts, st)
+	return st.reason
+}
+
+// pgCatalogMsg is the refusal for DuckDB's Postgres-compatibility views. They
+// are projections of duckdb_tables() and its siblings that drop the database
+// column, so the hub's scrub of a DuckLake's internal catalog (which keys on the
+// catalog name) could not see those rows; the same facts are on the allow-list
+// under their own names.
+const pgCatalogMsg = "the pg_catalog compatibility views are not available to the agent; use information_schema.tables / information_schema.columns, duckdb_tables(), SHOW TABLES or list_connections"
 
 // userCatalog looks up an attached catalog, hiding DuckDB's own system one.
 func (a *analyzer) userCatalog(n string) (dbRow, bool) {

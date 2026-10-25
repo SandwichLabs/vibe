@@ -73,7 +73,7 @@ var allowedTableFunctions = nameSet(
 	"range", "generate_series", "unnest", "generate_subscripts",
 	"duckdb_tables", "duckdb_columns", "duckdb_views", "duckdb_schemas",
 	"duckdb_constraints", "duckdb_indexes", "duckdb_sequences", "duckdb_keywords",
-	"duckdb_functions", "duckdb_types", "pragma_table_info",
+	"duckdb_functions", "duckdb_types", "pragma_table_info", "pragma_storage_info",
 	// DuckLake's read-only metadata functions (#119). Every other ducklake_*
 	// function (ducklake_set_option, _expire_snapshots, _merge_adjacent_files,
 	// _rewrite_data_files, _cleanup_old_files, _delete_orphaned_files,
@@ -136,7 +136,7 @@ var allowedPlanOperators = nameSet(
 	"RANGE", "GENERATE_SERIES", "GENERATE_SUBSCRIPTS",
 	"DUCKDB_TABLES", "DUCKDB_COLUMNS", "DUCKDB_VIEWS", "DUCKDB_SCHEMAS",
 	"DUCKDB_CONSTRAINTS", "DUCKDB_INDEXES", "DUCKDB_SEQUENCES", "DUCKDB_KEYWORDS",
-	"DUCKDB_FUNCTIONS", "DUCKDB_TYPES", "PRAGMA_TABLE_INFO",
+	"DUCKDB_FUNCTIONS", "DUCKDB_TYPES", "PRAGMA_TABLE_INFO", "PRAGMA_STORAGE_INFO",
 	"DUCKLAKE_SNAPSHOTS", "DUCKLAKE_CURRENT_SNAPSHOT", "DUCKLAKE_LAST_COMMITTED_SNAPSHOT", "DUCKLAKE_TABLE_INFO",
 )
 
