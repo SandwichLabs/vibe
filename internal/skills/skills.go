@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/a2ui"
 )
 
 // NamePattern is the required shape for every skill name — built-in or
@@ -80,8 +82,22 @@ func Builtins() []Skill {
 		}
 		out = append(out, Skill{Name: name, Description: description, Instructions: body})
 	}
+	out = append(out, a2uiSkill())
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// a2uiSkill is the built-in a2ui skill (#218). Unlike the others its body is
+// not an embedded file: it is generated at load time from the a2ui registries,
+// so an MCP client (which never sees the in-app <a2ui> prompt block) reads a
+// schema that cannot drift from what Validate and ValidateView accept, with no
+// generated file to keep in step.
+func a2uiSkill() Skill {
+	return Skill{
+		Name:         "a2ui",
+		Description:  "The A2UI component schema for present_data, create_dashboard and write_artifact views: every component type and field, which types a notebook dashboard takes and which a data artifact view takes. The in-app chat prompt already carries this schema; MCP clients read it here.",
+		Instructions: a2ui.SkillBody(),
+	}
 }
 
 // ParseFrontmatter parses a SKILL.md document: YAML-flavored frontmatter

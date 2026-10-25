@@ -74,6 +74,66 @@ func saveWithNewCell(ctx context.Context, store notebooks.Store, nb notebooks.No
 	return store.Save(ctx, raw)
 }
 
+// sqlVetFailure is one refused notebook SQL: the JSON-RPC code and the message
+// (the binder's error and candidates, or the policy reason).
+type sqlVetFailure struct {
+	code int
+	msg  string
+}
+
+// vetNotebookSQL runs the vetting every notebook-stored SQL gets at save: the
+// connection must be registered, the SQL is expanded and classified on it as it
+// will run (unqualified names resolve, a bad column fails with the binder's
+// candidates) and must be a read-only statement under the sandbox. what names
+// the surface in the refusal ("notebook sql cells"). It returns the validated
+// connection name.
+func (h *Handler) vetNotebookSQL(ctx context.Context, rawConnection, sqlStr, what string) (string, *sqlVetFailure) {
+	// An agent-authored cell may name the connection it runs on, validated
+	// against the registered names; the cell is classified on that connection
+	// so its unqualified names resolve the way they will when it runs.
+	connection, cerr := h.validConnection(rawConnection)
+	if cerr != nil {
+		return "", &sqlVetFailure{ErrInvalidParams, cerr.Error()}
+	}
+	connectErr := h.connectReferenced(ctx, connection, sqlStr)
+	// The cell keeps its wildcard; it is vetted as it will run, expanded.
+	vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
+	if xerr != nil {
+		return "", &sqlVetFailure{expandErrorCode(xerr), what + ": " + xerr.Error()}
+	}
+	v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
+	if verr != nil {
+		return "", &sqlVetFailure{ErrInternal, verr.Error()}
+	}
+	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
+		h.logger.Debug("notebook sql denied", "reason", v.Reason)
+		msg := fmt.Sprintf("%s are read-only queries: %v", what, withConnectError(err, connectErr))
+		if v.Reason != "" {
+			msg += ": " + v.Reason
+		}
+		return "", &sqlVetFailure{ErrPermission, msg}
+	}
+	return connection, nil
+}
+
+// vetDashboardSQL vets every sql-bound component of a validated page, on its own
+// connection, and returns one line per failure prefixed by the component's path
+// (components[i].sql). Nothing is short-circuited: the agent sees all of them.
+func (h *Handler) vetDashboardSQL(ctx context.Context, page a2ui.Page) []string {
+	var failures []string
+	for i, c := range page.Components {
+		sqlStr, _ := c.Fields["sql"].(string)
+		if strings.TrimSpace(sqlStr) == "" {
+			continue
+		}
+		conn, _ := c.Fields["connection"].(string)
+		if _, vf := h.vetNotebookSQL(ctx, conn, sqlStr, "dashboard sql bindings"); vf != nil {
+			failures = append(failures, fmt.Sprintf("components[%d].sql (%s %q): %s", i, c.Type, c.ID, vf.msg))
+		}
+	}
+	return failures
+}
+
 func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Response {
 	sqlStr := stringParam(req.Params["sql"])
 	if strings.TrimSpace(sqlStr) == "" {
@@ -83,26 +143,9 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 	if _, errResp := h.duckDB(req.ID); errResp != nil {
 		return errResp
 	}
-	// An agent-authored cell may name the connection it runs on, validated
-	// against the registered names; the cell is classified on that connection
-	// so its unqualified names resolve the way they will when it runs.
-	connection, cerr := h.validConnection(stringParam(req.Params["connection"]))
-	if cerr != nil {
-		return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
-	}
-	connectErr := h.connectReferenced(ctx, connection, sqlStr)
-	// The cell keeps its wildcard; it is vetted as it will run, expanded.
-	vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
-	if xerr != nil {
-		return NewErrorResponse(req.ID, expandErrorCode(xerr), "notebook sql cells: "+xerr.Error())
-	}
-	v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
-	if verr != nil {
-		return NewErrorResponse(req.ID, ErrInternal, verr.Error())
-	}
-	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
-		h.logger.Debug("notebook cell denied", "reason", v.Reason)
-		return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("notebook sql cells are read-only queries: %v: %s", withConnectError(err, connectErr), v.Reason))
+	connection, vf := h.vetNotebookSQL(ctx, stringParam(req.Params["connection"]), sqlStr, "notebook sql cells")
+	if vf != nil {
+		return NewErrorResponse(req.ID, vf.code, vf.msg)
 	}
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))
@@ -144,6 +187,11 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 	page, err := a2ui.Validate(req.Params["page"])
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
+	}
+	// Vet the live sql bindings before the dry-run short-circuit, so a refusal
+	// is reported on a dry run too (#215).
+	if failures := h.vetDashboardSQL(ctx, page); len(failures) > 0 {
+		return NewErrorResponse(req.ID, ErrInvalidParams, "create_dashboard refused: "+strings.Join(failures, "\n"))
 	}
 
 	store := h.access.Notebooks()
