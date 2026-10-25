@@ -22,6 +22,8 @@ type mcpOptions struct {
 	addr     string
 	handler  *agents.Handler
 	remember bool
+	version  string
+	refresh  func()
 }
 
 // WithMCPLogger sets the logger.
@@ -40,6 +42,15 @@ func WithMCPHandler(h *agents.Handler) MCPOption { return func(o *mcpOptions) { 
 // WithMCPAddr sets the listen address (loopback only; default is the port
 // remembered for this workspace, else any free port on 127.0.0.1).
 func WithMCPAddr(addr string) MCPOption { return func(o *mcpOptions) { o.addr = addr } }
+
+// WithMCPVersion sets the build version the server reports in serverInfo.
+func WithMCPVersion(v string) MCPOption { return func(o *mcpOptions) { o.version = v } }
+
+// WithMCPPolicyRefresh sets a function run before each client's server
+// instructions are built, for an owner (Studio) whose handler policy follows
+// saved settings only as calls arrive. Without it the handler's policy is the
+// one it was built with.
+func WithMCPPolicyRefresh(f func()) MCPOption { return func(o *mcpOptions) { o.refresh = f } }
 
 // WithMCPRememberPort stores the chosen port in the per-person workspace
 // settings so a client's saved address survives a restart (UX T11). Studio
@@ -87,7 +98,7 @@ func StartWorkspaceMCP(ws workspace.Workspace, sess session.Session, hold *Hold,
 	if o.wrap != nil {
 		handler = o.wrap(handler)
 	}
-	m.srv = vibemcp.New(handler, o.logger)
+	m.srv = vibemcp.New(handler, o.logger, mcpServerOptions(ws, sess, h, hold.Holder().App, o.version, o.refresh)...)
 
 	port := ws.Local().MCPPort
 	addr := o.addr

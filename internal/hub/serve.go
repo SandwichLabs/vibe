@@ -48,6 +48,8 @@ type ServeOptions struct {
 	Logger *slog.Logger
 	// App overrides the holder name in hub.lock (default AppServe).
 	App string
+	// Version is the build version reported in the MCP serverInfo.
+	Version string
 }
 
 // ResolveRoot turns a --workspace value (or "" for the working directory) into
@@ -287,7 +289,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 	if opts.Transport == "stdio" {
 		addr = "127.0.0.1:0"
 	}
-	share, serr := StartWorkspaceMCP(ws, sess, hold, WithMCPHandler(handler), WithMCPLogger(opts.Logger), WithMCPAddr(addr))
+	share, serr := StartWorkspaceMCP(ws, sess, hold, WithMCPHandler(handler), WithMCPLogger(opts.Logger), WithMCPAddr(addr), WithMCPVersion(opts.Version))
 	if serr != nil {
 		if opts.Transport == "sse" {
 			return fmt.Errorf("failed to start the SSE server: %w", serr)
@@ -304,7 +306,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 	switch opts.Transport {
 	case "stdio":
 		opts.Logger.Info("mcp serve: stdio transport ready")
-		err = vibemcp.New(handler, opts.Logger).ServeStdio(ctx, opts.In, opts.Out)
+		err = vibemcp.New(handler, opts.Logger, mcpServerOptions(ws, sess, handler, opts.App, opts.Version, nil)...).ServeStdio(ctx, opts.In, opts.Out)
 	case "sse":
 		fmt.Fprintf(opts.Err, "MCP SSE server listening on %s\n", share.URL())
 		fmt.Fprintf(opts.Err, "Auth token (send as `Authorization: Bearer <token>`, see docs/reference/mcp.md): %s\n", share.Token())
@@ -321,4 +323,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 	return err
 }
 
-const askNotice = `Ask before changes is on for this workspace: MCP clients can read but changes will be refused (no one is here to approve them). Changes to a connection other than this workspace's local database always need Vibe Studio. Turn the gate off in Vibe Studio → Settings → Agent.`
+// askNotice goes to stderr only (an MCP client never shows it to the model);
+// the same state reaches the model in the server instructions and in each
+// refusal.
+const askNotice = `Ask before changes is on for this workspace: MCP clients can read, but changes will be refused (no one is here to approve them). A valid notebook, skill or artifact write says it is valid and ready, so the client can ask you to approve it. Changes to a connection other than this workspace's local files always need Vibe Studio. To let MCP clients change local files without asking, turn off ` + agents.SettingsAskPath + `, then restart this server: the policy is read when it starts.`

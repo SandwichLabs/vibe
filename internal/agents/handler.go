@@ -102,7 +102,7 @@ type Handler struct {
 	// server's whole lifetime, and mark3labs/mcp-go dispatches each
 	// tools/call on its own goroutine (per internal/mcp/server.go's own Handler
 	// doc comment) — two concurrent MCP calls previously wrote/read this
-	// field with no synchronization at all. studio/app.go's
+	// field with no synchronization at all. studio/app_agent.go's
 	// agentToolHandler.Handle already holds a.mu.RLock() for the whole
 	// dispatch and reads a.activeNotebookID under that lock before calling
 	// SetActiveNotebook here — but the WRITE into this struct (a completely
@@ -123,7 +123,7 @@ type Handler struct {
 	// preview_query has succeeded on THIS Handler's lifetime — for
 	// chat/MCP that's the process lifetime (irrelevant there: write_cell is
 	// task-only), for task mode it's exactly one AgentTask call (a fresh
-	// Handler is built per call — see studio/app.go's AgentTask), which is
+	// Handler is built per call — see studio/app_agent.go's AgentTask), which is
 	// exactly "this task turn". handleWriteCell requires its sql to be a
 	// member of this set (review fix, finding 4).
 	previewedMu  sync.Mutex
@@ -265,7 +265,7 @@ func NewHandler(access WorkspaceAccess, engine EngineAccess, sandbox *SandboxCon
 // ApproveFunc obtains the user's OK for a pending write (#79). It is called
 // synchronously from inside Handle/handleRunQuery — a blocking call is
 // exactly the intended behaviour (the model's tool call waits for a human
-// answer) — and returns nil only on approval. studio/app.go's
+// answer) — and returns nil only on approval. studio/app_agent.go's
 // agentToolHandler.enableApprovals is the only production implementation: it
 // releases the caller's file lock for the duration of the wait (documented
 // on that function) so Save/Close/Settings stay responsive while a card is
@@ -275,8 +275,9 @@ type ApproveFunc func(ctx context.Context, req ApprovalRequest) error
 // SetApprover installs (or, with nil, removes) the function Handle/
 // handleRunQuery calls to obtain approval for a gated write. A Handler with
 // no approver refuses every write that needs one (see awaitApproval) instead
-// of blocking — that is the deliberate MCP behaviour: no
-// approver is ever attached to a headless or SSE MCP server.
+// of blocking — that is the deliberate headless behaviour. Headless
+// `vibe mcp serve` attaches no approver; Studio's SSE server does
+// (studio/workspace_mcp.go), so its writes show an approval card.
 func (h *Handler) SetApprover(fn ApproveFunc) { h.approver = fn }
 
 // SetFilePolicy atomically swaps in both the sandbox mode and the
@@ -294,6 +295,18 @@ func (h *Handler) SetFilePolicy(mode SandboxMode, requireApproval bool) {
 	next.RequireApproval = requireApproval
 	h.sandbox.Store(&next)
 }
+
+// Policy is the sandbox tier and ask-before-changes setting a call made with
+// ctx would run under now (the live file policy, tightened by any ceiling on
+// ctx).
+func (h *Handler) Policy(ctx context.Context) FilePolicy {
+	sb := h.sandboxFor(ctx)
+	return FilePolicy{Mode: sb.Mode, AskBeforeWrites: sb.RequireApproval}
+}
+
+// HasApprover reports whether someone can approve a write (Studio's approval
+// card); false means a write that needs an OK is refused.
+func (h *Handler) HasApprover() bool { return h.approver != nil }
 
 // Handle processes a JSON-RPC request and returns a response.
 func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
@@ -374,17 +387,21 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 // the wait vets exactly it, not a fresh expansion.
 func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxConfig, sqlText, runSQL string, params map[string]any, class sqlClass, nonLocal []string) *Response {
 	if h.approver == nil {
+		if tool := GetTool(req.Method); tool.DryRunSafe && len(nonLocal) == 0 {
+			// Validate first: an invalid request gets its own error, and a valid
+			// one is told it is ready and only needs the person's OK.
+			if resp := h.validateOnly(ctx, req); resp != nil {
+				return resp
+			}
+			return contentNeedsApproval(req, sb)
+		}
 		if len(nonLocal) > 0 {
 			return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
 				"%s changes %s, which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when \"Ask before changes\" is off), and there is no one to ask over MCP. "+
 					"Nothing was changed. Open the workspace in Vibe Studio: with its MCP server on, `vibe mcp serve` passes through to it and Studio shows you an approval card, or make the change from Studio's agent chat.",
 				req.Method, strings.Join(nonLocal, ", ")))
 		}
-		return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
-			"%s needs your OK before it runs: this workspace asks before the agent changes anything (sandbox: %s), and there is no one to ask over MCP. "+
-				"Nothing was changed. Changes to any connection other than the workspace's local database always need Vibe Studio: open the workspace there and approve the change. "+
-				`To let MCP clients change the local database without asking, turn off "Ask before changes" in Vibe Studio → Settings → Agent.`,
-			req.Method, sb.Mode))
+		return dataNeedsApproval(req, sb)
 	}
 
 	userDB := h.access.DuckDBDB()
@@ -404,7 +421,7 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	case err == nil:
 		// Round 2 review finding 7: the approver call above can block for
 		// minutes with the caller's file lock released (see
-		// studio/app.go's enableApprovals), during which SetFilePolicy may
+		// studio/app_agent.go's enableApprovals), during which SetFilePolicy may
 		// have tightened the file's live mode. A human did approve this
 		// exact change, but "approved" must still mean "still allowed" the
 		// moment it actually runs, not "was allowed when the card first
@@ -438,6 +455,21 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	default:
 		return NewErrorResponse(req.ID, ErrApprovalNeeded, err.Error())
 	}
+}
+
+// validateOnly dry-runs a DryRunSafe tool. It returns the tool's error, or nil
+// when the request is valid. A "success" that does not carry the dry-run marker
+// means the handler did not stop before its write; that is reported as an
+// internal error and never as a valid request.
+func (h *Handler) validateOnly(ctx context.Context, req *Request) *Response {
+	resp := h.dispatch(withDryRun(ctx), req)
+	if resp.Error != nil {
+		return resp
+	}
+	if m, ok := resp.Result.(map[string]any); !ok || m["dry_run"] != true {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("%s could not be checked without saving; nothing was reported as valid", req.Method))
+	}
+	return nil
 }
 
 // dispatch routes the request to the appropriate handler method.

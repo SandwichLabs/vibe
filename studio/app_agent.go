@@ -405,6 +405,15 @@ type agentToolHandler struct {
 // denied) unless something explicitly opts in.
 func (h *agentToolHandler) SetMode(mode string) { h.inner.SetMode(mode) }
 
+// refreshPolicy re-reads the saved agent settings into the handler, so the MCP
+// server instructions a client gets on connect report the gate as it is now.
+func (h *agentToolHandler) refreshPolicy() {
+	h.app.mu.RLock()
+	defer h.app.mu.RUnlock()
+	policy := h.app.agentPolicy()
+	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
+}
+
 func (h *agentToolHandler) Handle(ctx context.Context, req *agents.Request) *agents.Response {
 	h.app.mu.RLock()
 	defer h.app.mu.RUnlock()

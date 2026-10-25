@@ -40,6 +40,8 @@ func (a *App) StartMCP() (*MCPStatus, error) {
 		m, err := hub.StartWorkspaceMCP(a.ws, a.sess, a.hold,
 			hub.WithMCPLogger(a.logger),
 			hub.WithMCPRememberPort(),
+			hub.WithMCPVersion(version),
+			hub.WithMCPPolicyRefresh(h.refreshPolicy),
 			hub.WithMCPHandler(h.inner),
 			hub.WithMCPHandlerWrap(func(vibemcp.Handler) vibemcp.Handler { return h }),
 		)

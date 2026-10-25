@@ -15,6 +15,10 @@ type ToolDef struct {
 	// ListToolsForMode, which both internal/llm's chat runner and
 	// internal/mcp's server call instead of the unfiltered ListTools/Tools.
 	Modes []string
+	// DryRunSafe marks a content tool whose handler honours a dry run: it runs
+	// every check and stops before its write. Only such a tool is validated
+	// ahead of the approval gate; any other is refused at the gate unvalidated.
+	DryRunSafe bool
 }
 
 // ParamDef defines a parameter for a tool.
@@ -99,6 +103,7 @@ var Tools = []ToolDef{
 		Name:        "create_or_update_skill",
 		Description: "Author or update a Skill: domain context (business rules, table meaning, terminology) stored in the workspace (skills/<name>/SKILL.md) and loaded on demand by the agent. To replace an existing skill, send the \"rev\" that read_skill or list_skills returned: without one the write only creates, and an existing name is refused. Cannot use a built-in skill's name or the \"task-\" prefix (reserved).",
 		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Lowercase kebab-case name, e.g. \"revenue-rules\" (routing key; must not shadow a built-in or start with \"task-\")"},
 			{Name: "description", Type: "string", Required: true, Desc: "One-line description advertised in the system prompt (<= 300 characters)"},
@@ -125,6 +130,7 @@ var Tools = []ToolDef{
 		Name:        "write_artifact",
 		Description: "Author or replace a data artifact: a parameterised, live view stored as files (artifacts/<name>/artifact.yaml and view.a2ui.json, or view.js with view: script) that re-runs its named queries whenever it opens or a parameter changes. Every query is read-only and vetted against the SQL policy now and again on every run; a value only ever becomes a bound parameter. Call read_skill \"data-artifacts\" first for the manifest and view format. To replace an existing artifact, send the \"rev\" that get_artifact returned: without one the write only creates, and an existing name is refused. A query returned with sql_omitted is sent back as {\"name\": ..., \"keep_sql\": true} (needs the rev) to keep its stored SQL. A manifest with view: script takes view_source (the view.js text) instead of view; it is stored but never runs until the person allows it in Studio, and it asks again after every edit. A manifest with view: html is a page of Go html/template files (read_skill \"data-artifacts\", HTML pages section) sent as html_files; the page is stored but nothing renders it until the person allows it, it asks again after every edit, and no tool can allow it or run it.",
 		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Artifact name: 1 to 64 lowercase letters, digits, - or _"},
 			{Name: "manifest", Type: "object", Required: true, Desc: "The manifest: {title, description?, parameters: [{name, type, default, ...}], queries: [{name, connection?, sql}]}. See the data-artifacts skill."},
@@ -377,6 +383,7 @@ var Tools = []ToolDef{
 		Name:        "add_query_cell",
 		Description: "Append a SQL notebook cell to a notebook. sql must be a single read-only statement (classified the same way a live A2UI binding is — INSERT/UPDATE/DELETE/DDL are rejected). Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from label.",
 		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
 			{Name: "sql", Type: "string", Required: true, Desc: "A single read-only SQL statement"},
@@ -389,6 +396,7 @@ var Tools = []ToolDef{
 		Name:        "create_dashboard",
 		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. See the <a2ui> system prompt block for the component schema. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title. This is a dashboard cell in a notebook, not a live-view artifact; for a saved live view use write_artifact.",
 		Category:    "content",
+		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
 			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the <a2ui> system prompt block for the component schema.`},

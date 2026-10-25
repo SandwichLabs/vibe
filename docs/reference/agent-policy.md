@@ -49,6 +49,12 @@ There is no approver on headless `vibe mcp serve`, so it **refuses writes to non
 
 > run_query changes pg, which is not a local file in this workspace, so it always needs your OK in Vibe Studio (even when "Ask before changes" is off), and there is no one to ask over MCP. Nothing was changed. Open the workspace in Vibe Studio: with its MCP server on, `vibe mcp serve` passes through to it and Studio shows you an approval card, or make the change from Studio's agent chat.
 
+A content write (`write_artifact`, `add_query_cell`, `create_dashboard`, `create_or_update_skill`) that needs an approval nobody can give is **validated first**: every check the write makes runs with nothing written (a dry run inside the handler, so the two paths cannot drift), and only then is the approval asked for. An invalid request gets its own validation error. A valid one gets:
+
+> write_artifact: your request is valid and ready, but it was NOT saved yet. It writes artifacts/sales/ in the workspace folder, and this workspace asks before the agent changes anything (sandbox: read-write), with no one here to approve over MCP. Nothing was written. Ask the person to approve it: ... or they can turn off "Ask before changes" (the switch "Ask me before it changes data" in Vibe Studio → Settings → Workspace → The agent → On this computer) and then you can send the same call again.
+
+with `structuredContent {"valid": true, "needs_approval": true, "nothing_written": true}` over MCP. The data variant (`run_query`, records and the like) says it changes data in the workspace's local database and names the same switch. A refusal for the tier names the tier needed and where it is changed (`internal/agents/approval_text.go`). When an approver is present the card is shown before the write, as always.
+
 Through Studio (chat, or MCP proxied to Studio) the approval card says which non-local connections the statement changes. The policy is checked again after you approve, in case the tier or the connection changed while the card was open.
 
 ## Files and URLs

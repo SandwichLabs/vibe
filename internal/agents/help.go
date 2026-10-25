@@ -173,7 +173,7 @@ var mcpToolCategoryOrder = []string{"introspect", "data", "content", "schema"}
 var mcpToolCategoryLabel = map[string]string{
 	"introspect": "Introspect (read-only)",
 	"data":       "Data (read-write)",
-	"content":    "Content — notebooks & skills (read-write)",
+	"content":    "Content — notebooks, skills & artifacts (read-write)",
 	"schema":     "Schema (full access)",
 }
 
@@ -194,7 +194,8 @@ func buildMCPToolsEntry() HelpEntry {
 
 	var b strings.Builder
 	b.WriteString("# MCP Server & Tools\n\n")
-	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n")
+	b.WriteString("Vibe exposes an MCP (Model Context Protocol) server — `vibe mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n\n")
+	b.WriteString("When \"Ask before changes\" is on and nobody can approve (headless), a write is refused and nothing is changed. A notebook, skill or artifact write is checked first: an invalid request returns its validation error, and a valid one says it is valid and ready, so ask the person to approve it or to turn off \"Ask before changes\" in Settings → Workspace → The agent.\n")
 
 	tags := []string{"mcp", "server", "tool", "agent", "api"}
 	for _, cat := range mcpToolCategoryOrder {

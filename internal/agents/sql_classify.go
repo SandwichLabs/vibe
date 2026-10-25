@@ -371,11 +371,11 @@ func (sc *SandboxConfig) checkSQLClass(class sqlClass, reason string) error {
 	switch sc.Mode {
 	case ModeReadOnly:
 		if class != sqlClassRead {
-			return fmt.Errorf("run_query: the agent is read-only here: only read statements (SELECT, WITH...SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE, or a read-style PRAGMA) are allowed. Changing data needs the read-write tier")
+			return fmt.Errorf("run_query: the agent is read-only here: only read statements (SELECT, WITH...SELECT, SHOW, DESCRIBE, EXPLAIN, SUMMARIZE, or a read-style PRAGMA) are allowed. Changing data needs the read-write tier. %s", tierFix(ModeReadWrite))
 		}
 	case ModeReadWrite:
 		if class == sqlClassDDL {
-			return fmt.Errorf("run_query: this statement changes a connection's structure or writes a file, which needs the full tier (read-write allows INSERT, UPDATE and DELETE only)")
+			return fmt.Errorf("run_query: this statement changes a connection's structure or writes a file, which needs the full tier (read-write allows INSERT, UPDATE and DELETE only). %s", tierFix(ModeFull))
 		}
 	case ModeFull:
 	default:

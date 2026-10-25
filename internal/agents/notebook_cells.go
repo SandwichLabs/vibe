@@ -46,6 +46,22 @@ func (h *Handler) resolveTargetNotebook(ctx context.Context, store notebooks.Sto
 	return store.Create(ctx, title)
 }
 
+// notebookDryRun ends a dry run of a cell write: when the cell would go into an
+// existing notebook (named, or the one open in Studio) that notebook must
+// load; a new notebook is created only by the real write.
+func (h *Handler) notebookDryRun(ctx context.Context, req *Request, store notebooks.Store) *Response {
+	id := strings.TrimSpace(stringParam(req.Params["notebook_id"]))
+	if id == "" {
+		id = strings.TrimSpace(h.resolveActiveNotebook())
+	}
+	if id != "" {
+		if _, _, err := store.Get(ctx, id); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("notebook %q not found: %v", id, err))
+		}
+	}
+	return dryRunOK(req.ID)
+}
+
 // saveWithNewCell appends cell to nb and persists it through
 // notebooks.Save/Coerce (never a direct INSERT), returning the saved
 // notebook and any coercion warnings.
@@ -91,6 +107,9 @@ func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Respons
 
 	label := strings.TrimSpace(stringParam(req.Params["label"]))
 	store := h.access.Notebooks()
+	if isDryRun(ctx) {
+		return h.notebookDryRun(ctx, req, store)
+	}
 	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), label)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
@@ -128,6 +147,9 @@ func (h *Handler) handleCreateDashboard(ctx context.Context, req *Request) *Resp
 	}
 
 	store := h.access.Notebooks()
+	if isDryRun(ctx) {
+		return h.notebookDryRun(ctx, req, store)
+	}
 	nb, err := h.resolveTargetNotebook(ctx, store, stringParam(req.Params["notebook_id"]), page.Title)
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
