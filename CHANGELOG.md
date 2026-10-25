@@ -15,7 +15,7 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Changed
 
-- **The in-app agent's system prompt is about 40% smaller** (about 7 KB less per turn): it no longer repeats each tool's description, which the model already receives with the tool. It now tells the agent the workspace's `data/` folder path, to alias every aggregate with `AS` (bare aliases like `days`, `name` or `type` are DuckDB syntax errors), and that `run_query` parameters are `$name`. The built-in `duckdb-sql` skill says the same. ([#223](https://github.com/SandwichLabs/vibe/pull/223))
+- **The in-app agent's system prompt is more than a third smaller** (about 7 KB less per turn): it no longer repeats each tool's description, which the model already receives with the tool. It now tells the agent the workspace's `data/` folder path, to alias every aggregate with `AS` (bare aliases like `days`, `name` or `type` are DuckDB syntax errors), and that `run_query` parameters are `$name`. The built-in `duckdb-sql` skill says the same. ([#223](https://github.com/SandwichLabs/vibe/pull/223))
 - `help_search` with an empty query returns a short index of topics; asking for a topic by name returns just that topic. The component and view lists in the help are generated from the code, and there is a new `artifacts` topic. ([#224](https://github.com/SandwichLabs/vibe/pull/224))
 
 ## [0.3.1] - 2026-10-24
