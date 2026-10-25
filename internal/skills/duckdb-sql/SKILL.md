@@ -51,7 +51,10 @@ column left to right.
 
 `run_query` binds named parameters: write `$name` in the SQL and pass
 `{"name": value}` in `params`. A name used twice is bound twice, and `?`
-placeholders are not supported there.
+placeholders are not supported there. A parameter has no type until DuckDB can
+infer one, so cast it where a function has several overloads:
+`date_trunc('month', $from::DATE)`. `run_query` returns the last statement's
+result only, so send one `SELECT` per call.
 
 ```sql
 SELECT * FROM customers WHERE LOWER(state) = LOWER($state);

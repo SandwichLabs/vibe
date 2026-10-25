@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
@@ -118,7 +120,11 @@ func analyzeSQL(ctx context.Context, userDB queryDB, env *sqlEnv, raw string, pa
 		return deny(fmt.Sprintf("could not validate query: %v", err))
 	}
 	a := &analyzer{ctx: ctx, db: userDB, env: env, paths: env.pathPolicy(), vetted: map[string]bool{}}
-	return a.script(bound, args)
+	v := a.script(bound, args)
+	if v.Class == sqlClassOther {
+		v.Reason += untypedParamHint(v.Reason, raw)
+	}
+	return v
 }
 
 type analyzer struct {
@@ -189,46 +195,71 @@ func (a *analyzer) script(bound string, args []any) *sqlVerdict {
 	}
 	n, err := countStatements(bound)
 	if err != nil {
-		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err)))
+		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err, bound)))
 	}
 	if n != len(stmts) {
 		for _, toks := range stmts {
 			for _, t := range toks {
 				if t.isWord("PIVOT") || t.isWord("UNPIVOT") {
-					return deny(fmt.Sprintf("%s: the PIVOT/UNPIVOT statement form expands into several statements inside DuckDB; use FROM <table> PIVOT (... IN (...)) or a reader on a path inside data/", couldntVerifyMsg))
+					return deny(pivotStatementMsg)
 				}
 			}
 		}
 		return deny(fmt.Sprintf("%s: it could not be split into statements reliably", couldntVerifyMsg))
 	}
 	a.src = bound
+	if r := placeholderMismatch(stmts, len(args)); r != "" {
+		return deny(r)
+	}
 	out := &sqlVerdict{Class: sqlClassRead}
 	argPos := 0
-	for _, toks := range stmts {
-		nq := 0
-		for _, t := range toks {
-			if t.isPunct("?") {
-				nq++
-			}
-		}
-		if argPos+nq > len(args) {
-			return deny(fmt.Sprintf("%s: parameters do not line up with the statement", couldntVerifyMsg))
-		}
+	for i, toks := range stmts {
+		nq := countPlaceholders(toks)
 		stmtArgs := args[argPos : argPos+nq]
 		argPos += nq
 		v := a.statement(toks, stmtArgs, 0)
 		if v.Class == sqlClassOther {
 			return v
 		}
+		if v.Class == sqlClassRead && i < len(stmts)-1 {
+			out.discardedReads++
+		}
 		if v.Class > out.Class {
 			out.Class = v.Class
 		}
 		out.Targets = append(out.Targets, v.Targets...)
+		out.Temp = out.Temp || v.Temp
 	}
-	if argPos != len(args) {
-		return deny(fmt.Sprintf("%s: parameters do not line up with the statement", couldntVerifyMsg))
-	}
+	out.Statements = len(stmts)
 	return out
+}
+
+func countPlaceholders(toks []lexTok) int {
+	n := 0
+	for _, t := range toks {
+		if t.isPunct("?") {
+			n++
+		}
+	}
+	return n
+}
+
+// placeholderMismatch explains a script whose `?` tokens do not match the
+// $name parameters that were bound. Every bound $name became one `?`, so a
+// surplus `?` is one the caller wrote, and a deficit is a $name that sat inside
+// a string literal or a comment (BindParams rewrites it all the same).
+func placeholderMismatch(stmts [][]lexTok, bound int) string {
+	total := 0
+	for _, toks := range stmts {
+		total += countPlaceholders(toks)
+	}
+	switch {
+	case total > bound:
+		return "run_query parameters are named: write $name in the SQL and pass {\"name\": value} in params; a bare ? placeholder is not supported"
+	case total < bound:
+		return fmt.Sprintf("%s: a $name inside a string literal or a comment is not a parameter; write it outside the quotes", couldntVerifyMsg)
+	}
+	return ""
 }
 
 // preScreen refuses the never-list statement kinds by their first token.
@@ -266,14 +297,116 @@ func preScreen(toks []lexTok) *sqlVerdict {
 // parseFailure is the reason for a statement DuckDB's parser rejected. A name
 // with four or more parts (motherduck.newsroom.raw.t) fails deep in the
 // serializer with "NameListToString NOT IMPLEMENTED", which says nothing to
-// the agent, so it is explained (#111).
-func parseFailure(err error) string {
+// the agent, so it is explained (#111). A keyword used as a bare alias
+// (SELECT count(*) days) gets a fixed hint (#222). text is the SQL that failed.
+func parseFailure(err error, text string) string {
 	msg := firstLine(err.Error())
 	if strings.Contains(msg, "NameListToString") {
 		return "a table name has at most three parts (connection.schema.table); " + oneDatabasePerConnectionHint
 	}
-	return msg
+	return msg + keywordAliasHint(msg, text)
 }
+
+var syntaxNearRe = regexp.MustCompile(`syntax error at or near "([A-Za-z_][A-Za-z0-9_]*)"`)
+
+// maxAliasWords bounds how many keyword aliases one hint names, and
+// maxAliasProbes how many occurrences of a failing word are retried.
+const (
+	maxAliasWords  = 4
+	maxAliasProbes = 8
+	// maxAliasHintBytes: a longer statement gets no hint.
+	maxAliasHintBytes = 64 << 10
+)
+
+// keywordAliasHint explains "syntax error at or near <word>" when the word is a
+// DuckDB keyword or type name (days, value, year, ...) used as a bare alias.
+// It does not guess from a keyword list: it asks DuckDB's parser, which only
+// parses the text, whether writing AS before that word gets past the error. A
+// word counts only when the statement then parses, or fails further on at a
+// different word (a second bare alias, SELECT 1 hours, 2 minutes). A failure at
+// the AS itself means the word was not an alias, so any other syntax error gets
+// no hint.
+func keywordAliasHint(msg, text string) string {
+	if len(text) > maxAliasHintBytes {
+		return "" // every probe holds the shared parser connection
+	}
+	var words []string
+	for len(words) < maxAliasWords {
+		m := syntaxNearRe.FindStringSubmatch(msg)
+		if m == nil || slices.Contains(words, m[1]) {
+			break
+		}
+		next, nextMsg, ok := insertAlias(text, m[1])
+		if !ok {
+			break
+		}
+		words = append(words, m[1])
+		text, msg = next, nextMsg
+	}
+	if len(words) == 0 {
+		return ""
+	}
+	verb, subj, noun, obj := "is a DuckDB keyword", "it", "a bare alias", "it"
+	if len(words) > 1 {
+		verb, subj, noun, obj = "are DuckDB keywords", "they", "bare aliases", "them"
+	}
+	var parts []string
+	for _, w := range words {
+		parts = append(parts, "AS "+w)
+	}
+	return fmt.Sprintf(" (hint: %s %s, so %s cannot be %s: write %s, or quote %s as \"%s\")",
+		quotedList(words), verb, subj, noun, strings.Join(parts, ", "), obj, words[0])
+}
+
+func quotedList(words []string) string {
+	q := make([]string, len(words))
+	for i, w := range words {
+		q[i] = fmt.Sprintf("%q", w)
+	}
+	return strings.Join(q, ", ")
+}
+
+// insertAlias writes AS before an occurrence of word in text and reports
+// whether the parser got past it: the new text, the parser's message for it
+// ("" when it parses), and ok.
+func insertAlias(text, word string) (string, string, bool) {
+	probes := 0
+	for _, stmt := range lexStatements(text) {
+		for _, t := range stmt {
+			if t.Kind != lkWord || !strings.EqualFold(t.Raw, word) {
+				continue
+			}
+			if probes++; probes > maxAliasProbes {
+				return "", "", false
+			}
+			cand := text[:t.Start] + "AS " + text[t.Start:]
+			_, err := countStatements(cand)
+			if err == nil {
+				return cand, "", true
+			}
+			m := syntaxNearRe.FindStringSubmatch(firstLine(err.Error()))
+			if m != nil && !strings.EqualFold(m[1], "AS") {
+				return cand, firstLine(err.Error()), true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// untypedParamHint adds a cast hint to a binder error caused by a bound
+// parameter whose type DuckDB cannot infer (date_trunc('month', $from)): the
+// value reaches the planner untyped, so a function with several overloads
+// cannot choose.
+func untypedParamHint(reason, raw string) string {
+	names := engine.ParamNames(raw)
+	if len(names) == 0 || !strings.Contains(reason, "Could not choose a best candidate function") {
+		return ""
+	}
+	return fmt.Sprintf("\nHint: a ? above stands for one of your $name parameters. Its type is not known when the function is chosen, so cast it where it is used: $%s::DATE, $%s::TIMESTAMP, CAST($%s AS INTEGER).", names[0], names[0], names[0])
+}
+
+// pivotStatementMsg is the refusal for the PIVOT / UNPIVOT statement forms.
+const pivotStatementMsg = couldntVerifyMsg + ": the PIVOT/UNPIVOT statement form expands into several statements inside DuckDB; use the FROM form instead: FROM <table> PIVOT (sum(v) FOR k IN (...)) or FROM <table> UNPIVOT (value FOR name IN (col1, col2)), or a reader on a path inside data/"
 
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
@@ -311,11 +444,32 @@ func (a *analyzer) statement(toks []lexTok, args []any, depth int) *sqlVerdict {
 	case head.isWord("INSERT"), head.isWord("UPDATE"), head.isWord("DELETE"), head.isWord("MERGE"):
 		return a.dml(toks, args)
 	case head.isWord("CREATE"), head.isWord("DROP"), head.isWord("ALTER"):
-		return a.ddl(toks, args)
+		v := a.ddl(toks, args)
+		v.Temp = v.Class == sqlClassDDL && createsTemp(toks)
+		return v
 	case head.isWord("COPY"):
 		return a.copyStmt(toks, args)
+	case head.isWord("PIVOT"), head.isWord("UNPIVOT"):
+		return deny(pivotStatementMsg)
 	}
 	return deny(fmt.Sprintf("this kind of statement (%s) is not on the agent's allow-list", head.Raw))
+}
+
+// createsTemp reports whether toks is CREATE [OR REPLACE] TEMP[ORARY] ...
+func createsTemp(toks []lexTok) bool {
+	if !toks[0].isWord("CREATE") {
+		return false
+	}
+	for _, t := range toks[1:] {
+		switch {
+		case t.isWord("TEMP"), t.isWord("TEMPORARY"):
+			return true
+		case t.isWord("OR"), t.isWord("REPLACE"), t.isWord("UNIQUE"):
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 // readOrWith handles every statement DuckDB can serialize (a pure SELECT
@@ -324,7 +478,7 @@ func (a *analyzer) readOrWith(toks []lexTok, args []any) *sqlVerdict {
 	text := a.textOf(toks)
 	doc, err := serializeSQL(a.ctx, text)
 	if err != nil {
-		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err)))
+		return deny(fmt.Sprintf("%s: %s", couldntVerifyMsg, parseFailure(err, text)))
 	}
 	if !doc.Error && len(doc.Statements) == 1 {
 		return a.read(doc.Statements[0], toks, text, args)
@@ -412,7 +566,21 @@ func (a *analyzer) pragma(toks []lexTok) *sqlVerdict {
 			return deny("a PRAGMA may only take literal arguments")
 		}
 	}
+	if tableArgFuncs[name] && len(toks) > 2 {
+		if r := a.vetTableArgToks(name, toks[3:len(toks)-1]); r != "" {
+			return deny(r)
+		}
+	}
 	return &sqlVerdict{Class: sqlClassRead}
+}
+
+// vetTableArgToks vets the argument tokens of a PRAGMA or CALL that takes a
+// table name: exactly one plain string literal.
+func (a *analyzer) vetTableArgToks(fn string, args []lexTok) string {
+	if len(args) != 1 || args[0].Kind != lkString || !args[0].Plain {
+		return fmt.Sprintf("%s takes one table name written as a string literal", fn)
+	}
+	return a.vetTableArg(fn, args[0].Text)
 }
 
 // call allows only CALL of the catalog metadata functions with literal arguments.
@@ -426,6 +594,11 @@ func (a *analyzer) call(toks []lexTok) *sqlVerdict {
 	}
 	if !literalArgs(toks[3 : len(toks)-1]) {
 		return deny("CALL may only take literal arguments")
+	}
+	if tableArgFuncs[name] {
+		if r := a.vetTableArgToks(name, toks[3:len(toks)-1]); r != "" {
+			return deny(r)
+		}
 	}
 	return &sqlVerdict{Class: sqlClassRead}
 }

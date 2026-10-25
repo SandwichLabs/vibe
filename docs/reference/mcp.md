@@ -75,7 +75,7 @@ The text is built when each client connects, on `initialize` or, for a client on
 | content | false | false (a replace needs the `rev` it read, so it cannot clobber a newer version) | true for `write_artifact` and `create_or_update_skill` (a replace needs the `rev` it read), else false | false (files in the workspace folder) |
 | data, schema | false | true | true for `update_record` and `delete_record`, else false | true (a connection may be remote), except `save_query` and `build_query`, which write only `queries/*.sql`: false |
 
-`run_query` is a data tool, so it is destructive even though a `SELECT` is not: the hint describes what the tool may do.
+`run_query` is a data tool, so it is destructive even though a `SELECT` is not: the hint describes what the tool may do. Its `sql` is one statement as a string (a non-string is refused by name; one trailing semicolon is fine), `params` is `{name: value}` for `$name` in the SQL (a bare `?` is refused), and a script returns its last statement's result only, so a read before the last statement is refused. A zero-row result (or a `count(*)` of 0) that compared a column with string literals carries a `note` listing the values that column holds in the table the statement reads. Details: [agent-policy.md](agent-policy.md).
 
 Reads are not gated by approval; what the agent may read, and the never-list, are in [agent-policy.md](agent-policy.md). Every denial returns its reason as a tool error, and `list_connections` tells a client what is connected.
 

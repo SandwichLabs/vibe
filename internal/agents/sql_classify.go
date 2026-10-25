@@ -71,6 +71,14 @@ type sqlVerdict struct {
 	Targets []sqlTarget
 
 	readers int // file/URL readers vetted in the statement (for a nested query())
+
+	// Statements is how many statements the script held, and discardedReads how
+	// many of those, before the last, are reads: run_query returns only the last
+	// statement's result, so a read before it would be silently lost.
+	Statements     int
+	discardedReads int
+	// Temp is set for a statement that creates a TEMP object (see tempObjectNote).
+	Temp bool
 }
 
 func deny(reason string) *sqlVerdict { return &sqlVerdict{Class: sqlClassOther, Reason: reason} }
@@ -87,6 +95,22 @@ const (
 // included, and no approval can lift it: credentials are the session's to
 // create (Session.CreateTemporarySecret), never the agent's (#114).
 const secretsDeniedMsg = "run_query: secrets are managed by Vibe and cannot be created, listed or referenced from SQL"
+
+// gateReason is the reason checkSQLClass is given: the verdict's own, or the TEMP
+// explanation for the tier refusal of a TEMP create (kept out of Reason so no
+// other surface, a notebook refusal for one, repeats it).
+func (v *sqlVerdict) gateReason() string {
+	if v.Temp {
+		return tempObjectNote
+	}
+	return v.Reason
+}
+
+// tempObjectNote explains why CREATE TEMP ... still needs the full tier. A TEMP
+// object changes no connection, but it lives in the hub's one in-memory catalog,
+// which every later query shares (the person's notebooks and artifacts too), and
+// a temp table named like a real table shadows it for all of them.
+const tempObjectNote = "A TEMP table changes no connection, but it lives in the one session catalog that the person's notebooks and artifacts share, and it shadows a real table of the same name there, so it is held to the full tier; use a CTE (WITH name AS (...)) or a subquery instead."
 
 var plainIdentifierRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
@@ -375,7 +399,11 @@ func (sc *SandboxConfig) checkSQLClass(class sqlClass, reason string) error {
 		}
 	case ModeReadWrite:
 		if class == sqlClassDDL {
-			return fmt.Errorf("run_query: this statement changes a connection's structure or writes a file, which needs the full tier (read-write allows INSERT, UPDATE and DELETE only). %s", tierFix(ModeFull))
+			note := ""
+			if reason == tempObjectNote {
+				note = " " + tempObjectNote
+			}
+			return fmt.Errorf("run_query: this statement changes a connection's structure or writes a file, which needs the full tier (read-write allows INSERT, UPDATE and DELETE only).%s %s", note, tierFix(ModeFull))
 		}
 	case ModeFull:
 	default:

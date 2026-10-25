@@ -151,8 +151,47 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 	return runSQL, runCtx, v.Reason, nil
 }
 
+// sqlParam reads run_query's sql argument. A value that is not a string (sql:
+// 123, an array) is named as such instead of being reported as an empty
+// statement.
+func sqlParam(req *Request) (string, *Response) {
+	raw, present := req.Params["sql"]
+	if !present || raw == nil {
+		return "", nil // an absent sql is the policy's "statement is empty"
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return "", NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("run_query: sql must be a string holding one SQL statement (got %s)", jsonKind(raw)))
+	}
+	return s, nil
+}
+
+// jsonKind names a decoded JSON value's type for an error message.
+func jsonKind(v any) string {
+	switch v.(type) {
+	case bool:
+		return "a boolean"
+	case float64, float32, int, int64:
+		return "a number"
+	case []any:
+		return "an array"
+	case map[string]any:
+		return "an object"
+	}
+	return fmt.Sprintf("%T", v)
+}
+
+// discardedReadsMsg is the refusal for a script with reads before its last
+// statement.
+func discardedReadsMsg(reads, total int) string {
+	return fmt.Sprintf("run_query returns the result of the last statement only, but this script has %d statements and the %d read(s) before the last would be dropped without a word. Send each SELECT as its own call (a script is for writes)", total, reads)
+}
+
 func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
-	sqlStr, _ := req.Params["sql"].(string)
+	sqlStr, errResp := sqlParam(req)
+	if errResp != nil {
+		return errResp
+	}
 	var params map[string]any
 	if p, ok := req.Params["params"].(map[string]any); ok {
 		params = p
@@ -183,7 +222,7 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	}
 	v := h.classify(runCtx, userDB, runSQL, params)
 	class := v.Class
-	if err := sb.checkSQLClass(v.Class, v.Reason); err != nil {
+	if err := sb.checkSQLClass(v.Class, v.gateReason()); err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
 	}
 	// The second write gate: every connection the statement changes must be
@@ -192,7 +231,12 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrPermission, "run_query: "+err.Error())
 	}
-
+	// run_query returns the last statement's result only, so a read that
+	// comes before it would be dropped without a word. Writes may be scripted
+	// (each is checked and gated above); a read must be its own call.
+	if v.discardedReads > 0 {
+		return NewErrorResponse(req.ID, ErrInvalidParams, discardedReadsMsg(v.discardedReads, v.Statements))
+	}
 	// Approval gate (#79): run_query asks only when the statement actually
 	// changes something (DML) or reaches outside a plain read (DDL/ATTACH/
 	// COPY/INSTALL/multi-statement) — never for a SELECT. Runs after
@@ -239,8 +283,8 @@ func (h *Handler) handleRunQuery(ctx context.Context, req *Request) *Response {
 	// checkSQLClass above; the probes themselves never touch classifySQL
 	// because they are fixed SELECT DISTINCT templates this handler builds,
 	// never the caller's SQL text executed a second time.
-	if len(rows) == 0 {
-		if note := explainEmptyResult(ctx, userDB, sqlStr); note != "" {
+	if len(rows) <= 1 {
+		if note := explainEmptyResult(ctx, userDB, sqlStr, rows); note != "" {
 			result["note"] = note
 		}
 	}

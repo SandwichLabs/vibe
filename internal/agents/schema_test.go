@@ -35,11 +35,13 @@ func TestParamsToJSONSchema_RunQueryParams(t *testing.T) {
 	paramsSchema, ok := props["params"].(map[string]any)
 	require.True(t, ok, "run_query must declare a params field")
 
-	assert.Equal(t, map[string]any{
-		"type":                 "object",
-		"description":          "Named parameters for the query",
-		"additionalProperties": true,
-	}, paramsSchema)
+	assert.Equal(t, "object", paramsSchema["type"])
+	assert.Equal(t, true, paramsSchema["additionalProperties"])
+	// The description is the agent's only instruction on how a value is bound.
+	desc, _ := paramsSchema["description"].(string)
+	assert.Contains(t, desc, "$name")
+	assert.Contains(t, desc, "{name: value}")
+	assert.Contains(t, desc, "? is not supported")
 }
 
 // TestParamsToJSONSchema_CreateRecordValues pins the shape of the actual
