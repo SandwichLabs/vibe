@@ -4,6 +4,14 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **A built-in `a2ui` skill** gives MCP clients the A2UI component schema (`read_skill a2ui`): every type and field, which are valid in a notebook dashboard and which only in a data artifact view (controls, `pivot`, `query`, `drill`). It is generated from the validator's registries when read, so it cannot drift. The `create_dashboard`, `present_data` and `write_artifact` descriptions, the `a2ui` help topic and the MCP instructions point to it.
+
+### Fixed
+
+- `create_dashboard` now vets every `sql`-bound component like `add_query_cell` does (read-only, binds against the schema) and refuses a bad column, a write or `getenv()`, listing each failure by component path, instead of saving a dashboard that breaks when it renders.
+
 ## [0.3.2] - 2026-10-25
 
 ### Fixed

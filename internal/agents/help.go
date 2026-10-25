@@ -72,6 +72,8 @@ A2UI is a closed, validated component schema for a small dashboard: ` + "`{ titl
 
 ` + codeList(a2ui.TypeNames()) + `.
 
+Read the built-in skill (` + "`read_skill a2ui`" + `) for every type's fields, generated from the validator. A data artifact view additionally takes ` + codeList(a2ui.ViewTypeNames()) + ` and a ` + "`drill`" + ` field, and binds data with ` + "`query`" + ` instead of ` + "`sql`" + `; a notebook dashboard (` + "`create_dashboard`" + `, ` + "`present_data`" + `) takes neither.
+
 ## Data-bound components
 
 ` + "`stat`" + `, ` + "`table`" + ` and every chart type accept either inline data or a live ` + "`sql`" + ` binding, which re-runs every time the page renders (read-only, sandbox-gated, same as a notebook sql cell).

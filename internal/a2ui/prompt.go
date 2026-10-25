@@ -71,6 +71,16 @@ func hintInner(spec fieldSpec) string {
 		return "array of cell arrays"
 	case kindMotion:
 		return "{easing, speed, stagger, stiffness, damping, mass}"
+	case kindQuery:
+		return "query name"
+	case kindParam:
+		return "param name, type " + strings.Join(paramTypeNames(spec), "|")
+	case kindDrill:
+		return "{param, column}"
+	case kindNameList:
+		return "column names"
+	case kindColumnName:
+		return "column name"
 	case kindRange:
 		if spec.max == math.MaxFloat64 {
 			return "number > 0"

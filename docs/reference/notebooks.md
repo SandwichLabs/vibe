@@ -107,7 +107,14 @@ changes" is on; vibe-app#111):
 - **`create_dashboard`** — appends a whole A2UI page (multiple components)
   as one a2ui cell, with the same notebook-targeting rules as
   `add_query_cell`. It is a dashboard cell in a notebook; for a saved live
-  view, use `write_artifact`.
+  view, use `write_artifact`. Every `sql` binding is vetted at save the way
+  `add_query_cell` vets its SQL (one read-only statement that binds against
+  the schema, on the component's own `connection` if it names one); all
+  failures come back together, each as `components[i].sql` with the binder's
+  error and candidates. The same check runs again each time the cell renders.
+  MCP clients read the schema with `read_skill` `a2ui`, a built-in skill
+  generated from the component registry (the notebook dashboard types and the
+  artifact view types, labelled).
 
 There is no `create_page`/`update_page`/`get_page`/`list_pages` tool — those
 were retired with the page system. Asking the agent to "make me a page" or

@@ -82,7 +82,7 @@ func instructionsText(in instructionsInput) string {
 	fmt.Fprintf(&b, "Files: file readers only read inside %s (use absolute paths; relative paths are refused).\n",
 		filepath.Join(in.Root, "data")+string(filepath.Separator))
 	fmt.Fprintf(&b, "Connections (a name is the catalog in SQL): %s.\n", connectionList(in.Connections))
-	b.WriteString("Start with help_search \"\" for an index of every topic, and read_skill duckdb-sql and data-artifacts before writing SQL or artifacts.\n")
+	b.WriteString("Start with help_search \"\" for an index of every topic, and read_skill duckdb-sql and data-artifacts before writing SQL or artifacts, and a2ui before present_data, create_dashboard or an artifact view.\n")
 	b.WriteString("Settings can change while you are connected; this text is from connect time.")
 	return b.String()
 }

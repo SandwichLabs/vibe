@@ -128,13 +128,13 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "write_artifact",
-		Description: "Author or replace a data artifact: a parameterised, live view stored as files (artifacts/<name>/artifact.yaml and view.a2ui.json, or view.js with view: script) that re-runs its named queries whenever it opens or a parameter changes. Every query is read-only and vetted against the SQL policy now and again on every run; a value only ever becomes a bound parameter. Call read_skill \"data-artifacts\" first for the manifest and view format. To replace an existing artifact, send the \"rev\" that get_artifact returned: without one the write only creates, and an existing name is refused. A query returned with sql_omitted is sent back as {\"name\": ..., \"keep_sql\": true} (needs the rev) to keep its stored SQL. A manifest with view: script takes view_source (the view.js text) instead of view; it is stored but never runs until the person allows it in Studio, and it asks again after every edit. A manifest with view: html is a page of Go html/template files (read_skill \"data-artifacts\", HTML pages section) sent as html_files; the page is stored but nothing renders it until the person allows it, it asks again after every edit, and no tool can allow it or run it.",
+		Description: "Author or replace a data artifact: a parameterised, live view stored as files (artifacts/<name>/artifact.yaml and view.a2ui.json, or view.js with view: script) that re-runs its named queries whenever it opens or a parameter changes. Every query is read-only and vetted against the SQL policy now and again on every run; a value only ever becomes a bound parameter. Call read_skill \"data-artifacts\" first for the manifest and view format, and read_skill \"a2ui\" for the view components. To replace an existing artifact, send the \"rev\" that get_artifact returned: without one the write only creates, and an existing name is refused. A query returned with sql_omitted is sent back as {\"name\": ..., \"keep_sql\": true} (needs the rev) to keep its stored SQL. A manifest with view: script takes view_source (the view.js text) instead of view; it is stored but never runs until the person allows it in Studio, and it asks again after every edit. A manifest with view: html is a page of Go html/template files (read_skill \"data-artifacts\", HTML pages section) sent as html_files; the page is stored but nothing renders it until the person allows it, it asks again after every edit, and no tool can allow it or run it.",
 		Category:    "content",
 		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Artifact name: 1 to 64 lowercase letters, digits, - or _"},
-			{Name: "manifest", Type: "object", Required: true, Desc: "The manifest: {title, description?, parameters: [{name, type, default, ...}], queries: [{name, connection?, sql}]}. See the data-artifacts skill."},
-			{Name: "view", Type: "object", Required: false, Desc: "The A2UI view for view: a2ui (the default): {title, components: [...]}, with data bound by \"query\" (a query name), never sql. Required unless the manifest says view: script or view: html. See the data-artifacts skill."},
+			{Name: "manifest", Type: "object", Required: true, Desc: "The manifest: {title, description?, parameters: [{name, type, default, ...}], queries: [{name, connection?, sql}]}. See the data-artifacts skill, and read_skill \"a2ui\" for every component and field (controls, pivot and drill are view-only)."},
+			{Name: "view", Type: "object", Required: false, Desc: "The A2UI view for view: a2ui (the default): {title, components: [...]}, with data bound by \"query\" (a query name), never sql. Required unless the manifest says view: script or view: html. See the data-artifacts skill, and read_skill \"a2ui\" for every component and field (controls, pivot and drill are view-only)."},
 			{Name: "view_source", Type: "string", Required: false, Desc: "For view: script only, instead of view: the text of view.js (at most 1 MB), a worker script defining draw(ctx) or run. See the data-artifacts skill. It does not run until the person allows it."},
 			{Name: "keep_view_source", Type: "boolean", Required: false, Desc: "For view: script, instead of view_source: keep the stored view.js unchanged (get_artifact returned view_source_omitted). Needs the rev."},
 			{Name: "html_files", Type: "object", Required: false, Desc: "For view: html only, instead of view: the page's text files as {path: text}, paths relative to html/ (\"index.html.tmpl\", \"app.js\", \"assets/style.css\"). A file get_artifact returned with text_omitted is sent as {\"keep\": true} (needs the rev). The whole text file set is replaced; binary assets already stored are kept. Checked against the page rules now and vetted again on every write; it does not render until the person allows it."},
@@ -304,10 +304,10 @@ var Tools = []ToolDef{
 	// present_data itself never touches the database.
 	{
 		Name:        "present_data",
-		Description: "Render an A2UI page inline in the current reply. Call this WHENEVER you answer a data-driven question with a chart, table, or stat rather than plain prose — do not wait for the user to ask for a chart. This does not save anything; use inline data (rows/value/bars/points) rather than sql, since you already have the values and the reply is a one-off. See the <a2ui> system prompt block for the full component schema.",
+		Description: "Render an A2UI page inline in the current reply. Call this WHENEVER you answer a data-driven question with a chart, table, or stat rather than plain prose — do not wait for the user to ask for a chart. This does not save anything; use inline data (rows/value/bars/points) rather than sql, since you already have the values and the reply is a one-off. Call read_skill \"a2ui\" for the full component schema (the in-app prompt also carries it).",
 		Category:    "introspect",
 		Params: []ParamDef{
-			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the <a2ui> system prompt block for the component schema.`},
+			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the a2ui skill (read_skill "a2ui") for the component schema.`},
 		},
 	},
 
@@ -394,12 +394,12 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "create_dashboard",
-		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. See the <a2ui> system prompt block for the component schema. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title. This is a dashboard cell in a notebook, not a live-view artifact; for a saved live view use write_artifact.",
+		Description: "Append an A2UI dashboard (a page of one or more live/inline components) as a new cell in a notebook. Call read_skill \"a2ui\" for the component schema (the in-app prompt also carries it). Every sql binding is vetted like add_query_cell (read-only, binds against the schema) and failures are reported by component path. Appends to notebook_id if given, else the notebook currently open in Studio, else creates a new notebook titled from page.title. This is a dashboard cell in a notebook, not a live-view artifact; for a saved live view use write_artifact.",
 		Category:    "content",
 		DryRunSafe:  true,
 		Params: []ParamDef{
 			{Name: "notebook_id", Type: "string", Required: false, Desc: "Target notebook id. Omit to use the notebook currently open in Studio, or to create a new one if none is open."},
-			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the <a2ui> system prompt block for the component schema.`},
+			{Name: "page", Type: "object", Required: true, Desc: `An A2UI page: {"title": "...", "components": [...]}. See the a2ui skill (read_skill "a2ui") for the component schema.`},
 		},
 	},
 }
