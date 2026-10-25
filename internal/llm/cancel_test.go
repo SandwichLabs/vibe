@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ type cancelAfterFirstTool struct {
 
 func (h *cancelAfterFirstTool) Handle(ctx context.Context, req *agents.Request) *agents.Response {
 	resp := h.inner.Handle(ctx, req)
-	if req.ID == "system-prompt-skills" { // prompt assembly, not a model tool call
+	if id, _ := req.ID.(string); strings.HasPrefix(id, "system-prompt-") { // prompt assembly, not a model tool call
 		return resp
 	}
 	h.calls.Add(1)
