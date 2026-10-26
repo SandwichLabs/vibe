@@ -23,6 +23,7 @@ Task-oriented guides for people who use Vibe. They are written to be linkable by
 | Doc | What it is |
 |---|---|
 | [`direction.md`](direction.md) | The north star: workspaces, connections, the eight primitives, and (§9) what changed from the plan |
+| [`plans/answers-you-can-check.md`](plans/answers-you-can-check.md) | **Accepted direction, not built** (umbrella #250, epics #241-#249): every number comes with its evidence. Run receipts and the evidence drawer, VibeBench, the verifier, a semantic layer as files, `vibe check`, as-of on lake formats, standing questions, a compute decision spike and an aggregate-only agent tier; reviewed by an independent judge, whose changes are recorded in the plan |
 | [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) | The implementation plan for epic vibe-app#105 (delivered; "as built" summary at the top) |
 | [`plans/bring-your-own-agent.md`](plans/bring-your-own-agent.md) | Accepted plan for epic vibe-app#157: OpenAI, Ollama and Cloudflare providers (done), your own Claude Code / Codex / Gemini CLI / OpenCode over MCP, then in Studio's panel over ACP, and the security posture of that mode; only phase A and the spike are built |
 | [`plans/ducklake-catalogs.md`](plans/ducklake-catalogs.md) | Plan for #118 (DuckLake catalogs in SQLite and in object storage, with a storage dependency); delivered in PRs #119-#125, released in v0.1.3 |

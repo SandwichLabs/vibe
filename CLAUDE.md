@@ -11,7 +11,7 @@ Vibe is an **agentic desktop workspace for working with data where it already li
 - **Credentials** live in the OS keychain or env vars, never in the folder.
 - **`.vibe`** is an exchange **bundle** (zip, optional age passphrase) of notebooks, queries, skills and connection definitions. It never holds data or credentials. Older data-holding SQLCipher `.vibe` files are not opened (vibe-app#110 was dropped).
 
-**Read first:** `docs/direction.md` (north star; §9 "As delivered" lists what changed from the plan in vibe-app#105; the earlier Access-parity and page-system removals are recorded in `docs/archive/` and git history) and `docs/README.md` (index of every doc). Shipped surface reference: `docs/reference/`. Closed epic: vibe-app#105; cleanup survey: vibe-app#137 (`docs/reviews/cleanup-2026-10/`).
+**Read first:** `docs/direction.md` (north star; §9 "As delivered" lists what changed from the plan in vibe-app#105; the earlier Access-parity and page-system removals are recorded in `docs/archive/` and git history) and `docs/README.md` (index of every doc). Shipped surface reference: `docs/reference/`. Next direction: `docs/plans/answers-you-can-check.md` (umbrella #250, epics #241-#249; receipts, verifier, semantic layer). Closed epics: vibe-app#105, #162; cleanup survey: vibe-app#137 (`docs/reviews/cleanup-2026-10/`).
 
 ## Tech stack
 
