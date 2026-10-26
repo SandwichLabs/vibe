@@ -2,6 +2,7 @@
 
 **Date:** 2026-10-06 (delivered 2026-10-06; see §9)
 **Status:** **Delivered.** Epic vibe-app#105 (issues vibe-app#106–vibe-app#119) is merged: the code matches this document, apart from the departures listed in §9. This remains the product north star.
+- **Next:** [`plans/answers-you-can-check.md`](plans/answers-you-can-check.md) (epic #250, 2026-10-26) builds on this direction: every number Vibe shows comes with its evidence. See §10.
 - **Supersedes** the 2026-09-22 direction (Vibe as a "single-file" data workspace), whose primitives mostly carry forward. That version is in git history.
 - **Plan:** [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) (implemented; its "as built" summary lists the amendments and open follow-ups).
 - **Tracking:** epic vibe-app#105, issues vibe-app#106–vibe-app#119. What is left (packaging and signing in #4, and the follow-ups named in §9) is listed there.
@@ -127,7 +128,7 @@ Slice 3 ─ #118 .vibe bundle   #119 more types   file-open wiring (done)   #4 p
 ## 7. Non-goals
 
 - Bound forms, App Mode, macros, a data-entry persona (still gone, see vibe-app#68).
-- A Python execution plane. Scheduled refresh may come later as a notebook feature.
+- A Python execution plane. Revisited only through the compute decision spike (#248) and an owner decision recorded in §9. Scheduled refresh is now planned as standing questions (#247), read-only and enabled per person.
 - A plaintext-file fallback for credentials.
 - A git client: commit, push and merge stay in the user's git tool. Studio shows branch and dirty state only.
 - Multi-user / Tailscale mesh. Still deferred; shared backends plus git cover the sharing need for now.
@@ -184,3 +185,20 @@ Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-la
 - Removing a downloaded extension from Studio (there is Install but no Remove).
 - #4: signing and notarisation, CI and release, extension bundling, keychain on signed builds.
 - #1: notebook export to HTML, PDF and xlsx. vibe-app#56 (Studio Home) is superseded by the launcher.
+
+## 10. Next: answers you can check (2026-10-26)
+
+The direction for the next twelve months is [`plans/answers-you-can-check.md`](plans/answers-you-can-check.md) (umbrella epic #250, epics #241-#249). It keeps every primitive above and adds evidence to them:
+
+- **Run receipts (#241):** every query run records what it touched. Receipts live machine-local in `.vibe-local/receipts/` and never go into the folder, a bundle or git. Every rendered value opens to its evidence.
+- **VibeBench (#242):** measures agent accuracy before anything is claimed.
+- **The verifier (#243):** an independent second derivation. A disagreement becomes a question to the person.
+- **Semantic layer (#244):** reviewed files under `semantics/`. Definitions are proposed by the agent and accepted by the person.
+- **Headless checks (#245):** `vibe check`.
+- **As-of on lake formats (#246).**
+- **Standing questions (#247).**
+- **Compute decision spike (#248):** page isolation, `run_code`, Python.
+- **Aggregate-only agent tier (#249).**
+
+The plan refines "outputs are never persisted" for receipts. That refinement goes into CLAUDE.md before #241 lands. The non-goals in §7 stand, apart from the Python line, which now points to #248.
+

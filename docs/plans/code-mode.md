@@ -1,6 +1,6 @@
 # Code mode: proposal
 
-Status: **proposal**, not built; reviewed 2026-10-16 (§13: spike Starlark and SQL result handles before committing to Monty). The research is in [spike-code-mode-findings.md](spike-code-mode-findings.md). This document says how code mode works in Vibe and which rules it must obey. It names the code that it changes.
+Status: **proposal**, not built; the engine choice is now part of the compute decision spike #248 (2026-10-26); reviewed 2026-10-16 (§13: spike Starlark and SQL result handles before committing to Monty). The research is in [spike-code-mode-findings.md](spike-code-mode-findings.md). This document says how code mode works in Vibe and which rules it must obey. It names the code that it changes.
 
 This document uses ASD-STE100 Simplified Technical English. Descriptive sentences have a maximum of 25 words. Instructions have a maximum of 20 words. Function names, file names and code are in `code` font and are technical names.
 
