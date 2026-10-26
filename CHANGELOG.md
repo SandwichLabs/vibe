@@ -4,6 +4,8 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-26
+
 ### Security
 
 - **The agent can no longer read a DuckLake's internal metadata through PRAGMA arguments.** `PRAGMA storage_info`, `PRAGMA table_info` and their `pragma_*` table-function and `CALL` forms took any table name, so pointed at a lake's internal catalog they returned its schema and value statistics (including the start of the lake's data path), although a direct `SELECT` of it was refused. Their argument must now be one string literal naming a table, and it gets the same checks as a table reference. `pragma_storage_info('t')` is now allowed alongside `PRAGMA storage_info`.
@@ -196,7 +198,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/SandwichLabs/vibe/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/SandwichLabs/vibe/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/SandwichLabs/vibe/compare/v0.2.0...v0.3.0
