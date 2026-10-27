@@ -1,6 +1,6 @@
 // Generates mock.css for the #106 design mockups.
 //
-//   node docs/design/workspaces-connections/build-css.mjs
+//   node docs/archive/design/workspaces-connections/build-css.mjs
 //
 // mock.css = the real Studio stylesheets (SchoolHouse tokens, kit, hi-fi, theme
 // bridge, concatenated verbatim) + role VALUES for two built-in themes read out of
@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const src = join(here, '../../../studio/frontend/src')
+const src = join(here, '../../../../studio/frontend/src')
 const read = (p) => readFileSync(join(src, p), 'utf8')
 
 // ---- role values from builtin.ts -------------------------------------------
@@ -40,7 +40,7 @@ const a = bridge.indexOf('/* No-JS / pre-install fallback')
 const b = bridge.indexOf('/* ---- Selection + native controls')
 bridge = bridge.slice(0, a) + bridge.slice(b)
 
-const fonts = read('fonts.css').replaceAll('./assets/fonts/', '../../../studio/frontend/src/assets/fonts/')
+const fonts = read('fonts.css').replaceAll('./assets/fonts/', '../../../../studio/frontend/src/assets/fonts/')
 const additions = readFileSync(join(here, 'mock-additions.css'), 'utf8')
 
 const out = [

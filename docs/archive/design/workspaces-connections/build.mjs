@@ -1,4 +1,4 @@
-// Generates the #106 mockup pages.   node docs/design/workspaces-connections/build.mjs
+// Generates the #106 mockup pages.   node docs/archive/design/workspaces-connections/build.mjs
 // Docs tooling only. Outputs are plain static HTML + mock.css; open index.html.
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

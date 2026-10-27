@@ -62,7 +62,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 
 | Doc | What it is |
 |---|---|
-| [`design/workspaces-connections/`](design/workspaces-connections/index.html) | The mockup set and [spec](design/workspaces-connections/SPEC.md) for vibe-app#106 (launcher, shell switcher, connections rail and editor, states, approval card). Open `index.html` in a browser; [`SHOTS.md`](design/workspaces-connections/SHOTS.md) lists the captured screenshots. The design record, not a description of the current UI. |
+| [`design/README.md`](design/README.md) | Where Studio's designs live now: the Vibe Design System (tokens, components, voice) and the Design canvases (the workspaces and connections screens moved over from the vibe-app#106 mockups, and the screens for #250). The original HTML mockups and spec are in [`archive/design/workspaces-connections/`](archive/design/workspaces-connections/SPEC.md). |
 
 ## Contributing
 

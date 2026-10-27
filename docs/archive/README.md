@@ -10,5 +10,6 @@ These files are **history**. They describe directions and designs that were supe
 | `PROJECT.md`, `PLAN.md` | The original MVP spec and phased build plan, written around the SQLCipher `.vibe` container |
 | `motherduck-research.md` | MotherDuck platform research that informed the workspaces-and-connections direction |
 | `claude-plan.md` | A shelved plan for a richer TUI (formerly `.claude/plan.md`) |
+| `design/workspaces-connections/` | The hand-built HTML mockups and spec for vibe-app#106 (launcher, shell, connections, states, approval card). Moved here 2026-10-26 when the designs moved to Design canvases (see [`../design/README.md`](../design/README.md)). `node docs/archive/design/workspaces-connections/build.mjs` still regenerates them. |
 
 Links inside these files may point at paths that no longer exist.
