@@ -4,7 +4,7 @@
 **Plan:** [`docs/plans/workspaces-and-connections.md`](../../plans/workspaces-and-connections.md) §4.1, §4.2, §4.5, §4.8 and the spike amendments in [`spike-duckdb-hub-findings.md`](../../plans/spike-duckdb-hub-findings.md)
 **Mockups:** open [`index.html`](index.html) (light and dark toggle on every page). Screenshots are in [`shots/`](shots/).
 
-The mockups are static HTML built from the real Studio stylesheets (`schoolhouse/*.css`, `theme/bridge.css`) and the `--vibe-*` roles from `theme/builtin.ts` (light = SchoolHouse, dark = SchoolHouse Dark). They are documents, not shipped code. To regenerate after editing the sources: `node docs/design/workspaces-connections/build.mjs`.
+The mockups are static HTML built from the real Studio stylesheets (`schoolhouse/*.css`, `theme/bridge.css`) and the `--vibe-*` roles from `theme/builtin.ts` (light = SchoolHouse, dark = SchoolHouse Dark). They are documents, not shipped code. To regenerate after editing the sources: `node docs/archive/design/workspaces-connections/build.mjs`.
 
 | # | Page | Shot |
 |---|---|---|

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const iconsTs = readFileSync(join(here, '../../../studio/frontend/src/icons.ts'), 'utf8')
+const iconsTs = readFileSync(join(here, '../../../../studio/frontend/src/icons.ts'), 'utf8')
 
 // Real Studio icons (icons.ts) + a few extra Lucide glyphs this design needs.
 export const ICONS = {}
