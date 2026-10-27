@@ -1,6 +1,6 @@
 # Answers you can check: the 12-month plan
 
-Status: **accepted direction, not built (2026-10-26).** Umbrella epic #250; epics E1-E9 are #241-#249 (label `answers-you-can-check`). The draft was written as a no-limits moonshot, then reviewed by an independent judge against this codebase. This plan is the result after that review, and its *Review changes* section records what the review changed. Designs: the [Vibe Design System](https://claude.ai/artifact/LrBzD4cQ6BYYoseLnuFP9a) and the moonshot screens canvas (linked from each epic once drawn).
+Status: **accepted direction, not built (2026-10-26).** Umbrella epic #250; epics E1-E9 are #241-#249 (label `answers-you-can-check`). The draft was written as a no-limits moonshot, then reviewed by an independent judge against this codebase. This plan is the result after that review, and its *Review changes* section records what the review changed. Designs: the [Vibe Design System](https://claude.ai/artifact/LrBzD4cQ6BYYoseLnuFP9a) and the [Answers You Can Check canvas](https://claude.ai/artifact/3rVxGVVeKW6CR14JCPCGVT) (proposed screens; each epic links its screens and open design questions); see [`../design/README.md`](../design/README.md).
 
 ## Thesis
 
