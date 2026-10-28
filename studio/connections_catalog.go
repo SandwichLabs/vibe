@@ -70,13 +70,23 @@ func statusSnapshot(sess session.Session) map[string]session.StatusKind {
 	return out
 }
 
+// catalogChanged is the one place a catalog change is announced: the rail
+// reloads (catalog:changed) and the completion catalog rebuilds. "" = all.
+// It must not block or take a.mu: afterRun calls it under the read lock.
+func (a *App) catalogChanged(conn string) {
+	a.emitEvent("catalog:changed", map[string]any{"conn": conn})
+	if l := a.liveCat.Load(); l != nil {
+		l.Invalidate(conn)
+	}
+}
+
 // afterRun tells the rail what a run changed: a connection that attached (or
 // failed) gets its status refreshed, and anything that is not a plain read, or
 // that attached something, emits catalog:changed so open levels reload.
 func (a *App) afterRun(sess session.Session, before map[string]session.StatusKind, sqlText string) {
 	changed := a.settleRun(sess, before)
 	if changed || !agents.IsReadOnlyStatement(a.ctxOrBackground(), sess.DB(), sqlText, nil) {
-		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+		a.catalogChanged("")
 	}
 }
 
@@ -85,7 +95,7 @@ func (a *App) afterRun(sess session.Session, before map[string]session.StatusKin
 // usual, but the catalog is only reported changed when a connection attached.
 func (a *App) afterReadOnlyRun(sess session.Session, before map[string]session.StatusKind) {
 	if a.settleRun(sess, before) {
-		a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+		a.catalogChanged("")
 	}
 }
 

@@ -1,6 +1,6 @@
 # Data console and SQL autocomplete
 
-Status: **proposal, not built (2026-10-27).** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a libghostty terminal, that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
+Status: **Part A built (#256, 2026-10-28); Part B (the console) is a proposal.** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a libghostty terminal, that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
 
 ## Feasibility in one paragraph
 
@@ -14,7 +14,7 @@ The real work is in three places:
 - a session-scoped DuckDB connection;
 - a good line editor.
 
-Autocomplete is mostly built already: `internal/lsp.Complete` is a DuckDB-aware completer that knows clauses, aliases and three-part names. Today only `vibe lsp` uses it. Studio's CodeMirror has no completion extension at all.
+Autocomplete is mostly built already: the `internal/lsp` completer is a DuckDB-aware completer that knows clauses, aliases and three-part names. Today only `vibe lsp` uses it. Studio's CodeMirror has no completion extension at all.
 
 Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks; console 6-8 weeks.** About half the console time is the line editor and the script mode.
 
@@ -34,7 +34,7 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 | Option | How | Verdict |
 |---|---|---|
 | A. lang-sql schema completion | Turn on `autocompletion()` and pass lang-sql a `schema` object built from `ListCatalog` | Quick, but a second completer. It is a generic SQL dialect with weak alias and clause awareness, it needs the whole catalog shipped to the page, and it would drift from `vibe lsp` |
-| **B. Go completer behind a binding** | A CodeMirror completion source calls `CompleteSQL(text, offset, connection)`, which runs `lsp.Complete` over a live catalog cache | **Recommended.** One completer for Studio, notebooks, the console and `vibe lsp` (Neovim, Helix). DuckDB-aware. The IPC round trip is local and well under a frame |
+| **B. Go completer behind a binding** | A CodeMirror completion source calls `CompleteSQL(text, offset, connection)`, which runs the `internal/lsp` completer over a live catalog cache | **Recommended.** One completer for Studio, notebooks, the console and `vibe lsp` (Neovim, Helix). DuckDB-aware. The IPC round trip is local and well under a frame |
 | C. Run `vibe lsp` as an LSP server for CodeMirror | A CodeMirror LSP client talking to a child process | Not worth it. It adds a process and a JSON-RPC layer to get the same `Complete` call |
 
 ### Plan
@@ -53,7 +53,16 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 
 lang-sql's keyword completion stays as the fallback when no workspace is open. Tab or Enter accepts, Ctrl+Space opens the list, and the existing Cmd+Enter (run) keeps priority. The list is themed with `--vibe-*` roles.
 
-**A3. Polish (optional).**
+**As built (#256, 2026-10-28).**
+
+- The Query Explorer was still a `<textarea>`; it moved onto CodeMirror first (`components/SqlEditor.vue` over `createVibeEditor`, Ctrl/Cmd+Enter through the editor keymap).
+- `lsp.Live` (`internal/lsp/live.go`) is the live catalog and `CompleteSQL` (`studio/app_complete.go`) the thin binding: one request struct in, `{from, items, stale, building}` out. Offsets cross the bridge in UTF-16 code units and Go converts to bytes.
+- The catalog feed is Studio's `App.catalogChanged` (the one place `catalog:changed` is emitted), not a session hook: `internal/session` has no connect or run event. `Live` rebuilds only connections that are connected, debounced, and never connects one.
+- Caps live in the `information_schema` query itself (2000 relations per schema, 512 columns per relation, 250k rows).
+- `lib/sqlComplete.ts` is the one CodeMirror source for both surfaces; the lang-sql keyword list is its fallback.
+- A3 was not built (hover, snippets, `$param` names, `metric()`). Follow-up (#266): lex dollar-quoted strings, `E'...'` strings and `$word` as single tokens in `internal/lsp/lex.go`, to land with `$param` completion (the console in Part B wants it too).
+
+**A3. Polish (optional, not built).**
 
 - Hover for a column's type and a function's signature, through `lsp` hover.
 - Snippets for `COPY … TO`, `PIVOT` and `SUMMARIZE`.

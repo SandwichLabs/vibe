@@ -79,7 +79,7 @@ export function useQueryEditor() {
   const formattedRows = computed(() => {
     const r = result.value
     if (!r) return []
-    return r.rows.map((row) => row.map((cell, j) => formatCell(cell, r.columns[j]?.type)))
+    return (r.rows ?? []).map((row) => row.map((cell, j) => formatCell(cell, r.columns[j]?.type)))
   })
 
   async function loadQueries() {
@@ -275,13 +275,6 @@ export function useQueryEditor() {
     lastRunAt.value = ''
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault()
-      runQuery()
-    }
-  }
-
   // "New query here" / "New query on this table" in the rail open a fresh editor on
   // that connection: ?conn=prod_pg&sql=SELECT…&new=<stamp>.
   function applyRouteIntent() {
@@ -322,6 +315,6 @@ export function useQueryEditor() {
     statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy: cf.busy,
     lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
     selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
-    confirmDeleteQuery, newQuery, handleKeydown,
+    confirmDeleteQuery, newQuery,
   }
 }

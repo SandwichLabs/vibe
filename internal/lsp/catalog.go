@@ -35,6 +35,37 @@ type Connection struct {
 	DefaultSchema string    `json:"default_schema,omitempty"`
 	Schemas       []Schema  `json:"schemas"`
 	Updated       time.Time `json:"updated"`
+	// Truncated is set when a cap (Caps) cut relations or columns off.
+	Truncated bool `json:"truncated,omitempty"`
+	// Stale marks an entry served from the saved snapshot because the
+	// connection is not connected now. It is in-memory only.
+	Stale bool `json:"-"`
+}
+
+// Caps bounds what one connection contributes to a catalog, so a database with
+// tens of thousands of tables does not stream every column into memory.
+type Caps struct {
+	RelationsPerSchema int // tables and views kept per schema
+	ColumnsPerRelation int // columns kept per table or view
+	Rows               int // information_schema rows read per connection
+}
+
+// DefaultCaps are the caps Build and Studio use.
+func DefaultCaps() Caps {
+	return Caps{RelationsPerSchema: 2000, ColumnsPerRelation: 512, Rows: 250_000}
+}
+
+func (c Caps) orDefault() Caps {
+	if c.RelationsPerSchema <= 0 {
+		c.RelationsPerSchema = DefaultCaps().RelationsPerSchema
+	}
+	if c.ColumnsPerRelation <= 0 {
+		c.ColumnsPerRelation = DefaultCaps().ColumnsPerRelation
+	}
+	if c.Rows <= 0 {
+		c.Rows = DefaultCaps().Rows
+	}
+	return c
 }
 
 // Schema is one schema of a connection.
@@ -184,11 +215,12 @@ func (c *Catalog) Merge(fresh *Catalog) *Catalog {
 func Build(ctx context.Context, sess session.Session) (*Catalog, error) {
 	c := &Catalog{Version: catalogVersion, Generated: time.Now().UTC(), DefaultConnection: sess.DefaultCatalog()}
 	var errs []error
+	infos := catalogless(sess)
 	for _, st := range sess.Connections() {
-		if st.Kind != session.StatusOK || (builtinCatalog(st.Name) && st.Name != c.DefaultConnection) {
+		if !completable(st, infos[st.Name], c.DefaultConnection) {
 			continue
 		}
-		conn, err := buildConnection(ctx, sess, st)
+		conn, err := buildConnection(ctx, sess, st, DefaultCaps())
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", st.Name, err))
 			continue
@@ -204,47 +236,113 @@ func Build(ctx context.Context, sess session.Session) (*Catalog, error) {
 	return c, errors.Join(errs...)
 }
 
+// catalogless is the set of registered connections that attach no catalog
+// (s3, gcs, r2): there is no information_schema to read for them.
+func catalogless(sess session.Session) map[string]bool {
+	out := map[string]bool{}
+	for _, info := range sess.ConnectionInfos() {
+		if info.Catalogless {
+			out[info.Name] = true
+		}
+	}
+	return out
+}
+
+// completable reports whether a connection's schema may be read now: it is
+// connected, has a catalog, and is not DuckDB's own scratch catalog (unless the
+// workspace made it the default).
+func completable(st session.Status, catalogless bool, defaultConn string) bool {
+	if st.Kind != session.StatusOK || catalogless {
+		return false
+	}
+	return !builtinCatalog(st.Name) || st.Name == defaultConn
+}
+
 // columnsSQL lists one catalog's columns with their relation's kind in a
 // single round trip (information_schema works for every attached catalog type).
+// $2 and $3 are the relation and column caps plus one, pushed into the query so
+// a huge catalog does not stream every column; the extra row tells the caller a
+// cap cut something off. $4 is the connection's default schema, read first so
+// the row cap can never starve it.
 const columnsSQL = `
-SELECT c.table_schema, c.table_name, t.table_type, c.column_name, c.data_type
-  FROM information_schema.columns c
-  JOIN information_schema.tables t
-    ON t.table_catalog = c.table_catalog AND t.table_schema = c.table_schema AND t.table_name = c.table_name
- WHERE c.table_catalog = $1
- ORDER BY c.table_schema, c.table_name, c.ordinal_position`
+SELECT table_schema, table_name, table_type, column_name, data_type
+  FROM (
+    SELECT c.table_schema, c.table_name, t.table_type, c.column_name, c.data_type, c.ordinal_position,
+           dense_rank() OVER (PARTITION BY c.table_schema ORDER BY c.table_name) AS rel_rank,
+           row_number() OVER (PARTITION BY c.table_schema, c.table_name ORDER BY c.ordinal_position) AS col_rank
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_catalog = c.table_catalog AND t.table_schema = c.table_schema AND t.table_name = c.table_name
+     WHERE c.table_catalog = $1
+  )
+ WHERE rel_rank <= $2 AND col_rank <= $3
+ ORDER BY (table_schema = $4) DESC, table_schema, table_name, ordinal_position`
 
-func buildConnection(ctx context.Context, sess session.Session, st session.Status) (Connection, error) {
+func buildConnection(ctx context.Context, sess session.Session, st session.Status, caps Caps) (Connection, error) {
+	caps = caps.orDefault()
 	conn := Connection{Name: st.Name, Type: st.Type, Updated: time.Now().UTC()}
 	if ds, err := sess.DefaultSchema(ctx, st.Name); err == nil {
 		conn.DefaultSchema = ds
 	}
-	rows, err := sess.DB().QueryContext(ctx, columnsSQL, st.Name)
+	rows, err := sess.DB().QueryContext(ctx, columnsSQL, st.Name, caps.RelationsPerSchema+1, caps.ColumnsPerRelation+1, conn.DefaultSchema)
 	if err != nil {
 		return conn, fmt.Errorf("failed to list columns: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
-	var sch *Schema
-	var rel *Relation
+	b := &columnBuilder{conn: &conn, caps: caps}
 	for rows.Next() {
 		var schema, table, typ, col, dtype string
 		if err := rows.Scan(&schema, &table, &typ, &col, &dtype); err != nil {
 			return conn, fmt.Errorf("failed to read columns: %w", err)
 		}
-		if hiddenSchema(schema) {
-			continue
+		if !b.add(schema, table, typ, col, dtype) {
+			break
 		}
-		if sch == nil || sch.Name != schema {
-			conn.Schemas = append(conn.Schemas, Schema{Name: schema})
-			sch, rel = &conn.Schemas[len(conn.Schemas)-1], nil
-		}
-		if rel == nil || rel.Name != table {
-			sch.Tables = append(sch.Tables, Relation{Name: table, Kind: engine.RelationKind(typ)})
-			rel = &sch.Tables[len(sch.Tables)-1]
-		}
-		rel.Columns = append(rel.Columns, Column{Name: col, Type: dtype})
 	}
 	return conn, rows.Err()
+}
+
+// columnBuilder folds the ordered column rows into schemas and relations,
+// applying the caps. add returns false once the row cap is reached.
+type columnBuilder struct {
+	conn *Connection
+	caps Caps
+	rows int
+	sch  *Schema
+	rel  *Relation
+	skip bool // the current relation is over the per-schema cap
+}
+
+func (b *columnBuilder) add(schema, table, typ, col, dtype string) bool {
+	if b.rows++; b.rows > b.caps.Rows {
+		b.conn.Truncated = true
+		return false
+	}
+	if hiddenSchema(schema) {
+		return true
+	}
+	if b.sch == nil || b.sch.Name != schema {
+		b.conn.Schemas = append(b.conn.Schemas, Schema{Name: schema})
+		b.sch, b.rel, b.skip = &b.conn.Schemas[len(b.conn.Schemas)-1], nil, false
+	}
+	if b.rel == nil || b.rel.Name != table {
+		if len(b.sch.Tables) >= b.caps.RelationsPerSchema {
+			b.conn.Truncated, b.skip = true, true
+			return true
+		}
+		b.skip = false
+		b.sch.Tables = append(b.sch.Tables, Relation{Name: table, Kind: engine.RelationKind(typ)})
+		b.rel = &b.sch.Tables[len(b.sch.Tables)-1]
+	}
+	if b.skip {
+		return true
+	}
+	if len(b.rel.Columns) >= b.caps.ColumnsPerRelation {
+		b.conn.Truncated = true
+		return true
+	}
+	b.rel.Columns = append(b.rel.Columns, Column{Name: col, Type: dtype})
+	return true
 }
 
 // builtinCatalog is DuckDB's own in-memory scratch catalog, which the hub
@@ -292,18 +390,23 @@ func Snapshot(ctx context.Context, sess session.Session, root string) (int, erro
 	if n == 0 {
 		return 0, buildErr
 	}
+	if err := writeMerged(root, fresh); err != nil {
+		return 0, err
+	}
+	return n, buildErr
+}
+
+// writeMerged merges fresh into the workspace's saved snapshot and writes it.
+func writeMerged(root string, fresh *Catalog) error {
 	path, err := resolveSnapshot(root)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	old, err := Load(path)
 	if err != nil {
 		old = nil
 	}
-	if err := old.Merge(fresh).Save(path); err != nil {
-		return 0, err
-	}
-	return n, buildErr
+	return old.Merge(fresh).Save(path)
 }
 
 // Source hands the server the current snapshot, reloading the file when it

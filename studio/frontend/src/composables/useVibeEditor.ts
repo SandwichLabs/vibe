@@ -1,5 +1,5 @@
-import { EditorView, keymap, highlightSpecialChars } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
+import { EditorView, keymap, highlightSpecialChars, placeholder as placeholderExt } from '@codemirror/view'
+import { EditorState, type Extension } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
 import { sql as sqlLang } from '@codemirror/lang-sql'
 import { json as jsonLang } from '@codemirror/lang-json'
@@ -52,6 +52,32 @@ const vibeTheme = EditorView.theme({
   '.cm-scroller': {
     overflow: 'auto',
   },
+  // The SQL completion list (lib/sqlComplete.ts), all `--vibe-*` roles.
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    backgroundColor: 'var(--vibe-surface)',
+    color: 'var(--vibe-fg)',
+    border: '2px solid var(--vibe-border)',
+    boxShadow: 'var(--vibe-shadow)',
+    fontFamily: MONO,
+    fontSize: 'var(--sh-fs-sm)',
+  },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'var(--vibe-selection)',
+    color: 'var(--vibe-selection-fg)',
+  },
+  '.cm-completionDetail': {
+    color: 'var(--vibe-fg-muted)',
+    fontStyle: 'normal',
+    marginLeft: '1em',
+  },
+  '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail, .cm-tooltip-autocomplete ul li[aria-selected] .cm-completionMatchedText': {
+    color: 'inherit',
+  },
+  '.cm-completionMatchedText': {
+    color: 'var(--vibe-accent)',
+    textDecoration: 'none',
+    fontWeight: '700',
+  },
   // Focus is drawn by theme/bridge.css (`.cm-editor.cm-focused`) so it
   // matches the app-wide focus ring.
   '.cm-focused': {
@@ -89,13 +115,22 @@ interface VibeEditorOptions {
   readOnly?: boolean
   /** Extra key bindings layered on top of the default keymap (e.g. Ctrl/Cmd+Enter to run). */
   extraKeymap?: import('@codemirror/view').KeyBinding[]
+  /** Extra CodeMirror extensions (e.g. SQL completion), appended after the built-ins. */
+  extensions?: Extension[]
+  /** Greyed text shown while the document is empty. */
+  placeholder?: string
 }
 
 export interface VibeEditorInstance {
   /** Get the current document text. */
   getValue: () => string
-  /** Replace the entire document. */
-  setValue: (value: string) => void
+  /**
+   * Replace the entire document. `history: false` is for text loaded from
+   * outside (a saved query): the editor state is rebuilt, so the undo history
+   * starts empty and Ctrl+Z cannot bring the previous text back. The change
+   * listener is not called for it (the caller already has the text).
+   */
+  setValue: (value: string, opts?: { history?: boolean }) => void
   /** The underlying CodeMirror EditorView (for toolbar insertSnippet calls). */
   view: EditorView
   /** Tear down the editor. */
@@ -122,9 +157,7 @@ export function createVibeEditor(
   const languageExtension = languages[options.lang ?? 'markdown']()
   const extraKeymap = options.extraKeymap ?? []
 
-  const state = EditorState.create({
-    doc: options.value ?? '',
-    extensions: [
+  const extensions: Extension[] = [
       vibeTheme,
       syntaxHighlighting(vibeHighlightStyle),
       languageExtension,
@@ -134,19 +167,23 @@ export function createVibeEditor(
       keymap.of([...extraKeymap, ...defaultKeymap, ...historyKeymap]),
       updateListener,
       EditorView.lineWrapping,
+      ...(options.placeholder ? [placeholderExt(options.placeholder)] : []),
+      ...(options.extensions ?? []),
       // Read-only is the trust prompt: show every control and invisible character.
       ...(options.readOnly ? [EditorState.readOnly.of(true), highlightSpecialChars()] : []),
-    ],
-  })
+  ]
+  const state = EditorState.create({ doc: options.value ?? '', extensions })
 
   const view = new EditorView({ state, parent: el })
 
   return {
     getValue: () => view.state.doc.toString(),
-    setValue: (value: string) => {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: value },
-      })
+    setValue: (value: string, opts?: { history?: boolean }) => {
+      if (opts?.history === false) {
+        view.setState(EditorState.create({ doc: value, extensions }))
+        return
+      }
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
     },
     view,
     destroy: () => view.destroy(),
