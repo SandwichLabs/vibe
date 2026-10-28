@@ -1,6 +1,6 @@
 # Data console and SQL autocomplete
 
-Status: **proposal, not built (2026-10-27).** Tracking (label `data-console`): autocomplete #256; console epic #255 with R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a libghostty terminal, that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
+Status: **proposal, not built (2026-10-27).** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a libghostty terminal, that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
 
 ## Feasibility in one paragraph
 
@@ -22,7 +22,7 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 
 ### What exists
 
-- **`studio/frontend/src/composables/useVibeEditor.ts`** sets up CodeMirror with `@codemirror/lang-sql` for highlighting, plus history and keymaps. There is no `autocompletion()` extension, so nothing pops up. The same composable drives the Query Explorer and notebook SQL cells.
+- **`studio/frontend/src/composables/useVibeEditor.ts`** sets up CodeMirror with `@codemirror/lang-sql` for highlighting, plus history and keymaps. There is no `autocompletion()` extension, so nothing pops up. Only notebook SQL cells use it: the Query Explorer (`QueryEditorView.vue`) is still a plain `<textarea>`, so A2 first moves it onto `useVibeEditor` (corrected 2026-10-28; this was #5's first item).
 - **`internal/lsp`** has three parts:
   - `Build(ctx, sess)` reads a catalog (connections → schemas → relations → columns, plus `duckdb_functions()` names) from the connected connections.
   - `Snapshot` merges it into `.vibe-local/catalog.json`.
