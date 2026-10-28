@@ -316,7 +316,7 @@ func (a *App) CreateTable(name string, columns []ColumnInfo) error {
 		return err
 	}
 	a.emitEvent("data:changed")
-	a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+	a.catalogChanged("")
 	return nil
 }
 
@@ -341,7 +341,7 @@ func (a *App) DropTable(name string) error {
 		return err
 	}
 	a.emitEvent("data:changed")
-	a.emitEvent("catalog:changed", map[string]any{"conn": ""})
+	a.catalogChanged("")
 	return nil
 }
 

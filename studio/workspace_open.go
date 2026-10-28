@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/lsp"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
@@ -127,6 +128,9 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 		// replaced, must not paint names into the next workspace's rail.
 		if s := live.Load(); s != nil && a.liveSess.Load() == s {
 			a.emitStatus(*s, name)
+			if l := a.liveCat.Load(); l != nil {
+				l.Invalidate(name) // a signed-out connection drops to stale
+			}
 		}
 	}
 	opened, err := hub.Open(a.ctxOrBackground(), root, hub.OpenOptions{
@@ -147,6 +151,8 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	live.Store(&sess)
 	a.liveSess.Store(&sess)
 	a.engine = opened.Eng
+	// readOnly means another process owns the hub and keeps the snapshot current.
+	a.liveCat.Store(lsp.NewLive(sess, lsp.WithLiveLogger(a.logger), lsp.WithLiveSnapshot(ws.Root(), !readOnly)))
 	a.issues = issues
 	a.recordConnSigs(ws)
 	a.readOnly, a.holder = readOnly, holder
@@ -244,6 +250,9 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	if a.watcher != nil {
 		_ = a.watcher.Close()
 		a.watcher = nil
+	}
+	if l := a.liveCat.Swap(nil); l != nil {
+		l.Close() // before the session: a rebuild in flight reads through it
 	}
 	if a.sess != nil {
 		_ = a.sess.Close()

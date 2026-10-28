@@ -72,24 +72,39 @@ type tableRef struct {
 type cursor struct {
 	qual   []string // dotted qualifiers before the word: pg.public.or -> [pg public]
 	prefix string   // the partial word under the cursor
+	start  int      // byte offset the word (or its opening quote) starts at; the cursor when there is none
+	quoted bool     // the word under the cursor is a "quoted" name
 	clause clause
 	refs   []tableRef
 }
 
-// Complete returns completion candidates for the SQL in text at byte offset.
-// cat may be nil (no snapshot yet): then only keywords are offered.
-func Complete(text string, offset int, cat *Catalog) []Item {
+// completeAt returns completion candidates for the SQL in text at byte offset,
+// and the byte offset they replace from (the start of the word, or the opening
+// quote of a quoted name, under the cursor). cat may be nil (no snapshot yet):
+// then only keywords are offered. incomplete reports that the list was cut at
+// maxItems, so a client must ask again as the word grows instead of filtering
+// the cut list itself.
+func completeAt(text string, offset int, cat *Catalog) (items []Item, from int, incomplete bool) {
 	cur, ok := analyze(text, offset, cat)
 	if !ok {
-		return nil
+		return nil, min(max(offset, 0), len(text)), false
 	}
-	var items []Item
 	if len(cur.qual) > 0 {
 		items = qualifiedItems(cur, cat)
 	} else {
 		items = bareItems(cur, cat)
 	}
-	return filterItems(items, cur.prefix)
+	items, incomplete = filterItems(items, cur.prefix, cur.quoted)
+	return items, cur.start, incomplete
+}
+
+// String is the kind's lower-case name, for callers outside the LSP wire.
+func (k ItemKind) String() string {
+	names := [...]string{"keyword", "connection", "schema", "table", "view", "column", "function", "alias"}
+	if k < 0 || int(k) >= len(names) {
+		return "keyword"
+	}
+	return names[k]
 }
 
 // analyze finds the statement, the dotted path being typed, the clause and the
@@ -108,10 +123,12 @@ func analyze(text string, offset int, cat *Catalog) (cursor, bool) {
 	}
 	// toks[:before] end at or before the cursor.
 	head := toks[:before]
-	cur := cursor{}
+	cur := cursor{start: offset}
 	pathStart := len(head)
 	if n := len(head); n > 0 && head[n-1].end == offset && (head[n-1].kind == tokWord || head[n-1].kind == tokQuoted) {
 		cur.prefix = head[n-1].text
+		cur.start = head[n-1].start
+		cur.quoted = head[n-1].kind == tokQuoted
 		pathStart = n - 1
 	}
 	for pathStart >= 2 && isDot(head[pathStart-1]) && head[pathStart-2].isName() && head[pathStart-2].end == head[pathStart-1].start {
@@ -382,7 +399,10 @@ func columnItems(rel *Relation, where string) []Item {
 
 // filterItems keeps the items that start with prefix (case-insensitive), drops
 // duplicates, quotes names that need it, and caps the list.
-func filterItems(items []Item, prefix string) []Item {
+//
+// quoted means the replaced range starts at an opening quote, so every name
+// is inserted in its quoted form.
+func filterItems(items []Item, prefix string, quoted bool) ([]Item, bool) {
 	lp := strings.ToLower(prefix)
 	seen := map[string]bool{}
 	out := []Item{}
@@ -391,17 +411,21 @@ func filterItems(items []Item, prefix string) []Item {
 		if seen[key] || !strings.HasPrefix(strings.ToLower(it.Label), lp) {
 			continue
 		}
+		isSyntax := it.Kind == KindKeyword || it.Kind == KindFunction
+		if quoted && isSyntax {
+			continue // a "quoted" word is a name, never a keyword or function
+		}
 		seen[key] = true
-		if it.Kind != KindKeyword && it.Kind != KindFunction && needsQuotes(it.Label) {
+		if !isSyntax && (quoted || needsQuotes(it.Label)) {
 			it.Insert = `"` + strings.ReplaceAll(it.Label, `"`, `""`) + `"`
 		}
 		out = append(out, it)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Kind.Rank() < out[j].Kind.Rank() })
 	if len(out) > maxItems {
-		out = out[:maxItems]
+		return out[:maxItems], true
 	}
-	return out
+	return out, false
 }
 
 // needsQuotes reports whether name must be written "quoted" in SQL.

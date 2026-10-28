@@ -51,14 +51,14 @@ CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapsho
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio)
-studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,import_export,lifecycle,llm,
+studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,complete,import_export,lifecycle,llm,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go + artifact_starters.go (the New dialog's starter files by kind; the logic behind the data artifact bindings: list, open, run, edit, save, delete), viewserver{,_page}.go + artifact_view_host.go + artifact_page_host.go (the /vibe-view/ middleware and per-grant tokens for script views and static HTML pages), pagehost{,_bridge,_files,_launch_unix,_gate_linux,_gate_darwin}.go + pagecaps{,_state,_download,_ask,_app}.go (the `state`, `download` and `ask` capabilities) + pagehelper{,_unix}.go + pagewindow_{cgo.go,linux.c,darwin.m} + app_pagehost.go (page windows of scripted HTML pages: the manager and bridge in Studio, helper mode `--view-host`, the Linux bubblewrap network gate, the native WebKitGTK/WKWebView view), agent_turn.go (the in-flight chat turn and its cancel),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
                      dotenv.go, templates.go; every exported App method is a thin binding (<= 25
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
-                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Library (the one list of notebooks, live views, pages and chart scripts, with the New type picker)/Notebook/Artifact,
+                     and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (SQL completion is `lib/sqlComplete.ts`, the one CodeMirror source, used by `components/SqlEditor.vue` (the Query Explorer's editor) and notebook SQL cells; all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Library (the one list of notebooks, live views, pages and chart scripts, with the New type picker)/Notebook/Artifact,
                      TableBrowser, QueryEditor, ConnectionEditor, Skills, Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
@@ -77,7 +77,7 @@ internal/
   skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)
   llm/               in-app agent runner (fantasy), task mode, grounding
   editor/            $VISUAL/$EDITOR hand-off for the TUI REPL (ctrl+o, \e) and `vibe query --edit`; scratch buffers in .vibe-local/edit/
-  lsp/               `vibe lsp`: stdio Language Server (completion, hover) over a catalog snapshot (.vibe-local/catalog.json) the TUI or `vibe lsp snapshot` writes; opens no database and writes no file
+  lsp/               `vibe lsp`: stdio Language Server (completion, hover) over a catalog snapshot (.vibe-local/catalog.json) the TUI, Studio or `vibe lsp snapshot` writes (the server itself opens no database and writes no file); `Live` is the in-process catalog Studio completes from (rebuilt on `App.catalogChanged`, saved-snapshot fallback marked stale, capped, never connects a connection or runs SQL) and it writes the snapshot too
   mcp/, hub/         MCP server (SSE, stdio) and which process owns a workspace's hub (Studio vs `vibe mcp serve`); `hub.Open` is the one open path (workspace, hub lock, DuckDB session, engine)
   notebooks/, queries/  file-backed stores (notebooks.Store, queries.Store), same shape as skills.Store
   artifacts/         data artifacts (#162): the manifest model, strict decode, validation and `Bind` (names and values to SQL + bound params), plus the artifacts.Store (FileStore, Mock) for `artifacts/<name>/{artifact.yaml,view.a2ui.json | view.js}` under one two-file revision, `ViewHash` (the trust hash of a custom view), and the `view: html` page file set (`html/**`, the save-time template vet `VetPage`, `PageHash`, and `RenderHTMLPage`, the bounded renderer of static pages, `docs/plans/html-artifacts.md`) with the closed template function map in the leaf `artifacts/pagefuncs`; structure only, SQL vetting lives in `internal/agents`

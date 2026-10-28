@@ -11,6 +11,7 @@ import { ref } from 'vue'
 import ConnectionSelect from '../components/ConnectionSelect.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import SqlEditor from '../components/SqlEditor.vue'
 import ConflictBanner from '../components/ConflictBanner.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
 import { useQueryEditor } from '../composables/useQueryEditor'
@@ -21,7 +22,7 @@ const {
   statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy,
   lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
   selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
-  confirmDeleteQuery, newQuery, handleKeydown,
+  confirmDeleteQuery, newQuery,
 } = useQueryEditor()
 
 const saveModalEl = ref<HTMLElement | null>(null)
@@ -105,14 +106,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
       <!-- EDITOR + RESULTS -->
       <div class="col" style="flex: 1; gap: 0; min-width: 0;">
         <div class="editor" style="border-bottom: var(--sh-border);">
-          <textarea
-            v-model="sqlText"
-            @keydown="handleKeydown"
-            style="width: 100%; height: 180px; resize: none; background: var(--vibe-editor-bg); color: var(--vibe-editor-fg); border: 2px solid var(--vibe-border); font-family: var(--sh-font-mono); font-size: 13px; line-height: 1.8; padding: 18px;"
-            placeholder="Enter SQL query…"
-            autocapitalize="off" autocorrect="off" spellcheck="false"
-            data-testid="sql-input"
-          ></textarea>
+          <SqlEditor v-model="sqlText" :connection="conn" placeholder="Enter SQL query…" @run="runQuery" />
         </div>
 
         <!-- Run-status metadata bar (W5) -->

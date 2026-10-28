@@ -117,7 +117,7 @@ Options considered:
 
 In rough priority order:
 
-1. **Studio and `vibe mcp serve` should write the snapshot too.** Studio is
+1. **Studio and `vibe mcp serve` should write the snapshot too.** (Studio: done in #256, `lsp.Live` rewrites it after every catalog change while Studio owns the workspace; `vibe mcp serve` still does not.) Studio is
    usually the owner, and while it is, `vibe lsp snapshot` cannot read the
    local DuckDB files. One call to `lsp.Snapshot` after open, connect, DDL and
    Refresh closes this.

@@ -202,7 +202,7 @@ func (a *App) ConnectConnection(ref ConnectionRef) (*ConnectionInfo, error) {
 	if cerr != nil {
 		return info, errors.New(a.redact(cerr.Error()))
 	}
-	a.emitEvent("catalog:changed", map[string]any{"conn": ref.Name})
+	a.catalogChanged(ref.Name)
 	return info, nil
 }
 
@@ -248,7 +248,7 @@ func (a *App) DisconnectConnection(ref ConnectionRef) (*ConnectionInfo, error) {
 	}
 	sess.Preflight(ctx, ref.Name)
 	a.emitStatus(sess, ref.Name)
-	a.emitEvent("catalog:changed", map[string]any{"conn": ref.Name})
+	a.catalogChanged(ref.Name)
 	return a.infoOf(ref.Name), nil
 }
 
@@ -275,7 +275,7 @@ func (a *App) RefreshCatalog(ref ConnectionRef) error {
 		if err := sess.RefreshCatalog(ctx, n); err != nil {
 			return errors.New(a.redact(err.Error()))
 		}
-		a.emitEvent("catalog:changed", map[string]any{"conn": n})
+		a.catalogChanged(n)
 	}
 	return nil
 }

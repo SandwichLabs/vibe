@@ -10,6 +10,35 @@ import QueryEditorView from './QueryEditorView.vue'
 import { flushAll, _resetForTests as resetSaves } from '../composables/usePendingSaves'
 import { _resetConnectionsForTests } from '../composables/useConnections'
 
+// The SQL editor is CodeMirror, which jsdom cannot drive: mock it the way
+// NotebookView.spec.ts does, keep the latest instance, and "type" through its
+// onChange. The completion source needs no Go in these specs.
+const { createVibeEditor, editors } = vi.hoisted(() => {
+  const editors: Array<{ opts: any; doc: string }> = []
+  return {
+    editors,
+    createVibeEditor: vi.fn((_el: HTMLElement, opts: any) => {
+      const ed = { opts, doc: opts.value ?? '' }
+      editors.push(ed)
+      return {
+        view: { focus: vi.fn() },
+        setValue: (v: string) => { ed.doc = v; opts.onChange?.(v) },
+        destroy: vi.fn(),
+        getValue: () => ed.doc,
+      }
+    }),
+  }
+})
+vi.mock('../composables/useVibeEditor', () => ({ createVibeEditor }))
+vi.mock('../lib/sqlComplete', () => ({ sqlCompletion: () => [] }))
+
+async function typeSql(sql: string) {
+  const ed = editors[editors.length - 1]
+  ed.doc = sql
+  ed.opts.onChange(sql)
+  await flushPromises()
+}
+
 // The editor reads ?conn= / ?sql= from the route ("New query here" in the rail).
 const routeQuery: Record<string, string> = {}
 vi.mock('vue-router', () => ({
@@ -55,7 +84,7 @@ async function mountView() {
 }
 
 describe('QueryEditorView (W5 Query Explorer)', () => {
-  beforeEach(() => { vi.clearAllMocks(); _resetConnectionsForTests() })
+  beforeEach(() => { vi.clearAllMocks(); editors.length = 0; _resetConnectionsForTests() })
 
   it('has no schema tree of its own: the global Connections rail replaces it', async () => {
     makeApp()
@@ -66,7 +95,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
   it('runs on the chosen connection, per editor (RunQuery carries it)', async () => {
     const app = makeApp()
     const wrapper = await mountView()
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 1')
+    await typeSql('SELECT 1')
     await wrapper.find('[data-testid="run-query"]').trigger('click')
     await flushPromises()
     expect(app.RunQuery).toHaveBeenLastCalledWith(expect.objectContaining({ sql: 'SELECT 1', connection: '' }))
@@ -82,7 +111,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
   it('says a statement ran across the connections its qualified names pulled in', async () => {
     makeApp()
     const wrapper = await mountView()
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT * FROM local.main.a JOIN prod_pg.public.b USING (id)')
+    await typeSql('SELECT * FROM local.main.a JOIN prod_pg.public.b USING (id)')
     await wrapper.find('[data-testid="run-query"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="run-engine"]').text()).toContain('ran across local + prod_pg')
@@ -106,7 +135,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     const wrapper = await mountView()
     expect(wrapper.find('[data-testid="run-meta"]').exists()).toBe(false)
 
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 1 AS x')
+    await typeSql('SELECT 1 AS x')
     await wrapper.find('.btn-primary').trigger('click')
     await flushPromises()
 
@@ -137,7 +166,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
       },
     })
     const wrapper = await mountView()
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT note, empty, amt, amt_null FROM probe')
+    await typeSql('SELECT note, empty, amt, amt_null FROM probe')
     await wrapper.find('.btn-primary').trigger('click')
     await flushPromises()
 
@@ -167,7 +196,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
   it('a failed run shows the Error badge with the message', async () => {
     makeApp({ execError: 'Binder Error: nope' })
     const wrapper = await mountView()
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT nope')
+    await typeSql('SELECT nope')
     await wrapper.find('.btn-primary').trigger('click')
     await flushPromises()
 
@@ -182,7 +211,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     // Disabled with no SQL.
     expect((wrapper.find('[data-testid="export-csv"]').element as HTMLButtonElement).disabled).toBe(true)
 
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT * FROM customers')
+    await typeSql('SELECT * FROM customers')
     await wrapper.find('[data-testid="export-csv"]').trigger('click')
     await flushPromises()
     expect(app.ExportQueryResults).toHaveBeenCalledWith('SELECT * FROM customers', 'csv', '')
@@ -214,7 +243,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="query-dirty"]').exists()).toBe(false)
 
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 2')
+    await typeSql('SELECT 2')
     expect(wrapper.find('[data-testid="query-dirty"]').exists()).toBe(true)
   })
 
@@ -233,7 +262,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
 
     expect(app.SaveQueryOn).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: '', title: 'My query', sql: '', rev: '' }))
 
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT 3')
+    await typeSql('SELECT 3')
     await saveBtn().trigger('click')
     await modalSaveBtn().trigger('click')
     await flushPromises()
@@ -253,7 +282,7 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
       },
     })
     const wrapper = await mountView()
-    await wrapper.find('[data-testid="sql-input"]').setValue('SELECT * FROM range(100000)')
+    await typeSql('SELECT * FROM range(100000)')
     await wrapper.find('.btn-primary').trigger('click')
     await flushPromises()
 
@@ -314,5 +343,34 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     await vm.resolveConflict('overwrite')
     await flushPromises()
     expect(app.ResolveConflict).toHaveBeenCalledWith(expect.objectContaining({ kind: 'query', action: 'overwrite', rev: 'r5' }))
+  })
+
+  it('Ctrl/Cmd+Enter in the editor runs the query (the Mod-Enter binding)', async () => {
+    const app = makeApp()
+    const wrapper = await mountView()
+    await typeSql('SELECT 7')
+    const ed = editors[editors.length - 1]
+    const binding = ed.opts.extraKeymap.find((k: any) => k.key === 'Mod-Enter')
+    expect(binding.run({ state: { field: () => null } })).toBe(true)
+    await flushPromises()
+    expect(app.RunQuery).toHaveBeenCalledWith(expect.objectContaining({ sql: 'SELECT 7' }))
+    expect(wrapper.find('[data-testid="sql-input"]').exists()).toBe(true)
+  })
+
+  it('loading a saved query puts its SQL in the editor', async () => {
+    makeApp()
+    const wrapper = await mountView()
+    await wrapper.find('[data-testid="saved-query"]').trigger('click')
+    await flushPromises()
+    expect(editors[editors.length - 1].doc).toBe('SELECT 1')
+  })
+
+  it('a DDL result with rows: null renders as Complete without throwing', async () => {
+    makeApp({ execResult: { columns: [], rows: null, duration: '1ms', row_count: 0, total_rows: 0 } })
+    const wrapper = await mountView()
+    await typeSql('CREATE TABLE t(a INTEGER)')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="run-badge"]').text()).toContain('Complete')
   })
 })

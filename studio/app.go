@@ -12,6 +12,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/config"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/lsp"
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/selfupdate"
@@ -90,6 +91,10 @@ type App struct {
 	sessionID string
 	// liveSess is the session the status listener may speak for (nil: none open).
 	liveSess atomic.Pointer[session.Session]
+	// liveCat is the catalog SQL completion reads (nil: no workspace open). It
+	// is atomic because afterRun feeds it under a.mu and ConnectConnection
+	// without it.
+	liveCat atomic.Pointer[lsp.Live]
 
 	// activeNotebookID is the id of the notebook currently open in
 	// NotebookView.vue, if any — set via SetActiveNotebook. Consulted by

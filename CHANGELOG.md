@@ -4,6 +4,15 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **SQL autocomplete in the Query Explorer and notebook SQL cells (#256).** Ctrl+Space opens a list of connections, schemas, tables, columns (through aliases), functions and keywords from the same completer `vibe lsp` uses. Connected connections are live; others come from the saved snapshot. Completion never connects a connection or runs your SQL.
+
+### Changed
+
+- The Query Explorer's editor is now CodeMirror (it was a plain text box), with the notebook cells' look and Ctrl/Cmd+Enter to run.
+- Studio now writes `.vibe-local/catalog.json` for `vibe lsp` while it owns the workspace.
+
 ## [0.3.3] - 2026-10-26
 
 ### Security

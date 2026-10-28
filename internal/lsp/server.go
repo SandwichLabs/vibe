@@ -296,7 +296,7 @@ func (s *Server) completion(params json.RawMessage) (any, *rpcError) {
 	if rerr != nil {
 		return nil, rerr
 	}
-	items := Complete(text, off, s.src.Catalog())
+	items, _, incomplete := completeAt(text, off, s.src.Catalog())
 	out := make([]map[string]any, 0, len(items))
 	for i, it := range items {
 		ci := map[string]any{
@@ -312,7 +312,7 @@ func (s *Server) completion(params json.RawMessage) (any, *rpcError) {
 		}
 		out = append(out, ci)
 	}
-	return map[string]any{"isIncomplete": false, "items": out}, nil
+	return map[string]any{"isIncomplete": incomplete, "items": out}, nil
 }
 
 func (s *Server) hover(params json.RawMessage) (any, *rpcError) {
@@ -421,13 +421,36 @@ func byteOffset(text string, pos position, isUTF8 bool) int {
 		}
 		return min(end, len(text))
 	}
-	units := 0
-	for off < len(text) && text[off] != '\n' && units < pos.Character {
+	line := text[off:]
+	if nl := strings.IndexByte(line, '\n'); nl >= 0 {
+		line = line[:nl]
+	}
+	return off + utf16ToByte(line, pos.Character)
+}
+
+// utf16ToByte converts a count of UTF-16 code units into a byte offset in
+// text, clamping to the end.
+func utf16ToByte(text string, units int) int {
+	off, n := 0, 0
+	for off < len(text) && n < units {
 		r, size := utf8.DecodeRuneInString(text[off:])
-		units += len(utf16.Encode([]rune{r}))
+		n += utf16.RuneLen(r)
 		off += size
 	}
 	return off
+}
+
+// byteToUTF16 converts a byte offset in text into UTF-16 code units, clamping
+// to the end.
+func byteToUTF16(text string, b int) int {
+	b = min(max(b, 0), len(text))
+	n := 0
+	for off := 0; off < b; {
+		r, size := utf8.DecodeRuneInString(text[off:])
+		n += utf16.RuneLen(r)
+		off += size
+	}
+	return n
 }
 
 // uriPath turns a file:// URI into a path ("" for any other scheme).

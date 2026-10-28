@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fixture is a workspace with a local DuckDB default and a Postgres connection.
@@ -159,4 +160,74 @@ func TestHover(t *testing.T) {
 	assert.Contains(t, hov("SELECT na|me FROM customers"), "`name` VARCHAR")
 	assert.Contains(t, hov("SELECT * FROM p|g.public.invoices"), "postgres connection")
 	assert.Empty(t, hov("SELECT nope| FROM orders"))
+}
+
+func TestCompleteFrom_FromAndQuotedPrefix(t *testing.T) {
+	cat := fixture()
+	src := `SELECT * FROM "Ord`
+	items, from := completeFrom(src, len(src), cat)
+	assert.Equal(t, strings.Index(src, `"`), from, "the range starts at the opening quote")
+	require.NotEmpty(t, items)
+	for _, it := range items {
+		assert.True(t, strings.HasPrefix(it.Insert, `"`) && strings.HasSuffix(it.Insert, `"`), "%q inserts quoted", it.Label)
+	}
+
+	src = "SELECT * FROM ord"
+	items, from = completeFrom(src, len(src), cat)
+	assert.Equal(t, len(src)-3, from)
+	assert.Contains(t, labels(items), "orders")
+
+	src = "SELECT * FROM "
+	_, from = completeFrom(src, len(src), cat)
+	assert.Equal(t, len(src), from, "no word under the cursor: replace nothing")
+
+	src = "SELECT 'café', tot FROM orders"
+	off := strings.Index(src, " FROM")
+	items, from = completeFrom(src, off, cat)
+	assert.Equal(t, off-3, from, "from is a byte offset")
+	assert.Contains(t, labels(items), "total")
+}
+
+func TestUTF16Offsets(t *testing.T) {
+	text := "é😀x"
+	assert.Equal(t, 0, utf16ToByte(text, 0))
+	assert.Equal(t, 2, utf16ToByte(text, 1))
+	assert.Equal(t, 6, utf16ToByte(text, 3), "an astral rune is two units")
+	assert.Equal(t, len(text), utf16ToByte(text, 99))
+	assert.Equal(t, 1, byteToUTF16(text, 2))
+	assert.Equal(t, 3, byteToUTF16(text, 6))
+	assert.Equal(t, 4, byteToUTF16(text, 99))
+	for _, u := range []int{0, 1, 3, 4} { // 2 is inside the surrogate pair
+		assert.Equal(t, u, byteToUTF16(text, utf16ToByte(text, u)))
+	}
+}
+
+func TestItemKindString(t *testing.T) {
+	assert.Equal(t, "keyword", KindKeyword.String())
+	assert.Equal(t, "connection", KindConnection.String())
+	assert.Equal(t, "alias", KindAlias.String())
+	assert.Equal(t, "keyword", ItemKind(99).String())
+}
+
+func TestCompleteFrom_IncompleteWhenCapped(t *testing.T) {
+	cat := fixture()
+	var rels []Relation
+	for i := 0; i < maxItems+50; i++ {
+		rels = append(rels, Relation{Name: "s" + strings.Repeat("x", 1) + string(rune('a'+i%26)) + "_" + strings.Repeat("0", 3) + string(rune('a'+i/26%26)) + string(rune('a'+i/676)), Kind: "table"})
+	}
+	cat.Conn("local").Schema("main").Tables = rels
+	src := "SELECT * FROM s"
+	items, _, incomplete := completeAt(src, len(src), cat)
+	assert.Len(t, items, maxItems)
+	assert.True(t, incomplete)
+
+	src = "SELECT * FROM customer"
+	_, _, incomplete = completeAt(src, len(src), fixture())
+	assert.False(t, incomplete)
+}
+
+// completeFrom is completeAt without the incomplete flag.
+func completeFrom(text string, offset int, cat *Catalog) ([]Item, int) {
+	items, from, _ := completeAt(text, offset, cat)
+	return items, from
 }

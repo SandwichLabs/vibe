@@ -153,3 +153,94 @@ func TestSnapshot_RefusesSymlinksOutOfTheWorkspace(t *testing.T) {
 	require.NoError(t, rerr)
 	assert.Equal(t, "keep", string(b), "the link target is untouched")
 }
+
+// bigFile makes a DuckDB file of 3 schemas x 5 tables x 10 columns.
+func bigFile(t *testing.T) session.Session {
+	t.Helper()
+	dir := t.TempDir()
+	s, err := session.New(
+		session.WithTempDirectory(filepath.Join(dir, "tmp")),
+		session.WithExtensionDirectory(filepath.Join(dir, "ext")),
+		session.WithSecretDirectory(filepath.Join(dir, "sec")),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	path := filepath.Join(dir, "big.duckdb")
+	f, err := sql.Open("duckdb", path)
+	require.NoError(t, err)
+	for _, sc := range []string{"s1", "s2", "s3"} {
+		_, err = f.Exec(`CREATE SCHEMA ` + sc)
+		require.NoError(t, err)
+		for _, tb := range []string{"t1", "t2", "t3", "t4", "t5"} {
+			cols := []string{}
+			for c := 1; c <= 10; c++ {
+				cols = append(cols, "c"+string(rune('a'+c))+" INTEGER")
+			}
+			_, err = f.Exec(`CREATE TABLE ` + sc + "." + tb + "(" + strings.Join(cols, ",") + ")")
+			require.NoError(t, err)
+		}
+	}
+	_, err = f.Exec(`CREATE TABLE tm (a INTEGER, b INTEGER, c INTEGER)`) // the default schema, main
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.NoError(t, s.Attach(context.Background(), session.Spec{Name: "big", Path: path}))
+	return s
+}
+
+func TestBuildConnection_Caps(t *testing.T) {
+	sess := bigFile(t)
+	st, ok := sess.Status("big")
+	require.True(t, ok)
+
+	full, err := buildConnection(context.Background(), sess, st, DefaultCaps())
+	require.NoError(t, err)
+	assert.False(t, full.Truncated)
+	require.NotNil(t, full.Schema("s2"))
+	assert.Len(t, full.Schema("s2").Tables, 5)
+	assert.Len(t, full.Schema("s2").Tables[0].Columns, 10)
+
+	capped, err := buildConnection(context.Background(), sess, st, Caps{RelationsPerSchema: 2, ColumnsPerRelation: 3, Rows: 1000})
+	require.NoError(t, err)
+	assert.True(t, capped.Truncated)
+	for _, sc := range []string{"s1", "s2", "s3"} {
+		s := capped.Schema(sc)
+		require.NotNil(t, s)
+		require.Len(t, s.Tables, 2)
+		assert.Equal(t, []string{"t1", "t2"}, []string{s.Tables[0].Name, s.Tables[1].Name})
+		for _, r := range s.Tables {
+			assert.Len(t, r.Columns, 3)
+		}
+	}
+
+	rowCapped, err := buildConnection(context.Background(), sess, st, Caps{RelationsPerSchema: 100, ColumnsPerRelation: 100, Rows: 25})
+	require.NoError(t, err)
+	assert.True(t, rowCapped.Truncated)
+	n := 0
+	for _, s := range rowCapped.Schemas {
+		for _, r := range s.Tables {
+			n += len(r.Columns)
+		}
+	}
+	assert.Equal(t, 25, n)
+}
+
+func TestCompletable(t *testing.T) {
+	ok := session.Status{Name: "pg", Kind: session.StatusOK}
+	assert.True(t, completable(ok, false, "local"))
+	assert.False(t, completable(ok, true, "local"), "a storage connection has no catalog")
+	assert.False(t, completable(session.Status{Name: "pg", Kind: session.StatusNotConnected}, false, "local"))
+	assert.False(t, completable(session.Status{Name: "memory", Kind: session.StatusOK}, false, "local"))
+	assert.True(t, completable(session.Status{Name: "memory", Kind: session.StatusOK}, false, "memory"))
+}
+
+func TestBuildConnection_RowCapReadsDefaultSchemaFirst(t *testing.T) {
+	sess := bigFile(t)
+	st, ok := sess.Status("big")
+	require.True(t, ok)
+	conn, err := buildConnection(context.Background(), sess, st, Caps{RelationsPerSchema: 100, ColumnsPerRelation: 100, Rows: 5})
+	require.NoError(t, err)
+	assert.True(t, conn.Truncated)
+	require.NotNil(t, conn.Schema("main"), "the default schema is not starved by schemas that sort first")
+	require.NotNil(t, conn.Schema("main").Relation("tm"))
+	assert.Len(t, conn.Schema("main").Relation("tm").Columns, 3)
+}

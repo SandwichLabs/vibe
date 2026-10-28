@@ -111,6 +111,7 @@ interface AppApi {
   CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
   DropTable(name: string): Promise<void>
   RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
+  CompleteSQL(req: { sql: string; offset: number; connection: string }): Promise<CompleteSQLResult>
   RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
   RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
   ListArtifacts(): Promise<ArtifactSummary[]>
@@ -589,6 +590,21 @@ interface TableData {
   page_size: number
   total_rows: number
   total_pages: number
+}
+
+interface CompletionItem {
+  label: string
+  kind: 'keyword' | 'connection' | 'schema' | 'table' | 'view' | 'column' | 'function' | 'alias'
+  detail?: string
+  insert?: string
+}
+
+interface CompleteSQLResult {
+  from: number
+  items: CompletionItem[]
+  stale?: string[]
+  building?: boolean
+  incomplete?: boolean
 }
 
 interface QueryResult {

@@ -69,6 +69,10 @@ In Studio the SQL is hidden by default behind a "Show SQL" row, and the
 result shows first. Whether it is open is view state and is never stored. A
 cell with no SQL, or whose run fails, opens it.
 
+The SQL editor completes connections, schemas, tables, columns and functions
+(Ctrl+Space opens the list); the cell's `connection` decides where unqualified
+names resolve. See [editor.md](editor.md#completion-in-studio).
+
 ### markdown
 
 Plain markdown prose (`source`), rendered with the same renderer the rest of

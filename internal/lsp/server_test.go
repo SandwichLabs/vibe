@@ -204,3 +204,37 @@ func TestServer_BadJSONAndMissingLengthAreSurvivable(t *testing.T) {
 	assert.Contains(t, out.String(), "-32700")
 	assert.Contains(t, out.String(), `"id":7`)
 }
+
+func TestServer_CompletionReportsIncomplete(t *testing.T) {
+	cat := fixture()
+	var rels []Relation
+	for i := 0; i < maxItems+10; i++ {
+		rels = append(rels, Relation{Name: fmt.Sprintf("s%04d", i), Kind: "table"})
+	}
+	cat.Conn("local").Schema("main").Tables = rels
+	path := filepath.Join(t.TempDir(), "catalog.json")
+	require.NoError(t, cat.Save(path))
+	c := startServer(t, WithRootHook(func(string) *Source { return NewSource(path) }))
+	c.call("initialize", map[string]any{"rootUri": "file:///work/sales", "capabilities": map[string]any{}})
+	c.send("initialized", map[string]any{}, false)
+	uri := "file:///work/sales/q.sql"
+	c.send("textDocument/didOpen", map[string]any{"textDocument": map[string]any{
+		"uri": uri, "languageId": "sql", "version": 1, "text": "SELECT * FROM s",
+	}}, false)
+	complete := func(char int) (bool, int) {
+		var list struct {
+			IsIncomplete bool              `json:"isIncomplete"`
+			Items        []json.RawMessage `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(c.call("textDocument/completion", map[string]any{
+			"textDocument": map[string]any{"uri": uri},
+			"position":     map[string]any{"line": 0, "character": char},
+		}), &list))
+		return list.IsIncomplete, len(list.Items)
+	}
+	inc, n := complete(15)
+	assert.True(t, inc)
+	assert.Equal(t, maxItems, n)
+	inc, _ = complete(7) // "SELECT " offers keywords and functions, well under the cap
+	assert.False(t, inc)
+}

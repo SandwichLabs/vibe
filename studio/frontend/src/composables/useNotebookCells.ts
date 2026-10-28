@@ -15,6 +15,8 @@ import { bestView, describeShape } from '../lib/notebookViews'
 import { cellTitle } from '../lib/cellSummary'
 import { hasWailsRuntime } from '../lib/wails'
 import { blankCell, envelopeToRaw, newCellId, newCellState, type CellState } from '../lib/notebookCells'
+import { closeCompletion } from '@codemirror/autocomplete'
+import { sqlCompletion } from '../lib/sqlComplete'
 
 export function useNotebookCells(opts: { onDelete: (id: string) => void }) {
   // Cast: ref() would unwrap the CodeMirror EditorView type inside each cell's editor handle.
@@ -94,8 +96,9 @@ export function useNotebookCells(opts: { onDelete: (id: string) => void }) {
         lang: cell.type === 'sql' ? 'sql' : 'markdown',
         onChange: (v) => { cell.source = v },
         extraKeymap: cell.type === 'sql'
-          ? [{ key: 'Mod-Enter', run: () => { runCell(cell); return true } }]
+          ? [{ key: 'Mod-Enter', run: (view) => { closeCompletion(view); runCell(cell); return true } }]
           : [],
+        extensions: cell.type === 'sql' ? sqlCompletion({ connection: () => cell.connection }) : [],
       })
     }
   }
