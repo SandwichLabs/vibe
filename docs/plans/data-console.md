@@ -1,12 +1,12 @@
 # Data console and SQL autocomplete
 
-Status: **Part A built (#256, 2026-10-28); Part B (the console) is a proposal.** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a libghostty terminal, that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
+Status: **Part A built (#256, 2026-10-28); Part B (the console) is a proposal; R0 automated Linux runs done 2026-10-28; Linux human checks and macOS pending the owner (xterm.js recommended, provisional; go-libghostty no), see [`spike-console-r0-findings.md`](spike-console-r0-findings.md).** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a terminal widget (xterm.js after R0), that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
 
 ## Feasibility in one paragraph
 
 Both are feasible with no new trust surface, provided one rule holds: **the terminal is a renderer for Vibe's own Go REPL, never a shell.** There is no PTY, no subprocess and no `duckdb` binary. The terminal sends keystrokes to Go, and Go writes VT bytes back.
 
-The terminal widget is the least risky part. `ghostty-web` (Coder, MIT) is libghostty-vt compiled to WASM behind an xterm.js-compatible API, and xterm.js is a drop-in fallback.
+The terminal widget was the main R0 risk and it held, with a recommendation still to confirm. `ghostty-web` (Coder, MIT) is libghostty-vt compiled to WASM behind an xterm.js-style API, but it is **not** a drop-in: R0 found five behaviours that differ (paste, theme, Meta, scrollback units, write callbacks), so R0 recommends xterm.js with WebGL, provisional until the owner's macOS run and Linux human checks ([`spike-console-r0-findings.md`](spike-console-r0-findings.md)).
 
 The real work is in three places:
 
@@ -107,16 +107,16 @@ A separate `duckdb` process sees none of that. Giving it the connections would m
 
 | Path | What it is | Verdict |
 |---|---|---|
-| **1. `ghostty-web` in the webview** | libghostty-vt compiled to WASM (about 400 KB), with an xterm.js-compatible JS API, drawn in the Studio page. npm `ghostty-web` 0.4.0, MIT. It builds from Ghostty source with a small patch, and the project says it will move to the official libghostty WASM build once there is one | **Recommended**, behind the R0 spike. Studio's page CSP is only `frame-src` today, so WASM needs no CSP change. If a `script-src` is ever added, it must carry `'wasm-unsafe-eval'` |
+| 1. `ghostty-web` in the webview | libghostty-vt compiled to WASM, with an xterm.js-style JS API, drawn in the Studio page. npm `ghostty-web` 0.4.0, MIT. The npm ESM is 682 KB with the 423 KB WASM inlined as base64 (the raw `.wasm` is the "about 400 KB"); +184 KB gzip over Studio's JS. It builds from Ghostty source with a small patch, and the project says it will move to the official libghostty WASM build once there is one | **R0 result: works in WebKitGTK, not chosen.** WASM loads under Studio's CSP (frame-src only, no change) on both Linux origins. By the plan's rule it fails on real paste in bracketed mode (the everyday click-then-Ctrl+V path is raw) and is PARTIAL on in-place theme and on Alt as Meta; 10k-line frame pacing on native Wayland is a marginal miss and the default `scrollback` is a byte unit ([`spike-console-r0-findings.md`](spike-console-r0-findings.md)). Revisit if those are fixed upstream. If a `script-src` is ever added, it must carry `'wasm-unsafe-eval'` |
 | 2. Native libghostty surface | Embed Ghostty's GPU-rendered surface in a native child view, as the page windows do with WebKitGTK and WKWebView (`studio/pagewindow_*`) | **Not now.** There is no stable, tagged embedding API for the full surface (libghostty-vt is the part that is out). It means per-platform native code layered over a webview, plus focus and IME juggling, to draw text the webview can already draw. Revisit if libghostty ships a stable surface API and the webview path proves too slow |
-| 3. `go-libghostty` in Go | Mitchell Hashimoto's cgo bindings to libghostty-vt: terminal state, a screen formatter and key encoders | **Optional, tests only.** It could feed the REPL's output into a real VT state and assert on screen text (golden screens). Cost: Zig ≥ 0.17 and CMake in CI, and the README makes no promise of API stability. Decided in R0. The default is byte-level golden tests without it |
+| 3. `go-libghostty` in Go | Mitchell Hashimoto's cgo bindings to libghostty-vt: terminal state, a screen formatter and key encoders | **Optional, tests only.** It could feed the REPL's output into a real VT state and assert on screen text (golden screens). Cost: Zig ≥ 0.17 and CMake in CI, and the README makes no promise of API stability. **Recommended by R0: no.** It builds here in 2 minutes with Zig 0.17.0 and works, but it needs a Ghostty source build in CI and promises no API stability; byte-level golden tests stay |
 
-xterm.js (`@xterm/xterm`) is the fallback for path 1. The API is the same, so switching costs an import and a re-run of the spike checks.
+`@xterm/xterm` 6.0.0 with `addon-fit` and `addon-webgl` (DOM renderer as the fallback) is the recommended widget for R2, replacing path 1 (owner to confirm). R0 measured it on WebKitGTK: 10k lines at p95 17 to 18 ms, live theme switch, wrapped paste, Alt as Meta. It needs a Ctrl+Shift+C / Cmd+C binding of our own. It weighs +446 KB raw, +113 KB gzip.
 
 ### Architecture
 
 ```
-Vue  ReplTerminal.vue ── useReplTerminal.ts ── ghostty-web Terminal (canvas)
+Vue  ReplTerminal.vue ── useReplTerminal.ts ── xterm.js Terminal (WebGL)
         │ keystrokes, paste, resize                ▲ VT bytes (coalesced ~16 ms)
         ▼                                          │
 Wails  ReplOpen / ReplInput / ReplResize / ReplClose      event repl:out:<id>
@@ -147,7 +147,7 @@ Go     internal/repl.Session ── line editor ── statement splitter ──
 
 Output goes out on `repl:out:<id>` events, coalesced, with a per-frame byte cap and backpressure (the Go writer blocks when the frontend's acknowledged offset falls too far behind). Input is capped per call.
 
-**Frontend:** `components/ReplTerminal.vue` plus `composables/useReplTerminal.ts`, within the 600/150-line view limits. The terminal theme is built in JS from `getComputedStyle` over the `--vibe-*` roles (background, foreground, cursor, selection and the 16 ANSI slots from the chart and status roles), so it follows the four built-in themes and user themes without hex in a stylesheet. Copy and paste use bracketed paste. The font is `--sh-font-mono`.
+**Frontend:** `components/ReplTerminal.vue` plus `composables/useReplTerminal.ts`, within the 600/150-line view limits. The terminal theme is built in JS from `getComputedStyle` over the `--vibe-*` roles (background, foreground, cursor, selection and the 16 ANSI slots from the chart and status roles), so it follows the four built-in themes and user themes without hex in a stylesheet. Copy and paste use bracketed paste; Ctrl+Shift+C (Linux) and Cmd+C (macOS) are bound to the clipboard and Ctrl+C stays `^C`, and the theme is set through `options.theme` (xterm.js recolours live). The font is `--sh-font-mono`.
 
 ### Dot commands: a closed set
 
@@ -189,7 +189,7 @@ Whether the console becomes the default output is an owner call after a week of 
 
 | Phase | Work | Exit criteria |
 |---|---|---|
-| **R0 spike** (3-5 days) | `ghostty-web` in a throwaway Studio route, run against WebKitGTK (Linux) and WKWebView (macOS), with the same harness on xterm.js | Renders and themes. Dead keys, IME composition, Cmd/Ctrl shortcuts, copy, bracketed paste and resize all work. 10k lines of output scroll smoothly. WASM loads under Studio's CSP. Bundle size recorded. Decision recorded: ghostty-web or xterm.js, and go-libghostty for tests or not |
+| **R0 spike** (3-5 days) **Automated Linux runs done 2026-10-28** ([`spike-console-r0-findings.md`](spike-console-r0-findings.md)); Linux human checks (dead keys, IME, physical input) and macOS pending the owner | `ghostty-web` (and xterm.js) in a throwaway Studio route, run against WebKitGTK (Linux) and WKWebView (macOS), with the same harness on xterm.js | Renders and themes. Dead keys, IME composition, Cmd/Ctrl shortcuts, copy, bracketed paste and resize all work. 10k lines of output scroll smoothly. WASM loads under Studio's CSP. Bundle size recorded. Decision recorded: ghostty-web or xterm.js, and go-libghostty for tests or not |
 | **R1 engine** (1-1.5 wk) | `internal/repl` (session, splitter, dot commands, renderers, history filter, cancel) and `engine.ExecuteOn`. The line editor is `x/term`'s `Terminal` (it works over any `io.ReadWriter`: history, a completion callback, single line, with multi-line made by accumulating) | Golden byte tests per renderer. A fuzz test that no cell value emits ESC/OSC/CSI. History filter tests. Cancel interrupts a long `range()` query. Run-path parity test: the same statement via `RunQuery` and via the console takes the same gates and status updates |
 | **R2 Studio console** (1 wk) | Bindings, events and backpressure. `ReplTerminal.vue`. A **Console** tab in the Query Explorer. Tab completion through `lsp.Live` (A1) | Rodney: open the console, `.tables`, a federated join, Ctrl+C, a theme switch, closing the workspace mid-query. Thin-binding, Vue-size and ast-grep checks green |
 | **R3 script mode** (1 wk) | Editor-to-console run (statement, selection, all), `.grid`, `.save`, "Show as grid" | Rodney: a three-statement script with a temp table runs top to bottom, and the grid opens on the last result |
@@ -202,8 +202,8 @@ The order is **A1-A2 first** (it pays off in the editor, the notebooks and later
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| `ghostty-web` is young (0.4.x, a patched Ghostty build) | Medium | Pin the exact version. Swap to xterm.js through the same API. Add it to `THIRD_PARTY_NOTICES` |
-| WebKit quirks (IME, focus, canvas sizing) in WebKitGTK | Medium | R0 runs on both webviews before any engine work |
+| `ghostty-web` is young (0.4.x, a patched Ghostty build) | Resolved by R0 | xterm.js recommended (provisional); ghostty-web stays a later option behind the same adapter shape |
+| WebKit quirks (IME, focus, canvas sizing) in WebKitGTK and WKWebView | Medium | R0 ran WebKitGTK in a private compositor (rendering, input, resize, 10k lines all fine for xterm.js; no IM layer there). Dead keys, IME and everything on WKWebView are owner checks in the findings; do not start R2 before the macOS run |
 | A second run path creeps in (no receipts, different gates) | Medium | `engine.ExecuteOn` plus a run-path parity test in R1 |
 | Pinned connections exhaust the hub pool | Low | At most 4 sessions. Idle sessions release their connection and keep only display settings, with a "session reset" notice |
 | A credential in history | Low | The parsed-type history filter and its test. History is local only |
@@ -222,8 +222,8 @@ The order is **A1-A2 first** (it pays off in the editor, the notebooks and later
 ## Owner decisions
 
 1. **Console as default output** in the Query Explorer, or a tab beside the grid. *Default: a tab in R2; decide after R3 use.*
-2. **ghostty-web or xterm.js.** *Default: ghostty-web if R0 passes on both webviews.*
-3. **go-libghostty in CI** (adds Zig). *Default: no; byte-level golden tests.*
+2. **ghostty-web or xterm.js.** *Recommended by R0 (2026-10-28), owner to confirm after the Linux human checks and the macOS run: xterm.js 6.0.0 + fit + webgl.* By the plan's rule ghostty-web is FAIL on row 8 (real paste) and PARTIAL on rows 3 (theme) and 6 (keys); row 10 is a marginal miss and does not decide. xterm.js is PARTIAL on row 6 (two app key bindings) and passed the rest that could be run. See [`spike-console-r0-findings.md`](spike-console-r0-findings.md).
+3. **go-libghostty in CI** (adds Zig). *Recommended by R0: no; byte-level golden tests.* It builds and works (2 minutes, Zig 0.17.0) but is not worth a Ghostty source build in CI.
 4. **History persistence.** *Default: on, machine-local, filtered as above.*
 5. **`vibe repl` as a CLI command.** *Default: yes in R5; it mirrors the UI.*
 
@@ -231,5 +231,6 @@ The order is **A1-A2 first** (it pays off in the editor, the notebooks and later
 
 - [libghostty is coming](https://mitchellh.com/writing/libghostty-is-coming) (Mitchell Hashimoto): libghostty-vt as a zero-dependency VT parser and state library.
 - [coder/ghostty-web](https://github.com/coder/ghostty-web): the WASM build of libghostty-vt with an xterm.js-compatible API. npm `ghostty-web` 0.4.0, MIT, checked 2026-10-27.
+- [`spike-console-r0-findings.md`](spike-console-r0-findings.md): the R0 results matrix, API gap table, bundle sizes, go-libghostty experiment and the owner checklists.
 - [go-libghostty](https://next.tangled.org/mitchellh.com/go-libghostty): cgo bindings to libghostty-vt, with no stability promise yet.
 - [awesome-libghostty](https://github.com/Uzaaft/awesome-libghostty): other embedders.
