@@ -33,7 +33,7 @@ export const kindType: Record<string, string> = {
 }
 
 /** kindBoost keeps what the statement names above the catalog above keywords. */
-export const kindBoost: Record<string, number> = {
+const kindBoost: Record<string, number> = {
   column: 40, alias: 40, table: 30, view: 30, schema: 20, connection: 20, function: 10, keyword: 0,
 }
 
