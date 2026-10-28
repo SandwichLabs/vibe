@@ -1,0 +1,388 @@
+{
+  "tag": "xterm-webgl-pdb-webkitgtk-dev-x11",
+  "webview": "webkitgtk",
+  "origin": "wails://wails.localhost:34115",
+  "widget": "xterm-webgl",
+  "notes": [
+    "renderer=webgl (preserveDrawingBuffer for pixel sampling)",
+    "renderer=webgl (preserveDrawingBuffer for pixel sampling)"
+  ],
+  "dpr": 1,
+  "checks": [
+    {
+      "id": 1,
+      "name": "Renders (text-level; glyph alignment needs the png)",
+      "status": "pass"
+    },
+    {
+      "id": 2,
+      "name": "Theme from --vibe-* roles",
+      "status": "pass"
+    },
+    {
+      "id": 3,
+      "name": "Theme switch live",
+      "status": "pass"
+    },
+    {
+      "id": 4,
+      "name": "Dead keys",
+      "status": "human"
+    },
+    {
+      "id": 5,
+      "name": "IME composition",
+      "status": "human"
+    },
+    {
+      "id": 6,
+      "name": "Shortcuts",
+      "status": "human"
+    },
+    {
+      "id": 7,
+      "name": "Copy: getSelection equals selected text (programmatic; clipboard is a keyboard/human check)",
+      "status": "pass"
+    },
+    {
+      "id": 8,
+      "name": "Bracketed paste (adapter.paste; synthetic DOM paste event is labelled synthetic)",
+      "status": "pass"
+    },
+    {
+      "id": 9,
+      "name": "Resize / fit",
+      "status": "pass"
+    },
+    {
+      "id": 10,
+      "name": "10k lines (drain, rAF frame times during drain and a 2 s programmatic scroll)",
+      "status": "pass"
+    },
+    {
+      "id": 11,
+      "name": "WASM / init",
+      "status": "pass"
+    },
+    {
+      "id": 14,
+      "name": "Errors",
+      "status": "pass"
+    }
+  ],
+  "detail": [
+    {
+      "id": 1,
+      "name": "Renders (text-level; glyph alignment needs the png)",
+      "status": "pass",
+      "data": {
+        "cols": 156,
+        "rows": 38
+      }
+    },
+    {
+      "id": 2,
+      "name": "Theme from --vibe-* roles",
+      "status": "pass",
+      "data": {
+        "distinctBackgrounds": 4,
+        "themes": {
+          "schoolhouse-light": {
+            "background": "#faf7f0",
+            "foreground": "#1f2330",
+            "cursor": "#1f2330",
+            "cursorAccent": "#faf7f0",
+            "selectionBackground": "#f2a93b",
+            "selectionForeground": "#1f2330",
+            "black": "#f2eddf",
+            "red": "#b23b2e",
+            "green": "#2f7d4a",
+            "yellow": "#b47800",
+            "blue": "#2f6fa8",
+            "magenta": "#f2a93b",
+            "cyan": "#1f7268",
+            "white": "#5c6275",
+            "brightBlack": "#a8a89c",
+            "brightRed": "#1f7268",
+            "brightGreen": "#f2a93b",
+            "brightYellow": "#e27262",
+            "brightBlue": "#2f6fa8",
+            "brightMagenta": "#7a4fa0",
+            "brightCyan": "#a65a2c",
+            "brightWhite": "#1f2330"
+          },
+          "schoolhouse-dark": {
+            "background": "#1a1d27",
+            "foreground": "#ede9df",
+            "cursor": "#f2a93b",
+            "cursorAccent": "#1a1d27",
+            "selectionBackground": "#f2a93b",
+            "selectionForeground": "#1a1d27",
+            "black": "#22262f",
+            "red": "#e06a5c",
+            "green": "#58b076",
+            "yellow": "#e0a93a",
+            "blue": "#6aa5e0",
+            "magenta": "#f2a93b",
+            "cyan": "#3fa39b",
+            "white": "#a9aebd",
+            "brightBlack": "#6b7080",
+            "brightRed": "#3fa39b",
+            "brightGreen": "#f2a93b",
+            "brightYellow": "#e88072",
+            "brightBlue": "#6aa5e0",
+            "brightMagenta": "#b48ae0",
+            "brightCyan": "#d08a5c",
+            "brightWhite": "#ede9df"
+          },
+          "signal": {
+            "background": "#ffffff",
+            "foreground": "#000000",
+            "cursor": "#000000",
+            "cursorAccent": "#ffffff",
+            "selectionBackground": "#ffd700",
+            "selectionForeground": "#000000",
+            "black": "#f0ede4",
+            "red": "#cc0000",
+            "green": "#187a32",
+            "yellow": "#9a6e00",
+            "blue": "#1f5fbf",
+            "magenta": "#ffd700",
+            "cyan": "#111111",
+            "white": "#4d4d4d",
+            "brightBlack": "#8c8c8c",
+            "brightRed": "#111111",
+            "brightGreen": "#ffd700",
+            "brightYellow": "#e5604a",
+            "brightBlue": "#1f5fbf",
+            "brightMagenta": "#8b7355",
+            "brightCyan": "#187a32",
+            "brightWhite": "#000000"
+          },
+          "chalkboard": {
+            "background": "#1b2624",
+            "foreground": "#f3eedd",
+            "cursor": "#f2a93b",
+            "cursorAccent": "#1b2624",
+            "selectionBackground": "#f2a93b",
+            "selectionForeground": "#1b2624",
+            "black": "#22302d",
+            "red": "#f07a6c",
+            "green": "#7ed09a",
+            "yellow": "#f2c46b",
+            "blue": "#86b7ea",
+            "magenta": "#7fd1c3",
+            "cyan": "#f2a93b",
+            "white": "#b3bbb0",
+            "brightBlack": "#6f7b76",
+            "brightRed": "#f2a93b",
+            "brightGreen": "#7fd1c3",
+            "brightYellow": "#f08a7a",
+            "brightBlue": "#86b7ea",
+            "brightMagenta": "#e9a2c0",
+            "brightCyan": "#b7d77a",
+            "brightWhite": "#f3eedd"
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "Theme switch live",
+      "status": "pass",
+      "data": {
+        "watcherEvents": [
+          "signal: applied",
+          "chalkboard: applied",
+          "schoolhouse-light: applied",
+          "schoolhouse-light: applied",
+          "schoolhouse-dark: applied",
+          "schoolhouse-light: applied"
+        ],
+        "before": {
+          "via": "canvas-pixel",
+          "bg": "#faf7f0",
+          "red": "#b23b2e"
+        },
+        "afterDark": {
+          "via": "canvas-pixel",
+          "bg": "#1a1d27",
+          "red": "#e06a5c"
+        },
+        "afterLight": {
+          "via": "canvas-pixel",
+          "bg": "#faf7f0",
+          "red": "#b23b2e"
+        },
+        "expectLight": {
+          "bg": "#faf7f0",
+          "red": "#b23b2e"
+        },
+        "expectDark": {
+          "bg": "#1a1d27",
+          "red": "#e06a5c"
+        },
+        "inPlaceOk": true,
+        "recreatedOk": null,
+        "recreatedResult": "",
+        "note": "applied in place (light->dark->light)"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Dead keys",
+      "status": "human",
+      "data": "not automatable here"
+    },
+    {
+      "id": 5,
+      "name": "IME composition",
+      "status": "human",
+      "data": "not automatable here"
+    },
+    {
+      "id": 6,
+      "name": "Shortcuts",
+      "status": "human",
+      "data": "XTEST run (X11) / owner on macOS; rx log attached to this run"
+    },
+    {
+      "id": 7,
+      "name": "Copy: getSelection equals selected text (programmatic; clipboard is a keyboard/human check)",
+      "status": "pass",
+      "data": {
+        "got": "copy-me 12345"
+      }
+    },
+    {
+      "id": 8,
+      "name": "Bracketed paste (adapter.paste; synthetic DOM paste event is labelled synthetic)",
+      "status": "pass",
+      "data": {
+        "received": [
+          "\\x1b[200~a\\x0db\\x1b[201~",
+          "c",
+          "\\x1b[200~synthetic-paste\\x1b[201~"
+        ],
+        "syntheticPasteArrived": true
+      }
+    },
+    {
+      "id": 9,
+      "name": "Resize / fit",
+      "status": "pass",
+      "data": [
+        {
+          "gapW": 16,
+          "gapH": 7,
+          "w": 900,
+          "h": 300,
+          "fit": {
+            "cols": 110,
+            "rows": 17
+          },
+          "onResize": {
+            "cols": 110,
+            "rows": 17,
+            "colsChanged": true,
+            "rowsChanged": true
+          },
+          "metrics": {
+            "screenW": 880,
+            "screenH": 289,
+            "containerW": 896,
+            "containerH": 296
+          },
+          "cellW": 8,
+          "cellH": 17,
+          "fits": true,
+          "filled": true
+        },
+        {
+          "gapW": 16,
+          "gapH": 1,
+          "w": 620,
+          "h": 430,
+          "fit": {
+            "cols": 75,
+            "rows": 25
+          },
+          "onResize": {
+            "cols": 75,
+            "rows": 25,
+            "colsChanged": true,
+            "rowsChanged": true
+          },
+          "metrics": {
+            "screenW": 600,
+            "screenH": 425,
+            "containerW": 616,
+            "containerH": 426
+          },
+          "cellW": 8,
+          "cellH": 17,
+          "fits": true,
+          "filled": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "10k lines (drain, rAF frame times during drain and a 2 s programmatic scroll)",
+      "status": "pass",
+      "data": {
+        "n": 10000,
+        "drainMs": 63,
+        "drain": {
+          "frames": 1,
+          "p50": 31,
+          "p95": 31,
+          "max": 31,
+          "over33": 0,
+          "over50": 0
+        },
+        "scroll": {
+          "frames": 127,
+          "p50": 16,
+          "p95": 17,
+          "max": 19,
+          "over33": 0,
+          "over50": 0
+        },
+        "combined": {
+          "frames": 128,
+          "p50": 16,
+          "p95": 17,
+          "max": 31,
+          "over33": 0,
+          "over50": 0
+        },
+        "lastLinePresent": true,
+        "scrollbackAfter": 9963,
+        "lengthAfter": 10001
+      }
+    },
+    {
+      "id": 11,
+      "name": "WASM / init",
+      "status": "pass",
+      "data": {
+        "initMs": 30,
+        "origin": "wails://wails.localhost:34115",
+        "webview": "webkitgtk",
+        "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+        "dpr": 1,
+        "notes": [
+          "renderer=webgl (preserveDrawingBuffer for pixel sampling)",
+          "renderer=webgl (preserveDrawingBuffer for pixel sampling)"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "name": "Errors",
+      "status": "pass",
+      "data": []
+    }
+  ]
+}

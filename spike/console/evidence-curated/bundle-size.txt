@@ -1,0 +1,21 @@
+file                                                       raw   gzip(9)  spike
+ConsoleSpikeView-CtkgQ9_8.css                             4585      1216   yes
+ConsoleSpikeView-i_CBtUDi.js                             21605      8788   yes
+__vite-browser-external-2447137e-BvRk9kiK.js                 0        20   yes
+addon-fit-DIOBYJe3.js                                     1205       494   yes
+addon-webgl-C3a5wC6k.js                                 113360     30630   yes
+ghostty-vt-DOMeXDrv.wasm                                423045    125202   yes
+ghostty-web-CDHyIt4M.js                                 636528    183786   yes
+index-B50Sv1wY.js                                      1263473    416941 
+xterm-CerOhKYV.js                                       330956     82112   yes
+
+assets/*.js total          2367127    722771
+  spike chunks (js)        1103654    305830
+  baseline (no spike)      1263473    416941
+ghostty-vt.wasm asset       423045    125202
+
+ghostty-web chunk embeds the wasm as a base64 data URL: yes (564089 chars)
+
+ghostty-web chunk with the base64 literal removed (what a url-only load path could ship): raw 72468, gzip(9) 19549
+url-only total (stripped js + wasm): raw 495513, gzip(9) 143673
+xterm + fit + webgl: raw 445521, gzip(9) 113493 (+ xterm.css in ConsoleSpikeView css 4585 raw incl. spike styles)

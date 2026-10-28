@@ -1,0 +1,142 @@
+{
+  "typed": {
+    "cell": {
+      "w": 8,
+      "h": 14
+    },
+    "ptr": {
+      "x": 561,
+      "y": 462
+    },
+    "vy": 0,
+    "sbLines": 0,
+    "seed": "copy this text then press Ctrl+C in this box",
+    "rects": {
+      "term": {
+        "x": 8,
+        "y": 108,
+        "w": 1384,
+        "h": 709
+      },
+      "seed": {
+        "x": 117,
+        "y": 62,
+        "w": 280,
+        "h": 36
+      }
+    },
+    "innerW": 1400,
+    "innerH": 863,
+    "rx": [
+      "h",
+      "e",
+      "l",
+      "p",
+      "\\x0d"
+    ],
+    "selection": "",
+    "log": [],
+    "screen": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ]
+  },
+  "ctrl+c": [
+    "\\x03"
+  ],
+  "nav": [
+    "\\x1b[D",
+    "\\x1b[C",
+    "\\x1b[A",
+    "\\x1b[B",
+    "\\x1b[H",
+    "\\x1b[F",
+    "\\x1b[3~",
+    "\\x7f",
+    "\\x1b[5~",
+    "\\x1b[6~"
+  ],
+  "emacs": [
+    "b",
+    "f",
+    "\\x01",
+    "\\x05",
+    "\\x0c",
+    "\\x12",
+    "\\x04",
+    "\\x1a",
+    "\\x09",
+    "\\x1b"
+  ],
+  "ctrl+shift+a": [
+    "\\x01"
+  ],
+  "ctrl+v on": [
+    "line-one\\x0aline-two"
+  ],
+  "shift+Insert on": [
+    "\\x1b[2~"
+  ],
+  "ctrl+shift+v on": [
+    "line-one\\x0aline-two"
+  ],
+  "ctrl+v off": [
+    "line-one\\x0aline-two"
+  ],
+  "selection after drag": "be > help\ncommands: help table colors unicode wide lines N paste on|off size bell clear\nvibe > table",
+  "A: clipboard after drag only (auto-copy?)": "be > help\ncommands: help table colors unicode wide lines N paste on|off size bell clear\nvibe > table",
+  "copykey log": [],
+  "B: clipboard after drag + ctrl+shift+c": "be > help\ncommands: help table colors unicode wide lines N paste on|off size bell clear\nvibe > table",
+  "C: rx after ctrl+c with a selection": [
+    "\\x03"
+  ],
+  "C: clipboard after drag + ctrl+c": "be > help\ncommands: help table colors unicode wide lines N paste on|off size bell clear\nvibe > table",
+  "dblclick selections at 4 points (a word each, or whitespace)": [
+    "e",
+    "",
+    "help",
+    "─"
+  ],
+  "middle-click": [
+    "\\x1b[200~middle-paste\\x1b[201~"
+  ],
+  "viewportY after wheel up (scrolled?)": [
+    206.86884920634898,
+    9997
+  ],
+  "viewportY after wheel down": [
+    0,
+    9997
+  ],
+  "lines bottom": [
+    "line 009999 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789",
+    "vibe >"
+  ],
+  "supplementary dead_acute+e, dead_diaeresis+u (keysym injection)": [
+    "e",
+    "u"
+  ]
+}

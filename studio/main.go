@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/SandwichLabs/vibe/internal/connections"
@@ -74,9 +75,10 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 			// Serves /vibe-view/ (custom artifact views and pinned libraries).
-			Middleware: app.views.Middleware(),
+			Middleware: func(next http.Handler) http.Handler { return spikeMiddleware(app.views.Middleware()(next)) }, // SPIKE #257 - never merge
 		},
 		OnStartup:  app.startup,
+		OnDomReady: spikeDomReady, // SPIKE #257 - never merge
 		OnShutdown: app.shutdown,
 		// Lets the frontend flush pending debounced saves (e.g. a notebook's
 		// autosave) before the window/process actually closes — see

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { App } from './lib/bindings'
-import { onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { EventsOn } from './wailsjs/runtime/runtime'
 import LauncherView from './views/LauncherView.vue'
 import AppShell from './components/AppShell.vue'
@@ -24,6 +24,9 @@ let unsubInstalling: (() => void) | null = null
 // route (and notebook id) the old one left behind. A reload that merely picks
 // up the open workspace, or a take-over of the same one, keeps its route.
 const router = useRouter()
+// SPIKE #257 - never merge.
+const spikeRouteObj = useRoute()
+const spikeRoute = computed(() => spikeRouteObj.path.startsWith('/spike/'))
 watch(() => workspaceInfo.value?.root, (now, before) => {
   // Different workspace, or closed (so the next open starts at Home too). A
   // switch never nulls the info in between, so it is the first case.
@@ -82,7 +85,9 @@ onUnmounted(() => {
 
 <template>
   <div class="sh" style="height: 100vh; width: 100vw; background: var(--sh-paper); color: var(--sh-ink);">
-    <AppShell v-if="workspaceOpen" />
+    <!-- SPIKE #257 - never merge: the harness renders without a workspace. -->
+    <RouterView v-if="spikeRoute" />
+    <AppShell v-else-if="workspaceOpen" />
     <LauncherView v-else-if="!launching" />
     <div v-else data-testid="launching" aria-busy="true" />
 
@@ -95,7 +100,7 @@ onUnmounted(() => {
     <TakeOverDialog />
     <BundleExportDialog />
     <BundleImportDialog />
-    <UpdatePrompt v-if="!launching" />
+    <UpdatePrompt v-if="!launching && !spikeRoute" />
 
     <!-- Shared promise-based confirm (composables/useConfirm.ts) — the ONE
          ConfirmDialog every askConfirm() caller in the app resolves through,

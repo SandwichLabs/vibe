@@ -1,0 +1,9 @@
+=== RUN   TestScreen
+    main_test.go:20: 
+        ┌──┐
+        │hi│
+        └──┘
+--- PASS: TestScreen (0.00s)
+PASS
+ok  	spikegolg	0.002s
+exit=0

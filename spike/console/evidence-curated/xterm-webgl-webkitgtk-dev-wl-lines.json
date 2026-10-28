@@ -1,0 +1,31 @@
+{
+  "n": 10000,
+  "drainMs": 58,
+  "drain": {
+    "frames": 1,
+    "p50": 34,
+    "p95": 34,
+    "max": 34,
+    "over33": 1,
+    "over50": 0
+  },
+  "scroll": {
+    "frames": 122,
+    "p50": 17,
+    "p95": 18,
+    "max": 21,
+    "over33": 0,
+    "over50": 0
+  },
+  "combined": {
+    "frames": 123,
+    "p50": 17,
+    "p95": 18,
+    "max": 34,
+    "over33": 1,
+    "over50": 0
+  },
+  "lastLinePresent": true,
+  "scrollbackAfter": 9959,
+  "lengthAfter": 10001
+}

@@ -1,0 +1,18 @@
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+-- The C compiler identification is GNU 16.2.1
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found zig: /home/linuxbrew/.linuxbrew/bin/zig
+-- Configuring done (6.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/claude-1000/golg/src/build
+cmake --build build
+gmake[1]: Entering directory '/tmp/claude-1000/golg/src/build'
+[100%] Building libghostty-vt via zig build...
+[100%] Built target zig_build_lib_vt
+gmake[1]: Leaving directory '/tmp/claude-1000/golg/src/build'
+PKG_CONFIG_PATH=/tmp/claude-1000/golg/src/build/_deps/ghostty-src/zig-out/share/pkgconfig go build ./...
+make build exit=0 seconds=52

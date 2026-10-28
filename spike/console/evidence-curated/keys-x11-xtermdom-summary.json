@@ -1,0 +1,141 @@
+{
+  "typed": {
+    "ptr": {
+      "x": 513,
+      "y": 431
+    },
+    "vy": 0,
+    "sbLines": 0,
+    "seed": "copy this text then press Ctrl+C in this box",
+    "rects": {
+      "term": {
+        "x": 8,
+        "y": 108,
+        "w": 1264,
+        "h": 646
+      },
+      "seed": {
+        "x": 262,
+        "y": 62,
+        "w": 280,
+        "h": 36
+      }
+    },
+    "innerW": 1280,
+    "innerH": 800,
+    "rx": [
+      "h",
+      "e",
+      "l",
+      "p",
+      "\\x0d"
+    ],
+    "selection": "",
+    "log": [],
+    "screen": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ]
+  },
+  "ctrl+c": [
+    "\\x03"
+  ],
+  "nav": [
+    "\\x1b[D",
+    "\\x1b[C",
+    "\\x1b[A",
+    "\\x1b[B",
+    "\\x1b[H",
+    "\\x1b[F",
+    "\\x1b[3~",
+    "\\x7f",
+    "\\x1b[5~",
+    "\\x1b[6~"
+  ],
+  "emacs": [
+    "\\x1bb",
+    "\\x1bf",
+    "\\x01",
+    "\\x05",
+    "\\x0c",
+    "\\x12",
+    "\\x04",
+    "\\x1a",
+    "\\x09",
+    "\\x1b"
+  ],
+  "ctrl+shift+a": [
+    "\\x1b"
+  ],
+  "ctrl+v on": [
+    "\\x16"
+  ],
+  "shift+Insert on": [
+    "\\x1b[200~line-one\\x0dline-two\\x1b[201~"
+  ],
+  "ctrl+shift+v on": [
+    "\\x1b[200~line-one\\x0dline-two\\x1b[201~"
+  ],
+  "ctrl+v off": [
+    "\\x16"
+  ],
+  "selection after drag": "id     │ customer       │ region   │ amount       │ ordered      │ status     │\n│ int64  │ varchar        │ varchar  │ de",
+  "A: clipboard after drag only (auto-copy?)": "untouched",
+  "copykey log": [],
+  "B: clipboard after drag + ctrl+shift+c": "untouched",
+  "C: rx after ctrl+c with a selection": [
+    "\\x03"
+  ],
+  "C: clipboard after drag + ctrl+c": "untouched",
+  "dblclick selections at 4 points (a word each, or whitespace)": [
+    "int64",
+    "varchar",
+    "├────────┼────────────────┼──────────┼──────────────┼──────────────┼────────────┤",
+    "├────────┼────────────────┼──────────┼──────────────┼──────────────┼────────────┤"
+  ],
+  "middle-click": [
+    "\\x1b[200~middle-paste\\x1b[201~"
+  ],
+  "viewportY after wheel up (scrolled?)": [
+    9919,
+    9982
+  ],
+  "viewportY after wheel down": [
+    9919,
+    9982
+  ],
+  "lines bottom": [
+    "line 009999 the quick brown fox jumps over the lazy dog 0123456789 ",
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789 ",
+    ""
+  ],
+  "supplementary dead_acute+e, dead_diaeresis+u (keysym injection)": [
+    "a",
+    "r",
+    "\\x0d",
+    "e",
+    "u"
+  ]
+}

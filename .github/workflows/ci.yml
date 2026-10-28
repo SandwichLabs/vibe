@@ -260,7 +260,8 @@ jobs:
       - name: Build Studio (macOS)
         if: runner.os == 'macOS'
         working-directory: studio
-        run: wails build -tags duckdb_arrow
+        # SPIKE #257 - never merge: -devtools so the owner can right-click > Inspect Element in the spike build.
+        run: wails build -tags duckdb_arrow -devtools
 
       - name: Check the Studio binary exists
         shell: bash
@@ -272,3 +273,17 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/vibe-studio.app/Contents/MacOS/vibe-studio; else studio=studio/build/bin/vibe-studio; fi
           scripts/check-binary-tags.sh "$studio"
+
+      # SPIKE #257 - never merge: hand the unsigned macOS build to the owner (spike/console/mac/CHECKLIST.md).
+      - name: Zip the spike app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ditto -c -k --keepParent studio/build/bin/vibe-studio.app studio/build/bin/vibe-studio-spike-mac.zip
+
+      - name: Upload the spike app (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vibe-studio-spike-macos-arm64
+          path: studio/build/bin/vibe-studio-spike-mac.zip
+          retention-days: 14

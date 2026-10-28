@@ -1,0 +1,54 @@
+[
+  {
+    "gapW": 14,
+    "gapH": 7,
+    "w": 900,
+    "h": 300,
+    "fit": {
+      "cols": 126,
+      "rows": 17
+    },
+    "onResize": {
+      "cols": 126,
+      "rows": 17,
+      "colsChanged": true,
+      "rowsChanged": true
+    },
+    "metrics": {
+      "screenW": 882,
+      "screenH": 289,
+      "containerW": 896,
+      "containerH": 296
+    },
+    "cellW": 7,
+    "cellH": 17,
+    "fits": true,
+    "filled": true
+  },
+  {
+    "gapW": 14,
+    "gapH": 1,
+    "w": 620,
+    "h": 430,
+    "fit": {
+      "cols": 86,
+      "rows": 25
+    },
+    "onResize": {
+      "cols": 86,
+      "rows": 25,
+      "colsChanged": true,
+      "rowsChanged": true
+    },
+    "metrics": {
+      "screenW": 602,
+      "screenH": 425,
+      "containerW": 616,
+      "containerH": 426
+    },
+    "cellW": 7,
+    "cellH": 17,
+    "fits": true,
+    "filled": true
+  }
+]

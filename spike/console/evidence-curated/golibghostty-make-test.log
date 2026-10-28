@@ -1,0 +1,13 @@
+PKG_CONFIG_PATH=/tmp/claude-1000/golg/src/build/_deps/ghostty-src/zig-out/share/pkgconfig DYLD_LIBRARY_PATH=/tmp/claude-1000/golg/src/build/_deps/ghostty-src/zig-out/lib LD_LIBRARY_PATH=/tmp/claude-1000/golg/src/build/_deps/ghostty-src/zig-out/lib go test ./...
+ok  	go.mitchellh.com/libghostty	0.223s
+?   	go.mitchellh.com/libghostty/examples/build-info	[no test files]
+?   	go.mitchellh.com/libghostty/examples/colors	[no test files]
+?   	go.mitchellh.com/libghostty/examples/effects	[no test files]
+?   	go.mitchellh.com/libghostty/examples/formatter	[no test files]
+?   	go.mitchellh.com/libghostty/examples/grid-traverse	[no test files]
+?   	go.mitchellh.com/libghostty/examples/input	[no test files]
+?   	go.mitchellh.com/libghostty/examples/modes	[no test files]
+?   	go.mitchellh.com/libghostty/examples/render	[no test files]
+?   	go.mitchellh.com/libghostty/examples/snapshot	[no test files]
+ok  	go.mitchellh.com/libghostty/sys/png	0.002s
+make test exit=0 seconds=3

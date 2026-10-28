@@ -1,0 +1,23 @@
+{
+  "discrete wheel up x40: [viewportY, scrollbackLines]": [
+    9960,
+    9960
+  ],
+  "discrete wheel down x300": [
+    9960,
+    9960
+  ],
+  "lines bottom": [
+    "line 009999 the quick brown fox jumps over the lazy dog 0123456789 ",
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789 ",
+    "vibe > "
+  ],
+  "smooth scroll up x40 (pixel deltas)": [
+    9819,
+    9960
+  ],
+  "smooth scroll down x400": [
+    9960,
+    9960
+  ]
+}

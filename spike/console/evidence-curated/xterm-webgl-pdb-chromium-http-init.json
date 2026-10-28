@@ -1,0 +1,15 @@
+{
+  "id": 11,
+  "name": "WASM / init",
+  "status": "pass",
+  "data": {
+    "initMs": 26,
+    "origin": "http://localhost:34115",
+    "webview": "chromium",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "dpr": 1,
+    "notes": [
+      "renderer=webgl (preserveDrawingBuffer for pixel sampling)"
+    ]
+  }
+}

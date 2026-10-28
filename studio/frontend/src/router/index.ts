@@ -31,6 +31,8 @@ function redirectNotebooks(to: RouteLocation) {
 // editor/runtime views) is gone too. Notebooks (#66) are the only
 // authoring surface now.
 const routes = [
+  // SPIKE #257 - never merge.
+  { path: '/spike/console', component: () => import('../spike/console/ConsoleSpikeView.vue') },
   { path: '/', name: 'dashboard', component: DashboardView },
   // The Library (docs/plans/library.md L4): notebooks and artifacts in one list.
   { path: '/library', name: 'library', component: LibraryView },

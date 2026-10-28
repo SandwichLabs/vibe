@@ -1,0 +1,77 @@
+{
+  "cell": {
+    "w": 8,
+    "h": 14
+  },
+  "ptr": {
+    "x": 308,
+    "y": 308
+  },
+  "vy": 0,
+  "sbLines": 9952,
+  "seed": "copy this text then press Ctrl+C in this box",
+  "rects": {
+    "term": {
+      "x": 8,
+      "y": 108,
+      "w": 1384,
+      "h": 709
+    },
+    "seed": {
+      "x": 253,
+      "y": 62,
+      "w": 280,
+      "h": 36
+    }
+  },
+  "innerW": 1400,
+  "innerH": 863,
+  "rx": [
+    "c",
+    "l",
+    "e",
+    "a",
+    "r",
+    "\\x0d",
+    "l",
+    "i",
+    "n",
+    "e",
+    "s",
+    " ",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "\\x0d"
+  ],
+  "selection": "",
+  "log": [],
+  "screen": [
+    "line 009978 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009979 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009980 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009981 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009982 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009983 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009984 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009985 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009986 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009987 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009988 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009989 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009990 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009991 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009992 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009993 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009994 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009995 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009996 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009997 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009998 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009999 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789",
+    "vibe >"
+  ]
+}

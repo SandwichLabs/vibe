@@ -1,0 +1,125 @@
+[
+  {
+    "t": 342,
+    "cmd": "clear",
+    "result": "ok"
+  },
+  {
+    "t": 344,
+    "cmd": "table",
+    "result": "ok"
+  },
+  {
+    "t": 345,
+    "cmd": "colors",
+    "result": "ok"
+  },
+  {
+    "t": 345,
+    "cmd": "unicode",
+    "result": "ok"
+  },
+  {
+    "t": 346,
+    "cmd": "size",
+    "result": {
+      "cols": 195,
+      "rows": 42,
+      "colsChanged": true,
+      "rowsChanged": true
+    }
+  },
+  {
+    "t": 4571,
+    "cmd": "clear",
+    "result": "ok"
+  },
+  {
+    "t": 4691,
+    "cmd": "paste on",
+    "result": {
+      "bracketedPaste": false
+    }
+  },
+  {
+    "t": 4750,
+    "cmd": "paste off",
+    "result": {
+      "bracketedPaste": true
+    }
+  },
+  {
+    "t": 4811,
+    "cmd": "paste on",
+    "result": {
+      "bracketedPaste": false
+    }
+  },
+  {
+    "t": 4903,
+    "cmd": "paste off",
+    "result": {
+      "bracketedPaste": true
+    }
+  },
+  {
+    "t": 5567,
+    "cmd": "size",
+    "result": {
+      "cols": 126,
+      "rows": 17,
+      "colsChanged": true,
+      "rowsChanged": true
+    }
+  },
+  {
+    "t": 6231,
+    "cmd": "size",
+    "result": {
+      "cols": 86,
+      "rows": 25,
+      "colsChanged": true,
+      "rowsChanged": true
+    }
+  },
+  {
+    "t": 6645,
+    "cmd": "clear",
+    "result": "ok"
+  },
+  {
+    "t": 8715,
+    "cmd": "lines 10000",
+    "result": {
+      "n": 10000,
+      "drainMs": 58,
+      "drain": {
+        "frames": 1,
+        "p50": 34,
+        "p95": 34,
+        "max": 34,
+        "over33": 1,
+        "over50": 0
+      },
+      "scroll": {
+        "frames": 122,
+        "p50": 17,
+        "p95": 18,
+        "max": 21,
+        "over33": 0,
+        "over50": 0
+      },
+      "combined": {
+        "frames": 123,
+        "p50": 17,
+        "p95": 18,
+        "max": 34,
+        "over33": 1,
+        "over50": 0
+      },
+      "lastLinePresent": true,
+      "scrollbackAfter": 9959,
+      "lengthAfter": 10001
+    }
+  }
+]

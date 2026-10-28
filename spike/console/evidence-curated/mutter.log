@@ -1,0 +1,27 @@
+libmutter-Message: 13:37:10.893: Running Mutter (using mutter 50.6) as a Wayland display server
+libmutter-Message: 13:37:10.927: Added device '/dev/dri/renderD128' (amdgpu) using no mode setting.
+libmutter-Message: 13:37:10.928: Created gbm renderer for '/dev/dri/renderD128'
+libmutter-Message: 13:37:10.928: GPU /dev/dri/renderD128 selected as primary
+** Message: 13:37:10.929: Obtained a high priority EGL context
+libmutter-Message: 13:37:10.945: Added virtual monitor Meta-0
+libmutter-Message: 13:37:10.947: Using public X11 display :2, (using unix:/tmp/.X11-unix/X3 for managed services)
+libmutter-Message: 13:37:10.947: Using Wayland display name 'spike-wl'
+The XKEYBOARD keymap compiler (xkbcomp) reports:
+> Warning:          Multiple symbols for level 1/group 1 on key <FK23>
+>                   Using F23, ignoring XF86TouchpadOff
+> Warning:          Symbol map for key <FK23> redefined
+>                   Using last definition for conflicting fields
+> Warning:          Symbol map for key <FK24> redefined
+>                   Using last definition for conflicting fields
+Errors from xkbcomp are not fatal to the X server
+*** BUG ***
+In pixman_region32_init_rect: Invalid rectangle passed
+Set a breakpoint on '_pixman_log_error' to debug
+
+*** BUG ***
+In pixman_region32_init_rect: Invalid rectangle passed
+Set a breakpoint on '_pixman_log_error' to debug
+
+
+(mutter-x11-frames:856925): Gtk-CRITICAL **: 13:43:35.767: Unable to register the application: GDBus.Error:org.freedesktop.DBus.Error.NameHasNoOwner: Could not activate remote peer 'org.a11y.atspi.Registry': unit failed
+libmutter-Message: 13:46:02.703: Removed virtual monitor Meta-0
