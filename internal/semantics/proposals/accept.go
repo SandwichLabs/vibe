@@ -261,7 +261,7 @@ func Accept(ctx context.Context, props Store, sem semantics.Store, id string, op
 		return nil, fmt.Errorf("proposal %s is already %s: %w", id, p.Status, ErrNotOpen)
 	}
 	if opts.ShownRev == "" {
-		return pv, invalid("accepting needs the rev of the version you looked at (shown_rev from Show)")
+		return pv, &plainInvalid{"accepting needs the rev of the version you looked at (shown_rev from Show)"}
 	}
 	if opts.ShownRev != pv.ShownRev {
 		return pv, &ChangedAgainError{Target: pv.Target}
@@ -313,3 +313,10 @@ func writeAccepted(ctx context.Context, sem semantics.Store, pv *Preview, opts A
 func Reject(ctx context.Context, props Store, id string) error {
 	return props.Decide(ctx, id, StatusRejected, "")
 }
+
+// plainInvalid is a refusal that reads as a sentence, without the prefix of a
+// stored definition's error; errors.Is(err, ErrInvalid) still holds.
+type plainInvalid struct{ msg string }
+
+func (e *plainInvalid) Error() string        { return e.msg }
+func (e *plainInvalid) Is(target error) bool { return target == ErrInvalid }

@@ -58,3 +58,15 @@ func MetricVetter(ws workspace.Workspace, sess session.Session, logger *slog.Log
 	}
 	return h.VetReadOnlySQLIn, nil
 }
+
+// ReadOnlyRunner is the agent policy's read-only runner in the tightest tier,
+// for the person's runs of what a definition declares (assertions, join
+// profiling, a metric's "Try it"): every statement goes through the same
+// gates as a cloned artifact query, whatever the sandbox setting.
+func ReadOnlyRunner(ws workspace.Workspace, sess session.Session, logger *slog.Logger) (workspace.ReadOnlyRunner, error) {
+	h, _, err := NewAgentHandler(ws, sess, string(agents.ModeReadOnly), logger)
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
+}

@@ -69,7 +69,7 @@ func TestPolicyMetric_PolicySeesTheExpandedText(t *testing.T) {
 	ctx := context.Background()
 	mx, params, err := fx.h.expandMetrics(ctx, "", "SELECT * FROM metric('net_revenue', by => 'region')", nil)
 	require.NoError(t, err)
-	assert.Contains(t, mx.SQL, "GROUP BY region")
+	assert.Contains(t, mx.SQL, `GROUP BY "region"`)
 	assert.NotContains(t, mx.SQL, "metric(")
 	assert.Contains(t, params, "min")
 	v := fx.h.classify(ctx, fx.db, mx.SQL, params)

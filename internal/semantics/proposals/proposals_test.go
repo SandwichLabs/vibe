@@ -701,3 +701,16 @@ func TestAccept_GlossaryReplacementOfAGoneTermIsStale(t *testing.T) {
 	require.ErrorAs(t, err, &stale)
 	assert.Contains(t, err.Error(), "the term was deleted since this was proposed")
 }
+
+func TestAccept_EmptyPinIsAPlainSentence(t *testing.T) {
+	ctx := context.Background()
+	props, sem := &Mock{}, &semantics.Mock{}
+	p := mustBuild(t, metricDraft())
+	data, err := Encode(p)
+	require.NoError(t, err)
+	props.SetFile(p.ID, data)
+	_, err = Accept(ctx, props, sem, p.ID, AcceptOptions{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalid, "callers can still tell it from a conflict")
+	assert.Equal(t, "accepting needs the rev of the version you looked at (shown_rev from Show)", err.Error())
+}

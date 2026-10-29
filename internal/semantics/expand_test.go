@@ -2,10 +2,12 @@ package semantics
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
 
+	_ "github.com/duckdb/duckdb-go/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -65,11 +67,11 @@ func TestExpand_Shapes(t *testing.T) {
 	f := newFake(t)
 	cases := []struct{ in, want string }{
 		{"SELECT * FROM metric('net_revenue', by => 'region')",
-			"SELECT * FROM (SELECT region, sum(amount) AS net_revenue FROM (\nSELECT region, month, amount FROM sales\n) AS vibe_metric_net_revenue GROUP BY region)"},
+			"SELECT * FROM (SELECT \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS vibe_metric_net_revenue GROUP BY \"region\")"},
 		{"select * from METRIC ( 'net_revenue' , BY=>['Month', 'region'] )",
-			"select * from (SELECT month, region, sum(amount) AS net_revenue FROM (\nSELECT region, month, amount FROM sales\n) AS vibe_metric_net_revenue GROUP BY month, region)"},
+			"select * from (SELECT \"month\", \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS vibe_metric_net_revenue GROUP BY \"month\", \"region\")"},
 		{"SELECT metric('orders') AS n",
-			"SELECT (SELECT count(*) AS orders FROM (\nSELECT * FROM orders\n) AS vibe_metric_orders) AS n"},
+			"SELECT (SELECT count(*) AS \"orders\" FROM (\nSELECT * FROM orders\n) AS vibe_metric_orders) AS n"},
 		{"SELECT 'metric(''x'')' AS s -- metric('y')\n, \"metric\" FROM t", "SELECT 'metric(''x'')' AS s -- metric('y')\n, \"metric\" FROM t"},
 		{"SELECT * FROM s.metric('x')", "SELECT * FROM s.metric('x')"},
 		{"SELECT metric FROM metrics", "SELECT metric FROM metrics"},
@@ -310,4 +312,31 @@ func TestExpand_UnreadableMetricIsOneSentence(t *testing.T) {
 	assert.Contains(t, msg, "the metric cannot be read: semantics/metrics/broken.yaml: measure may not use FROM")
 	assert.NotContains(t, msg, "failed to get")
 	assert.NotContains(t, msg, "invalid semantics definition")
+}
+
+// A dimension named like a DuckDB function (current_date is not a reserved
+// word) groups by the column, not by today's date.
+func TestExpand_DimensionNamedLikeAFunctionGroupsByTheColumn(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE sales AS SELECT * FROM (VALUES ('a', 1), ('a', 2), ('b', 5)) t("current_date", amount)`)
+	require.NoError(t, err)
+	f := &fakeSource{
+		metrics: map[string]*Metric{"total": metricNamed(t, "total", "base", "sum(amount)", "current_date")},
+		queries: map[string]*queries.Query{"base": {ID: "base", SQL: `SELECT "current_date", amount FROM sales`}},
+	}
+	r, err := expand(t, f, "SELECT * FROM metric('total', by => 'current_date') ORDER BY 1")
+	require.NoError(t, err)
+	rows, err := db.Query(r.SQL)
+	require.NoError(t, err)
+	defer rows.Close()
+	got := map[string]int64{}
+	for rows.Next() {
+		var k string
+		var v int64
+		require.NoError(t, rows.Scan(&k, &v))
+		got[k] = v
+	}
+	assert.Equal(t, map[string]int64{"a": 3, "b": 5}, got)
 }

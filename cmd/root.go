@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -45,9 +46,34 @@ and ` + "`vibe mcp serve`" + `.`,
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		os.Exit(exitStatus(err))
 	}
 }
+
+// exitStatus is the process exit status for a command error: the status the
+// error carries (exitCodeError), otherwise 1.
+func exitStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	var coded *exitCodeError
+	if errors.As(err, &coded) {
+		return coded.code
+	}
+	return 1
+}
+
+// exitCodeError is a command failure with its own exit status (`vibe
+// semantics check` exits 2 when checks could not run but none failed). Its
+// message is printed like any error.
+type exitCodeError struct {
+	code int
+	msg  string
+	err  error
+}
+
+func (e *exitCodeError) Error() string { return e.msg }
+func (e *exitCodeError) Unwrap() error { return e.err }
 
 func init() {
 	cobra.OnInitialize(initConfig)
