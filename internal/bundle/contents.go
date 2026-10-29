@@ -9,7 +9,8 @@ import (
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
-// ContentItem is one notebook, query, skill or data artifact that can go in a bundle.
+// ContentItem is one notebook, query, skill, data artifact or semantic
+// definition that can go in a bundle.
 type ContentItem struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
@@ -29,12 +30,15 @@ type ContentConnection struct {
 
 // Contents is everything an Export dialog can offer from a workspace.
 type Contents struct {
-	WorkspaceName string              `json:"workspaceName"`
-	Notebooks     []ContentItem       `json:"notebooks"`
-	Queries       []ContentItem       `json:"queries"`
-	Skills        []ContentItem       `json:"skills"`
-	Artifacts     []ContentItem       `json:"artifacts"`
-	Connections   []ContentConnection `json:"connections"`
+	WorkspaceName string        `json:"workspaceName"`
+	Notebooks     []ContentItem `json:"notebooks"`
+	Queries       []ContentItem `json:"queries"`
+	Skills        []ContentItem `json:"skills"`
+	Artifacts     []ContentItem `json:"artifacts"`
+	// Semantics are the definitions under semantics/: ids look like
+	// "metrics/net_revenue" or "glossary".
+	Semantics   []ContentItem       `json:"semantics"`
+	Connections []ContentConnection `json:"connections"`
 }
 
 // ContentsOf lists what t could export: its readable notebooks, queries and
@@ -42,7 +46,7 @@ type Contents struct {
 // definitions, each marked portable or not. The workspace's own default
 // database is left out: a bundle has no data to go with it.
 func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
-	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Artifacts: []ContentItem{}, Connections: []ContentConnection{}}
+	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Artifacts: []ContentItem{}, Semantics: []ContentItem{}, Connections: []ContentConnection{}}
 	nbs, err := t.Notebooks().List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list notebooks: %w", err)
@@ -78,6 +82,9 @@ func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
 		if a.Error == "" {
 			out.Artifacts = append(out.Artifacts, ContentItem{ID: a.Name, Title: a.Manifest.Title})
 		}
+	}
+	if out.Semantics, err = semanticsItems(ctx, t); err != nil {
+		return nil, fmt.Errorf("failed to list semantic definitions: %w", err)
 	}
 	out.Connections = append(contentConnections("team", t.Config().Connections), contentConnections("this computer", t.Local().Connections)...)
 	sort.SliceStable(out.Connections, func(i, j int) bool { return out.Connections[i].Name < out.Connections[j].Name })

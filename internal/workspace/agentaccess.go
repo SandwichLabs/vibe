@@ -10,6 +10,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -59,6 +60,9 @@ func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
 
 // Artifacts is the workspace's artifacts/ folder.
 func (a *AgentAccess) Artifacts() artifacts.Store { return a.ws.Artifacts() }
+
+// Semantics is the workspace's semantics/ folder.
+func (a *AgentAccess) Semantics() semantics.Store { return a.ws.Semantics() }
 
 // AgentPolicy is the workspace's effective policy for this person.
 func (a *AgentAccess) AgentPolicy() (string, bool) { return a.ws.AgentPolicy() }

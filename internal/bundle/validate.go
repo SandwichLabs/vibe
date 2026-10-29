@@ -87,6 +87,12 @@ func validateItem(kind ItemKind, id string, data []byte) (string, []string, erro
 		return q.Title, nil, nil
 	case KindSkill:
 		return validateSkill(id, data)
+	case KindSemantics:
+		title, err := validateSemantics(id, data)
+		if err != nil {
+			return "", nil, corrupt("%s: %v", entryPath(kind, id), err)
+		}
+		return title, nil, nil
 	}
 	return "", nil, corrupt("unknown entry kind %q", kind)
 }

@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/connname"
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
@@ -70,10 +72,13 @@ type ItemKind string
 
 // Item kinds.
 const (
-	KindNotebook    ItemKind = "notebook"
-	KindQuery       ItemKind = "query"
-	KindSkill       ItemKind = "skill"
-	KindArtifact    ItemKind = "artifact"
+	KindNotebook ItemKind = "notebook"
+	KindQuery    ItemKind = "query"
+	KindSkill    ItemKind = "skill"
+	KindArtifact ItemKind = "artifact"
+	// KindSemantics is a file under semantics/. Its id is "entities/<name>",
+	// "metrics/<name>", "joins/<name>" or "glossary".
+	KindSemantics   ItemKind = "semantics"
 	KindConnections ItemKind = "connections"
 )
 
@@ -111,20 +116,24 @@ type Target interface {
 	Queries() queries.Store
 	Skills() skills.Store
 	Artifacts() artifacts.Store
+	Semantics() semantics.Store
 	AddConnection(scope workspace.Scope, def workspace.ConnectionDef) error
 	RemoveConnection(ctx context.Context, scope workspace.Scope, name string) error
 }
 
 var _ Target = workspace.Workspace(nil)
 
-// Selection says what an export takes. Notebooks, Queries, Skills and
-// Artifacts are ids (skill and artifact names); All takes every one of each kind and ignores them.
+// Selection says what an export takes. Notebooks, Queries, Skills, Artifacts
+// and Semantics are ids (skill and artifact names; semantics ids look like
+// "metrics/net_revenue" or "glossary"); All takes every one of each kind and
+// ignores them.
 type Selection struct {
 	All       bool     `json:"all"`
 	Notebooks []string `json:"notebooks"`
 	Queries   []string `json:"queries"`
 	Skills    []string `json:"skills"`
 	Artifacts []string `json:"artifacts"`
+	Semantics []string `json:"semantics"`
 	// SharedConnections adds every committed (team) vibe.yaml definition;
 	// TeamConnections names just some of them.
 	SharedConnections bool     `json:"sharedConnections"`
@@ -186,6 +195,12 @@ func classify(name string) (ItemKind, string, error) {
 		if filestore.ValidID(id) {
 			return KindQuery, id, nil
 		}
+	case name == semantics.Dir+"/"+semantics.GlossaryFile:
+		return KindSemantics, "glossary", nil
+	case len(parts) == 3 && parts[0] == semantics.Dir && isSemanticsFolder(parts[1]) && strings.HasSuffix(parts[2], semantics.Extension):
+		if n := strings.TrimSuffix(parts[2], semantics.Extension); connname.Valid(n) {
+			return KindSemantics, parts[1] + "/" + n, nil
+		}
 	case len(parts) == 3 && parts[0] == skills.Dir && parts[2] == skills.File:
 		if skills.NamePattern.MatchString(parts[1]) && filestore.ValidID(parts[1]) {
 			return KindSkill, parts[1], nil
@@ -203,7 +218,7 @@ func classify(name string) (ItemKind, string, error) {
 			return KindArtifact, parts[1], nil
 		}
 	}
-	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills, data artifacts and connection definitions)", name)
+	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills, data artifacts, semantic definitions and connection definitions)", name)
 }
 
 func entryPath(kind ItemKind, id string) string {
@@ -216,8 +231,17 @@ func entryPath(kind ItemKind, id string) string {
 		return skills.Dir + "/" + id + "/" + skills.File
 	case KindArtifact:
 		return artifacts.Dir + "/" + id + "/" + artifacts.ManifestFile
+	case KindSemantics:
+		if id == "glossary" {
+			return semantics.Dir + "/" + semantics.GlossaryFile
+		}
+		return semantics.Dir + "/" + id + semantics.Extension
 	}
 	return ConnectionsName
+}
+
+func isSemanticsFolder(s string) bool {
+	return s == semantics.EntitiesDir || s == semantics.MetricsDir || s == semantics.JoinsDir
 }
 
 // Key identifies an item in previews and decisions: "notebook/<id>".

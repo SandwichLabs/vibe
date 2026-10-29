@@ -37,8 +37,11 @@ type Tok struct {
 	Text  string
 	Raw   string
 	Plain bool // String only: a standard '...' literal with no escape processing
-	Start int  // byte offset in the source
-	End   int
+	// Closed is true for a String or Ident token that ended at its closing
+	// quote (or closing dollar tag) rather than at the end of the text.
+	Closed bool
+	Start  int // byte offset in the source
+	End    int
 }
 
 // IsWord reports a bare word equal to w (upper-case).
@@ -135,7 +138,7 @@ func Statements(src string) [][]Tok {
 			if c == '"' {
 				kind = Ident
 			}
-			cur = append(cur, Tok{Kind: kind, Text: b.String(), Raw: src[start:min(j, len(src))], Plain: kind == String && !escape && closed, Start: start, End: min(j, len(src))})
+			cur = append(cur, Tok{Kind: kind, Text: b.String(), Raw: src[start:min(j, len(src))], Plain: kind == String && !escape && closed, Closed: closed, Start: start, End: min(j, len(src))})
 			i = j
 		case c == '$':
 			// $tag$ ... $tag$ dollar quoting; a bare $ (or $1) is punctuation.
@@ -154,7 +157,7 @@ func Statements(src string) [][]Tok {
 					text = src[j+1 : j+1+k]
 					endPos = j + 1 + k + len(delim)
 				}
-				cur = append(cur, Tok{Kind: String, Text: text, Raw: src[i:endPos], Plain: false, Start: i, End: endPos})
+				cur = append(cur, Tok{Kind: String, Text: text, Raw: src[i:endPos], Plain: false, Closed: k >= 0, Start: i, End: endPos})
 				i = endPos
 			} else {
 				cur = append(cur, Tok{Kind: Punct, Text: "$", Raw: "$", Start: i, End: i + 1})

@@ -7,9 +7,9 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 Vibe is an **agentic desktop workspace for working with data where it already lives** — DataGrip/DBeaver-shaped, with an AI agent, live notebooks, skills and A2UI artifacts, all exposed to external agents over MCP.
 
 - **Connections** keep the data where it is (local DuckDB, MotherDuck, Postgres, MySQL, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg/Delta). They are attached on first use into one in-memory **DuckDB hub** per workspace.
-- A **workspace** is a folder (optionally a git repo): `vibe.yaml`, `notebooks/*.vnb`, `queries/*.sql`, `skills/<name>/SKILL.md`, `artifacts/<name>/` (data artifacts), `data/`. Machine-local state lives in `.vibe-local/` (git-ignored).
+- A **workspace** is a folder (optionally a git repo): `vibe.yaml`, `notebooks/*.vnb`, `queries/*.sql`, `skills/<name>/SKILL.md`, `artifacts/<name>/` (data artifacts), `semantics/{entities,metrics,joins}/*.yaml` and `semantics/glossary.md` (the semantic layer, `docs/reference/semantics.md`), `data/`. Machine-local state lives in `.vibe-local/` (git-ignored).
 - **Credentials** live in the OS keychain or env vars, never in the folder.
-- **`.vibe`** is an exchange **bundle** (zip, optional age passphrase) of notebooks, queries, skills and connection definitions. It never holds data or credentials. Older data-holding SQLCipher `.vibe` files are not opened (vibe-app#110 was dropped).
+- **`.vibe`** is an exchange **bundle** (zip, optional age passphrase) of notebooks, queries, skills, data artifacts, semantic definitions and connection definitions. It never holds data or credentials. Older data-holding SQLCipher `.vibe` files are not opened (vibe-app#110 was dropped).
 
 **Read first:** `docs/direction.md` (north star; §9 "As delivered" lists what changed from the plan in vibe-app#105; the earlier Access-parity and page-system removals are recorded in `docs/archive/` and git history) and `docs/README.md` (index of every doc). Shipped surface reference: `docs/reference/`. Next direction: `docs/plans/answers-you-can-check.md` (umbrella #250, epics #241-#249; receipts, verifier, semantic layer). Closed epics: vibe-app#105, #162; cleanup survey: vibe-app#137 (`docs/reviews/cleanup-2026-10/`).
 
@@ -73,6 +73,8 @@ internal/
   awssso/            AWS IAM Identity Center sign-in in Go: SSO profile loading, the shared token cache, role credentials, device-flow login (leaf: AWS SDK + stdlib only; `workspace.NewResolver` wires it as the `aws-sso:PROFILE` sign-in; Studio's banner and `vibe conn credentials sign-in` run the device flow, `aws sso login` shares its token cache)
   dotenv/            workspace .env parser and per-person allow/deny (hash-keyed allow, path-keyed deny)
   trustfile/         the allow-by-path-and-hash, deny-by-path decision store (leaf; JSON in the user config dir, never the workspace or a bundle); used by dotenv (dotenv.json) and by custom artifact views (views.json)
+  strictyaml/        the one strict YAML decoder (leaf): byte cap before parse, control-character scan, no anchors/aliases/tags/merge keys, KnownFields, one document; `artifacts.Decode` and `semantics` call it
+  semantics/         the semantic layer as files (E4, `docs/reference/semantics.md`): `semantics/{entities,metrics,joins}/<name>.yaml` + `glossary.md`; models, strict decode + validate (name rule = `connname`, caps, `measure` lexical check with `sqllex`), `Store` (FileStore, Mock) with one Rev per file and `Error` for unreadable files listed not hidden; `Workspace.Semantics()`, bundle entries and `vibe semantics list|show`; nothing executes a definition yet
   sqllex/            the SQL policy's lexer (leaf; `agents` aliases it, `queries.CheckParamShape` shares it)
   agents/            ToolDef registry, sandbox tiers, approval queue, SQL allow-list policy, JSON-RPC handler (handler*.go by tool family)
   skills/            SKILL.md store (FileStore, Mock, embedded built-ins) + the skills service (LoadSkills, SaveUserSkillAt, DeleteSkill, WriteImportSkill)

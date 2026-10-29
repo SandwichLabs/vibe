@@ -33,7 +33,7 @@ func Export(ctx context.Context, t Target, opts ExportOptions) (*ExportResult, e
 		return nil, err
 	}
 	if len(ex.items) == 0 {
-		return nil, errors.New("nothing to export: select at least one notebook, query, skill, data artifact or connection")
+		return nil, errors.New("nothing to export: select at least one notebook, query, skill, data artifact, semantic definition or connection")
 	}
 	sort.Slice(ex.items, func(i, j int) bool { return ex.items[i].Path < ex.items[j].Path })
 	if err := ex.checkSize(); err != nil {
@@ -126,6 +126,7 @@ func exportGroups(ctx context.Context, t Target, sel Selection) []exportGroup {
 			}
 			return ids, err
 		}},
+		{KindSemantics, sel.Semantics, func() ([]string, error) { return semanticsIDs(ctx, t) }},
 		{KindArtifact, sel.Artifacts, func() ([]string, error) {
 			l, err := t.Artifacts().List(ctx)
 			ids := make([]string, 0, len(l))
