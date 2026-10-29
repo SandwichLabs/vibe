@@ -4,14 +4,27 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29
+
+### Security
+
+- **The SQL check could be made to skip a statement.** DuckDB lets `$` continue a name (`x$a$`) and allows names with non-ASCII letters, and it reads `1._5` as a number followed by a name. Vibe's checks read these as the start of a dollar-quoted string instead, so `SELECT 1 AS x$a$; CREATE SECRET ...; SELECT $a$` hid the middle statement from the check while DuckDB still ran it. This affected the Query Explorer, notebooks and the agent's SQL policy. All four of Vibe's SQL lexers now read names and numbers as DuckDB does, and are tested against DuckDB itself.
+- **Statement text is no longer written to logs.** The query log line carries a short hash, the byte length and the connection. DuckDB errors are logged without the `LINE n:` echo of the statement, with quoted text blanked.
+- Log and history redaction now also catches short bearer tokens, API-key headers (`X-API-Key`, `X-Auth-Token`, `X-Amz-Security-Token` and others), JWTs and common key prefixes (`sk-`, `ghp_`, `glpat-`, `xox?-`, `AKIA...`).
+
 ### Added
 
+- **A data console in the Query Explorer (#255).** A Console tab next to the results grid gives a DuckDB-CLI-style prompt over the workspace hub: statements end with `;`, results draw as boxes, Ctrl+C cancels a running query, Tab completes names from the same catalog as autocomplete, and history is kept in `.vibe-local/repl/history` (statements that look like they hold a credential are never recorded). Dot commands include `.tables`, `.schema`, `.mode`, `.timer`, `.conn`, `.read` (run a saved query) and `.save` (save the last statement as a query). The connection picker switches the console's connection at an empty prompt. The console runs Vibe's own SQL path, with the same checks as the editor; it is never a shell. Up to four consoles can be open; they close when the workspace closes. See `docs/reference/console.md`.
 - **SQL autocomplete in the Query Explorer and notebook SQL cells (#256).** Ctrl+Space opens a list of connections, schemas, tables, columns (through aliases), functions and keywords from the same completer `vibe lsp` uses. Connected connections are live; others come from the saved snapshot. Completion never connects a connection or runs your SQL.
 
 ### Changed
 
 - The Query Explorer's editor is now CodeMirror (it was a plain text box), with the notebook cells' look and Ctrl/Cmd+Enter to run.
 - Studio now writes `.vibe-local/catalog.json` for `vibe lsp` while it owns the workspace.
+
+### Fixed
+
+- Nested block comments (`/* a /* b */ c */`) are now read as DuckDB reads them, so a valid statement after one is no longer refused (#275).
 
 ## [0.3.3] - 2026-10-26
 
@@ -207,7 +220,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/SandwichLabs/vibe/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/SandwichLabs/vibe/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/SandwichLabs/vibe/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/SandwichLabs/vibe/compare/v0.3.0...v0.3.1
