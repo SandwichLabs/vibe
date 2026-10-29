@@ -5,7 +5,7 @@ beside the queries and notebooks that use them. There are four kinds:
 
 - **Entities**: a thing the data is about (a customer, an order): its grain, its table, its id column, which columns are personal data.
 - **Metrics**: a named measure over a **saved query** (`net_revenue` = `sum(amount)` over the query `net_revenue_base`).
-- **Joins**: how two entities relate, declared and, later, measured.
+- **Joins**: how two entities relate, declared and measured.
 - **The glossary**: plain markdown, one `## term` section per term.
 
 Everything is files you can write by hand. Nothing here needs AI. `vibe semantics list` reads the files and nothing else; a metric runs when SQL calls it with [`metric()`](#using-a-metric-in-sql).
@@ -29,7 +29,7 @@ Each file is read as strictly as an [`artifact.yaml`](artifacts.md): by one shar
 - `version` is required and is `1`.
 - `name` is required, must equal the file name without `.yaml`, and follows the **name rule**: 1 to 63 characters, `^[a-z_][a-z0-9_]{0,62}$` (lower-case letters, digits and `_`, not starting with a digit). The rule is the connection-name rule, because a name is emitted into SQL as a bare identifier or alias, and a name that never needs quoting can never carry anything else. A Windows device name (`con`, `nul`, `com1`...) is refused for the name of an entity, metric or join, since it would not be a usable file everywhere a workspace is cloned.
 - Column, dimension and join-column names follow the same lower-case rule.
-- **Reserved SQL words are refused** as a name, column, dimension or any part of a `table` (DuckDB's reserved keywords: `select`, `order`, `group`, `null`, `true`, `table` and so on, compared without regard to case for table parts). A name is emitted bare as an identifier or alias, and `GROUP BY null` would silently group by a constant. A test keeps the list equal to DuckDB's own `duckdb_keywords()`.
+- **Reserved SQL words are refused** as a name, column, dimension or any part of a `table` (DuckDB's reserved keywords: `select`, `order`, `group`, `null`, `true`, `table` and so on, compared without regard to case for table parts). Names are emitted as quoted identifiers (`"region"`), so a column named like a function (`current_date`) is the column; the reserved-word rule remains as a second guard, since `GROUP BY null` would silently group by a constant. A test keeps the list equal to DuckDB's own `duckdb_keywords()`.
 - At most **500** files per kind: the first 500 (by name) are listed, followed by one entry named `_truncated` whose error says how many were left out.
 - A file that fails any of this is **not hidden**. It is listed with its error (`vibe semantics list`, `Error` in the store), it cannot be used, and it is never overwritten by Vibe unless you choose to overwrite it. That includes a name that is not valid (`Customer.yaml`) and a symbolic link (listed as "is a symbolic link; it is not read").
 - A write is refused (as a conflict) when a file with the same name in different capitalisation exists, since on a case-insensitive filesystem it would replace that file.
@@ -128,11 +128,11 @@ measured:                       # optional: written by a profiling run you start
 
 The `measured` counts are read strictly: a non-negative whole number written in decimal. `1.5`, `0x10`, `1e3`, `1_000`, `12.0`, `+5` and a quoted `"12"` are refused.
 
-`cardinality` is what you **declare**. `measured` is what a profiling run found; the run is something the person starts, it is not part of reading these files, and a file with no `measured` block is complete.
+`cardinality` is what you **declare**. `measured` is what a profiling run found; the run is something the person starts (see [Profiling a join](#profiling-a-join)), it is not part of reading these files, and a file with no `measured` block is complete.
 
 ## Assertions
 
-An assertion is a check you declare; a runner (coming later) plans and runs it. Its `kind` is closed:
+An assertion is a check you declare; `vibe semantics check` (or Studio's Run assertions) plans and runs it. Its `kind` is closed:
 
 | Kind | On | Takes |
 |---|---|---|
@@ -141,18 +141,59 @@ An assertion is a check you declare; a runner (coming later) plans and runs it. 
 | `accepted_values` | entity | `column` and `values` (1 to 200 values, each up to 200 characters) |
 | `non_negative` | metric | nothing |
 
+### Running assertions
+
+`vibe semantics check [entity|metric [name]] [--json]` runs the declared assertions, with no argument for everything. Each assertion becomes one read-only statement that counts the rows that break it:
+
+| Assertion | Counts |
+|---|---|
+| `unique` on `col` | `count(col) - count(DISTINCT col)` over the entity's `table`: surplus rows sharing a value (NULLs are `not_null`'s business, not duplicates) |
+| `not_null` on `col` | rows of the entity's `table` where `col IS NULL` |
+| `accepted_values` on `col` | rows where `CAST(col AS VARCHAR)` is none of the listed values; the values are bound parameters (`$v0`, `$v1`, ...), compared as text, and NULL is not a violation |
+| `non_negative` on a metric | rows where the metric is below 0 |
+| `not_null` on a metric | rows where the metric is NULL |
+
+A metric is checked **at its full dimension set**: it is expanded like any `metric()` call with every declared dimension, so a negative or missing value in any cell of the breakdown is found. The saved query's parameters take their declared defaults. Identifiers in the statements come only from validated names (the name rule and the table rule above) and are each quoted (`"customers"."current_date"`), so a column named like a DuckDB function such as `current_date` is the column, not today's date. A value is never part of the SQL text.
+
+`accepted_values` compares **as text** and is case-sensitive: the column is cast to `VARCHAR` and each listed value must match what DuckDB prints. Write `1`, not `1.0`, for an integer column; `1.50` for a `DECIMAL(10,2)`; `2026-10-29 15:30:12` for a timestamp; `true` (lower case) for a boolean; and `Active` is not `active`. For example, `values: ["1", "2"]` accepts an integer column holding 1 and 2 but flags 1.0 stored in a `DOUBLE` column, and `values: [active]` flags a row holding `Active`.
+
+Every statement runs through the agent policy's read-only path in the tightest tier, whatever the sandbox setting, the same gates a cloned artifact query gets: a definition from a cloned repository whose saved query reads files outside the workspace is refused, and a hand-written entity whose `table` is not a plain name is not even planned. A check reports one of:
+
+| Status | Meaning |
+|---|---|
+| `pass` | no violating rows |
+| `fail` | that many violating rows broke the assertion |
+| `error` | the check could not run (a connection is down, the policy refused the statement, the entity or metric file is unreadable, the saved query is missing); it says nothing about the data, and the other checks still run |
+
+Exit status: `0` when every check passes or none is declared, `1` when any check failed, `2` for anything that stopped the run from saying whether the data is right: a check that could not run, and also a usage or open error (an unknown kind or name, a bad flag, no workspace). So a script can tell "fix the data" (1) from "fix the command or the setup" (2). `vibe semantics profile` exits 0 on success and 2 on any error, including a join file that changed while it ran. `--json` prints one object per check (`subject_kind`, `subject`, `assertion`, `column`, `status`, `violations`, `duration_ms`, `error`, and an empty `receipt` reserved for [receipts](../plans/answers-you-can-check.md)). Names and messages are printed with control characters shown as `<U+XXXX>`. The command opens the workspace read-only (no hub lock, every connection attached read-only), so it takes no lock. It still cannot read a local DuckDB file that Studio has attached read-write: that check ends as an `error` (the file is in use) until you close the workspace in Studio or use a copy, so run `check` beside Studio only against remote or read-only connections.
+
+### Profiling a join
+
+`vibe semantics profile <join> [--json]` measures how the join's two entities really relate and records it in the join file as the `measured:` block. It reads both entities' tables with a few full scans (so a large table takes a while), each statement through the same read-only policy path as the assertions:
+
+- `left_rows` and `right_rows`: a row count of each entity's `table`.
+- `left_orphans` and `right_orphans`: rows with no partner on the other side under the `on` pairs (a NULL key has no partner).
+- `max_fanout`: the most right rows sharing one key that a left row has.
+- The most left rows sharing one key is also measured, to judge `one_to_many` and `one_to_one`, and is reported but not stored.
+
+The `verdict` compares this with the declared `cardinality`. `fan_out` means the declared side was supposed to be unique and is not (`many_to_one` and `one_to_one` want at most one right row per left key; `one_to_many` and `one_to_one` want at most one left row per key), so joining repeats rows and sums are inflated. `orphans` means rows that should find a partner do not (the left rows of a `many_to_one`, the right rows of a `one_to_many`, either side of a `one_to_one`; the other side having extra rows is normal). `many_to_many` is held to neither. When both apply, `fan_out` wins. A contradiction is printed as a warning and exits 0: the profile did its job. Both entities need to be reachable in one statement, so entities on different connections need a catalog-qualified `table` on at least one side.
+
+The file is read once, before the scans, and written with that revision: if it changed while the profile ran, **nothing is written** and the command says so, so a profile never overwrites an edit. The rest of the file, comments and line endings (LF or CRLF) included, is kept as written; a file the block cannot be edited into is refused before any scan runs; only the `measured:` block is replaced or appended. Profiling is not disabled in a read-only workspace: it only reads data, and the one thing it writes is the join file's `measured:` block (so a workspace folder you cannot write to refuses it with the file error). It is your action only: no agent tool or MCP method runs it, and `get_definition` returns the `measured` block so an agent can read the result.
+
 ## The glossary: `semantics/glossary.md`
 
 Plain markdown, up to 256 KiB, no control characters. Vibe reads it only for its terms: the level-2 headings (`## Active customer`) outside code fences, in file order. The text is otherwise yours.
 
 ## From the command line
 
-`list` and `show` only read files; no connection is opened and no query runs. The four proposal commands read and write the [proposals inbox](#proposals-an-agent-suggests-you-decide) and, for `accept`, one file under `semantics/`.
+`list` and `show` only read files; no connection is opened and no query runs. `check` and `profile` run read-only queries on your connections (see [Running assertions](#running-assertions) and [Profiling a join](#profiling-a-join)); `profile` also writes the join file. The four proposal commands read and write the [proposals inbox](#proposals-an-agent-suggests-you-decide) and, for `accept`, one file under `semantics/`.
 
 ```
 vibe semantics list [--json]            kind, name, one-line summary, and any error
 vibe semantics show <kind> <name>       the file exactly as stored (kind: entity | metric | join)
 vibe semantics show glossary            the glossary
+vibe semantics check [entity|metric [name]] [--json]   run the declared assertions (exit 1: a check failed, 2: some could not run)
+vibe semantics profile <join> [--json]  measure a join and record it as measured: in its file
 vibe semantics proposals [--all] [--json]   proposed definitions waiting for you (--all: decided ones too)
 vibe semantics show-proposal <id>       who proposed it and why, and a diff of the file against the proposed one
 vibe semantics accept <id> [--overwrite --rev <rev>]   write the proposed definition into semantics/
@@ -217,6 +258,8 @@ Every accept is pinned to the version that was shown: it carries the `Rev` of wh
 
 Studio's bindings are `ListProposals(all)`, `GetProposal(id)` (the proposal, the current text and revision of its target, the whole proposed text, whether it is stale, the `shown_rev` pin and the warnings; the diff is drawn client-side), `AcceptProposal(id, shownRev, overwrite)` (`shownRev` is the `shown_rev` that was on screen; the write is refused if it changed, and `overwrite` needs it) and `RejectProposal(id)`. The Semantics view that uses them is not built yet.
 
+Studio's bindings for running definitions are `RunAssertions(kind, name)` (rows as `check --json` prints them; empty `kind` and `name` run everything), `ProfileJoin(name)` (the profile; a join file that changed while it ran is a conflict) and `RunMetric(name, dims)` (a metric's "Try it": the metric by a subset of its dimensions, run through the read-only policy and capped at 5000 rows like the query grid, ordered by the dimensions; a result cut at the cap has `truncated: true` and `total_rows` equal to `row_count`, the true total being unknown).
+
 ## Sharing
 
 The files are plain and diff-friendly, so git carries them. A [`.vibe` bundle](workspaces.md#sharing-without-git-vibe-bundles) carries them too: `semantics/entities/<name>.yaml`, `semantics/metrics/<name>.yaml`, `semantics/joins/<name>.yaml` and `semantics/glossary.md` are bundle entries, each decoded with the rules above before anything is written. Import is byte for byte, and a name that already exists is renamed (`net_revenue_2`, the name inside the file updated), replaced (against the revision just read) or skipped, like a query. When the rename is of something the same bundle refers to, the references follow: a metric whose saved query (`query:`) came in renamed from `q` to `q-2` is pointed at `q-2`, and a join whose entity came in renamed is pointed at the new entity, so an imported definition never silently uses the workspace's own namesake; when you skip (or the default skips) a clashing saved query or entity that a metric or join of the same bundle refers to, the result's warnings say the reference now points at the workspace's existing one, which may be a different query or entity; a rewritten file is re-encoded (comments are not kept) and the result's warnings say so. The glossary is one file and cannot be kept beside another: a clash defaults to skip (the dialog shows "Can't keep both"), and you can still replace it. `vibe export bundle --semantics metrics/net_revenue` picks definitions by id (`entities/<name>`, `metrics/<name>`, `joins/<name>`, `glossary`). Anything under `.vibe-local/` is never in a bundle.
@@ -248,12 +291,12 @@ metric('<name>', by => ['<dimension>', '<dimension>', ...])
 Before anything checks or runs the statement, each call is replaced by one parenthesised `SELECT` over the metric's saved query:
 
 ```sql
-(SELECT region, month, sum(amount) AS net_revenue FROM (
+(SELECT "region", "month", sum(amount) AS "net_revenue" FROM (
 <the saved query's SQL, trailing ';' and comments cut off, otherwise byte for byte>
-) AS vibe_metric_net_revenue GROUP BY region, month)
+) AS vibe_metric_net_revenue GROUP BY "region", "month")
 ```
 
-With no `by`, the dimensions and the `GROUP BY` are left out. Only the names declared in the files and the metric's `measure` are written into the SQL; **what you typed in the call never is**. The saved query must be exactly one statement beginning with `SELECT`, `WITH`, `FROM` or `VALUES`, with balanced parentheses and closed quotes, and may not itself call `metric()`. Expanding twice gives the same text (the result contains no `metric(` call), so a statement can be re-checked.
+The dimensions and the metric's alias are quoted, so a dimension called `current_date` groups by the column, not today's date. With no `by`, the dimensions and the `GROUP BY` are left out. Only the names declared in the files and the metric's `measure` are written into the SQL; **what you typed in the call never is**. The saved query must be exactly one statement beginning with `SELECT`, `WITH`, `FROM` or `VALUES`, with balanced parentheses and closed quotes, and may not itself call `metric()`. Expanding twice gives the same text (the result contains no `metric(` call), so a statement can be re-checked.
 
 The saved query's own `$name` parameters stay in the text, bound, never written into it: a parameter you did not supply takes the default its saved query declares (relative dates such as `today-30d` resolve at the run), and a value you supply for it wins. Two metrics in one statement that declare the same `$name` differently are refused. A `$name` you write yourself outside the call that only a metric declares is refused (`$min belongs to metric net_revenue's saved query; it can't be used outside metric()`) unless you send a value for it, and a saved query open in the Query Explorer that declares the same name with another type is reported as a clash. In the Query Explorer, `vibe query` and the console you cannot supply a metric's own parameters yet (only the defaults apply); an agent's `run_query` can send them in `params`.
 
@@ -286,5 +329,5 @@ The same expander runs in front of every place SQL is checked and run, on the po
 - **The person's own typed SQL**: the Query Explorer, `vibe query` (it says `expanded 1 metric: net_revenue` on stderr), the Studio console and `vibe repl`. The editor's check (`usersql`) keeps its usual rules for what you typed and reads the expanded statement. Because a metric hides SQL behind a name, **each expanded metric (its saved query and measure) is also held to the agent's read-only policy**, as an artifact query is: exactly one `SELECT` by DuckDB's own parser, no file outside `data/`, no write, no secret. A cloned repository's metric that reads `/etc/passwd` is refused at run with `metric 'x' is refused: ...`, even under `vibe query --read-only`. Only the metric's part is held to the policy; your own SQL around it is not.
 - **Editors**: completion and hover (see [editor.md](editor.md#metric-in-the-editor)).
 
-Not covered: exporting a query that uses `metric()` (the export dialog and `vibe export` run the text as written), and the terminal UI's REPL (`vibe studio` without `--gui`), which runs `metric()` text unexpanded and so fails closed with DuckDB's unknown-function error.
+Not covered: a cancel button for a long assertion, profile or Try it run (each statement is bounded by a 2-minute deadline and Try it by 30 seconds; the Semantics view adds cancel), exporting a query that uses `metric()` (the export dialog and `vibe export` run the text as written), and the terminal UI's REPL (`vibe studio` without `--gui`), which runs `metric()` text unexpanded and so fails closed with DuckDB's unknown-function error.
 

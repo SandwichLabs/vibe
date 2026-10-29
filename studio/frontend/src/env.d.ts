@@ -105,6 +105,10 @@ interface AppApi {
   GetProposal(id: string): Promise<ProposalPreview>
   AcceptProposal(id: string, shownRev: string, overwrite: boolean): Promise<void>
   RejectProposal(id: string): Promise<void>
+  // Running what a definition declares (E4): assertions, join profiling, a metric's "Try it"
+  RunAssertions(kind: string, name: string): Promise<AssertionRow[]>
+  ProfileJoin(name: string): Promise<JoinProfile>
+  RunMetric(name: string, dims: string[]): Promise<QueryResult>
   ListTables(): Promise<string[]>
   DescribeTable(name: string): Promise<TableInfo>
   GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
@@ -581,6 +585,40 @@ interface ProposalPreview {
   warnings: string[] // a missing saved query, a dropped measured block, lost comments
 }
 
+// AssertionRow mirrors studio.AssertionRow (internal/semantics/assert.Row): one
+// assertion's outcome. 'error' means the check could not run, which says nothing
+// about the data.
+interface AssertionRow {
+  subject_kind: 'entity' | 'metric'
+  subject: string
+  assertion: string
+  column?: string
+  status: 'pass' | 'fail' | 'error'
+  violations: number
+  duration_ms: number
+  error?: string
+  receipt?: string // reserved for receipts; empty for now
+}
+
+// JoinProfile mirrors studio.JoinProfile (internal/semantics.Profile): what a
+// profiling run measured, and where it contradicts the declared cardinality.
+interface JoinProfile {
+  join: string
+  declared: string
+  measured: {
+    at: string
+    left_rows: number
+    right_rows: number
+    max_fanout: number
+    left_orphans: number
+    right_orphans: number
+    verdict: 'consistent' | 'fan_out' | 'orphans'
+  }
+  left_max_dup: number
+  warnings: string[]
+  rev: string
+}
+
 interface PageSummary {
   id: string
   title: string
@@ -674,6 +712,7 @@ interface QueryResult {
   duration: string
   row_count: number
   total_rows: number
+  truncated?: boolean // stopped at the cap without counting the rest (total_rows is then only row_count)
 }
 
 // KeychainProbe / LLMKeyStatus (#114): where the agent's API key comes from.

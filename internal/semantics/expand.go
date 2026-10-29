@@ -11,6 +11,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/connname"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/sqllex"
 )
 
@@ -124,9 +125,9 @@ func HasMetricCall(text string) bool {
 // Expand replaces every metric(...) call in text with a parenthesised SELECT
 // over the metric's saved query:
 //
-//	(SELECT region, sum(amount) AS net_revenue FROM (
+//	(SELECT "region", sum(amount) AS "net_revenue" FROM (
 //	<saved query SQL>
-//	) AS vibe_metric_net_revenue GROUP BY region)
+//	) AS vibe_metric_net_revenue GROUP BY "region")
 //
 // It lexes with internal/sqllex, the SQL policy's own lexer, so what it
 // rewrites is exactly what the policy would have read as a call. Only declared
@@ -466,22 +467,26 @@ func (x *expander) addParams(m *Metric, q *queries.Query, body string) error {
 }
 
 func render(m *Metric, dims []string, body string) string {
+	quoted := make([]string, len(dims))
+	for i, d := range dims {
+		quoted[i] = session.QuoteIdent(d)
+	}
 	var b strings.Builder
 	b.WriteString("(SELECT ")
-	for _, d := range dims {
+	for _, d := range quoted {
 		b.WriteString(d)
 		b.WriteString(", ")
 	}
 	b.WriteString(m.Measure)
 	b.WriteString(" AS ")
-	b.WriteString(m.Name)
+	b.WriteString(session.QuoteIdent(m.Name))
 	b.WriteString(" FROM (\n")
 	b.WriteString(body)
 	b.WriteString("\n) AS vibe_metric_")
 	b.WriteString(m.Name)
-	if len(dims) > 0 {
+	if len(quoted) > 0 {
 		b.WriteString(" GROUP BY ")
-		b.WriteString(strings.Join(dims, ", "))
+		b.WriteString(strings.Join(quoted, ", "))
 	}
 	b.WriteString(")")
 	return b.String()

@@ -89,7 +89,7 @@ func TestSemanticsDocNamesTheProposalSurface(t *testing.T) {
 	for _, v := range []string{proposals.Dir, "200", "64 KiB", "accept or reject some first"} {
 		assert.True(t, strings.Contains(doc, v), "semantics.md does not state %q", v)
 	}
-	for _, cmd := range []string{"vibe semantics proposals", "vibe semantics show-proposal", "vibe semantics accept", "vibe semantics reject", "--overwrite"} {
+	for _, cmd := range []string{"vibe semantics check", "vibe semantics profile", "vibe semantics proposals", "vibe semantics show-proposal", "vibe semantics accept", "vibe semantics reject", "--overwrite"} {
 		assert.True(t, strings.Contains(doc, cmd), "semantics.md does not document %q", cmd)
 	}
 	mcp := read("docs", "reference", "mcp.md")

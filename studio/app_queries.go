@@ -30,6 +30,10 @@ type QueryResult struct {
 	// `SELECT * FROM range(100000)` used to materialize every row into the
 	// webview and could crash it.
 	TotalRows int `json:"total_rows"`
+	// Truncated is set by a run that stopped at the cap without counting the
+	// rest (a metric's Try it): TotalRows is then only RowCount, not the true
+	// count. RunQuery counts, so it leaves this false.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // queryGridRowCap bounds how many rows the Query editor's grid will
