@@ -18,8 +18,8 @@ const busy = ref(false)
 const error = ref('')
 const done = ref<BundleExportResult | null>(null)
 
-// Ticked ids per group: nb notebooks, qs queries, sk skills, ar data artifacts, cn connections.
-const picked = ref<Record<string, Set<string>>>({ nb: new Set(), qs: new Set(), sk: new Set(), ar: new Set(), cn: new Set() })
+// Ticked ids per group: nb notebooks, qs queries, sk skills, ar data artifacts, sm semantic definitions, cn connections.
+const picked = ref<Record<string, Set<string>>>({ nb: new Set(), qs: new Set(), sk: new Set(), ar: new Set(), sm: new Set(), cn: new Set() })
 const encrypt = ref(false)
 const pass1 = ref('')
 const pass2 = ref('')
@@ -46,6 +46,7 @@ watch(bundleExportOpen, async (open) => {
       qs: new Set(c.queries.map((x) => x.id)),
       sk: new Set(c.skills.map((x) => x.id)),
       ar: new Set(c.artifacts.map((x) => x.id)),
+      sm: new Set(c.semantics.map((x) => x.id)),
       cn: new Set(),
     }
   } catch (e: unknown) {
@@ -66,7 +67,7 @@ function setAll(key: string, ids: string[], on: boolean) {
 
 const portableConns = computed(() => (content.value?.connections ?? []).filter((c) => c.portable))
 const blockedConns = computed(() => (content.value?.connections ?? []).filter((c) => !c.portable))
-const total = computed(() => picked.value.nb.size + picked.value.qs.size + picked.value.sk.size + picked.value.ar.size + picked.value.cn.size)
+const total = computed(() => picked.value.nb.size + picked.value.qs.size + picked.value.sk.size + picked.value.ar.size + picked.value.sm.size + picked.value.cn.size)
 const passMismatch = computed(() => encrypt.value && pass2.value !== '' && pass1.value !== pass2.value)
 const valid = computed(() => total.value > 0 && (!encrypt.value || (pass1.value !== '' && pass1.value === pass2.value)))
 
@@ -81,7 +82,7 @@ async function submit() {
       path: '',
       selection: {
         all: false,
-        notebooks: [...picked.value.nb], queries: [...picked.value.qs], skills: [...picked.value.sk], artifacts: [...picked.value.ar],
+        notebooks: [...picked.value.nb], queries: [...picked.value.qs], skills: [...picked.value.sk], artifacts: [...picked.value.ar], semantics: [...picked.value.sm],
         sharedConnections: false, teamConnections: team, localConnections: local,
       },
       passphrase: encrypt.value ? pass1.value : '',
@@ -111,7 +112,8 @@ async function submit() {
           <span>
             <b>Saved {{ done.notebooks }} notebook{{ done.notebooks === 1 ? '' : 's' }}, {{ done.queries }} quer{{ done.queries === 1 ? 'y' : 'ies' }},
             {{ done.skills }} skill{{ done.skills === 1 ? '' : 's' }}
-            and {{ done.artifacts }} data artifact{{ done.artifacts === 1 ? '' : 's' }}<template v-if="done.connections"> and connection definitions</template></b>
+            {{ done.artifacts }} data artifact{{ done.artifacts === 1 ? '' : 's' }}
+            and {{ done.semantics }} semantic definition{{ done.semantics === 1 ? '' : 's' }}<template v-if="done.connections"> and connection definitions</template></b>
             ({{ formatBytes(done.bytes) }}<template v-if="done.encrypted">, locked with a passphrase</template>).
             <span class="path-line">{{ done.path }}</span>
           </span>
@@ -137,6 +139,7 @@ async function submit() {
             { key: 'qs', title: 'Saved queries', items: content.queries },
             { key: 'sk', title: 'Skills', items: content.skills },
             { key: 'ar', title: 'Data artifacts', items: content.artifacts },
+            { key: 'sm', title: 'Semantic definitions', items: content.semantics },
           ]" :key="g.key" class="be-group">
             <legend>
               {{ g.title }} <span class="count">{{ picked[g.key].size }} of {{ g.items.length }}</span>

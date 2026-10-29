@@ -11,7 +11,10 @@ import { workspaceInfo, flushOrConfirm } from './useWorkspace'
 import { useNewWorkspaceFields } from './useNewWorkspaceFields'
 import { errorText } from '../lib/errors'
 
-export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill', artifact: 'Data artifact' }
+export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill', artifact: 'Data artifact', semantics: 'Semantic definition' }
+
+/** The Keep both option's wording: a semantic definition gets `_2`, the rest `-2`. */
+export const keepBothLabel = (kind: string) => `Keep both (add ${kind === 'semantics' ? '_2' : '-2'})`
 
 export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
   const open = computed(() => bundleImportRequest.value !== null)
@@ -86,7 +89,7 @@ export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
         stage.value = 'preview'
         passphrase.value = ''
         for (const it of pv.items) {
-          if (it.conflict) conflictChoice.value[it.key] = 'rename'
+          if (it.conflict) conflictChoice.value[it.key] = it.noRename ? 'skip' : 'rename'
           included.value[it.key] = true
         }
         for (const c of pv.connections) connIncluded.value[c.name] = false
@@ -107,7 +110,7 @@ export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
     + Object.values(connIncluded.value).filter(Boolean).length)
 
   function setAllConflicts(a: BundleAction) {
-    for (const i of conflicts.value) conflictChoice.value[i.key] = a
+    for (const i of conflicts.value) conflictChoice.value[i.key] = a === 'rename' && i.noRename ? 'skip' : a
   }
 
   const validNew = computed(() => mode.value === 'here' || (wsName.value.trim() !== '' && parentDir.value.trim() !== ''))
@@ -117,7 +120,7 @@ export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
     const items: Record<string, BundleAction> = {}
     for (const it of preview.value?.items ?? []) {
       if (!included.value[it.key]) items[it.key] = 'skip'
-      else if (it.conflict) items[it.key] = conflictChoice.value[it.key] ?? 'rename'
+      else if (it.conflict) items[it.key] = conflictChoice.value[it.key] ?? (it.noRename ? 'skip' : 'rename')
     }
     return { onConflict: 'rename', items, connections: Object.keys(connIncluded.value).filter((n) => connIncluded.value[n]) }
   }

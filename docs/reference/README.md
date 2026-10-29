@@ -8,6 +8,7 @@ surface so each area is easy to find:
 |---|---|
 | [`notebooks.md`](notebooks.md) | **Notebooks** (sql/markdown/a2ui cells) and the **A2UI** component reference |
 | [`artifacts.md`](artifacts.md) | **Data artifacts**: `artifacts/<name>/`, the manifest, parameter types, date defaults, view rules, controls, `pivot` and drill-down |
+| [`semantics.md`](semantics.md) | **The semantic layer**: `semantics/` entities, metrics, joins and the glossary, their formats, caps and name rule, `vibe semantics` |
 | [`workspaces.md`](workspaces.md) | **Workspaces**: the folder layout, `vibe.yaml`, connection scopes and precedence, the agent limit, file formats, conflicts |
 | [`import-office.md`](import-office.md) | **Import** (CSV/TSV/XLSX) into a connection's table and table/query **export** (CSV, Parquet, XLSX, JSON) |
 | [`templates.md`](templates.md) | Bundled starter **templates** |
@@ -22,7 +23,7 @@ surface so each area is easy to find:
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui`, every starter template in
 `internal/templates` and every `vibe.yaml` / connections.yaml key in the
-workspace schema must appear here.
+workspace schema must appear here, as must every assertion kind, join cardinality and metric format of the semantic layer.
 
 > **Direction note.** Per [`../direction.md`](../direction.md), the page
 > system (`pages.md`, page directives, the web preview server, the Studio page

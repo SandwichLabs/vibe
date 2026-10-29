@@ -28,6 +28,7 @@ type Counts struct {
 	Queries     int
 	Skills      int
 	Artifacts   int
+	Semantics   int
 	Connections int // 1 when the bundle carries connection definitions, else 0
 }
 
@@ -47,6 +48,8 @@ func (m Manifest) Counts() Counts {
 			if path.Base(e.Path) == artifacts.ManifestFile {
 				c.Artifacts++ // an artifact is two entries; count it once
 			}
+		case KindSemantics:
+			c.Semantics++
 		case KindConnections:
 			c.Connections = 1
 		}

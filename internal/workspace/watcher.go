@@ -20,6 +20,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
@@ -38,7 +39,10 @@ const (
 	// files, or a file under artifacts/<name>/html/ of a page (ID is the
 	// artifact name; Path says which file).
 	KindArtifact ChangeKind = "artifact"
-	KindConfig   ChangeKind = "config"
+	// KindSemantics is a file under semantics/: ID is "entities/<name>",
+	// "metrics/<name>", "joins/<name>" or "glossary".
+	KindSemantics ChangeKind = "semantics"
+	KindConfig    ChangeKind = "config"
 	// KindDotEnv is the workspace's .env. The change carries no content; ask
 	// Workspace.DotEnv for the new state (an allowed file becomes "changed").
 	KindDotEnv ChangeKind = "dotenv"
@@ -193,13 +197,25 @@ func (w *Watcher) addTree() error {
 	if !w.addDir(w.root) {
 		return fmt.Errorf("failed to watch workspace %s", w.root)
 	}
-	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir} {
+	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir} {
 		w.addDir(filepath.Join(w.root, d))
 	}
+	w.addSemanticsSubdirs()
 	for _, parent := range []string{skills.Dir, artifacts.Dir} {
 		w.addSubdirs(parent)
 	}
 	return nil
+}
+
+// semanticsSubdirs are the three folders under semantics/.
+var semanticsSubdirs = []string{semantics.EntitiesDir, semantics.MetricsDir, semantics.JoinsDir}
+
+// addSemanticsSubdirs registers semantics/entities, metrics and joins that
+// exist now.
+func (w *Watcher) addSemanticsSubdirs() {
+	for _, sub := range semanticsSubdirs {
+		w.addDir(filepath.Join(w.root, semantics.Dir, sub))
+	}
 }
 
 // addSubdirs registers each real subfolder of a content folder (skills/<name>/,
@@ -229,6 +245,14 @@ func (w *Watcher) relevant() []string {
 	if names, err := filestore.ListDir(w.root, queries.Dir, queries.Extension); err == nil {
 		for _, n := range names {
 			add(queries.Dir + "/" + n)
+		}
+	}
+	add(semantics.Dir + "/" + semantics.GlossaryFile)
+	for _, sub := range semanticsSubdirs {
+		if names, err := filestore.ListDir(w.root, semantics.Dir+"/"+sub, semantics.Extension); err == nil {
+			for _, n := range names {
+				add(semantics.Dir + "/" + sub + "/" + n)
+			}
 		}
 	}
 	if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
@@ -286,6 +310,10 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindNotebook, strings.TrimSuffix(parts[1], notebooks.Extension), true
 	case len(parts) == 2 && parts[0] == queries.Dir && strings.HasSuffix(parts[1], queries.Extension) && !filestore.IsTemp(parts[1]):
 		return KindQuery, strings.TrimSuffix(parts[1], queries.Extension), true
+	case len(parts) == 2 && parts[0] == semantics.Dir && parts[1] == semantics.GlossaryFile:
+		return KindSemantics, "glossary", true
+	case len(parts) == 3 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1]) && strings.HasSuffix(parts[2], semantics.Extension) && !filestore.IsTemp(parts[2]):
+		return KindSemantics, parts[1] + "/" + strings.TrimSuffix(parts[2], semantics.Extension), true
 	case len(parts) == 3 && parts[0] == skills.Dir && parts[2] == skills.File && !filestore.IsTemp(parts[1]):
 		return KindSkill, parts[1], true
 	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile || parts[2] == artifacts.ScriptFile) && !filestore.IsTemp(parts[1]):
@@ -295,6 +323,15 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindArtifact, parts[1], true
 	}
 	return "", "", false
+}
+
+func isSemanticsSubdir(s string) bool {
+	for _, d := range semanticsSubdirs {
+		if s == d {
+			return true
+		}
+	}
+	return false
 }
 
 // isArtifactHTMLPath reports whether parts is artifacts/<name>/html/... with no
@@ -442,7 +479,8 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 // anything was queued.
 func (w *Watcher) handleNewDir(abs, rel string) bool {
 	parts := strings.Split(rel, "/")
-	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir)) ||
+	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir || parts[0] == semantics.Dir)) ||
+		(len(parts) == 2 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1])) ||
 		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1])) ||
 		isArtifactHTMLDir(parts)
 	if !isWatchedDir || !w.addDir(abs) {
@@ -453,6 +491,9 @@ func (w *Watcher) handleNewDir(abs, rel string) bool {
 	// skills/<name>/ and artifacts/<name>/ levels and report what is there.
 	if len(parts) == 1 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) {
 		w.addSubdirs(parts[0])
+	}
+	if len(parts) == 1 && parts[0] == semantics.Dir {
+		w.addSemanticsSubdirs()
 	}
 	if len(parts) == 2 && parts[0] == artifacts.Dir {
 		w.addHTMLTree(filepath.Join(abs, artifacts.HTMLDir), 0)

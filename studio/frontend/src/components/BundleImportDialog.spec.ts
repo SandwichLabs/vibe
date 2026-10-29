@@ -65,6 +65,36 @@ describe('BundleImportDialog', () => {
     w.unmount()
   })
 
+  it('semantic definitions: labelled, renamed with _2, and the glossary cannot be kept beside', async () => {
+    const app = makeApp({
+      PreviewBundleImport: vi.fn(async () => preview({
+        items: [
+          { key: 'semantics/metrics/net_revenue', kind: 'semantics', id: 'metrics/net_revenue', title: 'Net revenue', size: 10, conflict: true },
+          { key: 'semantics/glossary', kind: 'semantics', id: 'glossary', title: 'Glossary', size: 10, conflict: true, noRename: true },
+        ],
+        connections: [],
+      })),
+    })
+    const w = await mountDialog()
+    expect(w.text()).toContain('Semantic definition')
+    const metric = w.find('[data-testid="bi-choice-semantics/metrics/net_revenue"]')
+    expect((metric.element as HTMLSelectElement).value).toBe('rename')
+    expect(metric.text()).toContain('Keep both (add _2)')
+    const glossary = w.find('[data-testid="bi-choice-semantics/glossary"]')
+    expect((glossary.element as HTMLSelectElement).value).toBe('skip')
+    expect(glossary.text()).not.toContain('Keep both')
+    expect(w.find('[data-testid="bi-norename"]').text()).toContain("Can't keep both")
+    // "Keep both" for everything leaves the glossary skipped.
+    await w.findAll('.bi-bulk .linkbtn')[0].trigger('click')
+    expect((glossary.element as HTMLSelectElement).value).toBe('skip')
+    await w.find('[data-testid="bi-import"]').trigger('click')
+    await flushPromises()
+    expect((app.CommitBundleImport.mock.calls[0] as any[])[1].items).toEqual({
+      'semantics/metrics/net_revenue': 'rename', 'semantics/glossary': 'skip',
+    })
+    w.unmount()
+  })
+
   it('unticking an item skips it', async () => {
     const app = makeApp()
     const w = await mountDialog()

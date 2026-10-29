@@ -171,6 +171,7 @@ func init() {
 	f.StringSlice("queries", nil, "query ids to include")
 	f.StringSlice("skills", nil, "skill names to include")
 	f.StringSlice("artifacts", nil, "data artifact names to include")
+	f.StringSlice("semantics", nil, `semantic definitions to include, as "metrics/net_revenue", "entities/customer", "joins/orders_customers" or "glossary"`)
 	f.Bool("with-connections", false, "include the committed (team) connection definitions")
 	f.StringSlice("with-local-connections", nil, `include these "This computer" connection definitions`)
 	f.Bool("encrypt", false, "wrap the bundle in a passphrase envelope")
@@ -250,8 +251,9 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("%s already exists; use --force to replace it", out)
 	}
 	arts, _ := f.GetStringSlice("artifacts")
-	sel := bundle.Selection{Notebooks: nbs, Queries: qs, Skills: sks, Artifacts: arts, SharedConnections: withConns, LocalConnections: localConns}
-	sel.All = len(nbs)+len(qs)+len(sks)+len(arts) == 0
+	sems, _ := f.GetStringSlice("semantics")
+	sel := bundle.Selection{Notebooks: nbs, Queries: qs, Skills: sks, Artifacts: arts, Semantics: sems, SharedConnections: withConns, LocalConnections: localConns}
+	sel.All = len(nbs)+len(qs)+len(sks)+len(arts)+len(sems) == 0
 	var pass string
 	if encrypt {
 		if pass, err = readBundlePassphrase(cmd, true); err != nil {
@@ -279,7 +281,7 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 	}
 	w := cmd.OutOrStdout()
 	counts := exportCounts(res.Manifest.Contents)
-	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills, %d data artifacts to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], counts[bundle.KindArtifact], out)
+	fmt.Fprintf(w, "Exported %d notebooks, %d queries, %d skills, %d data artifacts, %d semantic definitions to %s", counts[bundle.KindNotebook], counts[bundle.KindQuery], counts[bundle.KindSkill], counts[bundle.KindArtifact], counts[bundle.KindSemantics], out)
 	if counts[bundle.KindConnections] > 0 {
 		fmt.Fprint(w, " (with connection definitions)")
 	}

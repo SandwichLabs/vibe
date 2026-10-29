@@ -12,6 +12,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/a2ui"
 	"github.com/SandwichLabs/vibe/internal/connname"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/strictyaml"
 )
 
 // nameRe is the shape of a parameter or query name: it starts with a letter
@@ -343,17 +344,7 @@ func validateScript(src []byte) error {
 // invisible it also finds the zero-width characters, the left/right and Arabic
 // marks, the soft hyphen and the interlinear annotation characters.
 func firstHiddenRune(s string, invisible bool) (rune, bool) {
-	for _, r := range s {
-		switch {
-		case r < 0x20 && r != '\t' && r != '\n' && r != '\r', r == 0x7f, r >= 0x80 && r <= 0x9f,
-			r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x2028, r == 0x2029:
-			return r, true
-		case invisible && (r == 0x200e || r == 0x200f || (r >= 0x200b && r <= 0x200d) || r == 0x2060 || r == 0xfeff ||
-			r == 0x00ad || r == 0x061c || (r >= 0xfff9 && r <= 0xfffc)):
-			return r, true
-		}
-	}
-	return 0, false
+	return strictyaml.FirstHiddenRune(s, invisible)
 }
 
 // RenderView is the view as Go validated it, re-marshalled: the one form a UI
@@ -438,17 +429,7 @@ func checkJSONObject(view []byte) error {
 // EscapeHidden shows s with every character firstHiddenRune would refuse
 // replaced by a visible <U+XXXX> marker (carriage returns too, which can
 // overwrite a line on a terminal). For printing a file that is broken on disk.
-func EscapeHidden(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if _, hidden := firstHiddenRune(string(r), true); hidden || r == '\r' {
-			fmt.Fprintf(&b, "<U+%04X>", r)
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
+func EscapeHidden(s string) string { return strictyaml.EscapeHidden(s) }
 
 // ValidateParameters checks parameter declarations alone, the way a manifest's
 // are checked (names, types, defaults, constraints), one error per problem. A

@@ -7,7 +7,7 @@
 import { ref } from 'vue'
 import Icon from './Icon.vue'
 import { useModalKeys } from '../composables/useModal'
-import { useBundleImport, KIND_LABEL } from '../composables/useBundleImport'
+import { useBundleImport, KIND_LABEL, keepBothLabel } from '../composables/useBundleImport'
 import { workspaceInfo } from '../composables/useWorkspace'
 
 const root = ref<HTMLElement | null>(null)
@@ -87,8 +87,9 @@ useModalKeys(open, () => close(), root)
               </label>
               <span v-if="it.conflict" class="bi-choice">
                 <span class="badge badge--warn"><span class="dot"></span>Already here</span>
+                <span v-if="it.noRename" class="sub" data-testid="bi-norename">Can't keep both</span>
                 <select v-model="conflictChoice[it.key]" class="field-input bi-select" :aria-label="`What to do with ${it.title || it.id}`" :disabled="busy || !included[it.key]" :data-testid="`bi-choice-${it.key}`">
-                  <option value="rename">Keep both (add -2)</option>
+                  <option v-if="!it.noRename" value="rename">{{ keepBothLabel(it.kind) }}</option>
                   <option value="overwrite">Replace mine</option>
                   <option value="skip">Skip</option>
                 </select>

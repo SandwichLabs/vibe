@@ -20,6 +20,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/prefs"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/trustfile"
 )
@@ -70,6 +71,9 @@ type Workspace interface {
 	// Artifacts is the workspace's artifacts/ folder: data artifacts, one
 	// folder each (artifact.yaml and view.a2ui.json).
 	Artifacts() artifacts.Store
+	// Semantics is the workspace's semantics/ folder: entities, metrics, joins
+	// and the glossary, one yaml file each (docs/reference/semantics.md).
+	Semantics() semantics.Store
 
 	// ArtifactViewState reports where an artifact's custom view (view: script)
 	// stands for this person: undecided, allowed, changed (edited since the
@@ -207,6 +211,7 @@ type workspace struct {
 	qs queries.Store
 	sk skills.Store
 	af artifacts.Store
+	sm semantics.Store
 
 	mu       sync.RWMutex
 	cfg      Config
@@ -268,6 +273,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	w.qs = queries.NewFileStore(root, queries.WithObserver(obs), queries.WithLogger(w.logger))
 	w.sk = skills.NewFileStore(root, skills.WithObserver(obs), skills.WithLogger(w.logger))
 	w.af = artifacts.NewFileStore(root, artifacts.WithObserver(obs))
+	w.sm = semantics.NewFileStore(root, semantics.WithObserver(obs), semantics.WithLogger(w.logger))
 	return w, nil
 }
 
@@ -466,6 +472,7 @@ func (w *workspace) Notebooks() notebooks.Store { return w.nb }
 func (w *workspace) Queries() queries.Store     { return w.qs }
 func (w *workspace) Skills() skills.Store       { return w.sk }
 func (w *workspace) Artifacts() artifacts.Store { return w.af }
+func (w *workspace) Semantics() semantics.Store { return w.sm }
 
 func (w *workspace) Reload() error { return w.reload() }
 
@@ -580,7 +587,10 @@ func (w *workspace) loadUser() (UserConfig, error) {
 
 // tempDirs lists the directories WriteAtomic leaves temp files in.
 func (w *workspace) tempDirs() []string {
-	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, LocalDir}
+	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir, LocalDir}
+	for _, sub := range semanticsSubdirs {
+		dirs = append(dirs, semantics.Dir+"/"+sub)
+	}
 	for _, parent := range []string{skills.Dir, artifacts.Dir} {
 		if subs, err := filestore.ListSubdirs(w.root, parent); err == nil {
 			for _, s := range subs {

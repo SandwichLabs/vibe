@@ -6,6 +6,7 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Added
 
+- **A semantic layer as files (#244).** A workspace can now keep `semantics/entities/<name>.yaml` (what the data is about: grain, table, id column, PII flags), `semantics/metrics/<name>.yaml` (a named measure over a saved query), `semantics/joins/<name>.yaml` (how two entities relate) and a `semantics/glossary.md`. Files are read as strictly as an artifact manifest (size and node caps before parsing, no anchors, aliases, tags or unknown keys, names that never need SQL quoting), a file that cannot be read is listed with its error rather than hidden, and writes compare the revision they read. `vibe semantics list [--json]` and `vibe semantics show <kind> <name>` read them, and `.vibe` bundles carry them (`vibe export bundle --semantics metrics/net_revenue`). Nothing runs a definition yet. See `docs/reference/semantics.md`.
 - **Saved-query parameters in Studio and the CLI (#235).** A saved query's declared `$name` parameters now show as typed inputs, pre-filled with their defaults, when it is open in the Query Explorer, and `vibe query --saved ID -p name=value` runs it from the terminal. Values are bound parameters, never SQL text, and the statement is held to the same shape rules as the agent's `run_saved_query` (one statement, no placeholder inside a literal, no parameter as the argument of `query()` or a file reader).
 
 ## [0.4.0] - 2026-10-29

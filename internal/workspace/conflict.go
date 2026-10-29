@@ -19,6 +19,9 @@ const (
 	ConflictSkill    = "skill"
 	// ConflictArtifact is a data artifact: one item over two files, one revision.
 	ConflictArtifact = "artifact"
+	// ConflictSemantics is a file under semantics/ (ID "metrics/net_revenue",
+	// "glossary", ...); Data is {text}, the file's text.
+	ConflictSemantics = "semantics"
 
 	ConflictReload    = "reload"
 	ConflictOverwrite = "overwrite"
@@ -27,7 +30,7 @@ const (
 
 // ConflictRequest resolves a save refused because the file changed on disk.
 type ConflictRequest struct {
-	Kind   string `json:"kind"`   // notebook | query | skill | artifact
+	Kind   string `json:"kind"`   // notebook | query | skill | artifact | semantics
 	ID     string `json:"id"`     // notebook id, query id or skill name
 	Action string `json:"action"` // reload | overwrite | saveCopy
 	// Data is the local edit. Notebook: the same document SaveNotebook takes.
@@ -88,6 +91,8 @@ func ResolveConflict(ctx context.Context, ws Workspace, sess session.Session, re
 		target = skillConflicts{store: ws.Skills(), sess: sess}
 	case ConflictArtifact:
 		target = artifactConflicts{store: ws.Artifacts()}
+	case ConflictSemantics:
+		target = semanticsConflicts{store: ws.Semantics()}
 	default:
 		return nil, fmt.Errorf("unknown kind %q", req.Kind)
 	}

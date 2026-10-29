@@ -56,6 +56,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/editor.md`](reference/editor.md) | `$EDITOR` from the TUI and `vibe query -e`; `vibe lsp` for Neovim, Helix and eglot |
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |
 | [`reference/notebooks.md`](reference/notebooks.md) | Notebooks and the A2UI component reference |
+| [`reference/semantics.md`](reference/semantics.md) | The semantic layer: `semantics/` entities, metrics, joins and the glossary; formats, caps, name rule, `vibe semantics` |
 | [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down, running, sharing |
 | [`reference/import-office.md`](reference/import-office.md) | Import (CSV/TSV/XLSX) and export |
 | [`reference/templates.md`](reference/templates.md) | Starter templates |

@@ -915,11 +915,12 @@ interface BundleContent {
   queries: BundleContentItem[]
   skills: BundleContentItem[]
   artifacts: BundleContentItem[]
+  semantics: BundleContentItem[]
   connections: BundleContentConnection[]
 }
 interface BundleSelection {
   all: boolean
-  notebooks: string[]; queries: string[]; skills: string[]; artifacts: string[]
+  notebooks: string[]; queries: string[]; skills: string[]; artifacts: string[]; semantics: string[]
   sharedConnections: boolean
   teamConnections: string[]
   localConnections: string[]
@@ -927,11 +928,11 @@ interface BundleSelection {
 interface BundleExportRequest { path: string; selection: BundleSelection; passphrase: string }
 interface BundleExportResult {
   path: string; cancelled: boolean; encrypted: boolean
-  notebooks: number; queries: number; skills: number; artifacts: number; connections: number
+  notebooks: number; queries: number; skills: number; artifacts: number; semantics: number; connections: number
   bytes: number; warnings: string[]
 }
 type BundleAction = 'rename' | 'overwrite' | 'skip'
-interface BundlePreviewItem { key: string; kind: 'notebook' | 'query' | 'skill' | 'artifact'; id: string; title: string; size: number; conflict: boolean }
+interface BundlePreviewItem { key: string; kind: 'notebook' | 'query' | 'skill' | 'artifact' | 'semantics'; id: string; title: string; size: number; conflict: boolean; noRename?: boolean }
 interface BundlePreviewConnection {
   key: string; name: string; type: string; summary: string
   details: string[]; risks: string[]; askedWritable: boolean

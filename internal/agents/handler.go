@@ -18,6 +18,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -34,6 +35,10 @@ type WorkspaceAccess interface {
 	Notebooks() notebooks.Store
 	Queries() queries.Store
 	Skills() skills.Store
+	// Semantics is the semantics/ folder: entities, metrics, joins and the
+	// glossary. No tool reads it yet; the metric() expansion and the
+	// definition tools build on it.
+	Semantics() semantics.Store
 }
 
 // ProtectedPathsProvider is implemented by a WorkspaceAccess that knows the

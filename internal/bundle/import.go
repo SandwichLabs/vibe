@@ -67,6 +67,10 @@ type PreviewItem struct {
 	Title    string   `json:"title"`
 	Size     int64    `json:"size"`
 	Conflict bool     `json:"conflict"`
+	// NoRename is true for an item that cannot be kept beside an existing one
+	// (the glossary): a clash can only be replaced or skipped, and skipping is
+	// the default.
+	NoRename bool `json:"noRename,omitempty"`
 }
 
 // PreviewConnection is one connection definition in a bundle.
@@ -155,6 +159,8 @@ func (p *Package) noteRev(ctx context.Context, t Target, kind ItemKind, id strin
 		}
 	case KindArtifact:
 		rev = artifactRev(ctx, t, id)
+	case KindSemantics:
+		rev = semanticsRev(ctx, t, id)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -258,6 +264,7 @@ func (p *Package) Preview(ctx context.Context, t Target) Preview {
 			has, _ = storeHas(t, it.Kind, it.ID) // an unreadable store shows at Import
 		}
 		it.Conflict = has
+		it.NoRename = it.Kind == KindSemantics && it.ID == "glossary"
 		if it.Conflict {
 			p.noteRev(ctx, t, it.Kind, it.ID)
 		}
@@ -286,10 +293,11 @@ func (p *Package) Import(ctx context.Context, t Target, opts ImportOptions) (Res
 		return Result{}, err
 	}
 	res := Result{DryRun: opts.DryRun, Warnings: append([]string{}, p.Warnings...), Outcomes: []Outcome{}}
-	run := itemImporter{p: p, t: t, opts: opts, onConflict: onConflict, taken: map[string]map[string]bool{}}
+	run := itemImporter{p: p, t: t, opts: opts, onConflict: onConflict, taken: map[string]map[string]bool{}, renamed: map[ItemKind]map[string]string{}}
 	for _, it := range p.items {
 		res.Outcomes = append(res.Outcomes, run.importItem(ctx, it))
 	}
+	res.Warnings = append(res.Warnings, run.notes...)
 
 	defs := map[string]workspace.ConnectionDef{}
 	for _, d := range p.conns {
@@ -349,6 +357,11 @@ type itemImporter struct {
 	opts       ImportOptions
 	onConflict Action
 	taken      map[string]map[string]bool // final ids this run uses, per kind (dry run or not)
+	// renamed maps an item's bundle id to the id it was given here, per kind,
+	// for the references other items of the same bundle hold (a metric's saved
+	// query, a join's entities). notes say which references were rewritten.
+	renamed map[ItemKind]map[string]string
+	notes   []string
 }
 
 func (r *itemImporter) isTaken(kind ItemKind, id string) bool { return r.taken[string(kind)][id] }
@@ -379,6 +392,11 @@ func (r *itemImporter) action(it item, clash, inStore bool) Action {
 	if action == ActionOverwrite && !inStore {
 		action = ActionRename
 	}
+	// The glossary is one file and cannot be kept beside another: where a
+	// rename would be the default, it is skipped instead of failing.
+	if action == ActionRename && clash && it.Kind == KindSemantics && it.ID == "glossary" {
+		action = ActionSkip
+	}
 	return action
 }
 
@@ -395,33 +413,49 @@ func (r *itemImporter) importItem(ctx context.Context, it item) Outcome {
 	case action == ActionSkip:
 		o.Result = "skipped"
 	case action == ActionRename && clash:
-		var probeErr error
-		final := filestore.UniqueSlug(it.ID, func(c string) bool {
-			has, err := storeHas(r.t, it.Kind, c)
-			if err != nil {
-				probeErr = err
-				return true
-			}
-			return r.isTaken(it.Kind, c) || has
-		})
+		final, probeErr := r.freeID(it)
 		if final == "" {
 			o.Result, o.Error = "failed", "cannot find a free name for it"
+			if it.Kind == KindSemantics && it.ID == "glossary" {
+				o.Error = "the glossary is one file and cannot be renamed; choose overwrite or skip"
+			}
 			if probeErr != nil {
 				o.Error = probeErr.Error()
 			}
 			return o
 		}
 		r.take(it.Kind, final)
+		it = r.rewriteRefs(it)
 		o.Result, o.FinalID = r.p.write(ctx, r.t, it, final, false, r.opts.DryRun, &o)
 		if o.Error == "" {
 			o.Result = "renamed"
+			r.noteRename(it, final)
 		}
 	default:
 		r.take(it.Kind, it.ID)
+		it = r.rewriteRefs(it)
 		// A new item, or an overwrite of the one that is there.
 		o.Result, o.FinalID = r.p.write(ctx, r.t, it, it.ID, action == ActionOverwrite && inStore, r.opts.DryRun, &o)
 	}
 	return o
+}
+
+// freeID finds an unused id for an item that clashes. The error is a failed
+// probe of the workspace; with no error an empty id means none was found.
+func (r *itemImporter) freeID(it item) (string, error) {
+	if it.Kind == KindSemantics {
+		return r.renameSemantics(it)
+	}
+	var probeErr error
+	final := filestore.UniqueSlug(it.ID, func(c string) bool {
+		has, err := storeHas(r.t, it.Kind, c)
+		if err != nil {
+			probeErr = err
+			return true
+		}
+		return r.isTaken(it.Kind, c) || has
+	})
+	return final, probeErr
 }
 
 // write stores one item under finalID. overwrite is a compare-and-write
@@ -448,6 +482,8 @@ func (p *Package) write(ctx context.Context, t Target, it item, finalID string, 
 		final, err = p.writeSkill(ctx, t, it, finalID, overwrite)
 	case KindArtifact:
 		final, err = p.writeArtifact(ctx, t, it, finalID, overwrite)
+	case KindSemantics:
+		final, err = p.writeSemantics(ctx, t, it, finalID, overwrite)
 	default:
 		err = fmt.Errorf("unknown kind %q", it.Kind)
 	}
