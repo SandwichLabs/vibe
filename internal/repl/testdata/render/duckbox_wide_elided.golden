@@ -1,0 +1,8 @@
+┌────────────┬────────────┬───┬────────────┬────────────┐
+│   alpha    │    beta    │ … │  epsilon   │    zeta    │
+│  varchar   │  varchar   │ … │  varchar   │  varchar   │
+├────────────┼────────────┼───┼────────────┼────────────┤
+│ aaaaaaaaaa │ bbbbbbbbbb │ … │ eeeeeeeeee │ ffffffffff │
+│ aa         │ bb         │   │ ee         │ ff         │
+└────────────┴────────────┴───┴────────────┴────────────┘
+  1 rows                              6 columns (4 shown)

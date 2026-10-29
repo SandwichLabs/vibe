@@ -598,3 +598,93 @@ func failingDB(t *testing.T, failOn string) *sql.DB {
 	f.failOn = failOn
 	return db
 }
+
+func TestConnUse_MovesOnlyThatConnection(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	p := mkDuckFile(t, "other", "CREATE TABLE only_there(a INT)", "INSERT INTO only_there VALUES (42)")
+	require.NoError(t, s.Attach(ctx, Spec{Name: "other", Path: p}))
+
+	a, err := s.Conn(ctx)
+	require.NoError(t, err)
+	b, err := s.Conn(ctx)
+	require.NoError(t, err)
+	current := func(c *Conn) string {
+		var cat string
+		require.NoError(t, c.SQLConn().QueryRowContext(ctx, "SELECT current_database()").Scan(&cat))
+		return cat
+	}
+
+	require.NoError(t, a.Use(ctx, "other"))
+	assert.Equal(t, "other", current(a))
+	assert.Equal(t, "other", a.Catalog())
+	assert.Equal(t, s.DefaultCatalog(), current(b), "the other connection did not move")
+	rows, err := a.Query(ctx, "SELECT a FROM only_there")
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+
+	// Close puts it back before it returns to the pool.
+	require.NoError(t, a.Close())
+	require.NoError(t, b.Close())
+	s.DB().SetMaxOpenConns(1)
+	var cat string
+	require.NoError(t, s.DB().QueryRow("SELECT current_database()").Scan(&cat))
+	assert.Equal(t, s.DefaultCatalog(), cat)
+}
+
+func TestConnUse_RefusesUnknownAndUnattached(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	p := mkDuckFile(t, "lazy", "CREATE TABLE t(a INT)")
+	require.NoError(t, s.Register(Spec{Name: "lazy", Path: p}))
+	c, err := s.Conn(ctx)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+	assert.ErrorContains(t, c.Use(ctx, "missing"), "not attached")
+	assert.ErrorContains(t, c.Use(ctx, "lazy"), "not attached")
+	assert.Empty(t, c.Catalog())
+}
+
+func TestStatusSnapshot(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	p := mkDuckFile(t, "other", "CREATE TABLE t(a INT)")
+	require.NoError(t, s.Register(Spec{Name: "other", Path: p}))
+	before := StatusSnapshot(s)
+	assert.Equal(t, StatusNotConnected, before["other"])
+	require.NoError(t, s.Connect(ctx, "other"))
+	assert.Equal(t, StatusOK, StatusSnapshot(s)["other"])
+	assert.Equal(t, StatusNotConnected, before["other"], "a snapshot is a copy")
+}
+
+func TestConnQueryDDLInvalidatesSchemaCache(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	c, err := s.Conn(ctx)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+	before, err := s.ListTables(ctx, s.DefaultCatalog(), "")
+	require.NoError(t, err)
+	rows, err := c.Query(ctx, "CREATE TABLE viaconn(x INT)")
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	after, err := s.ListTables(ctx, s.DefaultCatalog(), "")
+	require.NoError(t, err)
+	assert.Len(t, after, len(before)+1)
+}
+
+func TestConnFollow_TakesTheCatalogsSettingsWithoutSQL(t *testing.T) {
+	ctx := context.Background()
+	s := newTestSession(t)
+	p := mkDuckFile(t, "other", "CREATE TABLE t(a INT)")
+	require.NoError(t, s.Attach(ctx, Spec{Name: "other", Path: p, RowCap: 3}))
+	c, err := s.Conn(ctx)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+	c.Follow("other")
+	assert.Equal(t, "other", c.Catalog())
+	assert.Equal(t, 3, c.cfg.rowCap)
+	c.Follow(s.DefaultCatalog())
+	assert.Empty(t, c.Catalog())
+	assert.NotEqual(t, 3, c.cfg.rowCap)
+}

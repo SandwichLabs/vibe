@@ -60,16 +60,6 @@ func (a *App) GetTableCapabilities(table string) (*TableCapabilities, error) {
 	return engine.DescribeTableCapabilities(a.ctxOrBackground(), sess, table, ro)
 }
 
-// statusSnapshot records every connection's state, to tell after a run which
-// ones a statement dialled (lazy attach) or changed.
-func statusSnapshot(sess session.Session) map[string]session.StatusKind {
-	out := map[string]session.StatusKind{}
-	for _, st := range sess.Connections() {
-		out[st.Name] = st.Kind
-	}
-	return out
-}
-
 // catalogChanged is the one place a catalog change is announced: the rail
 // reloads (catalog:changed) and the completion catalog rebuilds. "" = all.
 // It must not block or take a.mu: afterRun calls it under the read lock.

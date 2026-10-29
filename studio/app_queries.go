@@ -85,27 +85,23 @@ type RunQueryRequest struct {
 	TabID string `json:"tabId"`
 }
 
-// validateRunRequest checks the connection name and refuses what would undo
-// Vibe's own protections (LOAD, secret DDL; see usersql.CheckManaged).
+// validateRunRequest checks the connection name.
 func validateRunRequest(req RunQueryRequest) error {
 	if req.Connection != "" {
 		if err := session.ValidateName(req.Connection); err != nil {
 			return fmt.Errorf("unknown connection %q", req.Connection)
 		}
 	}
-	return usersql.CheckManaged(req.SQL)
+	return nil
 }
 
-// requireRunnable is requireWorkspace plus the parser-based half of the
-// editor's guard (usersql.CheckParsed): the caller holds a.mu.
+// requireRunnable is requireWorkspace plus the editor's guard
+// (usersql.CheckInteractive, shared with the console): the caller holds a.mu.
 func (a *App) requireRunnable(sqlText string) error {
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if !session.LazyStorage(a.sess) {
-		return nil // the configuration lock already refuses the setting
-	}
-	return usersql.CheckParsed(a.ctxOrBackground(), a.sess.DB(), sqlText)
+	return usersql.CheckInteractive(a.ctxOrBackground(), a.sess, sqlText)
 }
 
 // RunQuery runs the query editor's statement on the chosen connection.
@@ -121,7 +117,7 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	}
 
 	sqlStr := req.SQL
-	before := statusSnapshot(a.sess)
+	before := session.StatusSnapshot(a.sess)
 	start := time.Now()
 	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, nil, queryGridRowCap)
 	a.afterRun(a.sess, before, sqlStr)
@@ -236,7 +232,7 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	// Go-side wait.
 	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
 	defer cancel()
-	before := statusSnapshot(runSess)
+	before := session.StatusSnapshot(runSess)
 	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
 	a.afterRun(runSess, before, sqlStr)
 	if err != nil {

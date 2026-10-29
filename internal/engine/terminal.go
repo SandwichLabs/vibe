@@ -14,6 +14,14 @@ type TerminalOpts struct {
 	// StripC1 also drops the C1 controls U+0080 to U+009F, which some
 	// terminals treat as escape introducers.
 	StripC1 bool
+	// StripBidi also drops the Unicode bidirectional format characters
+	// (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069), which can reorder
+	// what a terminal shows and spoof a value or a column name.
+	StripBidi bool
+}
+
+func isBidi(r rune) bool {
+	return r == 0x061c || r == 0x200e || r == 0x200f || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
 }
 
 // TerminalText makes untrusted text safe to print to a terminal. A table cell,
@@ -39,6 +47,8 @@ func TerminalText(s string, o TerminalOpts) string {
 		case r < 0x20 || r == 0x7f:
 			// Dropped.
 		case o.StripC1 && r >= 0x80 && r < 0xa0:
+			// Dropped.
+		case o.StripBidi && isBidi(r):
 			// Dropped.
 		default:
 			b.WriteRune(r)

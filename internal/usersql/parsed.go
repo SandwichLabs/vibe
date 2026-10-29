@@ -44,40 +44,45 @@ func CheckParsed(ctx context.Context, db *sql.DB, sqlText string) error {
 	return nil
 }
 
-// checkPiece prepares one piece of text (never runs it) and refuses a
-// SET-type statement that names the setting, or any piece that cannot be
-// prepared and names it.
-func checkPiece(conn *sql.Conn, text string) error {
-	var refused error
+// ParsedType prepares text on conn (never runs it) and returns DuckDB's own
+// statement type. An error means DuckDB could not prepare it (a syntax error,
+// a missing table, more than one statement).
+func ParsedType(conn *sql.Conn, text string) (duckdb.StmtType, error) {
+	var typ duckdb.StmtType
 	err := conn.Raw(func(dc any) error {
 		c, ok := dc.(driver.Conn)
 		if !ok {
-			return nil
+			return fmt.Errorf("not a duckdb connection")
 		}
 		stmt, err := c.Prepare(text)
 		if err != nil {
-			// Also what a piece holding several statements gives (our
-			// splitter and DuckDB's disagreeing): never let it pass when it
-			// names the setting.
-			refused = refuseIfNamed(text)
-			return nil
+			return err
 		}
 		defer stmt.Close() //nolint:errcheck
 		ds, ok := stmt.(*duckdb.Stmt)
 		if !ok {
-			return nil
+			return fmt.Errorf("not a duckdb statement")
 		}
-		typ, err := ds.StatementType()
-		if err != nil || typ != duckdb.STATEMENT_TYPE_SET {
-			return nil
-		}
-		refused = refuseIfNamed(text)
-		return nil
+		typ, err = ds.StatementType()
+		return err
 	})
+	return typ, err
+}
+
+// checkPiece prepares one piece of text (never runs it) and refuses a
+// SET-type statement that names the setting, or any piece that cannot be
+// prepared and names it. (Also what a piece holding several statements gives,
+// our splitter and DuckDB's disagreeing: never let it pass when it names the
+// setting.)
+func checkPiece(conn *sql.Conn, text string) error {
+	typ, err := ParsedType(conn, text)
 	if err != nil {
 		return refuseIfNamed(text)
 	}
-	return refused
+	if typ != duckdb.STATEMENT_TYPE_SET {
+		return nil
+	}
+	return refuseIfNamed(text)
 }
 
 // namesGuardedSetting reports whether text mentions the setting once quotes

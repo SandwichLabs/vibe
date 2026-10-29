@@ -64,3 +64,13 @@ func TestCellText(t *testing.T) {
 	assert.Equal(t, "42", CellText(42, ""))
 	assert.Equal(t, fmt.Sprintf("%v", []int{1}), CellText([]int{1}, ""))
 }
+
+func TestTerminalText_StripBidi(t *testing.T) {
+	for _, r := range []rune{0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069} {
+		s := "a" + string(r) + "b"
+		assert.Equal(t, s, TerminalText(s, TerminalOpts{}), "kept without the option: %U", r)
+		assert.Equal(t, "ab", TerminalText(s, TerminalOpts{StripBidi: true}), "%U", r)
+	}
+	// Letters of right-to-left scripts are text, not format characters.
+	assert.Equal(t, "שלום مرحبا", TerminalText("שלום مرحبا", TerminalOpts{StripBidi: true, StripC1: true}))
+}

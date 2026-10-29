@@ -1,0 +1,14 @@
+[?2004hVibe console on ws. Statements end with ';'. Enter .help for commands.
+ws ▸ D create table t(x int);
+ws ▸ D insert into t values (1), (2);
+ws ▸ D insert into t values (3) returning x;
+┌───────┐
+│   x   │
+│ int32 │
+├───────┤
+│     3 │
+└───────┘
+ws ▸ D update t set x = x + 1;
+ws ▸ D delete from t where x = 2;
+ws ▸ D drop table t;
+ws ▸ D [?2004l

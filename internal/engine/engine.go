@@ -89,10 +89,29 @@ func (m *Manager) ExecuteCappedIn(ctx context.Context, connection, query string,
 	return m.execute(ctx, connection, query, params, maxRows)
 }
 
-// execute is the shared implementation behind Execute and ExecuteCapped: one
-// place for the "duckdb engine is not available" guard, the wrap text, and
-// the debug logging.
+// ExecuteOn is ExecuteCappedIn on a connection the caller holds across
+// statements (the console): the same lazy attach, parameter binding, wildcard
+// expansion, logging and error shaping, on conn instead of a connection pinned
+// per call. connection is the catalog unqualified names resolve against on
+// conn (the lazy attach needs it; a USE on conn moves it).
+func (m *Manager) ExecuteOn(ctx context.Context, conn *session.Conn, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	return m.run(ctx, connection, query, func() (*ResultSet, int, error) {
+		return m.duckdb.executeOn(ctx, conn, query, params, maxRows)
+	})
+}
+
+// execute is the shared implementation behind Execute and ExecuteCapped.
 func (m *Manager) execute(ctx context.Context, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	return m.run(ctx, connection, query, func() (*ResultSet, int, error) {
+		return m.duckdb.executeIn(ctx, connection, query, params, maxRows)
+	})
+}
+
+// run is the one run path behind every Manager entry point: the "duckdb engine
+// is not available" guard, the debug logging, the lazy attach, the
+// missing-catalog substitution and the wrap text. exec is the only part that
+// differs: which connection the statement runs on.
+func (m *Manager) run(ctx context.Context, connection, query string, exec func() (*ResultSet, int, error)) (*ResultSet, int, error) {
 	if m.duckdb == nil {
 		return nil, 0, fmt.Errorf("duckdb engine is not available")
 	}
@@ -116,7 +135,7 @@ func (m *Manager) execute(ctx context.Context, connection, query string, params 
 		connectErr = m.sess.ConnectReferenced(ctx, connection, query)
 	}
 
-	rs, total, err := m.duckdb.executeIn(ctx, connection, query, params, maxRows)
+	rs, total, err := exec()
 	if err != nil && connectErr != nil && looksLikeMissingCatalog(err) {
 		return nil, 0, connectErr
 	}
