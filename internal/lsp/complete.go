@@ -19,13 +19,14 @@ const (
 	KindColumn
 	KindFunction
 	KindAlias
+	KindMetric
 )
 
 // Rank orders kinds in a completion list: what the statement names first,
 // then the catalog, functions, and keywords last.
 func (k ItemKind) Rank() int {
 	switch k {
-	case KindColumn, KindAlias:
+	case KindColumn, KindAlias, KindMetric:
 		return 0
 	case KindTable, KindView:
 		return 1
@@ -85,6 +86,9 @@ type cursor struct {
 // maxItems, so a client must ask again as the word grows instead of filtering
 // the cut list itself.
 func completeAt(text string, offset int, cat *Catalog) (items []Item, from int, incomplete bool) {
+	if items, from, ok := metricItems(text, offset, cat); ok {
+		return items, from, false
+	}
 	cur, ok := analyze(text, offset, cat)
 	if !ok {
 		return nil, min(max(offset, 0), len(text)), false
@@ -100,7 +104,7 @@ func completeAt(text string, offset int, cat *Catalog) (items []Item, from int, 
 
 // String is the kind's lower-case name, for callers outside the LSP wire.
 func (k ItemKind) String() string {
-	names := [...]string{"keyword", "connection", "schema", "table", "view", "column", "function", "alias"}
+	names := [...]string{"keyword", "connection", "schema", "table", "view", "column", "function", "alias", "metric"}
 	if k < 0 || int(k) >= len(names) {
 		return "keyword"
 	}
@@ -346,6 +350,7 @@ func relationClauseItems(cat *Catalog) []Item {
 	for _, cn := range cat.Connections {
 		items = append(items, Item{Label: cn.Name, Kind: KindConnection, Detail: strings.TrimSpace(cn.Type + " connection")})
 	}
+	items = append(items, metricFunctionItem(cat)...)
 	if def != nil {
 		for _, s := range def.Schemas {
 			items = append(items, Item{Label: s.Name, Kind: KindSchema, Detail: "schema in " + def.Name})
@@ -370,6 +375,7 @@ func columnClauseItems(refs []tableRef, cat *Catalog) []Item {
 		for _, f := range cat.Functions {
 			items = append(items, Item{Label: f, Kind: KindFunction, Detail: "function"})
 		}
+		items = append(items, metricFunctionItem(cat)...)
 	}
 	return items
 }

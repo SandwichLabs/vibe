@@ -272,7 +272,7 @@ func (h *Handler) vetSavedQuery(ctx context.Context, q *queries.Query) ([]Artifa
 	if err != nil {
 		return fail("sql: " + err.Error())
 	}
-	runSQL, runCtx, reason, err := h.readOnlyVerdict(ctx, conn, sqlText, params)
+	runSQL, params, runCtx, reason, err := h.readOnlyVerdict(ctx, conn, sqlText, params)
 	if err != nil {
 		if errors.Is(err, ErrReadOnlyBindingDenied) {
 			err = errors.New("not a plain read (no writes, no temporary objects, files only inside data/)")

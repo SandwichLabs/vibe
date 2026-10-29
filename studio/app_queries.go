@@ -9,9 +9,12 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/agents"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // --- Queries ---
@@ -101,13 +104,40 @@ func validateRunRequest(req RunQueryRequest) error {
 	return nil
 }
 
-// requireRunnable is requireWorkspace plus the editor's guard
-// (usersql.CheckInteractive, shared with the console): the caller holds a.mu.
-func (a *App) requireRunnable(sqlText string) error {
+// prepareRun is the editor's statement as it will run: metric() calls expanded
+// (the same expander the agent's policy uses, each saved query behind one also
+// held to a plain SELECT), then the editor's guard (usersql.CheckInteractive,
+// shared with the console), then the parameter values bound. The caller holds
+// a.mu.
+func (a *App) prepareRun(req RunQueryRequest) (string, map[string]any, error) {
 	if err := a.requireWorkspace(); err != nil {
-		return err
+		return "", nil, err
 	}
-	return usersql.CheckInteractive(a.ctxOrBackground(), a.sess, sqlText)
+	ctx := a.ctxOrBackground()
+	if err := usersql.CheckInteractive(ctx, a.sess, req.SQL); err != nil {
+		return "", nil, err
+	}
+	params, declared, err := a.bindRunParams(req)
+	if err != nil {
+		return "", nil, err
+	}
+	opts := workspace.PersonOptions{Declared: declared}
+	if semantics.HasMetricCall(req.SQL) {
+		if opts.Vet, err = hub.MetricVetter(a.ws, a.sess, a.logger); err != nil {
+			return "", nil, err
+		}
+	}
+	exp, err := workspace.ExpandForPerson(ctx, a.ws, a.sess, req.SQL, req.Connection, params, opts)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(exp.Uses) > 0 {
+		// What runs is the expanded text, so the guard reads that too.
+		if err := usersql.CheckInteractive(ctx, a.sess, exp.SQL); err != nil {
+			return "", nil, err
+		}
+	}
+	return exp.SQL, exp.Params, nil
 }
 
 // RunQuery runs the query editor's statement on the chosen connection.
@@ -118,12 +148,7 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if err := a.requireRunnable(req.SQL); err != nil {
-		return nil, err
-	}
-
-	sqlStr := req.SQL
-	params, err := a.bindRunParams(req)
+	sqlStr, params, err := a.prepareRun(req)
 	if err != nil {
 		return nil, err
 	}
@@ -167,23 +192,24 @@ func columnInfos(rs *engine.ResultSet) []ColumnInfo {
 // the saved query does not declare is refused. Without a saved query there is
 // nothing declared: values are refused, and the statement runs as written. The
 // caller holds a.mu.
-func (a *App) bindRunParams(req RunQueryRequest) (map[string]any, error) {
+func (a *App) bindRunParams(req RunQueryRequest) (map[string]any, []queries.Param, error) {
 	if req.QueryID == "" {
 		if len(req.Params) > 0 {
-			return nil, errors.New("parameter values need a saved query that declares them")
+			return nil, nil, errors.New("parameter values need a saved query that declares them")
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err := a.requireWorkspace(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	saved, err := a.ws.Queries().Get(a.ctxOrBackground(), req.QueryID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	run := *saved
 	run.SQL = req.SQL
-	return queries.Bind(&run, req.Params, queries.BindOptions{Now: time.Now()})
+	params, err := queries.Bind(&run, req.Params, queries.BindOptions{Now: time.Now()})
+	return params, saved.Parameters, err
 }
 
 // a2uiQueryRowCap bounds how many rows a single A2UI data-bound component

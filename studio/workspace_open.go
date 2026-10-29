@@ -153,7 +153,7 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	a.liveSess.Store(&sess)
 	a.engine = opened.Eng
 	// readOnly means another process owns the hub and keeps the snapshot current.
-	a.liveCat.Store(lsp.NewLive(sess, lsp.WithLiveLogger(a.logger), lsp.WithLiveSnapshot(ws.Root(), !readOnly)))
+	a.liveCat.Store(lsp.NewLive(sess, lsp.WithLiveLogger(a.logger), lsp.WithLiveSnapshot(ws.Root(), !readOnly), lsp.WithLiveSemantics(ws.Semantics())))
 	a.issues = issues
 	a.recordConnSigs(ws)
 	a.readOnly, a.holder = readOnly, holder
@@ -370,6 +370,12 @@ func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 		// banner and Workspace settings re-read it. Values stay as loaded.
 		a.emitEvent("workspace:changed", map[string]any{"kind": "dotenv"})
 		return
+	}
+	if ch.Kind == workspace.KindSemantics {
+		// metric('...') completion and hover follow the files.
+		if l := a.liveCat.Load(); l != nil {
+			l.InvalidateSemantics()
+		}
 	}
 	if ch.Kind == workspace.KindArtifact {
 		// A page window for an artifact that changed ends at once; Reopen asks again.

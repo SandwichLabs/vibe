@@ -81,19 +81,24 @@ func (s *Session) runStatement(text string) {
 	runCtx, cancel := s.beginRun()
 	defer s.endRun(cancel)
 
-	if err := usersql.CheckInteractive(runCtx, s.o.Sess, text); err != nil {
+	runText, params, err := s.expand(runCtx, text)
+	if err != nil {
 		s.errorLine("Error:", err.Error()) // refused: no history, no hook
 		return
 	}
-	typ, prepErr := s.classify(text)
+	if err := usersql.CheckInteractive(runCtx, s.o.Sess, runText); err != nil {
+		s.errorLine("Error:", err.Error()) // refused: no history, no hook
+		return
+	}
+	typ, prepErr := s.classify(runText)
 	before := session.StatusSnapshot(s.o.Sess)
 	start := s.clock()
 
-	rs, total, err := s.o.Engine.ExecuteOn(runCtx, s.conn, s.current, text, nil, fetchCap)
+	rs, total, err := s.o.Engine.ExecuteOn(runCtx, s.conn, s.current, runText, params, fetchCap)
 	if s.o.Hooks.AfterRun != nil {
 		s.o.Hooks.AfterRun(before, text) // always after a run, as RunQuery does
 	}
-	s.show(runCtx, text, rs, total, err, typ, prepErr)
+	s.show(runCtx, runText, rs, total, err, typ, prepErr)
 	elapsed := s.clock().Sub(start)
 
 	if s.st.timer {
@@ -109,6 +114,15 @@ func (s *Session) runStatement(text string) {
 			s.last = text // what .save offers: never an ATTACH, a SET or a credential
 		}
 	}
+}
+
+// expand is the statement as it will run: through Options.Expand when the
+// embedding surface set one (metric() calls), otherwise as typed.
+func (s *Session) expand(ctx context.Context, text string) (string, map[string]any, error) {
+	if s.o.Expand == nil {
+		return text, nil, nil
+	}
+	return s.o.Expand(ctx, text, s.current)
 }
 
 // show prints a statement's outcome: ^C, the error, or the result (nothing for

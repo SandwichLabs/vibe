@@ -37,6 +37,12 @@ type Options struct {
 	Limiter    *Limiter         // nil = unlimited
 	Complete   Completer        // nil = Tab does nothing
 	Clock      func() time.Time // nil = time.Now (the .timer line in tests)
+	// Expand, when set, rewrites a typed statement before the editor's gate
+	// sees it (metric() calls become the metric's saved query). connection is
+	// the catalog the console works in. It returns the text to check and run
+	// and the parameter values it needs; an error is shown and nothing runs.
+	// The history keeps what was typed.
+	Expand func(ctx context.Context, text, connection string) (string, map[string]any, error)
 	// ConnectTimeout bounds dialling a connection that is not attached yet
 	// (opening on one, .conn, Use). 0 = no bound beyond the session's context.
 	ConnectTimeout time.Duration

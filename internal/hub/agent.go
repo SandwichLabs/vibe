@@ -46,3 +46,15 @@ func NewAgentHandler(ws workspace.Workspace, sess session.Session, tighten strin
 	eng := engine.NewManager(sess, engine.WithLogger(logger))
 	return agents.NewHandler(workspace.NewAgentAccess(ws, sess), eng, cfg, logger), policy, nil
 }
+
+// MetricVetter is the read-only policy check a person's surface runs on the
+// SQL a metric() call expands to (workspace.BodyVetter): the agent policy's
+// own verdict, in the tightest tier, so a metric from a cloned repository is
+// held to what a cloned artifact query is. It executes nothing.
+func MetricVetter(ws workspace.Workspace, sess session.Session, logger *slog.Logger) (workspace.BodyVetter, error) {
+	h, _, err := NewAgentHandler(ws, sess, string(agents.ModeReadOnly), logger)
+	if err != nil {
+		return nil, err
+	}
+	return h.VetReadOnlySQLIn, nil
+}

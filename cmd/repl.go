@@ -11,7 +11,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/repl"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // replCmd is the terminal driver of the data console engine (internal/repl):
@@ -72,10 +74,21 @@ func runREPL(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		cols, rows = 80, 24
 	}
+	vet, err := hub.MetricVetter(o.WS, o.Sess, logger)
+	if err != nil {
+		return err
+	}
 	s, err := repl.New(ctx, os.Stdout, repl.Options{
 		Engine: o.Eng, Sess: o.Sess,
 		Workspace: o.WS.Name(), Root: o.WS.Root(), Queries: o.WS.Queries(),
 		Connection: conn, Cols: cols, Rows: rows, Color: true, Logger: logger, Limiter: repl.NewLimiter(1),
+		Expand: func(ctx context.Context, text, connection string) (string, map[string]any, error) {
+			exp, err := workspace.ExpandForPerson(ctx, o.WS, o.Sess, text, connection, nil, workspace.PersonOptions{Vet: vet})
+			if err != nil {
+				return "", nil, err
+			}
+			return exp.SQL, exp.Params, nil
+		},
 	})
 	if err != nil {
 		return err

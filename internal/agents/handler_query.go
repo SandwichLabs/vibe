@@ -67,7 +67,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		return nil, false, err
 	}
 	orig := sqlStr
-	sqlStr, ctx, _, err = h.readOnlyVerdict(ctx, connection, orig, params)
+	sqlStr, params, ctx, _, err = h.readOnlyVerdict(ctx, connection, orig, params)
 	if err != nil {
 		return nil, false, err
 	}
@@ -120,25 +120,31 @@ func (h *Handler) executorFor(connection string) (func(ctx context.Context, q st
 // the statement references, expand s3/gcs/r2 wildcards, classify the statement
 // on a connection pinned to the named catalog, and apply the read-only gate. It
 // returns the statement as it will run (wildcards expanded), the context to
-// run it under, and the classifier's reason (empty for a read). err is the
+// run it under, the params to run it with (the caller's plus the defaults of any
+// metric() saved query's parameters), and the classifier's reason (empty for a read). err is the
 // connection's own failure, ErrReadOnlyBindingDenied, or an expansion or
 // classification failure. RunReadOnlySQLIn and the save-time artifact vet both
 // call it, so a statement is vetted by exactly the code that later runs it.
-func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, params map[string]any) (runSQL string, runCtx context.Context, reason string, err error) {
-	connectErr := h.connectReferenced(ctx, connection, orig)
-	// Wildcards on s3/gcs/r2 are expanded first; the statement is classified
-	// and run as expanded, so the cell and the binding keep the wildcard.
-	runSQL, runCtx, err = h.expand(ctx, orig)
+func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, params map[string]any) (runSQL string, runParams map[string]any, runCtx context.Context, reason string, err error) {
+	// metric() calls are expanded first, then wildcards on s3/gcs/r2; the
+	// statement is classified and run as expanded, so the cell and the binding
+	// keep the metric call and the wildcard.
+	mx, params, err := h.expandMetrics(ctx, connection, orig, params)
 	if err != nil {
-		return "", ctx, "", fmt.Errorf("query execution failed: %w", err)
+		return "", params, ctx, "", fmt.Errorf("query execution failed: %w", err)
+	}
+	connectErr := h.connectReferenced(ctx, connection, mx.SQL)
+	runSQL, runCtx, err = h.expand(ctx, mx.SQL)
+	if err != nil {
+		return "", params, ctx, "", fmt.Errorf("query execution failed: %w", err)
 	}
 	v, err := h.classifyIn(runCtx, connection, runSQL, params)
 	if err != nil {
-		return "", ctx, "", err
+		return "", params, ctx, "", err
 	}
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
 		if connectErr != nil {
-			return "", ctx, v.Reason, connectErr
+			return "", params, ctx, v.Reason, connectErr
 		}
 		// The user/agent-facing error is one fixed, mode-agnostic message
 		// (see ErrReadOnlyBindingDenied) — it never surfaces the policy's
@@ -146,9 +152,9 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 		// full-tier caller. The reason is still useful for debugging a denial
 		// that looks surprising, so it's logged here at debug level only.
 		h.logger.Debug("render-time sql binding denied", "class", v.Class, "reason", v.Reason, "query_sha256", engine.QueryDigest(orig), "query_bytes", len(orig))
-		return "", ctx, v.Reason, err
+		return "", params, ctx, v.Reason, err
 	}
-	return runSQL, runCtx, v.Reason, nil
+	return runSQL, params, runCtx, v.Reason, nil
 }
 
 // sqlParam reads run_query's sql argument. A value that is not a string (sql:
@@ -226,11 +232,16 @@ func (h *Handler) runQuery(ctx context.Context, req *Request, tgt runTarget) *Re
 	if errResp != nil {
 		return errResp
 	}
-	connectErr := h.connectReferenced(ctx, tgt.connection, sqlStr)
 	sb := h.sandboxFor(ctx)
-	// Wildcards on s3/gcs/r2 are expanded before the policy looks at the
-	// statement; what is vetted, approved-for and run is the expanded text.
-	runSQL, runCtx, err := h.expand(ctx, sqlStr)
+	// metric() calls, then wildcards on s3/gcs/r2, are expanded before the
+	// policy looks at the statement; what is vetted, approved-for and run is
+	// the expanded text.
+	mx, params, err := h.expandMetrics(ctx, tgt.connection, sqlStr, params)
+	if err != nil {
+		return NewErrorResponse(req.ID, expandErrorCode(err), "run_query: "+err.Error())
+	}
+	connectErr := h.connectReferenced(ctx, tgt.connection, mx.SQL)
+	runSQL, runCtx, err := h.expand(ctx, mx.SQL)
 	if err != nil {
 		return NewErrorResponse(req.ID, expandErrorCode(err), "run_query: "+err.Error())
 	}
@@ -240,13 +251,13 @@ func (h *Handler) runQuery(ctx context.Context, req *Request, tgt runTarget) *Re
 	}
 	class := v.Class
 	if tgt.readsOnly && (class == sqlClassWrite || class == sqlClassDDL) {
-		return NewErrorResponse(req.ID, ErrPermission, notAReadMsg(v.gateReason()))
+		return NewErrorResponse(req.ID, ErrPermission, metricPrefix(mx)+notAReadMsg(v.gateReason()))
 	}
 	if err := sb.checkSQLClass(v.Class, v.gateReason()); err != nil {
-		return NewErrorResponse(req.ID, ErrPermission, withConnectError(err, connectErr).Error())
+		return NewErrorResponse(req.ID, ErrPermission, metricPrefix(mx)+withConnectError(err, connectErr).Error())
 	}
 	if tgt.readsOnly && class != sqlClassRead {
-		return NewErrorResponse(req.ID, ErrPermission, notAReadMsg(v.gateReason()))
+		return NewErrorResponse(req.ID, ErrPermission, metricPrefix(mx)+notAReadMsg(v.gateReason()))
 	}
 	// The second write gate: every connection the statement changes must be
 	// writable.
@@ -300,6 +311,10 @@ func (h *Handler) runQuery(ctx context.Context, req *Request, tgt runTarget) *Re
 		// precision in transit.
 		"types": types,
 		"rows":  rows,
+	}
+	// metrics_used is the receipts seam: which metrics the statement expanded.
+	if len(mx.Uses) > 0 {
+		result["metrics_used"] = mx.UsesJSON()
 	}
 
 	// Empty-result explanation (#70): must run BEFORE the row budget below

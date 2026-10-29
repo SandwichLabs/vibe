@@ -26,6 +26,10 @@ type Catalog struct {
 	DefaultConnection string       `json:"default_connection,omitempty"`
 	Connections       []Connection `json:"connections"`
 	Functions         []string     `json:"functions,omitempty"`
+	// Metrics are the workspace's metrics (names, titles, dimensions; no SQL).
+	// nil means the writer did not look (Merge then keeps the saved ones);
+	// empty means there are none.
+	Metrics []MetricDoc `json:"metrics"`
 }
 
 // Connection is one attached catalog.
@@ -205,6 +209,9 @@ func (c *Catalog) Merge(fresh *Catalog) *Catalog {
 	if len(out.Functions) == 0 {
 		out.Functions = c.Functions
 	}
+	if out.Metrics == nil {
+		out.Metrics = c.Metrics
+	}
 	return &out
 }
 
@@ -212,9 +219,20 @@ func (c *Catalog) Merge(fresh *Catalog) *Catalog {
 // dials: connecting is the caller's decision (connections connect on first
 // use), so a connection that is not connected is left out, and Merge keeps
 // whatever an earlier snapshot knew about it.
-func Build(ctx context.Context, sess session.Session) (*Catalog, error) {
+func Build(ctx context.Context, sess session.Session, opts ...BuildOption) (*Catalog, error) {
+	var bo buildOpts
+	for _, o := range opts {
+		o(&bo)
+	}
 	c := &Catalog{Version: catalogVersion, Generated: time.Now().UTC(), DefaultConnection: sess.DefaultCatalog()}
 	var errs []error
+	if bo.metrics != nil {
+		docs, err := loadMetricDocs(ctx, bo.metrics)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		c.Metrics = docs
+	}
 	infos := catalogless(sess)
 	for _, st := range sess.Connections() {
 		if !completable(st, infos[st.Name], c.DefaultConnection) {
@@ -235,6 +253,15 @@ func Build(ctx context.Context, sess session.Session) (*Catalog, error) {
 	sort.Slice(c.Connections, func(i, j int) bool { return c.Connections[i].Name < c.Connections[j].Name })
 	return c, errors.Join(errs...)
 }
+
+// BuildOption tunes Build and Snapshot.
+type BuildOption func(*buildOpts)
+
+type buildOpts struct{ metrics MetricLister }
+
+// WithMetrics also snapshots the workspace's metrics (names, titles and
+// dimensions; never SQL), so a language client completes metric('...').
+func WithMetrics(src MetricLister) BuildOption { return func(o *buildOpts) { o.metrics = src } }
 
 // catalogless is the set of registered connections that attach no catalog
 // (s3, gcs, r2): there is no information_schema to read for them.
@@ -384,8 +411,8 @@ func functionNames(ctx context.Context, sess session.Session) ([]string, error) 
 // now. It returns how many connections it wrote; 0 means nothing was written
 // (none were connected, or the save failed, and the error says which). Build errors for one connection do not stop the others; they
 // are returned (with the count) after the save.
-func Snapshot(ctx context.Context, sess session.Session, root string) (int, error) {
-	fresh, buildErr := Build(ctx, sess)
+func Snapshot(ctx context.Context, sess session.Session, root string, opts ...BuildOption) (int, error) {
+	fresh, buildErr := Build(ctx, sess, opts...)
 	n := len(fresh.Connections)
 	if n == 0 {
 		return 0, buildErr

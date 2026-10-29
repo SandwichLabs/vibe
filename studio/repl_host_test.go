@@ -24,9 +24,11 @@ type consoleRig struct {
 	by  map[string]*frameLog
 }
 
-func newConsoleRig(t *testing.T) *consoleRig {
+func newConsoleRig(t *testing.T) *consoleRig { return newConsoleRigWith(t, newOpenApp(t)) }
+
+func newConsoleRigWith(t *testing.T, app *App) *consoleRig {
 	t.Helper()
-	r := &consoleRig{app: newOpenApp(t), by: map[string]*frameLog{}}
+	r := &consoleRig{app: app, by: map[string]*frameLog{}}
 	r.app.emit = func(event string, data ...any) {
 		if strings.HasPrefix(event, "repl:out:") && len(data) == 1 {
 			if f, ok := data[0].(replFrame); ok {

@@ -600,7 +600,7 @@ interface TableData {
 
 interface CompletionItem {
   label: string
-  kind: 'keyword' | 'connection' | 'schema' | 'table' | 'view' | 'column' | 'function' | 'alias'
+  kind: 'keyword' | 'connection' | 'schema' | 'table' | 'view' | 'column' | 'function' | 'alias' | 'metric'
   detail?: string
   insert?: string
 }

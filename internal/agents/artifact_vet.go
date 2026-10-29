@@ -86,7 +86,7 @@ func (h *Handler) vetArtifactQuery(ctx context.Context, m *artifacts.Manifest, n
 	if err != nil {
 		return nil, err
 	}
-	runSQL, runCtx, reason, err := h.readOnlyVerdict(ctx, runConn, sqlText, params)
+	runSQL, params, runCtx, reason, err := h.readOnlyVerdict(ctx, runConn, sqlText, params)
 	if err != nil {
 		if errors.Is(err, ErrReadOnlyBindingDenied) && reason != "" {
 			return nil, errors.New(reason)

@@ -47,10 +47,13 @@ type Live struct {
 	cancel   context.CancelFunc
 	done     chan struct{} // closed when the worker exits
 
-	mu    sync.RWMutex
-	built map[string]Connection // fresh entries by connection name
-	saved *Catalog              // the snapshot read at start; nil if none
-	fns   []string
+	sem MetricLister // where the metrics come from; nil = the saved snapshot's
+
+	mu      sync.RWMutex
+	built   map[string]Connection // fresh entries by connection name
+	saved   *Catalog              // the snapshot read at start; nil if none
+	fns     []string
+	metrics []MetricDoc // nil until read
 
 	wmu sync.Mutex // serialises the snapshot write with Close
 
@@ -74,6 +77,18 @@ func WithLiveCaps(c Caps) LiveOption { return func(v *Live) { v.caps = c.orDefau
 func WithLiveSnapshot(root string, write bool) LiveOption {
 	return func(v *Live) { v.root, v.write = root, write }
 }
+
+// WithLiveSemantics reads the metrics from src (a semantics.Store) on every
+// rebuild; InvalidateSemantics queues one when a semantics/ file changes.
+func WithLiveSemantics(src MetricLister) LiveOption { return func(v *Live) { v.sem = src } }
+
+// semanticsKey is the dirty-set entry for "reload the metrics": not a valid
+// connection name, so it can never collide with one.
+const semanticsKey = "\x00semantics"
+
+// InvalidateSemantics queues a reload of the metrics (a file under semantics/
+// changed). It never blocks.
+func (l *Live) InvalidateSemantics() { l.Invalidate(semanticsKey) }
 
 // NewLive starts the rebuild worker and queues a first build of every
 // connection that is connected now. Close it before closing sess.
@@ -192,6 +207,14 @@ func (l *Live) rebuild(names map[string]bool) {
 	if fnErr != nil {
 		l.logger.Debug("live catalog: functions failed", "error", fnErr)
 	}
+	var docs []MetricDoc
+	if l.sem != nil && (all || names[semanticsKey]) {
+		var merr error
+		if docs, merr = loadMetricDocs(ctx, l.sem); merr != nil {
+			l.logger.Debug("live catalog: metrics failed", "error", merr)
+			docs = nil
+		}
+	}
 	l.mu.Lock()
 	for n := range gone {
 		l.forgetLocked(n)
@@ -213,9 +236,12 @@ func (l *Live) rebuild(names map[string]bool) {
 	if fns != nil {
 		l.fns = fns
 	}
+	if docs != nil {
+		l.metrics = docs
+	}
 	snap := l.snapshotLocked(def)
 	l.mu.Unlock()
-	if len(built) > 0 && l.write && l.root != "" {
+	if (len(built) > 0 || docs != nil) && l.write && l.root != "" {
 		l.writeSnapshot(snap)
 	}
 }
@@ -256,7 +282,7 @@ func (l *Live) functionsFor(ctx context.Context, all bool) ([]string, error) {
 // snapshotLocked is the fresh part of the catalog (built entries only) in the
 // shape Merge writes. The caller holds l.mu.
 func (l *Live) snapshotLocked(def string) *Catalog {
-	c := &Catalog{Version: catalogVersion, Generated: time.Now().UTC(), DefaultConnection: def, Functions: l.fns}
+	c := &Catalog{Version: catalogVersion, Generated: time.Now().UTC(), DefaultConnection: def, Functions: l.fns, Metrics: l.metrics}
 	for _, conn := range l.built {
 		c.Connections = append(c.Connections, conn)
 	}
@@ -277,6 +303,10 @@ func (l *Live) Catalog() *Catalog {
 	c := &Catalog{Version: catalogVersion, Generated: time.Now().UTC(), DefaultConnection: def, Functions: l.fns}
 	if c.Functions == nil && l.saved != nil {
 		c.Functions = l.saved.Functions
+	}
+	c.Metrics = l.metrics
+	if c.Metrics == nil && l.saved != nil {
+		c.Metrics = l.saved.Metrics
 	}
 	for _, st := range sts {
 		if infos[st.Name] || (builtinCatalog(st.Name) && st.Name != def) {

@@ -344,6 +344,8 @@ func lspKind(k ItemKind) int {
 		return 3 // Function
 	case KindAlias:
 		return 6 // Variable
+	case KindMetric:
+		return 12 // Value
 	default:
 		return 14 // Keyword
 	}

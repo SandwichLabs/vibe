@@ -105,7 +105,7 @@ func TestSnapshot_NeverCarriesCredentials(t *testing.T) {
 
 	var generic map[string]any
 	require.NoError(t, json.Unmarshal(raw, &generic))
-	assert.ElementsMatch(t, []string{"version", "generated", "default_connection", "connections", "functions"}, keysOf(generic))
+	assert.ElementsMatch(t, []string{"version", "generated", "default_connection", "connections", "functions", "metrics"}, keysOf(generic))
 	list, ok := generic["connections"].([]any)
 	require.True(t, ok)
 	for _, c := range list {

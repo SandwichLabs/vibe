@@ -12,8 +12,10 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/repl"
 	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // maxConsoles is how many console tabs one workspace may have open; each pins
@@ -66,7 +68,19 @@ func (h *consoleHost) open(a *App, connection string) (string, error) {
 	ctx, cancel := context.WithCancel(a.ctxOrBackground())
 	c := &console{id: id, cancel: cancel}
 	c.pump = newOutPump(func(f replFrame) { a.emitEvent("repl:out:"+id, f) }, h.limits, func() { h.ended(id, "") })
-	sess := a.sess
+	sess, ws := a.sess, a.ws // under the lock the caller holds: the closure below never reads a
+	vet, err := hub.MetricVetter(ws, sess, a.logger)
+	if err != nil {
+		cancel()
+		return "", err
+	}
+	expand := func(ctx context.Context, text, conn string) (string, map[string]any, error) {
+		exp, err := workspace.ExpandForPerson(ctx, ws, sess, text, conn, nil, workspace.PersonOptions{Vet: vet})
+		if err != nil {
+			return "", nil, err
+		}
+		return exp.SQL, exp.Params, nil
+	}
 	o := repl.Options{
 		Engine: a.engine, Sess: sess, Workspace: a.ws.Name(), Root: a.ws.Root(), Queries: a.ws.Queries(),
 		Connection: connection, ConnectTimeout: connTimeout, Cols: 80, Rows: 24, Color: true, Logger: a.logger, Limiter: h.limiter,
@@ -76,6 +90,7 @@ func (h *consoleHost) open(a *App, connection string) (string, error) {
 			Conn:     func(name string) { a.emitEvent("repl:conn:"+id, name) },
 		},
 		Complete: completeFromCatalog(a),
+		Expand:   expand,
 	}
 	h.mu.Lock()
 	h.sessions[id] = c
