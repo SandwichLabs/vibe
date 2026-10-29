@@ -90,6 +90,10 @@ type Workspace interface {
 	// in the user config directory, never in the workspace or a bundle, and no
 	// agent tool or MCP method reaches any of these.
 	ArtifactViewState(name string) (ArtifactViewStatus, error)
+	// ArtifactViewStateCtx and AllowArtifactViewCtx are the same under the caller's
+	// context (what a Studio binding or a page run holds).
+	ArtifactViewStateCtx(ctx context.Context, name string) (ArtifactViewStatus, error)
+	AllowArtifactViewCtx(ctx context.Context, name, hash string) error
 	AllowArtifactView(name, hash string) error
 	DenyArtifactView(name string) error
 	RevokeArtifactView(name string) error

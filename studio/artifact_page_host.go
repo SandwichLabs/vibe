@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -27,7 +28,7 @@ type ArtifactPageGrant struct {
 // openPageGrant checks, in ws, that the artifact is an HTML page that is
 // allowed and static, rebuilds it from the bytes that were hashed (checking
 // the hash again over them), and holds them under a new token.
-func openPageGrant(vs *viewServer, ws workspace.Workspace, name, origin string, runner func(*artifacts.Manifest) artifacts.PageRunner) (*ArtifactPageGrant, error) {
+func openPageGrant(vs *viewServer, ws workspace.Workspace, name, origin string, runner func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner) (*ArtifactPageGrant, error) {
 	st, err := ws.ArtifactViewState(name)
 	if err != nil {
 		return nil, viewError(err)
@@ -41,10 +42,10 @@ func openPageGrant(vs *viewServer, ws workspace.Workspace, name, origin string, 
 	// The bytes held are the bytes the allowed hash covers, checked here rather
 	// than assumed: what renders is what was hashed.
 	page, err := artifacts.PageFromText(name, []byte(st.Manifest), st.PageFiles)
-	if err != nil || page.Page.Hash != st.Hash {
+	if err != nil || page.Page.Hash != st.ContentHash {
 		return nil, errViewNotAllowed
 	}
-	token, err := vs.issue(&viewGrant{name: name, hash: st.Hash, origin: origin, ws: ws, page: page, run: runner(&page.Manifest)})
+	token, err := vs.issue(&viewGrant{name: name, hash: st.Hash, origin: origin, ws: ws, page: page, run: runner(&page.Manifest, st.Pins)})
 	if err != nil {
 		if errors.Is(err, errBadViewOrigin) {
 			return nil, err
@@ -59,9 +60,11 @@ func openPageGrant(vs *viewServer, ws workspace.Workspace, name, origin string, 
 // lazy query runs: the same gates as every artifact query (vetted SQL at every
 // run, Bind, read-only, the 500-row cap, the 30 s limit), never SQL from the
 // page.
-func (a *App) pageRunner(name string, m *artifacts.Manifest) artifacts.PageRunner {
+func (a *App) pageRunner(name string, m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner {
 	return func(ctx context.Context, query string, values map[string]any) (*artifacts.PageRows, error) {
-		res, err := a.runPageQuery(ctx, name, m, query, values)
+		// The metric files and saved queries the page was allowed over are the
+		// only revisions this run may read, whatever a cache last said (#282).
+		res, err := a.runPageQuery(semantics.WithPins(ctx, pins), name, m, query, values)
 		if err != nil {
 			return nil, err
 		}

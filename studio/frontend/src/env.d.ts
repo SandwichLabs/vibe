@@ -100,6 +100,9 @@ interface AppApi {
   ListSkills(): Promise<SkillSummary[]>
   SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
   DeleteSkill(name: string): Promise<void>
+  // Semantic definitions (E4): what the Semantics view lists and opens
+  ListDefinitions(): Promise<DefinitionList>
+  GetDefinition(kind: string, name: string): Promise<DefinitionDetail>
   // Proposed semantic definitions (E4): the person's side of the inbox
   ListProposals(all: boolean): Promise<Proposal[]>
   GetProposal(id: string): Promise<ProposalPreview>
@@ -479,6 +482,11 @@ interface ArtifactViewStatus {
   capabilities?: string[]
   /** The queries the page can run, with the connection each runs on ("" is the workspace database): every manifest query for a scripted page (script can run any), the templates' for a static one. */
   query_uses?: { name: string; connection?: string; used?: boolean }[]
+  /** The metrics the artifact's queries call (#282); their files and saved queries are part of the hash. */
+  metrics_used?: ArtifactMetricUse[]
+  metrics_note?: string
+  /** Allowed, but only a metric or saved query it reads changed, not its own files. */
+  deps_changed?: boolean
   /** An HTML page's allow-prompt text, read with the hash it describes (never a second read). */
   disclosure?: PageDisclosure
   files?: ArtifactViewFile[]
@@ -492,6 +500,7 @@ interface PageDisclosure {
   credential: string
   askProvider: string
 }
+interface ArtifactMetricUse { name: string; query?: string; measure?: string; dimensions?: string[]; missing?: boolean }
 interface ArtifactViewFile { path: string; role: string; size: number; text?: string }
 // ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
 // URL is made from (/vibe-view/<token>/page), bound to one PageHash.
@@ -513,6 +522,8 @@ interface ArtifactViewDecision {
   kind?: 'script' | 'html'
   pageKind?: 'static' | 'scripted'
   capabilities?: string[]
+  metricsUsed?: ArtifactMetricUse[]
+  depsChanged?: boolean
 }
 
 interface DotEnvSatisfies { connection: string; signIn: string; variables: string[] }
@@ -583,6 +594,74 @@ interface ProposalPreview {
   stale_reason?: string
   shown_rev: string // pins the version on screen; sent back on accept
   warnings: string[] // a missing saved query, a dropped measured block, lost comments
+}
+
+// DefinitionSummary / DefinitionList mirror workspace.DefinitionList: one line per
+// entity, metric and join (a file that cannot be read lists with its error), the
+// glossary terms and the number of open proposals.
+interface DefinitionSummary {
+  kind: 'entity' | 'metric' | 'join'
+  name: string
+  title?: string
+  summary?: string
+  rev?: string
+  error?: string
+}
+interface DefinitionList {
+  entities: DefinitionSummary[]
+  metrics: DefinitionSummary[]
+  joins: DefinitionSummary[]
+  terms: string[]
+  glossary_rev?: string
+  glossary_error?: string
+  open_proposals: number
+}
+interface SemanticAssertion { kind: string; column?: string; values?: string[] }
+interface SemanticEntity {
+  name: string
+  description?: string
+  grain: string
+  table: string
+  connection?: string
+  id_column: string
+  columns?: { name: string; pii?: boolean; description?: string }[]
+  owner?: string
+  assertions?: SemanticAssertion[]
+}
+interface SemanticMetric {
+  name: string
+  title?: string
+  description?: string
+  query: string
+  measure: string
+  dimensions?: string[]
+  format?: string
+  owner?: string
+  settled_by?: { text: string; ref?: string }
+  assertions?: SemanticAssertion[]
+}
+interface SemanticJoin {
+  name: string
+  left: string
+  right: string
+  on: { left: string; right: string }[]
+  cardinality: string
+  description?: string
+  measured?: JoinProfile['measured']
+}
+// DefinitionDetail mirrors workspace.DefinitionDetail: one definition opened, its file
+// text as stored and, when the file is valid, the decoded document of its kind.
+interface DefinitionDetail {
+  kind: 'entity' | 'metric' | 'join' | 'glossary'
+  name: string
+  text: string
+  rev: string
+  error?: string
+  entity?: SemanticEntity
+  metric?: SemanticMetric
+  join?: SemanticJoin
+  glossary?: { text: string; terms: string[] }
+  query_missing?: boolean
 }
 
 // AssertionRow mirrors studio.AssertionRow (internal/semantics/assert.Row): one

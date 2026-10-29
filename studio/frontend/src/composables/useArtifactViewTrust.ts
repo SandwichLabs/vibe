@@ -99,8 +99,15 @@ export function useArtifactViewTrust(name: () => string) {
   onMounted(() => {
     void load()
     if (!hasWailsRuntime()) return
-    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifact' && p.id === name()) changed() }))
+    // A metric file or saved query this artifact reads changing (a pull, the Query Explorer,
+    // an accepted proposal) moves its hash too: read the state again.
+    const readsMetrics = () => !!status.value?.metrics_used?.length
+    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string; id?: string }) => {
+      if (p?.kind === 'artifact' && p.id === name()) changed()
+      else if ((p?.kind === 'semantics' || p?.kind === 'query') && readsMetrics()) changed()
+    }))
     offs.push(EventsOn('workspace:changed', (p?: { kind?: string; id?: string }) => { if (p?.kind === 'artifactview' && p.id === name()) changed() }))
+    offs.push(EventsOn('data:changed', () => { if (readsMetrics()) changed() }))
   })
   watch(name, () => { status.value = null; pending = null; changedWhileReading.value = false; void load() })
   onUnmounted(() => { seq++; for (const off of offs) off() })

@@ -201,7 +201,7 @@ func runProbe(t *testing.T, app *App, group, target string, wait time.Duration, 
 	app.pages.preflight = func() error { return nil }
 	_, err := app.pages.open(pageOpen{
 		ws: app.ws, name: "probe", query: "group=" + group + "&target=" + target, base: context.Background(),
-		runner: func(*artifacts.Manifest) artifacts.PageRunner {
+		runner: func(*artifacts.Manifest, map[string]string) artifacts.PageRunner {
 			return func(_ context.Context, q string, v map[string]any) (*artifacts.PageRows, error) {
 				if q != "probe" {
 					return nil, fmt.Errorf("no such query")
@@ -682,7 +682,7 @@ func TestLive_CapabilitiesInTheRealWindow(t *testing.T) {
 		svc.save = func(context.Context, string, string, string) (string, error) { saved.Add(1); return "", nil }
 		_, err := app.pages.open(pageOpen{
 			ws: app.ws, name: "caps", base: context.Background(), svc: svc,
-			runner: func(*artifacts.Manifest) artifacts.PageRunner {
+			runner: func(*artifacts.Manifest, map[string]string) artifacts.PageRunner {
 				return func(_ context.Context, q string, v map[string]any) (*artifacts.PageRows, error) {
 					mu.Lock()
 					msgs = append(msgs, fmt.Sprint(v["msg"]))

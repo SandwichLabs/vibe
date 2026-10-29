@@ -69,6 +69,12 @@ type viewGrant struct {
 	ws any
 	// script is the view.js that was hashed, held so what runs is what was hashed.
 	script []byte
+	// pins are the metric and saved-query revisions the allow covers: the view's
+	// queries run with them pinned (semantics.WithPins).
+	pins map[string]string
+	// manifest is the artifact.yaml that was hashed, decoded once: the view's
+	// queries run from it, not from the file as it is on disk at each run.
+	manifest *artifacts.Manifest
 	// page, run and limit make this the grant of a static HTML page (the files
 	// that were hashed, the runner that answers its queries, the render rate
 	// limit); okUntil is when the last positive re-check stops being trusted.

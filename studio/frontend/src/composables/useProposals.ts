@@ -15,6 +15,9 @@ export function useProposals() {
   // Set when accepting was refused because the file changed since the proposal:
   // the reason to show beside "Accept anyway".
   const stale = ref('')
+  // True when the open proposal was read again and came back different (the file it
+  // would replace, or the proposal, changed while it was on screen).
+  const updated = ref(false)
 
   const open = computed(() => proposals.value.filter((p) => p.status === 'open'))
 
@@ -31,10 +34,14 @@ export function useProposals() {
   async function select(id: string) {
     error.value = ''
     stale.value = ''
+    const before = preview.value
     try {
-      preview.value = await App.GetProposal(id)
+      const next = await App.GetProposal(id)
+      updated.value = !!before && before.proposal.id === id && before.shown_rev !== next.shown_rev
+      preview.value = next
     } catch (e) {
       preview.value = null
+      updated.value = false
       error.value = errorText(e)
     }
   }
@@ -52,6 +59,7 @@ export function useProposals() {
       await App.AcceptProposal(id, shown, overwrite)
       stale.value = ''
       preview.value = null
+      updated.value = false
       await load()
       return true
     } catch (e) {
@@ -76,6 +84,7 @@ export function useProposals() {
     try {
       await App.RejectProposal(id)
       preview.value = null
+      updated.value = false
       await load()
       return true
     } catch (e) {
@@ -86,5 +95,5 @@ export function useProposals() {
     }
   }
 
-  return { proposals, open, preview, busy, error, stale, load, select, accept, reject }
+  return { proposals, open, preview, busy, error, stale, updated, load, select, accept, reject }
 }

@@ -569,6 +569,9 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 	switch td.Category {
 	case "data", "schema", "content":
 		a.emitEvent("data:changed")
+		// save_query and friends change what a page that reads a metric reads.
+		// (async: the tool call that got here still holds the workspace lock)
+		go a.recheckGrants()
 	}
 	// add_query_cell/create_dashboard (#67 deferred part) write a new cell to
 	// _vibe_notebooks, not the live DuckDB data/schema "data:changed" covers
@@ -583,6 +586,10 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 	// merges only that id, never "every remote id it doesn't already have",
 	// which is what let a locally-deleted cell come back.
 	switch method {
+	case "propose_definition":
+		// The proposal went through this workspace's own store, which the file
+		// watcher does not report: the Semantics badge learns of it here.
+		a.emitEvent("semantics:proposed")
 	case "add_query_cell", "create_dashboard", "add_markdown_cell":
 		a.emitCellsAdded(method, result)
 	case "update_cell", "delete_cell", "move_cell":

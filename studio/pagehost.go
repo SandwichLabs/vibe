@@ -128,7 +128,7 @@ type pageOpen struct {
 	name    string
 	query   string
 	theme   map[string]string
-	runner  func(*artifacts.Manifest) artifacts.PageRunner
+	runner  func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner
 	allowed func(hash string) bool
 	base    context.Context
 	// svc is what the capabilities call (pagecaps.go).
@@ -139,6 +139,7 @@ type pageOpen struct {
 // message from the page names one.
 type pageWindow struct {
 	host    *pageHost
+	ws      any // the workspace it was opened in
 	name    string
 	hash    string
 	page    *artifacts.Artifact
@@ -181,7 +182,7 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 	if err := h.preflight(); err != nil {
 		return nil, err
 	}
-	page, hash, err := heldScriptedPage(req.ws, req.name)
+	page, hash, pins, err := heldScriptedPage(req.base, req.ws, req.name)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +200,7 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 		base = context.Background()
 	}
 	ctx, cancel := context.WithCancel(base)
-	run := req.runner(&page.Manifest)
+	run := req.runner(&page.Manifest, pins)
 	granted := grantedCaps(page, req.svc, hash)
 	setup, err := buildWindowSetup(ctx, run, page, req, h.libs, granted)
 	if err != nil {
@@ -211,7 +212,7 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 		cancel()
 		return nil, err
 	}
-	w := &pageWindow{host: h, name: req.name, hash: hash, page: page, conn: conn, out: pagehost.NewWriter(conn, pagehost.ToHelper),
+	w := &pageWindow{host: h, ws: req.ws, name: req.name, hash: hash, page: page, conn: conn, out: pagehost.NewWriter(conn, pagehost.ToHelper),
 		run: run, allowed: req.allowed, ctx: ctx, cancel: cancel, started: time.Now(),
 		escalate: make(chan struct{}), svc: req.svc, caps: map[string]bool{}, uploads: map[int64]*upload{}}
 	for _, n := range granted {
@@ -258,22 +259,25 @@ func (h *pageHost) open(req pageOpen) (*PageWindowInfo, error) {
 
 // heldScriptedPage rebuilds the page from the files the decision was made over
 // and checks it is allowed, scripted, and still at the hash the person saw.
-func heldScriptedPage(ws workspace.Workspace, name string) (*artifacts.Artifact, string, error) {
-	st, err := ws.ArtifactViewState(name)
+func heldScriptedPage(ctx context.Context, ws workspace.Workspace, name string) (*artifacts.Artifact, string, map[string]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	st, err := ws.ArtifactViewStateCtx(ctx, name)
 	if err != nil {
-		return nil, "", viewError(err)
+		return nil, "", nil, viewError(err)
 	}
 	if st.Kind != artifacts.ViewHTML || st.State != string(stateAllowed) || st.Hash == "" {
-		return nil, "", errViewNotAllowed
+		return nil, "", nil, errViewNotAllowed
 	}
 	if st.PageKind != artifacts.PageScripted {
-		return nil, "", errPageNotScripted
+		return nil, "", nil, errPageNotScripted
 	}
 	page, err := artifacts.PageFromText(name, []byte(st.Manifest), st.PageFiles)
-	if err != nil || page.Page.Hash != st.Hash {
-		return nil, "", errViewNotAllowed
+	if err != nil || page.Page.Hash != st.ContentHash {
+		return nil, "", nil, errViewNotAllowed
 	}
-	return page, st.Hash, nil
+	return page, st.Hash, st.Pins, nil
 }
 
 // register keeps the window unless all windows, or this artifact's, were ended

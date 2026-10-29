@@ -53,7 +53,9 @@ func capWindow(t *testing.T, app *App, name, caps string, edit func(*pageService
 	}
 	_, err = app.pages.open(pageOpen{
 		ws: app.ws, name: name, base: context.Background(), svc: svc,
-		runner:  func(m *artifacts.Manifest) artifacts.PageRunner { return app.pageRunner(name, m) },
+		runner: func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner {
+			return app.pageRunner(name, m, pins)
+		},
 		allowed: func(h string) bool { return app.pageStillAllowed(app.ws, name, h) },
 	})
 	require.NoError(t, err)

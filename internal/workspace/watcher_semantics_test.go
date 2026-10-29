@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 )
 
 const semanticsMetric = "version: 1\nname: net_revenue\nquery: base\nmeasure: sum(amount)\n"
@@ -34,7 +36,9 @@ func TestClassify_Semantics(t *testing.T) {
 		"semantics/x.yaml",
 		"semantics/metrics/a/b.yaml",
 		"semantics/glossary.md.swp",
-		".vibe-local/proposals/20261029T153012Z-metric-x-7f3a.yaml",
+		".vibe-local/proposals/20261029T153012Z-metric-x-7f3a.txt",
+		".vibe-local/proposals/.20261029T153012Z-metric-x-7f3a.yaml.swp",
+		".vibe-local/other/20261029T153012Z-metric-x-7f3a.yaml",
 	} {
 		_, _, ok := classify(rel)
 		assert.False(t, ok, rel)
@@ -89,4 +93,29 @@ func TestWorkspace_SemanticsStoreAndTempSweep(t *testing.T) {
 	assert.Contains(t, dirs, "semantics/entities")
 	assert.Contains(t, dirs, "semantics/metrics")
 	assert.Contains(t, dirs, "semantics/joins")
+}
+
+func TestWatcher_ProposalsAreReportedWhenFiledElsewhereNotByOwnStore(t *testing.T) {
+	ws, root := newWorkspace(t)
+	ctx := context.Background()
+	w := startWatcher(t, ws)
+
+	// The workspace's own store: reported by nobody (Studio announces an
+	// agent's proposal itself).
+	p, err := proposals.Build(proposals.Draft{Kind: semantics.KindMetric, Name: "net_revenue", Rationale: "why",
+		Definition: map[string]any{"query": "base", "measure": "sum(amount)"}}, time.Now(), proposals.ByAgent)
+	require.NoError(t, err)
+	require.NoError(t, ws.Proposals().Create(ctx, p))
+	expectQuiet(t, w)
+
+	// Another process files one, in a folder that may not have existed when the
+	// watcher started.
+	dir := filepath.Join(root, ".vibe-local", "proposals")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	name := "20261029T153012Z-metric-x-7f3a.yaml"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644))
+	got := next(t, w)
+	assert.Equal(t, Change{Kind: KindProposal, Op: OpCreated, ID: "20261029T153012Z-metric-x-7f3a", Path: ".vibe-local/proposals/" + name}, got)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".x.yaml.swp"), []byte("x"), 0o644))
+	expectQuiet(t, w)
 }

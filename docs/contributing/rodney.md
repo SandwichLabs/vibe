@@ -255,6 +255,27 @@ rodney js 'window.go.main.App.OpenWorkspace("/tmp/qa/qa").then(r => r.status)'  
 - Read-only / Take over: start `sleep 300 | vibe mcp serve --workspace DIR &` first, then `OpenWorkspace(DIR)`; the banner (`[data-testid=readonly-banner]`) offers Take over. Never `pkill -f` for cleanup.
 - A change on disk (conflict banner): edit a `notebooks/*.vnb` file in a shell while the notebook is open; an unsaved edit in the title field shows `[data-testid=conflict-banner]`, no edit reloads quietly.
 
+## The Semantics view (E4)
+
+The epic's exit round trip, in a real browser. Start the dev server with a throwaway config dir (above), create a workspace, and put data and a saved query in it through the bindings (no file, no real LLM needed):
+
+```bash
+q() { rodney js "window.go.main.App.RunQuery({sql:\"$1\",connection:\"\",tabId:\"qa\"}).then(r => 'ok').catch(e => 'ERR ' + e)"; }
+q "CREATE TABLE sales AS SELECT * FROM (VALUES ('east','2026-01',100),('west','2026-01',80),('west','2026-02',-20)) t(region, month, amount)"
+rodney js "window.go.main.App.SaveQueryOn({id:'net_revenue_base',title:'Net revenue base',sql:'SELECT region, month, amount FROM sales',description:'',rev:'',connection:''}).then(r => r.id)"
+```
+
+1. **A proposal.** With the local model at `localhost:8080` (`SetLLMSettings({provider:"local",endpoint:"http://localhost:8080/v1",model:...})`), ask the agent in chat (or `AgentChatStream`) to propose a metric with `propose_definition`; approve the card. Without a model, write a valid proposal file into `<workspace>/.vibe-local/proposals/<id>.yaml` by hand (the id shape is `20261029T153012Z-metric-net_revenue-7f3a`; `definition:` is the exact metric document). It is validated on read, and the watcher reports it (`workspace:changed-on-disk`, kind `proposal`).
+2. **The badge.** `[data-testid=semantics-badge]` on the Semantics nav item shows the open count without a reload.
+3. **The inbox.** `#/semantics?kind=proposal`: click the proposal card; `[data-testid=proposal-diff]` has one `[data-op]` line per line (`+`, `-`, space). Accept (`[data-testid=proposal-accept]`) opens the new metric card (`[data-testid=metric-card]`).
+4. **Try it.** Tick `[data-testid=try-dim-region]`, click `[data-testid=try-run]`: `[data-testid=result-grid]` has a row per region. **Run assertions** (`[data-testid=run-assertions]`) shows `[data-testid=assertion-summary]`.
+5. **The watcher.** Edit `semantics/metrics/<name>.yaml` in a shell (`sed -i`): the card's measure text changes within a second, no click.
+6. **Stale.** Write a second proposal for the same name with `replaces_rev` set to a revision that is not the file's: the preview shows `[data-testid=proposal-stale]` and the button reads "Accept anyway". Clicking it overwrites. To see "changed again", edit the file after the preview opened and click Accept.
+7. **A join.** Write two entities and `semantics/joins/<name>.yaml` over tables you created, open it and click `[data-testid=join-profile]`: `[data-testid=join-measured]` fills in; declare a cardinality the data contradicts to see `[data-testid=join-warning]`.
+8. **A page that reads a metric (#282).** Create `artifacts/rev/artifact.yaml` (`view: html`, a query `SELECT * FROM metric('net_revenue')`) and `html/index.html.tmpl` (`{{ query "q" }}`); open `#/library/artifact/rev`: the allow prompt lists `[data-testid=metrics-read-net_revenue]`. Allow it, then edit the metric's `measure:` on disk: the trust screen switches to "A metric this page reads changed (net_revenue), though its own files did not" and asks again (Settings > Pages says "A metric it reads changed"). An allowed page window or static page that was open closes at once, and a `vibe.run` after the edit is refused ("a metric this page reads changed"), with no half-second of grace. An artifact with no `metric()` stays allowed through the same edit.
+
+Screenshots go to `qa-screenshots/` (git-ignored), once in each theme (`[data-testid=theme-toggle]`).
+
 ## Update checks without GitHub (dev builds only)
 
 A `dev` binary (`task studio:dev`, `go run`) honours two environment variables that a release build ignores, so the update UI can be driven against a fake release server:

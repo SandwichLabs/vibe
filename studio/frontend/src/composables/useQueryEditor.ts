@@ -93,9 +93,9 @@ export function useQueryEditor() {
   }
 
   async function selectQuery(id: string) {
-    selectedId.value = id
     try {
       const q = await App.GetQuery(id)
+      selectedId.value = id // only once it has loaded: a missing query must not leave a selection with another query's text
       selectedRev.value = q.rev ?? ''
       sqlText.value = q.sql
       savedSQL.value = q.sql
@@ -285,8 +285,15 @@ export function useQueryEditor() {
   }
 
   // "New query here" / "New query on this table" in the rail open a fresh editor on
-  // that connection: ?conn=prod_pg&sql=SELECT…&new=<stamp>.
+  // that connection: ?conn=prod_pg&sql=SELECT…&new=<stamp>. ?open=<id> opens a saved
+  // query (the Semantics view's metric card links to its query this way).
   function applyRouteIntent() {
+    const open = route.query.open
+    if (typeof open === 'string' && open) {
+      void router.replace({ path: route.path })
+      void selectQuery(open)
+      return
+    }
     const c = route.query.conn
     if (typeof c !== 'string' || !route.query.new) return
     newQuery()
@@ -295,7 +302,7 @@ export function useQueryEditor() {
     if (typeof q === 'string') sqlText.value = q
     void router.replace({ path: route.path })
   }
-  watch(() => route.query.new, applyRouteIntent)
+  watch(() => [route.query.new, route.query.open], applyRouteIntent)
 
   watch(errorMessage, (msg) => {
     if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)

@@ -16,6 +16,7 @@ import { createVibeEditor, type VibeEditorInstance } from '../composables/useVib
 import CustomView from './CustomView.vue'
 import PageFiles from './PageFiles.vue'
 import PagePrompt from './PagePrompt.vue'
+import MetricsRead from './MetricsRead.vue'
 import StaticPage from './StaticPage.vue'
 import ScriptedPage from './ScriptedPage.vue'
 import { useArtifactViewTrust } from '../composables/useArtifactViewTrust'
@@ -85,13 +86,15 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
       <div v-else-if="state !== 'allowed'" class="note warn" role="status" data-testid="view-trust-line">
         <Icon name="alert" :size="16" />
         <span>
-          <template v-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it. </template>
-          <template v-if="isPage">Read the files below before you allow this page. It was written by someone else or by the agent.</template>
+          <template v-if="state === 'changed' && status.deps_changed" data-testid="view-trust-deps-changed">A metric this {{ isPage ? 'page' : 'view' }} reads changed ({{ (status.metrics_used ?? []).map((m) => m.name).join(', ') }}), though its own files did not. Read the metric below before you allow it again.</template>
+          <template v-else-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it.</template>
+          <template v-else-if="isPage">Read the files below before you allow this page. It was written by someone else or by the agent.</template>
           <template v-else>This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
 
       <PagePrompt v-if="isPage && state !== 'allowed' && status" :status="status" />
+      <MetricsRead v-if="state !== 'allowed' && status.metrics_used?.length" :metrics="status.metrics_used" :note="status.metrics_note" />
 
       <div v-if="changedWhileReading" class="note warn" role="alert" data-testid="view-trust-changed-reading">
         <Icon name="alert" :size="16" />

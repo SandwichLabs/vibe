@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 )
 
 const testOrigin = "http://localhost:34115"
@@ -382,4 +385,36 @@ func TestValidateArtifactViewPage(t *testing.T) {
 	require.Error(t, err)
 	_, err = app.ValidateArtifactViewPage("missing", `{}`)
 	require.Error(t, err)
+}
+
+// #282: a view that reads a metric is allowed on a hash that folds the metric
+// in; the host still opens it (it checks the bytes it holds against the view's
+// own hash), and a changed metric ends the allow.
+func TestOpenArtifactView_ViewReadingAMetricOpensAndStopsWhenTheMetricChanges(t *testing.T) {
+	app := newOpenApp(t)
+	ctx := context.Background()
+	require.NoError(t, app.ws.Queries().Create(ctx, &queries.Query{ID: "base", Title: "base", SQL: "SELECT 'east' AS region, 1 AS amount"}))
+	m, err := semantics.DecodeMetric("net_revenue", []byte("version: 1\nname: net_revenue\nquery: base\nmeasure: sum(amount)\n"))
+	require.NoError(t, err)
+	require.NoError(t, app.ws.Semantics().PutMetric(ctx, m))
+	dir := filepath.Join(app.ws.Root(), artifacts.Dir, "chart")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	manifest := "version: 1\ntitle: Chart\nview: script\nqueries:\n  - name: big\n    sql: SELECT * FROM metric('net_revenue')\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, artifacts.ManifestFile), []byte(manifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, artifacts.ScriptFile), []byte(studioScriptSource), 0o644))
+
+	st, err := app.ArtifactViewState("chart")
+	require.NoError(t, err)
+	require.Len(t, st.MetricsUsed, 1)
+	_, err = app.AllowArtifactView("chart", st.Hash)
+	require.NoError(t, err)
+	g, err := app.OpenArtifactView("chart", testOrigin)
+	require.NoError(t, err)
+	assert.Equal(t, st.Hash, g.Hash)
+
+	m.Measure = "sum(amount) + 1"
+	require.NoError(t, app.ws.Semantics().PutMetric(ctx, m))
+	_, err = app.OpenArtifactView("chart", testOrigin)
+	require.ErrorIs(t, err, errViewNotAllowed)
+	assert.Nil(t, app.views.lookup(g.Token), "the token issued before the change is gone")
 }
