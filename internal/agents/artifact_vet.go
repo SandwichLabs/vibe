@@ -110,7 +110,7 @@ func (h *Handler) describeQueryColumns(ctx context.Context, connection, runSQL s
 	wrapped := fmt.Sprintf("SELECT * FROM (%s\n) AS _a2ui_cols LIMIT 0", strings.TrimSuffix(strings.TrimSpace(runSQL), ";"))
 	rs, err := exec(ctx, wrapped, params)
 	if err != nil || rs == nil {
-		h.logger.Debug("artifact query columns not read", "error", err)
+		h.logger.Debug("artifact query columns not read", "error", engine.ErrorForLog(err))
 		return nil
 	}
 	cols := make([]ArtifactColumn, len(rs.Columns))
@@ -258,7 +258,7 @@ func (h *Handler) RunManifestQuery(ctx context.Context, name string, m *artifact
 	}
 	runConn, err := h.checkArtifactStatement(sqlText, connection)
 	if err != nil {
-		h.logger.Debug("artifact query refused", "artifact", name, "query", query, "reason", err)
+		h.logger.Debug("artifact query refused", "artifact", name, "query", query, "reason", engine.ErrorForLog(err))
 		return nil, false, err
 	}
 	return h.RunReadOnlySQLIn(ctx, runConn, sqlText, params, artifactQueryRowCap)

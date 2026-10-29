@@ -83,7 +83,7 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 			}
 			return rs, truncated, nil
 		}
-		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "sql", orig, "wrap_error", err)
+		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "query_sha256", engine.QueryDigest(orig), "query_bytes", len(orig), "wrap_error", engine.ErrorForLog(err))
 	}
 
 	rs, err = exec(ctx, sqlStr, params)
@@ -145,7 +145,7 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 		// reason, which can name a tier requirement that is false for a
 		// full-tier caller. The reason is still useful for debugging a denial
 		// that looks surprising, so it's logged here at debug level only.
-		h.logger.Debug("render-time sql binding denied", "class", v.Class, "reason", v.Reason, "sql", orig)
+		h.logger.Debug("render-time sql binding denied", "class", v.Class, "reason", v.Reason, "query_sha256", engine.QueryDigest(orig), "query_bytes", len(orig))
 		return "", ctx, v.Reason, err
 	}
 	return runSQL, runCtx, v.Reason, nil

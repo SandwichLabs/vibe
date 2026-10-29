@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
@@ -109,7 +110,7 @@ func (w *pageWindow) handleRun(m *pagehost.Message) {
 	rows, err := w.run(w.ctx, m.Q, m.V)
 	if err != nil {
 		if w.host.logger != nil {
-			w.host.logger.Debug("page query failed", "artifact", w.name, "query", m.Q, "error", err)
+			w.host.logger.Debug("page query failed", "artifact", w.name, "query", m.Q, "error", engine.ErrorForLog(err))
 		}
 		w.fail(m.ID, pagehost.CodeQuery)
 		return
@@ -181,7 +182,7 @@ func (w *pageWindow) handleDoc(m *pagehost.Message) {
 	var body bytes.Buffer
 	if err := renderPageQuery(w.ctx, w.run, w.page, m.Q, &body); err != nil {
 		if w.host.logger != nil {
-			w.host.logger.Debug("page render failed", "artifact", w.name, "error", err)
+			w.host.logger.Debug("page render failed", "artifact", w.name, "error", engine.ErrorForLog(err))
 		}
 		w.finishDoc(m.ID, 500, pageErrorDoc(err))
 		return

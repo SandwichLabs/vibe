@@ -43,11 +43,25 @@ var (
 	// scheme://user:password@host: only the password goes.
 	urlRE = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://[^\s:/@]+:)([^\s@/]+)(@)`)
 	// Authorization headers: Bearer/Basic only after "Authorization:", or
-	// followed by a token-like value (16+ chars, no spaces), so prose such as
-	// "basic usage" is left alone.
+	// followed by a token-like value (8+ chars, no spaces, and a digit or one
+	// of ._~+/= in it), so prose such as "basic usage" and "bearer certificate"
+	// is left alone.
 	authRE   = regexp.MustCompile(`(?i)(authorization\s*[:=]\s*)((?:bearer|basic)\s+)?([^\s,;]+)`)
-	bearerRE = regexp.MustCompile(`(?i)\b(bearer|basic)(\s+)([A-Za-z0-9._~+/=-]{16,})`)
+	bearerRE = regexp.MustCompile(`(?i)\b(bearer|basic)(\s+)([A-Za-z0-9._~+/=-]{8,})`)
+	// Other credential-carrying headers, whole value.
+	headerRE = regexp.MustCompile(`(?i)\b(x-api-key|api-key|x-auth-token|x-amz-security-token|x-goog-api-key|proxy-authorization)(\s*[:=]\s*)\S+`)
+	// JWTs (three base64url parts) and well-known token prefixes.
+	jwtRE    = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*`)
+	prefixRE = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]{16,}|gh[po]_[A-Za-z0-9]{16,}|glpat-[A-Za-z0-9_-]{16,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})`)
 )
+
+// bearerValueLooksLikeToken keeps prose ("bearer certificate") out of the
+// bearer rule: a value of 16 or more token characters is masked whatever it
+// holds (a long all-letter token), a shorter one only when it has a digit or
+// one of ._~+/=.
+func bearerValueLooksLikeToken(v string) bool {
+	return len(v) >= 16 || strings.ContainsAny(v, "0123456789._~+/=")
+}
 
 // RedactPatterns scrubs credential-shaped text only: the readable user='rosa'
 // stays. It is what a package without a Redactor of its own uses.
@@ -61,7 +75,16 @@ func RedactPatterns(s string) string {
 	s = yamlRE.ReplaceAllString(s, "${1}"+Mask)
 	s = urlRE.ReplaceAllString(s, "${1}"+Mask+"${3}")
 	s = authRE.ReplaceAllString(s, "${1}${2}"+Mask)
-	s = bearerRE.ReplaceAllString(s, "${1}${2}"+Mask)
+	s = bearerRE.ReplaceAllStringFunc(s, func(m string) string {
+		sub := bearerRE.FindStringSubmatch(m)
+		if !bearerValueLooksLikeToken(sub[3]) {
+			return m
+		}
+		return sub[1] + sub[2] + Mask
+	})
+	s = headerRE.ReplaceAllString(s, "${1}${2}"+Mask)
+	s = jwtRE.ReplaceAllString(s, Mask)
+	s = prefixRE.ReplaceAllString(s, Mask)
 	return s
 }
 

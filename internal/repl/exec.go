@@ -151,7 +151,7 @@ func (s *Session) refreshCurrent() {
 	defer rows.Close() //nolint:errcheck
 	var cat string
 	if rows.Next() && rows.Scan(&cat) == nil && cat != "" && cat != s.current {
-		s.current = cat
+		s.setCurrent(cat)
 		s.conn.Follow(cat)
 	}
 }

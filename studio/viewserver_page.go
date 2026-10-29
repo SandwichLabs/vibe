@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"net/http"
 	"net/url"
 	"path"
@@ -199,7 +200,7 @@ func renderStatus(err error) int {
 // path or a policy reason and is never shown.
 func (v *viewServer) logRender(g *viewGrant, err error) {
 	if v.log != nil {
-		v.log.Debug("page render failed", "artifact", g.name, "error", err, "cause", errors.Unwrap(err))
+		v.log.Debug("page render failed", "artifact", g.name, "error", engine.ErrorForLog(err), "cause", engine.ErrorForLog(errors.Unwrap(err)))
 	}
 }
 

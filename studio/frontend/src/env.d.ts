@@ -112,6 +112,12 @@ interface AppApi {
   DropTable(name: string): Promise<void>
   RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
   CompleteSQL(req: { sql: string; offset: number; connection: string }): Promise<CompleteSQLResult>
+  ReplOpen(connection: string): Promise<ReplOpenResult>
+  ReplInput(id: string, data: string): Promise<void>
+  ReplResize(id: string, cols: number, rows: number): Promise<void>
+  ReplAck(id: string, seq: number): Promise<void>
+  ReplClose(id: string): Promise<void>
+  ReplUse(id: string, name: string): Promise<string>
   RunA2UIQuery(sql: string): Promise<A2UIQueryResult>
   RunA2UIQueryIn(sql: string, connection: string): Promise<A2UIQueryResult>
   ListArtifacts(): Promise<ArtifactSummary[]>
@@ -605,6 +611,22 @@ interface CompleteSQLResult {
   stale?: string[]
   building?: boolean
   incomplete?: boolean
+}
+
+// ReplOpenResult: a new Data Console session. Its output arrives as
+// "repl:out:<id>" events carrying ReplFrame.
+interface ReplOpenResult {
+  id: string
+  cols: number
+  rows: number
+  connection: string
+}
+
+interface ReplFrame {
+  seq: number
+  data: string
+  closed?: boolean
+  reason?: string
 }
 
 interface QueryResult {

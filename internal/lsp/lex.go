@@ -79,10 +79,7 @@ func lex(src string) []token {
 			toks = append(toks, token{kind: tokWord, text: src[i:j], start: i, end: j})
 			i = j
 		case c >= '0' && c <= '9':
-			j := i + 1
-			for j < len(src) && (src[j] >= '0' && src[j] <= '9' || src[j] == '.' || src[j] == '_') {
-				j++
-			}
+			j := scanNumber(src, i)
 			toks = append(toks, token{kind: tokNumber, text: src[i:j], start: i, end: j})
 			i = j
 		default:
@@ -91,6 +88,35 @@ func lex(src string) []token {
 		}
 	}
 	return toks
+}
+
+// scanNumber returns the end of the numeric literal at src[i] (a digit), as
+// DuckDB lexes it: digits with "_" between them, an optional fraction and an
+// exponent only when digits follow it. Whatever comes next is another token
+// ("1e5$a$" is a number then a dollar quote; "1a$a$" is 1 then the name a$a$),
+// which matters because a "$" inside a name never starts a quote.
+func scanNumber(src string, i int) int {
+	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
+	digits := func(j int) int {
+		for j < len(src) && (isDigit(src[j]) || src[j] == '_' && j > 0 && isDigit(src[j-1]) && j+1 < len(src) && isDigit(src[j+1])) {
+			j++
+		}
+		return j
+	}
+	j := digits(i)
+	if j < len(src) && src[j] == '.' {
+		j = digits(j + 1)
+	}
+	if j < len(src) && (src[j] == 'e' || src[j] == 'E') {
+		k := j + 1
+		if k < len(src) && (src[k] == '+' || src[k] == '-') {
+			k++
+		}
+		if k < len(src) && isDigit(src[k]) {
+			j = digits(k)
+		}
+	}
+	return j
 }
 
 // scanBlockComment reads the /* */ comment starting at src[i]. As in DuckDB

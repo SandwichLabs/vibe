@@ -21,6 +21,10 @@ const (
 	// alike as io.EOF and keeps the half-typed line, so Ctrl+C is never handed
 	// to it.
 	interruptRune = ''
+	// useRune is the private signal Use sends through the input queue: the line
+	// editor passes it to the completion callback like any key, where the loop
+	// reads the real line and serves the request. Typed input never carries it.
+	useRune = ''
 )
 
 var (
@@ -132,10 +136,16 @@ func (s *Session) Input(p []byte) error {
 			s.in.flush()
 			// The flush may have eaten the end of a paste: close it for the editor.
 			out = append(out[:0], pasteEnd...)
-			s.flt.paste = false
+			s.flt.endPaste()
+			s.failUse()
 			(*cancel)()
 			continue
 		}
+		// Idle Ctrl+C: whatever is queued goes first, so the Ctrl+C itself can
+		// never be refused as "queue is full".
+		s.in.flush()
+		s.failUse()
+		s.flt.endPaste() // interruptSeq starts with the paste-end marker: the editor leaves paste mode too
 		out = append(out, interruptSeq...)
 	}
 	if err := s.in.write(out); err != nil {

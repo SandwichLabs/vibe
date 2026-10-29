@@ -53,11 +53,14 @@ func Tokens(sqlText string) [][]Token {
 			}
 		case r == '/' && i+1 < len(rs) && rs[i+1] == '*':
 			flushWord()
-			i += 2
-			for i+1 < len(rs) && !(rs[i] == '*' && rs[i+1] == '/') {
-				i++
-			}
-			i++
+			i = skipBlockComment(rs, i) - 1
+		case r == '$' && word.Len() > 0:
+			word.WriteRune(r) // x$a$ is one identifier
+		case isDigit(r) && word.Len() == 0:
+			j := scanNumber(rs, i)
+			word.WriteString(string(rs[i:j]))
+			flushWord()
+			i = j - 1
 		case r == '$':
 			j := i + 1
 			for j < len(rs) && isWordRune(rs[j]) {

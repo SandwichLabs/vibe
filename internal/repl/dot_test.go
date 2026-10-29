@@ -215,8 +215,8 @@ func TestSaveNeverOffersAnAttachOrASet(t *testing.T) {
 
 func TestTabCompletionSeam(t *testing.T) {
 	f := newSession(t, func(o *Options) {
-		o.Complete = func(line string, pos int) []string {
-			if strings.HasSuffix(line[:pos], "ord") {
+		o.Complete = func(r CompleteRequest) []string {
+			if strings.HasSuffix(r.Text[:r.Pos], "ord") {
 				return []string{"orders", "order_lines"}
 			}
 			return nil
