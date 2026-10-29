@@ -13,6 +13,7 @@ const { decisions, activity, busy, error, refresh, refreshActivity, revoke, setA
 const label: Record<string, string> = {
   allowed: 'Allowed',
   changed: 'Allowed, but edited since: asks again',
+  metricChanged: 'A metric it reads changed: asks again',
   denied: 'Denied',
   gone: 'The artifact is no longer here',
   undecided: 'Not allowed yet',
@@ -46,7 +47,8 @@ onUnmounted(() => { for (const off of offs) off() })
           <code>{{ d.name }}</code>
           <span v-if="kindText(d)" class="badge" :data-testid="`view-decision-kind-${d.name}`">{{ kindText(d) }}</span>
           <span v-if="d.capabilities?.length" class="help" style="margin: 0;" :data-testid="`view-decision-caps-${d.name}`">{{ d.capabilities.join(', ') }}</span>
-          <span class="help" style="flex: 1; margin: 0;">{{ label[d.state] ?? d.state }}</span>
+          <span v-if="d.metricsUsed?.length" class="help" style="margin: 0;" :title="'Their files are part of what you allowed: a change to one asks again.'" :data-testid="`view-decision-metrics-${d.name}`">reads {{ d.metricsUsed.map((m) => m.name).join(', ') }}</span>
+          <span class="help" style="flex: 1; margin: 0;">{{ (d.state === 'changed' && d.depsChanged ? label.metricChanged : label[d.state]) ?? d.state }}</span>
           <label v-if="d.declaresAsk" class="row view-decisions__ask" :title="'This page can send text, which may include query results, to your model provider.'">
             <input type="checkbox" :checked="d.askOn" :disabled="busy === d.name" :data-testid="`view-decision-ask-${d.name}`" @change="setAsk(d.name, ($event.target as HTMLInputElement).checked)">
             <span class="help" style="margin: 0;">Let it ask the model</span>

@@ -31,7 +31,9 @@ func (a *App) OpenArtifactPageWindow(name, query string, theme map[string]string
 	}
 	return a.pages.open(pageOpen{
 		ws: ws, name: name, query: query, theme: theme, base: a.ctxOrBackground(), svc: a.pageServices(ws, name),
-		runner:  func(m *artifacts.Manifest) artifacts.PageRunner { return a.pageRunner(name, m) },
+		runner: func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner {
+			return a.pageRunner(name, m, pins)
+		},
 		allowed: func(hash string) bool { return a.pageStillAllowed(ws, name, hash) },
 	})
 }

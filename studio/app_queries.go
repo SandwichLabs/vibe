@@ -408,7 +408,11 @@ func (a *App) SaveQueryOn(req SaveQueryRequest) (*QuerySaveResult, error) {
 			return nil, fmt.Errorf("unknown connection %q", req.Connection)
 		}
 	}
-	return a.saveQuery(req.ID, req.Title, req.SQL, req.Description, req.Rev, req.Connection)
+	res, err := a.saveQuery(req.ID, req.Title, req.SQL, req.Description, req.Rev, req.Connection)
+	if err == nil {
+		a.recheckGrants() // a page that reads a metric over this query may no longer be allowed
+	}
+	return res, err
 }
 
 func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) (*QuerySaveResult, error) {
@@ -462,6 +466,7 @@ func (a *App) saveQuery(id, title, sqlStr, description, rev, connection string) 
 
 // DeleteQuery deletes a saved query.
 func (a *App) DeleteQuery(id string) error {
+	defer a.recheckGrants() // registered first, so it runs after the lock is released
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

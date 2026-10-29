@@ -23,7 +23,7 @@ func (a *App) ArtifactViewState(name string) (*ArtifactViewStatusView, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := ws.ArtifactViewState(name)
+	st, err := ws.ArtifactViewStateCtx(a.ctxOrBackground(), name)
 	if err != nil {
 		return nil, viewError(err)
 	}
@@ -47,7 +47,7 @@ func viewError(err error) error {
 // AllowArtifactView approves the view whose hash the person was shown. It is
 // refused when the files changed since.
 func (a *App) AllowArtifactView(name, hash string) (*ArtifactViewStatusView, error) {
-	return a.decideArtifactView(name, func(ws workspace.Workspace) error { return ws.AllowArtifactView(name, hash) })
+	return a.decideArtifactView(name, func(ws workspace.Workspace) error { return ws.AllowArtifactViewCtx(a.ctxOrBackground(), name, hash) })
 }
 
 // DenyArtifactView records that the view must not run, until revoked.
@@ -83,7 +83,7 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 	a.views.dropArtifact(name)
 	a.pages.closeArtifact(name, pageStateChanged)
 	a.emitEvent("workspace:changed", map[string]any{"kind": "artifactview", "id": name})
-	st, err := ws.ArtifactViewState(name)
+	st, err := ws.ArtifactViewStateCtx(a.ctxOrBackground(), name)
 	if err != nil {
 		return nil, viewError(err)
 	}
@@ -113,7 +113,9 @@ func (a *App) OpenArtifactPage(name, origin string) (*ArtifactPageGrant, error) 
 	if err != nil {
 		return nil, err
 	}
-	return openPageGrant(a.views, ws, name, origin, func(m *artifacts.Manifest) artifacts.PageRunner { return a.pageRunner(name, m) })
+	return openPageGrant(a.views, ws, name, origin, func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner {
+		return a.pageRunner(name, m, pins)
+	})
 }
 
 // ValidateArtifactViewPage validates the A2UI page a custom view returned

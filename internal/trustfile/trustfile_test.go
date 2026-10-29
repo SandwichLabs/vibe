@@ -84,3 +84,40 @@ func TestDecisions_TwoInstancesOnOneFileLoseNothing(t *testing.T) {
 	require.NoError(t, b.AllowIf("/c", "h", func() (string, error) { return "h", nil }))
 	assert.Len(t, New(path).List(), 2*n)
 }
+
+func TestAllowIfNote_KeepsTheNoteAndOldFilesHaveNone(t *testing.T) {
+	d := New(filepath.Join(t.TempDir(), "d.json"))
+	require.NoError(t, d.AllowIfNote("/p", "h1", func() (string, string, error) { return "h1", "base", nil }))
+	assert.Equal(t, "base", d.Note("/p"))
+	assert.Equal(t, "base", d.List()[0].Note)
+	require.NoError(t, d.AllowIf("/q", "h", func() (string, error) { return "h", nil }))
+	assert.Empty(t, d.Note("/q"))
+	require.NoError(t, d.Deny("/p"))
+	assert.Empty(t, d.Note("/p"), "a deny has no note")
+}
+
+// A views.json written before notes existed (the fixture is the real shape on
+// disk) loads, keeps every decision, and has no notes.
+func TestPreNoteFileKeepsItsDecisions(t *testing.T) {
+	data, err := os.ReadFile("testdata/views_pre_note.json")
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "views.json")
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+	d := New(path)
+
+	const chart = "/home/someone/work/acme/artifacts/chart"
+	const hash = "9f2b0e3c5a7d4b1e8c6a2f0d9e4b7a3c1d5e8f2a6b0c4d7e9a1b3c5d7e9f0a2b"
+	assert.Equal(t, StateAllowed, d.State(chart, hash))
+	assert.Equal(t, StateChanged, d.State(chart, "other"))
+	assert.Equal(t, StateDenied, d.State("/home/someone/work/acme/artifacts/hostile", hash))
+	assert.Empty(t, d.Note(chart))
+	assert.Len(t, d.List(), 3)
+
+	// Writing a new decision keeps the old ones, byte for byte in meaning.
+	require.NoError(t, d.AllowIfNote("/p/new", "h", func() (string, string, error) { return "h", "base", nil }))
+	d2 := New(path)
+	assert.Equal(t, StateAllowed, d2.State(chart, hash))
+	assert.Equal(t, StateDenied, d2.State("/home/someone/work/acme/artifacts/hostile", hash))
+	assert.Equal(t, "base", d2.Note("/p/new"))
+	assert.Len(t, d2.List(), 4)
+}

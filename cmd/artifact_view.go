@@ -34,6 +34,10 @@ network or your files, and can only run this artifact's own queries):
   deny     never run it, until revoked. Edits do not ask again.
   revoke   forget the decision (the next open asks again).
 
+A view or page whose queries call metric() also lists the metrics it reads, and
+the metric files and saved queries behind them are part of its hash: changing
+one asks again.
+
 An HTML page (view: html) goes through the same commands: status lists its
 kind (static or scripted), the queries it uses with their connections, the
 capabilities it declares (state, download, ask) in plain words, every file and
@@ -63,6 +67,7 @@ func printViewStatus(w io.Writer, st workspace.ArtifactViewStatus, withSource bo
 		fmt.Fprintf(w, "%s: not decided (the view does not run)\n", st.Name)
 	}
 	fmt.Fprintf(w, "  hash: %s\n", st.Hash)
+	printMetricsUsed(w, st)
 	if st.Kind == "html" {
 		printPageStatus(w, st, withSource)
 		return
@@ -175,6 +180,26 @@ func printViewAfter(cmd *cobra.Command, ws workspace.Workspace, name string) err
 	}
 	printViewStatus(cmd.OutOrStdout(), st, false)
 	return nil
+}
+
+// printMetricsUsed lists the metrics the view's queries call, each with the
+// saved query it reads: their files are part of the hash (#282).
+func printMetricsUsed(w io.Writer, st workspace.ArtifactViewStatus) {
+	if len(st.MetricsUsed) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "  metrics it reads:")
+	for _, m := range st.MetricsUsed {
+		switch {
+		case m.Missing:
+			fmt.Fprintf(w, "    %s (no such metric yet)\n", m.Name)
+		case m.Query != "":
+			fmt.Fprintf(w, "    %s (saved query %s)\n", m.Name, m.Query)
+		default:
+			fmt.Fprintf(w, "    %s (its file cannot be read)\n", m.Name)
+		}
+	}
+	fmt.Fprintf(w, "  %s\n", artifacts.MetricsLine)
 }
 
 // printPageStatus lists an HTML page's host, the queries it uses with their

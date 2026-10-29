@@ -21,6 +21,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
 
@@ -42,7 +43,12 @@ const (
 	// KindSemantics is a file under semantics/: ID is "entities/<name>",
 	// "metrics/<name>", "joins/<name>" or "glossary".
 	KindSemantics ChangeKind = "semantics"
-	KindConfig    ChangeKind = "config"
+	// KindProposal is a proposed semantic definition in .vibe-local/proposals/
+	// (ID is the proposal id). An agent in this process files proposals through
+	// the workspace's own store, which the watcher does not report; Studio
+	// announces those itself. This kind is for another process or an editor.
+	KindProposal ChangeKind = "proposal"
+	KindConfig   ChangeKind = "config"
 	// KindDotEnv is the workspace's .env. The change carries no content; ask
 	// Workspace.DotEnv for the new state (an allowed file becomes "changed").
 	KindDotEnv ChangeKind = "dotenv"
@@ -84,7 +90,7 @@ func WithDebounce(d time.Duration) WatchOption { return func(o *watchOpts) { o.d
 // recursive on Linux, so every directory that can hold a watched file is
 // registered on its own: the root (for vibe.yaml and the content directories
 // appearing later), notebooks/, queries/, skills/, artifacts/, each
-// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/) and .vibe-local/, and directories created afterwards are added as they appear.
+// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/), semantics/ and its three folders, .vibe-local/ and .vibe-local/proposals/, and directories created afterwards are added as they appear.
 //
 // Its own stores' writes are ignored by content hash: a store announces the
 // hash of what it is about to write, and the watcher drops any event whose
@@ -201,6 +207,7 @@ func (w *Watcher) addTree() error {
 		w.addDir(filepath.Join(w.root, d))
 	}
 	w.addSemanticsSubdirs()
+	w.addProposalsDir()
 	for _, parent := range []string{skills.Dir, artifacts.Dir} {
 		w.addSubdirs(parent)
 	}
@@ -216,6 +223,13 @@ func (w *Watcher) addSemanticsSubdirs() {
 	for _, sub := range semanticsSubdirs {
 		w.addDir(filepath.Join(w.root, semantics.Dir, sub))
 	}
+}
+
+// addProposalsDir registers .vibe-local/ and .vibe-local/proposals when they
+// exist now.
+func (w *Watcher) addProposalsDir() {
+	w.addDir(filepath.Join(w.root, LocalDir))
+	w.addDir(filepath.Join(w.root, proposals.Dir))
 }
 
 // addSubdirs registers each real subfolder of a content folder (skills/<name>/,
@@ -253,6 +267,11 @@ func (w *Watcher) relevant() []string {
 			for _, n := range names {
 				add(semantics.Dir + "/" + sub + "/" + n)
 			}
+		}
+	}
+	if names, err := filestore.ListDir(w.root, proposals.Dir, proposals.Extension); err == nil {
+		for _, n := range names {
+			add(proposals.Dir + "/" + n)
 		}
 	}
 	if subs, err := filestore.ListSubdirs(w.root, skills.Dir); err == nil {
@@ -314,6 +333,8 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindSemantics, "glossary", true
 	case len(parts) == 3 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1]) && strings.HasSuffix(parts[2], semantics.Extension) && !filestore.IsTemp(parts[2]):
 		return KindSemantics, parts[1] + "/" + strings.TrimSuffix(parts[2], semantics.Extension), true
+	case len(parts) == 3 && parts[0]+"/"+parts[1] == proposals.Dir && strings.HasSuffix(parts[2], proposals.Extension) && !filestore.IsTemp(parts[2]):
+		return KindProposal, strings.TrimSuffix(parts[2], proposals.Extension), true
 	case len(parts) == 3 && parts[0] == skills.Dir && parts[2] == skills.File && !filestore.IsTemp(parts[1]):
 		return KindSkill, parts[1], true
 	case len(parts) == 3 && parts[0] == artifacts.Dir && (parts[2] == artifacts.ManifestFile || parts[2] == artifacts.ViewFile || parts[2] == artifacts.ScriptFile) && !filestore.IsTemp(parts[1]):
@@ -480,6 +501,8 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 func (w *Watcher) handleNewDir(abs, rel string) bool {
 	parts := strings.Split(rel, "/")
 	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir || parts[0] == semantics.Dir)) ||
+		(len(parts) == 1 && parts[0] == LocalDir) ||
+		rel == proposals.Dir ||
 		(len(parts) == 2 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1])) ||
 		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1])) ||
 		isArtifactHTMLDir(parts)
@@ -494,6 +517,9 @@ func (w *Watcher) handleNewDir(abs, rel string) bool {
 	}
 	if len(parts) == 1 && parts[0] == semantics.Dir {
 		w.addSemanticsSubdirs()
+	}
+	if len(parts) == 1 && parts[0] == LocalDir {
+		w.addProposalsDir()
 	}
 	if len(parts) == 2 && parts[0] == artifacts.Dir {
 		w.addHTMLTree(filepath.Join(abs, artifacts.HTMLDir), 0)

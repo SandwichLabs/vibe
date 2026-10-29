@@ -49,4 +49,21 @@ describe('useDefinitionRuns', () => {
     expect(r.error.value).toBe('')
     expect(r.conflict.value).toContain('the file changed')
   })
+
+  it('cannot be double-started, and reset forgets the output', async () => {
+    let release!: (rows: AssertionRow[]) => void
+    const run = vi.fn(() => new Promise<AssertionRow[]>((resolve) => { release = resolve }))
+    install({ RunAssertions: run })
+    const r = useDefinitionRuns()
+    const first = r.runAssertions('metric', 'net_revenue')
+    expect(r.busy.value).toBe(true)
+    await r.runAssertions('metric', 'net_revenue')
+    expect(run).toHaveBeenCalledTimes(1)
+    release([row('pass')])
+    await first
+    expect(r.busy.value).toBe(false)
+    expect(r.results.value).toHaveLength(1)
+    r.reset()
+    expect(r.results.value).toEqual([])
+  })
 })

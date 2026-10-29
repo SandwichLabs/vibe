@@ -45,6 +45,24 @@ describe('ArtifactViewDecisions', () => {
     expect(w.find('[data-testid="view-decision-b-chart"]').exists()).toBe(true)
   })
 
+  it('lists the metrics a page reads (#282)', async () => {
+    makeApp([
+      { name: 'p', path: '/x/p', decision: 'allow', state: 'allowed', kind: 'html', metricsUsed: [{ name: 'net_revenue', query: 'base' }, { name: 'orders', query: 'base' }] },
+      { name: 'q', path: '/x/q', decision: 'allow', state: 'allowed', kind: 'script' },
+    ])
+    const w = mount(ArtifactViewDecisions)
+    await flushPromises()
+    expect(w.get('[data-testid="view-decision-metrics-p"]').text()).toBe('reads net_revenue, orders')
+    expect(w.find('[data-testid="view-decision-metrics-q"]').exists()).toBe(false)
+  })
+
+  it('says a metric changed when only that did', async () => {
+    makeApp([{ name: 'p', path: '/x/p', decision: 'allow', state: 'changed', depsChanged: true, kind: 'html', metricsUsed: [{ name: 'm' }] }])
+    const w = mount(ArtifactViewDecisions)
+    await flushPromises()
+    expect(w.get('[data-testid="view-decision-p"]').text()).toContain('A metric it reads changed')
+  })
+
   it('toggles ask separately for a page that declares it', async () => {
     const app = makeApp([{ name: 'p', path: '/x/p', decision: 'allow', state: 'allowed', declaresAsk: true, askOn: true }, { name: 'q', path: '/x/q', decision: 'allow', state: 'allowed' }])
     ;(app as any).SetPageAsk = vi.fn(async () => {})

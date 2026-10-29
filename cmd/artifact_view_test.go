@@ -180,3 +180,20 @@ func TestArtifactView_StatusOfAScriptedPageListsCapabilities(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, list, "html (scripted)")
 }
+
+func TestArtifactView_StatusListsTheMetricsAViewReads(t *testing.T) {
+	st := workspace.ArtifactViewStatus{Name: "chart", Kind: "script", State: "undecided", Hash: "h",
+		MetricsUsed: []workspace.ArtifactMetricUse{{Name: "net_revenue", Query: "base"}, {Name: "ghost", Missing: true}}}
+	var buf bytes.Buffer
+	printViewStatus(&buf, st, false)
+	out := buf.String()
+	assert.Contains(t, out, "metrics it reads:")
+	assert.Contains(t, out, "net_revenue (saved query base)")
+	assert.Contains(t, out, "ghost (no such metric yet)")
+	assert.Contains(t, out, "Vibe asks again")
+
+	buf.Reset()
+	st.MetricsUsed = nil
+	printViewStatus(&buf, st, false)
+	assert.NotContains(t, buf.String(), "metrics it reads")
+}

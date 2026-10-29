@@ -54,6 +54,7 @@ type (
 // "overwrite" writes the local edit over it, and "saveCopy" writes the local edit
 // as a new item named "<title> (copy)".
 func (a *App) ResolveConflict(req ConflictRequest) (*ConflictResult, error) {
+	defer a.recheckGrants() // registered first, so it runs after the lock is released
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.requireWorkspace(); err != nil {

@@ -11,6 +11,7 @@ import (
 	"io/fs"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -50,10 +51,14 @@ func openViewGrant(vs *viewServer, ws workspace.Workspace, name, origin string) 
 	// The bytes held are the bytes the allowed hash covers, checked here rather
 	// than assumed: what runs is what was hashed.
 	h, err := artifacts.ViewHash([]byte(st.Manifest), []artifacts.ViewPart{{Path: artifacts.ScriptFile, Data: script}})
-	if err != nil || h != st.Hash {
+	if err != nil || h != st.ContentHash {
 		return nil, errViewNotAllowed
 	}
-	token, err := vs.issue(&viewGrant{name: name, hash: st.Hash, origin: origin, ws: ws, script: script})
+	m, err := artifacts.Decode([]byte(st.Manifest))
+	if err != nil {
+		return nil, errViewNotAllowed
+	}
+	token, err := vs.issue(&viewGrant{name: name, hash: st.Hash, origin: origin, ws: ws, script: script, pins: st.Pins, manifest: m})
 	if err != nil {
 		if errors.Is(err, errBadViewOrigin) {
 			return nil, err
@@ -76,7 +81,7 @@ func (a *App) viewStillAllowed(g *viewGrant) bool {
 	if ws == nil || any(ws) != g.ws {
 		return false
 	}
-	st, err := ws.ArtifactViewState(g.name)
+	st, err := ws.ArtifactViewStateCtx(a.ctxOrBackground(), g.name)
 	want := artifacts.ViewScript
 	if g.page != nil {
 		want = artifacts.ViewHTML
@@ -110,7 +115,7 @@ func (a *App) runViewQuery(token, query string, values map[string]any) (*A2UIQue
 	if g == nil {
 		return nil, errViewNotAllowed
 	}
-	res, err := a.runArtifactQuery(g.ctx, g.name, query, values)
+	res, err := a.runPageQuery(semantics.WithPins(g.ctx, g.pins), g.name, g.manifest, query, values)
 	if err != nil {
 		return nil, err
 	}

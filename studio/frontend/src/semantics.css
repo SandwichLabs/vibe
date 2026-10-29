@@ -1,0 +1,7 @@
+/* The Semantics view's shared card layout (SemanticsView and its cards). */
+.definition-card { display: flex; flex-direction: column; gap: var(--sh-space-4); }
+.definition-card__facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--sh-space-2) var(--sh-space-4); margin: 0; }
+.definition-card__facts dt { font-size: var(--sh-fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--sh-graphite); padding-top: 2px; }
+.definition-card__facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.definition-card__chip { margin: 0 var(--sh-space-2) var(--sh-space-1) 0; display: inline-block; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+.definition-card__section { display: flex; flex-direction: column; gap: var(--sh-space-3); }

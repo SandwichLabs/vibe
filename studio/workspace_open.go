@@ -377,6 +377,11 @@ func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 			l.InvalidateSemantics()
 		}
 	}
+	if ch.Kind == workspace.KindSemantics || ch.Kind == workspace.KindQuery {
+		// A page or view that reads a metric was allowed over its file and its
+		// saved query: whatever is open for it is re-checked now.
+		a.recheckGrantsIn(a.ctxOrBackground(), ws)
+	}
 	if ch.Kind == workspace.KindArtifact {
 		// A page window for an artifact that changed ends at once; Reopen asks again.
 		a.pages.artifactChanged(ch.ID)

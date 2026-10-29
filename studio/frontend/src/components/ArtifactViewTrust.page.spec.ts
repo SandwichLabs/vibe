@@ -38,7 +38,7 @@ const detail = { name: 'pg', title: 'Pg', params: [], queries: [], view_kind: 'h
 async function mountTrust() {
   const w = mount(ArtifactViewTrust, {
     props: { name: 'pg', detail, values: {}, refresh: 0 },
-    global: { stubs: { Icon: true, ScriptedPage: { template: '<div data-testid="scripted-page-stub" />' }, StaticPage: { template: '<div data-testid="static-page-stub" />' }, CustomView: { template: '<div data-testid="custom-view-stub" />' } } },
+    global: { stubs: { Icon: true, RouterLink: { props: ['to'], template: '<a :href="JSON.stringify(to)"><slot /></a>' }, ScriptedPage: { template: '<div data-testid="scripted-page-stub" />' }, StaticPage: { template: '<div data-testid="static-page-stub" />' }, CustomView: { template: '<div data-testid="custom-view-stub" />' } } },
   })
   await flushPromises()
   return w
@@ -140,5 +140,44 @@ describe('ArtifactViewTrust, HTML page source', () => {
     const w = await mountTrust()
     expect(w.get('[data-testid="view-trust-page-src"]').element.tagName).toBe('DIV')
     expect(w.find('[data-testid="page-files"]').exists()).toBe(true)
+  })
+
+  it('lists the metrics the page reads and says their files are part of the allow (#282)', async () => {
+    makeApp(status({
+      metrics_used: [{ name: 'net_revenue', query: 'net_revenue_base', measure: 'sum(amount)', dimensions: ['region'] }, { name: 'ghost', missing: true }],
+      metrics_note: 'It reads these metrics through their saved queries. Your allow covers their definitions as they are now: if a metric file or its saved query changes, Vibe asks again.',
+    }))
+    const w = await mountTrust()
+    expect(w.get('[data-testid="metrics-read-net_revenue"]').text()).toContain('net_revenue_base')
+    expect(w.get('[data-testid="metrics-read-measure-net_revenue"]').text()).toBe('sum(amount)')
+    expect(w.get('[data-testid="metrics-read-net_revenue"]').text()).toContain('by region')
+    expect(w.get('[data-testid="metrics-read-link-net_revenue"]').attributes('href')).toContain('metric')
+    expect(w.get('[data-testid="metrics-read-ghost"]').text()).toContain('no such metric yet')
+    expect(w.get('[data-testid="metrics-read-note"]').text()).toContain('Vibe asks again')
+  })
+
+  it('shows nothing about metrics for a page that calls none', async () => {
+    makeApp(status())
+    const w = await mountTrust()
+    expect(w.find('[data-testid="metrics-read"]').exists()).toBe(false)
+  })
+
+  it('says a metric changed, not the page, when only what it reads moved (#282)', async () => {
+    makeApp(status({
+      state: 'changed', deps_changed: true, metrics_used: [{ name: 'net_revenue', query: 'base' }],
+      metrics_note: 'Vibe asks again.',
+    }))
+    const w = await mountTrust()
+    const line = w.get('[data-testid="view-trust-line"]').text()
+    expect(line).toContain('A metric this page reads changed (net_revenue)')
+    expect(line).not.toContain('Read the files below')
+  })
+
+  it('says the page changed, once, when its own files changed', async () => {
+    makeApp(status({ state: 'changed' }))
+    const w = await mountTrust()
+    const line = w.get('[data-testid="view-trust-line"]').text()
+    expect(line).toContain('changed since you allowed it')
+    expect(line.match(/before you allow/g)).toHaveLength(1)
   })
 })

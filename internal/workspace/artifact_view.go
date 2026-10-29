@@ -50,9 +50,27 @@ type ArtifactViewStatus struct {
 	// State is none (not a script view, or unusable), undecided, allowed,
 	// changed (the files differ from what was allowed) or denied.
 	State string `json:"state"`
-	// Hash is the ViewHash of the files as read now ("" when State is none).
-	// Allow takes this value back.
+	// Hash is the hash the decision is keyed by, as read now ("" when State is
+	// none): the ViewHash or PageHash of the files, folded with the metric files
+	// and saved queries the artifact's queries read when they call metric()
+	// (#282; MetricsUsed lists them). Allow takes this value back.
 	Hash string `json:"hash"`
+	// ContentHash is the ViewHash or PageHash alone, what a host re-derives from
+	// the bytes it holds. It equals Hash for an artifact that calls no metric.
+	ContentHash string `json:"-"`
+	// MetricsUsed are the metrics the artifact's queries call (for a scripted
+	// page and a script view: any of its queries; for a static page: the ones
+	// its templates use), so the prompt can say what else the page reads.
+	MetricsUsed []ArtifactMetricUse `json:"metrics_used,omitempty"`
+	// MetricsNote is the allow prompt's plain line about them (set with MetricsUsed).
+	MetricsNote string `json:"metrics_note,omitempty"`
+	// DepsChanged is true when State is "changed" but the view's own files are
+	// the ones that were allowed: a metric or saved query it reads changed.
+	DepsChanged bool `json:"deps_changed,omitempty"`
+	// Deps are the metric and saved-query revisions Hash covers, and Pins the
+	// same as a map for semantics.WithPins: what a run of this view may read.
+	Deps []artifacts.DepPart `json:"-"`
+	Pins map[string]string   `json:"-"`
 	// Manifest and Source are the artifact.yaml and view.js text that Hash
 	// covers. A page (kind html) has no Source: its files are Files.
 	Manifest string `json:"manifest"`
@@ -120,6 +138,11 @@ type ArtifactViewDecision struct {
 	Kind         string   `json:"kind,omitempty"`
 	PageKind     string   `json:"pageKind,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	// MetricsUsed are the metrics its queries call (#282); a change to one of
+	// their files ends the allow.
+	MetricsUsed []ArtifactMetricUse `json:"metricsUsed,omitempty"`
+	// DepsChanged: the decision is "changed" only because of them.
+	DepsChanged bool `json:"depsChanged,omitempty"`
 }
 
 // Decision states beyond trustfile's.
@@ -227,7 +250,7 @@ func (w *workspace) readView(ctx context.Context, name string) ArtifactViewStatu
 	}
 	st.Kind = m.View
 	if m.View == artifacts.ViewHTML {
-		return w.readPage(st, name, src)
+		return w.readPage(ctx, st, name, src)
 	}
 	if m.View != artifacts.ViewScript {
 		return st
@@ -243,12 +266,13 @@ func (w *workspace) readView(ctx context.Context, name string) ArtifactViewStatu
 		return w.unusable(st, name, err)
 	}
 	st.Hash = h
+	w.applyMetricDeps(ctx, &st, querySQLs(m.Queries, nil))
 	return st
 }
 
 // readPage derives an HTML page's hash and file list from the one read of its
 // files: the same function the host that renders it uses, over the same bytes.
-func (w *workspace) readPage(st ArtifactViewStatus, name string, src *artifacts.Source) ArtifactViewStatus {
+func (w *workspace) readPage(ctx context.Context, st ArtifactViewStatus, name string, src *artifacts.Source) ArtifactViewStatus {
 	a, err := artifacts.PageFromText(name, []byte(src.Manifest), src.Files)
 	if err != nil {
 		return w.unusable(st, name, err)
@@ -265,7 +289,28 @@ func (w *workspace) readPage(st ArtifactViewStatus, name string, src *artifacts.
 		}
 		st.Files = append(st.Files, vf)
 	}
+	only := map[string]bool(nil)
+	if a.Page.Kind != artifacts.PageScripted {
+		only = map[string]bool{}
+		for _, q := range a.Page.Queries {
+			only[q] = true
+		}
+	}
+	w.applyMetricDeps(ctx, &st, querySQLs(a.Manifest.Queries, only))
 	return st
+}
+
+// querySQLs is the SQL text of the manifest queries a custom view can run: all
+// of them, or only the named ones (a static page runs the ones its templates
+// use).
+func querySQLs(qs []artifacts.Query, only map[string]bool) []string {
+	var out []string
+	for _, q := range qs {
+		if only == nil || only[q.Name] {
+			out = append(out, q.SQL)
+		}
+	}
+	return out
 }
 
 // pageQueryUses is the queries the allow prompt lists: for a scripted page every
@@ -290,12 +335,23 @@ func customKind(kind string) bool { return kind == artifacts.ViewScript || kind 
 
 // ArtifactViewState reports where the artifact's custom view stands.
 func (w *workspace) ArtifactViewState(name string) (ArtifactViewStatus, error) {
+	return w.ArtifactViewStateCtx(context.Background(), name)
+}
+
+// ArtifactViewStateCtx is ArtifactViewState under the caller's context: the
+// reads of the artifact, the metric files and the saved queries stop with it.
+func (w *workspace) ArtifactViewStateCtx(ctx context.Context, name string) (ArtifactViewStatus, error) {
 	if !filestore.ValidID(name) {
 		return ArtifactViewStatus{}, fmt.Errorf("artifact %q: %w", name, artifacts.ErrNotFound)
 	}
-	st := w.readView(context.Background(), name)
+	st := w.readView(ctx, name)
 	if st.Hash != "" {
-		st.State = string(w.vdec.State(w.viewKey(name), st.Hash))
+		key := w.viewKey(name)
+		st.State = string(w.vdec.State(key, st.Hash))
+		// An allow whose own files still match but whose metrics moved: say so.
+		if st.State == string(trustfile.StateChanged) && st.ContentHash != "" && w.vdec.Note(key) == st.ContentHash {
+			st.DepsChanged = true
+		}
 	}
 	return st, nil
 }
@@ -304,18 +360,29 @@ func (w *workspace) ArtifactViewState(name string) (ArtifactViewStatus, error) {
 // is refused with ErrViewChanged when the files differ now, checked while the
 // decision store is locked, so the allow is for the bytes that were reviewed.
 func (w *workspace) AllowArtifactView(name, hash string) error {
+	return w.AllowArtifactViewCtx(context.Background(), name, hash)
+}
+
+// AllowArtifactViewCtx is AllowArtifactView under the caller's context.
+func (w *workspace) AllowArtifactViewCtx(ctx context.Context, name, hash string) error {
 	if !filestore.ValidID(name) {
 		return fmt.Errorf("artifact %q: %w", name, artifacts.ErrNotFound)
 	}
-	err := w.vdec.AllowIf(w.viewKey(name), hash, func() (string, error) {
-		st := w.readView(context.Background(), name)
+	err := w.vdec.AllowIfNote(w.viewKey(name), hash, func() (string, string, error) {
+		st := w.readView(ctx, name)
 		if st.Hash == "" {
-			return "", ErrNoScriptView
+			return "", "", ErrNoScriptView
 		}
-		return st.Hash, nil
+		// A view that reads metrics records the hash of its own files, so a later
+		// "changed" can tell its files from the metrics it reads.
+		note := ""
+		if len(st.MetricsUsed) > 0 {
+			note = st.ContentHash
+		}
+		return st.Hash, note, nil
 	})
 	if err == nil {
-		w.defaultAskOn(name, hash)
+		w.defaultAskOn(ctx, name, hash)
 	}
 	return w.decisionErr(err, name)
 }
@@ -323,8 +390,8 @@ func (w *workspace) AllowArtifactView(name, hash string) error {
 // defaultAskOn turns the `ask` toggle on for a scripted page that declares it,
 // as the page is allowed (H5: on by default, revocable separately). A person's
 // earlier "off" (a deny, which survives edits) is left alone.
-func (w *workspace) defaultAskOn(name, hash string) {
-	st := w.readView(context.Background(), name)
+func (w *workspace) defaultAskOn(ctx context.Context, name, hash string) {
+	st := w.readView(ctx, name)
 	if st.Hash != hash || !declaresAsk(st) {
 		return
 	}
@@ -424,7 +491,7 @@ func (w *workspace) ArtifactViewDecisions() []ArtifactViewDecision {
 		st, _ := w.ArtifactViewState(name)
 		d.DeclaresAsk = declaresAsk(st)
 		if customKind(st.Kind) {
-			d.Kind, d.PageKind, d.Capabilities = st.Kind, st.PageKind, st.Capabilities
+			d.Kind, d.PageKind, d.Capabilities, d.MetricsUsed, d.DepsChanged = st.Kind, st.PageKind, st.Capabilities, st.MetricsUsed, st.DepsChanged
 		}
 		d.AskOn = d.DeclaresAsk && w.PageAskEnabled(name, st.Hash)
 		switch {

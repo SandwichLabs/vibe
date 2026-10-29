@@ -19,6 +19,7 @@ import { useTheme } from '../theme/useTheme'
 import { shortcutLabel } from '../composables/useModal'
 import { workspaceInfo } from '../composables/useWorkspace'
 import { useAgentChat } from '../composables/useAgentChat'
+import { openProposals, refreshProposalBadge, startProposalBadge } from '../composables/useProposalBadge'
 import { hasWailsRuntime } from '../lib/wails'
 
 const theme = useTheme()
@@ -40,10 +41,21 @@ const navItems = [
   { path: '/library', label: 'Library', icon: 'layers' },
   { path: '/queries', label: 'Queries', icon: 'terminal' },
   { path: '/skills', label: 'Skills', icon: 'bookOpen' },
+  { path: '/semantics', label: 'Semantics', icon: 'network' },
   { path: '/agent', label: 'Agent', icon: 'bot' },
   { path: '/import', label: 'Import', icon: 'download' },
   { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
+
+// The Agent entry says a turn is running; Semantics says how many proposals wait.
+function navLabel(item: { path: string; label: string }) {
+  if (item.path === '/agent' && agentBusy.value) return 'Agent, a turn is running'
+  if (item.path === '/semantics' && openProposals.value) return `Semantics, ${openProposals.value} ${openProposals.value === 1 ? 'proposal' : 'proposals'} waiting`
+  return item.label
+}
+function navTitle(item: { path: string; label: string }) {
+  return item.path === '/agent' && agentBusy.value ? 'Agent: a turn is running' : navLabel(item)
+}
 
 function isActive(path: string) {
   return route.path === path || (path !== '/' && route.path.startsWith(path))
@@ -99,6 +111,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
 const unsubs: Array<() => void> = []
 
 onMounted(() => {
+  unsubs.push(startProposalBadge())
   window.addEventListener('vibe:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
 })
@@ -109,6 +122,8 @@ onUnmounted(() => {
   unsubs.splice(0).forEach((u) => u())
   if (hasWailsRuntime()) WindowSetTitle('Vibe Studio')
 })
+
+watch(() => info.value?.sessionId, () => { void refreshProposalBadge() })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
@@ -161,12 +176,13 @@ watch(() => info.value?.name, (name) => {
           class="side-link"
           :class="{ active: isActive(item.path) }"
           :aria-current="isActive(item.path) ? 'page' : undefined"
-          :aria-label="item.path === '/agent' && agentBusy ? 'Agent, a turn is running' : item.label"
-          :title="item.path === '/agent' && agentBusy ? 'Agent: a turn is running' : item.label"
+          :aria-label="navLabel(item)"
+          :title="navTitle(item)"
         >
           <Icon :name="item.icon" :size="18" />
           <span>{{ item.label }}</span>
           <i v-if="item.path === '/agent' && agentBusy" class="agent-busy" data-testid="agent-busy-nav" aria-hidden="true"></i>
+          <span v-if="item.path === '/semantics' && openProposals" class="nav-badge" data-testid="semantics-badge" aria-hidden="true">{{ openProposals }}</span>
         </router-link>
       </nav>
 
@@ -207,6 +223,15 @@ watch(() => info.value?.name, (name) => {
   cursor: pointer;
 }
 .theme-toggle:hover { background: color-mix(in srgb, var(--vibe-chrome-fg) 12%, transparent); }
+/* Open-proposals count on the Semantics entry. */
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px; padding: 0 6px;
+  border-radius: 9px;
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+  background: var(--vibe-accent);
+  color: var(--vibe-accent-fg);
+}
 /* In-flight agent turn marker: a dot, not text, so it survives the collapsed sidebar. */
 .agent-busy {
   display: inline-block;

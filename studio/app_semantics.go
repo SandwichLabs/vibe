@@ -22,11 +22,37 @@ import (
 // internal/semantics/proposals and internal/workspace; no agent tool reaches
 // them.
 
-// Proposal and ProposalPreview are the inbox's wire types.
+// Proposal and ProposalPreview are the inbox's wire types; DefinitionList and
+// DefinitionDetail are the Semantics view's list and opened definition.
 type (
-	Proposal        = proposals.Proposal
-	ProposalPreview = proposals.Preview
+	Proposal         = proposals.Proposal
+	ProposalPreview  = proposals.Preview
+	DefinitionList   = workspace.DefinitionList
+	DefinitionDetail = workspace.DefinitionDetail
 )
+
+// ListDefinitions returns the workspace's entities, metrics, joins and
+// glossary terms (a file that cannot be read is listed with its error) and how
+// many proposals wait.
+func (a *App) ListDefinitions() (*DefinitionList, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
+	}
+	return workspace.ListDefinitions(a.ctxOrBackground(), a.ws)
+}
+
+// GetDefinition opens one definition (kind entity, metric, join or glossary):
+// its file text as stored, its revision and the decoded document.
+func (a *App) GetDefinition(kind, name string) (*DefinitionDetail, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
+	}
+	return workspace.GetDefinition(a.ctxOrBackground(), a.ws, semantics.Kind(kind), name)
+}
 
 // proposalErr marks a proposal whose target changed since it was proposed as a
 // conflict the UI can offer "accept anyway" for, keeping the reason.
@@ -73,6 +99,7 @@ func (a *App) GetProposal(id string) (*ProposalPreview, error) {
 // written, even with overwrite. If the file changed since the proposal was made
 // it is refused as a conflict unless overwrite (which needs shownRev).
 func (a *App) AcceptProposal(id, shownRev string, overwrite bool) error {
+	defer a.recheckGrants() // registered first, so it runs after the lock is released
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.requireWorkspace(); err != nil {
@@ -168,6 +195,7 @@ func (a *App) ProfileJoin(name string) (*JoinProfile, error) {
 		return nil, conflictErr(err)
 	}
 	a.emitEvent("data:changed")
+	a.recheckGrants()
 	return p, nil
 }
 

@@ -47,6 +47,10 @@ type decision struct {
 	Decision string `json:"decision"`
 	// SHA256 is set for an allow: the approved content.
 	SHA256 string `json:"sha256,omitempty"`
+	// Note is an optional caller-defined string kept with an allow (a custom
+	// view records the hash of its own files, so a later "changed" can say
+	// whether those files or something they read changed). Old files have none.
+	Note string `json:"note,omitempty"`
 }
 
 type decisionFile struct {
@@ -62,6 +66,8 @@ type Entry struct {
 	Decision string
 	// SHA256 is the approved content hash of an allow.
 	SHA256 string
+	// Note is the allow's note, "" when it has none.
+	Note string
 }
 
 // Decisions is the store.
@@ -146,6 +152,17 @@ func (d *Decisions) State(path, hash string) State {
 	return StateUndecided
 }
 
+// Note returns the note stored with path's allow, "" when there is none.
+func (d *Decisions) Note(path string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	dec := d.load().Files[path]
+	if dec.Decision != decAllow {
+		return ""
+	}
+	return dec.Note
+}
+
 // lock serialises a load-modify-save across processes. Memory-only stores need
 // none.
 func (d *Decisions) lock() (func(), error) {
@@ -169,6 +186,15 @@ func (d *Decisions) Allow(path, hash string) error {
 // and a file that changed since is refused with ErrStale. current is called
 // once, with the lock held, and must not call back into d.
 func (d *Decisions) AllowIf(path, shown string, current func() (string, error)) error {
+	return d.AllowIfNote(path, shown, func() (string, string, error) {
+		h, err := current()
+		return h, "", err
+	})
+}
+
+// AllowIfNote is AllowIf where current also returns the note to store with the
+// allow, read in the same step as the hash it describes.
+func (d *Decisions) AllowIfNote(path, shown string, current func() (hash, note string, err error)) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	unlock, err := d.lock()
@@ -176,7 +202,7 @@ func (d *Decisions) AllowIf(path, shown string, current func() (string, error)) 
 		return err
 	}
 	defer unlock()
-	now, err := current()
+	now, note, err := current()
 	if err != nil {
 		return err
 	}
@@ -184,7 +210,7 @@ func (d *Decisions) AllowIf(path, shown string, current func() (string, error)) 
 		return ErrStale
 	}
 	f := d.load()
-	f.Files[path] = decision{Decision: decAllow, SHA256: shown}
+	f.Files[path] = decision{Decision: decAllow, SHA256: shown, Note: note}
 	return d.save(f)
 }
 
@@ -215,7 +241,7 @@ func (d *Decisions) List() []Entry {
 	f := d.load()
 	out := make([]Entry, 0, len(f.Files))
 	for p, dec := range f.Files {
-		out = append(out, Entry{Path: p, Decision: dec.Decision, SHA256: dec.SHA256})
+		out = append(out, Entry{Path: p, Decision: dec.Decision, SHA256: dec.SHA256, Note: dec.Note})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out

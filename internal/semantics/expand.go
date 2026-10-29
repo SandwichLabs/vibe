@@ -60,14 +60,14 @@ func (s *reader) Metric(ctx context.Context, name string) (*Metric, error) {
 	if s.sem == nil {
 		return nil, ErrNotFound
 	}
-	return s.sem.Metric(ctx, name)
+	return s.pinnedMetric(ctx, name)
 }
 
 func (s *reader) Query(ctx context.Context, id string) (*queries.Query, error) {
 	if s.q == nil {
 		return nil, queries.ErrNotFound
 	}
-	return s.q.Get(ctx, id)
+	return s.pinnedQuery(ctx, id)
 }
 
 // Options describe the run the text is for.

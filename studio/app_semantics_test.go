@@ -115,3 +115,42 @@ func TestProposals_StaleIsAConflictUntilOverwrite(t *testing.T) {
 	cur, _ = app.ws.Semantics().Metric(ctx, "net_revenue")
 	assert.Equal(t, "sum(amount)", cur.Measure)
 }
+
+func TestDefinitionBindings_ListAndGet(t *testing.T) {
+	app := newOpenApp(t)
+	ctx := context.Background()
+	require.NoError(t, app.ws.Queries().Create(ctx, &queries.Query{ID: "net_revenue_base", Title: "Base", SQL: "SELECT 'east' AS region, 10 AS amount"}))
+
+	empty, err := app.ListDefinitions()
+	require.NoError(t, err)
+	assert.Empty(t, empty.Metrics)
+
+	p := fileProposal(t, app, netRevenueDraft(""))
+	pv, err := app.GetProposal(p.ID)
+	require.NoError(t, err)
+	require.NoError(t, app.AcceptProposal(p.ID, pv.ShownRev, false))
+
+	list, err := app.ListDefinitions()
+	require.NoError(t, err)
+	require.Len(t, list.Metrics, 1)
+	assert.Equal(t, "net_revenue", list.Metrics[0].Name)
+	assert.Zero(t, list.OpenProposals)
+
+	d, err := app.GetDefinition("metric", "net_revenue")
+	require.NoError(t, err)
+	require.NotNil(t, d.Metric)
+	assert.Equal(t, []string{"region"}, d.Metric.Dimensions)
+	assert.Contains(t, d.Text, "measure: sum(amount)")
+	assert.False(t, d.QueryMissing)
+
+	_, err = app.GetDefinition("metric", "../x")
+	assert.Error(t, err)
+}
+
+func TestAgentProposalAnnouncesItself(t *testing.T) {
+	app := newOpenApp(t)
+	var events []string
+	app.emit = func(name string, _ ...any) { events = append(events, name) }
+	app.notifyAgentToolChange("propose_definition", map[string]any{"proposed": true})
+	assert.Contains(t, events, "semantics:proposed")
+}

@@ -51,7 +51,7 @@ CLI: `vibe workspace init`, `query` (`-e` edits in $EDITOR), `lsp` (`lsp snapsho
 
 ```
 cmd/vibe/, cmd/   main (cmd/vibe) and the Cobra commands (workspace, query, import, export, conn, artifact, config, bundle, lsp, mcp, studio, repl (hidden until the Studio console ships, #259))
-studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,complete,import_export,lifecycle,llm,repl,
+studio/              Wails app (one bound App): app.go (core) + app_{about,agent,artifacts,artifact_views,semantics,complete,import_export,lifecycle,llm,repl,
                      notebooks,prefs,queries,skills,tables,update}.go (bindings by area), artifacts{,_edit}.go + artifact_starters.go (the New dialog's starter files by kind; the logic behind the data artifact bindings: list, open, run, edit, save, delete), viewserver{,_page}.go + artifact_view_host.go + artifact_page_host.go (the /vibe-view/ middleware and per-grant tokens for script views and static HTML pages), pagehost{,_bridge,_files,_launch_unix,_gate_linux,_gate_darwin}.go + pagecaps{,_state,_download,_ask,_app}.go (the `state`, `download` and `ask` capabilities) + pagehelper{,_unix}.go + pagewindow_{cgo.go,linux.c,darwin.m} + app_pagehost.go (page windows of scripted HTML pages: the manager and bridge in Studio, helper mode `--view-host`, the Linux bubblewrap network gate, the native WebKitGTK/WKWebView view), agent_turn.go (the in-flight chat turn and its cancel), repl_host.go + repl_pump.go (the Data Console's sessions, frame pump and backpressure behind the `Repl*` bindings),
                      workspace_{launch,recents,open,info,create,settings,conflict,mcp}.go, signin.go (AWS device sign-in flows: StartSignIn/CancelSignIn; ssodev.go and the `ssofake`-tagged ssofake.go are the dev-build seam),
                      connections_{crud,sync,catalog,creds,deps,probe,extensions}.go, secrets.go, bundle.go,
@@ -59,10 +59,11 @@ studio/              Wails app (one bound App): app.go (core) + app_{about,agent
                      statements counting nested ones; no file/process/SQL work, no filestore write, no
                      dot import or I/O alias: `TestExportedAppMethodsAreThinBindings`
                      and the `thin-binding` ast-grep rule); frontend/ is Vue 3 (SQL completion is `lib/sqlComplete.ts`, the one CodeMirror source, used by `components/SqlEditor.vue` (the Query Explorer's editor) and notebook SQL cells; all Go calls go through src/lib/bindings.ts: typed `App` over AppApi in env.d.ts; generated wailsjs/go is gitignored; views: Launcher, Dashboard, Library (the one list of notebooks, live views, pages and chart scripts, with the New type picker)/Notebook/Artifact,
-                     TableBrowser, QueryEditor (Grid and Console tabs; `ReplTerminal.vue` is xterm.js), ConnectionEditor, Skills, Import, Settings, Agent)
+                     TableBrowser, QueryEditor (Grid and Console tabs; `ReplTerminal.vue` is xterm.js), ConnectionEditor, Skills, Semantics (entities, metrics, joins, glossary and the proposals inbox: it reads and runs, edits no file; `useSemantics`, `useProposals`, `useDefinitionRuns`, `useProposalBadge` for the nav badge), Import, Settings, Agent)
 internal/
   workspace/         the folder model: vibe.yaml, scopes (user/shared/local), discovery, init, watcher;
                      ConnectionStates (one typed status for CLI + Studio), TestCredential (the Test guard);
+                     `ListDefinitions`/`GetDefinition` (the Semantics view's reads, `semantics_list.go`) and `applyMetricDeps` (`artifact_metrics.go`: a script view or page whose queries call `metric()` is allowed on `artifacts.DepsHash`, the view hash folded with the metric files and saved queries it reads, #282; `ArtifactViewStatus.ContentHash` is the plain hash a host re-derives), and the watcher's `KindSemantics`/`KindProposal`;
                      ApplySettings (the "only tighten" rules), ResolveConflict (Keep mine / Reload / Save as
                      copy over the notebook, query and skill stores), CreateNew, GitInfo (reads .git/HEAD, runs no git)
   connections/       connection type registry and attach SQL
