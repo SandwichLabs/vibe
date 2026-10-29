@@ -8,14 +8,14 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Security
 
-- **The SQL check could be made to skip a statement.** DuckDB lets `$` continue a name (`x$a$`) and allows names with non-ASCII letters, and it reads `1._5` as a number followed by a name. Vibe's checks read these as the start of a dollar-quoted string instead, so `SELECT 1 AS x$a$; CREATE SECRET ...; SELECT $a$` hid the middle statement from the check while DuckDB still ran it. This affected the Query Explorer, notebooks and the agent's SQL policy. All four of Vibe's SQL lexers now read names and numbers as DuckDB does, and are tested against DuckDB itself.
+- **The SQL check could be made to skip a statement.** DuckDB nests block comments (`/* a /* b */ c */`), lets `$` continue a name (`x$a$`) and allows non-ASCII letters in names, and it reads `1._5` as the number `1.` followed by the name `_5`. Vibe's checks could disagree about where a comment or a dollar-quoted string ended, so text such as `SELECT 1 AS x$a$; CREATE SECRET ...; SELECT $a$` or `/* /* */ ' */ CREATE SECRET ...` hid a statement from the check while DuckDB still ran it. The `$` and number cases affected the Query Explorer, notebooks and the agent's SQL policy (and so MCP clients and data artifacts); the nested-comment case affected the Query Explorer and notebooks. Vibe's SQL lexers now read comments, names and numbers as DuckDB does; the two that gate SQL (the editor's check and the agent's policy) are tested against DuckDB itself.
 - **Statement text is no longer written to logs.** The query log line carries a short hash, the byte length and the connection. DuckDB errors are logged without the `LINE n:` echo of the statement, with quoted text blanked.
-- Log and history redaction now also catches short bearer tokens, API-key headers (`X-API-Key`, `X-Auth-Token`, `X-Amz-Security-Token` and others), JWTs and common key prefixes (`sk-`, `ghp_`, `glpat-`, `xox?-`, `AKIA...`).
+- Log and history redaction now also catches short bearer tokens, API-key headers (`X-API-Key`, `X-Auth-Token`, `X-Amz-Security-Token` and others), JWTs and common key prefixes (`sk-`, `ghp_`/`gho_`, `glpat-`, `xoxb-`/`xoxp-`, `AKIA...`).
 
 ### Added
 
-- **A data console in the Query Explorer (#255).** A Console tab next to the results grid gives a DuckDB-CLI-style prompt over the workspace hub: statements end with `;`, results draw as boxes, Ctrl+C cancels a running query, Tab completes names from the same catalog as autocomplete, and history is kept in `.vibe-local/repl/history` (statements that look like they hold a credential are never recorded). Dot commands include `.tables`, `.schema`, `.mode`, `.timer`, `.conn`, `.read` (run a saved query) and `.save` (save the last statement as a query). The connection picker switches the console's connection at an empty prompt. The console runs Vibe's own SQL path, with the same checks as the editor; it is never a shell. Up to four consoles can be open; they close when the workspace closes. See `docs/reference/console.md`.
-- **SQL autocomplete in the Query Explorer and notebook SQL cells (#256).** Ctrl+Space opens a list of connections, schemas, tables, columns (through aliases), functions and keywords from the same completer `vibe lsp` uses. Connected connections are live; others come from the saved snapshot. Completion never connects a connection or runs your SQL.
+- **A data console in the Query Explorer (#255).** A Console tab next to the results grid gives a DuckDB-CLI-style prompt over the workspace hub: statements end with `;`, results draw as boxes, Ctrl+C cancels a running query, Tab completes names from the same catalog as autocomplete, and history is kept in `.vibe-local/repl/history` (statements that look like they hold a credential are never recorded). Dot commands include `.tables`, `.schema`, `.mode`, `.timer`, `.conn`, `.read` (run a saved query) and `.save` (save the last statement as a query). The connection picker switches the console's connection at an empty prompt. The console runs Vibe's own SQL path, with the same checks as the editor; it is never a shell. Values are printed with control and bidirectional-override characters removed. Up to four consoles can be open; they close when the workspace closes. See `docs/reference/console.md`.
+- **SQL autocomplete in the Query Explorer and notebook SQL cells (#256).** Names are offered as you type (Ctrl+Space opens the list on demand): connections, schemas, tables, columns (through aliases), functions and keywords, from the same completer `vibe lsp` uses. Connected connections are live; others come from the saved snapshot. Completion never connects a connection or runs your SQL.
 
 ### Changed
 
@@ -24,7 +24,8 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Fixed
 
-- Nested block comments (`/* a /* b */ c */`) are now read as DuckDB reads them, so a valid statement after one is no longer refused (#275).
+- Nested block comments (`/* a /* b */ c */`) are now read as DuckDB reads them, so a valid statement after one is no longer refused (#275). (The same mismatch could also hide a statement; see Security.)
+- `vibe lsp` no longer misreads dollar-quoted strings, `E'...'` strings, nested comments or `\r` line endings, and marks a capped completion list incomplete.
 
 ## [0.3.3] - 2026-10-26
 
