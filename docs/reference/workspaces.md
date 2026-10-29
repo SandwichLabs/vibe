@@ -53,6 +53,7 @@ acme-analytics/
 └── .vibe-local/              never committed; non-trust state only
     ├── hub.lock              held while a process owns the workspace, see "One owner at a time"
     ├── nonce                 this folder's mark, see "Re-cloning"
+    ├── proposals/            definitions an agent proposed, waiting for you, see [semantics.md](semantics.md#proposals-an-agent-suggests-you-decide)
     └── state.json            open tabs, last notebook
 ```
 

@@ -17,6 +17,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"github.com/SandwichLabs/vibe/internal/skills"
@@ -43,16 +44,19 @@ type mockAccess struct {
 	db     *sql.DB
 	duckDB *sql.DB
 
-	nbs notebooks.Mock
-	qs  queries.Mock
-	sks skills.Mock
-	sem semantics.Mock
+	nbs   notebooks.Mock
+	qs    queries.Mock
+	sks   skills.Mock
+	sem   semantics.Mock
+	props proposals.Mock
 }
 
-func (m *mockAccess) Notebooks() notebooks.Store { return &m.nbs }
-func (m *mockAccess) Queries() queries.Store     { return &m.qs }
-func (m *mockAccess) Skills() skills.Store       { return &m.sks }
-func (m *mockAccess) Semantics() semantics.Store { return &m.sem }
+func (m *mockAccess) Notebooks() notebooks.Store     { return &m.nbs }
+func (m *mockAccess) Queries() queries.Store         { return &m.qs }
+func (m *mockAccess) Skills() skills.Store           { return &m.sks }
+func (m *mockAccess) Semantics() semantics.ReadStore { return &m.sem }
+
+func (m *mockAccess) Proposals() proposals.Proposer { return &m.props }
 
 func (m *mockAccess) DuckDBDB() *sql.DB {
 	if m.duckDB != nil {

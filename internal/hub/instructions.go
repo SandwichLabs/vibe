@@ -113,7 +113,7 @@ func gateSentence(in instructionsInput) string {
 		return "Each change shows the person an approval card in Vibe Studio and waits for their OK."
 	case in.Policy.AskBeforeWrites:
 		return "Writes need the person's OK and nobody can give it over this connection, so they are refused. " +
-			"write_artifact, the notebook cell tools (add_query_cell, add_markdown_cell, update_cell, delete_cell, move_cell, create_dashboard), save_query, build_query and create_or_update_skill check your request first: when one says it is valid and ready, ask the person to approve it, or to turn off " +
+			"write_artifact, the notebook cell tools (add_query_cell, add_markdown_cell, update_cell, delete_cell, move_cell, create_dashboard), save_query, build_query, propose_definition and create_or_update_skill check your request first: when one says it is valid and ready, ask the person to approve it, or to turn off " +
 			agents.SettingsAskPath + "; that applies when the MCP server restarts."
 	}
 	return "Changes to this workspace's own local files run without asking; any other connection always needs the person's approval in Vibe Studio."

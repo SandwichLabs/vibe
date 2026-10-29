@@ -87,7 +87,7 @@ assertions:
 | Field | Meaning |
 |---|---|
 | `query` | The id of a [saved query](workspaces.md) (`queries/<id>.sql`): a lower-case letter or digit first, then letters, digits, `-` and `_`. A metric is a measure over that query's rows, so the SQL, its parameters and its connection live in one place, the saved query. The file is not required to exist when the metric is read, only when it is used. |
-| `measure` | One SQL aggregate expression over the saved query's columns, which is placed after `SELECT` and before `AS <name>`. It is held to a **structural** rule, not a list of bad words: at most 4 KiB, on one line; no `;`, `--` or `/*`; balanced parentheses; only plain `'strings'` with every quote closed (no `E'..'`, no `$$..$$`); **no comma outside parentheses** (so no second column); none of the words `SELECT`, `FROM`, `WITH`, `UNION`, `INTERSECT`, `EXCEPT`, `AS`, `GROUP`, `HAVING`, `ORDER`, `LIMIT`, `OFFSET`, `QUALIFY`, `WINDOW`, `PIVOT`, `PIVOT_WIDER`, `PIVOT_LONGER`, `UNPIVOT`, `TABLE`, `VALUES`, `DESCRIBE`, `SUMMARIZE`, `SHOW`, `EXPLAIN`, `PRAGMA`, `CALL`, `EXISTS` anywhere, and `WHERE` only directly inside `FILTER (...)`. After every `(` the next word may not be **any** DuckDB keyword (the full `duckdb_keywords()` list, every category), except `DISTINCT`, `CASE`, `NOT`, `NULL`, `TRUE`, `FALSE`, `INTERVAL`, `WHERE` right after `FILTER`, and a callable keyword such as `coalesce(`; so no subquery or statement (`(PIVOT ...)`, `(TABLE t)`, `(DESCRIBE ...)`, `(VALUES ...)`) can start inside a group. **Every call must be to an allowed function**: DuckDB's scalar and aggregate functions (a list generated from `duckdb_functions()` and kept equal to the linked DuckDB by a test), unqualified, less `getenv`, `query`, `query_table`, `metric`, the file readers (`read_csv`, `read_parquet`, `read_json`, `read_text`, `glob`, ...), `COLUMNS` and `UNNEST` (more than one column or row), `nextval`, `setval`, `currval`, `current_setting`, `getvariable`, `setvariable` (side effects and state), and the secret, MotherDuck and AI functions; `FILTER`, `OVER`, `IN` and the like before `(` are not calls, and a type after `::` may take arguments (`::DECIMAL(10,2)`). No `*` except in `count(*)` (`t.*`, `sum(*)` and `* EXCLUDE (...)` are refused; `a * b` is multiplication and is fine). A metric must produce exactly one value column and change nothing. So `sum(amount)`, `sum(amount) FILTER (WHERE status = 'paid')`, `count(DISTINCT customer_id)`, `sum(a) / nullif(sum(b), 0)`, `avg(x)::DECIMAL(10,2)`, `sum(price * qty)`, `sum(coalesce(a, 0))` and `sum(CASE WHEN refunded THEN 0 ELSE amount END)` are fine; `CAST(x AS ...)` (use `::`), `extract(year FROM d)` and `string_agg(x, ',' ORDER BY y)` are not. Commas inside a call's parentheses are fine. That is all that is checked when the file is read; whether the SQL is allowed is also decided where it runs, by the SQL policy (see below). To regenerate the lists after a DuckDB upgrade: `go test ./internal/semantics -run TestGenerateLists -update-lists`. |
+| `measure` | One SQL aggregate expression over the saved query's columns, which is placed after `SELECT` and before `AS <name>`. It is held to a **structural** rule, not a list of bad words: at most 4 KiB, on one line; no `;`, `--` or `/*`; balanced parentheses; only plain `'strings'` with every quote closed (no `E'..'`, no `$$..$$`); **no comma outside parentheses** (so no second column); none of the words `SELECT`, `FROM`, `WITH`, `UNION`, `INTERSECT`, `EXCEPT`, `AS`, `GROUP`, `HAVING`, `ORDER`, `LIMIT`, `OFFSET`, `QUALIFY`, `WINDOW`, `PIVOT`, `PIVOT_WIDER`, `PIVOT_LONGER`, `UNPIVOT`, `TABLE`, `VALUES`, `DESCRIBE`, `SUMMARIZE`, `SHOW`, `EXPLAIN`, `PRAGMA`, `CALL`, `EXISTS` anywhere, and `WHERE` only directly inside `FILTER (...)` (its condition may open with a parenthesised expression: `FILTER (WHERE (status) = 'paid')`). After every `(` the next word may not be **any** DuckDB keyword (the full `duckdb_keywords()` list, every category), except `DISTINCT`, `CASE`, `NOT`, `NULL`, `TRUE`, `FALSE`, `INTERVAL`, `WHERE` right after `FILTER`, and a callable keyword such as `coalesce(`; so no subquery or statement (`(PIVOT ...)`, `(TABLE t)`, `(DESCRIBE ...)`, `(VALUES ...)`) can start inside a group. **Every call must be to an allowed function**: DuckDB's scalar and aggregate functions (a list generated from `duckdb_functions()` and kept equal to the linked DuckDB by a test), unqualified, less `getenv`, `query`, `query_table`, `metric`, the file readers (`read_csv`, `read_parquet`, `read_json`, `read_text`, `glob`, ...), `COLUMNS` and `UNNEST` (more than one column or row), `nextval`, `setval`, `currval`, `current_setting`, `getvariable`, `setvariable`, `sleep_ms`, `write_log`, `setseed` (side effects and state), and the secret, MotherDuck and AI functions; `FILTER`, `OVER`, `IN` and the like before `(` are not calls, and a type after `::` may take arguments (`::DECIMAL(10,2)`). No `*` except in `count(*)` (`t.*`, `sum(*)` and `* EXCLUDE (...)` are refused; `a * b` is multiplication and is fine). A metric must produce exactly one value column and change nothing. So `sum(amount)`, `sum(amount) FILTER (WHERE status = 'paid')`, `count(DISTINCT customer_id)`, `sum(a) / nullif(sum(b), 0)`, `avg(x)::DECIMAL(10,2)`, `sum(price * qty)`, `sum(coalesce(a, 0))` and `sum(CASE WHEN refunded THEN 0 ELSE amount END)` are fine; `CAST(x AS ...)` (use `::`), `extract(year FROM d)` and `string_agg(x, ',' ORDER BY y)` are not. Commas inside a call's parentheses are fine. That is all that is checked when the file is read; whether the SQL is allowed is also decided where it runs, by the SQL policy (see below). To regenerate the lists after a DuckDB upgrade: `go test ./internal/semantics -run TestGenerateLists -update-lists`. |
 | `dimensions` | Columns of the saved query that a caller may group by. Lower-case column names, no duplicates. |
 | `format` | How a value is shown: `number`, `currency` or `percent`. Display only. |
 | `settled_by` | The disagreement that settled this definition. `text` is required (up to 2000 characters); `ref` is free text (up to 200) reserved for a verifier card or receipt id. It is stored and shown, never followed. |
@@ -147,15 +147,75 @@ Plain markdown, up to 256 KiB, no control characters. Vibe reads it only for its
 
 ## From the command line
 
-Both commands only read files; no connection is opened and no query runs.
+`list` and `show` only read files; no connection is opened and no query runs. The four proposal commands read and write the [proposals inbox](#proposals-an-agent-suggests-you-decide) and, for `accept`, one file under `semantics/`.
 
 ```
 vibe semantics list [--json]            kind, name, one-line summary, and any error
 vibe semantics show <kind> <name>       the file exactly as stored (kind: entity | metric | join)
 vibe semantics show glossary            the glossary
+vibe semantics proposals [--all] [--json]   proposed definitions waiting for you (--all: decided ones too)
+vibe semantics show-proposal <id>       who proposed it and why, and a diff of the file against the proposed one
+vibe semantics accept <id> [--overwrite --rev <rev>]   write the proposed definition into semantics/
+vibe semantics reject <id>              decline it; semantics/ is not touched
 ```
 
-`list` includes unreadable files with their error. `show` prints a file even when it fails validation (so you can read and fix it), then says why on stderr and exits non-zero. Control and bidirectional characters in a name, summary, error or file are shown as `<U+XXXX>`.
+`list` includes unreadable files with their error, and says on stderr how many proposals wait. `show` prints a file even when it fails validation (so you can read and fix it), then says why on stderr and exits non-zero. Control and bidirectional characters in a name, summary, error or file are shown as `<U+XXXX>`.
+
+## Proposals: an agent suggests, you decide
+
+An agent never writes under `semantics/`. It can only **propose** a definition, and the proposal waits for you. This is the one way an agent adds to the semantic layer, and it is the same in Studio's chat and over MCP.
+
+| Tool | Tiers | What it does |
+|---|---|---|
+| `list_definitions` | every tier | The entities, metrics (with dimensions, measure and saved query), joins and glossary terms, each with its `rev`, unreadable files with their error, and `proposals: {open: n}`. A read-only agent can use metrics through this and `metric()`. |
+| `get_definition` | every tier | One definition as data with its `rev`. For a metric it also returns the declared `parameters` of its saved query. For the glossary, a `name` (a term) returns that term's text. |
+| `propose_definition` | `read-write` and `full` (a content tool, like `save_query`) | Files a proposal. Arguments: `kind` (`entity`, `metric`, `join` or `glossary`), `name`, `definition`, `rationale`, optional `evidence` and `replaces_rev`. |
+
+`propose_definition` checks the definition **now** with the kind's own decoder and validator, so the measure rule, the reserved-word rule, the name rule and every cap apply, and an unknown field is refused. A definition that fails is refused with the reason and nothing is filed; an accepted proposal can therefore never produce a file Vibe would refuse to read. It also refuses: a `metric` whose saved query does not exist; a name that already exists unless `replaces_rev` is the `rev` the agent read (and a stale `rev`, so it cannot overwrite what it never saw); a proposal identical to one already waiting; a join with `measured` (that block is written only by a profiling run you start); a glossary text with a `## ` line of its own (it would start another term); and any call once **200** proposals are open (`accept or reject some first`). The agent is told the proposal was filed and that **nothing in `semantics/` has changed**. Its approval card (when the workspace asks before changes) says the same: "goes to your proposals inbox; nothing in semantics/ changes until you accept it". Dry-run and headless behaviour match `save_query`: a valid call that nobody can approve is "valid and ready, needs approval".
+
+### The inbox
+
+A proposal is a file, `.vibe-local/proposals/<id>.yaml`, on this machine: **git-ignored and never in a `.vibe` bundle**, so a proposal is not shared and not committed until you accept it and commit the resulting file. The id is made by Vibe (`<UTC time>-<kind>-<name>-<4 hex>`, for example `20261029T153012Z-metric-net_revenue-7f3a`), never by the agent, and every command and binding checks that it has exactly that shape before using it as a file name.
+
+```yaml
+version: 1
+id: 20261029T153012Z-metric-net_revenue-7f3a
+kind: metric                 # entity | metric | join | glossary
+name: net_revenue            # for a glossary, the term made into a name
+status: open                 # open | accepted | rejected
+proposed_at: 2026-10-29T15:30:12Z
+proposed_by: agent           # agent | person
+rationale: Refunds are excluded, per the finance thread.
+evidence: [saved query net_revenue_base]
+replaces_rev: ""             # the rev of the file it replaces; "" = a new file
+definition:                  # the exact document that would be written (glossary: term, text)
+  version: 1
+  name: net_revenue
+  query: net_revenue_base
+  measure: sum(amount)
+decided_at: ""
+```
+
+A proposal file is read as strictly as the definitions: at most **64 KiB** and **6,000** YAML nodes, no anchors, aliases, tags or merge keys, no unknown key, and the `definition` is decoded with the kind's own rules again every time the file is read (a hand-edited proposal that no longer passes is listed with its error and cannot be accepted). `rationale` is required (up to 2,000 characters), `evidence` holds up to 20 short strings. Decided proposals stay as history; Vibe keeps the newest 800 of 1,000 files and drops the oldest decided ones, never an open one.
+
+### Accepting
+
+Accepting is **only a person's act**: `vibe semantics accept <id>` or Studio's `AcceptProposal`. No tool, MCP method, approval card or agent path can accept or reject a proposal, or write, replace or delete anything under `semantics/`. The agent is handed a read-only view of the store and an inbox that can only add, wrapped so neither can be turned back into the writer, and a test runs every tool in every tier against a store that fails on any write and checks that `semantics/` and the existing proposal files are byte for byte unchanged on disk afterwards.
+
+Every accept is pinned to the version that was shown: it carries the `Rev` of what the person looked at (a token over the target file's revision and the proposal file's), and a mismatch (the target changed, or the proposal was edited, after it was shown) is refused with "changed again since you looked", before anything is written or marked. Plain `vibe semantics accept <id>` looks at the proposal right then, prints what it is about to write (the `show-proposal` text, with its `Rev`) to stderr, and writes exactly that; `--rev <rev>` accepts the version you reviewed earlier and must match. Studio's `AcceptProposal` requires the `shown_rev` and refuses an empty one.
+
+`accept` writes the text `show-proposal` displayed, as compare-and-write against the revision the proposal was made against (`replaces_rev`). The one exception to "exactly what was displayed" is accepting over a changed file, below, and even then it writes the proposed text, never a merge:
+
+- the file is unchanged since: it is written, and the proposal is marked `accepted`;
+- the file **changed, was created, or was deleted** since the proposal: nothing is written, and the command fails with "changed since this was proposed", showing the diff. To accept it anyway you pass `--overwrite` **and** `--rev <rev>`, the `Rev` line `show-proposal` printed for the version you reviewed (the failure message prints the exact command). `--overwrite` without `--rev` shows the proposal and refuses, so nothing can overwrite blind. If the file or the proposal changed again after you looked, the `Rev` no longer matches and even `--overwrite` is refused ("changed again since you looked"): look again;
+- the file already reads exactly as proposed (a crash after the write, before the proposal was marked): nothing is written again, the proposal is only marked accepted;
+- a glossary proposal appends a `## term` section, or replaces the existing section of the same term (matched without regard to case), and leaves every other term untouched. A **new** term (its `replaces_rev` is empty) is never stale because some other term changed, only because that term now exists, so two new-term proposals can be accepted one after the other; a replacement is stale if its term changed, and if the term was deleted ("the term was deleted since this was proposed"). Marking the proposal accepted compares the proposal file with the version that was shown. A glossary with a code fence that is never closed is refused (`glossary.md has an unclosed ``` fence; fix it first`), since an appended term would be swallowed by the fence. A glossary written with CRLF line endings keeps them.
+
+`show-proposal` (and Studio's `GetProposal`) also warns about: a metric whose saved query no longer exists, a join whose `measured` block accepting would drop, and a hand-written file with comments that the canonical rewrite will lose.
+
+`reject` marks the proposal `rejected`. A proposal that is no longer open cannot be accepted or rejected again.
+
+Studio's bindings are `ListProposals(all)`, `GetProposal(id)` (the proposal, the current text and revision of its target, the whole proposed text, whether it is stale, the `shown_rev` pin and the warnings; the diff is drawn client-side), `AcceptProposal(id, shownRev, overwrite)` (`shownRev` is the `shown_rev` that was on screen; the write is refused if it changed, and `overwrite` needs it) and `RejectProposal(id)`. The Semantics view that uses them is not built yet.
 
 ## Sharing
 

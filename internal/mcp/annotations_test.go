@@ -220,3 +220,44 @@ func asList(t *testing.T, v any) []any {
 	require.True(t, ok, "expected a list, got %T", v)
 	return l
 }
+
+// The semantic-layer tools reach MCP clients from the same registry with the
+// same gating: the two readers work at every tier, the proposer only where a
+// content write is allowed, and no tool decides a proposal.
+func TestSemanticsToolsOverMCP(t *testing.T) {
+	offered := map[string]agents.ToolDef{}
+	for _, td := range agents.ListToolsForMode(agents.ModeMCP) {
+		offered[td.Name] = td
+	}
+	for name, category := range map[string]string{"list_definitions": "introspect", "get_definition": "introspect", "propose_definition": "content"} {
+		td, ok := offered[name]
+		require.True(t, ok, name)
+		assert.Equal(t, category, td.Category, name)
+	}
+	assert.True(t, *toolDefToMCPTool(offered["list_definitions"]).Annotations.ReadOnlyHint)
+	assert.False(t, *toolDefToMCPTool(offered["propose_definition"]).Annotations.ReadOnlyHint)
+	assert.False(t, *toolDefToMCPTool(offered["propose_definition"]).Annotations.DestructiveHint)
+	for name := range offered {
+		for _, banned := range []string{"accept", "reject", "decide", "write_definition", "delete_definition"} {
+			assert.NotContains(t, name, banned, "no tool may decide a proposal or write a definition")
+		}
+	}
+
+	for _, mode := range []agents.SandboxMode{agents.ModeReadOnly, agents.ModeReadWrite, agents.ModeFull} {
+		h := agents.NewHandler(&mockAccess{}, &mockEngine{}, &agents.SandboxConfig{Mode: mode, MaxQueryRows: 100},
+			slog.New(slog.NewTextHandler(io.Discard, nil)))
+		call := func(method string, params map[string]any) *agents.Response {
+			return h.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: method, Params: params})
+		}
+		assert.Nil(t, call("list_definitions", map[string]any{}).Error, mode)
+		assert.Nil(t, call("get_definition", map[string]any{"kind": "glossary"}).Error, mode)
+		resp := call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r",
+			"definition": map[string]any{"term": "Churn", "text": "Left."}})
+		if mode == agents.ModeReadOnly {
+			require.NotNil(t, resp.Error)
+			assert.Equal(t, agents.ErrPermission, resp.Error.Code)
+			continue
+		}
+		assert.Nil(t, resp.Error, mode)
+	}
+}

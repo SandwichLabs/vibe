@@ -285,7 +285,8 @@ var measureDeniedFunctions = func() map[string]bool {
 	m := setOf("getenv", "query", "query_table", "metric",
 		"columns", "unnest",
 		"nextval", "setval", "currval", "current_setting", "getvariable", "setvariable",
-		"which_secret", "prompt", "embedding", "get_md_token", "print_md_token")
+		"which_secret", "prompt", "embedding", "get_md_token", "print_md_token",
+		"sleep_ms", "write_log", "setseed")
 	for _, f := range queries.ReaderFunctions {
 		m[f] = true
 	}
@@ -308,7 +309,7 @@ var afterParenOK = setOf("distinct", "case", "not", "null", "true", "false", "in
 
 // beforeParenOK are keywords that may stand directly before "(" without being
 // a function call: IN (...), FILTER (...), AND (...), and the like.
-var beforeParenOK = setOf("in", "not", "and", "or", "filter", "over", "when", "then", "else", "case", "between",
+var beforeParenOK = setOf("where", "in", "not", "and", "or", "filter", "over", "when", "then", "else", "case", "between",
 	"is", "distinct", "like", "ilike", "any", "all", "interval", "end")
 
 // checkMeasure holds the measure to what can be emitted on one SQL line as one

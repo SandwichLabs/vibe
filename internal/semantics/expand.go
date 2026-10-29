@@ -47,13 +47,13 @@ type Reader interface {
 }
 
 type reader struct {
-	sem Store
+	sem ReadStore
 	q   queries.Store
 }
 
 // NewReader reads metrics from sem and saved queries from q. Either may be
 // nil; a metric() call then fails with a plain message.
-func NewReader(sem Store, q queries.Store) Reader { return &reader{sem: sem, q: q} }
+func NewReader(sem ReadStore, q queries.Store) Reader { return &reader{sem: sem, q: q} }
 
 func (s *reader) Metric(ctx context.Context, name string) (*Metric, error) {
 	if s.sem == nil {
@@ -325,7 +325,7 @@ func (x *expander) loadMetric(name, label string) (*Metric, error) {
 	case errors.Is(err, ErrNotFound):
 		return nil, refuse("%s: there is no metric named %s (metrics live in semantics/metrics/; `vibe semantics list` shows them)", label, quoteForMessage(name))
 	case err != nil:
-		return nil, refuse("%s: the metric cannot be read: %s", label, errorText(err))
+		return nil, refuse("%s: the metric cannot be read: %s", label, ReadableError(err))
 	case m == nil || m.Error != "":
 		return nil, refuse("%s: the metric cannot be read", label)
 	}

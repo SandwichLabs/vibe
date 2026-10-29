@@ -100,6 +100,11 @@ interface AppApi {
   ListSkills(): Promise<SkillSummary[]>
   SaveSkill(name: string, description: string, instructions: string, tableName: string, rev: string): Promise<void>
   DeleteSkill(name: string): Promise<void>
+  // Proposed semantic definitions (E4): the person's side of the inbox
+  ListProposals(all: boolean): Promise<Proposal[]>
+  GetProposal(id: string): Promise<ProposalPreview>
+  AcceptProposal(id: string, shownRev: string, overwrite: boolean): Promise<void>
+  RejectProposal(id: string): Promise<void>
   ListTables(): Promise<string[]>
   DescribeTable(name: string): Promise<TableInfo>
   GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
@@ -540,6 +545,40 @@ interface SkillSummary {
   table_name?: string
   source: string // 'built-in' | 'user' | 'import'
   rev?: string // store revision as listed; sent back on save
+}
+
+// Proposal mirrors studio.Proposal (internal/semantics/proposals): a definition
+// an agent proposed, waiting for the person. The definition itself is read
+// through GetProposal's proposed_text.
+interface Proposal {
+  id: string
+  kind: 'entity' | 'metric' | 'join' | 'glossary'
+  name: string
+  status: 'open' | 'accepted' | 'rejected' | ''
+  proposed_at: string
+  proposed_by: string
+  rationale: string
+  evidence: string[]
+  replaces_rev: string
+  decided_at: string
+  rev?: string
+  error?: string // an unreadable proposal file
+}
+
+// ProposalPreview mirrors studio.ProposalPreview: a proposal beside the file it
+// would replace. proposed_text is the whole file after accepting; the diff is
+// drawn client-side.
+interface ProposalPreview {
+  proposal: Proposal
+  target: string
+  exists: boolean
+  current_text: string
+  current_rev: string
+  proposed_text: string
+  stale: boolean
+  stale_reason?: string
+  shown_rev: string // pins the version on screen; sent back on accept
+  warnings: string[] // a missing saved query, a dropped measured block, lost comments
 }
 
 interface PageSummary {

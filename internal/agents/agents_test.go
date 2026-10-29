@@ -14,6 +14,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
 	"github.com/SandwichLabs/vibe/internal/skills"
@@ -215,12 +216,13 @@ type mockAccess struct {
 	db     *sql.DB
 	duckDB *sql.DB
 
-	mu  sync.Mutex
-	nbs notebooks.Store
-	qs  queries.Store
-	sks skills.Store
-	sem semantics.Mock
-	ars artifacts.Store
+	mu    sync.Mutex
+	nbs   notebooks.Store
+	qs    queries.Store
+	sks   skills.Store
+	sem   semantics.Mock
+	props proposals.Mock
+	ars   artifacts.Store
 }
 
 func (m *mockAccess) Artifacts() artifacts.Store {
@@ -250,7 +252,9 @@ func (m *mockAccess) Queries() queries.Store {
 	return m.qs
 }
 
-func (m *mockAccess) Semantics() semantics.Store { return &m.sem }
+func (m *mockAccess) Semantics() semantics.ReadStore { return &m.sem }
+
+func (m *mockAccess) Proposals() proposals.Proposer { return &m.props }
 
 func (m *mockAccess) Skills() skills.Store {
 	m.mu.Lock()

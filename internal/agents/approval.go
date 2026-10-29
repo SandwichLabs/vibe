@@ -233,6 +233,12 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 	case "save_query":
 		ar.Rows = -1
 		ar.Summary = fmt.Sprintf("Save query %q", stringParam(req.Params["title"]))
+	case "propose_definition":
+		ar.Rows = -1
+		ar.Summary = "Propose a semantic definition (goes to your proposals inbox; nothing in semantics/ changes until you accept it)"
+		if def, ok := req.Params["definition"].(map[string]any); ok {
+			ar.SQL = stringParam(def["measure"])
+		}
 	case "create_or_update_skill":
 		ar.Rows = -1
 		ar.Summary = fmt.Sprintf("Save skill %s", stringParam(req.Params["name"]))

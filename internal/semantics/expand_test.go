@@ -297,3 +297,17 @@ func TestExpand_CheckOuterParams(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalid)
 	assert.Contains(t, err.Error(), "declared as text by the open query and as number by metric net_revenue's saved query")
 }
+
+// A metric file that does not decode is reported as one sentence, not as the
+// store's nested "failed to get metric ...: invalid semantics definition: ..." chain.
+func TestExpand_UnreadableMetricIsOneSentence(t *testing.T) {
+	mock := &Mock{}
+	mock.SetFile("metrics/broken.yaml", []byte("version: 1\nname: broken\nquery: q\nmeasure: sum(a) FROM t\n"))
+	q := &queries.Mock{}
+	_, err := Expand(context.Background(), "SELECT * FROM metric('broken')", NewReader(mock, q), Options{})
+	require.Error(t, err)
+	msg := err.Error()
+	assert.Contains(t, msg, "the metric cannot be read: semantics/metrics/broken.yaml: measure may not use FROM")
+	assert.NotContains(t, msg, "failed to get")
+	assert.NotContains(t, msg, "invalid semantics definition")
+}

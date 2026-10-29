@@ -128,6 +128,18 @@ func contentCases() []contentCase {
 			written: queryCount,
 		},
 		{
+			tool: "propose_definition",
+			valid: map[string]any{"kind": "glossary", "rationale": "Finance uses this word both ways.",
+				"definition": map[string]any{"term": "Churn", "text": "Customers who cancelled in the period."}},
+			invalid: map[string]any{"kind": "glossary", "rationale": "x",
+				"definition": map[string]any{"term": "Churn", "text": "text\n## smuggled\nsecond term"}},
+			written: func(t *testing.T, fx *artifactFixture) int {
+				list, err := fx.h.access.Proposals().List(context.Background())
+				require.NoError(t, err)
+				return len(list)
+			},
+		},
+		{
 			tool:    "build_query",
 			valid:   map[string]any{"name": "Big ids", "table": "t", "conditions": []any{map[string]any{"column": "id", "op": "gt", "value": "1"}}},
 			invalid: map[string]any{"name": "Big ids", "table": "t", "conditions": []any{map[string]any{"column": "nope", "op": "gt", "value": "1"}}},

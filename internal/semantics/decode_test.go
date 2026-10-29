@@ -149,7 +149,7 @@ func TestDecodeMetric_AcceptanceSetStillPasses(t *testing.T) {
 	for _, measure := range []string{"sum(amount)", "sum(amount) FILTER (WHERE status = 'paid')", "count(DISTINCT customer_id)",
 		"sum(a) / nullif(sum(b), 0)", "avg(x)::DECIMAL(10,2)", "sum(CASE WHEN refunded THEN 0 ELSE amount END)", "sum(price * qty)",
 		"sum(coalesce(a, 0))", "count(*) FILTER (WHERE status IN ('a', 'b'))", "sum(round(a, 2))", "max(date_trunc('month', d))",
-		"count(*) FILTER (WHERE NOT (a IS NULL))", "sum(CASE WHEN a THEN 1 END)::BIGINT", "(sum(a) + sum(b)) / 2", "sum(a * (1 - discount))"} {
+		"count(*) FILTER (WHERE NOT (a IS NULL))", "count(*) FILTER (WHERE (status) = 'x')", "count(*) FILTER (WHERE (a) > 1 AND (b) < 2)", "sum(CASE WHEN a THEN 1 END)::BIGINT", "(sum(a) + sum(b)) / 2", "sum(a * (1 - discount))"} {
 		doc := strings.Replace(goodMetric, "measure: sum(amount)", "measure: "+yamlQuote(measure), 1)
 		_, err := DecodeMetric("net_revenue", []byte(doc))
 		assert.NoError(t, err, measure)
@@ -239,7 +239,8 @@ func TestDecodeMetric_MeasureCannotBreakOut(t *testing.T) {
 		// more than one column or row, side effects, state
 		"sum(COLUMNS(*))", "sum(COLUMNS('a.*'))", "sum(unnest([1,2]))", "sum(nextval('s'))", "sum(setval('s', 1))",
 		"sum(currval('s'))", "sum(CAST(current_setting('threads') AS INTEGER))", "sum(getvariable('v'))", "sum(setvariable('v', 1))",
-		"sum(metric('x'))",
+		"sum(metric('x'))", "sum(sleep_ms(5))", "sum(write_log('x'))", "sum(setseed(0.5))",
+		"count(*) FILTER (WHERE (SELECT 1) = 1)", "count(*) FILTER (WHERE (TABLE t) IS NULL)", "sum(a) WHERE (b)", "sum(a) + WHERE(b)",
 		// a star that is not count(*)
 		"sum(*)", "count(DISTINCT *)", "sum(t.*)", "min(* EXCLUDE (a))",
 		// statement-shaped subqueries hidden in parentheses

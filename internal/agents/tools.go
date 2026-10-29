@@ -338,6 +338,39 @@ var Tools = []ToolDef{
 			{Name: "rev", Type: "string", Required: false, Desc: "The rev list_queries returned for that id. Required with id."},
 		},
 	},
+	// The semantic layer (E4): definitions are files in semantics/ that only a
+	// person writes. list_definitions and get_definition are introspect, so a
+	// read-only agent can use metrics; propose_definition files a proposal in
+	// the person's inbox and is a content tool. No tool accepts one.
+	{
+		Name:        "list_definitions",
+		Description: "List the workspace's semantic definitions (semantics/): entities (what the data is about: grain, table, id column), metrics (a named measure over a saved query, with the dimensions it can be grouped by), joins (how two entities relate) and the glossary terms, plus proposals: {open: n} for the proposals waiting for the person. Each has the rev get_definition and propose_definition use; a file that cannot be read is listed with its error. Use a metric in SQL as metric('name') or metric('name', by => 'dimension'); call help_search \"semantics\" for the details.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+	{
+		Name:        "get_definition",
+		Description: "Get one semantic definition as data, with its rev. For a metric it also returns the declared parameters of its saved query. kind is entity, metric, join or glossary. For the glossary, send name (a term) to get that term's text, or omit it for the list of terms.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "kind", Type: "string", Required: true, Desc: "entity | metric | join | glossary"},
+			{Name: "name", Type: "string", Required: false, Desc: "The definition's name from list_definitions; for the glossary, a term"},
+		},
+	},
+	{
+		Name:        "propose_definition",
+		Description: "Propose a semantic definition for the person to accept. It goes to their proposals inbox (.vibe-local/proposals/); nothing in semantics/ changes until they accept it, and no tool can accept it for them. The definition is checked now with the same rules as a file in semantics/, so an invalid one is refused with the reason and nothing is filed. kind is entity, metric, join or glossary. A metric is {query: <saved query id>, measure: <one SQL aggregate such as sum(amount)>, dimensions?: [columns of that query], title?, description?, format?: number|currency|percent, settled_by?: {text}, assertions?: [{kind: non_negative|not_null}]}: its saved query must exist (save_query first). An entity is {grain, table, id_column, description?, connection?, columns?: [{name, pii?, description?}], assertions?}. A join is {left, right, on: [{left, right}], cardinality: one_to_one|many_to_one|one_to_many|many_to_many}. A glossary term is {term, text}. To change an existing definition send the rev get_definition returned as replaces_rev; to add a new one send none. Give the reason in rationale, and what you based it on (receipts, queries, observed values) in evidence.",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "kind", Type: "string", Required: true, Desc: "entity | metric | join | glossary"},
+			{Name: "name", Type: "string", Required: false, Desc: "The definition's name: lower-case letters, digits and underscores. Not used for the glossary (the term is the name)."},
+			{Name: "definition", Type: "object", Required: true, Desc: "The document to write; version and name default. See this tool's description for each kind's fields."},
+			{Name: "rationale", Type: "string", Required: true, Desc: "Why this definition, in a few sentences the person will read before accepting"},
+			{Name: "evidence", Type: "array", Required: false, Desc: "What it is based on: short strings, such as a saved query id or a receipt id", Items: &ParamDef{Type: "string"}},
+			{Name: "replaces_rev", Type: "string", Required: false, Desc: "The rev get_definition returned for the definition this replaces. Omit for a new one."},
+		},
+	},
 	{
 		Name:        "run_saved_query",
 		Description: "Run a saved query by id (see list_queries) and return its rows like run_query. Send values for its declared parameters as params {name: value}; a name you omit takes its default. It goes through run_query's gates, on the query's own connection, and runs reads only.",

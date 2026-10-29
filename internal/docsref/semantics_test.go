@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 )
 
 // TestSemanticsDocNamesEveryClosedValue keeps docs/reference/semantics.md
@@ -67,4 +68,36 @@ func TestSemanticsDocNamesEveryClosedValue(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, strings.Contains(string(b), "semantics.md"), "%s does not list semantics.md", index)
 	}
+}
+
+// TestSemanticsDocNamesTheProposalSurface keeps the proposals section honest:
+// every field of a proposal file, every status, the caps, the three tools and
+// the four commands appear in semantics.md, and the tools in mcp.md.
+func TestSemanticsDocNamesTheProposalSurface(t *testing.T) {
+	read := func(parts ...string) string {
+		b, err := os.ReadFile(filepath.Join(append([]string{repoRoot(t)}, parts...)...))
+		require.NoError(t, err)
+		return string(b)
+	}
+	doc := read("docs", "reference", "semantics.md")
+	for _, key := range yamlKeys(reflect.TypeOf(proposals.Proposal{})) {
+		assert.True(t, strings.Contains(doc, key), "semantics.md does not mention the proposal field %q", key)
+	}
+	for _, v := range []string{proposals.StatusOpen, proposals.StatusAccepted, proposals.StatusRejected, proposals.ByAgent, proposals.ByPerson} {
+		assert.True(t, strings.Contains(doc, v), "semantics.md does not name %q", v)
+	}
+	for _, v := range []string{proposals.Dir, "200", "64 KiB", "accept or reject some first"} {
+		assert.True(t, strings.Contains(doc, v), "semantics.md does not state %q", v)
+	}
+	for _, cmd := range []string{"vibe semantics proposals", "vibe semantics show-proposal", "vibe semantics accept", "vibe semantics reject", "--overwrite"} {
+		assert.True(t, strings.Contains(doc, cmd), "semantics.md does not document %q", cmd)
+	}
+	mcp := read("docs", "reference", "mcp.md")
+	policy := read("docs", "reference", "agent-policy.md")
+	for _, tool := range []string{"list_definitions", "get_definition", "propose_definition"} {
+		assert.True(t, strings.Contains(doc, "`"+tool+"`"), "semantics.md does not name %s", tool)
+		assert.True(t, strings.Contains(mcp, "`"+tool+"`"), "mcp.md does not name %s", tool)
+		assert.True(t, strings.Contains(policy, "`"+tool+"`"), "agent-policy.md does not name %s", tool)
+	}
+	assert.True(t, strings.Contains(read("docs", "privacy.md"), ".vibe-local/proposals/"), "privacy.md does not say proposals stay on this machine")
 }

@@ -95,6 +95,20 @@ func errorText(err error) string {
 	return strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": ")
 }
 
+// ReadableError is a store error as one sentence: the store wraps a
+// decoder's refusal as `failed to get metric "x": invalid semantics
+// definition: <file>: <why>`, and the first two layers say nothing the caller
+// does not already know.
+func ReadableError(err error) string {
+	s := err.Error()
+	if strings.HasPrefix(s, "failed to get ") {
+		if i := strings.Index(s, `": `); i >= 0 {
+			s = s[i+3:]
+		}
+	}
+	return strings.TrimPrefix(s, ErrInvalid.Error()+": ")
+}
+
 func loadKind[T any](c *core, o ops[T], name string) (*T, error) {
 	data, rev, err := c.b.read(o.rel(name))
 	if err != nil {

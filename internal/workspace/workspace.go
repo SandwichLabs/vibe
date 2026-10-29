@@ -21,6 +21,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/skills"
 	"github.com/SandwichLabs/vibe/internal/trustfile"
 )
@@ -74,6 +75,11 @@ type Workspace interface {
 	// Semantics is the workspace's semantics/ folder: entities, metrics, joins
 	// and the glossary, one yaml file each (docs/reference/semantics.md).
 	Semantics() semantics.Store
+	// Proposals is the inbox of proposed semantic definitions
+	// (.vibe-local/proposals/): machine-local, git-ignored and never bundled.
+	// Accepting one (proposals.Accept) is the person's act; agent tools are
+	// given only AgentAccess.Proposals, a proposer that cannot decide.
+	Proposals() proposals.Store
 
 	// ArtifactViewState reports where an artifact's custom view (view: script)
 	// stands for this person: undecided, allowed, changed (edited since the
@@ -212,6 +218,7 @@ type workspace struct {
 	sk skills.Store
 	af artifacts.Store
 	sm semantics.Store
+	pr proposals.Store
 
 	mu       sync.RWMutex
 	cfg      Config
@@ -274,6 +281,7 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	w.sk = skills.NewFileStore(root, skills.WithObserver(obs), skills.WithLogger(w.logger))
 	w.af = artifacts.NewFileStore(root, artifacts.WithObserver(obs))
 	w.sm = semantics.NewFileStore(root, semantics.WithObserver(obs), semantics.WithLogger(w.logger))
+	w.pr = proposals.NewFileStore(root, proposals.WithObserver(obs), proposals.WithLogger(w.logger))
 	return w, nil
 }
 
@@ -474,6 +482,8 @@ func (w *workspace) Skills() skills.Store       { return w.sk }
 func (w *workspace) Artifacts() artifacts.Store { return w.af }
 func (w *workspace) Semantics() semantics.Store { return w.sm }
 
+func (w *workspace) Proposals() proposals.Store { return w.pr }
+
 func (w *workspace) Reload() error { return w.reload() }
 
 func (w *workspace) SaveConfig(c Config) error {
@@ -587,7 +597,7 @@ func (w *workspace) loadUser() (UserConfig, error) {
 
 // tempDirs lists the directories WriteAtomic leaves temp files in.
 func (w *workspace) tempDirs() []string {
-	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir, LocalDir}
+	dirs := []string{".", notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir, LocalDir, proposals.Dir}
 	for _, sub := range semanticsSubdirs {
 		dirs = append(dirs, semantics.Dir+"/"+sub)
 	}
