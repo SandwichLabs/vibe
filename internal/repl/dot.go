@@ -1,6 +1,7 @@
 package repl
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -277,7 +278,10 @@ func (s *Session) dotConn(args []string, _ string) error {
 
 // switchTo makes name the catalog the console's connection works in,
 // connecting it first when it is registered but not attached.
-func (s *Session) switchTo(name string) error {
+func (s *Session) switchTo(name string) error { return s.switchToCtx(s.ctx, name) }
+
+// switchToCtx is switchTo under ctx, so a Ctrl+C can cancel the dial.
+func (s *Session) switchToCtx(ctx context.Context, name string) error {
 	if err := session.ValidateName(name); err != nil {
 		return failf("unknown connection %q", safe(name))
 	}
@@ -287,7 +291,9 @@ func (s *Session) switchTo(name string) error {
 	}
 	if st.Kind != session.StatusOK {
 		before := session.StatusSnapshot(s.o.Sess)
-		err := s.o.Sess.Connect(s.ctx, name)
+		cctx, cancel := s.connectCtx(ctx)
+		err := s.o.Sess.Connect(cctx, name)
+		cancel()
 		if s.o.Hooks.AfterRun != nil {
 			s.o.Hooks.AfterRun(before, "USE "+session.QuoteIdent(name))
 		}
@@ -295,10 +301,10 @@ func (s *Session) switchTo(name string) error {
 			return failf("%s", err.Error())
 		}
 	}
-	if err := s.conn.Use(s.ctx, name); err != nil {
+	if err := s.conn.Use(ctx, name); err != nil {
 		return failf("%s", err.Error())
 	}
-	s.current = name
+	s.setCurrent(name)
 	return nil
 }
 
@@ -421,4 +427,24 @@ func packColumns(names []string, width int) []string {
 		lines = append(lines, strings.TrimRight(b.String(), " "))
 	}
 	return lines
+}
+
+// connectCtx is the context a dial runs under: the session's, bounded by
+// Options.ConnectTimeout when set.
+func (s *Session) connectCtx(parent context.Context) (context.Context, context.CancelFunc) {
+	if s.o.ConnectTimeout > 0 {
+		return context.WithTimeout(parent, s.o.ConnectTimeout)
+	}
+	return parent, func() {}
+}
+
+// setCurrent records the catalog the console works in and tells the surface.
+func (s *Session) setCurrent(name string) {
+	if name == s.current {
+		return
+	}
+	s.current = name
+	if s.o.Hooks.Conn != nil {
+		s.o.Hooks.Conn(name)
+	}
 }

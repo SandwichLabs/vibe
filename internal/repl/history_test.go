@@ -132,3 +132,19 @@ func TestHistoryRecallsInTheEditor(t *testing.T) {
 	f.run("\x1b[A;\r") // up arrow recalls the previous statement
 	assert.Contains(t, f.out.String(), "from file")
 }
+
+// The redactor's patterns grow (#276); ordinary SQL that merely mentions
+// credential-looking words must stay recordable.
+func TestOrdinarySQLStaysRecordable(t *testing.T) {
+	for _, stmt := range []string{
+		"SELECT token, password FROM users WHERE id = 5",
+		"CREATE TABLE users(password VARCHAR)",
+		"SELECT * FROM secrets ORDER BY key_id",
+		"SELECT 'Basic Input' AS s",
+		"-- bearer of bad news\nSELECT 1",
+		"SELECT max_tokens FROM settings",
+	} {
+		assert.True(t, recordable(foldEntry(stmt)), stmt)
+	}
+	assert.False(t, recordable(foldEntry("SELECT 1 WHERE password = 'x'")))
+}

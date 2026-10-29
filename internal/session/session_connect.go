@@ -569,7 +569,7 @@ func qualifiers(q string) map[string]bool {
 			}
 		case r == '_' || unicode.IsLetter(r):
 			j := i
-			for j < n && isWord(rs[j]) {
+			for j < n && (isWord(rs[j]) || rs[j] == '$') { // x$a$ is one name
 				j++
 			}
 			// A dot before the word means it is not the first qualifier part.

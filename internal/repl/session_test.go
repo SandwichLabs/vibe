@@ -73,3 +73,24 @@ func TestEscapesAreOnlyTheKnownOnes(t *testing.T) {
 	}
 	assert.NotContains(t, out, "\x1b", "only the console's own sequences, and x/term's cursor motion, remain")
 }
+
+func TestCompleteSeesEarlierLines(t *testing.T) {
+	got := make(chan CompleteRequest, 4)
+	f := newSession(t, func(o *Options) {
+		o.Complete = func(r CompleteRequest) []string {
+			select {
+			case got <- r:
+			default:
+			}
+			return nil
+		}
+	})
+	f.waitFor(prompt)
+	f.typ("select 1,\r")
+	f.waitFor("· ")
+	f.typ("ab\t")
+	r := <-got
+	assert.Equal(t, "select 1,\nab", r.Text)
+	assert.Equal(t, len(r.Text), r.Pos)
+	assert.NotEmpty(t, r.Connection)
+}

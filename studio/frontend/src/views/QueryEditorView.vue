@@ -12,6 +12,7 @@ import ConnectionSelect from '../components/ConnectionSelect.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import SqlEditor from '../components/SqlEditor.vue'
+import ReplTerminal from '../components/ReplTerminal.vue'
 import ConflictBanner from '../components/ConflictBanner.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
 import { useQueryEditor } from '../composables/useQueryEditor'
@@ -24,6 +25,11 @@ const {
   selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
   confirmDeleteQuery, newQuery,
 } = useQueryEditor()
+
+// The output area has two tabs (docs/reference/console.md): the result Grid and
+// the Console (a terminal on the same connection). The console keeps its
+// session while the Grid is showing.
+const outputTab = ref<'grid' | 'console'>('grid')
 
 const saveModalEl = ref<HTMLElement | null>(null)
 useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
@@ -109,6 +115,24 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
           <SqlEditor v-model="sqlText" :connection="conn" placeholder="Enter SQL query…" @run="runQuery" />
         </div>
 
+        <div class="output-tabs" role="tablist" aria-label="Output">
+          <button
+            role="tab" class="output-tab" data-testid="output-tab-grid"
+            :class="{ on: outputTab === 'grid' }" :aria-selected="outputTab === 'grid'"
+            @click="outputTab = 'grid'"
+          >Grid</button>
+          <button
+            role="tab" class="output-tab" data-testid="output-tab-console"
+            :class="{ on: outputTab === 'console' }" :aria-selected="outputTab === 'console'"
+            @click="outputTab = 'console'"
+          ><Icon name="terminal" :size="12" /> Console</button>
+        </div>
+
+        <div v-show="outputTab === 'console'" class="col" style="flex: 1; min-height: 0;" role="tabpanel">
+          <ReplTerminal :connection="conn" :active="outputTab === 'console'" />
+        </div>
+
+        <div v-show="outputTab === 'grid'" class="col" style="flex: 1; gap: 0; min-height: 0;" role="tabpanel">
         <!-- Run-status metadata bar (W5) -->
         <div v-if="lastRunOk !== null" class="result-bar" data-testid="run-meta">
           <span v-if="lastRunOk" class="badge badge--success" data-testid="run-badge"><span class="dot"></span> Complete</span>
@@ -154,6 +178,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
             <h2>Write a query, press Run</h2>
             <p class="lead">Queries run on the embedded DuckDB engine — analytics and CRUD alike.</p>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -230,6 +255,34 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
   background: var(--sh-surface);
   border: 1.5px solid var(--vibe-border);
   box-shadow: var(--sh-shadow-xs);
+}
+.output-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 12px 0;
+  border-bottom: var(--sh-border);
+  background: var(--sh-paper-2);
+}
+.output-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1.5px solid transparent;
+  border-bottom: none;
+  border-radius: var(--sh-radius-sm) var(--sh-radius-sm) 0 0;
+  background: transparent;
+  color: var(--sh-graphite);
+  font-family: var(--sh-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.output-tab:hover { background: var(--sh-hover); }
+.output-tab.on {
+  background: var(--sh-surface);
+  border-color: var(--vibe-border);
+  color: inherit;
 }
 .sql-error {
   white-space: pre-wrap;

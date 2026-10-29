@@ -91,6 +91,7 @@ func (a *App) open(path string, mode openMode) (*OpenWorkspaceResult, error) {
 	// It runs again under the lock to close the window where a Wait registers
 	// between the first call and taking the lock.
 	a.cancelAgentWork()
+	a.consoles.closeAll(a.logger)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cancelAgentWork()
@@ -210,6 +211,7 @@ func holderInfo(h *hub.Holder) *HolderInfo {
 // released. The frontend flushes its pending notebook saves first.
 func (a *App) CloseWorkspace() error {
 	a.cancelAgentWork()
+	a.consoles.closeAll(a.logger)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cancelAgentWork()
@@ -251,6 +253,9 @@ func (a *App) closeWorkspaceLocked(reason string) {
 		_ = a.watcher.Close()
 		a.watcher = nil
 	}
+	// Consoles hold hub connections and never take a.mu, so ending them here
+	// cannot deadlock; this covers the switch path and a ReplOpen that raced in.
+	a.consoles.closeAll(a.logger)
 	if l := a.liveCat.Swap(nil); l != nil {
 		l.Close() // before the session: a rebuild in flight reads through it
 	}
@@ -301,6 +306,7 @@ func (a *App) onReleaseRequested() {
 // back read-only and the error says why.
 func (a *App) TakeOverWorkspace() (*OpenWorkspaceResult, error) {
 	a.cancelAgentWork()
+	a.consoles.closeAll(a.logger)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.requireWorkspace(); err != nil {

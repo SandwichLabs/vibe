@@ -190,6 +190,9 @@ type App struct {
 	flows   signInFlows
 	openURL func(string)
 
+	// consoles are the open console sessions of the workspace (repl_host.go).
+	consoles *consoleHost
+
 	// bundles holds .vibe bundles that were previewed and await their commit (#118).
 	bundles bundleStore
 }
@@ -216,6 +219,7 @@ func NewApp(logger *slog.Logger) *App {
 		llmCfg:          config.Load().LLM,
 		approvals:       agents.NewApprovalQueue(),
 		approvalTimeout: defaultApprovalTimeout,
+		consoles:        newConsoleHost(),
 	}
 	app.views = newViewServer(viewWorkerJS, viewLibs(), app.viewStillAllowed)
 	app.views.log = logger
@@ -266,6 +270,7 @@ func (a *App) emitEvent(event string, data ...any) {
 // the lock is free.
 func (a *App) shutdown(_ context.Context) {
 	a.cancelAgentWork()
+	a.consoles.closeAll(a.logger)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	root := ""

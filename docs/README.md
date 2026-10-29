@@ -51,6 +51,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/workspaces.md`](reference/workspaces.md) | The folder layout, `vibe.yaml`, scopes, the CLI, Studio's launcher, `.vibe` bundles |
 | [`reference/connections.md`](reference/connections.md) | Every connection type, fields, credentials, read-only, Test, extensions |
 | [`reference/agent-policy.md`](reference/agent-policy.md) | The agent's SQL policy: tiers, the three-gate write rule, file and URL rules, the never-list |
+| [`reference/console.md`](reference/console.md) | The Data Console: the Query Explorer's terminal tab, keys, dot commands, history, limits |
 | [`reference/mcp.md`](reference/mcp.md) | `vibe mcp serve` (stdio/SSE), client config, SSE auth |
 | [`reference/editor.md`](reference/editor.md) | `$EDITOR` from the TUI and `vibe query -e`; `vibe lsp` for Neovim, Helix and eglot |
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |

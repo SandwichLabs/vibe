@@ -53,7 +53,7 @@ func (f *inputFilter) apply(p []byte) []byte {
 				return out
 			}
 			r, n := utf8.DecodeRune(rest)
-			if r != utf8.RuneError && !isBidiRune(r) && !(r >= 0x80 && r < 0xa0) && r != interruptRune {
+			if r != utf8.RuneError && !isBidiRune(r) && !(r >= 0x80 && r < 0xa0) && r != interruptRune && r != useRune {
 				out = append(out, rest[:n]...)
 			}
 			i += n
@@ -82,15 +82,25 @@ func (f *inputFilter) escape(out, rest []byte) ([]byte, int, bool) {
 }
 
 // control passes an ASCII byte; inside a paste only line breaks and a space
-// for a tab.
+// for a tab. Ctrl+C passes (Input acts on it before the editor sees it), or a
+// Ctrl+C mid-paste would be lost while the paste goes on.
 func (f *inputFilter) control(out []byte, b byte) []byte {
-	if !f.paste || b >= 0x20 && b != 0x7f || b == '\r' || b == '\n' {
+	if !f.paste || b >= 0x20 && b != 0x7f || b == '\r' || b == '\n' || b == ctrlC {
 		return append(out, b)
 	}
 	if b == '\t' {
 		return append(out, ' ')
 	}
 	return out
+}
+
+// endPaste forgets an open paste and any half-seen marker: the editor is told
+// to leave paste mode by the sequence Input sends.
+func (f *inputFilter) endPaste() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.paste = false
+	f.carry = nil
 }
 
 // filterState is what the filter remembers between calls.

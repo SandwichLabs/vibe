@@ -4,6 +4,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -116,12 +118,14 @@ func (m *Manager) run(ctx context.Context, connection, query string, exec func()
 		return nil, 0, fmt.Errorf("duckdb engine is not available")
 	}
 
-	// This logs statement text. Credential DDL (CREATE SECRET, #114) must never
-	// come through here: it runs on session.CreateTemporarySecret's dedicated,
-	// non-logging path, and the agent SQL policy refuses CREATE SECRET.
+	// Statement text is never logged (#276): a literal in a statement can be a
+	// credential, and the console runs statements a person typed. The log
+	// carries a short digest to correlate with, the size and the connection.
 	m.logger.DebugContext(ctx, "executing query",
 		slog.String("engine", "duckdb"),
-		slog.String("query", query),
+		slog.String("query_sha256", QueryDigest(query)),
+		slog.Int("query_bytes", len(query)),
+		slog.String("connection", connection),
 	)
 
 	// Lazy attach: a remote connection the statement names (pg.public.orders)
@@ -157,4 +161,74 @@ func looksLikeMissingCatalog(err error) bool {
 	m := strings.ToLower(err.Error())
 	return (strings.Contains(m, "does not exist") && (strings.Contains(m, "catalog") || strings.Contains(m, "table with name") || strings.Contains(m, "schema with name"))) ||
 		strings.Contains(m, "catalog error") || strings.Contains(m, "unknown connection") || strings.Contains(m, "not attached")
+}
+
+// QueryDigest is the first 12 hex digits of the SHA-256 of a statement: what
+// logs carry instead of statement text.
+func QueryDigest(query string) string {
+	sum := sha256.Sum256([]byte(query))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// ErrorForLog is err's text made safe to log: DuckDB errors quote the
+// statement text and the values in it. It drops everything from "\nLINE " on
+// (the statement echo and its caret), then replaces the contents of every
+// quoted run left in the first lines ('...' and "..." with doubled-quote
+// escapes, an unterminated one to the end) with "..." inside the same quotes,
+// and the contents of a dollar-quoted run ($tag$ ... to the end) with the
+// same. What remains is the error class and the unquoted words.
+func ErrorForLog(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := err.Error()
+	if i := strings.Index(text, "\nLINE "); i >= 0 {
+		text = text[:i]
+	}
+	var b strings.Builder
+	rs := []rune(strings.TrimSpace(text))
+	for i := 0; i < len(rs); i++ {
+		switch r := rs[i]; {
+		case r == '\'' || r == '"':
+			i = skipQuotedRun(rs, i)
+			b.WriteString(string(r) + "..." + string(r))
+		case r == '$' && dollarTagEnd(rs, i) > 0:
+			b.WriteString("$...$")
+			i = len(rs)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// skipQuotedRun returns the index of the closing quote of the run that opens
+// at rs[i] (doubled quotes escape), or len(rs) when it is unterminated.
+func skipQuotedRun(rs []rune, i int) int {
+	q := rs[i]
+	for j := i + 1; j < len(rs); j++ {
+		if rs[j] != q {
+			continue
+		}
+		if j+1 < len(rs) && rs[j+1] == q {
+			j++
+			continue
+		}
+		return j
+	}
+	return len(rs)
+}
+
+// dollarTagEnd returns the index of the "$" that closes the opening tag of a
+// dollar quote starting at rs[i] ($$ or $tag$), or 0 when rs[i] is not one
+// ($1 is a parameter).
+func dollarTagEnd(rs []rune, i int) int {
+	j := i + 1
+	for j < len(rs) && (rs[j] == '_' || rs[j] >= 0x80 || rs[j] >= 'a' && rs[j] <= 'z' || rs[j] >= 'A' && rs[j] <= 'Z' || rs[j] >= '0' && rs[j] <= '9') {
+		j++
+	}
+	if j < len(rs) && rs[j] == '$' && (j == i+1 || rs[i+1] < '0' || rs[i+1] > '9') {
+		return j
+	}
+	return 0
 }

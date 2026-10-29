@@ -157,8 +157,44 @@ type statement struct {
 	text  string   // the statement's own text, without its ";"
 }
 
+// isWordRune reports whether r can continue an identifier (and be part of a
+// dollar-quote tag): letters, digits, "_" and any non-ASCII rune, as in DuckDB
+// and PostgreSQL. A "$" also continues an identifier (x$a$ is one name) but is
+// handled by the callers, because it starts a dollar quote or a parameter
+// anywhere else.
 func isWordRune(r rune) bool {
-	return r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+	return r == '_' || r >= 0x80 || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+func isDigit(r rune) bool { return r >= '0' && r <= '9' }
+
+// scanNumber returns the index just after the numeric literal that starts at
+// rs[i] (a digit): digits with "_" only between two digits (never after a "."
+// or an exponent mark: "1._5" is 1. then the name _5), an optional fraction, and an
+// exponent only when digits follow it. What follows ("0x1f" -> 0 then x1f,
+// "1e$" -> 1 then e$) is the next token, as DuckDB lexes it, so a "$" after a
+// number starts a dollar quote while a "$" inside a name does not.
+func scanNumber(rs []rune, i int) int {
+	digits := func(j int) int {
+		for j < len(rs) && (isDigit(rs[j]) || (rs[j] == '_' && j > 0 && isDigit(rs[j-1]) && j+1 < len(rs) && isDigit(rs[j+1]))) {
+			j++
+		}
+		return j
+	}
+	j := digits(i)
+	if j < len(rs) && rs[j] == '.' {
+		j = digits(j + 1)
+	}
+	if j < len(rs) && (rs[j] == 'e' || rs[j] == 'E') {
+		k := j + 1
+		if k < len(rs) && (rs[k] == '+' || rs[k] == '-') {
+			k++
+		}
+		if k < len(rs) && isDigit(rs[k]) {
+			j = digits(k)
+		}
+	}
+	return j
 }
 
 func statements(s string) []statement {
@@ -202,11 +238,14 @@ func statements(s string) []statement {
 			}
 		case r == '/' && i+1 < len(rs) && rs[i+1] == '*':
 			flushWord()
-			i += 2
-			for i+1 < len(rs) && !(rs[i] == '*' && rs[i+1] == '/') {
-				i++
-			}
-			i++
+			i = skipBlockComment(rs, i) - 1
+		case r == '$' && word.Len() > 0:
+			word.WriteRune(r) // x$a$ is one identifier
+		case isDigit(r) && word.Len() == 0:
+			j := scanNumber(rs, i)
+			word.WriteString(string(rs[i:j]))
+			flushWord()
+			i = j - 1
 		case r == '$':
 			// $tag$ ... $tag$ (tag may be empty); $1 and the like are parameters.
 			j := i + 1
@@ -259,4 +298,30 @@ func statements(s string) []statement {
 	}
 	end(len(rs))
 	return out
+}
+
+// skipBlockComment returns the index just after the block comment that opens
+// at rs[i] ("/*"). Block comments nest, as in DuckDB and PostgreSQL, so
+// "/* a /* b */ c */" is one comment. An unterminated or mis-nested comment
+// swallows the rest of the text (fail closed: nothing after it is read as
+// SQL). Dollar-quoted strings ($tag$...$tag$) and E'...' strings are lexed
+// identically by statements and Tokens, in their own cases.
+func skipBlockComment(rs []rune, i int) int {
+	depth := 0
+	for i < len(rs) {
+		switch {
+		case rs[i] == '/' && i+1 < len(rs) && rs[i+1] == '*':
+			depth++
+			i += 2
+		case rs[i] == '*' && i+1 < len(rs) && rs[i+1] == '/':
+			depth--
+			i += 2
+			if depth == 0 {
+				return i
+			}
+		default:
+			i++
+		}
+	}
+	return len(rs)
 }

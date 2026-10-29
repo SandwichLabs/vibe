@@ -100,3 +100,14 @@ func TestComplete_NothingInsideDollarQuoted(t *testing.T) {
 		assert.Empty(t, at(src, cat), src)
 	}
 }
+
+// "$" inside a name is part of the name; after a number it opens a quote.
+func TestSplit_DollarInIdentifier(t *testing.T) {
+	stmts, _, _ := Split("SELECT 1 AS x$a$; ATTACH 'x' AS y; SELECT $a$")
+	require.Len(t, stmts, 2)
+	assert.Equal(t, "ATTACH 'x' AS y", stmts[1])
+	stmts, _, _ = Split("SELECT 1e5$b$; ATTACH 'x' AS y; $b$;")
+	assert.Len(t, stmts, 1)
+	stmts, _, _ = Split("SELECT 1a$b$; ATTACH 'x' AS y;")
+	assert.Len(t, stmts, 2)
+}

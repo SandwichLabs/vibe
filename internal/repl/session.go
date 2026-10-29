@@ -37,6 +37,9 @@ type Options struct {
 	Limiter    *Limiter         // nil = unlimited
 	Complete   Completer        // nil = Tab does nothing
 	Clock      func() time.Time // nil = time.Now (the .timer line in tests)
+	// ConnectTimeout bounds dialling a connection that is not attached yet
+	// (opening on one, .conn, Use). 0 = no bound beyond the session's context.
+	ConnectTimeout time.Duration
 }
 
 // Hooks are what the embedding surface does around a run. Both may be nil.
@@ -51,11 +54,23 @@ type Hooks struct {
 	// Exit is called once when the person types .exit/.quit or Ctrl+D on an
 	// empty line, before the session ends. Studio closes the tab.
 	Exit func()
+	// Conn is called, on the session's goroutine, whenever the catalog the
+	// console works in changes: .conn, a USE statement, Use. Studio tells the
+	// Query Explorer so its picker never disagrees with the console.
+	Conn func(name string)
 }
 
-// Completer answers Tab: candidates for the word ending at pos (a byte offset
-// into line).
-type Completer func(line string, pos int) []string
+// CompleteRequest is what Tab asks about: the statement typed so far (the
+// earlier lines of an unfinished statement, then the current line) with Pos
+// the byte offset of the cursor in Text, and the catalog the console works in.
+type CompleteRequest struct {
+	Text       string
+	Pos        int
+	Connection string
+}
+
+// Completer answers Tab: candidates for the word ending at req.Pos.
+type Completer func(req CompleteRequest) []string
 
 // Session is one console: a line editor, a pinned connection and the loop
 // between them. Create it with New; feed it with Input; end it with Close.
@@ -72,6 +87,11 @@ type Session struct {
 	in   *inputQueue
 	flt  inputFilter
 	inMu sync.Mutex // one Input at a time: the filter's state and the queue write go together
+	// busy is true while the loop handles a line (a statement, a dot command).
+	busy atomic.Bool
+	// useReq is the pending Use request, served on the loop's goroutine (use.go).
+	useMu  sync.Mutex
+	useReq *useRequest
 
 	conn    *session.Conn
 	current string // the catalog the pinned connection works in
@@ -199,9 +219,7 @@ func open(parent context.Context, out io.Writer, o Options) (*Session, error) {
 	}{s.in, editorWriter{s.sink}}, "")
 	s.term.History = termHistory{hist}
 	_ = s.term.SetSize(cols, rows)
-	if o.Complete != nil {
-		s.term.AutoCompleteCallback = s.complete
-	}
+	s.term.AutoCompleteCallback = s.complete // Tab, and the Use request (use.go)
 	s.makePrompts()
 	if o.Connection != "" && o.Connection != s.current {
 		if err := s.switchTo(o.Connection); err != nil {
@@ -273,10 +291,18 @@ func (s *Session) banner() { s.printf("%s\n", s.pal().dim(bannerText(s.o.Workspa
 
 // complete is the line editor's Tab hook (the seam R4 grows).
 func (s *Session) complete(line string, pos int, key rune) (string, int, bool) {
+	if key == useRune {
+		s.serveUse(line)
+		return line, pos, true // the key is a signal, never text
+	}
 	if key != '\t' || s.o.Complete == nil || pos < 0 || pos > len(line) {
 		return "", 0, false
 	}
-	cands := s.o.Complete(line, pos)
+	prior := s.buf // the earlier lines; lsp.Split may have trimmed their last newline
+	if prior != "" && !strings.HasSuffix(prior, "\n") {
+		prior += "\n"
+	}
+	cands := s.o.Complete(CompleteRequest{Text: prior + line, Pos: len(prior) + pos, Connection: s.current})
 	if len(cands) == 0 {
 		return "", 0, false
 	}
@@ -404,11 +430,15 @@ func (s *Session) loop() {
 			}
 			return
 		}
+		line = strings.ReplaceAll(line, string(useRune), "") // a signal, never text
 		if line == string(interruptRune) {
 			s.buf = "" // Ctrl+C at the prompt: forget the half-typed statement
 			continue
 		}
-		if !s.handleLine(line) {
+		s.busy.Store(true)
+		more := s.handleLine(line)
+		s.busy.Store(false)
+		if !more {
 			s.left = true
 			return
 		}

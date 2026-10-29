@@ -160,12 +160,19 @@ func lexStatements(src string) [][]lexTok {
 			switch {
 			case isLexWordRune(r):
 				j := i
-				for j < len(src) {
-					r2, w2 := utf8.DecodeRuneInString(src[j:])
-					if !isLexWordRune(r2) {
-						break
+				if r >= '0' && r <= '9' {
+					// A numeric literal ends where DuckDB's does: "1a$b$" is 1 then
+					// the name a$b$, "1e5$b$" is a number then a dollar quote.
+					j = lexNumberEnd(src, i)
+				} else {
+					// An identifier may hold "$" (x$a$ is one name, not x and a quote).
+					for j < len(src) {
+						r2, w2 := utf8.DecodeRuneInString(src[j:])
+						if !isLexWordRune(r2) && r2 != '$' {
+							break
+						}
+						j += w2
 					}
-					j += w2
 				}
 				raw := src[i:j]
 				cur = append(cur, lexTok{Kind: lkWord, Text: strings.ToUpper(raw), Raw: raw, Start: i, End: j})
@@ -197,4 +204,31 @@ func matchParen(toks []lexTok, open int) int {
 		}
 	}
 	return -1
+}
+
+// lexNumberEnd returns the end of the numeric literal at src[i] (a digit):
+// digits with "_" between them, an optional fraction, and an exponent only
+// when digits follow it.
+func lexNumberEnd(src string, i int) int {
+	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
+	digits := func(j int) int {
+		for j < len(src) && (isDigit(src[j]) || src[j] == '_' && j > 0 && isDigit(src[j-1]) && j+1 < len(src) && isDigit(src[j+1])) {
+			j++
+		}
+		return j
+	}
+	j := digits(i)
+	if j < len(src) && src[j] == '.' {
+		j = digits(j + 1)
+	}
+	if j < len(src) && (src[j] == 'e' || src[j] == 'E') {
+		k := j + 1
+		if k < len(src) && (src[k] == '+' || src[k] == '-') {
+			k++
+		}
+		if k < len(src) && isDigit(src[k]) {
+			j = digits(k)
+		}
+	}
+	return j
 }
