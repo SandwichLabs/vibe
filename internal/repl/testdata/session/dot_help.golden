@@ -1,0 +1,21 @@
+[?2004hVibe console on ws. Statements end with ';'. Enter .help for commands.
+ws ▸ D .help
+.help                                      show this list
+.mode [box|csv|duckbox|json|line|markdown] set how results are drawn
+.timer on|off                              show how long each statement took
+.maxrows [COUNT]                           rows to draw (0: all fetched)
+.maxwidth [COUNT]                          columns to draw within (0: the terminal width)
+.nullvalue STRING                          how NULL is written
+.headers on|off                            csv header row
+.columns                                   draw one line per column, one column per row
+.rows                                      draw rows as rows (the default)
+.tables [PATTERN]                          tables and views of the current connection
+.schema [PATTERN]                          CREATE statements of the current connection
+.conn [NAME]                               show the connections, or switch to one
+.read NAME                                 run a saved query
+.save TITLE                                save the last statement as a query
+.clear                                     clear the screen
+.exit                                      leave the console
+
+Statements end with ';'. Ctrl+C cancels the running statement. Ctrl+D exits.
+ws ▸ D [?2004l

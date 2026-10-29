@@ -445,22 +445,46 @@ func (h *hub) Conn(ctx context.Context, opts ...QueryOption) (*Conn, error) {
 }
 
 func (h *hub) pin(ctx context.Context, catalog string) (*Conn, error) {
+	if err := h.checkPinnable(catalog); err != nil {
+		return nil, err
+	}
+	c, err := h.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Use(ctx, catalog); err != nil {
+		_ = c.c.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+// checkPinnable refuses a catalog a connection cannot be switched to: unknown,
+// not attached, or storage (no catalog of its own).
+func (h *hub) checkPinnable(catalog string) error {
 	e, eAtt := h.entryOf(catalog)
 	if e == nil || !eAtt {
-		return nil, fmt.Errorf("connection %q is not attached", catalog)
+		return fmt.Errorf("connection %q is not attached", catalog)
 	}
 	if h.catalogless(e) {
-		return nil, fmt.Errorf("connection %q is storage, not a database: read it with read_parquet('<its scope>...') instead", catalog)
+		return fmt.Errorf("connection %q is storage, not a database: read it with read_parquet('<its scope>...') instead", catalog)
 	}
-	c, err := h.db.Conn(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pin connection: %w", err)
+	return nil
+}
+
+// Use switches the pinned connection to catalog (USE), with the checks pin
+// makes: the catalog must be registered, attached and not storage. Only this
+// connection moves; Close restores the session default.
+func (c *Conn) Use(ctx context.Context, catalog string) error {
+	if err := c.h.checkPinnable(catalog); err != nil {
+		return err
 	}
-	if _, err := c.ExecContext(ctx, "USE "+QuoteIdent(catalog)); err != nil {
-		_ = c.Close()
-		return nil, fmt.Errorf("failed to switch to connection %q: %w", catalog, err)
+	if _, err := c.c.ExecContext(ctx, "USE "+QuoteIdent(catalog)); err != nil {
+		return fmt.Errorf("failed to switch to connection %q: %w", catalog, err)
 	}
-	return &Conn{c: c, h: h, catalog: catalog, cfg: h.callCfg([]QueryOption{WithCatalog(catalog)})}, nil
+	c.catalog = catalog
+	c.cfg = c.h.callCfg([]QueryOption{WithCatalog(catalog)})
+	return nil
 }
 
 // Conn is one pinned connection. Not safe for concurrent use.
@@ -482,6 +506,9 @@ func (c *Conn) Catalog() string { return c.catalog }
 func (c *Conn) Query(ctx context.Context, query string, args ...any) (*Rows, error) {
 	ctx, cancel := withTimeout(ctx, c.cfg)
 	r, err := c.c.QueryContext(ctx, query, args...)
+	if isDDL(query) {
+		c.h.InvalidateSchema("")
+	}
 	if err != nil {
 		cancel()
 		return nil, c.h.readErr(ctx, "failed to run query", err)
@@ -501,6 +528,19 @@ func (c *Conn) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 		return nil, c.h.readErr(ctx, "failed to execute statement", err)
 	}
 	return res, nil
+}
+
+// Follow records that the connection now works in catalog (a USE the person
+// typed moved it), so later statements get that catalog's timeout and row cap,
+// as after Use. It runs no SQL.
+func (c *Conn) Follow(catalog string) {
+	if catalog == c.h.defCat() {
+		c.catalog = ""
+		c.cfg = c.h.callCfg(nil)
+		return
+	}
+	c.catalog = catalog
+	c.cfg = c.h.callCfg([]QueryOption{WithCatalog(catalog)})
 }
 
 // Close verifies the connection is back on the session's default catalog and

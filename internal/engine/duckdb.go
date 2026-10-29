@@ -41,9 +41,32 @@ func (e *DuckDBEngine) execute(ctx context.Context, query string, params map[str
 	return e.executeIn(ctx, "", query, params, maxRows)
 }
 
+// rowsFunc is the one thing that differs between running on a connection
+// pinned per call and on one the caller holds: where the bound SQL goes.
+type rowsFunc func(boundSQL string, args []any) (*session.Rows, error)
+
 // executeIn is execute with connection (a catalog name) as the default for
 // unqualified names; "" is the session default.
 func (e *DuckDBEngine) executeIn(ctx context.Context, connection, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	var opts []session.QueryOption
+	if connection != "" {
+		opts = append(opts, session.WithCatalog(connection))
+	}
+	return e.executeWith(ctx, query, params, maxRows, func(boundSQL string, args []any) (*session.Rows, error) {
+		return e.sess.QueryWith(ctx, boundSQL, args, opts...)
+	})
+}
+
+// executeOn is executeIn on a connection the caller holds across statements.
+func (e *DuckDBEngine) executeOn(ctx context.Context, conn *session.Conn, query string, params map[string]any, maxRows int) (*ResultSet, int, error) {
+	return e.executeWith(ctx, query, params, maxRows, func(boundSQL string, args []any) (*session.Rows, error) {
+		return conn.Query(ctx, boundSQL, args...)
+	})
+}
+
+// executeWith binds parameters, expands storage wildcards, runs the SQL
+// through run and scans the rows: the part every entry point shares.
+func (e *DuckDBEngine) executeWith(ctx context.Context, query string, params map[string]any, maxRows int, run rowsFunc) (*ResultSet, int, error) {
 	boundSQL, args, err := BindParams(query, params)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to bind parameters: %w", err)
@@ -54,11 +77,7 @@ func (e *DuckDBEngine) executeIn(ctx context.Context, connection, query string, 
 		return nil, 0, err
 	}
 
-	var opts []session.QueryOption
-	if connection != "" {
-		opts = append(opts, session.WithCatalog(connection))
-	}
-	rows, err := e.sess.QueryWith(ctx, boundSQL, args, opts...)
+	rows, err := run(boundSQL, args)
 	if err != nil {
 		return nil, 0, shorten(rw, fmt.Errorf("failed to execute duckdb query: %w", err))
 	}

@@ -91,6 +91,21 @@ func CheckManaged(sqlText string) error {
 	return nil
 }
 
+// CheckInteractive is the guard the Studio query editor and the console run on
+// SQL a person types: CheckManaged, then, only while httpfs has not loaded
+// (session.LazyStorage; afterwards the configuration lock refuses the setting
+// itself), the parser-based CheckParsed. It is not a security boundary (see the
+// package doc); it is the one place both surfaces share.
+func CheckInteractive(ctx context.Context, sess session.Session, sqlText string) error {
+	if err := CheckManaged(sqlText); err != nil {
+		return err
+	}
+	if !session.LazyStorage(sess) {
+		return nil
+	}
+	return CheckParsed(ctx, sess.DB(), sqlText)
+}
+
 // guardedSetting reports whether the words after SET/RESET name the S3 URL
 // setting (#138), or a quoted name, which cannot be told from it: the lock lets
 // that one setting through after httpfs loads, so it is checked here.

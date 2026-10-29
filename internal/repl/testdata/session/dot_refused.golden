@@ -1,0 +1,4 @@
+[?2004hVibe console on ws. Statements end with ';'. Enter .help for commands.
+ws ▸ D .shell ls
+Error: .shell is not available: the console runs SQL on the workspace hub, never a shell.
+ws ▸ D [?2004l

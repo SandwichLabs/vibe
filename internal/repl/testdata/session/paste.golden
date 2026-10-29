@@ -1,0 +1,16 @@
+[?2004hVibe console on ws. Statements end with ';'. Enter .help for commands.
+ws ▸ D select 1;
+┌───────┐
+│   1   │
+│ int32 │
+├───────┤
+│     1 │
+└───────┘
+ws ▸ D select 2;
+┌───────┐
+│   2   │
+│ int32 │
+├───────┤
+│     2 │
+└───────┘
+ws ▸ D [?2004l

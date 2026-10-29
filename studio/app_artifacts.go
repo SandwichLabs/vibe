@@ -6,6 +6,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/session"
 )
 
 // --- Data artifacts (#162) ---
@@ -65,7 +66,7 @@ func (a *App) runStoredQuery(parent context.Context, run func(context.Context, *
 	}
 	ctx, cancel := context.WithTimeout(parent, a2uiQueryTimeout)
 	defer cancel()
-	before := statusSnapshot(runSess)
+	before := session.StatusSnapshot(runSess)
 	rs, truncated, err := run(ctx, handler)
 	a.afterReadOnlyRun(runSess, before)
 	if err != nil {

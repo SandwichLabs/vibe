@@ -257,3 +257,14 @@ func (h *hub) entryOf(name string) (*entry, bool) {
 	}
 	return e, e.attach
 }
+
+// StatusSnapshot records every connection's state, to tell after a run which
+// ones a statement dialled (lazy attach) or changed. The Studio query editor
+// and the console both take it before a run.
+func StatusSnapshot(s Session) map[string]StatusKind {
+	out := map[string]StatusKind{}
+	for _, st := range s.Connections() {
+		out[st.Name] = st.Kind
+	}
+	return out
+}
