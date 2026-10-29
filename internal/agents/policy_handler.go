@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/storageglob"
 )
@@ -55,6 +57,85 @@ func (h *Handler) expand(ctx context.Context, raw string) (string, context.Conte
 		return "", ctx, err
 	}
 	return text, storageglob.WithRewrite(ctx, rw), nil
+}
+
+// expandMetrics is the first step of every expansion: metric('name', by => ...)
+// calls in raw become the parenthesised SELECT over the metric's saved query
+// (internal/semantics, on the policy's own lexer), before the wildcard step,
+// the connect step and every gate see the text. Every path that classifies and
+// runs SQL (run_query, run_saved_query, preview_query, write_cell and the cell
+// and dashboard vets, notebook cells and A2UI bindings, artifact queries)
+// calls it, so the policy only ever judges the expanded statement and a
+// metric whose saved query was edited into something hostile is refused like
+// any other text. params gains the declared defaults of the saved queries'
+// $name parameters; a value the caller sent wins. Text with no metric call
+// comes back unchanged and params is returned as given.
+func (h *Handler) expandMetrics(ctx context.Context, connection, raw string, params map[string]any) (*semantics.Result, map[string]any, error) {
+	if !semantics.HasMetricCall(raw) {
+		return &semantics.Result{SQL: raw}, params, nil
+	}
+	var src semantics.Reader
+	o := semantics.Options{Connection: connection}
+	if h.access != nil {
+		if sess := h.access.Session(); sess != nil {
+			o.DefaultConnection = sess.DefaultCatalog()
+		}
+		src = semantics.NewReader(h.access.Semantics(), h.access.Queries())
+	}
+	res, err := semantics.Expand(ctx, raw, src, o)
+	if err == nil && res.Changed {
+		err = res.CheckOuterParams(raw, params, nil)
+	}
+	if err != nil {
+		return nil, params, scrubbedError(err)
+	}
+	if !res.Changed {
+		return res, params, nil
+	}
+	if params, err = res.BindParams(params, time.Now()); err != nil {
+		return nil, params, scrubbedError(err)
+	}
+	return res, params, nil
+}
+
+// scrubbedError is an expansion error as an agent may read it: it came from the
+// stores (a saved query's error text can hold an absolute path), so the text is
+// scrubbed, and the chain (errors.Is) is kept.
+type scrubbedErr struct{ err error }
+
+func (e *scrubbedErr) Error() string { return scrubStoreText(e.err.Error()) }
+func (e *scrubbedErr) Unwrap() error { return e.err }
+
+func scrubbedError(err error) error { return &scrubbedErr{err: err} }
+
+// VetReadOnlySQLIn runs the read-only verdict a render-time read gets (every
+// gate of RunReadOnlySQLIn: connect, expand, classify, read-only) without
+// executing the statement. A person's own surfaces use it on the SQL a metric
+// hides, so a cloned repository's metric is held to the same policy as a
+// cloned artifact query.
+func (h *Handler) VetReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any) error {
+	_, _, _, reason, err := h.readOnlyVerdict(ctx, connection, sqlStr, params)
+	if errors.Is(err, ErrReadOnlyBindingDenied) && reason != "" {
+		return errors.New(reason)
+	}
+	return err
+}
+
+// metricPrefix names the metrics a refused statement used, so a denial the
+// policy words about the expanded text can be traced to the metric behind it.
+func metricPrefix(res *semantics.Result) string {
+	if res == nil || len(res.Uses) == 0 {
+		return ""
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, u := range res.Uses {
+		if !seen[u.Name] {
+			seen[u.Name] = true
+			names = append(names, "'"+u.Name+"'")
+		}
+	}
+	return "metric " + strings.Join(names, ", ") + ": "
 }
 
 // expandErrorCode maps an expansion failure to the response code: a pattern the

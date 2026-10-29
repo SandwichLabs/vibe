@@ -8,7 +8,7 @@ beside the queries and notebooks that use them. There are four kinds:
 - **Joins**: how two entities relate, declared and, later, measured.
 - **The glossary**: plain markdown, one `## term` section per term.
 
-Everything is files you can write by hand. Nothing here needs AI, a connection or a running query: `vibe semantics list` reads the files and nothing else.
+Everything is files you can write by hand. Nothing here needs AI. `vibe semantics list` reads the files and nothing else; a metric runs when SQL calls it with [`metric()`](#using-a-metric-in-sql).
 
 ```
 semantics/
@@ -87,7 +87,7 @@ assertions:
 | Field | Meaning |
 |---|---|
 | `query` | The id of a [saved query](workspaces.md) (`queries/<id>.sql`): a lower-case letter or digit first, then letters, digits, `-` and `_`. A metric is a measure over that query's rows, so the SQL, its parameters and its connection live in one place, the saved query. The file is not required to exist when the metric is read, only when it is used. |
-| `measure` | One SQL aggregate expression over the saved query's columns, which is placed after `SELECT` and before `AS <name>`. The rule: at most 4 KiB, on one line; no `;`, `--` or `/*`; balanced parentheses; only plain `'strings'` with every quote closed (no `E'..'`, no `$$..$$`); **no comma outside parentheses** (so no second column); none of the words `SELECT`, `FROM`, `WITH`, `UNION`, `INTERSECT`, `EXCEPT`, `AS`, `GROUP`, `HAVING`, `ORDER`, `LIMIT`, `OFFSET`, `QUALIFY`, `WINDOW` anywhere, and `WHERE` only directly inside `FILTER (...)`; no call to `getenv`, `query`, `query_table` or a file reader (`read_csv`, `read_parquet`, `read_json`, `read_text`, `glob`, ...). So `sum(amount)`, `sum(amount) FILTER (WHERE status = 'paid')`, `count(DISTINCT customer_id)`, `sum(a) / nullif(sum(b), 0)`, `avg(x)::DECIMAL(10,2)` and `sum(CASE WHEN refunded THEN 0 ELSE amount END)` are fine; `CAST(x AS ...)` (use `::`), `extract(year FROM d)` and `string_agg(x, ',' ORDER BY y)` are not. Commas inside a call's parentheses are fine. That is all that is checked here; whether the SQL is allowed is decided where it runs, by the same SQL policy as any other statement. |
+| `measure` | One SQL aggregate expression over the saved query's columns, which is placed after `SELECT` and before `AS <name>`. It is held to a **structural** rule, not a list of bad words: at most 4 KiB, on one line; no `;`, `--` or `/*`; balanced parentheses; only plain `'strings'` with every quote closed (no `E'..'`, no `$$..$$`); **no comma outside parentheses** (so no second column); none of the words `SELECT`, `FROM`, `WITH`, `UNION`, `INTERSECT`, `EXCEPT`, `AS`, `GROUP`, `HAVING`, `ORDER`, `LIMIT`, `OFFSET`, `QUALIFY`, `WINDOW`, `PIVOT`, `PIVOT_WIDER`, `PIVOT_LONGER`, `UNPIVOT`, `TABLE`, `VALUES`, `DESCRIBE`, `SUMMARIZE`, `SHOW`, `EXPLAIN`, `PRAGMA`, `CALL`, `EXISTS` anywhere, and `WHERE` only directly inside `FILTER (...)`. After every `(` the next word may not be **any** DuckDB keyword (the full `duckdb_keywords()` list, every category), except `DISTINCT`, `CASE`, `NOT`, `NULL`, `TRUE`, `FALSE`, `INTERVAL`, `WHERE` right after `FILTER`, and a callable keyword such as `coalesce(`; so no subquery or statement (`(PIVOT ...)`, `(TABLE t)`, `(DESCRIBE ...)`, `(VALUES ...)`) can start inside a group. **Every call must be to an allowed function**: DuckDB's scalar and aggregate functions (a list generated from `duckdb_functions()` and kept equal to the linked DuckDB by a test), unqualified, less `getenv`, `query`, `query_table`, `metric`, the file readers (`read_csv`, `read_parquet`, `read_json`, `read_text`, `glob`, ...), `COLUMNS` and `UNNEST` (more than one column or row), `nextval`, `setval`, `currval`, `current_setting`, `getvariable`, `setvariable` (side effects and state), and the secret, MotherDuck and AI functions; `FILTER`, `OVER`, `IN` and the like before `(` are not calls, and a type after `::` may take arguments (`::DECIMAL(10,2)`). No `*` except in `count(*)` (`t.*`, `sum(*)` and `* EXCLUDE (...)` are refused; `a * b` is multiplication and is fine). A metric must produce exactly one value column and change nothing. So `sum(amount)`, `sum(amount) FILTER (WHERE status = 'paid')`, `count(DISTINCT customer_id)`, `sum(a) / nullif(sum(b), 0)`, `avg(x)::DECIMAL(10,2)`, `sum(price * qty)`, `sum(coalesce(a, 0))` and `sum(CASE WHEN refunded THEN 0 ELSE amount END)` are fine; `CAST(x AS ...)` (use `::`), `extract(year FROM d)` and `string_agg(x, ',' ORDER BY y)` are not. Commas inside a call's parentheses are fine. That is all that is checked when the file is read; whether the SQL is allowed is also decided where it runs, by the SQL policy (see below). To regenerate the lists after a DuckDB upgrade: `go test ./internal/semantics -run TestGenerateLists -update-lists`. |
 | `dimensions` | Columns of the saved query that a caller may group by. Lower-case column names, no duplicates. |
 | `format` | How a value is shown: `number`, `currency` or `percent`. Display only. |
 | `settled_by` | The disagreement that settled this definition. `text` is required (up to 2000 characters); `ref` is free text (up to 200) reserved for a verifier card or receipt id. It is stored and shown, never followed. |
@@ -159,8 +159,72 @@ vibe semantics show glossary            the glossary
 
 ## Sharing
 
-The files are plain and diff-friendly, so git carries them. A [`.vibe` bundle](workspaces.md#sharing-without-git-vibe-bundles) carries them too: `semantics/entities/<name>.yaml`, `semantics/metrics/<name>.yaml`, `semantics/joins/<name>.yaml` and `semantics/glossary.md` are bundle entries, each decoded with the rules above before anything is written. Import is byte for byte, and a name that already exists is renamed (`net_revenue_2`, the name inside the file updated), replaced (against the revision just read) or skipped, like a query. When the rename is of something the same bundle refers to, the references follow: a metric whose saved query (`query:`) came in renamed from `q` to `q-2` is pointed at `q-2`, and a join whose entity came in renamed is pointed at the new entity, so an imported definition never silently uses the workspace's own namesake; a rewritten file is re-encoded (comments are not kept) and the result's warnings say so. The glossary is one file and cannot be kept beside another: a clash defaults to skip (the dialog shows "Can't keep both"), and you can still replace it. `vibe export bundle --semantics metrics/net_revenue` picks definitions by id (`entities/<name>`, `metrics/<name>`, `joins/<name>`, `glossary`). Anything under `.vibe-local/` is never in a bundle.
+The files are plain and diff-friendly, so git carries them. A [`.vibe` bundle](workspaces.md#sharing-without-git-vibe-bundles) carries them too: `semantics/entities/<name>.yaml`, `semantics/metrics/<name>.yaml`, `semantics/joins/<name>.yaml` and `semantics/glossary.md` are bundle entries, each decoded with the rules above before anything is written. Import is byte for byte, and a name that already exists is renamed (`net_revenue_2`, the name inside the file updated), replaced (against the revision just read) or skipped, like a query. When the rename is of something the same bundle refers to, the references follow: a metric whose saved query (`query:`) came in renamed from `q` to `q-2` is pointed at `q-2`, and a join whose entity came in renamed is pointed at the new entity, so an imported definition never silently uses the workspace's own namesake; when you skip (or the default skips) a clashing saved query or entity that a metric or join of the same bundle refers to, the result's warnings say the reference now points at the workspace's existing one, which may be a different query or entity; a rewritten file is re-encoded (comments are not kept) and the result's warnings say so. The glossary is one file and cannot be kept beside another: a clash defaults to skip (the dialog shows "Can't keep both"), and you can still replace it. `vibe export bundle --semantics metrics/net_revenue` picks definitions by id (`entities/<name>`, `metrics/<name>`, `joins/<name>`, `glossary`). Anything under `.vibe-local/` is never in a bundle.
 
-## Coming next
+## Using a metric in SQL
 
-A metric will be usable in SQL by name, so that people and agents reuse one definition instead of re-deriving it. That is not part of what is described above: today these files are read, listed and shared, and nothing runs them.
+A metric is called by name, wherever you write SQL:
+
+```sql
+SELECT * FROM metric('net_revenue');                              -- one row, one column: net_revenue
+SELECT * FROM metric('net_revenue', by => 'region');              -- one row per region
+SELECT * FROM metric('net_revenue', by => ['region', 'month']);   -- grouped by both
+SELECT region, net_revenue FROM metric('net_revenue', by => 'region') WHERE net_revenue > 1000 ORDER BY 2 DESC;
+SELECT metric('net_revenue') / 12 AS monthly;                     -- a scalar, in a SELECT list
+```
+
+The grammar is exactly this, and nothing else:
+
+```
+metric('<name>')
+metric('<name>', by => '<dimension>')
+metric('<name>', by => ['<dimension>', '<dimension>', ...])
+```
+
+`<name>` and every `<dimension>` must be a plain `'quoted'` literal (not `E'..'`, not `$$..$$`, not an expression). `by` is the only named argument; there is no `where =>`, no time grain and no parameter in the call. A dimension must be one of the metric's `dimensions` (matched without regard to case). The word must be a bare `metric` followed by `(`: `"metric"(...)` and `schema.metric(...)` are left alone and fail as an unknown function. At most 20 calls in one statement.
+
+### What it expands to
+
+Before anything checks or runs the statement, each call is replaced by one parenthesised `SELECT` over the metric's saved query:
+
+```sql
+(SELECT region, month, sum(amount) AS net_revenue FROM (
+<the saved query's SQL, trailing ';' and comments cut off, otherwise byte for byte>
+) AS vibe_metric_net_revenue GROUP BY region, month)
+```
+
+With no `by`, the dimensions and the `GROUP BY` are left out. Only the names declared in the files and the metric's `measure` are written into the SQL; **what you typed in the call never is**. The saved query must be exactly one statement beginning with `SELECT`, `WITH`, `FROM` or `VALUES`, with balanced parentheses and closed quotes, and may not itself call `metric()`. Expanding twice gives the same text (the result contains no `metric(` call), so a statement can be re-checked.
+
+The saved query's own `$name` parameters stay in the text, bound, never written into it: a parameter you did not supply takes the default its saved query declares (relative dates such as `today-30d` resolve at the run), and a value you supply for it wins. Two metrics in one statement that declare the same `$name` differently are refused. A `$name` you write yourself outside the call that only a metric declares is refused (`$min belongs to metric net_revenue's saved query; it can't be used outside metric()`) unless you send a value for it, and a saved query open in the Query Explorer that declares the same name with another type is reported as a clash. In the Query Explorer, `vibe query` and the console you cannot supply a metric's own parameters yet (only the defaults apply); an agent's `run_query` can send them in `params`.
+
+### Refusals
+
+Each is a plain sentence naming the call; the first is for an unknown name and the last for a hand-edited file:
+
+| You wrote | You are told |
+|---|---|
+| `metric('nope')` | `metric('nope'): there is no metric named 'nope' (metrics live in semantics/metrics/; vibe semantics list shows them)` |
+| `by => 'colour'` | `metric('net_revenue'): 'colour' is not a dimension of net_revenue (dimensions: region, month)` |
+| `metric(net_revenue)`, `metric()` | `metric(): the metric name must be a plain 'quoted' literal` |
+| `metric('x', where => ...)`, an extra argument | `metric('x'): only by => is supported (no where, no other arguments); ...` |
+| a dimension that is not a plain literal | `metric('x'): each dimension must be a plain 'quoted' literal; ...` |
+| a saved query that calls `metric()` | `metric('x'): its saved query "q" uses metric(), which a metric's own query may not do` |
+| a saved query that is not one read | `metric('x'): saved query "q" is not one read statement (one SELECT, WITH, FROM or VALUES)` |
+| a missing saved query | `metric('x'): its saved query "q" does not exist (queries/q.sql)` |
+| a `$name` the saved query does not declare | `metric('x'): its saved query "q" uses $name, which it does not declare as a parameter` |
+| two metrics declaring `$name` differently | `metrics a and b both declare the parameter $name, differently (...)` |
+| a saved query on another connection | `metric 'x' is defined on connection 'prod_pg'; run this statement on prod_pg` |
+| more than 20 calls | `metric(): 21 metric() calls; at most 20 are allowed in one statement` |
+
+The connection rule: a metric runs on the connection its saved query names (`connection:` in the query's header; none means the workspace default). The Query Explorer's Run-on choice, a notebook cell's connection or `vibe query -c` must be that connection. This stops one unqualified table name meaning two different tables.
+
+### Where it works
+
+The same expander runs in front of every place SQL is checked and run, on the policy's own lexer (`internal/sqllex`), so it cannot read a statement differently from the check that follows it:
+
+- **The agent**, through the one tool surface: `run_query`, `run_saved_query`, `preview_query`, `write_cell`, notebook cells, A2UI `sql` bindings and artifact queries. The [SQL policy](agent-policy.md) judges the **expanded** statement, in every tier, so a metric whose saved query was hand-edited into something the policy refuses is refused, with the metric's name in front of the policy's words. `run_query` answers with `metrics_used: [{name, by, query}]` when it expanded any. Notebook cells (including the ones Studio runs for you), dashboard bindings and artifact queries are always run through this agent policy, whoever is looking, not through the editor's rules below.
+- **The person's own typed SQL**: the Query Explorer, `vibe query` (it says `expanded 1 metric: net_revenue` on stderr), the Studio console and `vibe repl`. The editor's check (`usersql`) keeps its usual rules for what you typed and reads the expanded statement. Because a metric hides SQL behind a name, **each expanded metric (its saved query and measure) is also held to the agent's read-only policy**, as an artifact query is: exactly one `SELECT` by DuckDB's own parser, no file outside `data/`, no write, no secret. A cloned repository's metric that reads `/etc/passwd` is refused at run with `metric 'x' is refused: ...`, even under `vibe query --read-only`. Only the metric's part is held to the policy; your own SQL around it is not.
+- **Editors**: completion and hover (see [editor.md](editor.md#metric-in-the-editor)).
+
+Not covered: exporting a query that uses `metric()` (the export dialog and `vibe export` run the text as written), and the terminal UI's REPL (`vibe studio` without `--gui`), which runs `metric()` text unexpanded and so fails closed with DuckDB's unknown-function error.
+

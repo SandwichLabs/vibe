@@ -67,6 +67,9 @@ func (c semanticsConflicts) overwrite(ctx context.Context, req ConflictRequest) 
 	return &ConflictResult{ID: req.ID, Rev: rev, Title: req.ID}, nil
 }
 
+// maxCopyName is the longest a definition name may be (connname's rule).
+const maxCopyName = 63
+
 func (c semanticsConflicts) saveCopy(ctx context.Context, req ConflictRequest) (*ConflictResult, error) {
 	kind, name, err := c.split(req.ID)
 	if err != nil {
@@ -77,10 +80,16 @@ func (c semanticsConflicts) saveCopy(ctx context.Context, req ConflictRequest) (
 	}
 	text := []byte(str(req.Data, "text"))
 	for n := 1; n < 100; n++ {
-		copyName := name + "_copy"
+		suffix := "_copy"
 		if n > 1 {
-			copyName = fmt.Sprintf("%s_copy_%d", name, n)
+			suffix = fmt.Sprintf("_copy_%d", n)
 		}
+		// A name is at most 63 characters: shorten the base so the copy's fits.
+		base := name
+		if len(base)+len(suffix) > maxCopyName {
+			base = base[:maxCopyName-len(suffix)]
+		}
+		copyName := base + suffix
 		if _, serr := c.store.Source(ctx, kind, copyName); !errors.Is(serr, semantics.ErrNotFound) {
 			if serr != nil {
 				return nil, serr

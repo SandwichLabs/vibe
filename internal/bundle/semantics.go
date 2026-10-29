@@ -267,6 +267,22 @@ func (r *itemImporter) noteRename(it item, final string) {
 	r.renamed[it.Kind][it.ID] = final
 }
 
+// noteSkip records that a clashing saved query or entity was not imported, so
+// the metrics and joins of the same bundle that refer to it can say they now
+// use the workspace's own.
+func (r *itemImporter) noteSkip(it item) {
+	if folder, _ := splitSemanticsID(it.ID); it.Kind != KindQuery && !(it.Kind == KindSemantics && folder == semantics.EntitiesDir) {
+		return
+	}
+	if r.skipped == nil {
+		r.skipped = map[ItemKind]map[string]bool{}
+	}
+	if r.skipped[it.Kind] == nil {
+		r.skipped[it.Kind] = map[string]bool{}
+	}
+	r.skipped[it.Kind][it.ID] = true
+}
+
 // rewriteRefs points a metric at the saved query, and a join at the entities,
 // that the same bundle brought in under new names. Without it a renamed
 // "q" -> "q-2" would leave the imported metric using the workspace's own "q".
@@ -287,6 +303,9 @@ func (r *itemImporter) rewriteRefs(it item) item {
 		}
 		newQ, ok := r.renamed[KindQuery][m.Query]
 		if !ok {
+			if r.skipped[KindQuery][m.Query] {
+				r.notes = append(r.notes, fmt.Sprintf("metric %s uses the saved query %q, which was skipped because the workspace already has one by that name: it now points at the workspace's %q, which may be a different query", name, m.Query, m.Query))
+			}
 			return it
 		}
 		old := m.Query
@@ -305,6 +324,9 @@ func (r *itemImporter) rewriteRefs(it item) item {
 		}
 		changed := false
 		for _, side := range []*string{&j.Left, &j.Right} {
+			if r.skipped[KindSemantics][semantics.EntitiesDir+"/"+*side] {
+				r.notes = append(r.notes, fmt.Sprintf("join %s uses the entity %q, which was skipped because the workspace already has one by that name: it now points at the workspace's %q, which may be a different entity", name, *side, *side))
+			}
 			if final, ok := r.renamed[KindSemantics][semantics.EntitiesDir+"/"+*side]; ok {
 				_, newName := splitSemanticsID(final)
 				r.notes = append(r.notes, fmt.Sprintf("join %s now uses the entity %q imported with it (the workspace's own %q was kept)", name, newName, *side))

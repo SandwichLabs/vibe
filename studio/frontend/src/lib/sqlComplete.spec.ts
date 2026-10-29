@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { CompletionContext, completionKeymap } from '@codemirror/autocomplete'
-import { kindType, sqlSource, toCompletions, keywordFallback } from './sqlComplete'
+import { kindType, sqlSource, toCompletions, keywordFallback, inMetricLiteral } from './sqlComplete'
 
 // "|" marks the cursor.
 function ctxAt(src: string, explicit = false, aborted = false) {
@@ -100,6 +100,25 @@ describe('sqlSource', () => {
     expect(await source(ctxAt('SELECT * FROM |', true).ctx)).not.toBeNull()
     expect(await source(ctxAt('SELECT o.|').ctx)).not.toBeNull()
   })
+
+  it('answers on the bare quote of a metric() argument, where a bare space stays quiet', async () => {
+    const CompleteSQL = vi.fn(async () => ({ from: 22, items: [{ label: 'net_revenue', kind: 'metric', detail: 'Net revenue by region' }] }))
+    setApp({ CompleteSQL })
+    const res = await source(ctxAt("select * from metric('|").ctx)
+    expect(res?.options.map((o) => o.label)).toEqual(['net_revenue'])
+    expect(res?.options[0].type).toBe(kindType.metric)
+    expect(await source(ctxAt("select * from metric('net_revenue', by => '|").ctx)).not.toBeNull()
+    expect(CompleteSQL).toHaveBeenCalledTimes(2)
+  })
+
+  it('recognises only the quotes of a metric() argument', () => {
+    for (const yes of ["select * from metric('", "SELECT metric ( 'net_", "select * from metric('a', by => '", "metric('a', by => ['x', '", "metric('a', BY=>'r"]) {
+      expect(inMetricLiteral(yes), yes).toBe(true)
+    }
+    for (const no of ["select * from read_csv('", "select * from metric('a')", "select * from t where a = '", "metric('a', by => 'x') where b = '"]) {
+      expect(inMetricLiteral(no), no).toBe(false)
+    }
+  })
 })
 
 describe('keymap and mapping', () => {
@@ -110,7 +129,7 @@ describe('keymap and mapping', () => {
   })
 
   it('maps every kind the Go completer emits', () => {
-    for (const k of ['keyword', 'connection', 'schema', 'table', 'view', 'column', 'function', 'alias'] as const) {
+    for (const k of ['keyword', 'connection', 'schema', 'table', 'view', 'column', 'function', 'alias', 'metric'] as const) {
       expect(kindType[k]).toBeTruthy()
       expect(toCompletions([{ label: 'a', kind: k }])[0].type).toBe(kindType[k])
     }

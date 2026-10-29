@@ -106,13 +106,18 @@ func (h *Handler) vetNotebookSQL(ctx context.Context, rawConnection, sqlStr, wha
 	if cerr != nil {
 		return "", &sqlVetFailure{ErrInvalidParams, cerr.Error()}
 	}
-	connectErr := h.connectReferenced(ctx, connection, sqlStr)
-	// The cell keeps its wildcard; it is vetted as it will run, expanded.
-	vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
+	// The cell keeps its metric() call and its wildcard; it is vetted as it
+	// will run, expanded.
+	mx, vetParams, xerr := h.expandMetrics(ctx, connection, sqlStr, nil)
 	if xerr != nil {
 		return "", &sqlVetFailure{expandErrorCode(xerr), what + ": " + xerr.Error()}
 	}
-	v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
+	connectErr := h.connectReferenced(ctx, connection, mx.SQL)
+	vetSQL, vetCtx, xerr := h.expand(ctx, mx.SQL)
+	if xerr != nil {
+		return "", &sqlVetFailure{expandErrorCode(xerr), what + ": " + xerr.Error()}
+	}
+	v, verr := h.classifyIn(vetCtx, connection, vetSQL, vetParams)
 	if verr != nil {
 		return "", &sqlVetFailure{ErrInternal, verr.Error()}
 	}

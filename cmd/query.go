@@ -16,7 +16,9 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -137,6 +139,10 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if sqlText, params, err = expandMetrics(ctx, o, sqlText, conn, params, readOnly, errW); err != nil {
+		return err
+	}
+
 	target := conn
 	if target == "" {
 		target = o.WS.DefaultConnection()
@@ -158,6 +164,36 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(errW, "showing the first %d of %d rows (--limit 0 for all)\n", rs.RowCount(), total)
 	}
 	return nil
+}
+
+// expandMetrics replaces metric('name', by => ...) calls with the metric's
+// saved query (the same expander the agent's policy runs), then holds the
+// expanded text to the same courtesy check as the typed one. It says what it
+// expanded on standard error, so the SQL that ran is never a surprise.
+func expandMetrics(ctx context.Context, o *openedWorkspace, sqlText, conn string, params map[string]any, readOnly bool, errW io.Writer) (string, map[string]any, error) {
+	var opts workspace.PersonOptions
+	if semantics.HasMetricCall(sqlText) {
+		var verr error
+		if opts.Vet, verr = hub.MetricVetter(o.WS, o.Sess, nil); verr != nil {
+			return "", nil, verr
+		}
+	}
+	exp, err := workspace.ExpandForPerson(ctx, o.WS, o.Sess, sqlText, conn, params, opts)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(exp.Uses) == 0 {
+		return sqlText, params, nil
+	}
+	if err := usersql.Check(exp.SQL, readOnly); err != nil {
+		return "", nil, err
+	}
+	names := make([]string, len(exp.Uses))
+	for i, u := range exp.Uses {
+		names[i] = u.Name
+	}
+	fmt.Fprintf(errW, "expanded %d metric%s: %s\n", len(names), plural(len(names)), strings.Join(names, ", "))
+	return exp.SQL, exp.Params, nil
 }
 
 // checkSavedFlags refuses the combinations --saved and -p do not allow, before

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/vibe/internal/semantics"
 )
 
 // --- preview_query (#66 part B, task mode) ---
@@ -60,6 +61,9 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	if err != nil {
 		if errors.Is(err, ErrReadOnlyBindingDenied) {
 			return NewErrorResponse(req.ID, ErrPermission, fmt.Sprintf("preview_query only runs read-only statements: %v", err))
+		}
+		if errors.Is(err, semantics.ErrInvalid) {
+			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("query failed: %v", err))
 		}
 		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("query failed: %v", err))
 	}
@@ -207,12 +211,16 @@ func (h *Handler) handleWriteCell(ctx context.Context, req *Request) *Response {
 		if cerr != nil {
 			return NewErrorResponse(req.ID, ErrInvalidParams, cerr.Error())
 		}
-		connectErr := h.connectReferenced(ctx, connection, sqlStr)
-		vetSQL, vetCtx, xerr := h.expand(ctx, sqlStr)
+		mx, vetParams, xerr := h.expandMetrics(ctx, connection, sqlStr, nil)
 		if xerr != nil {
 			return NewErrorResponse(req.ID, expandErrorCode(xerr), "write_cell: "+xerr.Error())
 		}
-		v, verr := h.classifyIn(vetCtx, connection, vetSQL, nil)
+		connectErr := h.connectReferenced(ctx, connection, mx.SQL)
+		vetSQL, vetCtx, xerr := h.expand(ctx, mx.SQL)
+		if xerr != nil {
+			return NewErrorResponse(req.ID, expandErrorCode(xerr), "write_cell: "+xerr.Error())
+		}
+		v, verr := h.classifyIn(vetCtx, connection, vetSQL, vetParams)
 		if verr != nil {
 			return NewErrorResponse(req.ID, ErrInternal, verr.Error())
 		}

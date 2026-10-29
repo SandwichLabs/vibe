@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -73,4 +74,26 @@ func TestResolveConflict_Semantics(t *testing.T) {
 	assert.Error(t, err)
 	_, err = ResolveConflict(ctx, ws, sess, ConflictRequest{Kind: ConflictSemantics, ID: "nope/x", Action: ConflictReload})
 	assert.Error(t, err)
+}
+
+func TestResolveConflict_SemanticsSaveCopyFitsTheNameRule(t *testing.T) {
+	ws, sess := conflictFixture(t)
+	ctx := context.Background()
+	long := strings.Repeat("a", 63)
+	text := strings.Replace(semanticsMetric, "name: net_revenue", "name: "+long, 1)
+	m, err := semantics.DecodeMetric(long, []byte(text))
+	require.NoError(t, err)
+	require.NoError(t, ws.Semantics().PutMetric(ctx, m))
+	req := ConflictRequest{Kind: ConflictSemantics, ID: "metrics/" + long, Action: ConflictSaveCopy, Data: map[string]any{"text": text + "title: Mine\n"}}
+
+	want := []string{strings.Repeat("a", 58) + "_copy", strings.Repeat("a", 56) + "_copy_2", strings.Repeat("a", 56) + "_copy_3"}
+	for _, w := range want {
+		res, err := ResolveConflict(ctx, ws, sess, req)
+		require.NoError(t, err)
+		assert.Equal(t, "metrics/"+w, res.ID)
+		assert.LessOrEqual(t, len(w), 63)
+		got, err := ws.Semantics().Metric(ctx, w)
+		require.NoError(t, err)
+		assert.Equal(t, w, got.Name)
+	}
 }

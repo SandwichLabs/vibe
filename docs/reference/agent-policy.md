@@ -57,6 +57,10 @@ with `structuredContent {"valid": true, "needs_approval": true, "nothing_written
 
 Through Studio (chat, or MCP proxied to Studio) the approval card says which non-local connections the statement changes. The policy is checked again after you approve, in case the tier or the connection changed while the card was open.
 
+## `metric()` is expanded before the policy
+
+A call such as `metric('net_revenue', by => 'region')` (see [semantics.md](semantics.md#using-a-metric-in-sql)) is replaced by a `SELECT` over the metric's saved query **before** anything below runs, in every path that checks SQL (`run_query`, `run_saved_query`, `preview_query`, `write_cell`, notebook cells, A2UI bindings, artifact queries). The policy then classifies, vets paths and binds with `EXPLAIN` exactly the text that will run, with the same tier, connection and approval rules; a saved query behind a metric that reads a file outside `data/`, or is no longer one read, is refused like any statement, with `metric 'name': ` in front of the policy's reason. `metric` is **not** a DuckDB function and is on no allow-list: text that reaches the policy still holding a `metric(` call fails to bind. Wildcard expansion (below) runs after it.
+
 ## Files and URLs
 
 A file or URL is read only when it is written out as a **plain string literal** in a reader, and:

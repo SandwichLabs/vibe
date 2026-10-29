@@ -12,6 +12,9 @@ func Hover(text string, offset int, cat *Catalog) string {
 	if cat == nil || offset > len(text) {
 		return ""
 	}
+	if md := metricHover(text, offset, cat); md != "" {
+		return md
+	}
 	toks, ok := statementTokens(text, offset)
 	if !ok {
 		return ""

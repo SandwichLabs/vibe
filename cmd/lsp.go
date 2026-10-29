@@ -184,7 +184,7 @@ func snapshotWorkspace(ctx context.Context, o *openedWorkspace, root string, nam
 		fmt.Fprintln(errW, "nothing to snapshot: every named connection is a local file left to its owner")
 		return nil
 	}
-	n, err := lsp.Snapshot(ctx, o.Sess, root)
+	n, err := lsp.Snapshot(ctx, o.Sess, root, lsp.WithMetrics(o.WS.Semantics()))
 	if err != nil && n > 0 {
 		fmt.Fprintln(errW, "warning:", err)
 		err = nil

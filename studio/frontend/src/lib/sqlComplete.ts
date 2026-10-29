@@ -30,16 +30,25 @@ export const kindType: Record<string, string> = {
   column: 'property',
   function: 'function',
   alias: 'variable',
+  metric: 'constant',
 }
 
 /** kindBoost keeps what the statement names above the catalog above keywords. */
 const kindBoost: Record<string, number> = {
-  column: 40, alias: 40, table: 30, view: 30, schema: 20, connection: 20, function: 10, keyword: 0,
+  column: 40, alias: 40, metric: 40, table: 30, view: 30, schema: 20, connection: 20, function: 10, keyword: 0,
 }
 
 /** A word being typed: letters, digits, `_`, `$`, and an opening double quote. */
 const WORD = /["\w$]*$/
 const PLAIN_WORD = /^[\w$]*$/
+
+/** Inside metric('<here> or by => '<here>: the Go completer offers the metrics' names and dimensions. */
+const METRIC_LITERAL = /\bmetric\s*\(\s*'\w*$|\bby\s*=>\s*(?:\[[^\]]*,\s*)?\[?\s*'\w*$/i
+
+/** inMetricLiteral is true when the cursor sits in the quotes of a metric() argument. */
+export function inMetricLiteral(before: string): boolean {
+  return METRIC_LITERAL.test(before)
+}
 
 export function toCompletions(items: CompletionItem[]): Completion[] {
   return items.map((it) => ({
@@ -65,7 +74,8 @@ export function sqlSource(opts: SqlCompletionOptions): (ctx: CompletionContext) 
     const word = ctx.matchBefore(WORD)
     if (!word) return null
     const afterDot = word.from > 0 && ctx.state.sliceDoc(word.from - 1, word.from) === '.'
-    if (!ctx.explicit && word.from === word.to && !afterDot) return null // nothing to offer on a bare space
+    const metricLiteral = inMetricLiteral(ctx.state.sliceDoc(Math.max(0, ctx.pos - 300), ctx.pos))
+    if (!ctx.explicit && word.from === word.to && !afterDot && !metricLiteral) return null // nothing to offer on a bare space
     if (!hasBinding('CompleteSQL')) return keywordFallback(ctx)
     let res: CompleteSQLResult
     try {

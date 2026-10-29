@@ -137,7 +137,19 @@ func TestDecodeMetric_Refusals(t *testing.T) {
 func TestDecodeMetric_MeasureShapesThatPass(t *testing.T) {
 	for _, measure := range []string{"sum(amount)", "sum(amount) FILTER (WHERE status = 'paid')", "count(DISTINCT customer_id)",
 		"sum(a) / nullif(sum(b), 0)", "avg(x)::DECIMAL(10,2)", "sum(CASE WHEN refunded THEN 0 ELSE amount END)",
-		"coalesce(sum(a), 0)", "sum(CASE WHEN status = 'it''s' THEN 1 ELSE 0 END)", `sum("Amount")`, "count(*)"} {
+		"sum(price * qty)", "sum(price*qty) / count(*)", "sum(a) * 100.0 / sum(b)", "sum(a * -1)", "coalesce(sum(a), 0)", "sum(CASE WHEN status = 'it''s' THEN 1 ELSE 0 END)", `sum("Amount")`, "count(*)"} {
+		doc := strings.Replace(goodMetric, "measure: sum(amount)", "measure: "+yamlQuote(measure), 1)
+		_, err := DecodeMetric("net_revenue", []byte(doc))
+		assert.NoError(t, err, measure)
+	}
+}
+
+// The P2 acceptance set still passes under the structural rules.
+func TestDecodeMetric_AcceptanceSetStillPasses(t *testing.T) {
+	for _, measure := range []string{"sum(amount)", "sum(amount) FILTER (WHERE status = 'paid')", "count(DISTINCT customer_id)",
+		"sum(a) / nullif(sum(b), 0)", "avg(x)::DECIMAL(10,2)", "sum(CASE WHEN refunded THEN 0 ELSE amount END)", "sum(price * qty)",
+		"sum(coalesce(a, 0))", "count(*) FILTER (WHERE status IN ('a', 'b'))", "sum(round(a, 2))", "max(date_trunc('month', d))",
+		"count(*) FILTER (WHERE NOT (a IS NULL))", "sum(CASE WHEN a THEN 1 END)::BIGINT", "(sum(a) + sum(b)) / 2", "sum(a * (1 - discount))"} {
 		doc := strings.Replace(goodMetric, "measure: sum(amount)", "measure: "+yamlQuote(measure), 1)
 		_, err := DecodeMetric("net_revenue", []byte(doc))
 		assert.NoError(t, err, measure)
@@ -224,6 +236,21 @@ func TestDecodeMetric_MeasureCannotBreakOut(t *testing.T) {
 		// calls
 		"getenv('HOME')", "main.getenv('HOME')", `"getenv"('HOME')`, "query('select 1')", "query_table('t')",
 		"read_csv('x')", "read_parquet('x')", "glob('*')", "sum(length(read_text('/etc/passwd')))",
+		// more than one column or row, side effects, state
+		"sum(COLUMNS(*))", "sum(COLUMNS('a.*'))", "sum(unnest([1,2]))", "sum(nextval('s'))", "sum(setval('s', 1))",
+		"sum(currval('s'))", "sum(CAST(current_setting('threads') AS INTEGER))", "sum(getvariable('v'))", "sum(setvariable('v', 1))",
+		"sum(metric('x'))",
+		// a star that is not count(*)
+		"sum(*)", "count(DISTINCT *)", "sum(t.*)", "min(* EXCLUDE (a))",
+		// statement-shaped subqueries hidden in parentheses
+		"sum(a) + (PIVOT 'file.csv' ON a USING sum(b))", "count(*) FILTER (WHERE a IN (TABLE t))", "(DESCRIBE 'x.csv')",
+		"count(*) FILTER (WHERE EXISTS (SUMMARIZE t))", "count(*) FILTER (WHERE EXISTS (SHOW TABLES))",
+		"(PIVOT duckdb_secrets() ON x)", "(UNPIVOT t ON a)", "(VALUES (1))", "sum(a) + (EXPLAIN SELECT 1)",
+		"sum(a) + (CALL x())", "sum(a) + (PRAGMA x)", "sum(a) + ( FROM t )", "sum(a) + ((SELECT 1))", "sum(a) + (pivot_wider)",
+		"sum(a) IN (TABLE t)", "sum(a) IN (VALUES (1))", "sum(a) + (WITH x AS (SELECT 1) SELECT 1)",
+		// a call outside the scalar and aggregate allow-list
+		"sum(a) + read_csv_auto('x')", "sum(main.length(a))", "sum(foo_bar(a))", "sum(a) + duckdb_secrets()", "sum(which_secret('a','b'))",
+		"sum(sniff_csv('x'))", `sum("getenv"('x'))`,
 		// string forms
 		"sum(a) || E'x'", "sum(a) || $$x$$", "sum(a) || $t$x$t$",
 	}

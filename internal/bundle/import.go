@@ -361,6 +361,10 @@ type itemImporter struct {
 	// for the references other items of the same bundle hold (a metric's saved
 	// query, a join's entities). notes say which references were rewritten.
 	renamed map[ItemKind]map[string]string
+	// skipped is the bundle ids of the queries and entities left alone because
+	// the workspace already had one of that name, per kind: the references the
+	// bundle's metrics and joins hold now point at the workspace's own.
+	skipped map[ItemKind]map[string]bool
 	notes   []string
 }
 
@@ -412,6 +416,9 @@ func (r *itemImporter) importItem(ctx context.Context, it item) Outcome {
 	switch {
 	case action == ActionSkip:
 		o.Result = "skipped"
+		if clash {
+			r.noteSkip(it)
+		}
 	case action == ActionRename && clash:
 		final, probeErr := r.freeID(it)
 		if final == "" {

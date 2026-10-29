@@ -368,3 +368,39 @@ func TestSemantics_RenamesFollowReferencesInTheSameBundle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, strings.Join(dry.Warnings, "\n"), "metric net_revenue now uses")
 }
+
+func TestSemantics_SkippingAClashingQueryOrEntityWarnsThatReferencesNowPointAtTheWorkspaces(t *testing.T) {
+	ctx := context.Background()
+	src, _ := newWS(t)
+	require.NoError(t, src.Queries().Create(ctx, &queries.Query{ID: "net_revenue_base", Title: "Base", SQL: "SELECT 1 AS amount"}))
+	writeSem(t, src, semFiles)
+	res, err := Export(ctx, src, ExportOptions{Selection: all()})
+	require.NoError(t, err)
+
+	dst, _ := newWS(t)
+	require.NoError(t, dst.Queries().Create(ctx, &queries.Query{ID: "net_revenue_base", Title: "Mine", SQL: "SELECT 2 AS amount"}))
+	writeSem(t, dst, map[string]string{
+		"semantics/entities/customer.yaml": strings.Replace(semEntity, "customers", "my_customers", 1),
+	})
+	pkg, err := Open(res.Data, "")
+	require.NoError(t, err)
+	out, err := pkg.Import(ctx, dst, ImportOptions{OnConflict: ActionSkip})
+	require.NoError(t, err)
+	require.Zero(t, out.Failed(), "%+v", out.Outcomes)
+
+	notes := strings.Join(out.Warnings, "\n")
+	assert.Contains(t, notes, `metric net_revenue uses the saved query "net_revenue_base", which was skipped`)
+	assert.Contains(t, notes, "points at the workspace's")
+	assert.Contains(t, notes, `join orders_customers uses the entity "customer", which was skipped`)
+	m, err := dst.Semantics().Metric(ctx, "net_revenue")
+	require.NoError(t, err)
+	assert.Equal(t, "net_revenue_base", m.Query)
+
+	// A skip the person chose for an item that did not clash is not this case: nothing to point at.
+	fresh, _ := newWS(t)
+	pkg, err = Open(res.Data, "")
+	require.NoError(t, err)
+	out, err = pkg.Import(ctx, fresh, ImportOptions{})
+	require.NoError(t, err)
+	assert.NotContains(t, strings.Join(out.Warnings, "\n"), "was skipped")
+}

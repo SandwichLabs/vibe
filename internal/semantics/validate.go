@@ -267,21 +267,49 @@ func checkDimensions(dims []string) error {
 }
 
 // measureBannedWords may not appear in a measure at all: each starts a new
-// clause or a second query, which would break out of `<measure> AS name`.
+// clause, a second query or a statement-shaped subquery (`(PIVOT ...)`,
+// `(TABLE t)`, `(DESCRIBE ...)`, `EXISTS (SHOW ...)`), which would break out of
+// `<measure> AS name` or read something the saved query never named.
 var measureBannedWords = setOf("select", "from", "with", "union", "intersect", "except", "as", "group", "having",
-	"order", "limit", "offset", "qualify", "window")
+	"order", "limit", "offset", "qualify", "window",
+	"pivot", "pivot_wider", "pivot_longer", "unpivot", "table", "values", "describe", "summarize", "show",
+	"explain", "pragma", "call", "exists")
 
-// measureBannedCalls are functions a measure may not call: the file readers,
-// environment access and the query() family. A measure is also run through the
-// SQL policy where the policy runs, but the person's own surfaces do not run
-// the full policy on it, so the shape is held here.
-var measureBannedCalls = func() map[string]bool {
-	m := setOf("getenv", "query", "query_table")
+// measureDeniedFunctions are functions that are in duckdb_functions() as
+// scalar or aggregate but that a measure may not call: environment and
+// session state, the query() family, side effects, more than one column or
+// row, remote services and secrets. The allow-list (allowedFunctions) is
+// generated from DuckDB minus these, so a new DuckDB function is refused until
+// the list is regenerated (functions_test.go).
+var measureDeniedFunctions = func() map[string]bool {
+	m := setOf("getenv", "query", "query_table", "metric",
+		"columns", "unnest",
+		"nextval", "setval", "currval", "current_setting", "getvariable", "setvariable",
+		"which_secret", "prompt", "embedding", "get_md_token", "print_md_token")
 	for _, f := range queries.ReaderFunctions {
 		m[f] = true
 	}
 	return m
 }()
+
+// syntaxFunctions are callable names that DuckDB parses as keyword syntax, so
+// duckdb_functions() does not list them.
+var syntaxFunctions = setOf("coalesce", "nullif")
+
+// callable reports a name a measure may call.
+func callable(name string) bool { return allowedFunctions[name] || syntaxFunctions[name] }
+
+// afterParenOK are the keywords that may open a parenthesised group in a
+// measure. Any other keyword (of any DuckDB category) directly after "(" is
+// refused, so a statement-shaped subquery cannot start there; a keyword that
+// is a callable function (coalesce, left, ...) is let through when it is itself
+// followed by "(" and is on the function allow-list.
+var afterParenOK = setOf("distinct", "case", "not", "null", "true", "false", "interval")
+
+// beforeParenOK are keywords that may stand directly before "(" without being
+// a function call: IN (...), FILTER (...), AND (...), and the like.
+var beforeParenOK = setOf("in", "not", "and", "or", "filter", "over", "when", "then", "else", "case", "between",
+	"is", "distinct", "like", "ilike", "any", "all", "interval", "end")
 
 // checkMeasure holds the measure to what can be emitted on one SQL line as one
 // aggregate expression after `SELECT ` and before ` AS name`:
@@ -293,7 +321,19 @@ var measureBannedCalls = func() map[string]bool {
 //   - none of SELECT, FROM, WITH, UNION, INTERSECT, EXCEPT, AS, GROUP, HAVING,
 //     ORDER, LIMIT, OFFSET, QUALIFY, WINDOW anywhere, and WHERE only directly
 //     inside FILTER (...);
-//   - no call to getenv, query, query_table or a file reader.
+//   - every call is to a function on the generated allow-list (DuckDB's scalar
+//     and aggregate functions less measureDeniedFunctions: getenv, query,
+//     the file readers, COLUMNS, UNNEST, nextval and the other sequence and
+//     setting functions, metric, secrets and remote services), unqualified;
+//     FILTER, OVER, IN and the like before "(" are not calls; a type after
+//     "::" may take arguments (::DECIMAL(10,2));
+//   - after "(" the next word may not be any DuckDB keyword (so no
+//     `(SELECT ...)`, `(PIVOT ...)`, `(TABLE t)`, `(DESCRIBE ...)`, `(VALUES ...)`)
+//     except DISTINCT, CASE, NOT, NULL, TRUE, FALSE, INTERVAL, WHERE after
+//     FILTER, and a callable keyword such as coalesce( that is itself on the
+//     allow-list;
+//   - no `*` as a star (`t.*`, `* EXCLUDE (...)`, `sum(*)`) except in
+//     count(*); a `*` between two operands is multiplication and is fine.
 //
 // It does not decide that the expression is an aggregate; DuckDB and the SQL
 // policy do that where it runs.
@@ -344,8 +384,11 @@ func checkMeasureTokens(toks []sqllex.Tok) error {
 		case t.Kind == sqllex.Word && t.Text == "WHERE" && !(i >= 2 && toks[i-1].IsParen("(") && toks[i-2].IsWord("FILTER")):
 			return invalid("measure may use WHERE only inside FILTER (...)")
 		}
-		if t.IsName() && i+1 < len(toks) && toks[i+1].IsParen("(") && measureBannedCalls[strings.ToLower(t.Text)] {
-			return invalid("measure may not call %s()", strings.ToLower(t.Text))
+		if err := checkMeasureParens(toks, i); err != nil {
+			return err
+		}
+		if t.IsPunct("*") && isStar(toks, i) && !isCountStar(toks, i) {
+			return invalid("measure may use * only in count(*): a metric must produce exactly one value column")
 		}
 	}
 	if depth != 0 {
@@ -409,4 +452,75 @@ func checkMeasured(m *Measured) error {
 		return invalid("measured.verdict %q is not one of %s", m.Verdict, strings.Join(Verdicts, ", "))
 	}
 	return nil
+}
+
+// isStar reports whether the `*` at toks[i] is a star expression rather than
+// multiplication: multiplication has an operand on its left and one on its
+// right. count(*), sum(*), t.* and * EXCLUDE (...) are all stars.
+func isStar(toks []sqllex.Tok, i int) bool {
+	if i == 0 {
+		return true
+	}
+	p := toks[i-1]
+	leftOperand := p.Kind == sqllex.Word || p.Kind == sqllex.Ident || p.Kind == sqllex.String || p.IsParen(")")
+	if !leftOperand {
+		return true
+	}
+	if i+1 >= len(toks) {
+		return true
+	}
+	n := toks[i+1]
+	return n.IsParen(")") || n.IsPunct(",") || n.IsPunct("*")
+}
+
+// isCountStar reports count(*): the star alone inside the parentheses of count.
+func isCountStar(toks []sqllex.Tok, i int) bool {
+	return i >= 2 && i+1 < len(toks) && toks[i-1].IsParen("(") && toks[i+1].IsParen(")") &&
+		toks[i-2].IsName() && strings.EqualFold(toks[i-2].Text, "count")
+}
+
+// checkMeasureParens applies the structural rules around toks[i]: what may
+// follow an opening parenthesis, and which names may be called.
+func checkMeasureParens(toks []sqllex.Tok, i int) error {
+	t := toks[i]
+	if t.IsParen("(") && i+1 < len(toks) {
+		if err := afterParen(toks, i); err != nil {
+			return err
+		}
+	}
+	if !t.IsName() || i+1 >= len(toks) || !toks[i+1].IsParen("(") {
+		return nil
+	}
+	name := strings.ToLower(t.Text)
+	switch {
+	case i > 0 && toks[i-1].IsPunct("."):
+		return invalid("measure may not call a qualified function (%s)", name)
+	case i >= 2 && toks[i-1].IsPunct(":") && toks[i-2].IsPunct(":"):
+		return nil // a type: ::DECIMAL(10,2)
+	case measureDeniedFunctions[name]:
+		return invalid("measure may not call %s()", name)
+	case callable(name):
+		return nil
+	case t.Kind == sqllex.Word && beforeParenOK[name]:
+		return nil
+	}
+	return invalid("measure may not call %s(): only DuckDB's scalar and aggregate functions are allowed", name)
+}
+
+// afterParen refuses a DuckDB keyword directly after "(" (see afterParenOK).
+func afterParen(toks []sqllex.Tok, i int) error {
+	n := toks[i+1]
+	if n.Kind != sqllex.Word {
+		return nil
+	}
+	w := strings.ToLower(n.Text)
+	switch {
+	case afterParenOK[w], !allKeywords[w]:
+		return nil
+	case w == "where" && i > 0 && toks[i-1].IsWord("FILTER"):
+		return nil
+	case i+2 < len(toks) && toks[i+2].IsParen("(") && callable(w):
+		return nil // coalesce(, left(: a callable keyword
+	}
+	return invalid("measure may not start a group with %s: a subquery or statement cannot hide inside a measure", strings.ToUpper(w))
 }
