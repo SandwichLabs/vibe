@@ -1,0 +1,15 @@
+{
+  "check": "3",
+  "action": "theme dropdown schoolhouse-light -> chalkboard with output on screen",
+  "rxNew": [],
+  "verdict": "see png",
+  "note": "menu: pressed; compare ghostty-3-before.png and ghostty-3-after.png (old output recoloured or not)",
+  "screenTail": [
+    "12 rows (3 shown)",
+    "vibe > ^C (cancel)",
+    "vibe > colors",
+    "################################",
+    "bold dim italic underline inverse strike",
+    "vibe >"
+  ]
+}

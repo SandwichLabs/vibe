@@ -1,0 +1,10 @@
+{
+  "check": "5",
+  "action": "Japanese Romaji: type \"kanji\" (composing), then Return to commit",
+  "rxNew": [
+    "\\u{611f}\\u{3058}"
+  ],
+  "verdict": "pass",
+  "note": "input source=com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese (select rc 0); rx while composing=[]; rx on commit=['\\\\u{611f}\\\\u{3058}']; composition position: see ghostty-5-composing.png; AX windows while composing: AXWindow [] 217 241 124 140; main window 173,100; terminal rect (page) {'x': 8, 'y': 108, 'w': 1264, 'h': 646}",
+  "screenTail": []
+}

@@ -61,6 +61,24 @@ Write one line per check in `~/vibe-spike-evidence/human-wkwebview-<widget>.md`:
 
 Fill the `Fail` lines with the exact text of any error shown in the window or the log.
 
+Check 15 as written cannot pass: `-devtools` alone leaves Wails' default context menu disabled (it is on only in
+debug builds or with `EnableDefaultContextMenu`). Cmd+Shift+F12 opens the Web Inspector in this build.
+
+### 3a. Section 3 driven by accessibility scripting (how the 2026-10-28 run was done)
+
+Needs Accessibility (and Screen Recording) for the terminal app, and hands off the keyboard and mouse for about
+4 minutes per widget. Keys are CGEvents at the HID tap (so dead keys and the IME go through macOS), and the driver
+refuses to type unless the spike window is frontmost. It enables Japanese Romaji for check 5 and switches back to
+US; disable `com.apple.inputmethod.Kotoeri.RomajiTyping` and `com.apple.50onPaletteIM` afterwards (`./drive tis
+disable <id>`). The clipboard text is restored on exit. Trackpad scrolling is synthetic, not a physical swipe.
+
+```bash
+cd spike/console/mac && swiftc -O -o drive drive.swift
+APP=~/vibe-spike/vibe-studio.app/Contents/MacOS/vibe-studio
+P=$(./launch.sh $APP 'widget=ghostty&wasm=url&sb=30000000'); ./human-ax.py $P ghostty ~/vibe-spike-evidence/human-ax; kill $P
+# then widget=xterm-webgl and widget=xterm-dom; add only=4,5,... to rerun some checks
+```
+
 ## 4. Hand it back
 
 ```bash

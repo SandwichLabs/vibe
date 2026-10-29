@@ -43,3 +43,4 @@ studio/frontend/src/wailsjs/go/
 # SPIKE #257 - never merge
 spike/console/evidence/
 spike/console/bin/
+spike/console/mac/drive  # SPIKE #257 - never merge

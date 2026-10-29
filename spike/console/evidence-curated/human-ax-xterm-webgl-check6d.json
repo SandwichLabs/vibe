@@ -1,0 +1,25 @@
+{
+  "check": "6d",
+  "action": "Up Down Left Right Home End Ctrl+A Ctrl+L Ctrl+R",
+  "rxNew": [
+    "\\x1b[A",
+    "\\x1b[B",
+    "\\x1b[D",
+    "\\x1b[C",
+    "\\x1b[H",
+    "\\x1b[F",
+    "\\x01",
+    "\\x0c",
+    "\\x12"
+  ],
+  "verdict": "pass",
+  "note": "9/9 reached rx; expected roughly ['\\\\x1b[A', '\\\\x1b[B', '\\\\x1b[D', '\\\\x1b[C', '\\\\x1b[H', '\\\\x1b[F', '\\\\x01', '\\\\x0c', '\\\\x12']; status/route still the spike: True",
+  "screenTail": [
+    "bracketed paste on: {\"bracketedPaste\":false}",
+    "vibe > seed paste check^C (cancel)",
+    "vibe > paste off",
+    "bracketed paste off: {\"bracketedPaste\":true}",
+    "vibe > ^C (cancel)",
+    "vibe > "
+  ]
+}

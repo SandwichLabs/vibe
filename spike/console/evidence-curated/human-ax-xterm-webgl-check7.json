@@ -1,0 +1,17 @@
+{
+  "check": "7",
+  "action": "table; drag 2 lines; Cmd+C; double-click a word",
+  "rxNew": [],
+  "verdict": "pass",
+  "note": "rows=38; row shift 0; page selection after drag=''; clipboard==dragged rows: True; double-click selection='customer' (word 'customer')",
+  "screenTail": [
+    "\u2502   1006 \u2502 Stark          \u2502 EMEA     \u2502      7407.00 \u2502 2026-10-16   \u2502 open       \u2502",
+    "\u2502 \u00b7      \u2502 \u00b7              \u2502 \u00b7        \u2502 \u00b7            \u2502 \u00b7            \u2502 \u00b7          \u2502",
+    "\u2502   1012 \u2502 Wonka          \u2502 EMEA     \u2502     14814.00 \u2502 2026-10-28   \u2502 paid       \u2502",
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    "12 rows (3 shown)",
+    "vibe > "
+  ],
+  "clipboard": "\u2502 id     \u2502 customer       \u2502 region   \u2502 amount       \u2502 ordered      \u2502 status     \u2502\n\u2502 int64  \u2502 varchar        \u2502 varchar  \u2502 decimal      \u2502 date         \u2502 varchar    \u2502",
+  "expected": "\u2502 id     \u2502 customer       \u2502 region   \u2502 amount       \u2502 ordered      \u2502 status     \u2502\n\u2502 int64  \u2502 varchar        \u2502 varchar  \u2502 decimal      \u2502 date         \u2502 varchar    \u2502"
+}

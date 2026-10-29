@@ -1,0 +1,97 @@
+{
+  "check": "9",
+  "action": "resize small/wide, zoom (maximise), full screen; `size` after each",
+  "rxNew": [],
+  "verdict": "see json+png",
+  "note": "the harness fits once at open (no ResizeObserver), so `size` reports the grid it opened with; screenshots show clipping/stale pixels",
+  "screenTail": [
+    "vibe > size",
+    "166x38",
+    "vibe > ^C (cancel)",
+    "vibe > size",
+    "166x38",
+    "vibe > "
+  ],
+  "steps": [
+    {
+      "step": "small",
+      "sizeCmd": [
+        "166x38"
+      ],
+      "termRect": {
+        "x": 8,
+        "y": 150,
+        "w": 744,
+        "h": 292
+      },
+      "cell": {
+        "w": 7.5,
+        "h": 17
+      },
+      "fitWouldBe": [
+        98,
+        16
+      ]
+    },
+    {
+      "step": "wide",
+      "sizeCmd": [
+        "166x38"
+      ],
+      "termRect": {
+        "x": 8,
+        "y": 108,
+        "w": 1384,
+        "h": 514
+      },
+      "cell": {
+        "w": 7.5,
+        "h": 17
+      },
+      "fitWouldBe": [
+        184,
+        30
+      ]
+    },
+    {
+      "step": "zoom",
+      "sizeCmd": [
+        "166x38"
+      ],
+      "termRect": {
+        "x": 8,
+        "y": 100,
+        "w": 1694,
+        "h": 927
+      },
+      "cell": {
+        "w": 7.5,
+        "h": 17
+      },
+      "fitWouldBe": [
+        225,
+        54
+      ]
+    },
+    {
+      "step": "fullscreen",
+      "sizeCmd": [
+        "166x38"
+      ],
+      "termRect": {
+        "x": 8,
+        "y": 100,
+        "w": 1694,
+        "h": 927
+      },
+      "cell": {
+        "w": 7.5,
+        "h": 17
+      },
+      "fitWouldBe": [
+        225,
+        54
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": 11,
+  "name": "WASM / init",
+  "status": "pass",
+  "data": {
+    "initMs": 15,
+    "origin": "wails://wails",
+    "webview": "wkwebview",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) wails.io",
+    "dpr": 2,
+    "notes": [
+      "scrollbackOption=20000; wasm=url (/assets/ghostty-vt-DOMeXDrv.wasm); renderer=canvas2d",
+      "wasm fetch 200 content-type=application/wasm bytes=423045"
+    ]
+  }
+}

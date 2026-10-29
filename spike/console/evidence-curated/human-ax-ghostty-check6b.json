@@ -1,0 +1,15 @@
+{
+  "check": "6b",
+  "action": "terminal Cmd+A, Cmd+C, paste into seed box",
+  "rxNew": [
+    "a"
+  ],
+  "verdict": "fail",
+  "note": "clipboard 1 chars, first line [redacted]; seed box now 1 chars",
+  "screenTail": [
+    "12 rows (3 shown)",
+    "vibe > ^C (cancel)",
+    "vibe > a"
+  ],
+  "clipboardHead": "[redacted: pre-existing clipboard, 1 char]"
+}

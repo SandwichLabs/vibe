@@ -1,0 +1,15 @@
+{
+  "check": "10",
+  "action": "lines 10000; synthetic trackpad (continuous, phased) and wheel scroll during and after drain",
+  "rxNew": [],
+  "verdict": "pass",
+  "note": "scroll bursts (25 events @16 ms) took [0.51, 0.5, 0.51, 0.49, 0.5, 0.5]s each (no stall if ~0.4-0.6); viewportY now 386.15866463921896, scrollback 9989; last line visible in tail: True",
+  "screenTail": [
+    "line 009996 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009997 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009998 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 009999 the quick brown fox jumps over the lazy dog 0123456789",
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789",
+    "vibe >"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": 11,
+  "name": "WASM / init",
+  "status": "pass",
+  "data": {
+    "initMs": 16,
+    "origin": "wails://wails",
+    "webview": "wkwebview",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) wails.io",
+    "dpr": 2,
+    "notes": [
+      "scrollbackOption=20000; wasm=inline; renderer=canvas2d"
+    ]
+  }
+}

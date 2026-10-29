@@ -1,0 +1,11 @@
+{
+  "check": "4",
+  "action": "Option+e e, Option+u u (US layout)",
+  "rxNew": [
+    "\\u{e9}",
+    "\\u{fc}"
+  ],
+  "verdict": "pass",
+  "note": "expected \u00e9 then \u00fc once each; got ['\\\\u{e9}', '\\\\u{fc}']",
+  "screenTail": []
+}

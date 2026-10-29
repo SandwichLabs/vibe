@@ -1,0 +1,28 @@
+{
+  "check": "6c",
+  "action": "seed text Cmd+C, terminal Cmd+V; then \"paste on\", Cmd+V",
+  "rxNew": [
+    "seed paste check",
+    "\\x03",
+    "p",
+    "a",
+    "s",
+    "t",
+    "e",
+    " ",
+    "o",
+    "n",
+    "\\x0d",
+    "seed paste check"
+  ],
+  "verdict": "check",
+  "note": "plain paste rx=['seed paste check']; bracketed rx=['seed paste check']",
+  "screenTail": [
+    "vibe > ^C (cancel)",
+    "vibe > a^C (cancel)",
+    "vibe > seed paste check^C (cancel)",
+    "vibe > paste on",
+    "bracketed paste on: {\"bracketedPaste\":true}",
+    "vibe > seed paste check"
+  ]
+}

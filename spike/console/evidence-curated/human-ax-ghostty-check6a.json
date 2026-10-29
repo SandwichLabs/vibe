@@ -1,0 +1,25 @@
+{
+  "check": "6a",
+  "action": "help Enter, table Enter, Ctrl+C, Option+b, Option+f",
+  "rxNew": [
+    "h",
+    "e",
+    "l",
+    "p",
+    "\\x0d",
+    "t",
+    "a",
+    "b",
+    "l",
+    "e",
+    "\\x0d",
+    "\\x03"
+  ],
+  "verdict": "check",
+  "note": "Ctrl+C rx tail=['\\\\x03'], \"^C (cancel)\" on screen=True; Option+b/f sent [] (other)",
+  "screenTail": [
+    "12 rows (3 shown)",
+    "vibe > ^C (cancel)",
+    "vibe >"
+  ]
+}

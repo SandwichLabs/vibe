@@ -1,0 +1,15 @@
+{
+  "check": "15",
+  "action": "right-click page -> Inspect Element; fallback Cmd+Shift+F12",
+  "rxNew": [],
+  "verdict": "pass",
+  "note": "context menu Inspect: no menu (Wails disables the default context menu unless debug or EnableDefaultContextMenu); inspector opened via Cmd+Shift+F12: True; windows: AXWindow [Web Inspector \u2014 wails] 355 118 1000 650",
+  "screenTail": [
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    "12 rows (3 shown)",
+    "vibe > unicode",
+    "CJK  \u4f60\u597d\u4e16\u754c \u65e5\u672c\u8a9e \ud55c\uae00 |  emoji \ud83d\ude00\ud83d\udc4d\ud83c\udf89 |  combining e n |  deva \u0915\u0924\u092c |",
+    "12345678901234567890123456789012345678901234567890",
+    "vibe >"
+  ]
+}

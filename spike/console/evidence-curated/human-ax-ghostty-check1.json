@@ -1,0 +1,15 @@
+{
+  "check": "1",
+  "action": "Retina screenshot (2x) of table/unicode output for crispness",
+  "rxNew": [],
+  "verdict": "see png",
+  "note": "/private/tmp/claude-501/-Users-zac-projects-sandwich-labs-vibe/187fb7f9-c240-4014-809f-7df3e4c44a2d/scratchpad/human/ghostty-1-retina.png",
+  "screenTail": [
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    "12 rows (3 shown)",
+    "vibe > unicode",
+    "CJK  \u4f60\u597d\u4e16\u754c \u65e5\u672c\u8a9e \ud55c\uae00 |  emoji \ud83d\ude00\ud83d\udc4d\ud83c\udf89 |  combining e n |  deva \u0915\u0924\u092c |",
+    "12345678901234567890123456789012345678901234567890",
+    "vibe >"
+  ]
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "gapW": 16,
+    "gapH": 11,
+    "w": 900,
+    "h": 300,
+    "fit": {
+      "cols": 110,
+      "rows": 19
+    },
+    "onResize": {
+      "cols": 110,
+      "rows": 19
+    },
+    "metrics": {
+      "screenW": 880,
+      "screenH": 285,
+      "containerW": 896,
+      "containerH": 296
+    },
+    "cellW": 8,
+    "cellH": 15,
+    "fits": true,
+    "filled": true
+  },
+  {
+    "gapW": 16,
+    "gapH": 6,
+    "w": 620,
+    "h": 430,
+    "fit": {
+      "cols": 75,
+      "rows": 28
+    },
+    "onResize": {
+      "cols": 75,
+      "rows": 28
+    },
+    "metrics": {
+      "screenW": 600,
+      "screenH": 420,
+      "containerW": 616,
+      "containerH": 426
+    },
+    "cellW": 8,
+    "cellH": 15,
+    "fits": true,
+    "filled": true
+  }
+]

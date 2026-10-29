@@ -1,0 +1,15 @@
+{
+  "check": "3",
+  "action": "theme dropdown schoolhouse-light -> chalkboard with output on screen",
+  "rxNew": [],
+  "verdict": "see png",
+  "note": "menu: pressed; compare xterm-dom-3-before.png and xterm-dom-3-after.png (old output recoloured or not)",
+  "screenTail": [
+    "line 010000 the quick brown fox jumps over the lazy dog 0123456789 ",
+    "vibe > ^C (cancel)",
+    "vibe > colors",
+    "################################",
+    "bold dim italic underline inverse strike",
+    "vibe > "
+  ]
+}

@@ -1,0 +1,16 @@
+# WKWebView human checks: ghostty (wasm=url, sb=30000000)
+
+Driven by Claude Code with real HID-level input (CGEvent posted at the HID tap, so dead keys and the IME go through the macOS input system), AX window control and screencapture; not a person at the keyboard. Trackpad scrolling is synthetic (continuous, phased scroll events), not a physical swipe. Keyboard layout: US (same Option dead keys as ABC). IME: Japanese Romaji, enabled for the run and disabled afterwards. Local build of 5eeb889 (`wails build -tags duckdb_arrow -devtools`). Per-step JSON: `human-ax-<widget>-check<N>.json`; screenshots: `human-ax-*.png` (a curated subset). Format: # | action | what happened | verdict.
+
+- 4 | Option+e e, Option+u u | rx: \u{e9} then \u{fc}, once each | pass
+- 5 | Japanese Romaji, type "kanji", Return | nothing in rx while composing; commit sends 感じ once | partial: the composition text and candidate panel are drawn at the terminal's top-left (over row 0), not at the caret (human-ax-ghostty-5-composing-full.png)
+- 6a | help, table, Ctrl+C, Option+b, Option+f | Ctrl+C -> \x03 and "^C (cancel)". Option+b / Option+f send NOTHING (neither \x1bb/\x1bf nor ∫/ƒ) | fail (Option+letter dropped)
+- 6b | Cmd+A, Cmd+C in terminal, paste into seed box | Cmd+A is not select-all: it sends "a" to the terminal; Cmd+C copies nothing; the clipboard keeps its old content | fail
+- 6c | Cmd+V plain, then "paste on" + Cmd+V | plain: "seed paste check" echoed once. With paste on, a real Cmd+V is NOT bracketed (rx "seed paste check", no \x1b[200~ ... \x1b[201~); the auto check 8 passes only through adapter.paste() | fail (bracketed paste from the keyboard)
+- 6d | Up Down Left Right Home End Ctrl+A Ctrl+L Ctrl+R | 9/9 reach rx (\x1b[A \x1b[B \x1b[D \x1b[C \x1b[H \x1b[F \x01 \x0c \x12); page did not scroll, reload or open search | pass
+- 7 | table, drag 2 lines, Cmd+C, double-click a word | clipboard equals the two dragged rows exactly; double-click selects "customer" | pass
+- 10 | lines 10000, scroll during and after drain (trackpad-style + wheel) | each 25-event burst took ~0.5 s (no stall), viewport follows (fractional viewportY = smooth scroll), last line present | pass (synthetic)
+- 3 | theme schoolhouse-light -> chalkboard with output on screen | the page chrome recolours; the terminal background and the existing output keep the old palette (human-ax-ghostty-3-*.png) | partial (matches auto check 3: in place does not recolour, recreate needed)
+- 9 | resize small/wide, zoom, full screen | `size` stays 155x43 at every size: the spike harness fits once at open and has no ResizeObserver, so this checks the harness, not the widget. Small window: the fixed grid clips at the bottom; no stale pixels. Also: Ctrl+Cmd+F (leave full screen) is swallowed by ghostty and sent as \x1b[102;5u (Cmd dropped) | n/a (harness), note the shortcut capture
+- 1 | Retina screenshot (2x) of table + unicode | glyphs crisp, box-drawing lines meet, CJK/emoji render (human-ax-ghostty-1-retina-crop.png) | pass
+- 15 | right-click, Inspect Element | no context menu: Wails disables the default context menu unless built with debug or EnableDefaultContextMenu, and -devtools alone does not change that. Cmd+Shift+F12 (Wails' devtools hotkey) opens the Web Inspector | fail as written; inspector reachable via Cmd+Shift+F12
