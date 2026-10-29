@@ -12,19 +12,7 @@ import "context"
 // A file that cannot be read still lists, under its file stem, with Error set;
 // Get refuses it (ErrInvalid) and a write over it needs Overwrite.
 type Store interface {
-	// Entities, Metrics and Joins list every definition ordered by name; never
-	// nil. An unreadable file is listed with Error set, never hidden. More
-	// than MaxFilesPerKind files is an error.
-	Entities(ctx context.Context) ([]Entity, error)
-	Metrics(ctx context.Context) ([]Metric, error)
-	Joins(ctx context.Context) ([]Join, error)
-
-	// Entity, Metric and Join return one definition. A missing name satisfies
-	// errors.Is(err, ErrNotFound); an unreadable or invalid file is an error
-	// wrapping ErrInvalid.
-	Entity(ctx context.Context, name string) (*Entity, error)
-	Metric(ctx context.Context, name string) (*Metric, error)
-	Join(ctx context.Context, name string) (*Join, error)
+	ReadStore
 
 	// PutEntity, PutMetric and PutJoin validate and write a definition. With
 	// neither a revision (the item's Rev or WithRev) nor Overwrite the write
@@ -41,12 +29,6 @@ type Store interface {
 	DeleteMetric(ctx context.Context, name string, opts ...WriteOption) error
 	DeleteJoin(ctx context.Context, name string, opts ...WriteOption) error
 
-	// Source returns a file's text exactly as stored, valid or not, with its
-	// revision: what an editor or `vibe semantics show` displays, so a broken
-	// file can be read and fixed. name is ignored for KindGlossary. A missing
-	// file is ErrNotFound.
-	Source(ctx context.Context, kind Kind, name string) (*Source, error)
-
 	// PutSource validates file bytes with the kind's strict decoder and writes
 	// them exactly as given (comments and layout kept), under the same
 	// revision rules as the Put methods. It is how a bundle import keeps a
@@ -54,11 +36,40 @@ type Store interface {
 	// returns the new revision.
 	PutSource(ctx context.Context, kind Kind, name string, data []byte, opts ...WriteOption) (rev string, err error)
 
-	// Glossary returns glossary.md; a missing file is an empty Glossary with
-	// no Rev, not an error. PutGlossary validates and writes it under the same
-	// revision rules as the others.
-	Glossary(ctx context.Context) (*Glossary, error)
+	// PutGlossary validates and writes glossary.md under the same revision
+	// rules as the others.
 	PutGlossary(ctx context.Context, g *Glossary, opts ...WriteOption) error
+}
+
+// ReadStore is the read half of a Store. It is what a tool surface that must
+// never change a definition (the agent's tools, MCP) is given: the Put and
+// Delete methods are not part of its type, so no tool can reach them. Only a
+// person's surface (accepting a proposal, a bundle import, an editor) holds a
+// Store.
+type ReadStore interface {
+	// Entities, Metrics and Joins list every definition ordered by name; never
+	// nil. An unreadable file is listed with Error set, never hidden. More
+	// than MaxFilesPerKind files is an error.
+	Entities(ctx context.Context) ([]Entity, error)
+	Metrics(ctx context.Context) ([]Metric, error)
+	Joins(ctx context.Context) ([]Join, error)
+
+	// Entity, Metric and Join return one definition. A missing name satisfies
+	// errors.Is(err, ErrNotFound); an unreadable or invalid file is an error
+	// wrapping ErrInvalid.
+	Entity(ctx context.Context, name string) (*Entity, error)
+	Metric(ctx context.Context, name string) (*Metric, error)
+	Join(ctx context.Context, name string) (*Join, error)
+
+	// Source returns a file's text exactly as stored, valid or not, with its
+	// revision: what an editor or `vibe semantics show` displays, so a broken
+	// file can be read and fixed. name is ignored for KindGlossary. A missing
+	// file is ErrNotFound.
+	Source(ctx context.Context, kind Kind, name string) (*Source, error)
+
+	// Glossary returns glossary.md; a missing file is an empty Glossary with
+	// no Rev, not an error.
+	Glossary(ctx context.Context) (*Glossary, error)
 }
 
 // Source is one file's text as stored.

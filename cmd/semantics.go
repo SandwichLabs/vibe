@@ -12,17 +12,20 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/strictyaml"
+	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 var semanticsCmd = &cobra.Command{
 	Use:   "semantics",
-	Short: "List and show the workspace's semantic definitions",
+	Short: "List the workspace's semantic definitions and review proposed ones",
 	Long: `The semantic layer is reviewed files in the workspace's semantics/ folder:
 entities (what the data is about), metrics (named measures over a saved
 query), joins (how entities relate) and a glossary. "list" shows them the way
 Studio's Semantics view does, unreadable files included with their error, and
 "show" prints one file as stored. Both only read files: no connection is
-opened and no query is run. See docs/reference/semantics.md.`,
+opened and no query is run. An agent can only propose a definition: "proposals"
+lists what is waiting, "show-proposal" shows the change, and "accept" or
+"reject" decides it. See docs/reference/semantics.md.`,
 }
 
 var semanticsListCmd = &cobra.Command{
@@ -125,6 +128,9 @@ func runSemanticsList(cmd *cobra.Command, _ []string) error {
 	}
 	rows := semanticsRows(all)
 	out := cmd.OutOrStdout()
+	if !asJSON {
+		defer hintProposals(cmd, ws)
+	}
 	if asJSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
@@ -140,6 +146,14 @@ func runSemanticsList(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Kind, strictyaml.EscapeHidden(r.Name), dash(strictyaml.EscapeHidden(oneLine(r.Summary))), dash(strictyaml.EscapeHidden(oneLine(r.Error))))
 	}
 	return tw.Flush()
+}
+
+// hintProposals says on stderr how many proposals wait, so a list does not
+// hide the inbox.
+func hintProposals(cmd *cobra.Command, ws workspace.Workspace) {
+	if n, err := ws.Proposals().OpenCount(cmdCtx(cmd)); err == nil && n > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%d proposed definition(s) waiting: vibe semantics proposals\n", n)
+	}
 }
 
 func runSemanticsShow(cmd *cobra.Command, args []string) error {

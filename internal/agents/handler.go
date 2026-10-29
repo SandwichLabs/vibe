@@ -19,6 +19,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -36,9 +37,12 @@ type WorkspaceAccess interface {
 	Queries() queries.Store
 	Skills() skills.Store
 	// Semantics is the semantics/ folder: entities, metrics, joins and the
-	// glossary. No tool reads it yet; the metric() expansion and the
-	// definition tools build on it.
-	Semantics() semantics.Store
+	// glossary, read only. The type has no Put or Delete, so no tool can
+	// change a definition; accepting a proposal is the person's act.
+	Semantics() semantics.ReadStore
+	// Proposals is the inbox of proposed definitions as a proposer sees it:
+	// add one, list and count. It cannot accept, reject or change a proposal.
+	Proposals() proposals.Proposer
 }
 
 // ProtectedPathsProvider is implemented by a WorkspaceAccess that knows the
@@ -415,6 +419,9 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	userDB := h.access.DuckDBDB()
 	ar := describeWrite(ctx, req, userDB, class)
 	h.describeCellEdit(ctx, req, &ar)
+	if req.Method == "propose_definition" {
+		ar.Summary = h.proposeSummary(ctx, req)
+	}
 	if sqlText != "" {
 		ar.SQL = sqlText
 	}
@@ -537,6 +544,14 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 		return h.handleSaveQuery(ctx, req)
 	case "run_saved_query":
 		return h.handleRunSavedQuery(ctx, req)
+
+	// The semantic layer: read it, or propose a change (the person accepts)
+	case "list_definitions":
+		return h.handleListDefinitions(ctx, req)
+	case "get_definition":
+		return h.handleGetDefinition(ctx, req)
+	case "propose_definition":
+		return h.handleProposeDefinition(ctx, req)
 
 	// A2UI artifacts (#67)
 	case "present_data":

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -153,24 +152,9 @@ func DecodeGlossary(data []byte) (*Glossary, error) {
 	}
 	text := string(data)
 	g := &Glossary{Text: text, Terms: []string{}}
-	fence := ""
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			switch marker := trimmed[:3]; {
-			case fence == "":
-				fence = marker
-			case fence == marker:
-				fence = ""
-			}
-			continue
-		}
-		if fence != "" {
-			continue
-		}
-		if m := glossaryHeadingRE.FindStringSubmatch(line); m != nil {
-			g.Terms = append(g.Terms, m[1])
-		}
+	secs, _ := scanGlossary(text)
+	for _, s := range secs {
+		g.Terms = append(g.Terms, s.term)
 	}
 	return g, nil
 }

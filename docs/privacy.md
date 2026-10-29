@@ -26,6 +26,10 @@ This is the one place your data can leave your computer by design, so be clear a
 
 Credentials stay in your OS keychain or environment variables. They never appear in the workspace folder, a `.vibe` bundle, log lines, error messages shown to the UI or the agent, or anything the agent can read.
 
+## Proposed definitions stay on this machine
+
+When an agent proposes a semantic definition (`propose_definition`), the proposal is a file in `.vibe-local/proposals/` in the workspace folder. That folder is git-ignored and is never read into a `.vibe` bundle, so a proposal, its rationale and its evidence are not committed, shared or exported. Nothing is sent anywhere because of it. Only when you accept a proposal does its definition become a file under `semantics/`, which git and bundles do carry.
+
 ## HTML pages that ask the model
 
 A scripted HTML page can declare `ask`, which sends text the page chose (it may include query results) to the model provider you set in Settings > App, the same one the agent uses. The prompt that asks you to allow the page names that provider. You can switch `ask` off for one page in Settings > Workspace > Pages, which also lists recent uses (when, how many bytes; never the text). A scripted page on macOS can also open a network connection to an address it chooses, though it cannot read a reply; on Linux it has no network at all. Pages never see your credentials.

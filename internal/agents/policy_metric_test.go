@@ -19,7 +19,7 @@ func putMetric(t *testing.T, fx *policyFixture, name, query, measure string) {
 	t.Helper()
 	m, err := semantics.DecodeMetric(name, []byte("version: 1\nname: "+name+"\nquery: "+query+"\nmeasure: "+measure+"\ndimensions: [region, month]\n"))
 	require.NoError(t, err)
-	require.NoError(t, fx.h.access.Semantics().PutMetric(context.Background(), m))
+	require.NoError(t, writableSemantics(fx).PutMetric(context.Background(), m))
 }
 
 func putSaved(t *testing.T, fx *policyFixture, id, sqlText string, params ...queries.Param) {
@@ -135,7 +135,7 @@ func TestPolicyMetric_ConnectionRule(t *testing.T) {
 	require.NoError(t, fx.h.access.Queries().Create(context.Background(), &queries.Query{ID: "ledger_base", Title: "ledger", SQL: "SELECT id, amount FROM ledger", Connection: "ro"}))
 	m, err := semantics.DecodeMetric("ledger_total", []byte("version: 1\nname: ledger_total\nquery: ledger_base\nmeasure: sum(amount)\n"))
 	require.NoError(t, err)
-	require.NoError(t, fx.h.access.Semantics().PutMetric(context.Background(), m))
+	require.NoError(t, writableSemantics(fx).PutMetric(context.Background(), m))
 	resp := fx.run("SELECT * FROM metric('ledger_total')")
 	require.NotNil(t, resp.Error)
 	assert.Contains(t, resp.Error.Message, "defined on connection 'ro'")
@@ -186,4 +186,11 @@ func TestPolicyMetric_OuterPlaceholderIsRefusedUnlessSupplied(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "$min belongs to metric net_revenue's saved query; it can't be used outside metric()")
 	resp = fx.call("run_query", map[string]any{"sql": q, "params": map[string]any{"min": float64(10)}})
 	require.Nil(t, resp.Error, "%+v", resp.Error)
+}
+
+// writableSemantics is the fixture's in-memory semantics store with its write
+// methods: the handler itself only ever holds the read half.
+func writableSemantics(fx *policyFixture) *semantics.Mock {
+	m, _ := fx.h.access.Semantics().(*semantics.Mock)
+	return m
 }

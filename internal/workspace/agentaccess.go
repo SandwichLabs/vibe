@@ -11,6 +11,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/notebooks"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -61,8 +62,17 @@ func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
 // Artifacts is the workspace's artifacts/ folder.
 func (a *AgentAccess) Artifacts() artifacts.Store { return a.ws.Artifacts() }
 
-// Semantics is the workspace's semantics/ folder.
-func (a *AgentAccess) Semantics() semantics.Store { return a.ws.Semantics() }
+// Semantics is the workspace's semantics/ folder, read only: the agent's tools
+// are given no way to write a definition (accepting a proposal is the person's).
+func (a *AgentAccess) Semantics() semantics.ReadStore {
+	return struct{ semantics.ReadStore }{a.ws.Semantics()}
+}
+
+// Proposals is the inbox of proposed definitions as a proposer sees it: it can
+// add a proposal and count them, and cannot read, accept, reject or change one.
+func (a *AgentAccess) Proposals() proposals.Proposer {
+	return struct{ proposals.Proposer }{a.ws.Proposals()}
+}
 
 // AgentPolicy is the workspace's effective policy for this person.
 func (a *AgentAccess) AgentPolicy() (string, bool) { return a.ws.AgentPolicy() }

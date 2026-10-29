@@ -110,6 +110,30 @@ A data artifact is a parameterised, live view stored as files under ` + "`artifa
 Call **read_skill** with ` + "`data-artifacts`" + ` for the manifest and view format. Reference: docs/reference/artifacts.md.`,
 	},
 	{
+		Topic:   "semantics",
+		Title:   "Semantic Layer",
+		Summary: "Entities, metrics, joins and a glossary kept as reviewed files; metric() in SQL; propose_definition for the person to accept.",
+		Tags:    []string{"semantics", "semantic", "metric", "metrics", "entity", "entities", "join", "glossary", "definition", "definitions", "proposal", "propose", "dimension", "measure", "list_definitions", "get_definition", "propose_definition"},
+		Content: `# Semantic Layer
+
+The workspace says what its data means in reviewed files under ` + "`semantics/`" + `: **entities** (what the data is about: grain, table, id column, PII flags), **metrics** (a named measure over a saved query), **joins** (how two entities relate) and a **glossary**. A person writes them and git carries them.
+
+## Using what exists
+
+- **` + "`list_definitions`" + `** lists them all, with each one's ` + "`rev`" + ` and how many proposals wait. **` + "`get_definition`" + `** returns one as data; for a metric it also returns the declared parameters of its saved query. Both work in every tier.
+- In SQL, call a metric by name: ` + "`SELECT * FROM metric('net_revenue')`" + `, ` + "`metric('net_revenue', by => 'region')`" + `, ` + "`by => ['region', 'month']`" + `. The name and dimensions are quoted literals; a dimension must be one the metric lists. The call is replaced by the metric's own query before any check runs, so it is held to the same read-only policy. Use a defined metric instead of re-deriving its measure by hand.
+
+## Proposing a change
+
+**` + "`propose_definition`" + `** (read-write and full tiers) files a proposal in the person's inbox. **Nothing in ` + "`semantics/`" + ` changes until the person accepts it** (` + "`vibe semantics proposals`" + `, or Vibe Studio), and no tool can accept, reject or write a definition. The definition is checked now with the same rules as a file, so a bad measure, an unknown field or a reserved word is refused with the reason and nothing is filed.
+
+- ` + "`kind`" + ` is entity, metric, join or glossary. A metric is ` + "`{query, measure, dimensions?, title?, description?, format?, settled_by?, assertions?}`" + `; its saved query must already exist (save_query first). An entity is ` + "`{grain, table, id_column, ...}`" + `, a join ` + "`{left, right, on, cardinality}`" + `, a glossary term ` + "`{term, text}`" + `.
+- To change an existing definition, send the ` + "`rev`" + ` from get_definition as ` + "`replaces_rev`" + `; without it a name that exists is refused. Give a ` + "`rationale`" + ` the person will read and ` + "`evidence`" + ` (a saved query id, a receipt) where there is some.
+- Until the person accepts it, the metric does not exist: do not call it in SQL.
+
+Reference: docs/reference/semantics.md.`,
+	},
+	{
 		Topic:   "skills",
 		Title:   "Skills",
 		Summary: "Markdown skills the agent loads on demand (list_skills, read_skill, authoring).",
