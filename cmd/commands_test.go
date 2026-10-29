@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 	_ "github.com/duckdb/duckdb-go/v2"
@@ -972,4 +973,64 @@ func TestConnStatusWords_InfoAndListAgree(t *testing.T) {
 	}
 	assert.Equal(t, "error", infoStatus["broken"])
 	assert.NotEqual(t, "unavailable", infoStatus["broken"])
+}
+
+func TestQuery_SavedWithParams(t *testing.T) {
+	root := newWS(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{
+		ID: "over", Title: "Over", SQL: "SELECT i, $label AS label FROM range(10) t(i) WHERE i >= $min_n",
+		Parameters: []queries.Param{{Name: "min_n", Type: "integer", Default: "8"}, {Name: "label", Type: "text", Default: "dflt"}},
+	}))
+	require.NoError(t, ws.Close())
+
+	run := func(args ...string) (string, error) {
+		out, _, err := runVibe(append([]string{"query", "--workspace", root, "--format", "csv"}, args...)...)
+		return out, err
+	}
+	out, err := run("--saved", "over")
+	require.NoError(t, err)
+	assert.Equal(t, "i,label\n8,dflt\n9,dflt\n", out, "declared defaults")
+
+	// A value is bound, never written into the SQL.
+	out, err = run("--saved", "over", "-p", "min_n=9", "-p", "label=x'; DROP TABLE t; --")
+	require.NoError(t, err)
+	assert.Equal(t, "i,label\n9,x'; DROP TABLE t; --\n", out)
+
+	_, err = run("--saved", "over", "-p", "min_n=nine")
+	require.ErrorContains(t, err, "whole number")
+	_, err = run("--saved", "over", "-p", "other=1")
+	require.ErrorContains(t, err, "no parameter named")
+	_, err = run("--saved", "missing")
+	require.ErrorContains(t, err, "no saved query")
+	_, err = run("-p", "min_n=1", "SELECT 1")
+	require.ErrorContains(t, err, "--saved")
+	_, err = run("--saved", "over", "SELECT 1")
+	require.ErrorContains(t, err, "--saved runs the saved query")
+	_, err = run("SELECT $x")
+	require.Error(t, err, "ad-hoc SQL with $name is still the binder's error")
+}
+
+func TestQuery_SavedShapeIsCheckedLikeTheAgentDoes(t *testing.T) {
+	root := newWS(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	decl := []queries.Param{{Name: "q", Type: "text", Default: "SELECT 1"}}
+	cases := map[string]string{
+		"reader":   "SELECT * FROM query($q)",
+		"literal":  "SELECT '$q' AS s, $q",
+		"dollar":   "SELECT $pé$; CREATE SECRET pwn (TYPE s3); --$pé$",
+		"question": "SELECT ?, $q",
+		"position": "SELECT $1, $q",
+	}
+	for id, sqlText := range cases {
+		require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: id, Title: id, SQL: sqlText, Parameters: decl}))
+	}
+	require.NoError(t, ws.Close())
+	for id := range cases {
+		_, _, err := runVibe("query", "--workspace", root, "--saved", id)
+		require.Error(t, err, id)
+		assert.NotContains(t, err.Error(), "failed to execute", id, "refused before the engine ran it")
+	}
 }

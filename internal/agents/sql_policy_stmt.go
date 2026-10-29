@@ -15,12 +15,12 @@ import (
 // a bare word or a quoted identifier.
 func parseName(toks []lexTok, i int) (parts []string, next int, ok bool) {
 	for {
-		if i >= len(toks) || !toks[i].isName() {
+		if i >= len(toks) || !toks[i].IsName() {
 			return nil, i, false
 		}
 		parts = append(parts, nameOf(toks[i]))
 		i++
-		if i < len(toks) && toks[i].isPunct(".") {
+		if i < len(toks) && toks[i].IsPunct(".") {
 			i++
 			continue
 		}
@@ -32,16 +32,16 @@ func parseName(toks []lexTok, i int) (parts []string, next int, ok bool) {
 // screen, the target catalogs, then the plan.
 func (a *analyzer) dml(toks []lexTok, args []any) *sqlVerdict {
 	start := 0
-	if toks[0].isWord("WITH") {
+	if toks[0].IsWord("WITH") {
 		start = -1
 		depth := 0
 		for i, t := range toks {
 			switch {
-			case t.isParen("("):
+			case t.IsParen("("):
 				depth++
-			case t.isParen(")"):
+			case t.IsParen(")"):
 				depth--
-			case depth == 0 && (t.isWord("INSERT") || t.isWord("UPDATE") || t.isWord("DELETE") || t.isWord("MERGE")):
+			case depth == 0 && (t.IsWord("INSERT") || t.IsWord("UPDATE") || t.IsWord("DELETE") || t.IsWord("MERGE")):
 				start = i
 			}
 			if start >= 0 {
@@ -58,11 +58,11 @@ func (a *analyzer) dml(toks []lexTok, args []any) *sqlVerdict {
 		depth := 0
 		for _, t := range toks[start:] {
 			switch {
-			case t.isParen("("):
+			case t.IsParen("("):
 				depth++
-			case t.isParen(")"):
+			case t.IsParen(")"):
 				depth--
-			case depth == 0 && t.isWord("SET"):
+			case depth == 0 && t.IsWord("SET"):
 				hasSet = true
 			}
 		}
@@ -74,7 +74,7 @@ func (a *analyzer) dml(toks []lexTok, args []any) *sqlVerdict {
 	switch toks[start].Text {
 	case "INSERT":
 		for i := start + 1; i < len(toks) && i <= start+4; i++ {
-			if toks[i].isWord("INTO") {
+			if toks[i].IsWord("INTO") {
 				nameAt = i + 1
 				break
 			}
@@ -82,11 +82,11 @@ func (a *analyzer) dml(toks []lexTok, args []any) *sqlVerdict {
 	case "UPDATE":
 		nameAt = start + 1
 	case "DELETE":
-		if start+1 < len(toks) && toks[start+1].isWord("FROM") {
+		if start+1 < len(toks) && toks[start+1].IsWord("FROM") {
 			nameAt = start + 2
 		}
 	case "MERGE":
-		if start+1 < len(toks) && toks[start+1].isWord("INTO") {
+		if start+1 < len(toks) && toks[start+1].IsWord("INTO") {
 			nameAt = start + 2
 		}
 	}
@@ -129,10 +129,10 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 	temp := false
 	for i < len(toks) {
 		w := toks[i]
-		if !(w.isWord("OR") || w.isWord("REPLACE") || w.isWord("TEMP") || w.isWord("TEMPORARY") || w.isWord("UNIQUE")) {
+		if !(w.IsWord("OR") || w.IsWord("REPLACE") || w.IsWord("TEMP") || w.IsWord("TEMPORARY") || w.IsWord("UNIQUE")) {
 			break
 		}
-		if w.isWord("TEMP") || w.isWord("TEMPORARY") {
+		if w.IsWord("TEMP") || w.IsWord("TEMPORARY") {
 			temp = true
 		}
 		i++
@@ -155,12 +155,12 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 	}
 	i++
 	// IF [NOT] EXISTS
-	if i < len(toks) && toks[i].isWord("IF") {
+	if i < len(toks) && toks[i].IsWord("IF") {
 		i++
-		if i < len(toks) && toks[i].isWord("NOT") {
+		if i < len(toks) && toks[i].IsWord("NOT") {
 			i++
 		}
-		if i < len(toks) && toks[i].isWord("EXISTS") {
+		if i < len(toks) && toks[i].IsWord("EXISTS") {
 			i++
 		}
 	}
@@ -175,7 +175,7 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 		// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [name] ON table (...)
 		on := -1
 		for j := i; j < len(toks); j++ {
-			if toks[j].isWord("ON") {
+			if toks[j].IsWord("ON") {
 				on = j
 				break
 			}
@@ -218,7 +218,7 @@ func (a *analyzer) ddl(toks []lexTok, args []any) *sqlVerdict {
 // would replace it for every later statement (list_value, read_text, glob ...),
 // including the ones the policy has vetted by name.
 func (a *analyzer) macroShadows(toks []lexTok, i int) string {
-	for i < len(toks) && (toks[i].isWord("IF") || toks[i].isWord("NOT") || toks[i].isWord("EXISTS")) {
+	for i < len(toks) && (toks[i].IsWord("IF") || toks[i].IsWord("NOT") || toks[i].IsWord("EXISTS")) {
 		i++
 	}
 	parts, _, ok := parseName(toks, i)
@@ -245,7 +245,7 @@ func anyReadOnly(targets []sqlTarget) bool {
 // view, a macro body), so it is worth a plan check.
 func hasQueryPart(toks []lexTok) bool {
 	for _, t := range toks {
-		if t.isWord("SELECT") || t.isWord("FROM") || t.isWord("VALUES") || t.isWord("WITH") || t.isWord("PIVOT") || t.isWord("UNPIVOT") {
+		if t.IsWord("SELECT") || t.IsWord("FROM") || t.IsWord("VALUES") || t.IsWord("WITH") || t.IsWord("PIVOT") || t.IsWord("UNPIVOT") {
 			return true
 		}
 	}
@@ -259,13 +259,13 @@ func (a *analyzer) copyStmt(toks []lexTok, args []any) *sqlVerdict {
 	depth, to := 0, -1
 	for i := 1; i < len(toks); i++ {
 		switch {
-		case toks[i].isParen("("):
+		case toks[i].IsParen("("):
 			depth++
-		case toks[i].isParen(")"):
+		case toks[i].IsParen(")"):
 			depth--
-		case depth == 0 && toks[i].isWord("FROM"):
+		case depth == 0 && toks[i].IsWord("FROM"):
 			return deny("COPY ... FROM is not allowed (COPY FROM DATABASE and file imports): load a file with INSERT INTO ... SELECT * FROM read_csv('<path in data/>')")
-		case depth == 0 && toks[i].isWord("TO") && to < 0:
+		case depth == 0 && toks[i].IsWord("TO") && to < 0:
 			to = i
 		}
 	}
@@ -278,10 +278,10 @@ func (a *analyzer) copyStmt(toks []lexTok, args []any) *sqlVerdict {
 	a.vetted[toks[to+1].Text] = true
 	// Options after the path are a parenthesised list (or WITH (...)): nothing else.
 	rest := toks[to+2:]
-	if len(rest) > 0 && rest[0].isWord("WITH") {
+	if len(rest) > 0 && rest[0].IsWord("WITH") {
 		rest = rest[1:]
 	}
-	if len(rest) > 0 && !(rest[0].isParen("(") && matchParen(rest, 0) == len(rest)-1) {
+	if len(rest) > 0 && !(rest[0].IsParen("(") && matchParen(rest, 0) == len(rest)-1) {
 		return deny("COPY ... TO takes only a parenthesised option list after the path")
 	}
 	if toks[1].Kind != lkParen {
@@ -406,23 +406,23 @@ func (a *analyzer) stringNet(toks []lexTok) string {
 func cteNamesFromTokens(toks []lexTok) map[string]bool {
 	names := map[string]bool{}
 	for j, t := range toks {
-		if !t.isWord("AS") {
+		if !t.IsWord("AS") {
 			continue
 		}
 		k := j + 1
-		for k < len(toks) && (toks[k].isWord("NOT") || toks[k].isWord("MATERIALIZED")) {
+		for k < len(toks) && (toks[k].IsWord("NOT") || toks[k].IsWord("MATERIALIZED")) {
 			k++
 		}
-		if k >= len(toks) || !toks[k].isParen("(") {
+		if k >= len(toks) || !toks[k].IsParen("(") {
 			continue
 		}
 		p := j - 1
-		if p >= 0 && toks[p].isParen(")") { // a column list: WITH a(x, y) AS (...)
+		if p >= 0 && toks[p].IsParen(")") { // a column list: WITH a(x, y) AS (...)
 			depth := 0
 			for ; p >= 0; p-- {
-				if toks[p].isParen(")") {
+				if toks[p].IsParen(")") {
 					depth++
-				} else if toks[p].isParen("(") {
+				} else if toks[p].IsParen("(") {
 					depth--
 					if depth == 0 {
 						p--
@@ -431,7 +431,7 @@ func cteNamesFromTokens(toks []lexTok) map[string]bool {
 				}
 			}
 		}
-		if p >= 0 && toks[p].isName() {
+		if p >= 0 && toks[p].IsName() {
 			names[strings.ToLower(nameOf(toks[p]))] = true
 		}
 	}
@@ -450,7 +450,7 @@ func (a *analyzer) screenTokens(toks []lexTok, astMode bool, depth int) (readers
 	}
 	var cte map[string]bool
 	for i, t := range toks {
-		if t.isName() && i+1 < len(toks) && toks[i+1].isParen("(") {
+		if t.IsName() && i+1 < len(toks) && toks[i+1].IsParen("(") {
 			name := strings.ToLower(nameOf(t))
 			if r := hardDeniedFunc(name); r != "" {
 				if name == "query" || name == "query_table" {
@@ -495,7 +495,7 @@ func (a *analyzer) screenTokens(toks []lexTok, astMode bool, depth int) (readers
 		}
 		if isTableRefStart(toks, i) {
 			parts, next, ok := tableRefAt(toks, i)
-			if !ok || (next < len(toks) && toks[next].isParen("(")) {
+			if !ok || (next < len(toks) && toks[next].IsParen("(")) {
 				continue // a function call or a subquery, not a table name
 			}
 			if len(parts) == 1 && cte[strings.ToLower(parts[0])] {
@@ -515,7 +515,7 @@ func (a *analyzer) screenTokens(toks []lexTok, astMode bool, depth int) (readers
 // literalQuery vets query('<sql>') / query_table('<name>') with one plain
 // literal argument by checking the SQL it carries as a read of its own.
 func (a *analyzer) literalQuery(name string, toks []lexTok, i, depth int) (int, string) {
-	if i+3 >= len(toks) || toks[i+2].Kind != lkString || !toks[i+2].Plain || !toks[i+3].isParen(")") {
+	if i+3 >= len(toks) || toks[i+2].Kind != lkString || !toks[i+2].Plain || !toks[i+3].IsParen(")") {
 		return 0, fmt.Sprintf("%s() is not allowed unless its argument is one plain string literal", name)
 	}
 	inner := toks[i+2].Text
@@ -576,7 +576,7 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 		return fmt.Sprintf("%s() is shadowed by a macro of the same name, so it would not read the file that was checked; the agent will not use it", fn)
 	}
 	paths, next, ok := readerPathTokens(toks, open+1, closeIdx)
-	if !ok || (toks[open+1].isPunct("[") && !a.listFormSafe()) {
+	if !ok || (toks[open+1].IsPunct("[") && !a.listFormSafe()) {
 		return fmt.Sprintf(need, fn)
 	}
 	// A second positional string (after a comma, not after "=" or ":=") would
@@ -584,11 +584,11 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 	depth := 0
 	for j := next; j < closeIdx; j++ {
 		switch {
-		case toks[j].isParen("("), toks[j].isPunct("{"), toks[j].isPunct("["):
+		case toks[j].IsParen("("), toks[j].IsPunct("{"), toks[j].IsPunct("["):
 			depth++
-		case toks[j].isParen(")"), toks[j].isPunct("}"), toks[j].isPunct("]"):
+		case toks[j].IsParen(")"), toks[j].IsPunct("}"), toks[j].IsPunct("]"):
 			depth--
-		case depth == 0 && toks[j].isPunct(",") && j+1 < closeIdx:
+		case depth == 0 && toks[j].IsPunct(",") && j+1 < closeIdx:
 			if n := toks[j+1]; n.Kind == lkString {
 				return fmt.Sprintf("%s() takes one path: more than one positional argument is not allowed", fn)
 			}
@@ -600,12 +600,12 @@ func (a *analyzer) vetReaderTokens(fn string, toks []lexTok, open int) string {
 	depth = 0
 	for j := next; j < closeIdx; j++ {
 		switch {
-		case toks[j].isParen("("), toks[j].isPunct("{"), toks[j].isPunct("["):
+		case toks[j].IsParen("("), toks[j].IsPunct("{"), toks[j].IsPunct("["):
 			depth++
-		case toks[j].isParen(")"), toks[j].isPunct("}"), toks[j].isPunct("]"):
+		case toks[j].IsParen(")"), toks[j].IsPunct("}"), toks[j].IsPunct("]"):
 			depth--
-		case depth == 0 && toks[j].isName() && j+1 < closeIdx:
-			eq := toks[j+1].isPunct("=") || (toks[j+1].isPunct(":") && j+2 < closeIdx && toks[j+2].isPunct("="))
+		case depth == 0 && toks[j].IsName() && j+1 < closeIdx:
+			eq := toks[j+1].IsPunct("=") || (toks[j+1].IsPunct(":") && j+2 < closeIdx && toks[j+2].IsPunct("="))
 			if eq && !safeReaderParams[strings.ToLower(nameOf(toks[j]))] {
 				return fmt.Sprintf("%s(): the option %q is not on the agent's list of safe reader options (%s)", fn, strings.ToLower(nameOf(toks[j])), safeReaderParamList())
 			}
@@ -629,7 +629,7 @@ func readerPathTokens(toks []lexTok, i, closeIdx int) (paths []string, next int,
 	switch {
 	case plain(toks[i]):
 		paths, next = []string{toks[i].Text}, i+1
-	case toks[i].isPunct("["):
+	case toks[i].IsPunct("["):
 		next = i + 1
 		for {
 			if next >= closeIdx || !plain(toks[next]) {
@@ -637,11 +637,11 @@ func readerPathTokens(toks []lexTok, i, closeIdx int) (paths []string, next int,
 			}
 			paths = append(paths, toks[next].Text)
 			next++
-			if next < closeIdx && toks[next].isPunct(",") {
+			if next < closeIdx && toks[next].IsPunct(",") {
 				next++
 				continue
 			}
-			if next < closeIdx && toks[next].isPunct("]") {
+			if next < closeIdx && toks[next].IsPunct("]") {
 				next++
 				break
 			}
@@ -650,7 +650,7 @@ func readerPathTokens(toks []lexTok, i, closeIdx int) (paths []string, next int,
 	default:
 		return nil, 0, false
 	}
-	if next > closeIdx || !(toks[next].isPunct(",") || toks[next].isParen(")")) {
+	if next > closeIdx || !(toks[next].IsPunct(",") || toks[next].IsParen(")")) {
 		return nil, 0, false
 	}
 	return paths, next, true
@@ -661,26 +661,26 @@ func readerPathTokens(toks []lexTok, i, closeIdx int) (paths []string, next int,
 // parenthesised table group, or a string after TABLE.
 func isTableRefStart(toks []lexTok, i int) bool {
 	t := toks[i]
-	if !(t.isName() || t.Kind == lkString) || i == 0 {
+	if !(t.IsName() || t.Kind == lkString) || i == 0 {
 		return false
 	}
 	// A keyword after "(" starts a subquery, not a table name.
-	if t.isWord("LATERAL") || t.isWord("SELECT") || t.isWord("WITH") || t.isWord("VALUES") || t.isWord("UNNEST") ||
-		t.isWord("FROM") || t.isWord("TABLE") || t.isWord("PIVOT") || t.isWord("UNPIVOT") || t.isWord("DESCRIBE") || t.isWord("SHOW") || t.isWord("SUMMARIZE") {
+	if t.IsWord("LATERAL") || t.IsWord("SELECT") || t.IsWord("WITH") || t.IsWord("VALUES") || t.IsWord("UNNEST") ||
+		t.IsWord("FROM") || t.IsWord("TABLE") || t.IsWord("PIVOT") || t.IsWord("UNPIVOT") || t.IsWord("DESCRIBE") || t.IsWord("SHOW") || t.IsWord("SUMMARIZE") {
 		return false
 	}
 	prev := toks[i-1]
 	switch {
-	case prev.isWord("FROM"), prev.isWord("JOIN"), prev.isWord("USING"):
+	case prev.IsWord("FROM"), prev.IsWord("JOIN"), prev.IsWord("USING"):
 		return true
-	case prev.isWord("PIVOT"), prev.isWord("UNPIVOT"):
+	case prev.IsWord("PIVOT"), prev.IsWord("UNPIVOT"):
 		// UNPIVOT '<file>' ...; but FROM t UNPIVOT INCLUDE NULLS (...) is not a source.
-		return !(t.isWord("INCLUDE") || t.isWord("EXCLUDE"))
-	case prev.isWord("TABLE"):
+		return !(t.IsWord("INCLUDE") || t.IsWord("EXCLUDE"))
+	case prev.IsWord("TABLE"):
 		return t.Kind == lkString
-	case prev.isParen("("):
+	case prev.IsParen("("):
 		return i >= 2 && fromGroup(toks, i-2, 0)
-	case prev.isPunct(","):
+	case prev.IsPunct(","):
 		return inFromList(toks, i-1)
 	}
 	return false
@@ -692,11 +692,11 @@ func fromGroup(toks []lexTok, q, depth int) bool {
 		return false
 	}
 	switch {
-	case toks[q].isWord("FROM"), toks[q].isWord("JOIN"):
+	case toks[q].IsWord("FROM"), toks[q].IsWord("JOIN"):
 		return true
-	case toks[q].isPunct(","):
+	case toks[q].IsPunct(","):
 		return inFromList(toks, q)
-	case toks[q].isParen("("):
+	case toks[q].IsParen("("):
 		return fromGroup(toks, q-1, depth+1)
 	}
 	return false
@@ -709,9 +709,9 @@ func inFromList(toks []lexTok, c int) bool {
 	for j := c - 1; j >= 0; j-- {
 		t := toks[j]
 		switch {
-		case t.isParen(")"):
+		case t.IsParen(")"):
 			depth++
-		case t.isParen("("):
+		case t.IsParen("("):
 			if depth == 0 {
 				return false
 			}

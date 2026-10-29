@@ -3,6 +3,8 @@ package agents
 import (
 	"sort"
 	"strings"
+
+	"github.com/SandwichLabs/vibe/internal/queries"
 )
 
 // The name lists behind the agent SQL policy (#116). Everything here is a
@@ -27,14 +29,7 @@ func nameSet(names ...string) map[string]bool {
 // are read (a `_delta_log` add.path of "../../x", version_name_format,
 // allow_moved_paths ...), so no check on the literal path can confine them. They
 // are reachable only in the person's own SQL, through a connection they defined.
-var readerFuncs = nameSet(
-	"read_csv", "read_csv_auto",
-	"read_parquet", "parquet_scan", "parquet_metadata", "parquet_schema",
-	"parquet_file_metadata", "parquet_kv_metadata",
-	"read_json", "read_json_auto", "read_ndjson", "read_ndjson_auto",
-	"read_json_objects", "read_json_objects_auto", "read_ndjson_objects",
-	"read_text", "read_blob", "glob",
-)
+var readerFuncs = nameSet(queries.ReaderFunctions...)
 
 // safeReaderParams are the only named options a reader may be given. They
 // change how a file is parsed, never which other file or URL is read or where

@@ -4,6 +4,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **Saved-query parameters in Studio and the CLI (#235).** A saved query's declared `$name` parameters now show as typed inputs, pre-filled with their defaults, when it is open in the Query Explorer, and `vibe query --saved ID -p name=value` runs it from the terminal. Values are bound parameters, never SQL text, and the statement is held to the same shape rules as the agent's `run_saved_query` (one statement, no placeholder inside a literal, no parameter as the argument of `query()` or a file reader).
+
 ## [0.4.0] - 2026-10-29
 
 ### Security

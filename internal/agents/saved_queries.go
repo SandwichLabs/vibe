@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/queries"
 )
 
@@ -237,7 +235,7 @@ func declaredParams(raw any) ([]queries.Param, error) {
 		}
 		out = append(out, p)
 	}
-	if errs := artifacts.ValidateParameters(artifactParams(out)); len(errs) > 0 {
+	if errs := artifacts.ValidateParameters(queries.ArtifactParams(out)); len(errs) > 0 {
 		return nil, joinInvalid(errs)
 	}
 	return out, nil
@@ -255,64 +253,6 @@ func trimInvalid(err error) string {
 	return strings.TrimPrefix(err.Error(), artifacts.ErrInvalid.Error()+": ")
 }
 
-// artifactParams maps stored parameters to the artifact kind's, so one binder
-// (artifacts.Bind) coerces, defaults and bounds the values of both. A required
-// parameter with no default stays without one: a run must then supply it.
-func artifactParams(ps []queries.Param) []artifacts.Param {
-	out := make([]artifacts.Param, len(ps))
-	for i := range ps {
-		p := artifacts.Param{Name: ps[i].Name, Type: ps[i].Type}
-		if ps[i].Default != "" || !ps[i].Required {
-			d := ps[i].Default
-			p.Default = &d
-		}
-		out[i] = p
-	}
-	return out
-}
-
-// bindSavedQuery turns a saved query and the caller's values into the statement
-// text and the typed params to bind. Every $name the SQL uses must be declared
-// and every declared name must be used, so the header never disagrees with the
-// SQL.
-func bindSavedQuery(q *queries.Query, values map[string]any, strict bool) (string, map[string]any, error) {
-	if strict {
-		if err := checkDeclarations(q); err != nil {
-			return "", nil, err
-		}
-	}
-	m := &artifacts.Manifest{
-		Parameters: artifactParams(q.Parameters),
-		Queries:    []artifacts.Query{{Name: "saved", SQL: q.SQL, Connection: q.Connection}},
-	}
-	sqlText, _, params, err := artifacts.Bind(m, "saved", values, time.Now())
-	if err != nil {
-		return "", nil, errors.New(strings.ReplaceAll(trimInvalid(err), `query "saved" `, "the query "))
-	}
-	return sqlText, params, nil
-}
-
-func checkDeclarations(q *queries.Query) error {
-	used := engine.ParamNames(q.SQL)
-	declared := map[string]bool{}
-	for _, p := range q.Parameters {
-		declared[p.Name] = true
-	}
-	usedSet := map[string]bool{}
-	for _, u := range used {
-		usedSet[u] = true
-		if !declared[u] {
-			return fmt.Errorf("the SQL uses $%s, which is not a declared parameter. Declare it in parameters ({name: %q, type, default}), or write the value into the SQL", u, u)
-		}
-	}
-	for _, p := range q.Parameters {
-		if !usedSet[p.Name] {
-			return fmt.Errorf("parameter %q is declared but the SQL never uses $%s", p.Name, p.Name)
-		}
-	}
-	return nil
-}
-
 // --- vetting -----------------------------------------------------------------
 
 // vetSavedQuery holds a saved query's SQL to the policy a run applies: the
@@ -323,7 +263,8 @@ func (h *Handler) vetSavedQuery(ctx context.Context, q *queries.Query) ([]Artifa
 	fail := func(msg string) ([]ArtifactColumn, *sqlVetFailure) {
 		return nil, &sqlVetFailure{ErrInvalidParams, redactForAgent(msg)}
 	}
-	sqlText, params, err := bindSavedQuery(q, nil, true)
+	params, err := queries.Bind(q, nil, queries.BindOptions{Strict: true})
+	sqlText := q.SQL
 	if err != nil {
 		return fail("sql: " + err.Error())
 	}
@@ -371,7 +312,8 @@ func (h *Handler) handleRunSavedQuery(ctx context.Context, req *Request) *Respon
 		}
 		values = m
 	}
-	sqlText, params, err := bindSavedQuery(q, values, false)
+	params, err := queries.Bind(q, values, queries.BindOptions{})
+	sqlText := q.SQL
 	if err != nil {
 		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("saved query %q: %s", id, err))
 	}

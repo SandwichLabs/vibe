@@ -48,7 +48,7 @@ func TestLexStatementsAgreeWithDuckDB(t *testing.T) {
 		_ = db.Close()
 		got := 0
 		for _, st := range lexStatements(script) {
-			if len(st) > 0 && st[0].isWord("CREATE") {
+			if len(st) > 0 && st[0].IsWord("CREATE") {
 				got++
 			}
 		}

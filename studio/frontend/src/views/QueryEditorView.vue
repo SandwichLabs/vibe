@@ -14,12 +14,13 @@ import Icon from '../components/Icon.vue'
 import SqlEditor from '../components/SqlEditor.vue'
 import ReplTerminal from '../components/ReplTerminal.vue'
 import ConflictBanner from '../components/ConflictBanner.vue'
+import QueryParams from '../components/QueryParams.vue'
 import { useModalKeys, shortcutLabel } from '../composables/useModal'
 import { useQueryEditor } from '../composables/useQueryEditor'
 import { cellClass, isNumericType } from '../lib/formatCell'
 
 const {
-  queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
+  qp, queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
   statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy,
   lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
   selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
@@ -82,6 +83,8 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
       @overwrite="resolveConflict('overwrite')"
       @save-copy="resolveConflict('saveCopy')"
     />
+
+    <QueryParams :qp="qp" />
 
     <div class="row" style="flex: 1; gap: 0; align-items: stretch; min-height: 0;">
       <!-- LEFT RAIL — saved queries (the schema tree is the global Connections rail) -->

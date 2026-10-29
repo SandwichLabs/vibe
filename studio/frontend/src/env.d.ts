@@ -110,7 +110,7 @@ interface AppApi {
   DeleteRow(table: string, pkCol: string, pkVal: any): Promise<WriteResult>
   CreateTable(name: string, columns: ColumnInfo[]): Promise<void>
   DropTable(name: string): Promise<void>
-  RunQuery(req: { sql: string; connection: string; tabId: string }): Promise<QueryResult>
+  RunQuery(req: { sql: string; connection: string; tabId: string; queryId?: string; params?: Record<string, string | number | boolean> }): Promise<QueryResult>
   CompleteSQL(req: { sql: string; offset: number; connection: string }): Promise<CompleteSQLResult>
   ReplOpen(connection: string): Promise<ReplOpenResult>
   ReplInput(id: string, data: string): Promise<void>
@@ -710,12 +710,21 @@ interface QuerySummary {
   engine: string
 }
 
+// QueryParamT mirrors queries.Param: a saved query's declared $name parameter
+// (type is text, number, integer, date or boolean; default is a string).
+interface QueryParamT {
+  name: string
+  type: 'text' | 'number' | 'integer' | 'date' | 'boolean'
+  required: boolean
+  default?: string
+}
+
 interface QueryDetail {
   id: string
   title: string
   sql: string
   engine: string
-  parameters: any[]
+  parameters: QueryParamT[]
   created_at: string
   updated_at: string
   rev?: string

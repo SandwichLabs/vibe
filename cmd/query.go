@@ -10,10 +10,12 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/SandwichLabs/vibe/internal/editor"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
+	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/usersql"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +41,13 @@ courtesy, ATTACH, DETACH, INSTALL, LOAD, SET and CREATE SECRET are refused with
 an explanation (connections come from the workspace, credentials from your
 keychain). That is a check for common slips, not a security boundary.
 
+--saved ID runs a saved query (queries/ID.sql) instead of a statement you give:
+its SQL runs as saved, on its connection unless -c names another. A saved query
+may declare $name parameters; -p name=value (repeatable) sets one, typed by its
+declaration, and a parameter you leave out takes its default. A value is bound,
+never written into the SQL. Without --saved, a $name in the statement is an
+error, as before.
+
 Pass "-" as the statement to read it from standard input. --edit (-e) opens
 the statement (or an empty buffer) in $VISUAL or $EDITOR first, as psql's \e
 does, and runs what you save; quitting the editor with an error (":cq") runs
@@ -56,6 +65,8 @@ func init() {
 	queryCmd.Flags().String("format", "table", "output format: table, csv, json")
 	queryCmd.Flags().Int("limit", defaultQueryLimit, "maximum rows to print (0 = no cap)")
 	queryCmd.Flags().BoolP("edit", "e", false, "edit the statement in $VISUAL or $EDITOR before running it")
+	queryCmd.Flags().String("saved", "", "run the saved query with this id instead of a statement")
+	queryCmd.Flags().StringArrayP("param", "p", nil, "a saved query's parameter, name=value (repeatable; needs --saved)")
 	queryCmd.Flags().Bool("read-only", false, "read without taking ownership of the workspace; every connection is attached read-only")
 	addWorkspaceFlag(queryCmd)
 	rootCmd.AddCommand(queryCmd)
@@ -81,19 +92,28 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	if limit < 0 {
 		return fmt.Errorf("--limit must be 0 or more")
 	}
-	sqlText, err := queryText(cmd, dir, args)
-	if errors.Is(err, errEditUnchanged) {
-		fmt.Fprintln(errW, "the statement was not changed; nothing was run")
-		return nil
-	}
-	if err != nil {
+	saved, _ := cmd.Flags().GetString("saved")
+	pairs, _ := cmd.Flags().GetStringArray("param")
+	if err := checkSavedFlags(cmd, saved, pairs, args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(sqlText) == "" {
-		return fmt.Errorf("no SQL given")
-	}
-	if err := usersql.Check(sqlText, readOnly); err != nil {
-		return err
+	var sqlText string
+	if saved == "" {
+		var err error
+		sqlText, err = queryText(cmd, dir, args)
+		if errors.Is(err, errEditUnchanged) {
+			fmt.Fprintln(errW, "the statement was not changed; nothing was run")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(sqlText) == "" {
+			return fmt.Errorf("no SQL given")
+		}
+		if err := usersql.Check(sqlText, readOnly); err != nil {
+			return err
+		}
 	}
 
 	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe query", errW)
@@ -101,6 +121,21 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer o.Close()
+
+	var params map[string]any
+	if saved != "" {
+		var q *queries.Query
+		if q, params, err = bindSaved(ctx, o, saved, pairs); err != nil {
+			return err
+		}
+		sqlText = q.SQL
+		if conn == "" {
+			conn = q.Connection
+		}
+		if err := usersql.Check(sqlText, readOnly); err != nil {
+			return err
+		}
+	}
 
 	target := conn
 	if target == "" {
@@ -112,7 +147,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rs, total, err := o.Eng.ExecuteCappedIn(ctx, conn, sqlText, nil, limit)
+	rs, total, err := o.Eng.ExecuteCappedIn(ctx, conn, sqlText, params, limit)
 	if err != nil {
 		return friendlyQueryError(err, readOnly)
 	}
@@ -123,6 +158,66 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(errW, "showing the first %d of %d rows (--limit 0 for all)\n", rs.RowCount(), total)
 	}
 	return nil
+}
+
+// checkSavedFlags refuses the combinations --saved and -p do not allow, before
+// the workspace is opened.
+func checkSavedFlags(cmd *cobra.Command, saved string, pairs, args []string) error {
+	if saved == "" {
+		if len(pairs) > 0 {
+			return fmt.Errorf("-p/--param sets a saved query's parameter: give --saved ID")
+		}
+		return nil
+	}
+	if edit, _ := cmd.Flags().GetBool("edit"); edit || len(args) > 0 {
+		return fmt.Errorf("--saved runs the saved query as it is: give no statement and no --edit")
+	}
+	return nil
+}
+
+// bindSaved loads a saved query and binds the -p values to its declared
+// parameters (queries.Bind, the binder the agent and Studio use). The statement
+// text comes back unchanged; the values only ever travel as bound params.
+func bindSaved(ctx context.Context, o *openedWorkspace, id string, pairs []string) (*queries.Query, map[string]any, error) {
+	q, err := o.WS.Queries().Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, queries.ErrNotFound) {
+			return nil, nil, fmt.Errorf("there is no saved query %q (see the queries/ folder)", id)
+		}
+		return nil, nil, fmt.Errorf("failed to read saved query %q: %w", id, err)
+	}
+	if q.Error != "" {
+		return nil, nil, fmt.Errorf("saved query %q cannot be run: %s", id, q.Error)
+	}
+	raw, err := splitParamPairs(pairs)
+	if err != nil {
+		return nil, nil, err
+	}
+	values, err := queries.ParseValues(q, raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	params, err := queries.Bind(q, values, queries.BindOptions{Now: time.Now()})
+	if err != nil {
+		return nil, nil, fmt.Errorf("saved query %q: %w", id, err)
+	}
+	return q, params, nil
+}
+
+// splitParamPairs reads name=value pairs; the value may itself contain "=".
+func splitParamPairs(pairs []string) (map[string]string, error) {
+	out := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		name, val, ok := strings.Cut(p, "=")
+		if !ok || name == "" {
+			return nil, fmt.Errorf("-p expects name=value (got %q)", p)
+		}
+		if _, dup := out[name]; dup {
+			return nil, fmt.Errorf("parameter %q is given twice", name)
+		}
+		out[name] = val
+	}
+	return out, nil
 }
 
 // queryText is the statement to run: the argument, standard input for "-",

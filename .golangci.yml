@@ -46,8 +46,8 @@ linters:
       # validator of one wire format, or a single type-mapping switch, each with
       # a table-driven test of its own. Splitting them hides the state machine.
       - linters: [gocognit]
-        path: internal/agents/sql_lex\.go
-        text: "`lexStatements`"
+        path: internal/sqllex/lex\.go
+        text: "`Statements`"
       - linters: [gocognit]
         path: internal/agents/sql_classify\.go
         text: "`tokensTouchSecrets`"
