@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/secrets"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/workspace"
@@ -575,4 +576,63 @@ func TestAfterRun_RefreshesTheRailOnlyForNonReads(t *testing.T) {
 		app.afterRun(app.sess, session.StatusSnapshot(app.sess), s)
 		assert.Equal(t, before+1, ev.count("catalog:changed"), "non-read must refresh the rail: %s", s)
 	}
+}
+
+func TestRunQuery_BindsASavedQuerysParameters(t *testing.T) {
+	app, _ := connApp(t)
+	require.NoError(t, app.ws.Queries().Create(context.Background(), &queries.Query{
+		ID: "over", Title: "Over", SQL: "SELECT i FROM range(10) t(i) WHERE i >= $min_n AND $tag = 'a'",
+		Parameters: []queries.Param{{Name: "min_n", Type: "integer", Default: "8"}, {Name: "tag", Type: "text", Default: "a"}},
+	}))
+	q, err := app.GetQuery("over")
+	require.NoError(t, err)
+	require.Len(t, q.Parameters, 2, "GetQuery carries the declarations the inputs are built from")
+
+	res, err := app.RunQuery(RunQueryRequest{SQL: q.SQL, QueryID: "over"})
+	require.NoError(t, err)
+	assert.Len(t, res.Rows, 2, "defaults bind")
+
+	res, err = app.RunQuery(RunQueryRequest{SQL: q.SQL, QueryID: "over", Params: map[string]any{"min_n": float64(3)}})
+	require.NoError(t, err)
+	assert.Len(t, res.Rows, 7)
+
+	// A value is a bound param: text that looks like SQL only ever compares as a string.
+	res, err = app.RunQuery(RunQueryRequest{SQL: q.SQL, QueryID: "over", Params: map[string]any{"tag": "a' OR 1=1 --"}})
+	require.NoError(t, err)
+	assert.Empty(t, res.Rows)
+
+	// The buffer may be edited; a $name the saved query does not declare is refused.
+	_, err = app.RunQuery(RunQueryRequest{SQL: "SELECT $other", QueryID: "over"})
+	require.ErrorContains(t, err, "not a declared parameter")
+	_, err = app.RunQuery(RunQueryRequest{SQL: q.SQL, QueryID: "over", Params: map[string]any{"min_n": "3"}})
+	require.Error(t, err, "wrong type")
+	_, err = app.RunQuery(RunQueryRequest{SQL: "SELECT 1", Params: map[string]any{"min_n": 3}})
+	require.ErrorContains(t, err, "saved query")
+
+	// Ad-hoc text with $name and no saved query is unchanged: the engine's error.
+	_, err = app.RunQuery(RunQueryRequest{SQL: "SELECT $x"})
+	require.Error(t, err)
+}
+
+func TestRunQuery_SavedQueryShapeIsCheckedLikeTheAgentDoes(t *testing.T) {
+	app, _ := connApp(t)
+	decl := []queries.Param{{Name: "q", Type: "text", Default: "SELECT 1"}}
+	for id, sqlText := range map[string]string{
+		"reader":   "SELECT * FROM query($q)",
+		"literal":  "SELECT '$q' AS s, $q",
+		"dollar":   "SELECT $pé$; CREATE SECRET pwn (TYPE s3); --$pé$",
+		"question": "SELECT ?, $q",
+		"position": "SELECT $1, $q",
+	} {
+		require.NoError(t, app.ws.Queries().Create(context.Background(), &queries.Query{ID: id, Title: id, SQL: sqlText, Parameters: decl}))
+		_, err := app.RunQuery(RunQueryRequest{SQL: sqlText, QueryID: id})
+		assert.Error(t, err, id)
+	}
+	// The buffer is what runs and what is checked: an edit that adds the hazard is refused too.
+	require.NoError(t, app.ws.Queries().Create(context.Background(), &queries.Query{ID: "ok", Title: "ok", SQL: "SELECT $q", Parameters: decl}))
+	_, err := app.RunQuery(RunQueryRequest{SQL: "SELECT * FROM query($q)", QueryID: "ok"})
+	require.ErrorContains(t, err, "cannot be an argument of query")
+	res, err := app.RunQuery(RunQueryRequest{SQL: "SELECT $q AS v", QueryID: "ok"})
+	require.NoError(t, err)
+	require.Len(t, res.Rows, 1)
 }

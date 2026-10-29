@@ -373,4 +373,34 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="run-badge"]').text()).toContain('Complete')
   })
+
+  it('shows an input per declared parameter and runs the saved query with the typed values (#235)', async () => {
+    const app = makeApp()
+    app.GetQuery.mockResolvedValue({
+      id: 'q1', title: 'Over', sql: 'SELECT $min_n',
+      parameters: [{ name: 'min_n', type: 'integer', required: false, default: '5' }],
+    } as any)
+    const wrapper = await mountView()
+    expect(wrapper.find('[data-testid="query-params"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="saved-query"]').trigger('click')
+    await flushPromises()
+    const input = wrapper.find('[data-testid="query-param-min_n"] input')
+    expect((input.element as HTMLInputElement).value).toBe('5')
+
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(app.RunQuery).toHaveBeenLastCalledWith(expect.objectContaining({ queryId: 'q1', params: { min_n: 5 } }))
+
+    await input.setValue('12')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(app.RunQuery).toHaveBeenLastCalledWith(expect.objectContaining({ params: { min_n: 12 } }))
+
+    await input.setValue('lots')
+    app.RunQuery.mockClear()
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(app.RunQuery).not.toHaveBeenCalled()
+    expect(wrapper.find('.sql-error').text()).toContain('min_n')
+  })
 })

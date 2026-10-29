@@ -83,6 +83,12 @@ type RunQueryRequest struct {
 	// TabID names the editor tab; it only labels the run (the choice is never
 	// session-global).
 	TabID string `json:"tabId"`
+	// QueryID names the saved query the editor has open, and Params the values
+	// of its declared $name parameters (typed JSON, as the inputs hold them). A
+	// name left out takes its declared default. The SQL stays the buffer's
+	// text: values are bound, never written into it.
+	QueryID string         `json:"queryId,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
 }
 
 // validateRunRequest checks the connection name.
@@ -117,9 +123,13 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	}
 
 	sqlStr := req.SQL
+	params, err := a.bindRunParams(req)
+	if err != nil {
+		return nil, err
+	}
 	before := session.StatusSnapshot(a.sess)
 	start := time.Now()
-	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, nil, queryGridRowCap)
+	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, params, queryGridRowCap)
 	a.afterRun(a.sess, before, sqlStr)
 	duration := time.Since(start)
 
@@ -134,17 +144,46 @@ func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 		Rows:      rs.Rows,
 	}
 
-	for _, col := range rs.Columns {
-		result.Columns = append(result.Columns, ColumnInfo{
-			Name: col.Name,
-			Type: col.Type,
-		})
-	}
+	result.Columns = columnInfos(rs)
 
 	if err := jsonRoundTripGuard(result); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// columnInfos names and types a result set's columns for the grid.
+func columnInfos(rs *engine.ResultSet) []ColumnInfo {
+	var out []ColumnInfo
+	for _, col := range rs.Columns {
+		out = append(out, ColumnInfo{Name: col.Name, Type: col.Type})
+	}
+	return out
+}
+
+// bindRunParams binds the editor's parameter values against the declarations of
+// the saved query it has open (queries.Bind, the binder run_saved_query uses).
+// The buffer may have been edited, so only what it names is bound, and a $name
+// the saved query does not declare is refused. Without a saved query there is
+// nothing declared: values are refused, and the statement runs as written. The
+// caller holds a.mu.
+func (a *App) bindRunParams(req RunQueryRequest) (map[string]any, error) {
+	if req.QueryID == "" {
+		if len(req.Params) > 0 {
+			return nil, errors.New("parameter values need a saved query that declares them")
+		}
+		return nil, nil
+	}
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
+	}
+	saved, err := a.ws.Queries().Get(a.ctxOrBackground(), req.QueryID)
+	if err != nil {
+		return nil, err
+	}
+	run := *saved
+	run.SQL = req.SQL
+	return queries.Bind(&run, req.Params, queries.BindOptions{Now: time.Now()})
 }
 
 // a2uiQueryRowCap bounds how many rows a single A2UI data-bound component

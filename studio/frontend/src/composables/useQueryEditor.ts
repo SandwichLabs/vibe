@@ -15,6 +15,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from './usePendingSaves'
 import { hasWailsRuntime } from '../lib/wails'
 import { useConflict } from './useConflict'
+import { useQueryParams } from './useQueryParams'
 
 // mentions: the statement names a connection in qualifier position (name.).
 function mentions(sql: string, name: string): boolean {
@@ -27,6 +28,7 @@ export function useQueryEditor() {
 
   // E2: the list and the result grid are replaced wholesale, never mutated in
   // place, so they need no deep reactivity (a result holds up to the row cap).
+  const qp = useQueryParams()
   const queries = shallowRef<QuerySummary[]>([])
   const selectedId = ref<string | null>(null)
   // The store's revision of the selected query as loaded: sent back on save so a
@@ -100,6 +102,7 @@ export function useQueryEditor() {
       conn.value = (q as { connection?: string }).connection ?? ''
       savedConn.value = conn.value
       saveTitle.value = q.title
+      qp.load(q.parameters)
     } catch (e: any) {
       error.value = errorText(e)
     }
@@ -115,12 +118,16 @@ export function useQueryEditor() {
 
   async function runQuery() {
     if (!sqlText.value.trim()) return
+    // A saved query's declared $name parameters: checked here, bound in Go.
+    const pv = qp.payload()
+    if (!pv.ok) { error.value = pv.error; result.value = null; return }
+    const bound = qp.hasParams.value && selectedId.value ? { queryId: selectedId.value, params: pv.params } : {}
     running.value = true
     error.value = ''
     result.value = null
     try {
       ranOn.value = ranOnText(sqlText.value)
-      result.value = await App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId })
+      result.value = await App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId, ...bound })
       lastRunOk.value = true
     } catch (e: any) {
       error.value = errorText(e)
@@ -255,6 +262,7 @@ export function useQueryEditor() {
         selectedId.value = null
         sqlText.value = ''
         savedSQL.value = ''
+        qp.clear()
       }
       await loadQueries()
     } catch (e: any) {
@@ -271,6 +279,7 @@ export function useQueryEditor() {
     result.value = null
     error.value = ''
     saveTitle.value = ''
+    qp.clear()
     lastRunOk.value = null
     lastRunAt.value = ''
   }
@@ -311,7 +320,7 @@ export function useQueryEditor() {
   onUnmounted(() => { for (const off of unsubs) off() })
 
   return {
-    queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
+    qp, queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
     statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy: cf.busy,
     lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
     selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,

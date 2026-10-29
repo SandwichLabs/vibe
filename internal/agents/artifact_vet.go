@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/queries"
 )
 
 // This file is the save-time vet of a data artifact (D5, epic #162). The
@@ -132,85 +132,10 @@ func (h *Handler) checkArtifactStatement(sqlText, connection string) (string, er
 	return h.validConnection(connection)
 }
 
-// readerOrQueryArgs are the functions whose argument decides what is read or
-// run, so a parameter may never appear inside them.
-var readerOrQueryArgs = func() map[string]bool {
-	m := map[string]bool{"query": true, "query_table": true}
-	for n := range readerFuncs {
-		m[strings.ToLower(n)] = true
-	}
-	return m
-}()
-
-// checkArtifactSQLShape holds a query to the two lexical rules of D5, on the
-// policy's own lexer (sql_lex.go):
-//
-//   - a query is exactly one statement (the lexer's count; the policy
-//     cross-checks it against DuckDB's before any classification);
-//   - every $name placeholder is a parameter token. engine.BindParams rewrites
-//     every "$name" it finds in the raw text, string literals, quoted names,
-//     $$...$$ bodies and comments included, and the database would quietly
-//     ignore the extra argument, so a placeholder in any of those places is
-//     refused, as are a bare "?" and a positional "$1" (they would take another
-//     parameter's argument);
-//   - a parameter is never the argument of query(), query_table() or a reader.
-//
-// It is cheap and does no I/O.
-func checkArtifactSQLShape(sqlText string) error {
-	var seen []string
-	stmts := lexStatements(sqlText)
-	if len(stmts) != 1 {
-		return errors.New("a query is exactly one statement")
-	}
-	for _, toks := range stmts {
-		for i, t := range toks {
-			if t.Kind != lkPunct {
-				continue
-			}
-			switch t.Text {
-			case "?":
-				return errors.New("a bare ? is not allowed: write the parameter as $name")
-			case "$":
-				if i+1 >= len(toks) || toks[i+1].Kind != lkWord || toks[i+1].Start != t.End {
-					return errors.New("a $ must start a parameter name such as $from")
-				}
-				name := toks[i+1].Raw
-				if name[0] >= '0' && name[0] <= '9' {
-					return fmt.Errorf("$%s is a positional parameter: use a declared name such as $from", name)
-				}
-				seen = append(seen, name)
-			}
-		}
-		if err := checkParamInReaderArgs(toks); err != nil {
-			return err
-		}
-	}
-	if !slices.Equal(seen, engine.ParamOccurrences(sqlText)) {
-		return errors.New("a $name placeholder appears inside a string literal, a quoted name, a $$...$$ body or a comment, where it would be rewritten too: " +
-			"keep $name only where a value belongs, and write literal text without it")
-	}
-	return nil
-}
-
-// checkParamInReaderArgs refuses a parameter inside the argument list of
-// query(...), query_table(...) or a file reader in one statement's tokens.
-func checkParamInReaderArgs(toks []lexTok) error {
-	for i := 0; i+1 < len(toks); i++ {
-		if !toks[i].isName() || !toks[i+1].isParen("(") || !readerOrQueryArgs[strings.ToLower(toks[i].Text)] {
-			continue
-		}
-		end := matchParen(toks, i+1)
-		if end < 0 {
-			end = len(toks)
-		}
-		for _, t := range toks[i+2 : end] {
-			if t.Kind == lkPunct && t.Text == "$" {
-				return fmt.Errorf("a parameter cannot be an argument of %s(...): it would choose what is read or run", strings.ToLower(toks[i].Text))
-			}
-		}
-	}
-	return nil
-}
+// checkArtifactSQLShape holds a query to the two lexical rules of D5 (one
+// statement; every $name a parameter token, never the argument of query() or a
+// reader). The rule is queries.CheckParamShape, shared with Studio and the CLI.
+func checkArtifactSQLShape(sqlText string) error { return queries.CheckParamShape(sqlText) }
 
 // artifactQueryRowCap bounds the rows one artifact query returns, the cap of a
 // live A2UI binding. The cap is pushed into the query (RunReadOnlySQLIn).

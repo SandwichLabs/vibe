@@ -200,7 +200,7 @@ func (a *analyzer) script(bound string, args []any) *sqlVerdict {
 	if n != len(stmts) {
 		for _, toks := range stmts {
 			for _, t := range toks {
-				if t.isWord("PIVOT") || t.isWord("UNPIVOT") {
+				if t.IsWord("PIVOT") || t.IsWord("UNPIVOT") {
 					return deny(pivotStatementMsg)
 				}
 			}
@@ -237,7 +237,7 @@ func (a *analyzer) script(bound string, args []any) *sqlVerdict {
 func countPlaceholders(toks []lexTok) int {
 	n := 0
 	for _, t := range toks {
-		if t.isPunct("?") {
+		if t.IsPunct("?") {
 			n++
 		}
 	}
@@ -267,7 +267,7 @@ func preScreen(toks []lexTok) *sqlVerdict {
 	// U&'...' and U&"..." decode escapes the lexer does not, so a name or a
 	// path could be spelled in a way no token check recognises.
 	for i := 0; i+2 < len(toks); i++ {
-		if toks[i].isWord("U") && toks[i+1].isPunct("&") && toks[i].End == toks[i+1].Start && toks[i+1].End == toks[i+2].Start &&
+		if toks[i].IsWord("U") && toks[i+1].IsPunct("&") && toks[i].End == toks[i+1].Start && toks[i+1].End == toks[i+2].Start &&
 			(toks[i+2].Kind == lkString || toks[i+2].Kind == lkIdent) {
 			return deny("Unicode escape strings and identifiers (U&'...') are not allowed")
 		}
@@ -281,11 +281,11 @@ func preScreen(toks []lexTok) *sqlVerdict {
 			depth := 0
 			for _, t := range toks[1:] {
 				switch {
-				case t.isParen("("):
+				case t.IsParen("("):
 					depth++
-				case t.isParen(")"):
+				case t.IsParen(")"):
 					depth--
-				case depth == 0 && t.isWord("FROM"):
+				case depth == 0 && t.IsWord("FROM"):
 					return deny("COPY ... FROM is not allowed (COPY FROM DATABASE and file imports): load a file with INSERT INTO ... SELECT * FROM read_csv('<path in data/>')")
 				}
 			}
@@ -433,23 +433,23 @@ func (a *analyzer) statement(toks []lexTok, args []any, depth int) *sqlVerdict {
 		}
 	}
 	switch {
-	case head.isWord("EXPLAIN"):
+	case head.IsWord("EXPLAIN"):
 		return a.explain(toks, args, depth)
-	case head.isWord("PRAGMA"):
+	case head.IsWord("PRAGMA"):
 		return a.pragma(toks)
-	case head.isWord("CALL"):
+	case head.IsWord("CALL"):
 		return a.call(toks)
-	case head.isParen("(") || (head.Kind == lkWord && readHeads[head.Text]):
+	case head.IsParen("(") || (head.Kind == lkWord && readHeads[head.Text]):
 		return a.readOrWith(toks, args)
-	case head.isWord("INSERT"), head.isWord("UPDATE"), head.isWord("DELETE"), head.isWord("MERGE"):
+	case head.IsWord("INSERT"), head.IsWord("UPDATE"), head.IsWord("DELETE"), head.IsWord("MERGE"):
 		return a.dml(toks, args)
-	case head.isWord("CREATE"), head.isWord("DROP"), head.isWord("ALTER"):
+	case head.IsWord("CREATE"), head.IsWord("DROP"), head.IsWord("ALTER"):
 		v := a.ddl(toks, args)
 		v.Temp = v.Class == sqlClassDDL && createsTemp(toks)
 		return v
-	case head.isWord("COPY"):
+	case head.IsWord("COPY"):
 		return a.copyStmt(toks, args)
-	case head.isWord("PIVOT"), head.isWord("UNPIVOT"):
+	case head.IsWord("PIVOT"), head.IsWord("UNPIVOT"):
 		return deny(pivotStatementMsg)
 	}
 	return deny(fmt.Sprintf("this kind of statement (%s) is not on the agent's allow-list", head.Raw))
@@ -457,14 +457,14 @@ func (a *analyzer) statement(toks []lexTok, args []any, depth int) *sqlVerdict {
 
 // createsTemp reports whether toks is CREATE [OR REPLACE] TEMP[ORARY] ...
 func createsTemp(toks []lexTok) bool {
-	if !toks[0].isWord("CREATE") {
+	if !toks[0].IsWord("CREATE") {
 		return false
 	}
 	for _, t := range toks[1:] {
 		switch {
-		case t.isWord("TEMP"), t.isWord("TEMPORARY"):
+		case t.IsWord("TEMP"), t.IsWord("TEMPORARY"):
 			return true
-		case t.isWord("OR"), t.isWord("REPLACE"), t.isWord("UNIQUE"):
+		case t.IsWord("OR"), t.IsWord("REPLACE"), t.IsWord("UNIQUE"):
 		default:
 			return false
 		}
@@ -483,7 +483,7 @@ func (a *analyzer) readOrWith(toks []lexTok, args []any) *sqlVerdict {
 	if !doc.Error && len(doc.Statements) == 1 {
 		return a.read(doc.Statements[0], toks, text, args)
 	}
-	if doc.Error && toks[0].isWord("WITH") && doc.ErrorType == "not implemented" {
+	if doc.Error && toks[0].IsWord("WITH") && doc.ErrorType == "not implemented" {
 		return a.dml(toks, args)
 	}
 	return deny(fmt.Sprintf("%s: it did not parse as a single read statement", couldntVerifyMsg))
@@ -514,14 +514,14 @@ func (a *analyzer) read(stmt map[string]any, toks []lexTok, text string, args []
 // statement: INSERT, CTAS and COPY TO all ran under it, spike finding A).
 func (a *analyzer) explain(toks []lexTok, args []any, depth int) *sqlVerdict {
 	i := 1
-	if i < len(toks) && toks[i].isParen("(") {
+	if i < len(toks) && toks[i].IsParen("(") {
 		// Only EXPLAIN (FORMAT <word>) is accepted.
-		if !(i+3 < len(toks) && toks[i+1].isWord("FORMAT") && toks[i+2].Kind == lkWord && toks[i+3].isParen(")")) {
+		if !(i+3 < len(toks) && toks[i+1].IsWord("FORMAT") && toks[i+2].Kind == lkWord && toks[i+3].IsParen(")")) {
 			return deny("EXPLAIN options other than (FORMAT ...) are not allowed (EXPLAIN ANALYZE executes the statement)")
 		}
 		i += 4
 	}
-	if i < len(toks) && toks[i].isWord("ANALYZE") {
+	if i < len(toks) && toks[i].IsWord("ANALYZE") {
 		return deny("EXPLAIN ANALYZE is not allowed: it executes the statement")
 	}
 	if i >= len(toks) {
@@ -554,7 +554,7 @@ func literalArgs(toks []lexTok) bool {
 
 // pragma allows only the read-style introspection PRAGMAs.
 func (a *analyzer) pragma(toks []lexTok) *sqlVerdict {
-	if len(toks) < 2 || !toks[1].isName() {
+	if len(toks) < 2 || !toks[1].IsName() {
 		return deny("PRAGMA needs a name")
 	}
 	name := strings.ToLower(nameOf(toks[1]))
@@ -562,7 +562,7 @@ func (a *analyzer) pragma(toks []lexTok) *sqlVerdict {
 		return deny(fmt.Sprintf("PRAGMA %s is not on the allow-list (only %s)", name, sortedNames(allowedPragmas)))
 	}
 	if len(toks) > 2 {
-		if !toks[2].isParen("(") || matchParen(toks, 2) != len(toks)-1 || !literalArgs(toks[3:len(toks)-1]) {
+		if !toks[2].IsParen("(") || matchParen(toks, 2) != len(toks)-1 || !literalArgs(toks[3:len(toks)-1]) {
 			return deny("a PRAGMA may only take literal arguments")
 		}
 	}
@@ -585,7 +585,7 @@ func (a *analyzer) vetTableArgToks(fn string, args []lexTok) string {
 
 // call allows only CALL of the catalog metadata functions with literal arguments.
 func (a *analyzer) call(toks []lexTok) *sqlVerdict {
-	if len(toks) < 4 || !toks[1].isName() || !toks[2].isParen("(") || matchParen(toks, 2) != len(toks)-1 {
+	if len(toks) < 4 || !toks[1].IsName() || !toks[2].IsParen("(") || matchParen(toks, 2) != len(toks)-1 {
 		return deny("CALL is only allowed as CALL <catalog function>(literal arguments)")
 	}
 	name := strings.ToLower(nameOf(toks[1]))

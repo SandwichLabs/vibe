@@ -16,6 +16,8 @@ The editor is `$VISUAL`, then `$EDITOR`, then `vi`. The value may carry argument
 | TUI REPL | `ctrl+o` opens the current input. `\e` then Enter opens the last query (as in psql). |
 | CLI | `vibe query -e` opens an empty buffer; `vibe query -e "SELECT ..."` starts from that text; `-` (standard input) cannot be combined with `-e`. |
 
+`vibe query --saved ID -p name=value` runs a saved query with its declared `$name` parameters (see [workspaces.md](workspaces.md#queries-queriesidsql)); it does not combine with `-e`.
+
 Save and quit to run the query. Quitting with an error (`:cq` in Vim) or leaving the buffer unchanged or empty runs nothing (`vibe query -e` says so and exits 0).
 
 The buffer is a scratch file, `<workspace>/.vibe-local/edit/query-*.sql`, created mode 0600 in a folder that must be a real directory of yours (a symbolic link there, as a cloned repository could ship, is refused; the folder is set to 0700), and removed when the editor exits. It sits under the workspace so an editor that finds its language-server root by walking up to `vibe.yaml` attaches `vibe lsp` to it; the editor also gets `VIBE_WORKSPACE` in its environment. Outside a workspace the file goes to the system temp folder.
