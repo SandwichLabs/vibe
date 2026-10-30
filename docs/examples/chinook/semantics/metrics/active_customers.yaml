@@ -1,0 +1,11 @@
+version: 1
+name: active_customers
+title: Active customers
+description: Distinct customers with at least one invoice line in the group. A customer is counted once in every group they appear in (each genre they bought, say), so groups overlap and do not add up.
+query: sales-lines
+measure: count(DISTINCT customer_id)
+dimensions: [country, genre, year]
+format: number
+owner: sales
+assertions:
+  - {kind: non_negative}

@@ -1,0 +1,16 @@
+version: 1
+name: country_year
+description: "One country in one survey year. The data is every fifth year, 1952 to 2007, for 142 countries."
+grain: one row per country per year
+table: gapminder
+id_column: id
+columns:
+  - {name: life_exp, description: "life expectancy at birth, in years"}
+  - {name: pop, description: population}
+  - {name: gdp_percap, description: "GDP per capita, in US$, inflation-adjusted"}
+owner: example
+assertions:
+  - {kind: unique, column: id}
+  - {kind: not_null, column: life_exp}
+  - {kind: not_null, column: pop}
+  - {kind: accepted_values, column: continent, values: [Africa, Americas, Asia, Europe, Oceania]}

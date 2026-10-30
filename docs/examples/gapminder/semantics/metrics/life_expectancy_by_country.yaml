@@ -1,0 +1,11 @@
+version: 1
+name: life_expectancy_by_country
+title: Life expectancy (plain mean of countries)
+description: "The unweighted mean of country figures: each country counts the same, whatever its population. Kept to show how far it can be from life_expectancy. Not the headline number."
+query: country-years
+measure: avg(life_exp)
+dimensions: [continent, year]
+format: number
+owner: example
+assertions:
+  - {kind: non_negative}

@@ -1,0 +1,12 @@
+version: 1
+name: population
+title: Population
+description: "Total population. Additive over countries, but not over years: sum it for one year at a time (by year, or by continent and year)."
+query: country-years
+measure: sum(pop)
+dimensions: [continent, year, country]
+format: number
+owner: example
+assertions:
+  - {kind: non_negative}
+  - {kind: not_null}

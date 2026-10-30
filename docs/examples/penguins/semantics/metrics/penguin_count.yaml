@@ -1,0 +1,12 @@
+version: 1
+name: penguin_count
+title: Penguins
+description: How many penguins were measured.
+query: penguins
+measure: count(*)
+dimensions: [species, island, sex, year]
+format: number
+owner: example
+assertions:
+  - {kind: non_negative}
+  - {kind: not_null}

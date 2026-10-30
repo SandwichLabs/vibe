@@ -1,0 +1,11 @@
+version: 1
+name: employee
+description: A member of staff. Sales support agents are the ones customers are assigned to.
+grain: one row per employee
+table: employee
+id_column: employee_id
+columns:
+  - {name: reports_to, description: the employee_id of the manager; empty for the general manager}
+owner: hr
+assertions:
+  - {kind: unique, column: employee_id}

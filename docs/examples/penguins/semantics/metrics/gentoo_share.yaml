@@ -1,0 +1,13 @@
+version: 1
+name: gentoo_share
+title: Gentoo share
+description: The fraction of penguins that are Gentoo, a ratio of two counts over the same rows.
+query: penguins
+measure: 1.0 * count(*) FILTER (WHERE species = 'Gentoo') / nullif(count(*), 0)
+dimensions: [island, sex, year]
+format: percent
+owner: example
+settled_by:
+  text: "The denominator is every penguin in the group, including those with no sex or mass recorded, so the share does not move when a measurement is missing."
+assertions:
+  - {kind: non_negative}

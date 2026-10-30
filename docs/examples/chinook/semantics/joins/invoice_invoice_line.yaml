@@ -1,0 +1,16 @@
+version: 1
+name: invoice_invoice_line
+left: invoice
+right: invoice_line
+on:
+  - {left: invoice_id, right: invoice_id}
+cardinality: one_to_many
+description: an invoice has one or more lines. Joining the two repeats the invoice once per line, so never sum invoice.total across this join.
+measured:
+  at: 2026-10-30T00:36:23Z
+  left_rows: 412
+  right_rows: 2240
+  max_fanout: 14
+  left_orphans: 0
+  right_orphans: 0
+  verdict: consistent

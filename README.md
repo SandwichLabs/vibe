@@ -60,6 +60,7 @@ No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is
 - **Connections.** Data stays where it lives, attached on first use into one DuckDB hub. Read-only by default. [Recipes](docs/connections.md) for each type.
 - **Live notebooks.** SQL, Markdown and dashboard cells. Notebooks store questions, not answers: every cell re-runs when you open it.
 - **Data artifacts.** Parameterised, live views kept as files in `artifacts/`: typed parameters, named queries, controls and drill-down. They store questions, not answers. [Reference](docs/reference/artifacts.md).
+- **A semantic layer.** Entities, metrics, joins and a glossary as reviewed files in `semantics/`, checked and profiled against the data, callable as `metric('revenue', by => 'country')` in any SQL. An agent can only propose a definition; you accept it. [Reference](docs/reference/semantics.md), [examples](docs/examples/README.md).
 - **Skills.** Markdown documents that teach the agent what your metrics mean and which joins are canonical, loaded on demand.
 - **An agent with guardrails.** Sandbox tiers, an SQL allow-list, and an approval for every write that matters. Works with a local model, Ollama, OpenAI, Anthropic, Gemini or Cloudflare AI Gateway.
 - **MCP for your own agent.** `vibe mcp serve` gives Claude Code, Claude Desktop, Cursor and others the same tools with the same limits. [Setup](docs/mcp-clients.md).

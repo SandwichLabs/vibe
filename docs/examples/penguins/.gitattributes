@@ -1,0 +1,2 @@
+# Vibe: notebooks are LF text so diffs stay clean
+*.vnb text eol=lf

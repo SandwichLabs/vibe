@@ -1,0 +1,9 @@
+employee_id,first_name,last_name,title,reports_to
+1,Andrew,Adams,General Manager,
+2,Nancy,Edwards,Sales Manager,1
+3,Jane,Peacock,Sales Support Agent,2
+4,Margaret,Park,Sales Support Agent,2
+5,Steve,Johnson,Sales Support Agent,2
+6,Michael,Mitchell,IT Manager,1
+7,Robert,King,IT Staff,6
+8,Laura,Callahan,IT Staff,6

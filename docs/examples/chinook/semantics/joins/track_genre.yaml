@@ -1,0 +1,16 @@
+version: 1
+name: track_genre
+left: track
+right: genre
+on:
+  - {left: genre_id, right: genre_id}
+cardinality: many_to_one
+description: each track has one genre
+measured:
+  at: 2026-10-30T00:36:24Z
+  left_rows: 3503
+  right_rows: 25
+  max_fanout: 1
+  left_orphans: 0
+  right_orphans: 0
+  verdict: consistent

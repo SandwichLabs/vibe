@@ -1,0 +1,14 @@
+version: 1
+name: life_expectancy
+title: Life expectancy (population-weighted)
+description: Life expectancy at birth in years, averaged over countries weighted by population, so a country counts in proportion to its people. By country and year it is that country's own figure.
+query: country-years
+measure: sum(life_exp * pop) / nullif(sum(pop), 0)
+dimensions: [continent, year, country]
+format: number
+owner: example
+settled_by:
+  text: "One analyst took the plain mean of the country figures, another weighted by population. In the Americas in 2007 the weighted figure is 75.4 and the plain mean 73.6, because the United States (78.2 years) and Mexico (76.2) have far more people than the typical small country of the region. The weighted mean answers 'how long does the typical person on this continent expect to live?', so that is the definition. The plain mean is kept as life_expectancy_by_country for comparison."
+assertions:
+  - {kind: non_negative}
+  - {kind: not_null}

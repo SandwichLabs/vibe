@@ -1,0 +1,15 @@
+version: 1
+name: customer
+description: A person or company that has bought from the store.
+grain: one row per customer
+table: customer
+id_column: customer_id
+columns:
+  - {name: first_name, pii: true}
+  - {name: last_name, pii: true}
+  - {name: email, pii: true, description: contact address}
+  - {name: support_rep_id, description: the employee who looks after this customer}
+owner: sales
+assertions:
+  - {kind: unique, column: customer_id}
+  - {kind: not_null, column: country}

@@ -1,0 +1,14 @@
+version: 1
+name: revenue
+title: Revenue
+description: What customers paid, in dollars, summed from invoice lines (unit price times quantity).
+query: sales-lines
+measure: sum(unit_price * quantity)
+dimensions: [country, genre, year]
+format: currency
+owner: finance
+settled_by:
+  text: "Finance summed invoice.total, marketing summed invoice lines. Both reach 2328.60 over all time, but only lines can be cut by genre, and joining invoice to its lines repeats the total once per line (up to 14 times: see the invoice_invoice_line join), which inflates it (summing invoice.total over that join gives 20848.62, nearly nine times the real 2328.60). Revenue is the sum of the lines."
+assertions:
+  - {kind: non_negative}
+  - {kind: not_null}

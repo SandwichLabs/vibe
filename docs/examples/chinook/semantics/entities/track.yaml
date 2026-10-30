@@ -1,0 +1,10 @@
+version: 1
+name: track
+description: A song that can be bought.
+grain: one row per track
+table: track
+id_column: track_id
+owner: catalogue
+assertions:
+  - {kind: unique, column: track_id}
+  - {kind: not_null, column: genre_id}

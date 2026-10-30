@@ -1,0 +1,12 @@
+version: 1
+name: gdp_total
+title: Total GDP
+description: Total GDP in inflation-adjusted US dollars, reconstructed as GDP per capita times population for each country-year and then summed. Like population, sum it within one year.
+query: country-years
+measure: sum(gdp_percap * pop)
+dimensions: [continent, year, country]
+format: currency
+owner: example
+assertions:
+  - {kind: non_negative}
+  - {kind: not_null}

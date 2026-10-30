@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "title": "Store metrics",
+  "cells": [
+    {
+      "id": "cell_1",
+      "type": "markdown",
+      "collapsed": false,
+      "source": "# Store metrics\n\nEvery SQL cell calls `metric()`. The definitions are in `semantics/metrics/`, and each is measured over the saved query `queries/sales-lines.sql`, so every cell below agrees on what a sale is.\n\nLoad the data first: see the README's Setup."
+    },
+    {
+      "id": "cell_2",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT * FROM metric('revenue', by => 'year')\nORDER BY year",
+      "label": "Revenue by year"
+    },
+    {
+      "id": "cell_3",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT genre, revenue\nFROM metric('revenue', by => 'genre')\nORDER BY revenue DESC\nLIMIT 10",
+      "label": "Top ten genres by revenue"
+    },
+    {
+      "id": "cell_4",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT country, revenue, invoice_count, avg_invoice_value\nFROM metric('revenue', by => 'country')\nJOIN metric('invoice_count', by => 'country') USING (country)\nJOIN metric('avg_invoice_value', by => 'country') USING (country)\nORDER BY revenue DESC\nLIMIT 10",
+      "label": "Top ten countries"
+    },
+    {
+      "id": "cell_5",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT year, active_customers\nFROM metric('active_customers', by => 'year')\nORDER BY year",
+      "label": "Active customers by year"
+    },
+    {
+      "id": "cell_6",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT metric('revenue') AS revenue,\n       metric('revenue') / metric('active_customers') AS revenue_per_customer",
+      "label": "Revenue per customer"
+    }
+  ]
+}

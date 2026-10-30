@@ -1,0 +1,12 @@
+version: 1
+name: invoice
+description: One purchase by one customer. Its total is the price of all its lines.
+grain: one row per invoice
+table: invoice
+id_column: invoice_id
+columns:
+  - {name: total, description: "stored on the invoice and also derivable from its lines; revenue uses the lines (see the revenue metric)"}
+owner: sales
+assertions:
+  - {kind: unique, column: invoice_id}
+  - {kind: not_null, column: customer_id}

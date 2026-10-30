@@ -1,0 +1,9 @@
+version: 1
+name: genre
+description: A music genre. Every track has exactly one.
+grain: one row per genre
+table: genre
+id_column: genre_id
+owner: catalogue
+assertions:
+  - {kind: unique, column: genre_id}

@@ -1,0 +1,11 @@
+version: 1
+name: avg_body_mass_g
+title: Average body mass (g)
+description: Mean body mass in grams. Penguins with no recorded mass are left out of the average, not counted as zero.
+query: penguins
+measure: avg(body_mass_g)
+dimensions: [species, island, sex, year]
+format: number
+owner: example
+assertions:
+  - {kind: non_negative}
