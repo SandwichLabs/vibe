@@ -1,0 +1,11 @@
+version: 1
+name: invoice_count
+title: Invoices
+description: Distinct invoices. An invoice with tracks from several genres is counted once in each genre, so by genre this does not add up to the total.
+query: sales-lines
+measure: count(DISTINCT invoice_id)
+dimensions: [country, genre, year]
+format: number
+owner: finance
+assertions:
+  - {kind: non_negative}

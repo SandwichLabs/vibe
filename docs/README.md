@@ -62,6 +62,17 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/templates.md`](reference/templates.md) | Starter templates |
 | [`reference/themes.md`](reference/themes.md) | Studio themes |
 
+## Examples
+
+Runnable workspaces to open in Studio or work through on the command line. Each README is a walkthrough with real output; `internal/docsref` checks that the definitions still validate.
+
+| Doc | What it is |
+|---|---|
+| [`examples/README.md`](examples/README.md) | Index of the example workspaces: the semantic layer (metrics, entities, joins, glossary, assertions, profiling, proposals, `metric()`) on small public datasets |
+| [`examples/penguins/`](examples/penguins/README.md) | Palmer Penguins: one table, three metrics, an assertion that fails on real data, a saved query with a parameter |
+| [`examples/chinook/`](examples/chinook/README.md) | Chinook music store: six entities, profiled joins, a metric settled by a disagreement, a notebook, the proposal flow |
+| [`examples/gapminder/`](examples/gapminder/README.md) | Gapminder: population-weighted life expectancy, a join with right-side orphans |
+
 ## Design
 
 | Doc | What it is |

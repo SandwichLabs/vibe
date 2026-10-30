@@ -1,0 +1,16 @@
+version: 1
+name: customer_invoice
+left: customer
+right: invoice
+on:
+  - {left: customer_id, right: customer_id}
+cardinality: one_to_many
+description: a customer has many invoices; every invoice has a customer
+measured:
+  at: 2026-10-30T00:36:23Z
+  left_rows: 59
+  right_rows: 412
+  max_fanout: 7
+  left_orphans: 0
+  right_orphans: 0
+  verdict: consistent

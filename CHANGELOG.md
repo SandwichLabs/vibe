@@ -4,6 +4,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
+
 ## [0.5.0] - 2026-10-29
 
 This release adds a **semantic layer kept as files** (#244): named metrics, entities, joins and a glossary that live in the workspace next to your queries, run anywhere SQL runs, and change only when you accept the change. See `docs/reference/semantics.md`.

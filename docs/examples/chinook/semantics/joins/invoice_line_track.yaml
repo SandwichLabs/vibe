@@ -1,0 +1,16 @@
+version: 1
+name: invoice_line_track
+left: invoice_line
+right: track
+on:
+  - {left: track_id, right: track_id}
+cardinality: many_to_one
+description: each line sells one track; a track can be sold many times, or never
+measured:
+  at: 2026-10-30T00:36:24Z
+  left_rows: 2240
+  right_rows: 3503
+  max_fanout: 1
+  left_orphans: 0
+  right_orphans: 1519
+  verdict: consistent

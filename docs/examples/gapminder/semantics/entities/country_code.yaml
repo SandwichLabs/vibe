@@ -1,0 +1,12 @@
+version: 1
+name: country_code
+description: "ISO 3166-1 codes for countries. Wider than the data: it lists countries that have no rows in country_year."
+grain: one row per country
+table: country_codes
+id_column: iso_alpha
+columns:
+  - {name: iso_num, description: the numeric ISO code}
+owner: example
+assertions:
+  - {kind: unique, column: iso_alpha}
+  - {kind: unique, column: country}

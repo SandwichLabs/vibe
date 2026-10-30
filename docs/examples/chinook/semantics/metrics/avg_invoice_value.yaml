@@ -1,0 +1,11 @@
+version: 1
+name: avg_invoice_value
+title: Average invoice value
+description: Revenue divided by distinct invoices. A ratio, so it is computed in one expression, never averaged across groups.
+query: sales-lines
+measure: sum(unit_price * quantity) / nullif(count(DISTINCT invoice_id), 0)
+dimensions: [country, year]
+format: currency
+owner: finance
+assertions:
+  - {kind: non_negative}

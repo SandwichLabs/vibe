@@ -1,0 +1,16 @@
+version: 1
+name: country_year_code
+left: country_year
+right: country_code
+on:
+  - {left: country, right: country}
+cardinality: many_to_one
+description: each country-year row names one country, and each country has one code. The code list is longer than the data.
+measured:
+  at: 2026-10-30T00:36:27Z
+  left_rows: 1704
+  right_rows: 187
+  max_fanout: 1
+  left_orphans: 0
+  right_orphans: 45
+  verdict: consistent

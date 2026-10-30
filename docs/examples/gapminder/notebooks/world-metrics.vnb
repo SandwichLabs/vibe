@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "title": "World metrics",
+  "cells": [
+    {
+      "id": "cell_1",
+      "type": "markdown",
+      "collapsed": false,
+      "source": "# World metrics\n\nEvery SQL cell calls `metric()`. `life_expectancy` is population-weighted; `life_expectancy_by_country` is the plain mean, kept to compare."
+    },
+    {
+      "id": "cell_2",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT continent, life_expectancy, population FROM metric('life_expectancy', by => ['continent','year']) JOIN metric('population', by => ['continent','year']) USING (continent, year) WHERE year = 2007 ORDER BY life_expectancy DESC",
+      "label": "Life expectancy and population by continent, 2007"
+    },
+    {
+      "id": "cell_3",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT year, life_expectancy\nFROM metric('life_expectancy', by => ['continent', 'year'])\nWHERE continent = 'Asia'\nORDER BY year",
+      "label": "Asia over time"
+    },
+    {
+      "id": "cell_4",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT w.continent, w.life_expectancy AS weighted, p.life_expectancy_by_country AS plain_mean\nFROM metric('life_expectancy', by => ['continent', 'year']) AS w\nJOIN metric('life_expectancy_by_country', by => ['continent', 'year']) AS p\n  ON p.continent = w.continent AND p.year = w.year\nWHERE w.year = 2007\nORDER BY w.continent",
+      "label": "Weighted against plain mean, 2007"
+    },
+    {
+      "id": "cell_5",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT year, gdp_total / 1e12 AS gdp_trillion\nFROM metric('gdp_total', by => 'year')\nORDER BY year",
+      "label": "World GDP by year, trillions of US dollars"
+    }
+  ]
+}

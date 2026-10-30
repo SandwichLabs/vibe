@@ -8,6 +8,8 @@ beside the queries and notebooks that use them. There are four kinds:
 - **Joins**: how two entities relate, declared and measured.
 - **The glossary**: plain markdown, one `## term` section per term.
 
+Three runnable example workspaces, with real output, are in [`docs/examples/`](../examples/README.md).
+
 Everything is files you can write by hand. Nothing here needs AI. `vibe semantics list` reads the files and nothing else; a metric runs when SQL calls it with [`metric()`](#using-a-metric-in-sql).
 
 ```

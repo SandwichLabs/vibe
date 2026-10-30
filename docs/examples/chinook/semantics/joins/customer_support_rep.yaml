@@ -1,0 +1,16 @@
+version: 1
+name: customer_support_rep
+left: customer
+right: employee
+on:
+  - {left: support_rep_id, right: employee_id}
+cardinality: one_to_one
+description: "Declared one_to_one on purpose, as a naive first guess, to show what a profile does with a wrong declaration. The right answer is many_to_one: a support rep looks after many customers."
+measured:
+  at: 2026-10-30T00:36:24Z
+  left_rows: 59
+  right_rows: 8
+  max_fanout: 1
+  left_orphans: 0
+  right_orphans: 5
+  verdict: fan_out

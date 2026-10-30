@@ -1,0 +1,11 @@
+version: 1
+name: invoice_line
+description: One track on one invoice. This is where a sale has a genre.
+grain: one row per track per invoice
+table: invoice_line
+id_column: invoice_line_id
+owner: sales
+assertions:
+  - {kind: unique, column: invoice_line_id}
+  - {kind: not_null, column: track_id}
+  - {kind: accepted_values, column: quantity, values: ["1"]}

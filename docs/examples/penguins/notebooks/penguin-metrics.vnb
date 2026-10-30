@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "title": "Penguin metrics",
+  "cells": [
+    {
+      "id": "cell_1",
+      "type": "markdown",
+      "collapsed": false,
+      "source": "# Penguin metrics\n\nEvery SQL cell calls `metric()`. The definitions live in `semantics/metrics/`; `vibe semantics list` shows them."
+    },
+    {
+      "id": "cell_2",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT * FROM metric('penguin_count', by => 'species')\nORDER BY penguin_count DESC",
+      "label": "Penguins by species"
+    },
+    {
+      "id": "cell_3",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT species, island, penguin_count\nFROM metric('penguin_count', by => ['species', 'island'])\nORDER BY species, island",
+      "label": "Where each species lives"
+    },
+    {
+      "id": "cell_4",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT species, sex, avg_body_mass_g\nFROM metric('avg_body_mass_g', by => ['species', 'sex'])\nORDER BY species, sex",
+      "label": "Average body mass by species and sex"
+    },
+    {
+      "id": "cell_5",
+      "type": "sql",
+      "collapsed": false,
+      "source": "SELECT * FROM metric('gentoo_share', by => 'island')",
+      "label": "Gentoo share by island"
+    }
+  ]
+}

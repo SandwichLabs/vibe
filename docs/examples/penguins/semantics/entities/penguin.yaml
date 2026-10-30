@@ -1,0 +1,15 @@
+version: 1
+name: penguin
+description: One of the 344 penguins measured at Palmer Station, Antarctica, 2007-2009.
+grain: one row per penguin
+table: penguins
+id_column: id
+columns:
+  - {name: sex, description: "male or female; empty when the field team could not tell"}
+  - {name: body_mass_g, description: body mass in grams}
+owner: example
+assertions:
+  - {kind: unique, column: id}
+  - {kind: not_null, column: species}
+  - {kind: accepted_values, column: species, values: [Adelie, Chinstrap, Gentoo]}
+  - {kind: not_null, column: sex}
