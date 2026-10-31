@@ -4,6 +4,15 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Security
+
+- **The agent's `create_table` and `add_column` take literal defaults only (#21, #67).** A column type could carry `DEFAULT chr(39)||chr(120)`, `DEFAULT concat(...)` or `CHECK (...)`, expressions DuckDB would evaluate on every insert. The agent's column type may now hold a type, `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `REFERENCES t(col)` and a `DEFAULT` that is a number, a single-quoted string (`'it''s'`), `TRUE`, `FALSE`, `NULL`, `CURRENT_TIMESTAMP` or `CURRENT_DATE`. `CHECK`, generated columns (`AS (...)`, `GENERATED`) and every other default are refused with a message listing what is allowed. Studio's table designer and `vibe` for people are unchanged. This applies over MCP too.
+- **Datasheet edits no longer trust the column type from the database's catalog (#21).** Insert, update and delete in the datasheet cast values with `CAST(? AS <type>)`, taking the type text from the attached database. A hostile database could return a type that is not just a type. The text is now checked against a small grammar (DECIMAL(10,2), `TIMESTAMP WITH TIME ZONE`, `INTEGER[]`, `STRUCT(...)`, `MAP(...)`, `UNION(...)`, enums with quoted labels all pass), and anything else is cast as `VARCHAR`.
+
+### Changed
+
+- The `go-sql-sprintf-ident` ast-grep rule is now in `tools/ast-grep/rules/` at warning level (a review list of `fmt.Sprintf` SQL, not a failure), and the importer's last hand-quoted sequence name uses `QuoteLiteral`.
+
 ### Added
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.

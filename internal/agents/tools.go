@@ -209,7 +209,7 @@ var Tools = []ToolDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Name of the table"},
 			{Name: "columns", Type: "array", Required: true, Desc: "Column definitions", Items: &ParamDef{Type: "object", Fields: []ParamDef{
 				{Name: "name", Type: "string", Required: true, Desc: "Column name"},
-				{Name: "type", Type: "string", Required: true, Desc: "DuckDB column type, e.g. TEXT, INTEGER, DOUBLE, DATE, BOOLEAN. Constraints (PRIMARY KEY, NOT NULL) may be embedded directly, e.g. \"INTEGER PRIMARY KEY\"."},
+				{Name: "type", Type: "string", Required: true, Desc: "DuckDB column type, e.g. TEXT, INTEGER, DOUBLE, DATE, BOOLEAN. Constraints (PRIMARY KEY, NOT NULL) may be embedded directly, e.g. \"INTEGER PRIMARY KEY\". DEFAULT must be a literal (number, 'text', TRUE, FALSE, NULL, CURRENT_TIMESTAMP, CURRENT_DATE); CHECK and generated columns are refused."},
 			}}},
 		},
 	},
@@ -220,7 +220,7 @@ var Tools = []ToolDef{
 		Params: []ParamDef{
 			{Name: "table", Type: "string", Required: true, Desc: "Table to modify"},
 			{Name: "name", Type: "string", Required: true, Desc: "Column name"},
-			{Name: "type", Type: "string", Required: true, Desc: "Column type"},
+			{Name: "type", Type: "string", Required: true, Desc: "Column type. DEFAULT must be a literal; CHECK is refused."},
 		},
 	},
 	{

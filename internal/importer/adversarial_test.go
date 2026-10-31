@@ -430,3 +430,20 @@ func TestImport_UpsertHugeAutoNumberGapRefused(t *testing.T) {
 	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM t").Scan(&count))
 	require.Equal(t, 1, count, "a blocked pre-flight must leave the table untouched")
 }
+
+// A column whose catalog type is not plain type text must stop an append before the type
+// reaches TRY_CAST(... AS <type>) (#21). An enum label holding a newline prints as such a type.
+func TestImport_AppendRefusesUnsafeRawType(t *testing.T) {
+	db := openDuckDB(t)
+	_, err := db.Exec("CREATE TYPE odd AS ENUM ('a" + "\n" + "b')")
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE t (id BIGINT PRIMARY KEY, v odd)`)
+	require.NoError(t, err)
+	path := writeCSV(t, t.TempDir(), "b.csv", "id,v\n1,x\n")
+	_, err = Import(context.Background(), db, Options{Source: Source{Path: path, HasHeader: true}, Table: "t", Mode: ModeAppend})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "will not use in SQL")
+	var n int
+	require.NoError(t, db.QueryRow(`SELECT count(*) FROM t`).Scan(&n))
+	require.Zero(t, n)
+}
