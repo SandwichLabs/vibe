@@ -277,3 +277,21 @@ func TestSemanticsCheck_ColumnNamedLikeAFunction(t *testing.T) {
 	assert.EqualValues(t, 1, rows[1]["violations"])
 	assert.EqualValues(t, 2, rows[2]["violations"])
 }
+
+// When no check could run, the report says loudly that nothing was verified
+// (#302: "0 passed, 0 failed, 57 could not run" was easy to misread).
+func TestSemanticsCheck_NothingVerifiedIsSaidOutLoud(t *testing.T) {
+	root := newWS(t)
+	seedMetricFile(t, root, "gone", "version: 1\nname: gone\nquery: no_such_query\nmeasure: sum(amount)\nassertions:\n  - {kind: not_null}\n")
+	out, _, err := runVibe("semantics", "check", "--workspace", root)
+	require.Error(t, err)
+	assert.Equal(t, 2, exitStatus(err))
+	assert.Contains(t, out, "0 passed, 0 failed, 1 could not run")
+	assert.Contains(t, out, "Nothing was verified")
+
+	// With anything verified, the line is not printed.
+	root = checkWorkspace(t)
+	out, _, err = runVibe("semantics", "check", "--workspace", root)
+	require.NoError(t, err)
+	assert.NotContains(t, out, "Nothing was verified")
+}

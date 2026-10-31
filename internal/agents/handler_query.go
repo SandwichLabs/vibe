@@ -162,7 +162,9 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 	}
 	v, err := h.classifyIn(runCtx, connection, runSQL, params)
 	if err != nil {
-		return "", params, ctx, "", err
+		// A connection that failed to connect cannot be pinned: say why it
+		// failed, not that it "is not attached" (#302).
+		return "", params, ctx, "", withConnectError(err, connectErr)
 	}
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
 		if connectErr != nil {

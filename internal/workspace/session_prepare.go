@@ -36,6 +36,9 @@ type prepareEnv struct {
 	Root string
 	// ForceReadOnly and SkipLocal mirror WithForceReadOnly and WithSkipLocalFiles.
 	ForceReadOnly, SkipLocal bool
+	// PolicyGated mirrors WithPolicyGatedRuns: a type that cannot be attached
+	// read-only is attached as defined under ForceReadOnly.
+	PolicyGated bool
 	// Fail reports a problem with a connection that stays in the session.
 	Fail func(name, msg string)
 	// ClaimHubToken offers the MotherDuck token a connection resolved; it
@@ -144,7 +147,8 @@ func (p ducklakePreparer) Prepare(ctx context.Context, env prepareEnv, rc Resolv
 
 // motherduckPreparer handles the one hub-wide account: a MotherDuck connection
 // cannot be attached read-only (a read-only open leaves it registered but
-// unconnectable), and the workspace holds one token.
+// unconnectable, unless every statement is policy-gated: WithPolicyGatedRuns),
+// and the workspace holds one token.
 type motherduckPreparer struct{ validatePreparer }
 
 func (motherduckPreparer) ReadOnly(rc ResolvedConnection, _ bool) (bool, error) {
@@ -155,7 +159,7 @@ func (motherduckPreparer) ReadOnly(rc ResolvedConnection, _ bool) (bool, error) 
 }
 
 func (p motherduckPreparer) Prepare(ctx context.Context, env prepareEnv, rc ResolvedConnection, def connections.Def, spec *session.Spec) error {
-	if env.ForceReadOnly {
+	if env.ForceReadOnly && !env.PolicyGated {
 		spec.Params["forced_read_only"] = "true"
 	}
 	if err := p.validatePreparer.Prepare(ctx, env, rc, def, spec); err != nil {
