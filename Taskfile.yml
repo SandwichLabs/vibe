@@ -127,7 +127,7 @@ tasks:
     cmds:
       - task: build
       - task: studio:install
-      - task: build:studio:linux
+      - task: '{{if eq OS "darwin"}}build:studio{{else}}build:studio:linux{{end}}'
 
   # The Studio build tasks stamp {{.VERSION}} into wails.json (productVersion, so the macOS bundle
   # says it too) for the length of the build, then restore the file; the tree stays clean.
@@ -151,7 +151,7 @@ tasks:
       - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
 
   install:
-    desc: Versioned build of the vibe CLI and Vibe Studio into ~/go/bin (Linux)
+    desc: Versioned build of the vibe CLI and Vibe Studio into ~/go/bin (Linux; the Studio half is skipped on other platforms)
     cmds:
       - task: install:cli
       - task: install:studio

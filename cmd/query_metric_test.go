@@ -2,13 +2,17 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
@@ -103,4 +107,96 @@ func TestQuery_HostileClonedMetricIsRefused(t *testing.T) {
 	out, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM read_csv('"+outside+"')")
 	require.NoError(t, err)
 	assert.Equal(t, "n\n1\n", out)
+}
+
+func TestExport_SQLExpandsMetricAndRefusesInstall(t *testing.T) {
+	root := metricWorkspace(t)
+	dst := filepath.Join(t.TempDir(), "m.csv")
+	_, stderr, err := runVibe("export", "--workspace", root, "--sql", "SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region", "-o", dst)
+	require.NoError(t, err, stderr)
+	b, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "region,net_revenue\neast,30\nwest,5\n", string(b))
+
+	out, stderr, err := runVibe("export", "--workspace", root, "--format", "csv", "--sql", "SELECT metric('net_revenue') AS total")
+	require.NoError(t, err, stderr)
+	assert.Equal(t, "total\n35\n", out)
+
+	n := filepath.Join(t.TempDir(), "n.csv")
+	_, _, err = runVibe("export", "--workspace", root, "--sql", "INSTALL httpfs", "-o", n)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "INSTALL is not available here")
+	assert.NoFileExists(t, n)
+
+	// A `$` in the destination path is not a placeholder.
+	dollar := filepath.Join(t.TempDir(), "a$b.csv")
+	_, stderr, err = runVibe("export", "--workspace", root, "--sql", "SELECT metric('net_revenue') AS total", "-o", dollar)
+	require.NoError(t, err, stderr)
+	assert.FileExists(t, dollar)
+
+	// A statement that breaks out of COPY (...) is refused.
+	evil := filepath.Join(t.TempDir(), "e.csv")
+	_, _, err = runVibe("export", "--workspace", root, "--sql", "SELECT 1) TO '"+evil+"'; DELETE FROM sales; COPY (SELECT 1", "-o", filepath.Join(t.TempDir(), "e2.csv"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exactly one SELECT")
+	out2, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM sales")
+	require.NoError(t, err)
+	assert.Equal(t, "n\n4\n", out2)
+}
+
+func TestExport_HostileClonedMetricIsRefused(t *testing.T) {
+	root := metricWorkspace(t)
+	outside := filepath.Join(t.TempDir(), "secret.csv")
+	require.NoError(t, os.WriteFile(outside, []byte("region,month,amount\nx,1,99\n"), 0o644))
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "pv_base", Title: "pv", SQL: "SELECT region, month, amount FROM read_csv('" + outside + "')"}))
+	require.NoError(t, ws.Close())
+	seedMetricFile(t, root, "pv", "version: 1\nname: pv\nquery: pv_base\nmeasure: sum(amount)\n")
+	dst := filepath.Join(t.TempDir(), "pv.csv")
+	_, _, err = runVibe("export", "--workspace", root, "--sql", "SELECT metric('pv')", "-o", dst)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "metric 'pv' is refused")
+	assert.NoFileExists(t, dst)
+}
+
+// The second guard reads the expanded statement: a token only the metric's
+// saved query carries is refused, though the typed text is clean.
+func TestPrepareForPerson_SecondGuardSeesExpandedSQL(t *testing.T) {
+	root := metricWorkspace(t)
+	o, err := openWorkspace(context.Background(), root, false, false, "test", io.Discard)
+	require.NoError(t, err)
+	defer o.Close()
+	guard := func(_ context.Context, s string) error {
+		if strings.Contains(s, "WHERE amount") {
+			return errors.New("expanded text refused")
+		}
+		return nil
+	}
+	_, err = hub.PrepareForPerson(context.Background(), o.WS, o.Sess, nil, hub.PersonRun{SQL: "SELECT metric('net_revenue')", Guard: guard})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expanded text refused")
+	_, err = hub.PrepareForPerson(context.Background(), o.WS, o.Sess, nil, hub.PersonRun{SQL: "SELECT 1", Guard: guard})
+	require.NoError(t, err)
+}
+
+// The TUI REPL's prepare step expands metric() and keeps the CLI's guard.
+func TestTUIPrepare_ExpandsMetricAndGuards(t *testing.T) {
+	root := metricWorkspace(t)
+	o, err := openWorkspace(context.Background(), root, false, false, "test", io.Discard)
+	require.NoError(t, err)
+	defer o.Close()
+	prep := tuiPrepare(o, false)
+	text, params, err := prep(context.Background(), "SELECT metric('net_revenue') AS total")
+	require.NoError(t, err)
+	assert.NotContains(t, text, "metric(")
+	assert.Contains(t, params, "min")
+	rs, err := o.Eng.Execute(context.Background(), text, params)
+	require.NoError(t, err)
+	assert.EqualValues(t, 35, rs.Rows[0][0])
+
+	_, _, err = prep(context.Background(), "INSTALL httpfs")
+	require.Error(t, err)
+	_, _, err = prep(context.Background(), "SELECT * FROM metric('nope')")
+	require.Error(t, err)
 }

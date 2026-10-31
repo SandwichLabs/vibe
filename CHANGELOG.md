@@ -4,18 +4,25 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
+
+### Changed
+
+- The Wails CLI pin in CI and release is now v2.17.0, matching `go.mod`, so `wails dev` and `wails build` no longer rewrite `go.mod` (#270).
+- Dependabot no longer proposes minor or major `duckdb-go` bumps (they change the DuckDB engine version); engine upgrades are hand-run. A new workflow regenerates `THIRD_PARTY_NOTICES.md` on Dependabot dependency PRs, and the CI notices check says to run `task notices` (#293). CI fails when the Wails CLI pin and `go.mod` disagree.
+- The `go-sql-sprintf-ident` ast-grep rule is now in `tools/ast-grep/rules/` at warning level (a review list of `fmt.Sprintf` SQL, not a failure), and the importer's last hand-quoted sequence name uses `QuoteLiteral`.
+
+### Fixed
+
+- `metric()` now works in a query export (the Query Explorer's export and `vibe export --sql`) and in the terminal UI's REPL, which used to fail with DuckDB's unknown-function error. An export also gets the editor's guard it used to skip (`INSTALL`, `LOAD`, secrets are refused with the editor's message). Every person-facing run path now prepares SQL in one place, `hub.PrepareForPerson` (#287). A file export now binds `$name` placeholders as a run does, so a `$word` inside exported text must be a parameter, as in the Query Explorer.
+- `task build:all` builds the macOS Studio app on macOS instead of always the Linux one.
+
 ### Security
 
 - **The agent's `create_table` and `add_column` take literal defaults only (#21, #67).** A column type could carry `DEFAULT chr(39)||chr(120)`, `DEFAULT concat(...)` or `CHECK (...)`, expressions DuckDB would evaluate on every insert. The agent's column type may now hold a type, `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `REFERENCES t(col)` and a `DEFAULT` that is a number, a single-quoted string (`'it''s'`), `TRUE`, `FALSE`, `NULL`, `CURRENT_TIMESTAMP` or `CURRENT_DATE`. `CHECK`, generated columns (`AS (...)`, `GENERATED`) and every other default are refused with a message listing what is allowed. Studio's table designer and `vibe` for people are unchanged. This applies over MCP too.
 - **Datasheet edits no longer trust the column type from the database's catalog (#21).** Insert, update and delete in the datasheet cast values with `CAST(? AS <type>)`, taking the type text from the attached database. A hostile database could return a type that is not just a type. The text is now checked against a small grammar (DECIMAL(10,2), `TIMESTAMP WITH TIME ZONE`, `INTEGER[]`, `STRUCT(...)`, `MAP(...)`, `UNION(...)`, enums with quoted labels all pass), and anything else is cast as `VARCHAR`.
-
-### Changed
-
-- The `go-sql-sprintf-ident` ast-grep rule is now in `tools/ast-grep/rules/` at warning level (a review list of `fmt.Sprintf` SQL, not a failure), and the importer's last hand-quoted sequence name uses `QuoteLiteral`.
-
-### Added
-
-- Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
 
 ## [0.5.0] - 2026-10-29
 

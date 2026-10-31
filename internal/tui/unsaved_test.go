@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
@@ -116,4 +117,43 @@ func TestExecuteREPLQuery_RefusesWhatVibeManages(t *testing.T) {
 	ro.readOnly = true
 	result, _ = ro.executeREPLQuery("COPY t TO '/tmp/vibe-should-not-exist.csv'")().(replResultMsg)
 	assert.Contains(t, result.output, "--read-only")
+}
+
+// The REPL runs what WithPrepare returns (metric() expanded by cmd), with its
+// parameter values, and shows a refusal from it without running anything.
+func TestExecuteREPLQuery_RunsThePreparedStatement(t *testing.T) {
+	app, db := newRealDuckDBApp(t)
+	var seenCtx context.Context
+	app.prepare = func(ctx context.Context, text string) (string, map[string]any, error) {
+		seenCtx = ctx
+		if text == "refuse" {
+			return "", nil, errors.New("metric 'x' is refused")
+		}
+		return "INSERT INTO t VALUES ($v)", map[string]any{"v": 7}, nil
+	}
+	type ctxKey struct{}
+	app.ctx = context.WithValue(context.Background(), ctxKey{}, "k")
+
+	result, ok := app.executeREPLQuery("SELECT metric('x')")().(replResultMsg)
+	require.True(t, ok)
+	assert.True(t, result.wrote)
+	assert.Equal(t, "k", seenCtx.Value(ctxKey{}))
+	assert.Equal(t, 1, rowCount(t, db))
+
+	result, _ = app.executeREPLQuery("refuse")().(replResultMsg)
+	assert.Contains(t, result.output, "is refused")
+	assert.Equal(t, 1, rowCount(t, db))
+}
+
+// A prepared statement with parameters is still classified as the read it is
+// (the classifier gets the values), so it is not flagged as a write.
+func TestExecuteREPLQuery_PreparedReadWithParamsIsNotAWrite(t *testing.T) {
+	app, _ := newRealDuckDBApp(t)
+	app.prepare = func(context.Context, string) (string, map[string]any, error) {
+		return "SELECT range AS n FROM range(0, 5000) WHERE range >= $min", map[string]any{"min": 0}, nil
+	}
+	result, ok := app.executeREPLQuery("SELECT metric('x')")().(replResultMsg)
+	require.True(t, ok)
+	assert.False(t, result.wrote)
+	assert.NotContains(t, result.output, "Error")
 }
