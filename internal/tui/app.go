@@ -112,7 +112,8 @@ type PrepareFunc func(ctx context.Context, sql string) (string, map[string]any, 
 // typed.
 func WithPrepare(f PrepareFunc) Option { return func(a *App) { a.prepare = f } }
 
-// WithContext sets the context the REPL's queries run under (the default is
+// WithContext sets the context the REPL's queries, the table and notebook
+// views' reads and the catalog snapshot run under (the default is
 // context.Background()).
 func WithContext(ctx context.Context) Option { return func(a *App) { a.ctx = ctx } }
 
@@ -156,7 +157,19 @@ func NewApp(ws WorkspaceAccess, eng EngineAccess, logger *slog.Logger, opts ...O
 	for _, o := range opts {
 		o(a)
 	}
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
 	return a
+}
+
+// ctxOrBackground is the App's context; an App built as a literal (tests) may
+// have none.
+func (a *App) ctxOrBackground() context.Context {
+	if a.ctx == nil {
+		return context.Background()
+	}
+	return a.ctx
 }
 
 // LoadData loads the table list and notebook list from the workspace.
@@ -164,8 +177,8 @@ func (a *App) LoadData() {
 	if a.ws == nil {
 		return
 	}
-	a.tables.LoadTables(a.ws.Session())
-	a.notebooks.LoadNotebooks(a.ws.Notebooks())
+	a.tables.LoadTables(a.ctxOrBackground(), a.ws.Session())
+	a.notebooks.LoadNotebooks(a.ctxOrBackground(), a.ws.Notebooks())
 	a.refreshSnapshot()
 }
 
@@ -278,10 +291,10 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.repl, cmd = a.repl.Update(msg)
 	case modeTables:
 		var loadCmd tea.Cmd
-		a.tables, loadCmd = a.tables.Update(msg)
+		a.tables, loadCmd = a.tables.Update(a.ctxOrBackground(), msg)
 		cmd = loadCmd
 	case modeNotebooks:
-		a.notebooks, cmd = a.notebooks.Update(msg, a.ws)
+		a.notebooks, cmd = a.notebooks.Update(a.ctxOrBackground(), msg, a.ws)
 	}
 	return a, cmd
 }
@@ -314,6 +327,7 @@ func (a *App) cycleMode() {
 }
 
 func (a *App) executeREPLQuery(query string) tea.Cmd {
+	width := a.width // read here, on the update loop, not in the command's goroutine
 	return func() tea.Msg {
 		if a.engine == nil {
 			return replResultMsg{output: "-- Error: no engine available"}
@@ -324,10 +338,7 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 				return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
 			}
 		}
-		ctx := a.ctx
-		if ctx == nil {
-			ctx = context.Background()
-		}
+		ctx := a.ctxOrBackground()
 		var params map[string]any
 		if a.prepare != nil {
 			var perr error
@@ -357,7 +368,7 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 		if err != nil {
 			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
 		}
-		return replResultMsg{output: formatResultSet(rs), wrote: !readOnly}
+		return replResultMsg{output: formatResultSet(rs, width), wrote: !readOnly}
 	}
 }
 

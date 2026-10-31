@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/repl"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -225,80 +226,21 @@ func (r REPLModel) OutputContent() string {
 // that happens to return rows.
 const replRowCap = 1000
 
-// formatResultSet formats a query ResultSet as plain, padded text — the TUI
-// is a terminal, so table results are a fixed-width text grid rather than
-// any styled/bordered rendering (lipgloss borders + Width() interact badly
-// with variable-width cell content). Every cell value is run through
-// formatCellValue, which renders NULL/NaN/Inf as visible text and strips
-// control/escape characters so a value can't corrupt the terminal.
-func formatResultSet(rs *engine.ResultSet) string {
+// formatResultSet draws a query ResultSet with the console's duckbox renderer
+// (internal/repl), so the TUI and the console share one formatter and every
+// value passes through engine.TerminalText. At most replRowCap rows are drawn,
+// and since executeREPLQuery may have capped the fetch the count is a lower
+// bound ("1000+ rows");
+// width is the columns available.
+func formatResultSet(rs *engine.ResultSet, width int) string {
 	if rs == nil || len(rs.Columns) == 0 {
 		return "-- OK (no results)"
 	}
-
-	totalRows := len(rs.Rows)
-	rows := rs.Rows
-	truncated := totalRows > replRowCap
-	if truncated {
-		rows = rows[:replRowCap]
-	}
-
-	widths := make([]int, len(rs.Columns))
-	for i, c := range rs.Columns {
-		widths[i] = len(sanitizeForTerminal(c.Name, false))
-	}
-	rowsText := make([][]string, len(rows))
-	for ri, row := range rows {
-		vals := make([]string, len(rs.Columns))
-		for i := range rs.Columns {
-			v := ""
-			if i < len(row) {
-				v = formatCellValue(row[i])
-			}
-			vals[i] = v
-			if len(v) > widths[i] {
-				widths[i] = len(v)
-			}
-		}
-		rowsText[ri] = vals
-	}
-
 	var b strings.Builder
-	writeRow := func(vals []string) {
-		parts := make([]string, len(vals))
-		for i, v := range vals {
-			parts[i] = padRight(v, widths[i])
-		}
-		b.WriteString(strings.Join(parts, "  "))
-		b.WriteString("\n")
+	if err := repl.RenderDuckbox(&b, rs, repl.RenderOptions{Width: width, MaxRows: replRowCap, TotalUnknown: true}); err != nil {
+		return fmt.Sprintf("-- Error: %v", err)
 	}
-
-	colNames := make([]string, len(rs.Columns))
-	for i, c := range rs.Columns {
-		colNames[i] = sanitizeForTerminal(c.Name, false)
-	}
-	writeRow(colNames)
-
-	sepParts := make([]string, len(widths))
-	for i, w := range widths {
-		sepParts[i] = strings.Repeat("-", w)
-	}
-	b.WriteString(strings.Join(sepParts, "  "))
-	b.WriteString("\n")
-
-	for _, vals := range rowsText {
-		writeRow(vals)
-	}
-
-	if truncated {
-		// "at least" because when executeREPLQuery already pushed a LIMIT
-		// down into the SQL, rs.Rows itself was already capped at the
-		// database — totalRows-replRowCap is a floor on how much more
-		// exists, not necessarily the exact remainder.
-		b.WriteString(fmt.Sprintf("… at least %d more row(s) not shown (capped at %d)\n", totalRows-replRowCap, replRowCap))
-	}
-	b.WriteString(fmt.Sprintf("(%d rows)", totalRows))
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // formatCellValue renders one result cell as display text: NULL for a Go
@@ -323,12 +265,4 @@ func formatCellValue(v any) string {
 		return formatCellValue(float64(n))
 	}
 	return sanitizeForTerminal(engine.CellText(v, "NULL"), false)
-}
-
-// padRight pads s with spaces to width n (no-op if s is already >= n runes).
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
 }

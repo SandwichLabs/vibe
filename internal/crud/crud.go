@@ -191,9 +191,11 @@ func DeleteRowTx(tx TxExecer, colTypes map[string]string, table, pkCol string, p
 
 // castType returns the DuckDB cast target for a column, defaulting to VARCHAR
 // for unknown columns so the statement still parses (an unknown column will
-// fail at the INSERT/UPDATE with a clear error).
+// fail at the INSERT/UPDATE with a clear error). The type comes from the
+// database's catalog, which may be hostile, so a type SafeCastType refuses is
+// treated like an unknown one and never reaches the SQL text.
 func castType(colTypes map[string]string, col string) string {
-	if t, ok := colTypes[col]; ok && t != "" {
+	if t, ok := colTypes[col]; ok && SafeCastType(t) {
 		return t
 	}
 	return "VARCHAR"

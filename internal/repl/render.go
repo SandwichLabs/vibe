@@ -197,3 +197,42 @@ func transposeIf(g *grid, st settings) *grid {
 func renderError(w io.Writer, label, msg string, p palette) {
 	fmt.Fprintf(w, "%s %s\n", p.red(label), strings.TrimRight(safeMultiline(msg), "\n"))
 }
+
+// RenderOptions are what a surface outside the console (the TUI REPL) sets
+// when it draws a result with the console's duckbox renderer.
+type RenderOptions struct {
+	Width   int // columns available; <= 0 means 80
+	MaxRows int // most rows ever drawn; <= 0 means every row
+	// TotalUnknown says the rows rs holds are only a lower bound on the result
+	// (the caller capped the fetch): a truncated footer reads "MaxRows+ rows".
+	TotalUnknown bool
+}
+
+// RenderDuckbox draws rs as the console's duckbox table, uncoloured: the one
+// formatter every surface shares, with every value through engine.TerminalText
+// (the console's safe). When rs holds more than MaxRows rows only the first
+// MaxRows are drawn and the footer reports the count of rows rs held. A result
+// with no columns draws nothing.
+func RenderDuckbox(w io.Writer, rs *engine.ResultSet, o RenderOptions) error {
+	if rs == nil || len(rs.Columns) == 0 {
+		return nil
+	}
+	st := defaultSettings()
+	st.maxrows = 0
+	total := len(rs.Rows)
+	if o.MaxRows > 0 && total > o.MaxRows {
+		trimmed := *rs
+		trimmed.Rows = rs.Rows[:o.MaxRows]
+		rs = &trimmed
+		st.maxrows = o.MaxRows
+	}
+	width := o.Width
+	if width <= 0 {
+		width = 80
+	}
+	g := buildGrid(rs, total, st, true, true)
+	if o.TotalUnknown && st.maxrows > 0 && len(g.footer) > 0 && len(rs.Rows) < total {
+		g.footer[0] = fmt.Sprintf("%d+ rows", len(rs.Rows))
+	}
+	return renderBox(context.Background(), w, g, renderOpts{st: st, width: width})
+}

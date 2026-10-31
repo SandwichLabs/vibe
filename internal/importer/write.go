@@ -120,7 +120,7 @@ func createAndInsert(ctx context.Context, tx *sql.Tx, table string, target []tar
 	for _, tc := range target {
 		def := fmt.Sprintf("%s %s", session.QuoteIdent(tc.Name), tc.Friendly.DuckDB())
 		if tc.Name == key && keyIsInteger {
-			def += fmt.Sprintf(" DEFAULT nextval('%s')", engine.AutoNumberSequence(table, key))
+			def += " DEFAULT nextval(" + session.QuoteLiteral(engine.AutoNumberSequence(table, key)) + ")"
 		}
 		if tc.Name == key {
 			def += " PRIMARY KEY"
