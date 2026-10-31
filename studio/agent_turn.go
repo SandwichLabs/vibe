@@ -60,6 +60,7 @@ func (a *App) CancelAgentQuery(turnID string) {
 // (a long query) is interrupted instead of making the close wait behind it.
 func (a *App) cancelAgentWork() {
 	a.chat.cancelTurn("")
+	a.runs.cancelAll()
 	if a.approvals != nil {
 		a.approvals.CancelAll()
 	}

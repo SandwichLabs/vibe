@@ -9,7 +9,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { App } from '../lib/bindings'
 import { connectionList, defaultConnectionName, refreshConnections, openPromptFor, startConnectionTracking } from './useConnections'
-import { errorText, isConflict } from '../lib/errors'
+import { errorText, isCancelled, isConflict } from '../lib/errors'
 import { formatCell } from '../lib/formatCell'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { register as registerPendingSave } from './usePendingSaves'
@@ -39,6 +39,8 @@ export function useQueryEditor() {
   const result = shallowRef<QueryResult | null>(null)
   const loading = ref(true)
   const running = ref(false)
+  // Set when the last run was stopped with Stop: a neutral line, not an error.
+  const cancelled = ref(false)
   const error = ref('')
   const showSaveModal = ref(false)
   const saveTitle = ref('')
@@ -117,12 +119,13 @@ export function useQueryEditor() {
   }
 
   async function runQuery() {
-    if (!sqlText.value.trim()) return
+    if (!sqlText.value.trim() || running.value) return
     // A saved query's declared $name parameters: checked here, bound in Go.
     const pv = qp.payload()
     if (!pv.ok) { error.value = pv.error; result.value = null; return }
     const bound = qp.hasParams.value && selectedId.value ? { queryId: selectedId.value, params: pv.params } : {}
     running.value = true
+    cancelled.value = false
     error.value = ''
     result.value = null
     try {
@@ -130,6 +133,14 @@ export function useQueryEditor() {
       result.value = await App.RunQuery({ sql: sqlText.value, connection: conn.value, tabId, ...bound })
       lastRunOk.value = true
     } catch (e: any) {
+      if (isCancelled(e)) {
+        // Neutral: no Complete or Error badge for a run that never finished.
+        cancelled.value = true
+        lastRunOk.value = null
+        lastRunAt.value = new Date().toLocaleTimeString()
+        running.value = false
+        return
+      }
       error.value = errorText(e)
       lastRunOk.value = false
       // A connection the statement names may need a sign-in or an extension: say
@@ -140,6 +151,11 @@ export function useQueryEditor() {
     }
     lastRunAt.value = new Date().toLocaleTimeString()
     running.value = false
+  }
+
+  /** Stop the run in flight (this tab's); the run then ends with the cancelled error. */
+  function stopQuery() {
+    if (running.value) void App.CancelRun(`query:${tabId}`)
   }
 
   async function saveQuery() {
@@ -324,13 +340,17 @@ export function useQueryEditor() {
       unsubs.push(EventsOn('workspace:changed-on-disk', onDiskChange))
     }
   })
-  onUnmounted(() => { for (const off of unsubs) off() })
+  // Leaving the view mid-run stops it: the next mount has a new tabId, so nothing could cancel it later.
+  onUnmounted(() => {
+    for (const off of unsubs) off()
+    if (running.value) void App.CancelRun(`query:${tabId}`)
+  })
 
   return {
-    qp, queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
+    qp, queries, selectedId, sqlText, result, loading, running, cancelled, error, showSaveModal, saveTitle, errorMessage,
     statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy: cf.busy,
     lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
-    selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
+    selectQuery, runQuery, stopQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
     confirmDeleteQuery, newQuery,
   }
 }
