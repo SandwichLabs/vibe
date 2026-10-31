@@ -151,8 +151,8 @@ type (
 // workspace and session it was built for. It takes the lifecycle lock only to
 // read them; the handler then takes a.mu.RLock for each statement it runs (so
 // a workspace close waits for the statement in flight, not for the whole run).
-// There is no cancel from the UI yet (the Semantics view adds one); the
-// per-statement and Try it deadlines bound a run until then.
+// A run is registered under its kind (runKey*), so CancelRun stops it; the
+// per-statement and Try it deadlines still bound one the person leaves.
 func (a *App) definitionRunner() (*agentToolHandler, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -171,9 +171,14 @@ func (a *App) RunAssertions(kind, name string) ([]AssertionRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx, end := a.runs.begin(a.ctxOrBackground(), runKeyAssertions)
+	defer end()
 	before := session.StatusSnapshot(h.sess)
-	results, err := workspace.RunAssertions(a.ctxOrBackground(), h.ws, kind, name, workspace.ReadOnlyRunFunc(h), time.Now())
+	results, err := workspace.RunAssertions(ctx, h.ws, kind, name, workspace.ReadOnlyRunFunc(h), time.Now())
 	a.afterReadOnlyRun(h.sess, before)
+	if ctx.Err() != nil {
+		return nil, errRunCancelled // a stopped run's remaining checks are errors, not results
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -188,11 +193,13 @@ func (a *App) ProfileJoin(name string) (*JoinProfile, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx, end := a.runs.begin(a.ctxOrBackground(), runKeyProfile)
+	defer end()
 	before := session.StatusSnapshot(h.sess)
-	p, err := workspace.ProfileJoin(a.ctxOrBackground(), h.ws, name, workspace.ReadOnlyRunFunc(h), time.Now())
+	p, err := workspace.ProfileJoin(ctx, h.ws, name, workspace.ReadOnlyRunFunc(h), time.Now())
 	a.afterReadOnlyRun(h.sess, before)
 	if err != nil {
-		return nil, conflictErr(err)
+		return nil, conflictErr(cancelledOr(ctx, err))
 	}
 	a.emitEvent("data:changed")
 	a.recheckGrants()
@@ -207,18 +214,20 @@ func (a *App) RunMetric(name string, dims []string) (*QueryResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), tryItTimeout)
+	runCtx, end := a.runs.begin(a.ctxOrBackground(), runKeyMetric)
+	defer end()
+	ctx, cancel := context.WithTimeout(runCtx, tryItTimeout)
 	defer cancel()
 	sqlStr, connection, err := workspace.MetricQuery(ctx, h.ws, name, dims)
 	if err != nil {
-		return nil, err
+		return nil, cancelledOr(runCtx, err)
 	}
 	before := session.StatusSnapshot(h.sess)
 	start := time.Now()
 	rs, truncated, err := h.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, tryItRowCap)
 	a.afterReadOnlyRun(h.sess, before)
 	if err != nil {
-		return nil, a.explainReadOnlyDenial(err)
+		return nil, cancelledOr(runCtx, a.explainReadOnlyDenial(err))
 	}
 	return tryItResult(rs, truncated, time.Since(start))
 }

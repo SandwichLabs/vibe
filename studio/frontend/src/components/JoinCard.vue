@@ -44,9 +44,9 @@ const disagrees = computed(() => !!measured.value && measured.value.verdict !== 
     </div>
     <section class="col definition-card__section">
       <div class="row" style="gap: var(--sh-space-3);">
-        <button type="button" class="btn btn-sm" :disabled="runs.busy || readOnly" :title="readOnly ? 'This workspace is read-only: the result cannot be written to the join file.' : 'Count the rows of both entities and record the result in the join file'" data-testid="join-profile" @click="runs.profileJoin(detail.join!.name)">Profile</button>
+        <button type="button" class="btn btn-sm" :disabled="runs.busy || readOnly" :title="readOnly ? 'This workspace is read-only: the result cannot be written to the join file.' : 'Count the rows of both entities and record the result in the join file'" data-run-trigger data-testid="join-profile" @click="runs.profileJoin(detail.join!.name)">Profile</button>
       </div>
-      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :error="runs.error" :conflict="runs.conflict ? `The join file changed while the profile ran, so nothing was written: ${runs.conflict}. Profile again.` : ''" what="Profiling" />
+      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :cancelled="runs.cancelled" @stop="runs.stop" :error="runs.error" :conflict="runs.conflict ? `The join file changed while the profile ran, so nothing was written: ${runs.conflict}. Profile again.` : ''" what="Profiling" />
     </section>
     <SourceText :text="detail.text" :path="`semantics/joins/${detail.join.name}.yaml`" />
   </div>

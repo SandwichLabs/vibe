@@ -56,12 +56,12 @@ function describeAssertion(a: SemanticAssertion) {
         <label v-for="d in detail.metric.dimensions ?? []" :key="d" class="row" style="gap: 6px; align-items: center;">
           <input v-model="dims" type="checkbox" :value="d" :data-testid="`try-dim-${d}`"> <span>{{ d }}</span>
         </label>
-        <button type="button" class="btn btn-primary btn-sm" :disabled="runs.busy" data-testid="try-run" @click="runs.tryMetric(detail.metric!.name, dims)">
+        <button type="button" class="btn btn-primary btn-sm" :disabled="runs.busy" data-run-trigger data-testid="try-run" @click="runs.tryMetric(detail.metric!.name, dims)">
           Run{{ dims.length ? ` by ${dims.join(', ')}` : ' (total)' }}
         </button>
-        <button v-if="detail.metric.assertions?.length" type="button" class="btn btn-sm" :disabled="runs.busy" data-testid="run-assertions" @click="runs.runAssertions('metric', detail.metric!.name)">Run assertions</button>
+        <button v-if="detail.metric.assertions?.length" type="button" class="btn btn-sm" :disabled="runs.busy" data-run-trigger data-testid="run-assertions" @click="runs.runAssertions('metric', detail.metric!.name)">Run assertions</button>
       </div>
-      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :error="runs.error" :conflict="runs.conflict" what="Running" />
+      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :cancelled="runs.cancelled" @stop="runs.stop" :error="runs.error" :conflict="runs.conflict" what="Running" />
       <ResultGrid v-if="runs.tried" :result="runs.tried" />
       <AssertionResults v-if="runs.results.length" :rows="runs.results" />
     </section>

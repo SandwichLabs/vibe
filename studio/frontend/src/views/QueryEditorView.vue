@@ -7,7 +7,7 @@
 // and the result grid. The subhead exposes Save, CSV/Parquet export (DuckDB
 // COPY via ExportQueryResults), an Ask-agent jump (opens the W0 panel), and
 // Run. All state and actions live in useQueryEditor.
-import { ref } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import ConnectionSelect from '../components/ConnectionSelect.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
@@ -20,12 +20,23 @@ import { useQueryEditor } from '../composables/useQueryEditor'
 import { cellClass, isNumericType } from '../lib/formatCell'
 
 const {
-  qp, queries, selectedId, sqlText, result, loading, running, error, showSaveModal, saveTitle, errorMessage,
+  qp, queries, selectedId, sqlText, result, loading, running, cancelled, error, showSaveModal, saveTitle, errorMessage,
   statusMessage, showConfirmDelete, pendingDeleteId, hoveredId, conflict, conflictBusy,
   lastRunAt, lastRunOk, ranOn, conn, dirty, currentTitle, truncated, formattedRows,
-  selectQuery, runQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
+  selectQuery, runQuery, stopQuery, saveQuery, resolveConflict, exportResults, askAgent, deleteQuery,
   confirmDeleteQuery, newQuery,
 } = useQueryEditor()
+
+// Stop disappears when the run ends; hand its keyboard focus to Run so it is not lost.
+const runBtn = ref<HTMLButtonElement | null>(null)
+let stopHadFocus = false
+function onStop() { stopHadFocus = true; stopQuery() }
+watch(running, async (r) => {
+  if (r || !stopHadFocus) return
+  stopHadFocus = false
+  await nextTick()
+  runBtn.value?.focus()
+})
 
 // The output area has two tabs (docs/reference/console.md): the result Grid and
 // the Console (a terminal on the same connection). The console keeps its
@@ -67,7 +78,10 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
       <button class="btn btn-ghost btn-sm" data-testid="ask-agent" @click="askAgent">
         <Icon name="sparkle" :size="14" /> Ask agent
       </button>
-      <button @click="runQuery" :disabled="running" class="btn btn-primary btn-sm" data-testid="run-query">
+      <button v-if="running" type="button" class="btn btn-sm" data-testid="stop-query" aria-label="Stop the running query" @click="onStop">
+        <Icon name="x" :size="14" /> Stop
+      </button>
+      <button ref="runBtn" @click="runQuery" :disabled="running" class="btn btn-primary btn-sm" data-testid="run-query">
         <Icon name="play" :size="14" /> {{ running ? 'Running…' : `Run · ${shortcutLabel('Enter')}` }}
       </button>
       </div>
@@ -150,6 +164,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
         <div style="flex: 1; overflow: auto; min-height: 0;">
           <div v-if="error" class="sql-error" style="padding: 16px; font-size: 13px; font-weight: 600; color: var(--sh-error);">{{ error }}</div>
           <div v-else-if="running" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);">Running query…</div>
+          <div v-else-if="cancelled" class="sh-mono" style="padding: 16px; color: var(--sh-graphite);" role="status" data-testid="query-cancelled">Query cancelled.</div>
           <div v-else-if="result" style="overflow: auto; height: 100%;">
             <div v-if="truncated" class="result-bar" data-testid="query-row-cap">
               Showing the first {{ result.row_count.toLocaleString() }} of {{ result.total_rows.toLocaleString() }} rows. Export CSV or Parquet to get all of them.

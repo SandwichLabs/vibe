@@ -50,3 +50,12 @@ export function errorText(e: unknown): string {
   }
   return message
 }
+
+// CANCELLED is the fixed text studio/run_cancel.go returns for a run the person
+// stopped (Stop in the Query Explorer or the Semantics view).
+const CANCELLED = 'cancelled'
+
+/** isCancelled reports whether a thrown binding error is a run the person stopped: shown as a neutral line, not an error. */
+export function isCancelled(e: unknown): boolean {
+  return errorText(e).toLowerCase() === CANCELLED
+}

@@ -108,6 +108,43 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     expect(wrapper.find('[data-testid="run-engine"]').text()).toContain('ran on prod_pg')
   })
 
+  it('Stop cancels the run of this tab and shows a neutral cancelled line, not an error', async () => {
+    const app = makeApp() as any
+    let reject!: (e: Error) => void
+    app.RunQuery.mockImplementationOnce(() => new Promise((_, rej) => { reject = rej }))
+    app.CancelRun = vi.fn(async () => { reject(new Error('cancelled')) })
+    const wrapper = await mountView()
+    expect(wrapper.find('[data-testid="stop-query"]').exists()).toBe(false)
+    await typeSql('SELECT count(*) FROM range(1e12::BIGINT)')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    const stop = wrapper.find('[data-testid="stop-query"]')
+    expect(stop.exists()).toBe(true)
+    expect(stop.attributes('aria-label')).toBeTruthy()
+    const tabId = app.RunQuery.mock.calls[0][0].tabId
+    await stop.trigger('click')
+    await flushPromises()
+    expect(app.CancelRun).toHaveBeenCalledWith(`query:${tabId}`)
+    expect(wrapper.find('[data-testid="query-cancelled"]').exists()).toBe(true)
+    expect(wrapper.find('.sql-error').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="run-badge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stop-query"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="run-query"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('cancels an in-flight run when the view is left', async () => {
+    const app = makeApp() as any
+    app.RunQuery.mockImplementationOnce(() => new Promise(() => {}))
+    app.CancelRun = vi.fn(async () => {})
+    const wrapper = await mountView()
+    await typeSql('SELECT 1')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    const tabId = app.RunQuery.mock.calls[0][0].tabId
+    wrapper.unmount()
+    expect(app.CancelRun).toHaveBeenCalledWith(`query:${tabId}`)
+  })
+
   it('says a statement ran across the connections its qualified names pulled in', async () => {
     makeApp()
     const wrapper = await mountView()

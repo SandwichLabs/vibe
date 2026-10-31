@@ -84,8 +84,9 @@ func humanDuration(d time.Duration) string {
 type RunQueryRequest struct {
 	SQL        string `json:"sql"`
 	Connection string `json:"connection"`
-	// TabID names the editor tab; it only labels the run (the choice is never
-	// session-global).
+	// TabID names the editor tab. It keys the run for CancelRun ("query:<tabId>"),
+	// and a second run with the same TabID replaces the first; the connection
+	// choice is never session-global.
 	TabID string `json:"tabId"`
 	// QueryID names the saved query the editor has open, and Params the values
 	// of its declared $name parameters (typed JSON, as the inputs hold them). A
@@ -109,11 +110,10 @@ func validateRunRequest(req RunQueryRequest) error {
 // parameter values bound, then hub.PrepareForPerson (the editor's guard on the
 // typed text, metric() calls expanded with each saved query behind one held to a
 // plain SELECT, the guard again on the expanded text). The caller holds a.mu.
-func (a *App) prepareRun(req RunQueryRequest) (string, map[string]any, error) {
+func (a *App) prepareRun(ctx context.Context, req RunQueryRequest) (string, map[string]any, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return "", nil, err
 	}
-	ctx := a.ctxOrBackground()
 	params, declared, err := a.bindRunParams(req)
 	if err != nil {
 		return "", nil, err
@@ -127,21 +127,29 @@ func (a *App) prepareRun(req RunQueryRequest) (string, map[string]any, error) {
 	return exp.SQL, exp.Params, nil
 }
 
-// RunQuery runs the query editor's statement on the chosen connection.
+// RunQuery runs the query editor's statement on the chosen connection. The run
+// is registered under the tab's key, so CancelRun("query:<tabId>") stops it.
 func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	if err := validateRunRequest(req); err != nil {
 		return nil, err
 	}
+	ctx, end := a.runs.begin(a.ctxOrBackground(), queryRunKey(req.TabID))
+	defer end()
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+	res, err := a.runQuery(ctx, req)
+	return res, cancelledOr(ctx, err)
+}
 
-	sqlStr, params, err := a.prepareRun(req)
+// runQuery is RunQuery under ctx; the caller holds a.mu.
+func (a *App) runQuery(ctx context.Context, req RunQueryRequest) (*QueryResult, error) {
+	sqlStr, params, err := a.prepareRun(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	before := session.StatusSnapshot(a.sess)
 	start := time.Now()
-	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, params, queryGridRowCap)
+	rs, total, err := a.engine.ExecuteCappedIn(ctx, req.Connection, sqlStr, params, queryGridRowCap)
 	a.afterRun(a.sess, before, sqlStr)
 	duration := time.Since(start)
 

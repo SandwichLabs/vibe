@@ -6,6 +6,7 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Added
 
+- A Stop button for a running query in the Query Explorer, and for Try it, Run assertions and Profile in the Semantics view. Stop interrupts DuckDB mid-statement (about 10-40 ms in testing) and the run ends as a neutral "cancelled" line, not an error. New `CancelRun` binding (#5, #287).
 - `vibe repl` is no longer hidden: the data console (Studio's Console tab) on a real terminal, with the same engine, gates, dot commands and history. `docs/reference/console.md` describes it (#262).
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
 
