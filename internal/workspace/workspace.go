@@ -290,12 +290,18 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 }
 
 // observe forwards a store's own write to every live watcher.
-func (w *workspace) observe(path, hash string) {
+func (w *workspace) observe(path, hash string) func() {
 	w.wmu.Lock()
 	ws := append([]*Watcher(nil), w.watchers...)
 	w.wmu.Unlock()
+	dones := make([]func(), 0, len(ws))
 	for _, x := range ws {
-		x.noteWrite(path, hash)
+		dones = append(dones, x.noteWrite(path, hash))
+	}
+	return func() {
+		for _, d := range dones {
+			d()
+		}
 	}
 }
 

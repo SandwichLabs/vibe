@@ -233,7 +233,7 @@ func TestFileStore_RejectsBadInput(t *testing.T) {
 
 func TestFileStore_ObserverSeesWrites(t *testing.T) {
 	var path, hash string
-	s := NewFileStore(t.TempDir(), WithObserver(func(p, h string) { path, hash = p, h }))
+	s := NewFileStore(t.TempDir(), WithObserver(func(p, h string) func() { path, hash = p, h; return nil }))
 	q := &Query{Title: "Obs", SQL: "x"}
 	require.NoError(t, s.Create(context.Background(), q))
 	assert.True(t, strings.HasSuffix(path, "obs.sql"))

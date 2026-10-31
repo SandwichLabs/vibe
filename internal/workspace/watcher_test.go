@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/filestore"
 	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -235,4 +238,92 @@ func TestWatcher_RecreatedNotebooksDirIsWatchedAgain(t *testing.T) {
 		got[c.ID] = c.Op
 	}
 	assert.Equal(t, OpCreated, got["b"])
+}
+
+// A store write that lands between flush's hash and its lock must not turn
+// into a change event for the store's own write.
+func TestWatcher_OwnWriteDuringFlushHashIsNotReported(t *testing.T) {
+	ws, root := newWorkspace(t)
+	ctx := context.Background()
+	nb, err := ws.Notebooks().Create(ctx, "Race")
+	require.NoError(t, err)
+	w := startWatcher(t, ws)
+
+	abs := filepath.Join(root, "notebooks", nb.ID+".vnb")
+	var once sync.Once
+	var fired atomic.Bool
+	w.mu.Lock()
+	w.afterHash = func(p string) {
+		if p != abs {
+			return
+		}
+		once.Do(func() {
+			// The hash above saw the old file; the store now saves and announces.
+			nb.Title = "Race, saved mid-flush"
+			_, _, serr := ws.Notebooks().Save(ctx, nb)
+			assert.NoError(t, serr)
+			fired.Store(true)
+		})
+	}
+	w.mu.Unlock()
+
+	w.queue(abs)
+	w.flush()
+	w.flush()
+	assert.True(t, fired.Load(), "hook did not run")
+	expectQuiet(t, w)
+}
+
+// The stores announce before they rename. A whole flush can run in between;
+// it must leave the path alone until the write has landed.
+func TestWatcher_FlushBetweenAnnounceAndRenameIsNotReported(t *testing.T) {
+	ws, root := newWorkspace(t)
+	w := startWatcher(t, ws)
+	dir := filepath.Join(root, "artifacts", "mine")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	abs := filepath.Join(dir, "artifact.yaml")
+	data := []byte(artifactManifest)
+
+	done := w.noteWrite(abs, filestore.HashBytes(data)) // announce
+	w.queue(abs)                                        // the new folder's event queued it
+	assert.True(t, w.flush(), "the in-flight path is left for later")
+	require.NoError(t, os.WriteFile(abs, data, 0o644)) // the rename
+	done()
+	done() // idempotent
+	expectQuiet(t, w)
+}
+
+func TestWatcher_FlushBetweenAnnounceAndRemoveIsNotReported(t *testing.T) {
+	ws, root := newWorkspace(t)
+	nb, err := ws.Notebooks().Create(context.Background(), "G")
+	require.NoError(t, err)
+	w := startWatcher(t, ws)
+	abs := filepath.Join(root, "notebooks", nb.ID+".vnb")
+
+	done := w.noteWrite(abs, "")
+	w.queue(abs)
+	assert.True(t, w.flush())
+	require.NoError(t, os.Remove(abs))
+	done()
+	expectQuiet(t, w)
+}
+
+// A path left in flight is flushed again by the timer once the write lands,
+// without a further file event.
+func TestWatcher_RequeuedPathIsFlushedByTheTimer(t *testing.T) {
+	ws, root := newWorkspace(t)
+	w := startWatcher(t, ws)
+	abs := filepath.Join(root, "queries", "late.sql")
+	require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+
+	done := w.noteWrite(abs, filestore.HashBytes([]byte("select 1\n")))
+	require.NoError(t, os.WriteFile(abs, []byte("select 2\n"), 0o644)) // an outside edit
+	time.Sleep(200 * time.Millisecond)                                 // several debounce rounds, all deferred
+	select {
+	case c := <-w.Events():
+		t.Fatalf("reported while in flight: %+v", c)
+	default:
+	}
+	done()
+	assert.Equal(t, Change{Kind: KindQuery, Op: OpChanged, ID: "late", Path: "queries/late.sql"}, next(t, w))
 }

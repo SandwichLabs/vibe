@@ -305,7 +305,7 @@ func TestFileStore_DeleteKeepsForeignFiles(t *testing.T) {
 func TestFileStore_ObserverSeesBothWrites(t *testing.T) {
 	root := t.TempDir()
 	var paths []string
-	s := NewFileStore(root, WithObserver(func(p, h string) { paths = append(paths, filepath.Base(p)+":"+h[:0]) }))
+	s := NewFileStore(root, WithObserver(func(p, h string) func() { paths = append(paths, filepath.Base(p)+":"+h[:0]); return nil }))
 	putFresh(t, s, "sales")
 	assert.Equal(t, []string{ViewFile + ":", ManifestFile + ":"}, paths, "view first, then manifest")
 }
@@ -380,7 +380,7 @@ func TestFileStore_ConflictingPutLeavesThePairAsItWas(t *testing.T) {
 	ctx := context.Background()
 	var inject func()
 	viewWrites := 0
-	s := NewFileStore(root, WithObserver(func(p, _ string) {
+	s := NewFileStore(root, WithObserver(func(p, _ string) func() {
 		if filepath.Base(p) == ViewFile {
 			viewWrites++
 		}
@@ -389,6 +389,7 @@ func TestFileStore_ConflictingPutLeavesThePairAsItWas(t *testing.T) {
 			inject = nil
 			f()
 		}
+		return nil
 	}))
 	putFresh(t, s, "sales")
 	oldM, _ := os.ReadFile(fsPath(root, "sales", ManifestFile))
@@ -496,12 +497,13 @@ func TestFileStore_DeleteRemovesEachFileOnlyIfUnchanged(t *testing.T) {
 	ctx := context.Background()
 	var s *FileStore
 	armed := false
-	s = NewFileStore(root, WithObserver(func(abs, _ string) {
+	s = NewFileStore(root, WithObserver(func(abs, _ string) func() {
 		// Announced just before the view is removed: an outside writer touches the manifest now.
 		if armed && filepath.Base(abs) == ViewFile {
 			armed = false
 			_ = os.WriteFile(fsPath(root, "sales", ManifestFile), []byte("# outside\n"+goodManifest), 0o644)
 		}
+		return nil
 	}))
 	a := putFresh(t, s, "sales")
 	armed = true

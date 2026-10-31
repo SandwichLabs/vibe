@@ -76,6 +76,11 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 		return nil, err
 	}
 	if err := f(ws); err != nil {
+		if errors.Is(err, workspace.ErrDecisionNotSaved) {
+			// The bridge carries only the fixed error; the cause (a path may
+			// be in it) stays in the log, where a failing test shows it too.
+			a.logger.Error("artifact view decision not saved", "artifact", name, "error", err)
+		}
 		return nil, viewError(err)
 	}
 	// A decision ends the artifact's open tokens at once: a revoke or a deny
