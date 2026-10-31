@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -53,6 +54,12 @@ type ConnectionEngine interface {
 	ExecuteIn(ctx context.Context, connection, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
+// cappedEngine is the optional engine capability of keeping only the first
+// maxRows rows of a run (engine.Manager has it).
+type cappedEngine interface {
+	ExecuteCappedIn(ctx context.Context, connection, sql string, params map[string]any, maxRows int) (*engine.ResultSet, int, error)
+}
+
 // RunReadOnlySQLIn is RunReadOnlySQL with connection (a catalog name; "" is
 // the session default) as the default for unqualified table names. The
 // statement is classified on a connection pinned to that catalog, so the
@@ -75,7 +82,13 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	if maxRows > 0 {
 		trimmed := strings.TrimSuffix(strings.TrimSpace(sqlStr), ";")
 		wrapped := fmt.Sprintf("SELECT * FROM (%s\n) AS _a2ui_limit LIMIT %d", trimmed, maxRows+1)
-		if rs, err = exec(ctx, wrapped, params); err == nil {
+		rs, err = exec(ctx, wrapped, params)
+		if errors.Is(err, engine.ErrResultTooLarge) {
+			// Not a shape the push-down cannot wrap: the unwrapped run would
+			// read the same rows again.
+			return nil, false, err
+		}
+		if err == nil {
 			rs.Rows = dropDuckLakeInternalRows(rs.Rows)
 			if len(rs.Rows) > maxRows {
 				rs.Rows = rs.Rows[:maxRows]
@@ -86,7 +99,16 @@ func (h *Handler) RunReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 		h.logger.Debug("render-time sql binding: LIMIT push-down not supported for this statement shape, falling back to unwrapped execution", "query_sha256", engine.QueryDigest(orig), "query_bytes", len(orig), "wrap_error", engine.ErrorForLog(err))
 	}
 
-	rs, err = exec(ctx, sqlStr, params)
+	// The unwrapped run keeps maxRows+1 rows (one probe row, so truncation is
+	// seen) and neither scans nor counts the rest against a byte budget.
+	if ce, ok := h.engine.(cappedEngine); ok && maxRows > 0 {
+		rs, _, err = ce.ExecuteCappedIn(ctx, connection, sqlStr, params, maxRows+1)
+	} else {
+		rs, err = exec(ctx, sqlStr, params)
+	}
+	if errors.Is(err, engine.ErrResultTooLarge) {
+		return nil, false, err
+	}
 	if err != nil {
 		return nil, false, fmt.Errorf("query execution failed: %w", err)
 	}

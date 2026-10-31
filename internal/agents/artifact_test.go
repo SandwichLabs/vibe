@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
 )
@@ -763,4 +764,46 @@ func TestArtifactQueriesText_KeptQueryIsLabelled(t *testing.T) {
 	got := artifactQueriesText(manifest)
 	assert.Contains(t, got, "-- rows (kept as stored)")
 	assert.Contains(t, got, "-- total\nSELECT 1")
+}
+
+// countingEngine counts the statements that reach the engine.
+type countingEngine struct {
+	EngineAccess
+	n atomic.Int32
+}
+
+func (c *countingEngine) Execute(ctx context.Context, q string, p map[string]any) (*engine.ResultSet, error) {
+	c.n.Add(1)
+	return c.EngineAccess.Execute(ctx, q, p)
+}
+
+func (c *countingEngine) ExecuteCappedIn(ctx context.Context, conn, q string, p map[string]any, n int) (*engine.ResultSet, int, error) {
+	c.n.Add(1)
+	inner, ok := c.EngineAccess.(cappedEngine)
+	if !ok {
+		return nil, 0, fmt.Errorf("engine is not capped")
+	}
+	return inner.ExecuteCappedIn(ctx, conn, q, p, n)
+}
+
+// A result over the byte cap fails while the rows are read, with the fixed
+// sentinel, on the push-down path and without a second (unwrapped) attempt. A
+// normal query is unaffected.
+func TestRunArtifactQuery_ByteCap(t *testing.T) {
+	fx := newArtifactFixture(t, ModeReadOnly)
+	fxw := newArtifactFixture(t, ModeReadWrite)
+	fx.useStore(fxw.store)
+	fxw.mustWrite("fat", map[string]any{"title": "Fat", "queries": []any{rowsQuery("SELECT repeat('x', 1000000) AS s FROM range(100)")}})
+	fxw.mustWrite("slim", map[string]any{"title": "Slim", "queries": []any{rowsQuery("SELECT repeat('x', 1000) AS s FROM range(100)")}})
+
+	ce := &countingEngine{EngineAccess: fx.h.engine}
+	fx.h.engine = ce
+	_, _, err := fx.run("fat", "rows", nil)
+	require.ErrorIs(t, err, engine.ErrResultTooLarge)
+	assert.EqualValues(t, 1, ce.n.Load(), "no second, unwrapped attempt")
+	assert.NotContains(t, err.Error(), "repeat")
+
+	n, _, err := fx.run("slim", "rows", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 100, n)
 }

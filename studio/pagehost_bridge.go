@@ -112,7 +112,11 @@ func (w *pageWindow) handleRun(m *pagehost.Message) {
 		if w.host.logger != nil {
 			w.host.logger.Debug("page query failed", "artifact", w.name, "query", m.Q, "error", engine.ErrorForLog(err))
 		}
-		w.fail(m.ID, pagehost.CodeQuery)
+		code := pagehost.CodeQuery
+		if errors.Is(err, engine.ErrResultTooLarge) {
+			code = pagehost.CodeTooLarge
+		}
+		w.fail(m.ID, code)
 		return
 	}
 	if !w.stillAllowed() {

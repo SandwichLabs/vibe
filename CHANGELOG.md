@@ -4,6 +4,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Fixed
+
+- **Artifact queries now stop at 16 MB of result (#193).** A shared or pulled artifact with a query like `SELECT repeat('x', 1000000) FROM range(100)` could fill Studio's memory, because only rows (500) and time were capped. The size is now counted while rows are read, for level 1 artifacts, live A2UI bindings, notebook SQL cells, script views and HTML pages (a page's old check ran after all rows were read), and a result over it fails with "the result is too large". A single huge row is still built once before it is refused, and DuckDB still builds its own result first.
+
 ### Added
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.

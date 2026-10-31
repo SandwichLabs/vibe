@@ -25,6 +25,8 @@ parameters:
 queries:
   - name: big
     sql: SELECT id, qty FROM t WHERE qty >= $min_qty ORDER BY id
+  - name: fat
+    sql: SELECT repeat('x', 1000000) AS s FROM range(100)
 `
 
 const studioArtifactView = `{"title":"Orders","components":[
@@ -85,7 +87,7 @@ func TestGetArtifact_RendersTheValidatedPageWithDefaults(t *testing.T) {
  {"id":"t","type":"table","query":"big"}]}`, string(d.View))
 	assert.EqualValues(t, 0, d.Defaults["min_qty"])
 	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, d.Defaults["since"])
-	require.Len(t, d.Queries, 1)
+	require.Len(t, d.Queries, 2)
 	assert.Equal(t, []string{"min_qty"}, d.Queries[0].Uses)
 	assert.NotEmpty(t, d.Rev)
 }
