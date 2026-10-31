@@ -11,9 +11,10 @@ import (
 	"github.com/SandwichLabs/vibe/internal/artifacts/pagefuncs"
 )
 
-// MaxQueryResultBytes caps one query result of a page (strings and bytes in its
-// rows, and about 32 bytes per cell); over it, the query fails with the fixed
-// block.
+// MaxQueryResultBytes caps one query result of any artifact query (level 1,
+// a live A2UI binding or notebook SQL cell, a worker view, a page). The shared scan layer enforces
+// it while rows are read (engine.WithMaxResultBytes); a page also checks what
+// its template sees, below, in case a runner does not.
 const MaxQueryResultBytes = 16 << 20
 
 // memoQuery is one named query's outcome within a render: run on first use,
@@ -63,8 +64,8 @@ func (e *pageEnv) Query(name string) (pagefuncs.Result, error) {
 		e.fail(name)
 		return q.res, q.err
 	}
-	// 500 rows can still hold gigabytes in one cell. The runner has already read
-	// the rows, so this bounds what the template sees and copies, not the read.
+	// Studio's runner already stopped reading at MaxQueryResultBytes; this is the
+	// backstop for a PageRunner that does not, and bounds what the template copies.
 	if pagefuncs.SizeOf(rows.Rows) > MaxQueryResultBytes {
 		q.err = fmt.Errorf("%w: the result is over %d bytes", errPageQuery, MaxQueryResultBytes)
 		e.fail(name)

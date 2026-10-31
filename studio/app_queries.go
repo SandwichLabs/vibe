@@ -285,7 +285,7 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
 	defer cancel()
 	before := session.StatusSnapshot(runSess)
-	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
+	rs, truncated, err := handler.RunReadOnlySQLIn(agents.ArtifactQueryContext(ctx), connection, sqlStr, nil, a2uiQueryRowCap)
 	a.afterRun(runSess, before, sqlStr)
 	if err != nil {
 		return nil, a.explainReadOnlyDenial(err)

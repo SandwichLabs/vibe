@@ -42,7 +42,8 @@ A single read-only SQL statement (`source`). Sql cells are the same live,
 sandbox-gated read binding an A2UI data-bound component uses: INSERT,
 UPDATE, DELETE, and DDL are rejected at run time (the frontend surfaces the
 denial as "Notebook cells are read-only queries — use the Query editor to
-change data"). A sql cell also carries:
+change data"). A cell returns at most 500 rows and 16 MB of data (counted while
+rows are read; over it the cell fails with "the result is too large"). A sql cell also carries:
 
 - `view` — how the result renders: `table`, `bar`, `line`, `stat`, or one
   of the KINETIC chart views `area`, `columns`, `rings`, `radar`, `sankey`,
