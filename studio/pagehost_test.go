@@ -308,6 +308,12 @@ func TestPageWindow_RunAnswersOnlyTheWindowsManifestQueries(t *testing.T) {
 	var n int
 	require.NoError(t, app.sess.DB().QueryRow("SELECT count(*) FROM t").Scan(&n))
 	assert.Equal(t, 3, n)
+
+	// A result over the byte cap is "too large", not a failed query.
+	fh.run(4, "fat", "")
+	r = fh.until(t, replyTo(4))
+	assert.False(t, *r.OK)
+	assert.Equal(t, pagehost.CodeTooLarge, r.Code)
 }
 
 func TestPageWindow_NoMessageCanNameAnotherArtifact(t *testing.T) {

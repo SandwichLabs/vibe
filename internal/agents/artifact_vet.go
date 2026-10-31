@@ -141,6 +141,16 @@ func checkArtifactSQLShape(sqlText string) error { return queries.CheckParamShap
 // live A2UI binding. The cap is pushed into the query (RunReadOnlySQLIn).
 const artifactQueryRowCap = 500
 
+// ArtifactQueryContext limits a run of an artifact's query, a live A2UI
+// binding or a notebook SQL cell (RunA2UIQueryIn serves all of them, and a
+// pulled or bundled notebook re-runs every cell on open) to
+// artifacts.MaxQueryResultBytes of result, checked while the rows are read.
+// Every such path goes through RunReadOnlySQLIn, so a caller outside this
+// package (Studio's A2UI binding) wraps its context with it.
+func ArtifactQueryContext(ctx context.Context) context.Context {
+	return engine.WithMaxResultBytes(ctx, artifacts.MaxQueryResultBytes)
+}
+
 // RunArtifactQuery runs one named query of a stored artifact with the given
 // parameter values, and is the ONE path that does: Studio's binding, the
 // level-2 bridge and any later tool call it. It never trusts the caller for
@@ -186,5 +196,5 @@ func (h *Handler) RunManifestQuery(ctx context.Context, name string, m *artifact
 		h.logger.Debug("artifact query refused", "artifact", name, "query", query, "reason", engine.ErrorForLog(err))
 		return nil, false, err
 	}
-	return h.RunReadOnlySQLIn(ctx, runConn, sqlText, params, artifactQueryRowCap)
+	return h.RunReadOnlySQLIn(ArtifactQueryContext(ctx), runConn, sqlText, params, artifactQueryRowCap)
 }

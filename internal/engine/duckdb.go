@@ -83,7 +83,7 @@ func (e *DuckDBEngine) executeWith(ctx context.Context, query string, params map
 	}
 	defer rows.Close() //nolint:errcheck
 
-	rs, total, err := ScanRows(rows.Rows, maxRows)
+	rs, total, err := ScanRows(rows.Rows, maxRows, maxResultBytes(ctx))
 	return rs, total, shorten(rw, err)
 }
 
