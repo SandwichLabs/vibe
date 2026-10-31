@@ -155,11 +155,16 @@ func TestWriteAtomic_ConcurrentWritersExactlyOneWins(t *testing.T) {
 func TestObserverSeesWritesBeforeTheRename(t *testing.T) {
 	root := t.TempDir()
 	var gotPath, gotHash string
-	obs := func(p, h string) { gotPath, gotHash = p, h }
+	doneCalls := 0
+	obs := func(p, h string) func() {
+		gotPath, gotHash = p, h
+		return func() { doneCalls++ }
+	}
 	_, err := WriteAtomic(root, Write{Rel: "o.txt", Data: []byte("v")}, obs)
 	require.NoError(t, err)
 	assert.True(t, strings.HasSuffix(gotPath, "o.txt"))
 	assert.Equal(t, HashBytes([]byte("v")), gotHash)
+	assert.Equal(t, 1, doneCalls, "done is called once, after the rename")
 
 	// A refused write is never announced.
 	gotPath = ""

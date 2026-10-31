@@ -338,7 +338,7 @@ func TestStore_ErrFailsEveryCall(t *testing.T) {
 func TestFileStore_LayoutAndObserver(t *testing.T) {
 	root := t.TempDir()
 	var seen []string
-	s := NewFileStore(root, WithObserver(func(path, hash string) { seen = append(seen, filepath.Base(path)+":"+hash) }))
+	s := NewFileStore(root, WithObserver(func(path, hash string) func() { seen = append(seen, filepath.Base(path)+":"+hash); return nil }))
 	m := mustMetric(t)
 	require.NoError(t, s.PutMetric(context.Background(), m))
 	data, err := os.ReadFile(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))

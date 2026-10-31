@@ -35,8 +35,9 @@ var ErrViewChanged = errors.New("the view changed since it was shown; review it 
 // or an HTML page) to decide on.
 var ErrNoScriptView = errors.New("this artifact has no custom view to decide on")
 
-// ErrDecisionNotSaved means the decision could not be recorded. The detail (it
-// can hold a path) goes to the debug log.
+// ErrDecisionNotSaved means the decision could not be recorded. The returned
+// error wraps it with the cause (which can hold a path), so logs and tests show
+// why; Studio's bridge (viewError) collapses it back to this fixed error.
 var ErrDecisionNotSaved = errors.New("your decision could not be saved")
 
 // ArtifactViewStatus is where one artifact's custom view stands for this
@@ -453,7 +454,7 @@ func (w *workspace) decisionErr(err error, name string) error {
 		return ErrNoScriptView
 	}
 	w.logger.Debug("artifact view decision failed", "artifact", name, "error", err)
-	return ErrDecisionNotSaved
+	return fmt.Errorf("%w: %v", ErrDecisionNotSaved, err)
 }
 
 // DenyArtifactView records that the artifact's view must not run, until

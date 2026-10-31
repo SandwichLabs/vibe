@@ -116,7 +116,11 @@ type Option func(*options)
 type options struct {
 	onRelease func()
 	pending   bool
+	noRetry   bool // TakeOver polls itself: no wait for a probe to clear
 }
+
+// withoutRetry makes an acquire report a held lock at once.
+func withoutRetry() Option { return func(o *options) { o.noRetry = true } }
 
 // WithPendingMCP publishes mcp {pending:true} in the very first write of
 // hub.lock, so a second `vibe mcp serve` that races the owner's startup waits
@@ -179,13 +183,11 @@ func acquireAt(root, app string, opts ...Option) (*Hold, error) {
 			return nil, err
 		}
 	}
-	l, err := filelock.AcquireAt(dir, LockFile, payload)
-	if errors.Is(err, filelock.ErrHeld) {
-		// A concurrent ReadHolder probe holds a shared flock for an instant;
-		// one short retry tells that apart from a real holder.
-		time.Sleep(25 * time.Millisecond)
-		l, err = filelock.AcquireAt(dir, LockFile, payload)
+	budget := acquireRetryBudget
+	if o.noRetry {
+		budget = 0
 	}
+	l, err := acquireWithRetry(dir, payload, budget)
 	if err != nil {
 		stop()
 		closeDir(dir)
@@ -324,4 +326,28 @@ func validateEndpoint(ep MCPEndpoint) error {
 		return fmt.Errorf("%w: the MCP endpoint has no token", ErrUntrusted)
 	}
 	return nil
+}
+
+// acquireRetryBudget and acquireRetryStep bound how long Open waits to tell a
+// concurrent ReadHolder probe from a real holder. ProbeAt holds a shared flock
+// for one LOCK_SH/LOCK_UN pair (ReadHolder's torn-read retries run unlocked),
+// so the window is tiny, but a probing process that is descheduled inside it
+// can stretch it; the budget leaves generous room for that. A real holder
+// costs one budget of waiting, so callers that poll (TakeOver) pass zero.
+const (
+	acquireRetryBudget = 250 * time.Millisecond
+	acquireRetryStep   = 25 * time.Millisecond
+)
+
+// acquireWithRetry takes the hub lock, retrying ErrHeld for the retry budget;
+// a holder still there after it is a real one.
+func acquireWithRetry(dir *os.File, payload []byte, budget time.Duration) (*filelock.Lock, error) {
+	deadline := time.Now().Add(budget)
+	for {
+		l, err := filelock.AcquireAt(dir, LockFile, payload)
+		if !errors.Is(err, filelock.ErrHeld) || !time.Now().Before(deadline) {
+			return l, err
+		}
+		time.Sleep(acquireRetryStep)
+	}
 }

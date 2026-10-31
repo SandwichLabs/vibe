@@ -52,6 +52,7 @@ func TakeOver(ctx context.Context, ws workspace.Workspace, app string, timeout t
 		timeout = 10 * time.Second
 	}
 	root := ws.Root()
+	opts = append(opts[:len(opts):len(opts)], withoutRetry()) // the polling below is the retry
 	if hold, err := acquireAt(root, app, opts...); err == nil {
 		return hold, nil
 	} else if !errors.Is(err, ErrHubHeld) {

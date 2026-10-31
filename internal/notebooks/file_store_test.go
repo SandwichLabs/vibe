@@ -259,7 +259,7 @@ func TestFileStore_SymlinkedFileIsRefused(t *testing.T) {
 func TestFileStore_ObserverSeesOwnWrites(t *testing.T) {
 	var gotPath, gotHash string
 	root := t.TempDir()
-	s := NewFileStore(root, WithObserver(func(p, h string) { gotPath, gotHash = p, h }))
+	s := NewFileStore(root, WithObserver(func(p, h string) func() { gotPath, gotHash = p, h; return nil }))
 	nb, err := s.Create(context.Background(), "Obs")
 	require.NoError(t, err)
 	assert.True(t, strings.HasSuffix(gotPath, "obs.vnb"))

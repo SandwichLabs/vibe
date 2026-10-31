@@ -8,6 +8,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
 
+### Fixed
+
+- Two races behind flaky tests (#227). The file watcher no longer reports a store's own save or delete as an outside change: a store announces a write before it replaces the file, and the watcher now leaves a path alone until that write has landed (and re-checks a path whose write raced its hashing). Opening the hub lock no longer reports a phantom holder while another process is only reading who holds it (it retries for up to 250 ms before reporting a real holder). A decision that cannot be saved now logs its cause (#280).
+
 ## [0.5.0] - 2026-10-29
 
 This release adds a **semantic layer kept as files** (#244): named metrics, entities, joins and a glossary that live in the workspace next to your queries, run anywhere SQL runs, and change only when you accept the change. See `docs/reference/semantics.md`.

@@ -102,8 +102,25 @@ func (e *ConflictError) Is(target error) bool { return target == ErrConflict }
 
 // Observer is told about every successful write and delete a store makes, so
 // a file watcher can ignore its own changes. hash is "" for a delete. path is
-// absolute.
-type Observer func(path, hash string)
+// absolute. It is called before the file is replaced or removed and returns a
+// done func, which the store calls once the file system change (or its
+// rollback) has happened, so the observer knows the announcement is in flight
+// until then. done may be nil.
+type Observer func(path, hash string) (done func())
+
+// announce tells obs (nil-safe) and returns a done that is safe to call more
+// than once.
+func announce(obs Observer, path, hash string) func() {
+	if obs == nil {
+		return func() {}
+	}
+	done := obs(path, hash)
+	if done == nil {
+		return func() {}
+	}
+	var once sync.Once
+	return func() { once.Do(done) }
+}
 
 // Write describes one write.
 type Write struct {
@@ -295,18 +312,16 @@ func WriteAtomic(root string, w Write, obs Observer) (Stamp, error) {
 			return Stamp{}, &ConflictError{Path: w.Rel, Want: w.Expect, Got: cur, Existing: w.Expect == "", Missing: cur == "" && w.Expect != ""}
 		}
 	}
-	if obs != nil {
-		// Announced before the rename so a fast watcher never sees an
-		// unannounced version of our own write.
-		obs(abs, HashBytes(w.Data))
-	}
+	// Announced before the rename so a fast watcher never sees an
+	// unannounced version of our own write; done marks it landed.
+	done := announce(obs, abs, HashBytes(w.Data))
 	if err := os.Rename(tmpName, abs); err != nil {
 		cleanup()
-		if obs != nil {
-			obs(abs, prev) // roll the announcement back: nothing changed
-		}
+		announce(obs, abs, prev)() // roll the announcement back: nothing changed
+		done()
 		return Stamp{}, fmt.Errorf("failed to replace %s: %w", w.Rel, err)
 	}
+	done()
 	syncDir(dir)
 	fi, err := os.Stat(abs)
 	if err != nil {
@@ -336,15 +351,13 @@ func Remove(root, rel, expect string, overwrite bool, obs Observer) error {
 	if !overwrite && expect != "" && cur != expect {
 		return &ConflictError{Path: rel, Want: expect, Got: cur}
 	}
-	if obs != nil {
-		obs(abs, "")
-	}
+	done := announce(obs, abs, "")
 	if err := os.Remove(abs); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		if obs != nil {
-			obs(abs, cur) // roll the announcement back: the file is still there
-		}
+		announce(obs, abs, cur)() // roll the announcement back: the file is still there
+		done()
 		return fmt.Errorf("failed to delete %s: %w", rel, err)
 	}
+	done()
 	syncDir(filepath.Dir(abs))
 	return nil
 }

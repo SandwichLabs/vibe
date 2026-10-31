@@ -110,7 +110,15 @@ type Watcher struct {
 	known   map[string]string // abs path -> content hash last seen or written
 	watched map[string]bool
 	pending map[string]struct{}
-	closed  bool
+	gen     map[string]uint64 // abs path -> bumped by every noteWrite and its done; see settle
+	// inflight counts a path's announced store writes whose file system change
+	// has not landed yet (see noteWrite); settle waits them out.
+	inflight map[string]int
+	closed   bool
+
+	// afterHash is a test seam (guarded by mu): settle calls it between
+	// hashing a file and re-taking mu. Nil outside tests.
+	afterHash func(abs string)
 }
 
 // Watch starts a watcher for the workspace and registers it so the
@@ -132,7 +140,7 @@ func (w *workspace) Watch(opts ...WatchOption) (*Watcher, error) {
 	wt := &Watcher{
 		root: w.root, fs: fw, events: make(chan Change, 256), done: make(chan struct{}),
 		logger: w.logger, debounce: o.debounce,
-		known: map[string]string{}, watched: map[string]bool{}, pending: map[string]struct{}{},
+		known: map[string]string{}, watched: map[string]bool{}, pending: map[string]struct{}{}, gen: map[string]uint64{}, inflight: map[string]int{},
 	}
 	if err := wt.addTree(); err != nil {
 		_ = fw.Close()
@@ -168,15 +176,32 @@ func (w *Watcher) Close() error {
 	return err
 }
 
-// noteWrite is called by the stores before they replace or delete a file.
-func (w *Watcher) noteWrite(path, hash string) {
+// noteWrite is called by the stores before they replace or delete a file. The
+// returned done is called once the change (or its rollback) has happened; until
+// then the path is in flight and flush leaves it for the next round, because
+// the file on disk may still be the version before the announcement. done is
+// safe to call more than once.
+func (w *Watcher) noteWrite(path, hash string) (done func()) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.gen[path]++
+	w.inflight[path]++
 	if hash == "" {
 		delete(w.known, path)
-		return
+	} else {
+		w.known[path] = hash
 	}
-	w.known[path] = hash
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.gen[path]++
+			if w.inflight[path]--; w.inflight[path] <= 0 {
+				delete(w.inflight, path)
+			}
+		})
+	}
 }
 
 func (w *Watcher) addDir(abs string) bool {
@@ -452,7 +477,10 @@ func (w *Watcher) loop() {
 			}
 		case <-timerC:
 			timerC = nil
-			w.flush()
+			if w.flush() {
+				timer = rearm(timer, w.debounce)
+				timerC = timer.C
+			}
 		}
 	}
 }
@@ -570,8 +598,9 @@ func (w *Watcher) queue(abs string) {
 	w.mu.Unlock()
 }
 
-// flush turns the settled paths into Changes.
-func (w *Watcher) flush() {
+// flush turns the settled paths into Changes. It reports whether it left a
+// path for later (a store write was in flight), so the caller re-arms the timer.
+func (w *Watcher) flush() (requeued bool) {
 	w.mu.Lock()
 	paths := make([]string, 0, len(w.pending))
 	for p := range w.pending {
@@ -589,9 +618,61 @@ func (w *Watcher) flush() {
 		if !ok {
 			continue
 		}
+		op, settled := w.settle(abs)
+		if !settled {
+			// A store announced a write to this path while it was being
+			// hashed, so the hash may predate it. Look again next flush.
+			w.queue(abs)
+			requeued = true
+			continue
+		}
+		if op == "" {
+			continue
+		}
+		select {
+		case w.events <- Change{Kind: kind, Op: op, ID: id, Path: rel}:
+		case <-w.done:
+			return requeued
+		}
+	}
+	return requeued
+}
+
+// settleTries bounds how often settle re-hashes a path whose store write
+// raced the hash.
+const settleTries = 3
+
+// settle decides what happened to abs and updates known. The hash is taken
+// without mu (file I/O must not block the stores' noteWrite), so it can go
+// stale against a concurrent noteWrite; gen[abs] is read before hashing and
+// compared under mu afterwards, and a moved generation discards the reading
+// and hashes again. A path with an announced write still in flight is not
+// settled either: the store announces before it renames, so the file may be
+// older than known. It reports false when every try raced a write.
+func (w *Watcher) settle(abs string) (ChangeOp, bool) {
+	for range settleTries {
+		w.mu.Lock()
+		if w.inflight[abs] > 0 {
+			w.mu.Unlock()
+			return "", false
+		}
+		g, hook := w.gen[abs], w.afterHash
+		w.mu.Unlock()
+
 		hash, exists := w.hashOf(abs)
+		if hook != nil {
+			hook(abs)
+		}
 
 		w.mu.Lock()
+		if w.inflight[abs] > 0 {
+			w.mu.Unlock()
+			return "", false
+		}
+		if w.gen[abs] != g {
+			w.mu.Unlock()
+			continue
+		}
 		prev, wasKnown := w.known[abs]
 		var op ChangeOp
 		switch {
@@ -608,15 +689,9 @@ func (w *Watcher) flush() {
 			delete(w.known, abs)
 		}
 		w.mu.Unlock()
-		if op == "" {
-			continue
-		}
-		select {
-		case w.events <- Change{Kind: kind, Op: op, ID: id, Path: rel}:
-		case <-w.done:
-			return
-		}
+		return op, true
 	}
+	return "", false
 }
 
 // WaitForChange is a small helper for callers and tests: it returns the next
