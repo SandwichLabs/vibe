@@ -4,6 +4,10 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Fixed
+
+- `metric()` now works in a query export (the Query Explorer's export and `vibe export --sql`) and in the terminal UI's REPL, which used to fail with DuckDB's unknown-function error. An export also gets the editor's guard it used to skip (`INSTALL`, `LOAD`, secrets are refused with the editor's message). Every person-facing run path now prepares SQL in one place, `hub.PrepareForPerson` (#287). A file export now binds `$name` placeholders as a run does, so a `$word` inside exported text must be a parameter, as in the Query Explorer.
+
 ### Added
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
