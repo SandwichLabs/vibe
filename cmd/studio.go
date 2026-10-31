@@ -111,6 +111,7 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 	}
 
 	app := tui.NewApp(tuiWorkspace{o}, o.Eng, logger,
+		tui.WithContext(ctx), tui.WithPrepare(tuiPrepare(o, readOnly)),
 		tui.WithReadOnly(readOnly), tui.WithWorkspaceName(o.WS.Name()), tui.WithNotices(tuiNotices(o)...),
 		tui.WithEditorRoot(o.WS.Root()), tui.WithCatalogSnapshot(tuiSnapshotPath(o, readOnly)))
 	app.LoadData()
@@ -320,4 +321,18 @@ func tuiSnapshotPath(o *openedWorkspace, readOnly bool) string {
 		return ""
 	}
 	return o.WS.Root()
+}
+
+// tuiPrepare readies the TUI REPL's SQL as a person runs it: metric() calls
+// expanded and the CLI's courtesy check on the typed and the expanded text.
+func tuiPrepare(o *openedWorkspace, readOnly bool) tui.PrepareFunc {
+	return func(ctx context.Context, text string) (string, map[string]any, error) {
+		exp, err := hub.PrepareForPerson(ctx, o.WS, o.Sess, nil, hub.PersonRun{
+			SQL: text, Guard: cliGuard(readOnly),
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		return exp.SQL, exp.Params, nil
+	}
 }

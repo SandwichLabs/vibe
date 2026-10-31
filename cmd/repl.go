@@ -13,22 +13,22 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/repl"
-	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // replCmd is the terminal driver of the data console engine (internal/repl):
-// the same Session Studio's console tab will render, on this terminal. It is
-// hidden until that tab ships (#259) and is for people, not agents: the agent
-// reaches data through MCP and never reads a console.
+// the same Session Studio's Console tab renders, on this terminal. It mirrors
+// that tab and is for people, not agents: the agent reaches data through MCP
+// and never reads a console.
 var replCmd = &cobra.Command{
-	Use:    "repl",
-	Short:  "An interactive SQL console on the workspace hub (Studio's console, in the terminal)",
-	Hidden: true,
+	Use:   "repl",
+	Short: "An interactive SQL console on the workspace hub (Studio's console, in the terminal)",
 	Long: `An interactive SQL console on the workspace's DuckDB session: the engine of
-Studio's data console, driven from this terminal. It is Vibe's own REPL, not a
+Studio's Console tab (Query Explorer), driven from this terminal. It is Vibe's own REPL, not a
 shell and not the duckdb binary: statements take the same checks and the same
 lazy attach as the Query Explorer, and dot commands are a closed set (.help).
-Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.`,
+Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.
+It needs a terminal on standard input. History is kept per workspace in
+.vibe-local/repl/history; see docs/reference/console.md.`,
 	Args:         cobra.NoArgs,
 	RunE:         runREPL,
 	SilenceUsage: true,
@@ -74,21 +74,11 @@ func runREPL(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		cols, rows = 80, 24
 	}
-	vet, err := hub.MetricVetter(o.WS, o.Sess, logger)
-	if err != nil {
-		return err
-	}
 	s, err := repl.New(ctx, os.Stdout, repl.Options{
 		Engine: o.Eng, Sess: o.Sess,
 		Workspace: o.WS.Name(), Root: o.WS.Root(), Queries: o.WS.Queries(),
 		Connection: conn, Cols: cols, Rows: rows, Color: true, Logger: logger, Limiter: repl.NewLimiter(1),
-		Expand: func(ctx context.Context, text, connection string) (string, map[string]any, error) {
-			exp, err := workspace.ExpandForPerson(ctx, o.WS, o.Sess, text, connection, nil, workspace.PersonOptions{Vet: vet})
-			if err != nil {
-				return "", nil, err
-			}
-			return exp.SQL, exp.Params, nil
-		},
+		Expand: hub.PersonExpander(o.WS, o.Sess, logger),
 	})
 	if err != nil {
 		return err

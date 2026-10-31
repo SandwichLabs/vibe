@@ -31,11 +31,11 @@ func NewNotebooksModel() NotebooksModel {
 }
 
 // LoadNotebooks refreshes the notebook list from the workspace.
-func (m *NotebooksModel) LoadNotebooks(store notebooks.Store) {
+func (m *NotebooksModel) LoadNotebooks(ctx context.Context, store notebooks.Store) {
 	if store == nil {
 		return
 	}
-	list, err := store.List(context.Background())
+	list, err := store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -63,7 +63,7 @@ func (m *NotebooksModel) Back() {
 }
 
 // Update handles input for the notebooks view.
-func (m NotebooksModel) Update(msg tea.Msg, ws WorkspaceAccess) (NotebooksModel, tea.Cmd) {
+func (m NotebooksModel) Update(ctx context.Context, msg tea.Msg, ws WorkspaceAccess) (NotebooksModel, tea.Cmd) {
 	if m.viewing {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
 			m.viewing = false
@@ -97,7 +97,7 @@ func (m NotebooksModel) Update(msg tea.Msg, ws WorkspaceAccess) (NotebooksModel,
 			if store := ws.Notebooks(); store == nil {
 				err = errors.New("no notebook store")
 			} else {
-				nb, _, err = store.Get(context.Background(), sel.ID)
+				nb, _, err = store.Get(ctx, sel.ID)
 			}
 			if err != nil {
 				m.err = err.Error()

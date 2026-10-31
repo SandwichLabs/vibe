@@ -1,0 +1,23 @@
+id: go-sql-sprintf-ident
+language: go
+severity: warning
+message: "SQL built with fmt.Sprintf (injection-review candidate). Every %s/%v argument must come from a quoting helper such as session.QuoteIdent, session.QuoteLiteral or TableRef.SQL(). Warning-level review list; CI blocks only on errors."
+rule:
+  kind: call_expression
+  all:
+    - has: {field: function, regex: '^fmt\.Sprintf$'}
+    - has:
+        field: arguments
+        has:
+          kind: interpreted_string_literal
+          regex: '(?i)^"\s*(select|insert|update|delete|create|drop|alter|attach|detach|copy|pragma|install|load)\b.*%[sqv]'
+          stopBy: neighbor
+ignores:
+  - "**/*_test.go"
+  # Audited in #21: every identifier and literal in internal/importer reaches its SQL through
+  # session.QuoteIdent / QuoteLiteral / TableRef.SQL() (tableSQL), or is the constant stageTable;
+  # the one catalog-supplied fragment, a target column's raw type, must pass crud.SafeCastType in
+  # loadColumns (import.go) before it can reach castExprRaw; the rest are expression strings built from those in castExpr/keyCastExpr (types.go,
+  # preflight.go). The rule cannot follow a quoted value through a variable, so the package
+  # would only report false positives. A new Sprintf here still gets reviewed in the PR.
+  - "internal/importer/**"

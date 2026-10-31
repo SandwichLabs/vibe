@@ -163,3 +163,57 @@ func TestMetric_RunsInTheConsole(t *testing.T) {
 	require.NoError(t, r.app.ReplInput(id, "SELECT * FROM metric('nope');\r"))
 	r.waitText(t, id, "there is no metric named 'nope'")
 }
+
+// An exported Query Explorer buffer is prepared like a run: a metric() call
+// expands (its saved query's $min bound inside COPY) and the editor's guard
+// refuses INSTALL.
+func TestMetric_ExportQueryResultsExpandsAndIsGuarded(t *testing.T) {
+	app := appWithMetric(t)
+	dst := filepath.Join(t.TempDir(), "out.csv")
+	got, err := app.ExportQueryResults("SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region;", "csv", dst)
+	require.NoError(t, err)
+	assert.Equal(t, dst, got)
+	b, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "region,net_revenue\neast,30\nwest,5\n", string(b))
+
+	dst2 := filepath.Join(t.TempDir(), "x.csv")
+	_, err = app.ExportQueryResults("INSTALL httpfs", "csv", dst2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "INSTALL is not available here")
+	_, statErr := os.Stat(dst2)
+	assert.True(t, os.IsNotExist(statErr))
+	_, err = app.ExportQueryResults("SELECT * FROM metric('nope')", "csv", dst2)
+	require.Error(t, err)
+}
+
+func TestMetric_ExportRefusesBreakoutAndHostileMetric(t *testing.T) {
+	app := appWithMetric(t)
+	dst := filepath.Join(t.TempDir(), "e.csv")
+	_, err := app.ExportQueryResults("SELECT 1) TO '"+dst+".x'; DELETE FROM sales; COPY (SELECT 1", "csv", dst)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exactly one SELECT")
+	var n int
+	require.NoError(t, app.sess.DB().QueryRow("SELECT count(*) FROM sales").Scan(&n))
+	assert.Equal(t, 4, n)
+	assert.NoFileExists(t, dst)
+	assert.NoFileExists(t, dst+".x")
+
+	outside := filepath.Join(t.TempDir(), "secret.csv")
+	require.NoError(t, os.WriteFile(outside, []byte("region,month,amount\nx,1,99\n"), 0o644))
+	ctx := context.Background()
+	require.NoError(t, app.ws.Queries().Create(ctx, &queries.Query{ID: "pv_base", Title: "pv", SQL: "SELECT region, month, amount FROM read_csv('" + outside + "')"}))
+	m, err := semantics.DecodeMetric("pv", []byte("version: 1\nname: pv\nquery: pv_base\nmeasure: sum(amount)\n"))
+	require.NoError(t, err)
+	require.NoError(t, app.ws.Semantics().PutMetric(ctx, m))
+	dst2 := filepath.Join(t.TempDir(), "pv.csv")
+	_, err = app.ExportQueryResults("SELECT metric('pv')", "csv", dst2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "metric 'pv' is refused")
+	assert.NoFileExists(t, dst2)
+
+	dollar := filepath.Join(t.TempDir(), "a$b.csv")
+	_, err = app.ExportQueryResults("SELECT metric('net_revenue') AS total", "csv", dollar)
+	require.NoError(t, err)
+	assert.FileExists(t, dollar)
+}

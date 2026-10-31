@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -20,10 +21,12 @@ func CopyFormat(format string) (ext, opts string, err error) {
 }
 
 // CopyQueryTo writes the rows of query to the file dst with COPY ... TO (see
-// CopyToSQL for how query and dst are quoted). opts is caller-built option text
+// CopyToSQL for how query and dst are quoted). query may carry positional ?
+// placeholders (engine.BindParams) with their values in args; they are bound by
+// the driver, never spliced into the text. opts is caller-built option text
 // (CopyFormat), never user input. The caller has checked that query is a single
 // SELECT where that matters.
-func CopyQueryTo(db *sql.DB, query, dst, opts string) error {
-	_, err := db.Exec(CopyToSQL(query, dst, opts))
+func CopyQueryTo(ctx context.Context, db *sql.DB, query string, args []any, dst, opts string) error {
+	_, err := db.ExecContext(ctx, CopyToSQL(query, dst, opts), args...)
 	return err
 }

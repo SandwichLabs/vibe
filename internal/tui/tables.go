@@ -53,12 +53,11 @@ func NewTablesModel() TablesModel {
 // local DuckDB table with no estimate (empty, or not yet analysed) falls back to
 // an exact count, as does one with an estimate under 10,000; a remote table with no estimate shows none, since counting it
 // can be slow or expensive.
-func (m *TablesModel) LoadTables(sess session.Session) {
+func (m *TablesModel) LoadTables(ctx context.Context, sess session.Session) {
 	if sess == nil {
 		return
 	}
 	m.sess = sess
-	ctx := context.Background()
 	catalogs, err := sess.ListCatalogs(ctx)
 	if err != nil {
 		return
@@ -127,7 +126,7 @@ func (m *TablesModel) SetData(msg tableDataMsg) {
 }
 
 // Update handles input for the tables view.
-func (m TablesModel) Update(msg tea.Msg) (TablesModel, tea.Cmd) {
+func (m TablesModel) Update(ctx context.Context, msg tea.Msg) (TablesModel, tea.Cmd) {
 	if m.browsing {
 		keyMsg, ok := msg.(tea.KeyMsg)
 		if ok && keyMsg.String() == "esc" {
@@ -158,7 +157,7 @@ func (m TablesModel) Update(msg tea.Msg) (TablesModel, tea.Cmd) {
 			m.browsing = true
 			m.browser.SetLoading(sel.Name, sel.RowCount, sel.Approx)
 			m.browser.SetFocused(true)
-			return m, m.loadTableData(sel)
+			return m, m.loadTableData(ctx, sel)
 		}
 	}
 	return m, nil
@@ -166,7 +165,7 @@ func (m TablesModel) Update(msg tea.Msg) (TablesModel, tea.Cmd) {
 
 // loadTableData asynchronously loads up to 1000 rows of a table (crud.Page's
 // MaxPageSize), the same reader Studio's table browser uses.
-func (m TablesModel) loadTableData(item TableInfo) tea.Cmd {
+func (m TablesModel) loadTableData(ctx context.Context, item TableInfo) tea.Cmd {
 	sess := m.sess
 	tableName := item.Name
 	ref := item.Ref
@@ -178,8 +177,8 @@ func (m TablesModel) loadTableData(item TableInfo) tea.Cmd {
 			return tableDataMsg{tableName: tableName, err: fmt.Errorf("no session available")}
 		}
 		// Renews a storage secret that is about to end, as the engine would.
-		_ = sess.ConnectReferenced(context.Background(), ref.Catalog, "")
-		pg, err := crud.Page(context.Background(), sess.DB(), ref, crud.PageRequest{Page: 1, PageSize: crud.MaxPageSize, SkipCount: true})
+		_ = sess.ConnectReferenced(ctx, ref.Catalog, "")
+		pg, err := crud.Page(ctx, sess.DB(), ref, crud.PageRequest{Page: 1, PageSize: crud.MaxPageSize, SkipCount: true})
 		if err != nil {
 			return tableDataMsg{tableName: tableName, err: err}
 		}

@@ -83,6 +83,9 @@ type App struct {
 	// readOnly marks a TUI opened without owning the workspace's database
 	// (`vibe studio --read-only`); shown in the status bar.
 	readOnly bool
+	// prepare readies typed SQL (nil = as typed); ctx bounds the REPL's queries.
+	prepare PrepareFunc
+	ctx     context.Context
 	// name is the workspace name shown in the status bar.
 	name string
 
@@ -99,6 +102,20 @@ type Option func(*App)
 
 // WithReadOnly marks the app as running without ownership of the workspace.
 func WithReadOnly(on bool) Option { return func(a *App) { a.readOnly = on } }
+
+// PrepareFunc readies a statement a person typed to run: metric() calls
+// expanded and the courtesy checks run on what will really execute (cmd wires
+// hub.PrepareForPerson). It returns the SQL to run and its parameter values.
+type PrepareFunc func(ctx context.Context, sql string) (string, map[string]any, error)
+
+// WithPrepare sets how the REPL readies typed SQL; without it the text runs as
+// typed.
+func WithPrepare(f PrepareFunc) Option { return func(a *App) { a.prepare = f } }
+
+// WithContext sets the context the REPL's queries, the table and notebook
+// views' reads and the catalog snapshot run under (the default is
+// context.Background()).
+func WithContext(ctx context.Context) Option { return func(a *App) { a.ctx = ctx } }
 
 // WithWorkspaceName sets the workspace name shown in the status bar.
 func WithWorkspaceName(name string) Option { return func(a *App) { a.name = name } }
@@ -140,7 +157,19 @@ func NewApp(ws WorkspaceAccess, eng EngineAccess, logger *slog.Logger, opts ...O
 	for _, o := range opts {
 		o(a)
 	}
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
 	return a
+}
+
+// ctxOrBackground is the App's context; an App built as a literal (tests) may
+// have none.
+func (a *App) ctxOrBackground() context.Context {
+	if a.ctx == nil {
+		return context.Background()
+	}
+	return a.ctx
 }
 
 // LoadData loads the table list and notebook list from the workspace.
@@ -148,8 +177,8 @@ func (a *App) LoadData() {
 	if a.ws == nil {
 		return
 	}
-	a.tables.LoadTables(a.ws.Session())
-	a.notebooks.LoadNotebooks(a.ws.Notebooks())
+	a.tables.LoadTables(a.ctxOrBackground(), a.ws.Session())
+	a.notebooks.LoadNotebooks(a.ctxOrBackground(), a.ws.Notebooks())
 	a.refreshSnapshot()
 }
 
@@ -262,10 +291,10 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.repl, cmd = a.repl.Update(msg)
 	case modeTables:
 		var loadCmd tea.Cmd
-		a.tables, loadCmd = a.tables.Update(msg)
+		a.tables, loadCmd = a.tables.Update(a.ctxOrBackground(), msg)
 		cmd = loadCmd
 	case modeNotebooks:
-		a.notebooks, cmd = a.notebooks.Update(msg, a.ws)
+		a.notebooks, cmd = a.notebooks.Update(a.ctxOrBackground(), msg, a.ws)
 	}
 	return a, cmd
 }
@@ -298,14 +327,25 @@ func (a *App) cycleMode() {
 }
 
 func (a *App) executeREPLQuery(query string) tea.Cmd {
+	width := a.width // read here, on the update loop, not in the command's goroutine
 	return func() tea.Msg {
 		if a.engine == nil {
 			return replResultMsg{output: "-- Error: no engine available"}
 		}
-		if err := usersql.Check(query, a.readOnly); err != nil {
-			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
+		if a.prepare == nil {
+			// With a prepare step its guard checks the typed and the expanded text.
+			if err := usersql.Check(query, a.readOnly); err != nil {
+				return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
+			}
 		}
-		ctx := context.Background()
+		ctx := a.ctxOrBackground()
+		var params map[string]any
+		if a.prepare != nil {
+			var perr error
+			if query, params, perr = a.prepare(ctx, query); perr != nil {
+				return replResultMsg{output: fmt.Sprintf("-- Error: %v", perr)}
+			}
+		}
 		var duckDB *sql.DB
 		if a.ws != nil {
 			if sess := a.ws.Session(); sess != nil {
@@ -323,12 +363,12 @@ func (a *App) executeREPLQuery(query string) tea.Cmd {
 		// fails closed (false) on a nil db or a classification error, so
 		// an unrecognized/unparseable statement is always treated as a
 		// write here too.
-		readOnly := agents.IsReadOnlyStatement(ctx, duckDB, query, nil)
-		rs, err := a.engine.Execute(ctx, capRowsIfSafe(query, readOnly), nil)
+		readOnly := agents.IsReadOnlyStatement(ctx, duckDB, query, params)
+		rs, err := a.engine.Execute(ctx, capRowsIfSafe(query, readOnly), params)
 		if err != nil {
 			return replResultMsg{output: fmt.Sprintf("-- Error: %v", err)}
 		}
-		return replResultMsg{output: formatResultSet(rs), wrote: !readOnly}
+		return replResultMsg{output: formatResultSet(rs, width), wrote: !readOnly}
 	}
 }
 

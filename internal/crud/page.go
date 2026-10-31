@@ -103,7 +103,7 @@ func Page(ctx context.Context, db *sql.DB, ref session.TableRef, req PageRequest
 	}
 	defer rows.Close() //nolint:errcheck
 
-	rs, _, err := engine.ScanRows(rows, 0)
+	rs, _, err := engine.ScanRows(rows, 0, 0)
 	if err != nil {
 		return nil, err
 	}

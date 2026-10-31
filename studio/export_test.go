@@ -51,3 +51,10 @@ func (a *App) SetAgentConfig(cfg AgentConfig) error {
 func (a *App) OpenWorkspaceReadOnly(path string) (*OpenWorkspaceResult, error) {
 	return a.open(path, openReadOnly)
 }
+
+// size is how many runs are registered, for the cancel tests.
+func (r *runRegistry) size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.runs)
+}

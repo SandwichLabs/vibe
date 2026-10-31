@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/importer"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -278,4 +279,10 @@ func catalogTables(app *App, connection string) ([]string, error) {
 		out = append(out, t.Ref().String())
 	}
 	return out, nil
+}
+
+func TestStudio_RunA2UIQueryIn_ByteCap(t *testing.T) {
+	app := appWithSecondCatalog(t)
+	_, err := app.RunA2UIQueryIn("SELECT repeat('x', 1000000) FROM range(100)", "")
+	require.ErrorIs(t, err, engine.ErrResultTooLarge)
 }

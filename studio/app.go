@@ -107,6 +107,7 @@ type App struct {
 	// (CancelAgentTask) can stop a task turn without touching a.ctx (the
 	// whole app's lifecycle context) or any concurrently running chat turn.
 	chat         chatTurns
+	runs         runRegistry
 	taskCancelMu sync.Mutex
 	taskCancel   map[string]context.CancelFunc
 

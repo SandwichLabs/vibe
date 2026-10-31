@@ -57,6 +57,10 @@ with `structuredContent {"valid": true, "needs_approval": true, "nothing_written
 
 Through Studio (chat, or MCP proxied to Studio) the approval card says which non-local connections the statement changes. The policy is checked again after you approve, in case the tier or the connection changed while the card was open.
 
+### Column definitions in `create_table` and `add_column`
+
+The `type` of a column is DDL text, not a quoted value, so the agent's is checked against a closed grammar (`crud.CheckAgentColumnType`): a DuckDB type, plus `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `REFERENCES t(col)` and `DEFAULT <literal>`. A default literal is a number (`0`, `-5`, `1.5e3`), a single-quoted string (`'abc'`, `'it''s'`), `TRUE`, `FALSE`, `NULL`, `CURRENT_TIMESTAMP` or `CURRENT_DATE`. A function call, operator, cast or parenthesised default (`DEFAULT concat('a','b')`, `DEFAULT 1+1`, `DEFAULT nextval('s')`), `CHECK`, and generated columns (`AS (...)`, `GENERATED`) are refused with a message that lists what is allowed, over MCP as well. The table designer in Studio and the CLI keep the wider `crud.ValidColumnType` check for people.
+
 ## `metric()` is expanded before the policy
 
 A call such as `metric('net_revenue', by => 'region')` (see [semantics.md](semantics.md#using-a-metric-in-sql)) is replaced by a `SELECT` over the metric's saved query **before** anything below runs, in every path that checks SQL (`run_query`, `run_saved_query`, `preview_query`, `write_cell`, notebook cells, A2UI bindings, artifact queries). The policy then classifies, vets paths and binds with `EXPLAIN` exactly the text that will run, with the same tier, connection and approval rules; a saved query behind a metric that reads a file outside `data/`, or is no longer one read, is refused like any statement, with `metric 'name': ` in front of the policy's reason. `metric` is **not** a DuckDB function and is on no allow-list: text that reaches the policy still holding a `metric(` call fails to bind. Wildcard expansion (below) runs after it.

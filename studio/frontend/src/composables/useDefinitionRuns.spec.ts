@@ -66,4 +66,49 @@ describe('useDefinitionRuns', () => {
     r.reset()
     expect(r.results.value).toEqual([])
   })
+
+  it('stops a run by its kind, and shows a stopped run as cancelled, not an error', async () => {
+    let fail!: (e: Error) => void
+    const run = vi.fn(() => new Promise<AssertionRow[]>((_, reject) => { fail = reject }))
+    const cancel = vi.fn(async (_key: string) => { fail(new Error('cancelled')) })
+    install({ RunAssertions: run, CancelRun: cancel })
+    const r = useDefinitionRuns()
+    r.stop() // nothing running: no call
+    expect(cancel).not.toHaveBeenCalled()
+    const p = r.runAssertions('entity', 'customer')
+    r.stop()
+    await p
+    expect(cancel).toHaveBeenCalledWith('assertions')
+    expect(r.cancelled.value).toBe(true)
+    expect(r.error.value).toBe('')
+    expect(r.busy.value).toBe(false)
+    expect(r.results.value).toEqual([])
+  })
+
+  it('uses the metric and profile keys for Try it and Profile', async () => {
+    const hold: Array<(e: Error) => void> = []
+    const stuck = () => new Promise<never>((_, reject) => { hold.push(reject) })
+    const cancel = vi.fn(async (_key: string) => { hold.pop()!(new Error('cancelled')) })
+    install({ RunMetric: stuck, ProfileJoin: stuck, CancelRun: cancel })
+    const r = useDefinitionRuns()
+    const a = r.tryMetric('m', [])
+    r.stop(); await a
+    const b = r.profileJoin('j')
+    r.stop(); await b
+    expect(cancel.mock.calls.map((c) => c[0])).toEqual(['metric', 'profile'])
+  })
+
+  it('stops the run in flight when the view goes away', async () => {
+    const { mount } = await import('@vue/test-utils')
+    const { defineComponent, h } = await import('vue')
+    let fail!: (e: Error) => void
+    const cancel = vi.fn(async (_key: string) => { fail(new Error('cancelled')) })
+    install({ RunMetric: () => new Promise((_, rej) => { fail = rej }), CancelRun: cancel })
+    let runs!: ReturnType<typeof useDefinitionRuns>
+    const w = mount(defineComponent({ setup() { runs = useDefinitionRuns(); return () => h('div') } }))
+    const p = runs.tryMetric('m', [])
+    w.unmount()
+    await p
+    expect(cancel).toHaveBeenCalledWith('metric')
+  })
 })

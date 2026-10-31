@@ -11,6 +11,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(go)"
+    # duckdb-go encodes the DuckDB engine version in its minor (v2.10506.0 = DuckDB 1.5.6,
+    # v2.20000.0 = DuckDB 2.0), and the bindings modules move in lockstep. An engine upgrade is a
+    # hand-run PR (extensions, SQL policy, docs), so only patch bumps are proposed. Security updates
+    # are not affected by this ignore.
+    ignore:
+      - dependency-name: "github.com/duckdb/duckdb-go*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       go-minor-patch:
         update-types: [minor, patch]

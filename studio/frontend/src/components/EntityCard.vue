@@ -37,9 +37,9 @@ function describeAssertion(a: SemanticAssertion) {
     </dl>
     <section v-if="detail.entity.assertions?.length" class="col definition-card__section">
       <div class="row" style="gap: var(--sh-space-3);">
-        <button type="button" class="btn btn-sm" :disabled="runs.busy" data-testid="run-assertions" @click="runs.runAssertions('entity', detail.entity!.name)">Run assertions</button>
+        <button type="button" class="btn btn-sm" :disabled="runs.busy" data-run-trigger data-testid="run-assertions" @click="runs.runAssertions('entity', detail.entity!.name)">Run assertions</button>
       </div>
-      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :error="runs.error" :conflict="runs.conflict" what="Checking" />
+      <RunStatus :busy="runs.busy" :elapsed="runs.elapsed" :cancelled="runs.cancelled" @stop="runs.stop" :error="runs.error" :conflict="runs.conflict" what="Checking" />
       <AssertionResults v-if="runs.results.length" :rows="runs.results" />
     </section>
     <SourceText :text="detail.text" :path="`semantics/entities/${detail.entity.name}.yaml`" />

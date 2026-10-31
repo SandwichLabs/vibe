@@ -320,7 +320,7 @@ func TestWireTextMatchesDuckDB(t *testing.T) {
 		t.Run(lit, func(t *testing.T) {
 			rows, err := db.Query(fmt.Sprintf("SELECT (%s) AS v, (%s)::VARCHAR AS t", lit, lit))
 			require.NoError(t, err)
-			rs, _, err := ScanRows(rows, 0)
+			rs, _, err := ScanRows(rows, 0, 0)
 			require.NoError(t, err)
 			require.Len(t, rs.Rows, 1)
 
@@ -363,7 +363,7 @@ func TestTimestampTZWireZones(t *testing.T) {
 
 			rows, err := db.Query("SELECT TIMESTAMPTZ '2025-04-06 13:45:00+02' AS tstz")
 			require.NoError(t, err)
-			rs, _, err := ScanRows(rows, 0)
+			rs, _, err := ScanRows(rows, 0, 0)
 			require.NoError(t, err)
 			require.Len(t, rs.Rows, 1)
 			assert.Equal(t, tc.want, rs.Rows[0][0])
@@ -384,7 +384,7 @@ func TestWireJSONIsJSSafe(t *testing.T) {
 		t.Helper()
 		rows, err := db.Query("SELECT " + expr + " AS v")
 		require.NoError(t, err)
-		rs, _, err := ScanRows(rows, 0)
+		rs, _, err := ScanRows(rows, 0, 0)
 		require.NoError(t, err)
 		require.Len(t, rs.Rows, 1)
 		return rs.Rows[0][0]
@@ -473,7 +473,7 @@ func TestScanRowsColumnTypes(t *testing.T) {
 		'4ac7a9e9-607c-4c8a-84f3-843f0191e3fd'::UUID AS u,
 		TIMESTAMPTZ '2025-04-06 13:45:00+02' AS tstz`)
 	require.NoError(t, err)
-	rs, _, err := ScanRows(rows, 0)
+	rs, _, err := ScanRows(rows, 0, 0)
 	require.NoError(t, err)
 	require.Len(t, rs.Columns, 4)
 	assert.Equal(t, "DECIMAL(12,2)", rs.Columns[0].Type)

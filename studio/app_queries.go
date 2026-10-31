@@ -11,10 +11,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
-	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // --- Queries ---
@@ -87,8 +84,9 @@ func humanDuration(d time.Duration) string {
 type RunQueryRequest struct {
 	SQL        string `json:"sql"`
 	Connection string `json:"connection"`
-	// TabID names the editor tab; it only labels the run (the choice is never
-	// session-global).
+	// TabID names the editor tab. It keys the run for CancelRun ("query:<tabId>"),
+	// and a second run with the same TabID replaces the first; the connection
+	// choice is never session-global.
 	TabID string `json:"tabId"`
 	// QueryID names the saved query the editor has open, and Params the values
 	// of its declared $name parameters (typed JSON, as the inputs hold them). A
@@ -108,57 +106,50 @@ func validateRunRequest(req RunQueryRequest) error {
 	return nil
 }
 
-// prepareRun is the editor's statement as it will run: metric() calls expanded
-// (the same expander the agent's policy uses, each saved query behind one also
-// held to a plain SELECT), then the editor's guard (usersql.CheckInteractive,
-// shared with the console), then the parameter values bound. The caller holds
-// a.mu.
-func (a *App) prepareRun(req RunQueryRequest) (string, map[string]any, error) {
+// prepareRun is the editor's statement as it will run: the saved query's
+// parameter values bound, then hub.PrepareForPerson (the editor's guard on the
+// typed text, metric() calls expanded with each saved query behind one held to a
+// plain SELECT, the guard again on the expanded text). The caller holds a.mu.
+func (a *App) prepareRun(ctx context.Context, req RunQueryRequest) (string, map[string]any, error) {
 	if err := a.requireWorkspace(); err != nil {
-		return "", nil, err
-	}
-	ctx := a.ctxOrBackground()
-	if err := usersql.CheckInteractive(ctx, a.sess, req.SQL); err != nil {
 		return "", nil, err
 	}
 	params, declared, err := a.bindRunParams(req)
 	if err != nil {
 		return "", nil, err
 	}
-	opts := workspace.PersonOptions{Declared: declared}
-	if semantics.HasMetricCall(req.SQL) {
-		if opts.Vet, err = hub.MetricVetter(a.ws, a.sess, a.logger); err != nil {
-			return "", nil, err
-		}
-	}
-	exp, err := workspace.ExpandForPerson(ctx, a.ws, a.sess, req.SQL, req.Connection, params, opts)
+	exp, err := hub.PrepareForPerson(ctx, a.ws, a.sess, a.logger, hub.PersonRun{
+		SQL: req.SQL, Connection: req.Connection, Params: params, Declared: declared, Guard: hub.InteractiveGuard(a.sess),
+	})
 	if err != nil {
 		return "", nil, err
-	}
-	if len(exp.Uses) > 0 {
-		// What runs is the expanded text, so the guard reads that too.
-		if err := usersql.CheckInteractive(ctx, a.sess, exp.SQL); err != nil {
-			return "", nil, err
-		}
 	}
 	return exp.SQL, exp.Params, nil
 }
 
-// RunQuery runs the query editor's statement on the chosen connection.
+// RunQuery runs the query editor's statement on the chosen connection. The run
+// is registered under the tab's key, so CancelRun("query:<tabId>") stops it.
 func (a *App) RunQuery(req RunQueryRequest) (*QueryResult, error) {
 	if err := validateRunRequest(req); err != nil {
 		return nil, err
 	}
+	ctx, end := a.runs.begin(a.ctxOrBackground(), queryRunKey(req.TabID))
+	defer end()
 	a.mu.RLock()
 	defer a.mu.RUnlock()
+	res, err := a.runQuery(ctx, req)
+	return res, cancelledOr(ctx, err)
+}
 
-	sqlStr, params, err := a.prepareRun(req)
+// runQuery is RunQuery under ctx; the caller holds a.mu.
+func (a *App) runQuery(ctx context.Context, req RunQueryRequest) (*QueryResult, error) {
+	sqlStr, params, err := a.prepareRun(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	before := session.StatusSnapshot(a.sess)
 	start := time.Now()
-	rs, total, err := a.engine.ExecuteCappedIn(a.ctxOrBackground(), req.Connection, sqlStr, params, queryGridRowCap)
+	rs, total, err := a.engine.ExecuteCappedIn(ctx, req.Connection, sqlStr, params, queryGridRowCap)
 	a.afterRun(a.sess, before, sqlStr)
 	duration := time.Since(start)
 
@@ -302,7 +293,7 @@ func (a *App) RunA2UIQueryIn(sqlStr, connection string) (*A2UIQueryResult, error
 	ctx, cancel := context.WithTimeout(a.ctx, a2uiQueryTimeout)
 	defer cancel()
 	before := session.StatusSnapshot(runSess)
-	rs, truncated, err := handler.RunReadOnlySQLIn(ctx, connection, sqlStr, nil, a2uiQueryRowCap)
+	rs, truncated, err := handler.RunReadOnlySQLIn(agents.ArtifactQueryContext(ctx), connection, sqlStr, nil, a2uiQueryRowCap)
 	a.afterRun(runSess, before, sqlStr)
 	if err != nil {
 		return nil, a.explainReadOnlyDenial(err)
