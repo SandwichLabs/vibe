@@ -1,0 +1,100 @@
+name: Dependabot notices
+
+# Dependabot bumps change the dependency set, so the committed THIRD_PARTY_NOTICES.md (and
+# studio/frontend/package.json.md5) go stale and CI's "Third-party notices" check fails (#293).
+# This workflow regenerates them and pushes one commit to the Dependabot branch.
+#
+# Token reasoning: a workflow triggered by Dependabot on `pull_request` gets a read-only GITHUB_TOKEN
+# by default, but "You can use the `permissions` key in your workflow to increase the access for the
+# token" (https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions
+# and the auto-merge example in https://docs.github.com/en/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions).
+# So `contents: write` below is honored. We deliberately use `pull_request`, not `pull_request_target`:
+# the checked-out code is the Dependabot branch and runs with the (scoped) write token, so the job is
+# limited to PRs whose author is Dependabot and whose head is in this repository, never a fork.
+#
+# Known limit: a push made with GITHUB_TOKEN does not start other workflows, so the notices commit (the
+# PR head) has no CI run of its own. It touches only the two generated files: read CI's run on the
+# Dependabot commit for every other check (govulncheck runs before the notices step, so it is covered)
+# and this job for the notices. `[dependabot skip]` in the message lets Dependabot keep rebasing the PR
+# (force-pushing over this commit); this workflow then runs again on the rebased branch.
+
+on:
+  pull_request:
+    paths:
+      - studio/frontend/package.json
+      - studio/frontend/package-lock.json
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-notices-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  notices:
+    name: regenerate notices
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      CGO_ENABLED: "1"
+      GOFLAGS: -tags=webkit2_41,duckdb_arrow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          # Keep the write token out of .git/config while the bumped dependencies are installed and
+          # loaded; only the push step below sees it.
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: studio/frontend/package-lock.json
+
+      - name: Install system packages (CGO DuckDB, WebKitGTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # gen-notices reads licence texts from node_modules; no package script needs to run, so none
+      # does while the write token is in scope. go-licenses loads ./studio, which embeds
+      # frontend/dist, so a placeholder page is enough (as in the other worktree builds).
+      - name: Frontend install (no scripts)
+        working-directory: studio/frontend
+        run: |
+          npm ci --ignore-scripts
+          mkdir -p dist && echo '<!doctype html>' > dist/index.html
+
+      # Same steps as `task deps:refresh`.
+      - name: Regenerate notices and package digest
+        run: |
+          node scripts/gen-notices.mjs
+          node -e "process.stdout.write(require('crypto').createHash('md5').update(require('fs').readFileSync('studio/frontend/package.json')).digest('hex'))" > studio/frontend/package.json.md5
+
+      - name: Commit and push
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- THIRD_PARTY_NOTICES.md studio/frontend/package.json.md5; then
+            echo "Notices already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add THIRD_PARTY_NOTICES.md studio/frontend/package.json.md5
+          git commit -s -m "chore(deps): regenerate third-party notices [dependabot skip]"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${HEAD_REF}"

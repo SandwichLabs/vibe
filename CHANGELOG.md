@@ -8,6 +8,15 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
 
+### Changed
+
+- The Wails CLI pin in CI and release is now v2.17.0, matching `go.mod`, so `wails dev` and `wails build` no longer rewrite `go.mod` (#270).
+- Dependabot no longer proposes minor or major `duckdb-go` bumps (they change the DuckDB engine version); engine upgrades are hand-run. A new workflow regenerates `THIRD_PARTY_NOTICES.md` on Dependabot dependency PRs, and the CI notices check says to run `task notices` (#293). CI fails when the Wails CLI pin and `go.mod` disagree.
+
+### Fixed
+
+- `task build:all` builds the macOS Studio app on macOS instead of always the Linux one.
+
 ## [0.5.0] - 2026-10-29
 
 This release adds a **semantic layer kept as files** (#244): named metrics, entities, joins and a glossary that live in the workspace next to your queries, run anywhere SQL runs, and change only when you accept the change. See `docs/reference/semantics.md`.
