@@ -4,13 +4,20 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
-### Fixed
-
-- **Artifact queries now stop at 16 MB of result (#193).** A shared or pulled artifact with a query like `SELECT repeat('x', 1000000) FROM range(100)` could fill Studio's memory, because only rows (500) and time were capped. The size is now counted while rows are read, for level 1 artifacts, live A2UI bindings, notebook SQL cells, script views and HTML pages (a page's old check ran after all rows were read), and a result over it fails with "the result is too large". A single huge row is still built once before it is refused, and DuckDB still builds its own result first.
-
 ### Added
 
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
+
+### Changed
+
+- The Wails CLI pin in CI and release is now v2.17.0, matching `go.mod`, so `wails dev` and `wails build` no longer rewrite `go.mod` (#270).
+- Dependabot no longer proposes minor or major `duckdb-go` bumps (they change the DuckDB engine version); engine upgrades are hand-run. A new workflow regenerates `THIRD_PARTY_NOTICES.md` on Dependabot dependency PRs, and the CI notices check says to run `task notices` (#293). CI fails when the Wails CLI pin and `go.mod` disagree.
+
+### Fixed
+
+- `metric()` now works in a query export (the Query Explorer's export and `vibe export --sql`) and in the terminal UI's REPL, which used to fail with DuckDB's unknown-function error. An export also gets the editor's guard it used to skip (`INSTALL`, `LOAD`, secrets are refused with the editor's message). Every person-facing run path now prepares SQL in one place, `hub.PrepareForPerson` (#287). A file export now binds `$name` placeholders as a run does, so a `$word` inside exported text must be a parameter, as in the Query Explorer.
+- **Artifact queries now stop at 16 MB of result (#193).** A shared or pulled artifact with a query like `SELECT repeat('x', 1000000) FROM range(100)` could fill Studio's memory, because only rows (500) and time were capped. The size is now counted while rows are read, for level 1 artifacts, live A2UI bindings, notebook SQL cells, script views and HTML pages (a page's old check ran after all rows were read), and a result over it fails with "the result is too large". A single huge row is still built once before it is refused, and DuckDB still builds its own result first.
+- `task build:all` builds the macOS Studio app on macOS instead of always the Linux one.
 
 ## [0.5.0] - 2026-10-29
 

@@ -11,10 +11,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
-	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
 // --- Queries ---
@@ -108,38 +105,24 @@ func validateRunRequest(req RunQueryRequest) error {
 	return nil
 }
 
-// prepareRun is the editor's statement as it will run: metric() calls expanded
-// (the same expander the agent's policy uses, each saved query behind one also
-// held to a plain SELECT), then the editor's guard (usersql.CheckInteractive,
-// shared with the console), then the parameter values bound. The caller holds
-// a.mu.
+// prepareRun is the editor's statement as it will run: the saved query's
+// parameter values bound, then hub.PrepareForPerson (the editor's guard on the
+// typed text, metric() calls expanded with each saved query behind one held to a
+// plain SELECT, the guard again on the expanded text). The caller holds a.mu.
 func (a *App) prepareRun(req RunQueryRequest) (string, map[string]any, error) {
 	if err := a.requireWorkspace(); err != nil {
 		return "", nil, err
 	}
 	ctx := a.ctxOrBackground()
-	if err := usersql.CheckInteractive(ctx, a.sess, req.SQL); err != nil {
-		return "", nil, err
-	}
 	params, declared, err := a.bindRunParams(req)
 	if err != nil {
 		return "", nil, err
 	}
-	opts := workspace.PersonOptions{Declared: declared}
-	if semantics.HasMetricCall(req.SQL) {
-		if opts.Vet, err = hub.MetricVetter(a.ws, a.sess, a.logger); err != nil {
-			return "", nil, err
-		}
-	}
-	exp, err := workspace.ExpandForPerson(ctx, a.ws, a.sess, req.SQL, req.Connection, params, opts)
+	exp, err := hub.PrepareForPerson(ctx, a.ws, a.sess, a.logger, hub.PersonRun{
+		SQL: req.SQL, Connection: req.Connection, Params: params, Declared: declared, Guard: hub.InteractiveGuard(a.sess),
+	})
 	if err != nil {
 		return "", nil, err
-	}
-	if len(exp.Uses) > 0 {
-		// What runs is the expanded text, so the guard reads that too.
-		if err := usersql.CheckInteractive(ctx, a.sess, exp.SQL); err != nil {
-			return "", nil, err
-		}
 	}
 	return exp.SQL, exp.Params, nil
 }

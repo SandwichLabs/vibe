@@ -16,9 +16,7 @@ import (
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/usersql"
-	"github.com/SandwichLabs/vibe/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -166,27 +164,20 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// expandMetrics replaces metric('name', by => ...) calls with the metric's
-// saved query (the same expander the agent's policy runs), then holds the
-// expanded text to the same courtesy check as the typed one. It says what it
-// expanded on standard error, so the SQL that ran is never a surprise.
+// expandMetrics prepares the statement as a person runs it
+// (hub.PrepareForPerson: metric('name', by => ...) calls replaced by the
+// metric's saved query, then the same courtesy check on the expanded text as on
+// the typed one). It says what it expanded on standard error, so the SQL that
+// ran is never a surprise.
 func expandMetrics(ctx context.Context, o *openedWorkspace, sqlText, conn string, params map[string]any, readOnly bool, errW io.Writer) (string, map[string]any, error) {
-	var opts workspace.PersonOptions
-	if semantics.HasMetricCall(sqlText) {
-		var verr error
-		if opts.Vet, verr = hub.MetricVetter(o.WS, o.Sess, nil); verr != nil {
-			return "", nil, verr
-		}
-	}
-	exp, err := workspace.ExpandForPerson(ctx, o.WS, o.Sess, sqlText, conn, params, opts)
+	exp, err := hub.PrepareForPerson(ctx, o.WS, o.Sess, nil, hub.PersonRun{
+		SQL: sqlText, Connection: conn, Params: params, Guard: cliGuard(readOnly),
+	})
 	if err != nil {
 		return "", nil, err
 	}
 	if len(exp.Uses) == 0 {
 		return sqlText, params, nil
-	}
-	if err := usersql.Check(exp.SQL, readOnly); err != nil {
-		return "", nil, err
 	}
 	names := make([]string, len(exp.Uses))
 	for i, u := range exp.Uses {
@@ -194,6 +185,11 @@ func expandMetrics(ctx context.Context, o *openedWorkspace, sqlText, conn string
 	}
 	fmt.Fprintf(errW, "expanded %d metric%s: %s\n", len(names), plural(len(names)), strings.Join(names, ", "))
 	return exp.SQL, exp.Params, nil
+}
+
+// cliGuard is the CLI's courtesy check (usersql.Check) as a hub.PersonGuard.
+func cliGuard(readOnly bool) hub.PersonGuard {
+	return func(_ context.Context, text string) error { return usersql.Check(text, readOnly) }
 }
 
 // checkSavedFlags refuses the combinations --saved and -p do not allow, before

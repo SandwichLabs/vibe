@@ -6,6 +6,8 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/importer"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/skills"
@@ -39,18 +41,37 @@ func (a *App) ExportQueryResults(sqlStr, format, dst string) (string, error) {
 	if !strings.HasSuffix(strings.ToLower(dst), ext) {
 		dst += ext
 	}
-	ddb := a.sess.DB()
-	if ddb == nil {
-		return "", fmt.Errorf("DuckDB not available")
-	}
-	// The statement runs on the pool, not the engine: renew a storage secret
-	// that is about to end and dial what it names, as the engine would.
-	_ = a.sess.ConnectReferenced(a.ctxOrBackground(), "", sqlStr)
-	if err := session.CopyQueryTo(ddb, sqlStr, dst, copyOpts); err != nil {
-		return "", fmt.Errorf("failed to export query results: %w", err)
+	if err := a.exportQuery(sqlStr, dst, copyOpts); err != nil {
+		return "", err
 	}
 	a.logger.Info("exported query results", "format", format, "path", dst)
 	return dst, nil
+}
+
+// exportQuery writes the editor's statement to dst as the editor would run it:
+// guarded, metric() calls expanded, held to one SELECT and parameters bound
+// (hub.PrepareExport), then COPY. The caller holds a.mu.
+func (a *App) exportQuery(sqlStr, dst, copyOpts string) error {
+	ctx := a.ctxOrBackground()
+	ddb := a.sess.DB()
+	if ddb == nil {
+		return fmt.Errorf("DuckDB not available")
+	}
+	exp, err := hub.PrepareExport(ctx, a.ws, a.sess, a.logger, hub.PersonRun{SQL: sqlStr, Guard: hub.InteractiveGuard(a.sess)})
+	if err != nil {
+		return err
+	}
+	text, args, err := engine.BindParams(exp.SQL, exp.Params)
+	if err != nil {
+		return err
+	}
+	// The statement runs on the pool, not the engine: renew a storage secret
+	// that is about to end and dial what it names, as the engine would.
+	_ = a.sess.ConnectReferenced(ctx, "", exp.SQL)
+	if err := session.CopyQueryTo(ctx, ddb, text, args, dst, copyOpts); err != nil {
+		return fmt.Errorf("failed to export query results: %w", err)
+	}
+	return nil
 }
 
 // saveDialog asks where to save a file of the given format and extension. It
