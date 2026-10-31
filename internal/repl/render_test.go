@@ -185,3 +185,36 @@ func TestDuckboxMatchesDuckDBCLI(t *testing.T) {
 	assert.Equal(t, "  (40 shown)", lines[len(lines)-1])
 	assert.Equal(t, "│   range    │", lines[1], fmt.Sprint(lines[:3]))
 }
+
+func TestRenderDuckboxMatchesConsole(t *testing.T) {
+	rs := simpleRS()
+	var viaAPI bytes.Buffer
+	require.NoError(t, RenderDuckbox(&viaAPI, rs, RenderOptions{Width: 80}))
+	var viaConsole bytes.Buffer
+	st := defaultSettings()
+	require.NoError(t, render(context.Background(), &viaConsole, rs, len(rs.Rows), renderOpts{st: st, width: 80}))
+	assert.Equal(t, viaConsole.String(), viaAPI.String())
+}
+
+func TestRenderDuckboxCapsRowsAndSanitises(t *testing.T) {
+	var b bytes.Buffer
+	require.NoError(t, RenderDuckbox(&b, rangeRS(50), RenderOptions{Width: 80, MaxRows: 10}))
+	assert.Contains(t, b.String(), "50 rows")
+	assert.Contains(t, b.String(), "(10 shown)")
+	assert.NotContains(t, b.String(), "│           10 │")
+
+	b.Reset()
+	rs := &engine.ResultSet{Columns: []engine.Column{col("s", "VARCHAR")}, Rows: [][]any{{"a\x1b[2Jb"}}}
+	require.NoError(t, RenderDuckbox(&b, rs, RenderOptions{}))
+	assert.NotContains(t, b.String(), "\x1b")
+	b.Reset()
+	require.NoError(t, RenderDuckbox(&b, nil, RenderOptions{}))
+	assert.Empty(t, b.String())
+}
+
+func TestRenderDuckboxTotalUnknown(t *testing.T) {
+	var b bytes.Buffer
+	require.NoError(t, RenderDuckbox(&b, rangeRS(51), RenderOptions{Width: 80, MaxRows: 50, TotalUnknown: true}))
+	assert.Contains(t, b.String(), "50+ rows")
+	assert.Contains(t, b.String(), "(50 shown)")
+}

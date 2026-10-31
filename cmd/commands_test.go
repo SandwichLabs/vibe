@@ -1034,3 +1034,14 @@ func TestQuery_SavedShapeIsCheckedLikeTheAgentDoes(t *testing.T) {
 		assert.NotContains(t, err.Error(), "failed to execute", id, "refused before the engine ran it")
 	}
 }
+
+func TestRootHelp_ListsVibeRepl(t *testing.T) {
+	out, _, err := runVibe("--help")
+	require.NoError(t, err)
+	assert.Regexp(t, `(?m)^\s+repl\s`, out)
+	assert.False(t, replCmd.Hidden)
+	help, _, err := runVibe("repl", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, help, "--connection")
+	assert.Contains(t, help, "Console tab")
+}

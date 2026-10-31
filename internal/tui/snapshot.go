@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"sync/atomic"
 
 	"github.com/SandwichLabs/vibe/internal/lsp"
@@ -24,10 +23,10 @@ func (a *App) refreshSnapshot() {
 	if !a.snapshotBusy.CompareAndSwap(false, true) {
 		return
 	}
-	sess, root := a.ws.Session(), a.snapshotPath
+	sess, root, ctx := a.ws.Session(), a.snapshotPath, a.ctxOrBackground()
 	go func() {
 		defer a.snapshotBusy.Store(false)
-		if _, err := lsp.Snapshot(context.Background(), sess, root); err != nil {
+		if _, err := lsp.Snapshot(ctx, sess, root); err != nil {
 			a.logger.Debug("catalog snapshot incomplete", "error", err)
 		}
 	}()

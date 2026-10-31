@@ -6,10 +6,12 @@ All notable changes to Vibe are recorded here. The format follows [Keep a Change
 
 ### Added
 
+- `vibe repl` is no longer hidden: the data console (Studio's Console tab) on a real terminal, with the same engine, gates, dot commands and history. `docs/reference/console.md` describes it (#262).
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
 
 ### Changed
 
+- The terminal UI's REPL (`vibe studio` without `--gui`) now draws results with the console's duckbox renderer (`repl.RenderDuckbox`) instead of its own plain-text grid, so both show the same boxed table with a type row, and a result over 1,000 rows reads "1000+ rows (1000 shown)" (#262). Its table, notebook and catalog-snapshot reads now run under the context passed to `tui.WithContext` instead of `context.Background()`.
 - The Wails CLI pin in CI and release is now v2.17.0, matching `go.mod`, so `wails dev` and `wails build` no longer rewrite `go.mod` (#270).
 - Dependabot no longer proposes minor or major `duckdb-go` bumps (they change the DuckDB engine version); engine upgrades are hand-run. A new workflow regenerates `THIRD_PARTY_NOTICES.md` on Dependabot dependency PRs, and the CI notices check says to run `task notices` (#293). CI fails when the Wails CLI pin and `go.mod` disagree.
 - The `go-sql-sprintf-ident` ast-grep rule is now in `tools/ast-grep/rules/` at warning level (a review list of `fmt.Sprintf` SQL, not a failure), and the importer's last hand-quoted sequence name uses `QuoteLiteral`.

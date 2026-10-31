@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"database/sql"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
@@ -24,13 +25,13 @@ func TestTablesModel_LoadAndNavigate(t *testing.T) {
 	require.NoError(t, err)
 
 	m := NewTablesModel()
-	m.LoadTables(sessiontest.ForTests(db))
+	m.LoadTables(context.Background(), sessiontest.ForTests(db))
 	require.Len(t, m.items, 2)
 	assert.Equal(t, "gadgets", m.items[0].Name) // alphabetical; the default connection's tables keep bare names
 	assert.Equal(t, "widgets", m.items[1].Name)
 	assert.Equal(t, 2, m.items[1].RowCount)
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.Update(context.Background(), tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	assert.Equal(t, 1, m.cursor)
 
 	view := m.View(80, 20)
@@ -42,7 +43,7 @@ func TestTablesModel_EnterBrowsesRows(t *testing.T) {
 	m := NewTablesModel()
 	m.items = []TableInfo{{Name: "widgets", RowCount: 2}}
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := m.Update(context.Background(), tea.KeyMsg{Type: tea.KeyEnter})
 	assert.True(t, m.browsing)
 	require.NotNil(t, cmd)
 
@@ -84,7 +85,7 @@ func TestTablesModel_EstimateAndExactFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	m := NewTablesModel()
-	m.LoadTables(sessiontest.ForTests(db))
+	m.LoadTables(context.Background(), sessiontest.ForTests(db))
 	byName := map[string]TableInfo{}
 	for _, it := range m.items {
 		byName[it.Name] = it
@@ -105,7 +106,7 @@ func TestTablesModel_SmallLocalTableIsExact(t *testing.T) {
 	_, err = db.Exec(`CREATE TABLE small AS SELECT range AS id FROM range(50)`)
 	require.NoError(t, err)
 	m := NewTablesModel()
-	m.LoadTables(sessiontest.ForTests(db))
+	m.LoadTables(context.Background(), sessiontest.ForTests(db))
 	require.Len(t, m.items, 1)
 	assert.False(t, m.items[0].Approx)
 	assert.Equal(t, 50, m.items[0].RowCount)
@@ -120,10 +121,10 @@ func TestTablesModel_EnterLoadsRowsViaPage(t *testing.T) {
 	require.NoError(t, err)
 
 	m := NewTablesModel()
-	m.LoadTables(sessiontest.ForTests(db))
+	m.LoadTables(context.Background(), sessiontest.ForTests(db))
 	require.Len(t, m.items, 1)
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := m.Update(context.Background(), tea.KeyMsg{Type: tea.KeyEnter})
 	require.NotNil(t, cmd)
 	msg, ok := cmd().(tableDataMsg)
 	require.True(t, ok)
