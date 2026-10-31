@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/crud"
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -484,6 +485,10 @@ func (et *existingTable) loadColumns(ctx context.Context, conn *sql.Conn) error 
 		c.RawType = raw
 		if ct, ok := FromDuckDB(raw); ok {
 			c.Friendly, c.HasFriendly = ct, true
+		} else if !crud.SafeCastType(raw) {
+			// The raw type is interpolated into TRY_CAST(... AS <type>); the catalog may be hostile.
+			rows.Close()
+			return fmt.Errorf("column %q of %q has a type the import will not use in SQL (%q); import into a table whose column types are plain DuckDB types", c.Name, table, raw)
 		}
 		et.columns = append(et.columns, c)
 	}

@@ -26,8 +26,8 @@ func (h *Handler) handleCreateTable(ctx context.Context, req *Request) *Response
 		}
 		colName := fmt.Sprintf("%v", colMap["name"])
 		colType := fmt.Sprintf("%v", colMap["type"])
-		if !crud.ValidColumnType(colType) {
-			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid column type %q", colType))
+		if err := crud.CheckAgentColumnType(colType); err != nil {
+			return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 		}
 		colDefs = append(colDefs, fmt.Sprintf("%s %s", session.QuoteIdent(colName), colType))
 	}
@@ -52,8 +52,8 @@ func (h *Handler) handleAddColumn(ctx context.Context, req *Request) *Response {
 	table, _ := req.Params["table"].(string)
 	name, _ := req.Params["name"].(string)
 	colType, _ := req.Params["type"].(string)
-	if !crud.ValidColumnType(colType) {
-		return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("invalid column type %q", colType))
+	if err := crud.CheckAgentColumnType(colType); err != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 
 	tblSQL, tblErr := h.tableSQL(ctx, table)
