@@ -16,18 +16,19 @@ import (
 )
 
 // replCmd is the terminal driver of the data console engine (internal/repl):
-// the same Session Studio's console tab will render, on this terminal. It is
-// hidden until that tab ships (#259) and is for people, not agents: the agent
-// reaches data through MCP and never reads a console.
+// the same Session Studio's Console tab renders, on this terminal. It mirrors
+// that tab and is for people, not agents: the agent reaches data through MCP
+// and never reads a console.
 var replCmd = &cobra.Command{
-	Use:    "repl",
-	Short:  "An interactive SQL console on the workspace hub (Studio's console, in the terminal)",
-	Hidden: true,
+	Use:   "repl",
+	Short: "An interactive SQL console on the workspace hub (Studio's console, in the terminal)",
 	Long: `An interactive SQL console on the workspace's DuckDB session: the engine of
-Studio's data console, driven from this terminal. It is Vibe's own REPL, not a
+Studio's Console tab (Query Explorer), driven from this terminal. It is Vibe's own REPL, not a
 shell and not the duckdb binary: statements take the same checks and the same
 lazy attach as the Query Explorer, and dot commands are a closed set (.help).
-Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.`,
+Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.
+It needs a terminal on standard input. History is kept per workspace in
+.vibe-local/repl/history; see docs/reference/console.md.`,
 	Args:         cobra.NoArgs,
 	RunE:         runREPL,
 	SilenceUsage: true,

@@ -40,7 +40,7 @@ func TestNotebooksModel_LoadAndNavigate(t *testing.T) {
 	store := newNotebookTestStore(t)
 
 	m := NewNotebooksModel()
-	m.LoadNotebooks(store)
+	m.LoadNotebooks(context.Background(), store)
 	require.Len(t, m.items, 1)
 	assert.Equal(t, "Sales", m.items[0].Title)
 	assert.Equal(t, 2, m.items[0].CellCount)
@@ -55,9 +55,9 @@ func TestNotebooksModel_EnterDumpsCells(t *testing.T) {
 
 	m := NewNotebooksModel()
 	m.SetSize(80, 20)
-	m.LoadNotebooks(store)
+	m.LoadNotebooks(context.Background(), store)
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}, ws)
+	m, _ = m.Update(context.Background(), tea.KeyMsg{Type: tea.KeyEnter}, ws)
 	assert.True(t, m.viewing)
 	assert.Empty(t, m.err)
 

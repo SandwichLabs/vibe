@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/SandwichLabs/vibe/internal/engine"
 	"github.com/SandwichLabs/vibe/internal/notebooks"
@@ -50,26 +52,29 @@ func TestFormatResultSet_TruncatesAtRowCap(t *testing.T) {
 		rows[i] = []any{i}
 	}
 	rs := &engine.ResultSet{Columns: cols, Rows: rows}
-	out := formatResultSet(rs)
-	assert.Contains(t, out, "at least 50 more row(s) not shown")
-	assert.Contains(t, out, "(1050 rows)")
+	out := formatResultSet(rs, 80)
+	assert.Contains(t, out, "1000+ rows")
+	assert.NotContains(t, out, "1050")
+	assert.NotContains(t, out, "at least")
+	assert.Contains(t, out, "(1000 shown)")
 	// Data value for row 1050 (index 1049, beyond the cap) must not appear.
-	assert.NotContains(t, out, "\n1049\n")
-	assert.NotContains(t, out, "1049  ")
+	assert.NotContains(t, out, "1049")
 }
 
 func TestFormatResultSet_NoTruncationUnderCap(t *testing.T) {
 	cols := []engine.Column{{Name: "n", Type: "INTEGER"}}
 	rs := &engine.ResultSet{Columns: cols, Rows: [][]any{{1}, {2}}}
-	out := formatResultSet(rs)
+	out := formatResultSet(rs, 80)
 	assert.NotContains(t, out, "more row(s) not shown")
-	assert.Contains(t, out, "(2 rows)")
+	assert.Contains(t, out, "│     2 │")
+	assert.Contains(t, out, "int32")
+	assert.NotContains(t, out, "shown")
 }
 
 func TestFormatResultSet_NullValueRendersAsNULL(t *testing.T) {
 	cols := []engine.Column{{Name: "n", Type: "INTEGER"}}
 	rs := &engine.ResultSet{Columns: cols, Rows: [][]any{{nil}}}
-	out := formatResultSet(rs)
+	out := formatResultSet(rs, 80)
 	assert.Contains(t, out, "NULL")
 }
 
@@ -134,4 +139,29 @@ func TestDumpNotebook_SanitizesSourceAndTitle(t *testing.T) {
 	assert.NotContains(t, out, "\x1b")
 	assert.Contains(t, out, "Evil[2JTitle")
 	assert.Contains(t, out, "hello[31mworld")
+}
+
+func TestFormatResultSet_NoColumns(t *testing.T) {
+	assert.Equal(t, "-- OK (no results)", formatResultSet(&engine.ResultSet{}, 80))
+}
+
+func TestFormatResultSet_StripsEscapes(t *testing.T) {
+	rs := &engine.ResultSet{Columns: []engine.Column{{Name: "s\x1b[31m", Type: "VARCHAR"}}, Rows: [][]any{{"a\x1b[2Jb"}}}
+	assert.NotContains(t, formatResultSet(rs, 80), "\x1b")
+}
+
+func TestFormatResultSet_WideResultFitsWidth(t *testing.T) {
+	var cols []engine.Column
+	row := []any{}
+	for i := 0; i < 12; i++ {
+		cols = append(cols, engine.Column{Name: fmt.Sprintf("column_%d", i), Type: "VARCHAR"})
+		row = append(row, "some fairly long value")
+	}
+	rs := &engine.ResultSet{Columns: cols, Rows: [][]any{row, row}}
+	for _, w := range []int{60, 80, 120} {
+		out := formatResultSet(rs, w)
+		for _, l := range strings.Split(out, "\n") {
+			assert.LessOrEqual(t, utf8.RuneCountInString(l), w, "width %d: %q", w, l)
+		}
+	}
 }
