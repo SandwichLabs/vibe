@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/session"
 	"github.com/SandwichLabs/vibe/internal/usersql"
 	"github.com/spf13/cobra"
@@ -88,12 +90,12 @@ func runExport(cmd *cobra.Command, args []string) error {
 	}
 	defer o.Close()
 
-	source, conn, err := e.source(ctx, o, args, errW)
+	source, conn, params, err := e.source(ctx, o, args, errW)
 	if err != nil {
 		return err
 	}
 	if e.outFile == "" {
-		rs, _, err := o.Eng.ExecuteCappedIn(ctx, conn, source, nil, 0)
+		rs, _, err := o.Eng.ExecuteCappedIn(ctx, conn, source, params, 0)
 		if err != nil {
 			return err
 		}
@@ -109,8 +111,14 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if conn != "" {
 		qopts = append(qopts, session.WithCatalog(conn))
 	}
-	copySQL := session.CopyToSQL(source, e.outFile, copyOpts)
-	if _, err := o.Sess.ExecWith(ctx, copySQL, nil, qopts...); err != nil {
+	// The values are bound inside the query before it is wrapped, so the
+	// destination path is never scanned for placeholders.
+	bound, args2, err := engine.BindParams(source, params)
+	if err != nil {
+		return err
+	}
+	copySQL := session.CopyToSQL(bound, e.outFile, copyOpts)
+	if _, err := o.Sess.ExecWith(ctx, copySQL, args2, qopts...); err != nil {
 		return fmt.Errorf("failed to export: %w", err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Exported to %s\n", e.outFile)
@@ -158,29 +166,30 @@ func (e exportOpts) validate(args []string) (copyOpts, ext string, err error) {
 	return copyOpts, ext, nil
 }
 
-// source returns the SELECT to export and the connection whose catalog its
-// unqualified names use ("" for a table, which is named in full).
-func (e exportOpts) source(ctx context.Context, o *openedWorkspace, args []string, errW io.Writer) (source, conn string, err error) {
+// source returns the SELECT to export, the connection whose catalog its
+// unqualified names use ("" for a table, which is named in full) and the
+// parameter values the text needs. A --sql statement is prepared as a person
+// runs it (hub.PrepareForPerson), so a metric() call is expanded.
+func (e exportOpts) source(ctx context.Context, o *openedWorkspace, args []string, errW io.Writer) (source, conn string, params map[string]any, err error) {
 	if e.sql == "" {
 		ref, err := o.resolveTarget(ctx, args[0], errW)
 		if err != nil {
-			return "", "", err
+			return "", "", nil, err
 		}
-		return ref.SelectAllSQL(), "", nil
+		return ref.SelectAllSQL(), "", nil, nil
 	}
 	catalog := e.conn
 	if catalog == "" {
 		catalog = o.WS.DefaultConnection()
 	} else if _, ok := o.knownConnection(catalog); !ok {
-		return "", "", fmt.Errorf("unknown connection %q; this workspace has: %s", catalog, connectionNames(o))
+		return "", "", nil, fmt.Errorf("unknown connection %q; this workspace has: %s", catalog, connectionNames(o))
 	}
 	if err := o.requireConnection(catalog, errW); err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	// The text goes inside COPY (...), so it must be exactly one SELECT:
-	// nothing else can be smuggled in after a closing parenthesis.
-	if err := usersql.RequireSelect(ctx, o.Sess.DB(), e.sql); err != nil {
-		return "", "", err
+	exp, err := hub.PrepareExport(ctx, o.WS, o.Sess, nil, hub.PersonRun{SQL: e.sql, Connection: e.conn, Guard: cliGuard(e.readOnly)})
+	if err != nil {
+		return "", "", nil, err
 	}
-	return e.sql, e.conn, nil
+	return exp.SQL, e.conn, exp.Params, nil
 }
