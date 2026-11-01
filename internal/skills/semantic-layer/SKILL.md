@@ -101,6 +101,11 @@ its measure and dimensions against the saved query, are bound on the real
 connection without scanning rows. `vibe semantics check --compile` runs only
 those, fast enough after every edit; run it before the full `check`.
 
+Each entity and metric gets a `compile` row first: its table and columns, or
+its measure and dimensions against the saved query, are bound on the real
+connection without scanning rows. `vibe semantics check --compile` runs only
+those, fast enough after every edit; run it before the full `check`.
+
 ## 4. Using `metric()`
 
 ```sql
