@@ -116,6 +116,12 @@ func cliBeforeSession(errW io.Writer) func(workspace.Workspace) {
 
 // cliOpen opens the workspace through hub.Open and words its errors for the CLI.
 func cliOpen(ctx context.Context, dir string, mode hub.Mode, advise bool, app string, errW io.Writer) (*openedWorkspace, error) {
+	return cliOpenWith(ctx, dir, hub.OpenOptions{App: app, Mode: mode}, advise, errW)
+}
+
+// cliOpenWith is cliOpen with the caller's open options (App, Mode and the
+// rest); the CLI's logger, resolver, redactor and BeforeSession are filled in.
+func cliOpenWith(ctx context.Context, dir string, opts hub.OpenOptions, advise bool, errW io.Writer) (*openedWorkspace, error) {
 	if isVibeFile(dir) {
 		return nil, errLegacyFileArg
 	}
@@ -123,10 +129,9 @@ func cliOpen(ctx context.Context, dir string, mode hub.Mode, advise bool, app st
 	if err != nil {
 		return nil, err
 	}
-	o, err := hub.Open(ctx, root, hub.OpenOptions{
-		App: app, Mode: mode, Logger: logger, Resolver: cliResolver(), Redactor: cliRedactor,
-		BeforeSession: cliBeforeSession(errW),
-	})
+	opts.Logger, opts.Resolver, opts.Redactor = logger, cliResolver(), cliRedactor
+	opts.BeforeSession = cliBeforeSession(errW)
+	o, err := hub.Open(ctx, root, opts)
 	if err != nil {
 		var oe *hub.OpenError
 		if errors.As(err, &oe) {

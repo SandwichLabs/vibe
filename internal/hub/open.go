@@ -68,6 +68,11 @@ type OpenOptions struct {
 	// into a read-only open with Opened.Holder naming the owner (Studio's
 	// banner) instead of an error.
 	FallbackReadOnly bool
+	// PolicyGatedRuns (with a read-only open) is workspace.WithPolicyGatedRuns:
+	// for a process whose every statement goes through the agent policy's
+	// read-only runner (ReadOnlyRunner), so a connection that cannot be
+	// attached read-only (MotherDuck) is still reachable without the hub lock.
+	PolicyGatedRuns bool
 	// RepairMissingID adds an id to a vibe.yaml that has none and retries.
 	RepairMissingID bool
 	// TakeOverTimeout is how long ModeTakeOver waits for the owner (default 10s).
@@ -230,6 +235,9 @@ func openWith(ctx context.Context, root string, o OpenOptions, st steps) (opened
 	}
 	if out.ReadOnly {
 		sopts = append(sopts, workspace.WithForceReadOnly())
+		if o.PolicyGatedRuns {
+			sopts = append(sopts, workspace.WithPolicyGatedRuns())
+		}
 	}
 	if o.BeforeSession != nil {
 		o.BeforeSession(ws)

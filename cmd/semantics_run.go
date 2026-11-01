@@ -92,10 +92,13 @@ func init() {
 
 // openSemanticsRun opens the workspace for a run of what its definitions
 // declare: read-only (no hub lock, every connection attached read-only), with
-// the agent policy's read-only runner.
+// the agent policy's read-only runner. Every statement goes through that
+// runner, so the open is policy-gated (hub.OpenOptions.PolicyGatedRuns): a
+// connection that cannot be attached read-only at all (MotherDuck) is attached
+// as defined instead of being unreachable (#302).
 func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, semantics.QueryFunc, error) {
 	dir, _ := cmd.Flags().GetString("workspace")
-	o, err := openWorkspace(cmdCtx(cmd), dir, true, false, app, cmd.ErrOrStderr())
+	o, err := cliOpenWith(cmdCtx(cmd), dir, semanticsRunOpenOptions(app), false, cmd.ErrOrStderr())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -105,6 +108,11 @@ func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, semanti
 		return nil, nil, err
 	}
 	return o, workspace.ReadOnlyRunFunc(r), nil
+}
+
+// semanticsRunOpenOptions is the open openSemanticsRun asks for.
+func semanticsRunOpenOptions(app string) hub.OpenOptions {
+	return hub.OpenOptions{App: app, Mode: hub.ModeReadOnly, PolicyGatedRuns: true}
 }
 
 func runSemanticsCheck(cmd *cobra.Command, args []string) error {
@@ -168,6 +176,9 @@ func printCheckReport(out io.Writer, rows []assert.Row) {
 	}
 	_ = tw.Flush()
 	fmt.Fprintf(out, "\n%d passed, %d failed, %d could not run\n", pass, fail, errs)
+	if pass+fail == 0 && errs > 0 {
+		fmt.Fprintln(out, "Nothing was verified: no check could run. Fix the errors above and run it again.")
+	}
 }
 
 // checkExit is the exit status for a set of results.

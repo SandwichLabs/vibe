@@ -226,6 +226,40 @@ func TestOpenReadOnlyTakesNoLock(t *testing.T) {
 	assert.Equal(t, "Helper App", o.Holder.App)
 }
 
+// PolicyGatedRuns reaches the session only on a read-only open: MotherDuck
+// keeps forced_read_only (and AttachSQL refuses it) unless the open is
+// policy-gated (#302). No connection is dialed.
+func TestOpenPolicyGatedRunsReachesTheSession(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		opts   OpenOptions
+		forced bool
+	}{
+		{"read-only", OpenOptions{Mode: ModeReadOnly}, true},
+		{"read-only, policy-gated", OpenOptions{Mode: ModeReadOnly, PolicyGatedRuns: true}, false},
+		{"read-write ignores it", OpenOptions{Mode: ModeReadWrite, PolicyGatedRuns: true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws := newWorkspace(t)
+			require.NoError(t, ws.AddConnection(workspace.ScopeShared, workspace.ConnectionDef{Name: "md", Type: "motherduck", Database: "d"}))
+			var got []workspace.SessionOption
+			real := defaultSteps()
+			st := real
+			st.openSession = func(ctx context.Context, w workspace.Workspace, l *slog.Logger, opts ...workspace.SessionOption) (session.Session, []workspace.SessionIssue, error) {
+				got = opts
+				return real.openSession(ctx, w, l, opts...)
+			}
+			tc.opts.App, tc.opts.Logger = "test", quietLogger()
+			o, err := openWith(t.Context(), ws.Root(), tc.opts, st)
+			require.NoError(t, err)
+			defer o.Close()
+			spec, err := workspace.SessionSpec(o.WS, "md", got...)
+			require.NoError(t, err)
+			assert.Equal(t, tc.forced, spec.Params["forced_read_only"] != "")
+		})
+	}
+}
+
 func TestOpenRemoteOnlyTakesNoLockAndAttachesNoLocalFile(t *testing.T) {
 	ws := newWorkspace(t)
 	helperHolder(t, ws.Root())

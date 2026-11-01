@@ -31,7 +31,9 @@ type sessionOpts struct {
 	lookup    LookupFunc
 	session   []session.Option
 	readOnly  bool
-	preparers map[string]preparer
+	// policyGated: see WithPolicyGatedRuns.
+	policyGated bool
+	preparers   map[string]preparer
 }
 
 // WithForceReadOnly attaches every connection read-only whatever its
@@ -40,6 +42,16 @@ type sessionOpts struct {
 // exist yet is reported as an issue instead of being created, and no folder
 // is created for it.
 func WithForceReadOnly() SessionOption { return func(o *sessionOpts) { o.readOnly = true } }
+
+// WithPolicyGatedRuns goes with WithForceReadOnly, for a process whose every
+// statement runs through the agent policy's read-only path (`vibe semantics
+// check` and `profile`, through hub.ReadOnlyRunner). A connection type that
+// cannot be attached read-only at all (MotherDuck) is then attached as it is
+// defined, the way Studio attaches it for the same runs, instead of staying
+// registered but unconnectable. Every other connection is still attached
+// read-only, local files included; the policy, not the attach, is what keeps
+// such a process from writing.
+func WithPolicyGatedRuns() SessionOption { return func(o *sessionOpts) { o.policyGated = true } }
 
 // WithSkipLocalFiles registers local duckdb and sqlite connections without
 // attaching them (nor creating their files), for a command that only needs the
@@ -149,6 +161,7 @@ func (b *sessionBuild) env() prepareEnv {
 	return prepareEnv{
 		Root:          b.ws.Root(),
 		ForceReadOnly: b.o.readOnly,
+		PolicyGated:   b.o.policyGated,
 		SkipLocal:     b.o.skipLocal,
 		Fail:          b.failMsg,
 		ClaimHubToken: b.claimHubToken,
