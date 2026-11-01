@@ -84,6 +84,7 @@ func TestInstructionsText_StaysShortAndCapsConnections(t *testing.T) {
 	})
 	assert.Less(t, len(text), 2000, "Claude Code truncates instructions at 2,048 characters")
 	assert.Contains(t, text, "and 28 more")
+	assert.Contains(t, text, "semantic-layer", "the skill pointer stays in the capped text")
 }
 
 func TestServeStdio_InitializeCarriesInstructionsAndIdentity(t *testing.T) {

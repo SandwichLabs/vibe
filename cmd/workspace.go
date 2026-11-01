@@ -23,7 +23,7 @@ var workspaceCmd = &cobra.Command{
 	Long: `A workspace is a folder (optionally a git repository) holding notebooks,
 saved queries and skills as plain files, plus a vibe.yaml that marks it and
 lists its connections. Data stays where it lives; a workspace only describes
-how to reach it. See docs/reference/workspaces.md.`,
+how to reach it. See ` + docRef("workspaces"),
 }
 
 const initLong = `Turn a folder into a Vibe workspace: a vibe.yaml marker, notebooks/,

@@ -31,7 +31,7 @@ they go to your OS keychain, or are read from environment variables you name
 
 Scopes: --scope local (default; this computer, this workspace), shared (in the
 committed vibe.yaml, so teammates get the definition and enter their own
-credentials) or user (every workspace you open). See docs/reference/connections.md.`,
+credentials) or user (every workspace you open). See ` + docRef("connections"),
 }
 
 func addConnWorkspaceFlag(c *cobra.Command) { addWorkspaceFlag(c) }

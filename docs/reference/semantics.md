@@ -10,6 +10,8 @@ beside the queries and notebooks that use them. There are four kinds:
 
 Three runnable example workspaces, with real output, are in [`docs/examples/`](../examples/README.md).
 
+An agent reads the modelling conventions (grain first, double-sourced rows, which assertions to declare, the `metric()` window and hand-join patterns, propose rather than write) from the built-in `semantic-layer` skill (`read_skill semantic-layer`). This page is the reference it points to.
+
 Everything is files you can write by hand. Nothing here needs AI. `vibe semantics list` reads the files and nothing else; a metric runs when SQL calls it with [`metric()`](#using-a-metric-in-sql).
 
 ```
@@ -208,7 +210,7 @@ vibe semantics accept <id> [--overwrite --rev <rev>]   write the proposed defini
 vibe semantics reject <id>              decline it; semantics/ is not touched
 ```
 
-`list` includes unreadable files with their error, and says on stderr how many proposals wait. `show` prints a file even when it fails validation (so you can read and fix it), then says why on stderr and exits non-zero. Control and bidirectional characters in a name, summary, error or file are shown as `<U+XXXX>`.
+`list` includes unreadable files with their whole error message (whitespace folded, never cut) and says on stderr how many files could not be read and how many proposals wait. When the cause is an unquoted value inside `{...}` (for example `values: (key, unit)`, which YAML splits at the comma), the error ends with a hint to quote a value that contains `,` `(` `)` `:` or `#`. `show` prints a file even when it fails validation (so you can read and fix it), then says why on stderr and exits non-zero. Control and bidirectional characters in a name, summary, error or file are shown as `<U+XXXX>`.
 
 ## Proposals: an agent suggests, you decide
 
