@@ -12,8 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 type exportItem struct {
@@ -300,7 +300,7 @@ func (c *connCollector) take(d workspace.ConnectionDef, where string) {
 	c.out = append(c.out, clean)
 }
 
-// team takes the team's assay.yaml definitions: all of them, or the named ones.
+// team takes the team's slaw.yaml definitions: all of them, or the named ones.
 func (c *connCollector) team(t Target, sel Selection) error {
 	want := map[string]bool{}
 	for _, n := range sel.TeamConnections {

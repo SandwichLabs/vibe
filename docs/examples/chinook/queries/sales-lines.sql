@@ -1,4 +1,4 @@
--- assay: {"title":"Sales lines","description":"One row per invoice line, with the customer's country, the track's genre and the invoice year: the rows every revenue metric is measured over"}
+-- slaw: {"title":"Sales lines","description":"One row per invoice line, with the customer's country, the track's genre and the invoice year: the rows every revenue metric is measured over"}
 SELECT
   l.invoice_line_id,
   l.invoice_id,

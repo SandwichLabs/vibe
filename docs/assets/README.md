@@ -1,12 +1,12 @@
 # Docs assets
 
 Screenshots and media for the README, the docs and the release page. All of them
-come from the **current UI** (Assay from the `main` branch, a dev build, so
+come from the **current UI** (Slaw from the `main` branch, a dev build, so
 Settings > About says `dev`) against a local demo workspace, "Coffee Shop
 Analytics", with no account, token or personal data:
 
 - `local` (DuckDB) with `orders` (about 33,500 rows), `stores` and `products`,
-  generated with a seeded DuckDB script and loaded with `assay import` from CSV.
+  generated with a seeded DuckDB script and loaded with `slaw import` from CSV.
 - `loyalty`, a read-only SQLite connection with 20 made-up members.
 - `data/weather.parquet`, a synthetic daily-weather file.
 - One notebook ("Q3 sales review": markdown, an A2UI stat row and bar chart, SQL
@@ -33,20 +33,20 @@ Retake `settings-about.png` from a stamped rc build before shipping it, because 
 
 ## How they were made
 
-1. `assay workspace init` for the folder, then the data: a seeded DuckDB
+1. `slaw workspace init` for the folder, then the data: a seeded DuckDB
    `generate_series` script wrote `orders.csv`, `stores.csv`, `products.csv` and
-   `weather.parquet`; `assay import` loaded the CSVs. The notebook, queries and
+   `weather.parquet`; `slaw import` loaded the CSVs. The notebook, queries and
    skill are plain files in the workspace folder.
-2. `task studio:dev` with `ASSAY_CONFIG_DIR` pointing at a scratch directory, the
+2. `task studio:dev` with `SLAW_CONFIG_DIR` pointing at a scratch directory, the
    workspace opened through the `OpenWorkspace` binding, then
    [Rodney](../contributing/rodney.md) `screenshot -w 1440 -h 900` per view.
 3. The GIF and MP4 are a Rodney screenshot loop (about 13 frames a second)
    while a script clicks the notebook and scrolls smoothly, assembled with
    ffmpeg (`libx264`, then `palettegen`/`paletteuse` for the GIF).
-4. `social-preview.png` is an HTML card rendered in Rodney: brand teal gradient, `studio/build/icon/assay.svg`,
-   "Assay" in Fraunces, the README tagline in Inter (both from `studio/frontend/src/assets/fonts`) and a crop of `hero-notebook.png`.
+4. `social-preview.png` is an HTML card rendered in Rodney: brand teal gradient, `studio/build/icon/slaw.svg`,
+   "Slaw" in Fraunces, the README tagline in Inter (both from `studio/frontend/src/assets/fonts`) and a crop of `hero-notebook.png`.
 
-The top-bar "V" mark in Studio differs from the new app icon (`studio/build/icon/assay.svg`); a follow-up could use the icon there. The social card uses the icon.
+The top-bar "V" mark in Studio differs from the new app icon (`studio/build/icon/slaw.svg`); a follow-up could use the icon there. The social card uses the icon.
 
 Re-take a shot when the UI around it changes.
 

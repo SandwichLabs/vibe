@@ -9,7 +9,7 @@ import (
 
 // hashTag versions the ViewHash encoding. A different encoding gets a different
 // tag, so a stored allow can never match a hash made another way.
-const hashTag = "assay-view-hash/1"
+const hashTag = "slaw-view-hash/1"
 
 // ViewPart is one view file as hashed: its path relative to the artifact
 // folder (forward slashes) and its bytes.
@@ -22,7 +22,7 @@ type ViewPart struct {
 // manifest (so a pull that changes a query's SQL or connection after an allow
 // asks again) and every view file, in one canonical, length-prefixed stream:
 //
-//	string "assay-view-hash/1"
+//	string "slaw-view-hash/1"
 //	bytes  artifact.yaml
 //	uint64 number of view files
 //	then, sorted by path: string path, bytes content
@@ -36,7 +36,7 @@ type ViewPart struct {
 // Two files with the same path are refused (ErrInvalid), so the hash never
 // depends on input order. A per-file role, kind or capability list is not
 // hashed here: those come from artifact.yaml, which is entry 0. Adding a
-// per-file role to the stream is a new encoding, assay-view-hash/2.
+// per-file role to the stream is a new encoding, slaw-view-hash/2.
 func ViewHash(manifest []byte, files []ViewPart) (string, error) {
 	return hashWithTag(hashTag, manifest, files)
 }

@@ -1,7 +1,7 @@
 # Vendored fonts
 
 All three families are licensed under the SIL Open Font License 1.1 and are
-bundled so Assay renders identically offline (local-first: no CDN).
+bundled so Slaw renders identically offline (local-first: no CDN).
 
 | Family | Files | Source |
 |---|---|---|

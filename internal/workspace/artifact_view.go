@@ -11,9 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/trustfile"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/trustfile"
 )
 
 // ViewDecisionFile is the per-person file, beside dotenv.json in the user
@@ -103,7 +103,7 @@ type ArtifactViewQuery struct {
 	Name       string `json:"name"`
 	Connection string `json:"connection,omitempty"`
 	// Used is true when the page's templates name the query. A scripted page
-	// can run every manifest query with assay.run, so its list holds them all
+	// can run every manifest query with slaw.run, so its list holds them all
 	// (Used false for the ones only script could reach); a static page has no
 	// script, so its list holds only the template's.
 	Used bool `json:"used"`
@@ -222,7 +222,7 @@ func matchCase(dir, name string) string {
 // an absolute path, so the detail goes to the debug log only.
 const (
 	viewErrNotFound = "there is no such artifact"
-	viewErrUnusable = "this artifact's files are not usable as a custom view (open its Source tab in Studio, or run assay artifact list, to see why)"
+	viewErrUnusable = "this artifact's files are not usable as a custom view (open its Source tab in Studio, or run slaw artifact list, to see why)"
 )
 
 // unusable marks the status as not usable, with a fixed text.
@@ -315,7 +315,7 @@ func querySQLs(qs []artifacts.Query, only map[string]bool) []string {
 }
 
 // pageQueryUses is the queries the allow prompt lists: for a scripted page every
-// manifest query (assay.run reaches any of them), marked when the templates use
+// manifest query (slaw.run reaches any of them), marked when the templates use
 // it; for a static page the queries its templates use.
 func pageQueryUses(a *artifacts.Artifact) []ArtifactViewQuery {
 	used := map[string]bool{}

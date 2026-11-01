@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/assay/internal/importer"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/importer"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 var importCmd = &cobra.Command{
@@ -32,7 +32,7 @@ exists, --mode is required: upsert (update matching rows by key), replace
 (drop and recreate) or append (add rows).
 
 The command takes ownership of the workspace's database for its duration; if
-Assay or "assay mcp serve" has the workspace open it says so and stops.
+Slaw or "slaw mcp serve" has the workspace open it says so and stops.
 --dry-run writes no table, but it still takes ownership and, on a fresh
 workspace, creates the empty data/local.duckdb file.`,
 	Args:         cobra.ExactArgs(1),
@@ -42,8 +42,8 @@ workspace, creates the empty data/local.duckdb file.`,
 
 func runImport(cmd *cobra.Command, args []string) error {
 	file := args[0]
-	if isAssayFile(file) {
-		// A .assay argument is a bundle (#118); an older container is refused
+	if isSlawFile(file) {
+		// A .slaw argument is a bundle (#118); an older container is refused
 		// by the bundle reader with a plain message.
 		return runImportBundle(cmd, file)
 	}
@@ -74,7 +74,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 		into = importer.NormalizeName(tableNameFromCSVPath(file))
 	}
 
-	o, err := openWorkspace(ctx, dir, false, false, "assay import", errW)
+	o, err := openWorkspace(ctx, dir, false, false, "slaw import", errW)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if c, ok := o.knownConnection(ref.Catalog); ok && c.IsReadOnly() {
-		return fmt.Errorf("connection %s is read-only, so nothing can be imported into it; set `read_only: false` on it in assay.yaml or your connections file", ref.Catalog)
+		return fmt.Errorf("connection %s is read-only, so nothing can be imported into it; set `read_only: false` on it in slaw.yaml or your connections file", ref.Catalog)
 	}
 
 	src := importer.Source{Path: file, Sheet: sheet, HasHeader: !noHeader}

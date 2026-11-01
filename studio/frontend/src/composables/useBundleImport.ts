@@ -1,5 +1,5 @@
 /**
- * useBundleImport — the Import .assay dialog's state and actions (F10): pick and
+ * useBundleImport — the Import .slaw dialog's state and actions (F10): pick and
  * preview a bundle (verified before anything is written), the passphrase step,
  * the per-item Rename / Overwrite / Skip decisions, optional new-workspace
  * fields, and the commit. BundleImportDialog only renders it.

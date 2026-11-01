@@ -69,7 +69,7 @@ func (f *fakeKeyring) Delete(s, u string) error {
 
 func newResolver(f *fakeKeyring, env map[string]string) *Resolver {
 	return NewResolver(
-		WithKeychain(NewKeyringStore(WithKeyringBackend(f), WithKeyringService("assay-test"), WithKeyringTimeout(200*time.Millisecond))),
+		WithKeychain(NewKeyringStore(WithKeyringBackend(f), WithKeyringService("slaw-test"), WithKeyringTimeout(200*time.Millisecond))),
 		WithEnv(func(k string) string { return env[k] }),
 		WithResolverLogger(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))),
 	)
@@ -111,10 +111,10 @@ func TestKeyringRoundTripAndNotFound(t *testing.T) {
 }
 
 func TestKeyringServiceFromEnv(t *testing.T) {
-	t.Setenv("ASSAY_KEYRING_SERVICE", "assay-envtest")
-	assert.Equal(t, "assay-envtest", NewKeyringStore().Service())
-	t.Setenv("ASSAY_KEYRING_SERVICE", "")
-	assert.Equal(t, "assay", NewKeyringStore().Service())
+	t.Setenv("SLAW_KEYRING_SERVICE", "slaw-envtest")
+	assert.Equal(t, "slaw-envtest", NewKeyringStore().Service())
+	t.Setenv("SLAW_KEYRING_SERVICE", "")
+	assert.Equal(t, "slaw", NewKeyringStore().Service())
 }
 
 func TestKeyringTimeoutIsUnavailable(t *testing.T) {

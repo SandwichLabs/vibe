@@ -41,7 +41,7 @@ describe('errorText', () => {
 
 describe('isConflict', () => {
   it('recognises the bridge conflict marker on an Error or a string', () => {
-    expect(isConflict(new Error('conflict: notebooks/a.asnb changed on disk since it was loaded'))).toBe(true)
+    expect(isConflict(new Error('conflict: notebooks/a.slnb changed on disk since it was loaded'))).toBe(true)
     expect(isConflict('conflict: x')).toBe(true)
   })
   it('does not match other errors or a mid-message mention', () => {
@@ -50,11 +50,11 @@ describe('isConflict', () => {
     expect(isConflict(null)).toBe(false)
   })
   it('tells a deleted file from a changed one', () => {
-    expect(isDeletedConflict(new Error('conflict: notebooks/a.asnb was deleted on disk since it was loaded'))).toBe(true)
-    expect(isDeletedConflict(new Error('conflict: notebooks/a.asnb changed on disk since it was loaded'))).toBe(false)
+    expect(isDeletedConflict(new Error('conflict: notebooks/a.slnb was deleted on disk since it was loaded'))).toBe(true)
+    expect(isDeletedConflict(new Error('conflict: notebooks/a.slnb changed on disk since it was loaded'))).toBe(false)
     expect(isDeletedConflict(new Error('file was deleted'))).toBe(false)
   })
   it('settingsError drops the marker for a conflict', () => {
-    expect(settingsError(new Error('conflict: assay.yaml changed'))).toEqual({ text: 'assay.yaml changed', stale: true })
+    expect(settingsError(new Error('conflict: slaw.yaml changed'))).toEqual({ text: 'slaw.yaml changed', stale: true })
   })
 })

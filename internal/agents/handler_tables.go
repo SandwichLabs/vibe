@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/crud"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // --- Schema handlers ---

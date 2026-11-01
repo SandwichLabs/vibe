@@ -20,12 +20,12 @@ func TestConnInstallCoversASQLiteCatalogLake(t *testing.T) {
 	}
 	root := newWS(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	_, stderr, err := runAssay("conn", "add", "lake", "--type", "ducklake", "--path", "data/lake.db",
+	_, stderr, err := runSlaw("conn", "add", "lake", "--type", "ducklake", "--path", "data/lake.db",
 		"--option", "catalog=sqlite", "--option", "data_path=data/files", "--read-only=false", "--workspace", root)
 	require.NoError(t, err, stderr)
 
 	// Test --install on a lake that does not exist yet still installs first.
-	out, stderr, err := runAssay("conn", "test", "lake", "--install", "--workspace", root)
+	out, stderr, err := runSlaw("conn", "test", "lake", "--install", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "new lake")
 
@@ -33,7 +33,7 @@ func TestConnInstallCoversASQLiteCatalogLake(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	// (The CLI opens read-only and the catalog is not there yet, so the connect
 	// itself is refused for that; what matters is that both were installed.)
-	_, stderr, err = runAssay("conn", "connect", "lake", "--install", "--workspace", filepath.Clean(root))
+	_, stderr, err = runSlaw("conn", "connect", "lake", "--install", "--workspace", filepath.Clean(root))
 	if err != nil {
 		assert.Contains(t, err.Error(), "not readable")
 		assert.NotContains(t, err.Error(), "extension")

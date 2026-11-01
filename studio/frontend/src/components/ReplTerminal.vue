@@ -71,7 +71,7 @@ onBeforeUnmount(close)
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--assay-editor-bg);
+  background: var(--slaw-editor-bg);
 }
 .repl-term {
   flex: 1;
@@ -83,11 +83,11 @@ onBeforeUnmount(close)
   align-items: center;
   gap: 12px;
   padding: 6px 12px;
-  border-top: 1.5px solid var(--assay-border-subtle);
-  background: var(--assay-bg-alt);
-  color: var(--assay-fg-muted);
-  font-family: var(--assay-font-mono);
+  border-top: 1.5px solid var(--slaw-border-subtle);
+  background: var(--slaw-bg-alt);
+  color: var(--slaw-fg-muted);
+  font-family: var(--slaw-font-mono);
   font-size: 12px;
 }
-.repl-error { color: var(--assay-error); }
+.repl-error { color: var(--slaw-error); }
 </style>

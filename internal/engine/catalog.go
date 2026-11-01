@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // CatalogRequest asks for one level of a connection's tree: its schemas (no

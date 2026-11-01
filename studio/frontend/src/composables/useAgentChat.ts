@@ -145,7 +145,7 @@ interface StreamPayload {
 // carry its own marked/DOMPurify call here, a second copy that had drifted
 // from Skills' sanitization (weaker FORBID_TAGS, no image/link handling).
 // Consumers (AgentPanel, AgentView) must render the result inside a
-// `.assay-md-content` container (see lib/markdown.ts's assayMdContentClass)
+// `.slaw-md-content` container (see lib/markdown.ts's slawMdContentClass)
 // so installSafeLinkHandling's click interception actually applies to it.
 export const renderMarkdown = renderSafeMarkdown
 
@@ -195,7 +195,7 @@ function nextTurnId(): string {
   return `turn-${turnSeq}-${turnSeq * 2654435761 % 1000000}`
 }
 
-// The conversation is a module singleton (SandwichLabs/assay#2): the slide-in
+// The conversation is a module singleton (SandwichLabs/slaw#2): the slide-in
 // panel and the Agent page share ONE chat, and it outlives whichever view is
 // mounted. The per-turn Wails listeners live in send()'s closure, not in a
 // view, so a turn keeps streaming into this state while the person is on

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/agents"
 )
 
 // Every table function, CALL and PRAGMA the agent SQL policy allows, and every

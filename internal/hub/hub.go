@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filelock"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/filelock"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
-// LockFile is the hub lock's name inside the workspace's .assay-local/.
+// LockFile is the hub lock's name inside the workspace's .slaw-local/.
 const LockFile = "hub.lock"
 
 // ControlSigusr1 is the Holder.Control value of a holder that releases the hub
@@ -26,7 +26,7 @@ const ControlSigusr1 = "sigusr1"
 var (
 	// ErrHubHeld is wrapped by the error AcquireHub returns when another
 	// process owns the hub.
-	ErrHubHeld = errors.New("workspace is already open in another Assay process")
+	ErrHubHeld = errors.New("workspace is already open in another Slaw process")
 	// ErrNotHeld means nobody holds the hub lock right now.
 	ErrNotHeld = errors.New("nobody holds this workspace's hub")
 	// ErrUntrusted means a hub.lock exists and is held, but its content cannot
@@ -49,7 +49,7 @@ type MCPEndpoint struct {
 	Pending bool `json:"pending,omitempty"`
 }
 
-// CapSandboxHeader: the server honours an X-Assay-Sandbox header on the SSE
+// CapSandboxHeader: the server honours an X-Slaw-Sandbox header on the SSE
 // connection and applies it tighten-only for that session.
 const CapSandboxHeader = "sandbox-header"
 
@@ -77,7 +77,7 @@ type Holder struct {
 	Control string `json:"control,omitempty"`
 }
 
-// String renders the holder for messages, e.g. "Assay (pid 4242)".
+// String renders the holder for messages, e.g. "Slaw (pid 4242)".
 func (h Holder) String() string {
 	s := fmt.Sprintf("%s (pid %d)", h.App, h.PID)
 	if h.Host != "" {
@@ -96,7 +96,7 @@ type HeldError struct {
 }
 
 func (e *HeldError) Error() string {
-	who := "another Assay process"
+	who := "another Slaw process"
 	if e.Holder != nil {
 		who = e.Holder.String()
 	}
@@ -123,7 +123,7 @@ type options struct {
 func withoutRetry() Option { return func(o *options) { o.noRetry = true } }
 
 // WithPendingMCP publishes mcp {pending:true} in the very first write of
-// hub.lock, so a second `assay mcp serve` that races the owner's startup waits
+// hub.lock, so a second `slaw mcp serve` that races the owner's startup waits
 // for the endpoint instead of failing.
 func WithPendingMCP() Option { return func(o *options) { o.pending = true } }
 
@@ -137,13 +137,13 @@ func WithReleaseHandler(fn func()) Option { return func(o *options) { o.onReleas
 type Hold struct {
 	mu     sync.Mutex
 	lock   *filelock.Lock
-	dir    *os.File // .assay-local, held open: the lock is created and removed relative to it
+	dir    *os.File // .slaw-local, held open: the lock is created and removed relative to it
 	holder Holder
 	stop   func() // stops the release-signal listener
 }
 
 // AcquireHub takes the workspace's hub lock, non-blocking. app names the
-// holder ("Assay", "assay mcp serve"). When another process owns it the
+// holder ("Slaw", "slaw mcp serve"). When another process owns it the
 // error is a *HeldError (errors.Is ErrHubHeld) naming the holder.
 func AcquireHub(ws workspace.Workspace, app string, opts ...Option) (*Hold, error) {
 	return acquireAt(ws.Root(), app, opts...)
@@ -255,7 +255,7 @@ func ReadHolder(root string) (*Holder, error) {
 	}
 	defer closeDir(dir)
 	// Everything below is relative to the directory we just checked, so
-	// swapping .assay-local for a symlink now changes nothing.
+	// swapping .slaw-local for a symlink now changes nothing.
 	f, err := filelock.OpenAt(dir, LockFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

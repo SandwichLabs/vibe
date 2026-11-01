@@ -37,10 +37,10 @@ const bwrapPath = "/usr/bin/bwrap"
 
 // helperHome is the helper's HOME inside the namespace: a tmpfs, never the
 // person's home and never /root.
-const helperHome = "/tmp/assay-home"
+const helperHome = "/tmp/slaw-home"
 
 // helperExe is where the Studio binary appears inside the namespace.
-const helperExe = "/assay-view-host"
+const helperExe = "/slaw-view-host"
 
 var waylandNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
@@ -89,8 +89,8 @@ func gateContents(uid, gid int) map[string]string {
 		"nsswitch.conf": "passwd: files\ngroup: files\nhosts: files\n",
 		"resolv.conf":   "",
 		"hosts":         "127.0.0.1 localhost\n::1 localhost\n",
-		"passwd":        fmt.Sprintf("assay:x:%d:%d:Assay page:%s:/usr/sbin/nologin\n", uid, gid, helperHome),
-		"group":         fmt.Sprintf("assay:x:%d:\n", gid),
+		"passwd":        fmt.Sprintf("slaw:x:%d:%d:Slaw page:%s:/usr/sbin/nologin\n", uid, gid, helperHome),
+		"group":         fmt.Sprintf("slaw:x:%d:\n", gid),
 	}
 }
 

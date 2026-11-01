@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/SandwichLabs/assay/internal/engine"
+import "github.com/SandwichLabs/slaw/internal/engine"
 
 // sanitizeForTerminal is engine.TerminalText for the TUI: it strips control
 // characters (ESC included) from untrusted text. Newlines are kept when

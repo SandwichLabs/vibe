@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // #119: Iceberg and Delta readers, DuckLake's functions and catalogs, and the

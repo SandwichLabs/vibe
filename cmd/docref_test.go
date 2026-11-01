@@ -9,7 +9,7 @@ import (
 )
 
 func TestDocRefAt(t *testing.T) {
-	const base = "https://github.com/SandwichLabs/assay/blob/"
+	const base = "https://github.com/SandwichLabs/slaw/blob/"
 	assert.Equal(t, base+"v0.5.0/docs/reference/semantics.md", docRefAt("v0.5.0", "semantics"))
 	assert.Equal(t, base+"v0.5.0/docs/reference/semantics.md", docRefAt("0.5.0", "semantics"), "release.yml stamps the tag without its v")
 	assert.Equal(t, base+"v0.5.0-rc3/docs/reference/semantics.md", docRefAt("0.5.0-rc3", "semantics"))

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/importer"
+	"github.com/SandwichLabs/slaw/internal/importer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -1,20 +1,20 @@
 # Code mode: proposal
 
-Status: **proposal**, not built; the engine choice is now part of the compute decision spike #248 (2026-10-26); reviewed 2026-10-16 (§13: spike Starlark and SQL result handles before committing to Monty). The research is in [spike-code-mode-findings.md](spike-code-mode-findings.md). This document says how code mode works in Assay and which rules it must obey. It names the code that it changes.
+Status: **proposal**, not built; the engine choice is now part of the compute decision spike #248 (2026-10-26); reviewed 2026-10-16 (§13: spike Starlark and SQL result handles before committing to Monty). The research is in [spike-code-mode-findings.md](spike-code-mode-findings.md). This document says how code mode works in Slaw and which rules it must obey. It names the code that it changes.
 
 This document uses ASD-STE100 Simplified Technical English. Descriptive sentences have a maximum of 25 words. Instructions have a maximum of 20 words. Function names, file names and code are in `code` font and are technical names.
 
 ## 1. Summary
 
-Code mode adds one agent tool, `run_code`. The model writes a short Python program. A Monty sandbox runs the program in a separate worker process. The program calls the existing Assay tools as functions of an `assay` module. Each function call goes through `agents.Handler.Handle`, the same path as a direct tool call. Thus every gate, approval and redaction stays the same.
+Code mode adds one agent tool, `run_code`. The model writes a short Python program. A Monty sandbox runs the program in a separate worker process. The program calls the existing Slaw tools as functions of a `slaw` module. Each function call goes through `agents.Handler.Handle`, the same path as a direct tool call. Thus every gate, approval and redaction stays the same.
 
 Only the final value of the program goes back to the model. Query rows, schemas and intermediate results stay in the sandbox.
 
 Code mode is optional. It is off by default. When it is off, or when the sandbox is not available, the agent works as it does now.
 
-## 2. Why Assay needs it
+## 2. Why Slaw needs it
 
-Assay has approximately 30 tools. The tool definitions are not a large cost. The large costs are:
+Slaw has approximately 30 tools. The tool definitions are not a large cost. The large costs are:
 
 1. **Rows in the context.** `run_query` returns up to 15,000 characters of rows on each call. A comparison over three connections puts three results into the context.
 2. **Model turns.** A chat turn has a maximum of 8 tool steps (`maxSteps` in `internal/llm/runner.go`). A loop over 20 tables needs 20 steps.
@@ -25,15 +25,15 @@ In code mode, the program does the loop, the join and the arithmetic. The model 
 **Example: the model writes this program for "Which connections have tables with no rows?"**
 
 ```python
-import assay
+import slaw
 
 empty = []
-for conn in assay.list_connections()["connections"]:
+for conn in slaw.list_connections()["connections"]:
     if conn["status"] not in ("ok", "not-connected"):
         continue
     # introspect_schema returns names that run_query can use as they are.
-    for table in assay.introspect_schema(connection=conn["name"])["tables"]:
-        rows = assay.run_query(sql="SELECT count(*) AS n FROM " + table)["rows"]
+    for table in slaw.introspect_schema(connection=conn["name"])["tables"]:
+        rows = slaw.run_query(sql="SELECT count(*) AS n FROM " + table)["rows"]
         if rows[0]["n"] == 0:
             empty.append(table)
 {"empty_tables": empty, "count": len(empty)}
@@ -43,12 +43,12 @@ Without code mode, this question needs one tool step for each table.
 
 ## 3. The rules
 
-Code mode must obey all the Assay design principles. These rules are mandatory.
+Code mode must obey all the Slaw design principles. These rules are mandatory.
 
 | # | Rule | How code mode obeys it |
 |---|---|---|
-| C1 | **One tool surface.** | `run_code` is a `ToolDef` in `internal/agents`. The `assay` module functions are made from `ListToolsForMode`. There is no second list of functions. |
-| C2 | **Same gates.** | Each `assay.<tool>()` call is one `agents.Request` to `Handler.Handle`. The tier, the writable connection, the approval, the SQL policy and the table allow-list apply to each call. |
+| C1 | **One tool surface.** | `run_code` is a `ToolDef` in `internal/agents`. The `slaw` module functions are made from `ListToolsForMode`. There is no second list of functions. |
+| C2 | **Same gates.** | Each `slaw.<tool>()` call is one `agents.Request` to `Handler.Handle`. The tier, the writable connection, the approval, the SQL policy and the table allow-list apply to each call. |
 | C3 | **Credentials stay out.** | The worker starts with an empty environment. No host function returns a credential. The sandbox has no file, network or environment access. |
 | C4 | **Read-only until asked.** | A write in a program needs the same three gates as a direct write. The person sees an approval card for each gated write. |
 | C5 | **Everything works without AI, and without code mode.** | When `run_code` is not available, the agent uses the normal tools. No other feature needs code mode. |
@@ -65,7 +65,7 @@ model ──run_code(code)──▶ agents.Handler.Handle            (gates for 
                               ▲      typed frames         (no env, no files,
                               │      over stdio            no network)
                               │
-          assay.run_query(...) │ host-function suspension
+          slaw.run_query(...) │ host-function suspension
                               ▼
                      agents.Handler.Handle              (gates for each inner call)
                               │
@@ -77,7 +77,7 @@ model ──run_code(code)──▶ agents.Handler.Handle            (gates for 
 
 The package has three parts:
 
-- **`Engine`**: an interface. It runs one program with a `Host` and limits, and returns a `Result`. The first implementation uses `internal/montyclient`, a Go client for the Monty worker that Assay owns ([monty-client.md](monty-client.md)). A `starlark-go` implementation is the fallback (findings §5).
+- **`Engine`**: an interface. It runs one program with a `Host` and limits, and returns a `Result`. The first implementation uses `internal/montyclient`, a Go client for the Monty worker that Slaw owns ([monty-client.md](monty-client.md)). A `starlark-go` implementation is the fallback (findings §5).
 - **`Host`**: an interface with one method, `Call(ctx, tool string, kwargs map[string]any) (any, error)`. The production `Host` sends each call to the agent handler.
 - **`Stubs`**: a function that makes Python type stubs (`.pyi`) from `ToolDef` values. `ParamsToJSONSchema` is the model for this function.
 
@@ -92,19 +92,19 @@ The package does not import `internal/llm`. It imports `internal/agents` only fo
 | `Modes` | chat and MCP. Not task mode (see §9). |
 | `Params` | `code` (string, required): the program. |
 
-The category is `introspect`, so every tier can run a program. The program itself has no authority. Each inner call has its own category check, so a `read-only` tier still refuses `assay.create_record()`.
+The category is `introspect`, so every tier can run a program. The program itself has no authority. Each inner call has its own category check, so a `read-only` tier still refuses `slaw.create_record()`.
 
 The tool description contains:
 
-1. The Python subset rules in five lines (no `class` inheritance, no `match`, no third-party packages, only the `assay` module and the Monty standard library).
-2. The stub of each `assay` function: the name, the keyword parameters with types, and the first sentence of the tool description.
+1. The Python subset rules in five lines (no `class` inheritance, no `match`, no third-party packages, only the `slaw` module and the Monty standard library).
+2. The stub of each `slaw` function: the name, the keyword parameters with types, and the first sentence of the tool description.
 3. The return rule: the value of the last expression is the result.
 
 The stubs come from `ToolDef` values at run time, so they cannot be different from the tools.
 
-### 4.3 The `assay` module
+### 4.3 The `slaw` module
 
-The `assay` module is a Monty host module (`external_modules`). It has one function for each tool in `ListToolsForMode(outerMode)`, with these exceptions:
+The `slaw` module is a Monty host module (`external_modules`). It has one function for each tool in `ListToolsForMode(outerMode)`, with these exceptions:
 
 - `run_code` itself. A program cannot start a program.
 - The task-mode terminal tools (`write_cell`, `need_more_info`). They end a model turn.
@@ -132,7 +132,7 @@ The `Host` makes a new `agents.Request` with `Method` set to the tool name and `
 
 - `IsModeVisible`, `validateParams`, `sb.Check` and the table allow-list run for each call.
 - `run_query` classifies each statement with `analyzeSQL`, then runs `checkSQLClass` and `writeGates`.
-- A write that needs approval calls `awaitApproval`. A headless `assay mcp serve` returns `ErrApprovalNeeded`, as now.
+- A write that needs approval calls `awaitApproval`. A headless `slaw mcp serve` returns `ErrApprovalNeeded`, as now.
 - The sandbox ceiling on the context (`WithSandboxCeiling`) goes to each inner call, because the inner call uses the same `ctx`.
 
 **Do not** call `dispatch` or a `handleX` function directly from code mode. A test must make sure that `internal/codemode` calls only `Handle` (an `ast-grep` rule is a good fit).
@@ -161,12 +161,12 @@ The approval card must show that the write comes from a program. Add these field
 
 The last field applies a lesson from Muse "tainted egress" (findings §2.6). A program that read `prod_pg` and now writes to a shared `s3` connection can move private data. The person must see that before approval.
 
-**Phase 3 (durable).** Use Monty snapshots. At a gated write, the engine calls `FeedStart`, stops at the call, and dumps the snapshot. `run_code` returns "waiting for approval" to the model and ends the program step. The approval card stays open. When the person approves, Assay loads the snapshot, runs the write and resumes the program. Then a Studio restart does not lose the run. See §7.3 for the snapshot rules.
+**Phase 3 (durable).** Use Monty snapshots. At a gated write, the engine calls `FeedStart`, stops at the call, and dumps the snapshot. `run_code` returns "waiting for approval" to the model and ends the program step. The approval card stays open. When the person approves, Slaw loads the snapshot, runs the write and resumes the program. Then a Studio restart does not lose the run. See §7.3 for the snapshot rules.
 
 ### 5.4 What code mode must not change
 
 - `run_code` must not make the tier, the approval rule or the SQL policy less strict.
-- A committed `assay.yaml` can turn code mode off for the workspace. It cannot turn it on for a person who has it off (the "only tighten" rule in `workspace.ApplySettings`).
+- A committed `slaw.yaml` can turn code mode off for the workspace. It cannot turn it on for a person who has it off (the "only tighten" rule in `workspace.ApplySettings`).
 - `run_code` must not add a `fantasy` tool in `internal/llm`. It is a `ToolDef` (CLAUDE.md, "One tool surface").
 
 ## 6. Results, budgets and guardrails
@@ -220,11 +220,11 @@ The wall-time context also goes to each inner call. At this time `run_query` has
 
 [monty-client.md](monty-client.md) §5 gives the full rules. In summary:
 
-- The release workflow builds the worker from a pinned Monty tag. It installs it as `assay-monty` next to the `assay` binary on each of the four release runners.
-- Assay never downloads the worker at run time.
+- The release workflow builds the worker from a pinned Monty tag. It installs it as `slaw-monty` next to the `slaw` binary on each of the four release runners.
+- Slaw never downloads the worker at run time.
 - Verify the SHA-256 of the binary when the pool starts. Use a digest that the build stamps in with `ldflags`.
 - Add the Rust crates of the worker to `THIRD_PARTY_NOTICES.md` (`task notices`).
-- If the binary is not there, Assay does not show `run_code`. Settings shows "Code mode is not available on this install".
+- If the binary is not there, Slaw does not show `run_code`. Settings shows "Code mode is not available on this install".
 - macOS: sign the helper with the app when the signed release comes (epic #4). Until then, measure the Gatekeeper effect on an unsigned helper in the spike.
 
 ### 7.3 Snapshots (phase 3 only)
@@ -232,7 +232,7 @@ The wall-time context also goes to each inner call. At this time `run_query` has
 A snapshot contains the program state. This can include rows. Obey these rules:
 
 1. Keep snapshots in memory while Studio runs.
-2. If a snapshot must survive a restart, write it to the user cache directory with mode `0600`. Never write it into the workspace folder or `.assay-local/`.
+2. If a snapshot must survive a restart, write it to the user cache directory with mode `0600`. Never write it into the workspace folder or `.slaw-local/`.
 3. Sign each snapshot with an HMAC. Keep the key in the OS keychain through `internal/secrets`. Monty does not authenticate snapshots.
 4. Store the Monty version with the snapshot. Discard a snapshot from a different version.
 5. Delete the snapshot after it resumes, after the person declines, or after the approval expires.
@@ -242,17 +242,17 @@ A snapshot contains the program state. This can include rows. Obey these rules:
 | Setting | Values | Default | Scope |
 |---|---|---|---|
 | Studio, Settings → Assistant: "Code mode" | on, off | off | Per person (user config) |
-| `assay.yaml` `agent.code_mode` | `off` | not set | Workspace. It can only turn code mode off. |
-| `assay config code-mode` | `on`, `off` | off | CLI mirror of the Studio setting |
+| `slaw.yaml` `agent.code_mode` | `off` | not set | Workspace. It can only turn code mode off. |
+| `slaw config code-mode` | `on`, `off` | off | CLI mirror of the Studio setting |
 
-Document the `assay.yaml` key in `docs/reference/workspaces.md` between the `<!-- keys:NAME -->` markers. `internal/docsref` checks those tables.
+Document the `slaw.yaml` key in `docs/reference/workspaces.md` between the `<!-- keys:NAME -->` markers. `internal/docsref` checks those tables.
 
 ## 9. Scope
 
 **In scope**
 
 - Chat mode in Studio.
-- MCP (`assay mcp serve` and the Studio MCP server). External agents get the largest gain, because they do many tool calls.
+- MCP (`slaw mcp serve` and the Studio MCP server). External agents get the largest gain, because they do many tool calls.
 
 **Out of scope for now**
 
@@ -265,18 +265,18 @@ Document the `assay.yaml` key in `docs/reference/workspaces.md` between the `<!-
 
 | Phase | Content | Done when |
 |---|---|---|
-| P0, spike | Build a minimum `internal/montyclient` (protocol 6, `import assay`, one host call) against Pydantic's worker build. Build the worker from source on the four release runners and measure size and time. Test Gatekeeper with an unsigned helper. Write findings. | A findings note in `docs/plans/`. |
-| P1, reads | `internal/codemode`, the `run_code` tool, read tools only in the `assay` module, the setting, the binary in the release. Chat and MCP. | The parity test (§11) passes for all read tools. |
+| P0, spike | Build a minimum `internal/montyclient` (protocol 6, `import slaw`, one host call) against Pydantic's worker build. Build the worker from source on the four release runners and measure size and time. Test Gatekeeper with an unsigned helper. Write findings. | A findings note in `docs/plans/`. |
+| P1, reads | `internal/codemode`, the `run_code` tool, read tools only in the `slaw` module, the setting, the binary in the release. Chat and MCP. | The parity test (§11) passes for all read tools. |
 | P2, writes | Add the write tools. Blocking approval with the new card fields (§5.3). Fix the `MaxQueryRows` flag (§6.1). | The parity test passes for all tools and tiers. |
 | P3, durable approval | Snapshots (§7.3). | A program that waits for approval survives a Studio restart. |
 | P4, fallback | `starlark-go` engine behind the same `Engine` interface, only if P0 finds a platform without the worker. | Optional. |
 
 ## 11. Tests
 
-1. **Gate parity.** For each tool and each tier, a direct call and an `assay.<tool>()` call in a program give the same allow, deny or ask result. Use the fixtures of `sandbox_parity_test.go` and `policy_fixture_test.go`.
+1. **Gate parity.** For each tool and each tier, a direct call and a `slaw.<tool>()` call in a program give the same allow, deny or ask result. Use the fixtures of `sandbox_parity_test.go` and `policy_fixture_test.go`.
 2. **No ambient access.** A program that tries `open`, `os.environ`, `os.getenv`, `import socket` or `import subprocess` fails. The worker environment is empty.
 3. **No credential leak.** Attach a connection with a known secret. Run programs that call each tool and print each result and each error. The secret is not in the output (use the same check as `error_redaction_test.go`).
-4. **Limits.** An infinite loop, a large allocation, deep recursion and 201 inner calls each stop the program with a clear error. The Assay process continues.
+4. **Limits.** An infinite loop, a large allocation, deep recursion and 201 inner calls each stop the program with a clear error. The Slaw process continues.
 5. **Crash isolation.** Stop the worker process during a program. `run_code` returns an error, and the next `run_code` works.
 6. **Lock.** Close the workspace during a program. The next inner call fails, and there is no deadlock (`go test -race`).
 7. **Headless MCP.** A program that writes to a non-local connection gets `PermissionError` with the existing message, and nothing changes.
@@ -284,21 +284,21 @@ Document the `assay.yaml` key in `docs/reference/workspaces.md` between the `<!-
 
 ## 12. Open questions
 
-1. **Language.** Python (Monty) is the proposal. JavaScript (`qjs`) is the alternative. Python fits Assay users and skills better. Decide before P1.
-2. **Monty maintenance.** Decided: Assay owns its Go client and builds the worker itself ([monty-client.md](monty-client.md)). Open: do we offer our client back to the Monty project as a Go binding?
+1. **Language.** Python (Monty) is the proposal. JavaScript (`qjs`) is the alternative. Python fits Slaw users and skills better. Decide before P1.
+2. **Monty maintenance.** Decided: Slaw owns its Go client and builds the worker itself ([monty-client.md](monty-client.md)). Open: do we offer our client back to the Monty project as a Go binding?
 3. **Default.** Code mode is off by default in this proposal. After P2, do we turn it on by default for MCP clients only?
-4. **Approval scope.** Muse grants one-time, session, task and time-bounded approvals. Assay approves one call. Do we add "approve all writes from this program to this connection"?
+4. **Approval scope.** Muse grants one-time, session, task and time-bounded approvals. Slaw approves one call. Do we add "approve all writes from this program to this connection"?
 5. **Data-flow display.** §5.3 shows the connections that a program read before a write. Do we also block such a write in the `read-write` tier when the source is non-local and the target is shared?
 
 ## 13. Review (2026-10-16)
 
-The security design stands: every `assay.<tool>()` call is one `Handler.Handle` request, credentials never enter the sandbox, the gate parity test is the acceptance test, the Studio lock change (§5.2) and the truncation flag (§6.1) are needed whatever engine is used.
+The security design stands: every `slaw.<tool>()` call is one `Handler.Handle` request, credentials never enter the sandbox, the gate parity test is the acceptance test, the Studio lock change (§5.2) and the truncation flag (§6.1) are needed whatever engine is used.
 
 The engine choice is reopened:
 
-1. **The gain is smaller for Assay than in the sources.** The cited savings come from many-tool API servers. Assay has about 30 tools, and `run_query` already spans every attached connection: the §2 example is one query over `duckdb_tables()`. The real gains are loops over different tools and keeping rows out of the context.
+1. **The gain is smaller for Slaw than in the sources.** The cited savings come from many-tool API servers. Slaw has about 30 tools, and `run_query` already spans every attached connection: the §2 example is one query over `duckdb_tables()`. The real gains are loops over different tools and keeping rows out of the context.
 2. **Monty is a large standing cost.** About 12 MB more per CLI tarball (29 MB today), a Rust toolchain in the release (about 18 minutes cold), a ~1,900-line client to own, a monthly upgrade, and a second executable for Gatekeeper.
 3. **Its unique benefits are phase 3 snapshots and crash isolation.** Phases 1 and 2 already block a goroutine for approval. Data reaches a program only through capped tools.
-4. **Small local models write restricted dialects poorly.** Assay's default provider is local.
+4. **Small local models write restricted dialects poorly.** Slaw's default provider is local.
 
 Next step is a spike (#149), not P0 of this plan: run the common multi-step agent tasks through (a) a `starlark-go` `run_code` prototype behind the §4.1 `Engine` interface and (b) a `run_query` variant that keeps its result in a scratch table and returns a summary and a handle the model can query. Compare tokens and first-try success with the local model and with Claude. Go to Monty only if the numbers show Starlark's limits hurt. Phase 3 is dropped for now.

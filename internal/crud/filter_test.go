@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 var filterKnown = map[string]bool{"a": true, "my \"col\"": true, "naïve col": true, "x y": true, "id": true}

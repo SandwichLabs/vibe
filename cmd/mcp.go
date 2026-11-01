@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/hub"
 	"github.com/spf13/cobra"
 )
 
@@ -30,12 +30,12 @@ var mcpServeCmd = &cobra.Command{
 tool registry (internal/agents) and sandbox gating Studio's chat uses.
 
 The workspace is --workspace DIR, or the nearest folder above the current
-directory that holds an assay.yaml. A .assay file is a bundle, not a workspace.
+directory that holds a slaw.yaml. A .slaw file is a bundle, not a workspace.
 
-One process owns a workspace's DuckDB hub at a time (.assay-local/hub.lock):
+One process owns a workspace's DuckDB hub at a time (.slaw-local/hub.lock):
 
   - If nothing has it open, this process owns it and serves the tools itself.
-  - If Assay (or another owner) has it open and is serving MCP, this
+  - If Slaw (or another owner) has it open and is serving MCP, this
     process passes stdio through to that server, so the client never sees a
     DuckDB lock error and Studio's approval prompts apply.
   - If the owner is not serving MCP, this exits with a message naming it.
@@ -43,7 +43,7 @@ One process owns a workspace's DuckDB hub at a time (.assay-local/hub.lock):
 --sandbox can only TIGHTEN the workspace's own effective agent policy, never
 loosen it. A headless owner has no one to approve changes, so a write that
 needs approval is refused; changes to any connection other than the workspace's
-local database always need Assay.
+local database always need Slaw.
 
 stdio speaks JSON-RPC on stdin/stdout, one message per line. stdout is the
 protocol channel: nothing else is ever written there. Notices and logs go to
@@ -56,7 +56,7 @@ Writes go straight to their sources; there is nothing to save on exit.`,
 }
 
 func init() {
-	mcpServeCmd.Flags().String("workspace", "", "workspace folder (default: the nearest folder above the current directory with an assay.yaml)")
+	mcpServeCmd.Flags().String("workspace", "", "workspace folder (default: the nearest folder above the current directory with a slaw.yaml)")
 	mcpServeCmd.Flags().String("transport", "stdio", "transport: stdio or sse (sse needs this process to own the workspace)")
 	mcpServeCmd.Flags().String("addr", "127.0.0.1:0", "listen address for --transport sse (127.0.0.1 only; a non-loopback address is rejected)")
 	mcpServeCmd.Flags().String("sandbox", "", "sandbox mode: read-only, read-write, or full. Can only TIGHTEN the workspace's own agent policy, never loosen it")
@@ -66,10 +66,10 @@ func init() {
 
 func runMCPServe(cmd *cobra.Command, args []string) error {
 	if len(args) == 1 {
-		if strings.EqualFold(filepath.Ext(strings.TrimSpace(args[0])), ".assay") {
+		if strings.EqualFold(filepath.Ext(strings.TrimSpace(args[0])), ".slaw") {
 			return hub.ErrLegacyFile
 		}
-		return fmt.Errorf("assay mcp serve no longer takes a file argument; use --workspace %s", args[0])
+		return fmt.Errorf("slaw mcp serve no longer takes a file argument; use --workspace %s", args[0])
 	}
 	dir, _ := cmd.Flags().GetString("workspace")
 	transport, _ := cmd.Flags().GetString("transport")

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/llm"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/llm"
 )
 
 // LLMSettingsView is Settings → App → "The agent's model" as the form needs

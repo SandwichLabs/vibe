@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 var configCmd = &cobra.Command{
@@ -34,14 +34,14 @@ var llmKeyCmd = &cobra.Command{
 	Long: `The assistant's model API key lives in your OS keychain, never in a config file.
 Where a key is read from, first match wins:
 
-  1. ASSAY_LLM_API_KEY
+  1. SLAW_LLM_API_KEY
   2. the provider's standard variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
      OLLAMA_API_KEY, CLOUDFLARE_API_TOKEN)
   3. the keychain (item "llm-<provider>")
-  4. llm.api_key in ~/.assay.yaml (legacy, used for whichever provider is configured;
-     "assay config llm-key migrate" moves it)
+  4. llm.api_key in ~/.slaw.yaml (legacy, used for whichever provider is configured;
+     "slaw config llm-key migrate" moves it)
 
-Assay never prints a key back.`,
+Slaw never prints a key back.`,
 	PersistentPreRunE: checkLLMKeyProvider,
 }
 
@@ -122,7 +122,7 @@ var llmKeyStatusCmd = &cobra.Command{
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "provider: %s\nsource:   %s\n", cfg.LLM.Provider, src)
 		if config.HasFileKey(config.LLMConfigPath()) {
-			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LLMConfigPath()+"; run \"assay config llm-key migrate\"")
+			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LLMConfigPath()+"; run \"slaw config llm-key migrate\"")
 		}
 		return nil
 	},
@@ -130,7 +130,7 @@ var llmKeyStatusCmd = &cobra.Command{
 
 var llmKeyMigrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Move llm.api_key from ~/.assay.yaml into the keychain and blank it in the file",
+	Short: "Move llm.api_key from ~/.slaw.yaml into the keychain and blank it in the file",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		provider := resolveLLMKeyProvider()

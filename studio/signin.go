@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 

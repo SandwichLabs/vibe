@@ -15,13 +15,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/semantics/proposals"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 // WorkspaceAccess provides access to the open workspace (interface to avoid circular imports).
@@ -81,7 +81,7 @@ type Handler struct {
 	sandbox atomic.Pointer[SandboxConfig]
 	// approver, when set, is called to obtain the user's OK for a write
 	// (#79) — see awaitApproval. nil means "nobody can answer": headless
-	// `assay mcp serve` and Studio's SSE MCP server never call SetApprover,
+	// `slaw mcp serve` and Studio's SSE MCP server never call SetApprover,
 	// so a write needing approval on either of those is refused outright
 	// rather than hanging forever waiting for an answer nobody can give.
 	approver ApproveFunc
@@ -299,7 +299,7 @@ type ApproveFunc func(ctx context.Context, req ApprovalRequest) error
 // handleRunQuery calls to obtain approval for a gated write. A Handler with
 // no approver refuses every write that needs one (see awaitApproval) instead
 // of blocking — that is the deliberate headless behaviour. Headless
-// `assay mcp serve` attaches no approver; Studio's SSE server does
+// `slaw mcp serve` attaches no approver; Studio's SSE server does
 // (studio/workspace_mcp.go), so its writes show an approval card.
 func (h *Handler) SetApprover(fn ApproveFunc) { h.approver = fn }
 
@@ -420,8 +420,8 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 		}
 		if len(nonLocal) > 0 {
 			return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
-				"%s changes %s, which is not a local file in this workspace, so it always needs your OK in Assay (even when \"Ask before changes\" is off), and there is no one to ask over MCP. "+
-					"Nothing was changed. Open the workspace in Assay: with its MCP server on, `assay mcp serve` passes through to it and Studio shows you an approval card, or make the change from Studio's agent chat.",
+				"%s changes %s, which is not a local file in this workspace, so it always needs your OK in Slaw (even when \"Ask before changes\" is off), and there is no one to ask over MCP. "+
+					"Nothing was changed. Open the workspace in Slaw: with its MCP server on, `slaw mcp serve` passes through to it and Studio shows you an approval card, or make the change from Studio's agent chat.",
 				req.Method, strings.Join(nonLocal, ", ")))
 		}
 		return dataNeedsApproval(req, sb)

@@ -1,7 +1,7 @@
 package main
 
 // W5 Query Explorer backend tests: schema-tree stats, real PK flags from
-// DescribeTable, and CSV/Parquet query exports — all against a real .assay
+// DescribeTable, and CSV/Parquet query exports — all against a real .slaw
 // container + DuckDB (no mocks).
 
 import (

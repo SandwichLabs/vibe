@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
 )
 
 type fakeNative struct {
@@ -185,18 +185,18 @@ func TestHelper_ServeAnswersOnlyWhatStudioSent(t *testing.T) {
 		ok   bool
 		body string
 	}{
-		{"assay-page://pg/", true, "<p>doc0</p>"},
-		{"assay-page://PG/app.js", true, "alert(1)"},
-		{"assay-page://pg/assets/x.js", true, "x"},
-		{"assay-page://pg/app.js?x=1", false, ""},
-		{"assay-page://pg/missing.js", false, ""},
-		{"assay-page://pg/index.html", false, ""},
-		{"assay-page://pg/../app.js", false, ""},
-		{"assay-page://other/app.js", false, ""},
+		{"slaw-page://pg/", true, "<p>doc0</p>"},
+		{"slaw-page://PG/app.js", true, "alert(1)"},
+		{"slaw-page://pg/assets/x.js", true, "x"},
+		{"slaw-page://pg/app.js?x=1", false, ""},
+		{"slaw-page://pg/missing.js", false, ""},
+		{"slaw-page://pg/index.html", false, ""},
+		{"slaw-page://pg/../app.js", false, ""},
+		{"slaw-page://other/app.js", false, ""},
 		{"https://pg/app.js", false, ""},
-		{"assay-page://user@pg/app.js", false, ""},
-		{"assay-page://pg/%61pp.js", true, "alert(1)"}, // the same file, decoded
-		{"assay-page://pg/%2e%2e/app.js", false, ""},
+		{"slaw-page://user@pg/app.js", false, ""},
+		{"slaw-page://pg/%61pp.js", true, "alert(1)"}, // the same file, decoded
+		{"slaw-page://pg/%2e%2e/app.js", false, ""},
 	} {
 		id := uint64(100 + i)
 		h.serve(id, tc.url)
@@ -210,7 +210,7 @@ func TestHelper_ANavigationAsksStudioForTheNewDocument(t *testing.T) {
 	r := newHelperRig(t)
 	r.setup(t, "", nil)
 	go r.h.pump()
-	r.h.serve(7, "assay-page://pg/?region=east")
+	r.h.serve(7, "slaw-page://pg/?region=east")
 	var ask *pagehost.Message
 	select {
 	case ask = <-r.toStudio:
@@ -264,7 +264,7 @@ func TestHelper_MessagesFromThePageAreCheckedAgain(t *testing.T) {
 	defer r.nat.mu.Unlock()
 	joined := strings.Join(r.nat.evals, "\n")
 	for _, id := range []string{"9", "10", "11", "12"} {
-		assert.Contains(t, joined, "window.__assayReply("+id+",false,\"refused\")", id)
+		assert.Contains(t, joined, "window.__slawReply("+id+",false,\"refused\")", id)
 	}
 
 	h.message(`{"t":"run","id":13,"q":"x","v":{"k":"` + strings.Repeat("a", pagehost.MaxFromHelper) + `"}}`)
@@ -282,8 +282,8 @@ func TestHelper_RepliesBecomeScriptsAndQuitQuits(t *testing.T) {
 	r.nat.mu.Lock()
 	defer r.nat.mu.Unlock()
 	require.Len(t, r.nat.evals, 2)
-	assert.Contains(t, r.nat.evals[0], "window.__assayReply(4,true,JSON.parse(")
-	assert.Equal(t, `window.__assayReply(5,false,"limit")`, r.nat.evals[1])
+	assert.Contains(t, r.nat.evals[0], "window.__slawReply(4,true,JSON.parse(")
+	assert.Equal(t, `window.__slawReply(5,false,"limit")`, r.nat.evals[1])
 }
 
 func TestHelper_StudioGoingAwayQuitsTheWindow(t *testing.T) {

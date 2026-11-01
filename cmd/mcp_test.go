@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,14 +45,14 @@ func TestIsLoopbackAddr_GarbageAddrIsNotLoopback(t *testing.T) {
 	assert.False(t, got)
 }
 
-// TestHelperAssay re-runs this test binary as the `assay` CLI: the real cobra
+// TestHelperSlaw re-runs this test binary as the `slaw` CLI: the real cobra
 // tree, the real os.Stdin/os.Stdout, the real signals.
 func testCmdLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-func TestHelperAssay(t *testing.T) {
-	args := os.Getenv("ASSAY_TEST_ARGS")
+func TestHelperSlaw(t *testing.T) {
+	args := os.Getenv("SLAW_TEST_ARGS")
 	if args == "" {
 		t.Skip("not a helper invocation")
 	}
@@ -77,10 +77,10 @@ func (l *lockedBuf) Write(p []byte) (int, error) {
 }
 func (l *lockedBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
-func assayProc(t *testing.T, cfgDir string, args ...string) (*exec.Cmd, io.WriteCloser, *bufio.Scanner, *lockedBuf) {
+func slawProc(t *testing.T, cfgDir string, args ...string) (*exec.Cmd, io.WriteCloser, *bufio.Scanner, *lockedBuf) {
 	t.Helper()
-	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperAssay$")
-	cmd.Env = append(os.Environ(), "ASSAY_TEST_ARGS="+strings.Join(args, "\x1f"), "ASSAY_CONFIG_DIR="+cfgDir)
+	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperSlaw$")
+	cmd.Env = append(os.Environ(), "SLAW_TEST_ARGS="+strings.Join(args, "\x1f"), "SLAW_CONFIG_DIR="+cfgDir)
 	in, err := cmd.StdinPipe()
 	require.NoError(t, err)
 	out, err := cmd.StdoutPipe()
@@ -97,18 +97,18 @@ func assayProc(t *testing.T, cfgDir string, args ...string) (*exec.Cmd, io.Write
 func newCmdWorkspace(t *testing.T) (root, cfgDir string) {
 	t.Helper()
 	cfgDir = t.TempDir()
-	t.Setenv("ASSAY_CONFIG_DIR", cfgDir)
+	t.Setenv("SLAW_CONFIG_DIR", cfgDir)
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "ws"), workspace.WithInitLogger(testCmdLogger()))
 	require.NoError(t, err)
 	require.NoError(t, res.Workspace.Close())
 	return res.Workspace.Root(), cfgDir
 }
 
-func TestMCPServe_RejectsAssayFiles(t *testing.T) {
+func TestMCPServe_RejectsSlawFiles(t *testing.T) {
 	for _, args := range [][]string{
-		{"mcp", "serve", "old.assay"},
-		{"mcp", "serve", "/some/where/OLD.ASSAY"},
-		{"mcp", "serve", "--workspace", "old.assay"},
+		{"mcp", "serve", "old.slaw"},
+		{"mcp", "serve", "/some/where/OLD.SLAW"},
+		{"mcp", "serve", "--workspace", "old.slaw"},
 	} {
 		_, err := executeCommand(args...)
 		require.Error(t, err, "%v", args)
@@ -127,7 +127,7 @@ func TestMCPServe_NoLongerTakesAPositional(t *testing.T) {
 func TestMCPServe_NoWorkspaceHere(t *testing.T) {
 	_, err := executeCommand("mcp", "serve", "--workspace", t.TempDir())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no Assay workspace found")
+	assert.Contains(t, err.Error(), "no Slaw workspace found")
 }
 
 // TestMCPServe_StdoutIsProtocolOnly runs the real CLI: every byte on stdout
@@ -135,7 +135,7 @@ func TestMCPServe_NoWorkspaceHere(t *testing.T) {
 // opens, and nothing but JSON-RPC may be on it before the first request.
 func TestMCPServe_StdoutIsProtocolOnly(t *testing.T) {
 	root, cfg := newCmdWorkspace(t)
-	cmd, in, out, stderr := assayProc(t, cfg, "mcp", "serve", "--workspace", root)
+	cmd, in, out, stderr := slawProc(t, cfg, "mcp", "serve", "--workspace", root)
 
 	send := func(line string) {
 		_, err := io.WriteString(in, line+"\n")
@@ -176,7 +176,7 @@ func TestMCPServe_StdoutIsProtocolOnly(t *testing.T) {
 }
 
 // TestMCPServe_TakeOver is the headless side of Studio's "Take over": a
-// running `assay mcp serve` lets go of the hub when asked, closes its session
+// running `slaw mcp serve` lets go of the hub when asked, closes its session
 // and exits 0, and the taker owns the hub.
 func TestMCPServe_TakeOver(t *testing.T) {
 	root, cfg := newCmdWorkspace(t)
@@ -184,7 +184,7 @@ func TestMCPServe_TakeOver(t *testing.T) {
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
 
-	cmd, in, out, stderr := assayProc(t, cfg, "mcp", "serve", "--workspace", root)
+	cmd, in, out, stderr := slawProc(t, cfg, "mcp", "serve", "--workspace", root)
 	_, err = io.WriteString(in, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`+"\n")
 	require.NoError(t, err)
 	require.True(t, out.Scan(), stderr.String())
@@ -213,7 +213,7 @@ func TestMCPServe_TakeOver(t *testing.T) {
 }
 
 // TestMCPServe_TwoClientsStartedTogether: Claude Desktop and Claude Code
-// launching `assay mcp serve` for one workspace at the same moment must both
+// launching `slaw mcp serve` for one workspace at the same moment must both
 // work: one owns the hub, the other waits for its endpoint and proxies.
 func TestMCPServe_TwoClientsStartedTogether(t *testing.T) {
 	root, cfg := newCmdWorkspace(t)
@@ -224,7 +224,7 @@ func TestMCPServe_TwoClientsStartedTogether(t *testing.T) {
 	}
 	var cs []client
 	for i := 0; i < 2; i++ {
-		_, in, out, stderr := assayProc(t, cfg, "mcp", "serve", "--workspace", root)
+		_, in, out, stderr := slawProc(t, cfg, "mcp", "serve", "--workspace", root)
 		cs = append(cs, client{in, out, stderr})
 	}
 	for i, c := range cs {

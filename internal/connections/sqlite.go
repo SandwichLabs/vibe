@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // sqliteType attaches a SQLite file: ATTACH 'path' AS x (TYPE sqlite[, READ_ONLY]).

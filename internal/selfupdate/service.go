@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 )
 
 // autoCheckInterval is how long a weekly check waits.

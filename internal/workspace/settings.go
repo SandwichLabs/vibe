@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/sandbox"
+	"github.com/SandwichLabs/slaw/internal/sandbox"
 )
 
 // Settings is the Settings > Workspace form.
 type Settings struct {
 	Name              string `json:"name"`
 	DefaultConnection string `json:"defaultConnection"`
-	// TeamSandbox and TeamAskBeforeChanges are the committed limit (assay.yaml).
+	// TeamSandbox and TeamAskBeforeChanges are the committed limit (slaw.yaml).
 	// "" or "full" means no tier limit; the gate flag true means required for
 	// everyone.
 	TeamSandbox          string `json:"teamSandbox"`
@@ -22,13 +22,13 @@ type Settings struct {
 	Sandbox          string `json:"sandbox"`
 	AskBeforeChanges bool   `json:"askBeforeChanges"`
 	// LoadedTeamSandbox and LoadedTeamAsk are the committed values the form was
-	// opened with. When sent, an assay.yaml that has changed since (a git pull) makes
+	// opened with. When sent, a slaw.yaml that has changed since (a git pull) makes
 	// the save refuse instead of silently overwriting the team's change.
 	LoadedTeamSandbox *string `json:"loadedTeamSandbox,omitempty"`
 	LoadedTeamAsk     *bool   `json:"loadedTeamAsk,omitempty"`
 }
 
-// SettingsConflictError is a settings save refused because assay.yaml moved
+// SettingsConflictError is a settings save refused because slaw.yaml moved
 // since the form was opened. It matches ErrConflict.
 type SettingsConflictError struct{ Msg string }
 
@@ -46,13 +46,13 @@ func ParseSandbox(s string) (string, error) {
 }
 
 // ApplySettings saves the Settings > Workspace form: the name, default
-// connection and team limit go into assay.yaml (shared through git), and this
+// connection and team limit go into slaw.yaml (shared through git), and this
 // person's own agent choice goes into the per-person file outside the folder.
 //
-// assay.yaml can only tighten the agent: a person's tier above the team limit is
+// slaw.yaml can only tighten the agent: a person's tier above the team limit is
 // refused, and so is turning the ask-before-changes gate off when the team
-// requires it. Settings loaded before an assay.yaml change (LoadedTeam*), or a
-// assay.yaml that changed on disk, are refused with a *SettingsConflictError
+// requires it. Settings loaded before a slaw.yaml change (LoadedTeam*), or a
+// slaw.yaml that changed on disk, are refused with a *SettingsConflictError
 // before anything is written. Nothing is written when validation fails.
 func ApplySettings(ws Workspace, s Settings) error {
 	team := s.TeamSandbox
@@ -65,7 +65,7 @@ func ApplySettings(ws Workspace, s Settings) error {
 	}
 	cfg := ws.Config()
 	if staleTeamForm(cfg, s) {
-		return &SettingsConflictError{Msg: "the team's agent limit in assay.yaml changed since Settings was opened. Reload the page and try again."}
+		return &SettingsConflictError{Msg: "the team's agent limit in slaw.yaml changed since Settings was opened. Reload the page and try again."}
 	}
 	next := cfg
 	next.Name = strings.TrimSpace(s.Name)
@@ -78,7 +78,7 @@ func ApplySettings(ws Workspace, s Settings) error {
 	if !configEqual(cfg, next) {
 		if err := ws.SaveConfig(next); err != nil {
 			if errors.Is(err, ErrConflict) {
-				return &SettingsConflictError{Msg: "assay.yaml changed on disk since Settings was opened. Reload and try again."}
+				return &SettingsConflictError{Msg: "slaw.yaml changed on disk since Settings was opened. Reload and try again."}
 			}
 			return err
 		}
@@ -129,8 +129,8 @@ func staleTeamForm(cfg Config, s Settings) bool {
 
 // SetLocalAgent saves this person's own agent tier and gate, kept outside the
 // folder. The tier may not exceed the committed team limit, and the gate may not
-// be turned off when assay.yaml requires it (checked against the config as
-// saved, so a form that validated against an older assay.yaml is still caught).
+// be turned off when slaw.yaml requires it (checked against the config as
+// saved, so a form that validated against an older slaw.yaml is still caught).
 func SetLocalAgent(ws Workspace, sandbox string, ask bool) error {
 	mode, err := ParseSandbox(sandbox)
 	if err != nil {
@@ -138,10 +138,10 @@ func SetLocalAgent(ws Workspace, sandbox string, ask bool) error {
 	}
 	cfg := ws.Config()
 	if cfg.Sandbox != "" && rank(mode) > rank(cfg.Sandbox) {
-		return fmt.Errorf("The team limit in assay.yaml is %s, so this computer can't go above it.", cfg.Sandbox)
+		return fmt.Errorf("The team limit in slaw.yaml is %s, so this computer can't go above it.", cfg.Sandbox)
 	}
 	if !ask && cfg.AskBeforeWrites != nil && *cfg.AskBeforeWrites {
-		return errors.New("assay.yaml requires the agent to ask before changes, so this can't be turned off on this computer.")
+		return errors.New("slaw.yaml requires the agent to ask before changes, so this can't be turned off on this computer.")
 	}
 	local := ws.Local()
 	local.Agent.Sandbox = mode

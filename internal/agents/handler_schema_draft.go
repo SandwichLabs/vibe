@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
 )
 
 // --- Schema Builder draft + saved-SQL query handlers (ported from

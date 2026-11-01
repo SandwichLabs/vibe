@@ -10,8 +10,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
 )
 
 // maxDownloadBytes is the largest file a page may save (H5).

@@ -6,11 +6,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Store is where a workspace keeps its named queries. Two implementations
-// exist: the file store (queries/<id>.sql with a `-- assay:` header) and the
+// exist: the file store (queries/<id>.sql with a `-- slaw:` header) and the
 // legacy container's Registry over _vibe_queries.
 type Store interface {
 	// List returns every query ordered by title; never nil.

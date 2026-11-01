@@ -15,7 +15,7 @@ const found = computed(() => {
   const r = props.result
   if (!r?.ok) return ''
   const base = r.summary ? `Found ${r.summary}.` : 'Connected.'
-  return props.readOnly ? `${base} Read-only is on: Assay will look but not change.` : base
+  return props.readOnly ? `${base} Read-only is on: Slaw will look but not change.` : base
 })
 
 defineExpose({ focus: () => el.value?.focus() })

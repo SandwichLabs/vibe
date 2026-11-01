@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // IsIntegerType reports whether a DuckDB type name is in the integer family
@@ -29,12 +29,12 @@ func IsIntegerType(t string) bool {
 // auto-number primary key column. Both identifiers must be validated by the
 // caller before this is interpolated into DDL.
 func AutoNumberSequence(table, column string) string {
-	return fmt.Sprintf("_assay_seq_%s_%s", table, column)
+	return fmt.Sprintf("_slaw_seq_%s_%s", table, column)
 }
 
-// legacySeqPrefix is the prefix tables created before the Vibe to Assay rename
+// legacySeqPrefix is the prefix tables created before the Vibe to Slaw rename
 // carry in their own DuckDB files. That is user data in the connection, not app
-// state, so it is still recognised and bumped; new sequences use _assay_seq_.
+// state, so it is still recognised and bumped; new sequences use _slaw_seq_.
 const legacySeqPrefix = "_vibe_seq_"
 
 // legacyAutoNumberSequence is AutoNumberSequence under the pre-rename prefix.

@@ -14,13 +14,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Lines Init seeds into the ignore files.
 var (
 	gitignoreLines = []string{LocalDir + "/", "data/*.duckdb", "data/*.duckdb.wal", ".env", ".env.*", "!.env.example"}
-	gitattrsLines  = []string{"*.asnb text eol=lf"}
+	gitattrsLines  = []string{"*.slnb text eol=lf"}
 	// workspaceDirs are created by Init.
 	workspaceDirs = []string{"notebooks", "queries", "skills", DataDir}
 )
@@ -57,11 +57,11 @@ type InitResult struct {
 	Notes []string
 }
 
-// Init turns dir into a workspace: a fresh-id assay.yaml, notebooks/,
+// Init turns dir into a workspace: a fresh-id slaw.yaml, notebooks/,
 // queries/, skills/ and data/, a merged .gitignore and .gitattributes, and the
 // default `local` DuckDB connection (D3). Files already in the folder are left
 // alone, and existing .gitignore/.gitattributes are extended, not replaced.
-// assay.yaml is written last, so a failure part-way never leaves a folder that
+// slaw.yaml is written last, so a failure part-way never leaves a folder that
 // looks like a workspace but is not.
 //
 // It refuses a folder that is already a workspace or sits inside one.
@@ -145,14 +145,14 @@ func Init(dir string, opts ...InitOption) (*InitResult, error) {
 	return res, nil
 }
 
-// EnsureGitFiles merges Assay's lines into root's .gitignore and
+// EnsureGitFiles merges Slaw's lines into root's .gitignore and
 // .gitattributes, creating either when absent and never removing or reordering
 // anything already there.
 func EnsureGitFiles(root string) error {
-	if err := ensureLines(root, GitignoreFile, "# Assay: machine-local state and data files", gitignoreLines); err != nil {
+	if err := ensureLines(root, GitignoreFile, "# Slaw: machine-local state and data files", gitignoreLines); err != nil {
 		return err
 	}
-	return ensureLines(root, GitattrsFile, "# Assay: notebooks are LF text so diffs stay clean", gitattrsLines)
+	return ensureLines(root, GitattrsFile, "# Slaw: notebooks are LF text so diffs stay clean", gitattrsLines)
 }
 
 func ensureLines(root, name, comment string, want []string) error {
@@ -217,7 +217,7 @@ func gitInit(ctx context.Context, root string) (ran bool, note string) {
 	return true, ""
 }
 
-// EnsureID adds a fresh id to an assay.yaml that has none (a hand-written file,
+// EnsureID adds a fresh id to a slaw.yaml that has none (a hand-written file,
 // or a template copied without one) and returns it. The rest of the file is
 // preserved textually by prepending the key.
 func EnsureID(root string) (string, error) {
@@ -227,7 +227,7 @@ func EnsureID(root string) (string, error) {
 	}
 	var probe Config
 	if err := decodeStrict(data, &probe); err != nil {
-		return "", fmt.Errorf("invalid assay.yaml: %w", err)
+		return "", fmt.Errorf("invalid slaw.yaml: %w", err)
 	}
 	if probe.ID != "" {
 		return probe.ID, nil
@@ -251,7 +251,7 @@ func regenerateID(root string) (string, error) {
 	id := uuid.NewString()
 	out := idLineRE.ReplaceAll(data, []byte("id: "+id))
 	if _, err := ParseConfig(out); err != nil {
-		return "", fmt.Errorf("refusing to rewrite assay.yaml: %w", err)
+		return "", fmt.Errorf("refusing to rewrite slaw.yaml: %w", err)
 	}
 	if _, err := filestore.WriteAtomic(root, filestore.Write{Rel: ConfigFile, Data: out, Expect: st.Rev()}, nil); err != nil {
 		return "", err

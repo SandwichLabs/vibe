@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // The editing side of data artifacts (#162, step 6a): what the Source tab reads

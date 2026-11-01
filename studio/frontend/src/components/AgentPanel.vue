@@ -181,7 +181,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   margin-left: 8px;
   background: transparent;
   border: none;
-  color: var(--assay-chrome-fg);
+  color: var(--slaw-chrome-fg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -215,9 +215,9 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   letter-spacing: 0.06em;
 }
 .agent-pinbtn.active {
-  background: var(--assay-accent);
-  color: var(--assay-accent-fg);
-  border-color: var(--assay-accent);
+  background: var(--slaw-accent);
+  color: var(--slaw-accent-fg);
+  border-color: var(--slaw-accent);
 }
 .agent-hint {
   font-family: var(--sh-font-mono);

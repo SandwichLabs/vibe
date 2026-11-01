@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/queries"
 )
 
 // queryFixture is the artifact fixture with the real file store behind the
@@ -230,7 +230,7 @@ func TestRunSavedQuery_RefusesAStoredWrite(t *testing.T) {
 	fx := newQueryFixture(t, ModeFull, withAsk(false))
 	// a hand-edited file the save-time vet never saw
 	require.NoError(t, os.MkdirAll(filepath.Join(fx.root, "queries"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(fx.root, "queries", "evil.sql"), []byte("-- assay: {\"title\":\"evil\"}\nDELETE FROM t\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(fx.root, "queries", "evil.sql"), []byte("-- slaw: {\"title\":\"evil\"}\nDELETE FROM t\n"), 0o644))
 	resp := fx.call("run_saved_query", map[string]any{"id": "evil"})
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, ErrPermission, resp.Error.Code)
@@ -301,7 +301,7 @@ func TestRunSavedQuery_StoredWriteIsRefusedInEveryTierWithoutAskingAnyone(t *tes
 		fx := newQueryFixture(t, mode, withAsk(true), withApprover())
 		require.NoError(t, os.MkdirAll(filepath.Join(fx.root, "queries"), 0o755))
 		for id, body := range map[string]string{"w": "DELETE FROM t", "d": "DROP TABLE t"} {
-			require.NoError(t, os.WriteFile(filepath.Join(fx.root, "queries", id+".sql"), []byte("-- assay: {\"title\":\""+id+"\"}\n"+body+"\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(fx.root, "queries", id+".sql"), []byte("-- slaw: {\"title\":\""+id+"\"}\n"+body+"\n"), 0o644))
 			resp := fx.call("run_saved_query", map[string]any{"id": id})
 			require.NotNil(t, resp.Error, string(mode)+id)
 			assert.Contains(t, resp.Error.Message, "runs reads only", string(mode)+id)

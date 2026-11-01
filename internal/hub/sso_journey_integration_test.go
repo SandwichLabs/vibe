@@ -17,14 +17,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/sandbox"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
-	"github.com/SandwichLabs/assay/internal/testsupport/ssofake"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/sandbox"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/slaw/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // This is the whole of #131/#130 as one person lives it, against MinIO behind
@@ -33,7 +33,7 @@ import (
 //
 //	signed out -> device sign-in -> reads (plain s3, wildcard, DuckLake) ->
 //	rotation -> the session ends -> fail closed (never anonymous) ->
-//	`aws sso login` outside Assay -> the next statement revives it.
+//	`aws sso login` outside Slaw -> the next statement revives it.
 //
 // The bucket is anonymous-readable throughout, but a secretless read could not
 // reach it (it would go to the AWS default endpoint), so "never anonymous" is
@@ -77,7 +77,7 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 	assert.Equal(t, secrets.SignInHint{Kind: "aws-sso", Subject: "dev", Reason: "missing"}, *st.SignIn)
 	assert.Contains(t, st.Message, "aws sso login --profile dev")
 	note(st.Message)
-	assert.Equal(t, "assay-deny-s3", r.secretNamed(obj), "no storage secret: the catch-all deny secret answers")
+	assert.Equal(t, "slaw-deny-s3", r.secretNamed(obj), "no storage secret: the catch-all deny secret answers")
 	_, err = r.readObject(obj)
 	require.Error(t, err, "a signed-out connection reads nothing")
 	assert.Contains(t, err.Error(), "deny.invalid", "refused by the deny endpoint, not answered by any store")
@@ -92,7 +92,7 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 	assert.Zero(t, w.fake.Registrations(), "no device flow starts by itself")
 	assert.Zero(t, w.fake.Waiting())
 
-	// 2. Device sign-in, as Studio and `assay conn credentials sign-in` run it.
+	// 2. Device sign-in, as Studio and `slaw conn credentials sign-in` run it.
 	shown := make(chan secrets.DevicePrompt, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -126,7 +126,7 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 	got, err := r.readObject(obj)
 	require.NoError(t, err)
 	assert.Equal(t, "plain", got)
-	assert.Equal(t, "assay_floci", r.secretNamed(obj))
+	assert.Equal(t, "slaw_floci", r.secretNamed(obj))
 	got, err = r.exec("SELECT count(*) > 0 FROM read_parquet('s3://" + miniotest.Bucket + "/warehouse/ducklake/**/*.parquet')")
 	require.NoError(t, err)
 	assert.Equal(t, "true", got)
@@ -153,7 +153,7 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 		} {
 			resp = mh.Handle(ctx, &agents.Request{JSONRPC: "2.0", ID: "1", Method: "run_query", Params: map[string]any{"sql": q}})
 			require.NotNil(t, resp.Error, "%s: %s", mode, q)
-			assert.Regexp(t, `managed by Assay|not allowed|outside the workspace|relative path`, resp.Error.Message, "%s: %s", mode, q)
+			assert.Regexp(t, `managed by Slaw|not allowed|outside the workspace|relative path`, resp.Error.Message, "%s: %s", mode, q)
 			note(resp.Error.Message)
 		}
 	}
@@ -188,7 +188,7 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 	var lakes int
 	require.NoError(t, o.Sess.DB().QueryRow(`SELECT count(*) FROM duckdb_databases() WHERE database_name = 'lake'`).Scan(&lakes))
 	assert.Zero(t, lakes, "the lake is detached")
-	assert.Equal(t, "assay-deny-s3", r.secretNamed(obj2), "the SSO secret is gone and the deny secret answers")
+	assert.Equal(t, "slaw-deny-s3", r.secretNamed(obj2), "the SSO secret is gone and the deny secret answers")
 	got, err = r.readObject(obj2)
 	require.Error(t, err, "an expired session never falls back to anonymous (got %q)", got)
 	assert.Contains(t, err.Error(), "deny.invalid")
@@ -199,13 +199,13 @@ func TestSSOJourneyFromSignedOutToRevivedAfterAnExternalLogin(t *testing.T) {
 	note(resp.Error.Message)
 
 	// 6. `aws sso login --profile dev` in a terminal writes the shared token
-	// cache. No Assay call is made: the next statement, once the 30 s revive
+	// cache. No Slaw call is made: the next statement, once the 30 s revive
 	// interval has passed, finds the session and brings back the connection and
 	// its lake.
 	w.signIn(t)
 	w.sts.Store(assumeRole(t, ep))
 	clk.setTo(fresh.Expires.Add(-2 * time.Minute))
-	// The agent is the reviver (the path `assay mcp serve` takes): its next read
+	// The agent is the reviver (the path `slaw mcp serve` takes): its next read
 	// finds the session; the lake is attached again for the engine after it.
 	assert.Equal(t, "plain", fmt.Sprint(rowsOfResp(t, agentCall(h, "SELECT a FROM read_csv('"+obj+"', header = false, columns = {'a': 'VARCHAR'})"))[0][0]))
 	got, err = r.exec("SELECT count(*) FROM lake.warehouse.dim_students")

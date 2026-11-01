@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/session"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

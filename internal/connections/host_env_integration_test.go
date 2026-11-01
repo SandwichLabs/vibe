@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // #135: the host's AWS_* variables, even when they are valid for the very
@@ -67,7 +67,7 @@ func TestHostAWSEnvDoesNotReadAnUncoveredURL(t *testing.T) {
 	// regression fails here and never signs a request with the host's keys.
 	var matched string
 	require.NoError(t, sess.DB().QueryRowContext(ctx, "SELECT name FROM which_secret('s3://lake/other/b.parquet', 's3')").Scan(&matched))
-	require.Equal(t, "assay-deny-s3", matched)
+	require.Equal(t, "slaw-deny-s3", matched)
 	_, err = count("other/b")
 	require.Error(t, err, "an uncovered URL must not be read with the host's keys")
 	assert.Contains(t, err.Error(), "deny.invalid")

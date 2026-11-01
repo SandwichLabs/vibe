@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 type fakeVet struct{ err error }

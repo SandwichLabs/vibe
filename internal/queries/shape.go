@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/sqllex"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/sqllex"
 )
 
 // ReaderFunctions are the table functions that read a file or URL: the only

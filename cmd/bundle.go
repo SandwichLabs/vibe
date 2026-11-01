@@ -11,19 +11,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/assay/internal/bundle"
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/bundle"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // bundlePassphraseEnv is the script-friendly way to give a bundle passphrase.
 // An environment variable is visible to other processes of the same user, so
 // the prompt is the safer path; this exists for CI and shell scripts.
-const bundlePassphraseEnv = "ASSAY_BUNDLE_PASSPHRASE"
+const bundlePassphraseEnv = "SLAW_BUNDLE_PASSPHRASE"
 
 var exportBundleCmd = &cobra.Command{
-	Use:   "bundle [-o file.assay]",
-	Short: "Export the workspace's notebooks, queries, skills and data artifacts as a .assay bundle",
-	Long: `Write a .assay bundle: a zip of notebooks, queries, skills and data artifacts (and, with
+	Use:   "bundle [-o file.slaw]",
+	Short: "Export the workspace's notebooks, queries, skills and data artifacts as a .slaw bundle",
+	Long: `Write a .slaw bundle: a zip of notebooks, queries, skills and data artifacts (and, with
 --with-connections, connection definitions). A bundle holds no data and no
 credentials; connection definitions are stripped of sign-in methods and of paths
 outside the workspace.
@@ -40,16 +40,16 @@ passphrase is asked for twice on a terminal. For scripts, set ` + bundlePassphra
 }
 
 var importBundleCmd = &cobra.Command{
-	Use:   "bundle <file.assay>",
-	Short: "Import a .assay bundle into the workspace",
-	Long: `Import a .assay bundle into the current workspace. Every entry is verified
+	Use:   "bundle <file.slaw>",
+	Short: "Import a .slaw bundle into the workspace",
+	Long: `Import a .slaw bundle into the current workspace. Every entry is verified
 before anything is written. An item that already exists is renamed (-2, -3, ...)
 unless --on-conflict says overwrite or skip.
 
 Connection definitions in the bundle are only added with --with-connections
 (all of them, or a comma separated list of names). They go to "This computer"
-for this workspace, never to the committed assay.yaml, and arrive without
-credentials: add them with "assay conn credentials set <name>".
+for this workspace, never to the committed slaw.yaml, and arrive without
+credentials: add them with "slaw conn credentials set <name>".
 
 An encrypted bundle asks for its passphrase on a terminal, or reads
 ` + bundlePassphraseEnv + `.`,
@@ -59,9 +59,9 @@ An encrypted bundle asks for its passphrase on a terminal, or reads
 }
 
 var exportNotebookCmd = &cobra.Command{
-	Use:   "notebook <id> [-o file.asnb]",
-	Short: "Export one notebook as a .asnb file",
-	Long: `Write one notebook's file (notebooks/<id>.asnb) to -o (default <id>.asnb in the
+	Use:   "notebook <id> [-o file.slnb]",
+	Short: "Export one notebook as a .slnb file",
+	Long: `Write one notebook's file (notebooks/<id>.slnb) to -o (default <id>.slnb in the
 current directory). It is the same bytes a bundle holds.`,
 	Args:         cobra.ExactArgs(1),
 	RunE:         runExportNotebook,
@@ -69,9 +69,9 @@ current directory). It is the same bytes a bundle holds.`,
 }
 
 var importNotebookCmd = &cobra.Command{
-	Use:   "notebook <file.asnb>",
+	Use:   "notebook <file.slnb>",
 	Short: "Import one notebook file into the workspace",
-	Long: `Import a .asnb file (or Studio's single-notebook export) through the same checks
+	Long: `Import a .slnb file (or Studio's single-notebook export) through the same checks
 and conflict handling as a bundle. The file name, without its extension, is the
 notebook's id. An existing notebook is renamed (-2, -3, ...) unless
 --on-conflict says overwrite or skip.`,
@@ -92,7 +92,7 @@ func runExportNotebook(cmd *cobra.Command, args []string) error {
 	if !filestore.ValidID(id) {
 		return fmt.Errorf("%q is not a notebook id", id)
 	}
-	data, _, err := filestore.Read(ws.Root(), "notebooks/"+id+".asnb")
+	data, _, err := filestore.Read(ws.Root(), "notebooks/"+id+".slnb")
 	if err != nil {
 		return fmt.Errorf("failed to read notebook %q: %w", id, err)
 	}
@@ -101,7 +101,7 @@ func runExportNotebook(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("notebook %q cannot be exported: %w", id, err)
 	}
 	if out == "" {
-		out = id + ".asnb"
+		out = id + ".slnb"
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
 	if force {
@@ -166,7 +166,7 @@ func addBundleImportFlags(c *cobra.Command) {
 
 func init() {
 	f := exportBundleCmd.Flags()
-	f.StringP("output", "o", "", "destination file (default: <workspace name>.assay in the current directory)")
+	f.StringP("output", "o", "", "destination file (default: <workspace name>.slaw in the current directory)")
 	f.StringSlice("notebooks", nil, "notebook ids to include")
 	f.StringSlice("queries", nil, "query ids to include")
 	f.StringSlice("skills", nil, "skill names to include")
@@ -179,7 +179,7 @@ func init() {
 	addWorkspaceFlag(exportBundleCmd)
 	exportCmd.AddCommand(exportBundleCmd)
 
-	exportNotebookCmd.Flags().StringP("output", "o", "", "destination file (default: <id>.asnb)")
+	exportNotebookCmd.Flags().StringP("output", "o", "", "destination file (default: <id>.slnb)")
 	exportNotebookCmd.Flags().Bool("force", false, "replace the destination file if it exists")
 	addWorkspaceFlag(exportNotebookCmd)
 	exportCmd.AddCommand(exportNotebookCmd)
@@ -190,9 +190,9 @@ func init() {
 	addBundleImportFlags(importBundleCmd)
 	importBundleCmd.Flags().Bool("dry-run", false, "show what would happen; write nothing")
 	importCmd.AddCommand(importBundleCmd)
-	// `assay import <file.assay>` routes here too.
-	importCmd.Flags().String("on-conflict", "rename", "with a .assay bundle: rename, overwrite or skip an item that already exists")
-	importCmd.Flags().StringSlice("with-connections", nil, `with a .assay bundle: import connection definitions into "This computer": "all" or names`)
+	// `slaw import <file.slaw>` routes here too.
+	importCmd.Flags().String("on-conflict", "rename", "with a .slaw bundle: rename, overwrite or skip an item that already exists")
+	importCmd.Flags().StringSlice("with-connections", nil, `with a .slaw bundle: import connection definitions into "This computer": "all" or names`)
 }
 
 // readBundlePassphrase gets a passphrase: the environment variable, else a
@@ -245,7 +245,7 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 	defer ws.Close()
 
 	if out == "" {
-		out = filestore.Slug(ws.Name()) + ".assay"
+		out = filestore.Slug(ws.Name()) + ".slaw"
 	}
 	if _, err := os.Lstat(out); err == nil && !force {
 		return fmt.Errorf("%s already exists; use --force to replace it", out)
@@ -260,7 +260,7 @@ func runExportBundle(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-	res, err := bundle.Export(cmdCtx(cmd), ws, bundle.ExportOptions{Selection: sel, Passphrase: pass, AppVersion: "assay " + version})
+	res, err := bundle.Export(cmdCtx(cmd), ws, bundle.ExportOptions{Selection: sel, Passphrase: pass, AppVersion: "slaw " + version})
 	if err != nil {
 		return err
 	}

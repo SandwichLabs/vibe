@@ -1,6 +1,6 @@
 // Package notebooks implements the Notebook contract (#66 part A): a title
 // plus an ordered list of cells of three types (sql, markdown, a2ui), stored
-// one per file in a workspace (notebooks/<id>.asnb, see file_format.go). Ported from schoolwork-workspace's
+// one per file in a workspace (notebooks/<id>.slnb, see file_format.go). Ported from schoolwork-workspace's
 // src/notebook/model.js (emptyNotebook, newCell, coerceNotebook, VIEWS,
 // SCHEMA_VERSION) — same whitelist-rebuild-on-load contract, same rules:
 //
@@ -20,13 +20,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
 	"github.com/google/uuid"
 )
 
 // SchemaVersion is this package's notebook schema version. Coerce rejects a
 // notebook whose declared schemaVersion is newer — the same "a file from a
-// newer Assay must not silently corrupt under an older one" rule model.js's
+// newer Slaw must not silently corrupt under an older one" rule model.js's
 // coerceNotebook enforces.
 //
 // Version 2 (#108) adds an optional `connection` on sql cells (and on the
@@ -40,7 +40,7 @@ const SchemaVersion = 2
 // FileKind is the "kind" tag an exported notebook file (ExportNotebook) is
 // stamped with, and the value ImportNotebook checks against — mirrors
 // model.js's FILE_KIND, adapted to this product's naming.
-const FileKind = "assay/notebook"
+const FileKind = "slaw/notebook"
 
 // maxCells caps a notebook at a sane size (issue #66 part A: "cap cell
 // count"). A pathological import (or a future runaway task-mode loop) that
@@ -290,7 +290,7 @@ func Coerce(raw any) (Notebook, []string, error) {
 	// export's own schemaVersion, which may be newer even when the nested
 	// notebook object omits its own copy) and on the nested notebook object
 	// itself. Review fix: only checking src's copy let a wrapper like
-	// {"kind":"assay/notebook","schemaVersion":9,"notebook":{"cells":[]}}
+	// {"kind":"slaw/notebook","schemaVersion":9,"notebook":{"cells":[]}}
 	// (no schemaVersion on the nested object) sail through uncaught.
 	for _, holder := range [2]map[string]any{obj, src} {
 		if sv, ok := holder["schemaVersion"]; ok {

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // --- Queries ---
@@ -56,7 +56,7 @@ const queryGridRowCap = 5000
 // every open file/every other in-flight call.
 func jsonRoundTripGuard(v any) error {
 	if _, err := json.Marshal(v); err != nil {
-		return fmt.Errorf("result contains a value that could not be serialized (%w) — this is almost certainly a bug in Assay, not your query; please report it", err)
+		return fmt.Errorf("result contains a value that could not be serialized (%w) — this is almost certainly a bug in Slaw, not your query; please report it", err)
 	}
 	return nil
 }
@@ -373,7 +373,7 @@ func (a *App) GetQuery(id string) (*queries.Query, error) {
 }
 
 // QuerySaveResult is what SaveQueryOn returns: the query's id and the revision
-// the store now holds for it (empty for a legacy .assay), which the editor sends
+// the store now holds for it (empty for a legacy .slaw), which the editor sends
 // back with its next save.
 type QuerySaveResult struct {
 	ID  string `json:"id"`

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/importer"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/importer"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 // TestImportFile_MaliciousColumnName_CannotWriteFile is the end-to-end
@@ -75,7 +75,7 @@ func TestImportFile_QuoteInColumnName_ImportsCleanly(t *testing.T) {
 }
 
 // TestTableHasRows_MaliciousStoredTableName is the gating-path regression:
-// a shared .assay file can carry an attacker-authored _vibe_skills row whose
+// a shared .slaw file can carry an attacker-authored _vibe_skills row whose
 // table_name is itself a crafted identifier (not something the importer
 // wrote — the attacker just inserted the row directly, as anyone with write
 // access to the SQLite envelope can). LoadSkills (called on every chat turn
@@ -88,7 +88,7 @@ func TestTableHasRows_MaliciousStoredTableName(t *testing.T) {
 	evil := `x") ; COPY (SELECT 'pwned') TO '` + pwnedPath + `' ; --`
 
 	// The attacker creates a real table with this exact (crafted) name —
-	// they authored the .assay file, so this is within their control.
+	// they authored the .slaw file, so this is within their control.
 	quoted := `"` + escapeDoubleQuotes(evil) + `"`
 	_, err := app.sess.DB().Exec(`CREATE TABLE ` + quoted + ` (a INT)`)
 	require.NoError(t, err)

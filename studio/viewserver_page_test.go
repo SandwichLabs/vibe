@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 const pageManifest = studioArtifactManifest + "view: html\n"
@@ -71,7 +71,7 @@ func pageApp(t *testing.T) *App {
 }
 
 func wantPageCSP(tok string) string {
-	a := testOrigin + "/assay-view/" + tok + "/assets/"
+	a := testOrigin + "/slaw-view/" + tok + "/assets/"
 	return "sandbox; default-src 'none'; script-src 'none'; style-src " + a + " 'unsafe-inline'; img-src " + a + " data:; font-src " + a +
 		"; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"
 }
@@ -79,7 +79,7 @@ func wantPageCSP(tok string) string {
 func TestStaticPage_RendersWithH3sExactHeaders(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, map[string]string{"assets/style.css": "body{margin:0}"})
-	r := get(h, http.MethodGet, "/assay-view/"+tok+"/page")
+	r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page")
 	require.Equal(t, http.StatusOK, r.StatusCode)
 	assert.Equal(t, wantPageCSP(tok), r.Header.Get("Content-Security-Policy"))
 	assert.Equal(t, "nosniff", r.Header.Get("X-Content-Type-Options"))
@@ -91,7 +91,7 @@ func TestStaticPage_RendersWithH3sExactHeaders(t *testing.T) {
 	assert.Contains(t, out, "<h1>min 0</h1>")
 	assert.Contains(t, out, `href="page?min_qty=50"`)
 
-	a := get(h, http.MethodGet, "/assay-view/"+tok+"/assets/style.css")
+	a := get(h, http.MethodGet, "/slaw-view/"+tok+"/assets/style.css")
 	require.Equal(t, http.StatusOK, a.StatusCode)
 	assert.Equal(t, "text/css; charset=utf-8", a.Header.Get("Content-Type"))
 	assert.Equal(t, "body{margin:0}", body(t, a))
@@ -101,7 +101,7 @@ func TestStaticPage_RendersWithH3sExactHeaders(t *testing.T) {
 func TestStaticPage_ParametersComeFromTheQueryStringThroughBind(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
-	out := body(t, get(h, http.MethodGet, "/assay-view/"+tok+"/page?min_qty=50"))
+	out := body(t, get(h, http.MethodGet, "/slaw-view/"+tok+"/page?min_qty=50"))
 	assert.Contains(t, out, "<td>2</td><td>50</td>")
 	assert.NotContains(t, out, "<td>1</td><td>5</td>")
 	assert.Contains(t, out, "<h1>min 50</h1>")
@@ -110,12 +110,12 @@ func TestStaticPage_ParametersComeFromTheQueryStringThroughBind(t *testing.T) {
 		"min_qty=-5", "min_qty=abc", "min_qty=5.5", "min_qty=1&min_qty=2", "nope=1", "since=2026-13-45", "since=2026-01-01'%20OR%201=1",
 		"min_qty=1;DROP", "min_qty=%00", "since=" + strings.Repeat("a", 100),
 	} {
-		r := get(h, http.MethodGet, "/assay-view/"+tok+"/page?"+q)
+		r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page?"+q)
 		assert.Equal(t, http.StatusUnprocessableEntity, r.StatusCode, q)
 		assert.Equal(t, wantPageCSP(tok), r.Header.Get("Content-Security-Policy"), q)
 		assert.Contains(t, body(t, r), "A parameter value is not valid", q)
 	}
-	r := get(h, http.MethodGet, "/assay-view/"+tok+"/page?x="+strings.Repeat("a", 9000))
+	r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page?x="+strings.Repeat("a", 9000))
 	assert.Equal(t, http.StatusRequestURITooLong, r.StatusCode)
 	assert.NotEmpty(t, r.Header.Get("Content-Security-Policy"))
 }
@@ -125,13 +125,13 @@ func TestStaticPage_EveryResponseCarriesTheSandboxCSP(t *testing.T) {
 	tok, h := allowedPage(t, app, "pg", pageIndex, map[string]string{"assets/style.css": "x", "assets/d.json": "{}"})
 	other := strings.Repeat("0", 64)
 	targets := []string{
-		"/assay-view/" + tok + "/page", "/assay-view/" + tok + "/page?min_qty=x", "/assay-view/" + tok + "/page/",
-		"/assay-view/" + tok + "/index.html", "/assay-view/" + tok + "/assets/", "/assay-view/" + tok + "/assets/index.html",
-		"/assay-view/" + tok + "/assets/style.css", "/assay-view/" + tok + "/assets/style.css?x=1", "/assay-view/" + tok + "/assets/missing.css",
-		"/assay-view/" + tok + "/assets/d.json", "/assay-view/" + tok + "/assets/../index.html.tmpl", "/assay-view/" + tok + "/assets//style.css",
-		"/assay-view/" + tok + "/assets/index.html.tmpl", "/assay-view/" + tok + "/other", "/assay-view/" + tok + "/view.js",
-		"/assay-view/" + tok + "/worker.js", "/assay-view/" + other + "/page", "/assay-view/" + other + "/assets/style.css",
-		"/assay-view/nothex/page", "/assay-view/" + tok + "/page/x", "/assay-view/" + tok, "/assay-view/",
+		"/slaw-view/" + tok + "/page", "/slaw-view/" + tok + "/page?min_qty=x", "/slaw-view/" + tok + "/page/",
+		"/slaw-view/" + tok + "/index.html", "/slaw-view/" + tok + "/assets/", "/slaw-view/" + tok + "/assets/index.html",
+		"/slaw-view/" + tok + "/assets/style.css", "/slaw-view/" + tok + "/assets/style.css?x=1", "/slaw-view/" + tok + "/assets/missing.css",
+		"/slaw-view/" + tok + "/assets/d.json", "/slaw-view/" + tok + "/assets/../index.html.tmpl", "/slaw-view/" + tok + "/assets//style.css",
+		"/slaw-view/" + tok + "/assets/index.html.tmpl", "/slaw-view/" + tok + "/other", "/slaw-view/" + tok + "/view.js",
+		"/slaw-view/" + tok + "/worker.js", "/slaw-view/" + other + "/page", "/slaw-view/" + other + "/assets/style.css",
+		"/slaw-view/nothex/page", "/slaw-view/" + tok + "/page/x", "/slaw-view/" + tok, "/slaw-view/",
 	}
 	for _, target := range targets {
 		for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
@@ -143,14 +143,14 @@ func TestStaticPage_EveryResponseCarriesTheSandboxCSP(t *testing.T) {
 		}
 	}
 	// The worker and view.js routes never answer for a page's token.
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/view.js").StatusCode)
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/worker.js").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/view.js").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/worker.js").StatusCode)
 }
 
 func TestStaticPage_PathsThatInjectTheWailsRuntimeAreBadRequest(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
-	for _, target := range []string{"/assay-view/" + tok + "/page/", "/assay-view/" + tok + "/index.html", "/assay-view/" + tok + "/assets/", "/assay-view/" + tok + "/assets/a/index.html", "/assay-view/" + tok + "/"} {
+	for _, target := range []string{"/slaw-view/" + tok + "/page/", "/slaw-view/" + tok + "/index.html", "/slaw-view/" + tok + "/assets/", "/slaw-view/" + tok + "/assets/a/index.html", "/slaw-view/" + tok + "/"} {
 		assert.Equal(t, http.StatusBadRequest, get(h, http.MethodGet, target).StatusCode, target)
 	}
 }
@@ -160,12 +160,12 @@ func TestStaticPage_ATokenIsBoundToItsArtifactNotThePath(t *testing.T) {
 	a, h := allowedPage(t, app, "alpha", strings.Replace(pageIndex, "Orders", "ALPHA", 1), map[string]string{"assets/style.css": "A-CSS"})
 	b, _ := allowedPage(t, app, "beta", strings.Replace(pageIndex, "Orders", "BETA", 1)+"<p>BETA-ONLY</p>", map[string]string{"assets/style.css": "B-CSS", "assets/b.svg": `<svg xmlns="http://www.w3.org/2000/svg"/>`})
 	assert.NotEqual(t, a, b)
-	assert.Equal(t, "A-CSS", body(t, get(h, http.MethodGet, "/assay-view/"+a+"/assets/style.css")))
-	assert.Equal(t, "B-CSS", body(t, get(h, http.MethodGet, "/assay-view/"+b+"/assets/style.css")))
+	assert.Equal(t, "A-CSS", body(t, get(h, http.MethodGet, "/slaw-view/"+a+"/assets/style.css")))
+	assert.Equal(t, "B-CSS", body(t, get(h, http.MethodGet, "/slaw-view/"+b+"/assets/style.css")))
 	for _, target := range []string{
-		"/assay-view/" + a + "/../" + b + "/page", "/assay-view/" + a + "/" + b + "/page", "/assay-view/" + a + "/assets/b.svg",
-		"/assay-view/" + a + "/assets/../../" + b + "/assets/style.css", "/assay-view/" + a + "/page/" + b,
-		"/assay-view/" + a + "/assets/%2e%2e/" + b + "/page",
+		"/slaw-view/" + a + "/../" + b + "/page", "/slaw-view/" + a + "/" + b + "/page", "/slaw-view/" + a + "/assets/b.svg",
+		"/slaw-view/" + a + "/assets/../../" + b + "/assets/style.css", "/slaw-view/" + a + "/page/" + b,
+		"/slaw-view/" + a + "/assets/%2e%2e/" + b + "/page",
 	} {
 		r := get(h, http.MethodGet, target)
 		assert.GreaterOrEqual(t, r.StatusCode, 400, target)
@@ -173,8 +173,8 @@ func TestStaticPage_ATokenIsBoundToItsArtifactNotThePath(t *testing.T) {
 		assert.NotContains(t, o, "BETA", target)
 		assert.NotContains(t, o, "B-CSS", target)
 	}
-	assert.NotContains(t, body(t, get(h, http.MethodGet, "/assay-view/"+a+"/page")), "BETA")
-	assert.Contains(t, body(t, get(h, http.MethodGet, "/assay-view/"+b+"/page")), "BETA-ONLY")
+	assert.NotContains(t, body(t, get(h, http.MethodGet, "/slaw-view/"+a+"/page")), "BETA")
+	assert.Contains(t, body(t, get(h, http.MethodGet, "/slaw-view/"+b+"/page")), "BETA-ONLY")
 }
 
 func TestStaticPage_AssetsServeOnlyFilesUnderAssets(t *testing.T) {
@@ -185,12 +185,12 @@ func TestStaticPage_AssetsServeOnlyFilesUnderAssets(t *testing.T) {
 	for path, typ := range map[string]string{
 		"style.css": "text/css; charset=utf-8", "logo.svg": "image/svg+xml", "data.json": "application/json; charset=utf-8", "sub/x.css": "text/css; charset=utf-8",
 	} {
-		r := get(h, http.MethodGet, "/assay-view/"+tok+"/assets/"+path)
+		r := get(h, http.MethodGet, "/slaw-view/"+tok+"/assets/"+path)
 		require.Equal(t, http.StatusOK, r.StatusCode, path)
 		assert.Equal(t, typ, r.Header.Get("Content-Type"))
 	}
 	for _, path := range []string{"index.html.tmpl", "../artifact.yaml", "../../artifacts/pg/artifact.yaml", "sub", "nope.css", ".hidden.css"} {
-		r := get(h, http.MethodGet, "/assay-view/"+tok+"/assets/"+path)
+		r := get(h, http.MethodGet, "/slaw-view/"+tok+"/assets/"+path)
 		assert.GreaterOrEqual(t, r.StatusCode, 400, path)
 		assert.NotContains(t, body(t, r), "min_qty", path)
 	}
@@ -200,7 +200,7 @@ func TestStaticPage_ASubResourceRequestDoesNotRender(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
 	for _, c := range []struct{ dest, mode string }{{"image", "no-cors"}, {"style", "no-cors"}, {"script", "no-cors"}, {"font", "cors"}, {"empty", "cors"}, {"object", "no-cors"}, {"", "cors"}} {
-		req := httptest.NewRequest(http.MethodGet, "/assay-view/"+tok+"/page", nil)
+		req := httptest.NewRequest(http.MethodGet, "/slaw-view/"+tok+"/page", nil)
 		if c.dest != "" {
 			req.Header.Set("Sec-Fetch-Dest", c.dest)
 		}
@@ -213,7 +213,7 @@ func TestStaticPage_ASubResourceRequestDoesNotRender(t *testing.T) {
 		assert.NotContains(t, body(t, r), "<td>", c.dest)
 	}
 	for _, dest := range []string{"iframe", "frame", "document", ""} {
-		req := httptest.NewRequest(http.MethodGet, "/assay-view/"+tok+"/page", nil)
+		req := httptest.NewRequest(http.MethodGet, "/slaw-view/"+tok+"/page", nil)
 		if dest != "" {
 			req.Header.Set("Sec-Fetch-Dest", dest)
 			req.Header.Set("Sec-Fetch-Mode", "navigate")
@@ -268,12 +268,12 @@ func TestStaticPage_FourInFlightThenRefusedOverHTTP(t *testing.T) {
 	codes := make(chan int, 8)
 	for i := 0; i < maxRendersInFlight; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); codes <- get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode }()
+		go func() { defer wg.Done(); codes <- get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode }()
 	}
 	for i := 0; i < maxRendersInFlight; i++ {
 		<-started
 	}
-	r := get(h, http.MethodGet, "/assay-view/"+tok+"/page")
+	r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page")
 	assert.Equal(t, http.StatusTooManyRequests, r.StatusCode)
 	assert.Equal(t, wantPageCSP(tok), r.Header.Get("Content-Security-Policy"))
 	assert.Equal(t, "5", r.Header.Get("Retry-After"))
@@ -283,7 +283,7 @@ func TestStaticPage_FourInFlightThenRefusedOverHTTP(t *testing.T) {
 	for c := range codes {
 		assert.Equal(t, http.StatusOK, c)
 	}
-	assert.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode, "the slots come back")
+	assert.Equal(t, http.StatusOK, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode, "the slots come back")
 }
 
 func TestStaticPage_HostileRowValuesRenderAsText(t *testing.T) {
@@ -305,7 +305,7 @@ func TestStaticPage_HostileRowValuesRenderAsText(t *testing.T) {
 	g, err := app.OpenArtifactPage("hostile", testOrigin)
 	require.NoError(t, err)
 	h := app.views.Middleware()(http.NotFoundHandler())
-	out := body(t, get(h, http.MethodGet, "/assay-view/"+g.Token+"/page"))
+	out := body(t, get(h, http.MethodGet, "/slaw-view/"+g.Token+"/page"))
 	assert.NotContains(t, out, "<img")
 	assert.NotContains(t, out, "<script")
 	assert.NotContains(t, out, `" onmouseover`)
@@ -318,7 +318,7 @@ func TestStaticPage_AnUnboundedLoopInAVettedPageEndsFast(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "loop", `<p>before</p>{{ range 3000000000 }}{{ end }}`, nil)
 	start := time.Now()
-	r := get(h, http.MethodGet, "/assay-view/"+tok+"/page")
+	r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page")
 	assert.Less(t, time.Since(start), 3*time.Second)
 	assert.Equal(t, http.StatusGatewayTimeout, r.StatusCode)
 	assert.Equal(t, wantPageCSP(tok), r.Header.Get("Content-Security-Policy"))
@@ -338,7 +338,7 @@ func TestStaticPage_AFailingQueryIsAFixedBlockNeverThePolicyReason(t *testing.T)
 	require.NoError(t, err)
 	g, err := app.OpenArtifactPage("bad", testOrigin)
 	require.NoError(t, err)
-	r := get(app.views.Middleware()(http.NotFoundHandler()), http.MethodGet, "/assay-view/"+g.Token+"/page")
+	r := get(app.views.Middleware()(http.NotFoundHandler()), http.MethodGet, "/slaw-view/"+g.Token+"/page")
 	assert.Equal(t, http.StatusInternalServerError, r.StatusCode)
 	out := body(t, r)
 	assert.Contains(t, out, "could not run")
@@ -350,40 +350,40 @@ func TestStaticPage_AFailingQueryIsAFixedBlockNeverThePolicyReason(t *testing.T)
 func TestStaticPage_ServesWhatWasHashed(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, map[string]string{"assets/style.css": "ORIGINAL"})
-	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 
 	// Changed on disk after the token was issued: refused (never the new bytes
 	// and never a mix), and the token does not come back by itself.
 	dir := filepath.Join(app.ws.Root(), artifacts.Dir, "pg", artifacts.HTMLDir)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "assets", "style.css"), []byte("EVIL"), 0o644))
 	for _, target := range []string{"/page", "/assets/style.css"} {
-		r := get(h, http.MethodGet, "/assay-view/"+tok+target)
+		r := get(h, http.MethodGet, "/slaw-view/"+tok+target)
 		assert.Equal(t, http.StatusNotFound, r.StatusCode, target)
 		assert.NotContains(t, body(t, r), "EVIL")
 		assert.NotContains(t, body(t, r), "ORIGINAL")
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "assets", "style.css"), []byte("ORIGINAL"), 0o644))
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 }
 
 func TestStaticPage_ARevokeOrDenyEndsTheTokenAtOnceEvenWithTheVerdictCached(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
 	app.views.verdictTTL = time.Minute
-	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 	_, err := app.RevokeArtifactView("pg")
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 }
 
 func TestStaticPage_AnEditIsNoticedAfterTheVerdictTTL(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
 	app.views.verdictTTL = 50 * time.Millisecond
-	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 	writePage(t, app, "pg", pageIndex+"<p>edit</p>", nil)
 	time.Sleep(80 * time.Millisecond)
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 }
 
 func TestStaticPage_ABodyRenderedWhileTheFilesChangedIsNotDelivered(t *testing.T) {
@@ -398,7 +398,7 @@ func TestStaticPage_ABodyRenderedWhileTheFilesChangedIsNotDelivered(t *testing.T
 		return &artifacts.PageRows{}, nil
 	}
 	tok, _ := vs.issue(&viewGrant{name: "pg", origin: testOrigin, page: page, run: run})
-	r := get(h, http.MethodGet, "/assay-view/"+tok+"/page")
+	r := get(h, http.MethodGet, "/slaw-view/"+tok+"/page")
 	assert.Equal(t, http.StatusNotFound, r.StatusCode)
 	assert.NotContains(t, body(t, r), "SECRET")
 }
@@ -423,7 +423,7 @@ func TestOpenArtifactPage_RefusesAScriptedPageAndAScriptView(t *testing.T) {
 	require.ErrorIs(t, err, errViewNotAllowed, "a script view has no page")
 	g, err := app.OpenArtifactView("chart", testOrigin)
 	require.NoError(t, err)
-	r := get(app.views.Middleware()(http.NotFoundHandler()), http.MethodGet, "/assay-view/"+g.Token+"/page")
+	r := get(app.views.Middleware()(http.NotFoundHandler()), http.MethodGet, "/slaw-view/"+g.Token+"/page")
 	assert.Equal(t, http.StatusNotFound, r.StatusCode, "a script token renders no page")
 
 	_, err = app.OpenArtifactPage("sc", "http://x; script-src *")
@@ -436,7 +436,7 @@ func TestOpenArtifactPage_AnotherWorkspacesGrantIsDropped(t *testing.T) {
 	app := pageApp(t)
 	tok, h := allowedPage(t, app, "pg", pageIndex, nil)
 	app.views.clear()
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 }
 
 func TestStaticPage_QueriesRunTheHashedManifestNotTheFileOnDisk(t *testing.T) {
@@ -445,7 +445,7 @@ func TestStaticPage_QueriesRunTheHashedManifestNotTheFileOnDisk(t *testing.T) {
 	// A pull rewrites the query's SQL after the token was issued. With the verdict
 	// cached the page is still served, and it must still run the SQL that was hashed.
 	app.views.verdictTTL = time.Minute
-	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	require.Equal(t, http.StatusOK, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 	app.views.mu.Lock()
 	for _, g := range app.views.grants {
 		g.okUntil = time.Now().Add(time.Minute)
@@ -453,10 +453,10 @@ func TestStaticPage_QueriesRunTheHashedManifestNotTheFileOnDisk(t *testing.T) {
 	app.views.mu.Unlock()
 	path := filepath.Join(app.ws.Root(), artifacts.Dir, "pg", artifacts.ManifestFile)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(pageManifest, "qty >= $min_qty", "qty < 0", 1)), 0o644))
-	out := body(t, get(h, http.MethodGet, "/assay-view/"+tok+"/page"))
+	out := body(t, get(h, http.MethodGet, "/slaw-view/"+tok+"/page"))
 	assert.Contains(t, out, "<td>3</td><td>500</td>", "the held SQL ran, not the edited one (which returns no rows)")
 	assert.NotContains(t, out, "qty &lt; 0")
 	// Once the verdict is rechecked, the edit is seen and the page is refused.
 	app.views.verdictTTL = 0
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/page").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/slaw-view/"+tok+"/page").StatusCode)
 }

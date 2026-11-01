@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/slaw/internal/strictyaml"
 )
 
 // Decode parses and validates artifact.yaml. It is strict: the byte cap is

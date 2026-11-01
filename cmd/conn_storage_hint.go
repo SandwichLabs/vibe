@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/storageurl"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/storageurl"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 var shellSafeRE = regexp.MustCompile(`^[A-Za-z0-9._~/:@=+-]+$`)
@@ -23,7 +23,7 @@ func shellQuote(s string) string {
 }
 
 // printStorageHint tells the person, after a lake, Iceberg or Delta
-// connection with a storage URL was saved, which "assay conn add" would give it
+// connection with a storage URL was saved, which "slaw conn add" would give it
 // a storage connection. The save succeeded either way (a lake may be saved
 // before its storage connection), so this is a hint only. It describes the
 // definition just saved (def in scope), not whichever copy of the name wins,
@@ -41,7 +41,7 @@ func printStorageHint(out io.Writer, ws workspace.Workspace, def workspace.Conne
 		if s.Scope == "" {
 			prefix, covers = "'<bucket URL>'", n.URL // as typed, never expanded
 		}
-		fmt.Fprintf(out, "No storage connection covers %s. Add one: assay conn add %s --type %s --prefix %s%s --scope %s\n",
+		fmt.Fprintf(out, "No storage connection covers %s. Add one: slaw conn add %s --type %s --prefix %s%s --scope %s\n",
 			covers, shellQuote(s.Name), s.Type, prefix, requiredOption(s), scope)
 		if s.Type == "s3" {
 			fmt.Fprintln(out, "  Optional: --region <region>, --preset <id> (one of "+strings.Join(connections.PresetIDs(), ", ")+") or --option endpoint=<host:port> for an S3-compatible store.")

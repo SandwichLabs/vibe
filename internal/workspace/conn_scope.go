@@ -3,7 +3,7 @@ package workspace
 import "fmt"
 
 // DefinitionIn reads name's definition out of one scope's file: the shared
-// assay.yaml, this computer's local settings, or the user file. It is how a
+// slaw.yaml, this computer's local settings, or the user file. It is how a
 // shadowed definition (the Team copy behind a local override) is read; the
 // winning one is Workspace.Connection.
 func DefinitionIn(ws Workspace, scope Scope, name string) (ConnectionDef, bool) {

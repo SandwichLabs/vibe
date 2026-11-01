@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // --- Data handlers ---

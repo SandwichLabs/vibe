@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	"github.com/SandwichLabs/assay/internal/filelock"
+	"github.com/SandwichLabs/slaw/internal/filelock"
 )
 
 // maxScriptOutput caps the install output kept for display.
@@ -36,7 +36,7 @@ var applyMu sync.Mutex
 // scriptEnvScrub lists the variables install.sh reads that must not leak in from the caller's
 // environment: the command line (or our own value) is the only source for each.
 func scriptEnvScrub() []string {
-	return []string{"ASSAY_VERSION", "ASSAY_INSTALL_DIR", "INSTALL_DIR", "ASSAY_APP_DIR", "ASSAY_DOWNLOAD_BASE", "ASSAY_LATEST_URL"}
+	return []string{"SLAW_VERSION", "SLAW_INSTALL_DIR", "INSTALL_DIR", "SLAW_APP_DIR", "SLAW_DOWNLOAD_BASE", "SLAW_LATEST_URL"}
 }
 
 // scriptWaitDelay bounds how long after a cancelled install the script's output pipes are waited on.
@@ -44,7 +44,7 @@ const scriptWaitDelay = 5 * time.Second
 
 // Apply upgrades to tag by downloading that release's install.sh, verifying it
 // against the release's checksums.txt and running it. It refuses when this
-// Assay is not installer-managed, when tag is not a newer release, and while
+// Slaw is not installer-managed, when tag is not a newer release, and while
 // another upgrade runs (in this process or another). It never passes --force.
 func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 	if !ValidTag(tag) {
@@ -163,7 +163,7 @@ func checksumFor(sums []byte, name string) (string, error) {
 // runScript writes the script to a fresh private temp dir and runs it with /bin/sh. Never --force,
 // never a shell string: an argv slice.
 func (u *Updater) runScript(ctx context.Context, script []byte, tag string, in *Install) (string, error) {
-	dir, err := os.MkdirTemp("", "assay-update-")
+	dir, err := os.MkdirTemp("", "slaw-update-")
 	if err != nil {
 		return "", fmt.Errorf("failed to create a temp dir: %w", err)
 	}
@@ -205,10 +205,10 @@ func (u *Updater) scriptEnv(tag string, in *Install) []string {
 	}
 	env = append(env, "NO_COLOR=1")
 	if in.AppDir != "" {
-		env = append(env, "ASSAY_APP_DIR="+in.AppDir)
+		env = append(env, "SLAW_APP_DIR="+in.AppDir)
 	}
 	if u.dlBase != "" {
-		env = append(env, "ASSAY_DOWNLOAD_BASE="+strings.ReplaceAll(u.dlBase, "%s", tag))
+		env = append(env, "SLAW_DOWNLOAD_BASE="+strings.ReplaceAll(u.dlBase, "%s", tag))
 	}
 	return env
 }

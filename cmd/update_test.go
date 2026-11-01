@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
-	"github.com/SandwichLabs/assay/internal/selfupdate"
+	"github.com/SandwichLabs/slaw/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/selfupdate"
 )
 
 // updateRig is a fake GitHub plus a temp machine; tag is the "latest" release.
@@ -34,11 +34,11 @@ func newUpdateRig(t *testing.T, current string, managed bool) *updateRig {
 	root := t.TempDir()
 	r := &updateRig{cfg: filepath.Join(root, "cfg"), data: filepath.Join(root, "data")}
 	bin := filepath.Join(root, "bin")
-	require.NoError(t, os.MkdirAll(filepath.Join(r.data, "assay"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(r.data, "slaw"), 0o755))
 	require.NoError(t, os.MkdirAll(bin, 0o755))
-	r.exe = filepath.Join(bin, "assay")
+	r.exe = filepath.Join(bin, "slaw")
 	require.NoError(t, os.WriteFile(r.exe, []byte("x"), 0o755))
-	r.manifest = filepath.Join(r.data, "assay", "install-manifest")
+	r.manifest = filepath.Join(r.data, "slaw", "install-manifest")
 	if managed {
 		require.NoError(t, os.WriteFile(r.manifest, []byte("version=0.1.1\nF "+strings.Repeat("a", 64)+" "+r.exe+"\n"), 0o644))
 	}
@@ -47,7 +47,7 @@ func newUpdateRig(t *testing.T, current string, managed bool) *updateRig {
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
 		case strings.HasSuffix(req.URL.Path, "/releases/latest"):
-			http.Redirect(w, req, "/SandwichLabs/assay/releases/tag/v0.1.2", http.StatusFound)
+			http.Redirect(w, req, "/SandwichLabs/slaw/releases/tag/v0.1.2", http.StatusFound)
 		case strings.Contains(req.URL.Path, "/releases/tags/"):
 			_, _ = w.Write([]byte(`{"body":"Fixes things.","html_url":""}`))
 		case strings.HasSuffix(req.URL.Path, "/checksums.txt"):
@@ -78,7 +78,7 @@ func newUpdateRig(t *testing.T, current string, managed bool) *updateRig {
 	return r
 }
 
-// runUpdateCmd runs `assay update <args>` with stdin that is not a terminal.
+// runUpdateCmd runs `slaw update <args>` with stdin that is not a terminal.
 func runUpdateCmd(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	updateCheckOnly, updateYes = false, false
@@ -103,7 +103,7 @@ func TestUpdate_NoTerminalMeansCheckOnly(t *testing.T) {
 	assert.Contains(t, out, "Latest:  v0.1.2")
 	assert.Contains(t, out, "A newer release is available")
 	assert.Contains(t, out, "Fixes things.")
-	assert.Contains(t, out, "assay update --yes")
+	assert.Contains(t, out, "slaw update --yes")
 	b, _ := os.ReadFile(r.manifest)
 	assert.Contains(t, string(b), "version=0.1.1", "nothing was installed")
 }

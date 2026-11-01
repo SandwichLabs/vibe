@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // The exit criterion of metric(): a hand-written metric (a saved query and a

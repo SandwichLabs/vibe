@@ -16,11 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 func rawSession(t *testing.T, specs ...session.Spec) session.Session {
@@ -123,7 +123,7 @@ func passwordReceived(ch <-chan string) (string, bool) {
 	}
 }
 
-// A committed assay.yaml must not be able to choose env: credentials and a host
+// A committed slaw.yaml must not be able to choose env: credentials and a host
 // of its choosing: a statement that merely names the connection would send the
 // person's environment password there.
 func TestSharedEnvHintNeverSendsThePasswordToTheCommittedHost(t *testing.T) {
@@ -208,7 +208,7 @@ func TestConcurrentFirstUseOfAConnection(t *testing.T) {
 	}
 	assert.Equal(t, session.StatusOK, connStatus(s, "pg").Kind)
 	var n int
-	require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM duckdb_secrets() WHERE name='assay_pg'").Scan(&n))
+	require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM duckdb_secrets() WHERE name='slaw_pg'").Scan(&n))
 	assert.Equal(t, 1, n)
 }
 

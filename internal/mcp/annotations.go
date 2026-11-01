@@ -3,7 +3,7 @@ package mcp
 import (
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/agents"
 )
 
 // connectionReaders are introspect tools that look at a connection's own

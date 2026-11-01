@@ -322,15 +322,15 @@ func (mv *markupVet) checkSrcset(tag string, a attr) error {
 	return nil
 }
 
-// assayLibRe is a vendored library the page window serves: assay-lib/<name>.js.
+// slawLibRe is a vendored library the page window serves: slaw-lib/<name>.js.
 // Whether Studio vendors that name is not known here (the host answers 404 for
 // one it does not).
-var assayLibRe = regexp.MustCompile(`^assay-lib/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.js$`)
+var slawLibRe = regexp.MustCompile(`^slaw-lib/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.js$`)
 
 // scriptSrcOK is the one rule for a <script src>: a page's own script file
 // directly under html/, or a vendored library. files holds the page's paths.
 func scriptSrcOK(val string, files map[string]bool) bool {
-	if assayLibRe.MatchString(val) {
+	if slawLibRe.MatchString(val) {
 		return true
 	}
 	return files[val] && !strings.Contains(val, "/") && (path.Ext(val) == ".js" || path.Ext(val) == ".mjs")

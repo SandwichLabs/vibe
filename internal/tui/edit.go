@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/editor"
+	"github.com/SandwichLabs/slaw/internal/editor"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -26,8 +26,8 @@ type editorDoneMsg struct {
 const editCommand = `\e`
 
 // WithEditorRoot sets the workspace root for editor scratch buffers, so they
-// sit under the workspace (.assay-local/edit/) where an editor's language
-// server finds assay.yaml and starts `assay lsp`.
+// sit under the workspace (.slaw-local/edit/) where an editor's language
+// server finds slaw.yaml and starts `slaw lsp`.
 func WithEditorRoot(root string) Option { return func(a *App) { a.editRoot = root } }
 
 // openEditor suspends the TUI and runs the editor on a scratch .sql file

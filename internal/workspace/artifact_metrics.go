@@ -5,9 +5,9 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // A script view or HTML page whose queries call metric() reads files its own

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/prefs"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,16 +58,16 @@ func TestOpenWorkspace_OpensAndRecords(t *testing.T) {
 	assert.ErrorIs(t, err, errNoWorkspace)
 }
 
-func TestOpenWorkspace_AssayFileIsImportedNotOpened(t *testing.T) {
+func TestOpenWorkspace_SlawFileIsImportedNotOpened(t *testing.T) {
 	app := newBareApp(t)
-	path := filepath.Join(t.TempDir(), "old.assay")
+	path := filepath.Join(t.TempDir(), "old.slaw")
 	require.NoError(t, os.WriteFile(path, []byte("SQLite format 3"), 0o600))
 	_, err := app.OpenWorkspace(path)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Import .assay")
+	assert.Contains(t, err.Error(), "Import .slaw")
 	assert.False(t, app.IsWorkspaceOpen())
 
-	// A .assay on the command line is offered to the import flow, not opened.
+	// A .slaw on the command line is offered to the import flow, not opened.
 	app.setInitialArg(path)
 	init := app.GetInitialWorkspace()
 	assert.Empty(t, init.Path)
@@ -205,7 +205,7 @@ func TestOpenWorkspace_HeldElsewhereIsReadOnlyAndNotNotebookBlocking(t *testing.
 
 	ws, err := workspace.Open(root)
 	require.NoError(t, err)
-	other, err := hub.AcquireHub(ws, "assay mcp serve")
+	other, err := hub.AcquireHub(ws, "slaw mcp serve")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = other.Release(); _ = ws.Close() })
 
@@ -214,7 +214,7 @@ func TestOpenWorkspace_HeldElsewhereIsReadOnlyAndNotNotebookBlocking(t *testing.
 	require.Equal(t, "opened", res.Status)
 	assert.True(t, res.Info.ReadOnly)
 	require.NotNil(t, res.Info.Holder)
-	assert.Equal(t, "assay mcp serve", res.Info.Holder.App)
+	assert.Equal(t, "slaw mcp serve", res.Info.Holder.App)
 	assert.Equal(t, os.Getpid(), res.Info.Holder.PID)
 	assert.Equal(t, 1, ev.count("workspace:locked"))
 	assert.Equal(t, "read-only", res.Info.Policy.Sandbox, "a window that does not own the database cannot change it")
@@ -281,7 +281,7 @@ func TestConflict_NotebookResolveActions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Something else saves the file behind Studio's back.
-	path := filepath.Join(info.Root, "notebooks", nb.ID+".asnb")
+	path := filepath.Join(info.Root, "notebooks", nb.ID+".slnb")
 	disk, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(disk), "Weekly revenue", "Changed by git pull", 1)), 0o600))
@@ -429,7 +429,7 @@ func TestWatcher_ExternalEditEmitsChangedOnDisk(t *testing.T) {
 	require.NoError(t, err)
 
 	time.Sleep(300 * time.Millisecond) // let the watcher settle
-	path := filepath.Join(res.Info.Root, "notebooks", nb.ID+".asnb")
+	path := filepath.Join(res.Info.Root, "notebooks", nb.ID+".slnb")
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(b), "Watched notebook", "Edited outside", 1)), 0o600))
@@ -444,7 +444,7 @@ func TestWatcher_ExternalEditEmitsChangedOnDisk(t *testing.T) {
 
 func TestMCP_StartStopStatusAndClaudeConfigHasNoToken(t *testing.T) {
 	app := newOpenApp(t)
-	app.locateAssay = func() (string, error) { return "/usr/local/bin/assay", nil }
+	app.locateSlaw = func() (string, error) { return "/usr/local/bin/slaw", nil }
 	root := app.ws.Root()
 
 	st := app.GetMCPStatus()
@@ -603,7 +603,7 @@ func TestRecents_RemoveRestoreRelocateAndMissing(t *testing.T) {
 	list, _ = app.ListRecentWorkspaces()
 	assert.False(t, list[0].Missing)
 
-	require.Error(t, app.RelocateRecentWorkspace(moved, t.TempDir()), "a folder without assay.yaml cannot be located to")
+	require.Error(t, app.RelocateRecentWorkspace(moved, t.TempDir()), "a folder without slaw.yaml cannot be located to")
 }
 
 func TestSetPreferences_KeepsRecentList(t *testing.T) {
@@ -719,7 +719,7 @@ func TestSaveQueryOn_KeepsParametersAndDescription_ConnectionFollowsEditor(t *te
 	info, _ := app.GetWorkspaceInfo()
 	// A query written by the CLI or the agent, with a connection and a description.
 	require.NoError(t, os.WriteFile(filepath.Join(info.Root, "queries", "daily.sql"),
-		[]byte("-- assay: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
+		[]byte("-- slaw: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
 	got, err := app.GetQuery("daily")
 	require.NoError(t, err)
 	require.Equal(t, "local", got.Connection)
@@ -743,7 +743,7 @@ func TestSaveQueryOn_KeepsParametersAndDescription_ConnectionFollowsEditor(t *te
 	after, _ = app.GetQuery("daily")
 	assert.Empty(t, after.Connection)
 	require.NoError(t, os.WriteFile(filepath.Join(info.Root, "queries", "daily.sql"),
-		[]byte("-- assay: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
+		[]byte("-- slaw: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
 
 	// Keep mine / save as copy keep them too.
 	_, err = app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "overwrite", Data: map[string]any{"title": "Daily", "sql": "SELECT 3"}})
@@ -799,7 +799,7 @@ func TestKeepMine_RefusesWhenTheFileChangedAgain(t *testing.T) {
 	disk, err := app.GetNotebook(nb.ID)
 	require.NoError(t, err)
 	raised := disk.Rev
-	path := filepath.Join(info.Root, "notebooks", nb.ID+".asnb")
+	path := filepath.Join(info.Root, "notebooks", nb.ID+".slnb")
 	b, _ := os.ReadFile(path)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(b), `"N"`, `"Changed again"`, 1)), 0o600))
 
@@ -829,7 +829,7 @@ func TestSkillSaveCopy_NeverOverwritesAnEarlierCopy(t *testing.T) {
 func TestSetWorkspaceSettings_RefusesAStaleTeamForm(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
-	// assay.yaml changed since the form loaded (a git pull set a team limit).
+	// slaw.yaml changed since the form loaded (a git pull set a team limit).
 	cfg := app.ws.Config()
 	cfg.Sandbox = "read-only"
 	require.NoError(t, app.ws.SaveConfig(cfg))
@@ -866,7 +866,7 @@ func TestLaunchArg_FileURIsAndKinds(t *testing.T) {
 	dir := t.TempDir()
 	spaced := filepath.Join(dir, "my work")
 	require.NoError(t, os.Mkdir(spaced, 0o755))
-	bundle := filepath.Join(dir, "x.ASSAY")
+	bundle := filepath.Join(dir, "x.SLAW")
 	require.NoError(t, os.WriteFile(bundle, []byte("x"), 0o600))
 	plain := filepath.Join(dir, "notes.txt")
 	require.NoError(t, os.WriteFile(plain, []byte("x"), 0o600))
@@ -875,11 +875,11 @@ func TestLaunchArg_FileURIsAndKinds(t *testing.T) {
 	assert.Equal(t, spaced, classifyLaunchArg("file://"+(&url.URL{Path: spaced}).EscapedPath()).Path)
 	assert.Equal(t, bundle, classifyLaunchArg("file://"+(&url.URL{Path: bundle}).EscapedPath()).BundlePath)
 	// A folder named like a bundle is still a workspace.
-	odd := filepath.Join(dir, "x.assay")
+	odd := filepath.Join(dir, "x.slaw")
 	require.NoError(t, os.Mkdir(odd, 0o755))
 	assert.Equal(t, odd, classifyLaunchArg(odd).Path)
 	assert.Empty(t, classifyLaunchArg(odd).BundlePath)
-	// A directory is a workspace, a .assay is a bundle, anything else is a notice.
+	// A directory is a workspace, a .slaw is a bundle, anything else is a notice.
 	assert.Equal(t, spaced, classifyLaunchArg(spaced).Path)
 	assert.Equal(t, bundle, classifyLaunchArg(bundle).BundlePath)
 	r := classifyLaunchArg(plain)
@@ -902,7 +902,7 @@ func TestHandleOpenPath_QueuesBeforeReadyThenEmits(t *testing.T) {
 		payloads = append(payloads, p)
 	}
 	dir := t.TempDir()
-	bundle := filepath.Join(t.TempDir(), "b.assay")
+	bundle := filepath.Join(t.TempDir(), "b.slaw")
 	require.NoError(t, os.WriteFile(bundle, []byte("x"), 0o600))
 
 	// Before the frontend asks: queued, no event.
@@ -942,7 +942,7 @@ func TestResolveLaunch(t *testing.T) {
 	t.Run("cwd empty: launcher", func(t *testing.T) {
 		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, "", home))
 	})
-	t.Run("stray assay.yaml in home: launcher", func(t *testing.T) {
+	t.Run("stray slaw.yaml in home: launcher", func(t *testing.T) {
 		h2 := filepath.Join(base, "home2")
 		newWorkspaceDirAt(t, h2)
 		assert.Equal(t, InitialWorkspace{}, resolveLaunch(nil, h2, h2))
@@ -966,7 +966,7 @@ func TestResolveLaunch(t *testing.T) {
 		assert.Equal(t, InitialWorkspace{Path: plain}, resolveLaunch([]string{plain}, ws, home))
 	})
 	t.Run("explicit bundle, missing path, flag", func(t *testing.T) {
-		b := filepath.Join(home, "x.assay")
+		b := filepath.Join(home, "x.slaw")
 		require.NoError(t, os.WriteFile(b, []byte("z"), 0o644))
 		assert.Equal(t, InitialWorkspace{BundlePath: b}, resolveLaunch([]string{b}, ws, home))
 		r := resolveLaunch([]string{filepath.Join(home, "gone")}, ws, home)
@@ -976,7 +976,7 @@ func TestResolveLaunch(t *testing.T) {
 	})
 }
 
-// newWorkspaceDirAt makes dir look like a workspace (an assay.yaml is all
+// newWorkspaceDirAt makes dir look like a workspace (a slaw.yaml is all
 // discovery looks for).
 func newWorkspaceDirAt(t *testing.T, dir string) string {
 	t.Helper()
@@ -986,7 +986,7 @@ func newWorkspaceDirAt(t *testing.T, dir string) string {
 }
 
 func TestConflictErrBridgeShape(t *testing.T) {
-	wrapped := fmt.Errorf("failed to save: %w", &filestore.ConflictError{Path: "notebooks/a.asnb"})
+	wrapped := fmt.Errorf("failed to save: %w", &filestore.ConflictError{Path: "notebooks/a.slnb"})
 	err := conflictErr(wrapped)
 	require.ErrorIs(t, err, filestore.ErrConflict, "the bridge error is still a conflict to Go callers")
 	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix))

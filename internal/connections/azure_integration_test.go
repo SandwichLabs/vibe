@@ -24,12 +24,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // Azurite's well-known development account.
@@ -185,7 +185,7 @@ func TestAzureAgainstAzurite(t *testing.T) {
 	assert.EqualValues(t, 1, rows[0][0])
 
 	// The secret listing never shows the key.
-	rows = queryAll(t, eng, "SELECT name, secret_string FROM duckdb_secrets() WHERE name = 'assay_blob'")
+	rows = queryAll(t, eng, "SELECT name, secret_string FROM duckdb_secrets() WHERE name = 'slaw_blob'")
 	require.Len(t, rows, 1)
 	assert.NotContains(t, fmt.Sprint(rows[0]...), azuriteKey)
 	assert.Contains(t, fmt.Sprint(rows[0]...), "redacted")

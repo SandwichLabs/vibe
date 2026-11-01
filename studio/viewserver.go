@@ -1,17 +1,17 @@
 package main
 
 // The view server (#160): serves a custom artifact view (view: script) to its
-// Worker, and the pinned libraries, under /assay-view/ through Wails'
+// Worker, and the pinned libraries, under /slaw-view/ through Wails'
 // AssetServer.Middleware. It is a helper, not a binding.
 //
-// Routes (anything else under /assay-view/ is 404, or 400 when the path could
+// Routes (anything else under /slaw-view/ is 404, or 400 when the path could
 // make Wails inject its runtime):
 //
-//	/assay-view/<token>/worker.js   the host-owned bootstrap (viewhost/worker.js)
-//	/assay-view/<token>/view.js     the artifact's view, the bytes that were hashed
-//	/assay-view/lib/<file>.js       one pinned library from the embedded build
-//	/assay-view/<token>/page?...    a static HTML page, rendered in Go (viewserver_page.go)
-//	/assay-view/<token>/assets/...  a file of that page's html/assets/
+//	/slaw-view/<token>/worker.js   the host-owned bootstrap (viewhost/worker.js)
+//	/slaw-view/<token>/view.js     the artifact's view, the bytes that were hashed
+//	/slaw-view/lib/<file>.js       one pinned library from the embedded build
+//	/slaw-view/<token>/page?...    a static HTML page, rendered in Go (viewserver_page.go)
+//	/slaw-view/<token>/assets/...  a file of that page's html/assets/
 //
 // A token is 32 random bytes, issued by OpenArtifactView after it re-checked the
 // trust decision, and is bound to one artifact name, one ViewHash and one
@@ -39,13 +39,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
 const (
-	viewPrefix = "/assay-view"
-	viewLibDir = "/assay-view/lib/"
+	viewPrefix = "/slaw-view"
+	viewLibDir = "/slaw-view/lib/"
 	// maxViewGrants bounds the bytes held for tokens (each view.js is at most
 	// 1 MB). A new token for an artifact replaces that artifact's older ones.
 	maxViewGrants = 32
@@ -228,7 +228,7 @@ func (v *viewServer) dropArtifact(name string) {
 	}
 }
 
-// Middleware is the AssetServer middleware: /assay-view/ is answered here, every
+// Middleware is the AssetServer middleware: /slaw-view/ is answered here, every
 // other path goes on to the asset handler untouched.
 func (v *viewServer) Middleware() assetserver.Middleware {
 	return func(next http.Handler) http.Handler {
@@ -251,7 +251,7 @@ const denyCSP = "default-src 'none'; script-src 'none'; connect-src 'none'; work
 // Only that token's view.js and the pinned libraries may be loaded, with no
 // network, nested workers, images or eval.
 func scriptCSP(origin, token string) string {
-	return "default-src 'none'; script-src " + origin + "/assay-view/" + token + "/view.js " + origin + viewLibDir +
+	return "default-src 'none'; script-src " + origin + "/slaw-view/" + token + "/view.js " + origin + viewLibDir +
 		"; connect-src 'none'; worker-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'"
 }
 
@@ -310,7 +310,7 @@ func (v *viewServer) serveToken(w http.ResponseWriter, r *http.Request, token, f
 	reply(w, r, http.StatusOK, scriptCSP(g.origin, token), "text/javascript; charset=utf-8", body)
 }
 
-// reply writes one response with the headers every /assay-view/ response has.
+// reply writes one response with the headers every /slaw-view/ response has.
 func reply(w http.ResponseWriter, r *http.Request, status int, csp, contentType string, body []byte) {
 	h := w.Header()
 	h.Set("Content-Security-Policy", csp)

@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 func envWS(t *testing.T) (string, string) {
 	t.Helper()
 	cfg := t.TempDir()
-	t.Setenv("ASSAY_CONFIG_DIR", cfg)
+	t.Setenv("SLAW_CONFIG_DIR", cfg)
 	dir := filepath.Join(t.TempDir(), "acme")
 	res, err := workspace.Init(dir)
 	require.NoError(t, err)

@@ -22,7 +22,7 @@ var (
 )
 
 // maxScryptWork is the highest scrypt work factor Open accepts (log2 N): 18,
-// age's default and what Assay itself encrypts with (about a second, 256 MiB).
+// age's default and what Slaw itself encrypts with (about a second, 256 MiB).
 // A hostile file claiming more would make every passphrase guess cost seconds
 // and gigabytes.
 const maxScryptWork = 18

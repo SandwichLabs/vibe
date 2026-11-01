@@ -8,7 +8,7 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
 import ConflictBanner from './ConflictBanner.vue'
-import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
+import { createSlawEditor, type SlawEditorInstance } from '../composables/useSlawEditor'
 import { useArtifactSource } from '../composables/useArtifactSource'
 import { shortcutLabel } from '../composables/useModal'
 
@@ -22,12 +22,12 @@ type FileTab = 'manifest' | 'view'
 const tab = ref<FileTab>('manifest')
 const manifestEl = ref<HTMLElement | null>(null)
 const viewEl = ref<HTMLElement | null>(null)
-const editors: Partial<Record<FileTab, AssayEditorInstance>> = {}
+const editors: Partial<Record<FileTab, SlawEditorInstance>> = {}
 
 function mount(which: FileTab, el: HTMLElement | null, lang: 'yaml' | 'json' | 'javascript') {
   if (!el || editors[which]) return
   const text = which === 'manifest' ? manifest : view
-  editors[which] = createAssayEditor(el, {
+  editors[which] = createSlawEditor(el, {
     value: text.value,
     lang,
     onChange: (v) => { text.value = v },

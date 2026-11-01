@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // MetricDoc is what completion and hover know about a metric: its name, title,

@@ -1,5 +1,5 @@
 # Build artifacts
-/assay
+/slaw
 /vibe-app
 # studio/build holds the committed packaging inputs (Info.plist, .desktop, MIME
 # type, icons); only wails' output is ignored.
@@ -11,8 +11,8 @@ studio/build/windows/
 
 .env
 # Test data
-*.assay
-*.assay-journal
+*.slaw
+*.slaw-journal
 
 # QA artifacts
 qa-screenshots/

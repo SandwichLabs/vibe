@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Mock is an in-memory Store for tests of packages that depend on one. It

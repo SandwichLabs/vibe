@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // semanticsConflicts resolves a save of a file under semantics/ that was

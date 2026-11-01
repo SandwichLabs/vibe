@@ -1,4 +1,4 @@
-// Package tui is Assay's terminal interface (#69): a SQL REPL, a
+// Package tui is Slaw's terminal interface (#69): a SQL REPL, a
 // read-only table browser, and a notebook list. It is deliberately narrow —
 // the page editor/wizard/renderer that used to live here were removed along
 // with the page system (#66/#69); notebooks and A2UI dashboards are authored
@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/usersql"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/usersql"
 	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -60,7 +60,7 @@ type EngineAccess interface {
 	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
-// App is the top-level BubbleTea model for Assay's TUI.
+// App is the top-level BubbleTea model for Slaw's TUI.
 type App struct {
 	ws     WorkspaceAccess
 	engine EngineAccess
@@ -81,7 +81,7 @@ type App struct {
 	status   string // one-line transient status, cleared on next keypress
 
 	// readOnly marks a TUI opened without owning the workspace's database
-	// (`assay studio --read-only`); shown in the status bar.
+	// (`slaw studio --read-only`); shown in the status bar.
 	readOnly bool
 	// prepare readies typed SQL (nil = as typed); ctx bounds the REPL's queries.
 	prepare PrepareFunc
@@ -449,7 +449,7 @@ func (a *App) renderModeBar() string {
 }
 
 func (a *App) renderStatusBar() string {
-	status := " ASSAY STUDIO"
+	status := " SLAW STUDIO"
 	if a.name != "" {
 		status += " " + sanitizeForTerminal(a.name, false)
 	}

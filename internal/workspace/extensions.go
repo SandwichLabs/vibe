@@ -3,7 +3,7 @@ package workspace
 import (
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/connections"
 )
 
 // ExtensionNeed is one DuckDB extension some connection type needs, and which

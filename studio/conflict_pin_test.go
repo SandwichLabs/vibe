@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -105,7 +105,7 @@ func TestResolveConflict_QueryKeepsWhatTheEditorDoesNotEdit(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
 	require.NoError(t, os.WriteFile(filepath.Join(info.Root, "queries", "daily.sql"),
-		[]byte("-- assay: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
+		[]byte("-- slaw: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
 	// A description from the editor wins; an empty one keeps the disk's.
 	_, err := app.ResolveConflict(ConflictRequest{Kind: "query", ID: "daily", Action: "overwrite",
 		Data: map[string]any{"title": "Daily", "sql": "SELECT 2", "description": "mine"}})
@@ -126,7 +126,7 @@ func TestResolveConflict_NotebookOverwriteAfterDelete(t *testing.T) {
 	info, _ := app.GetWorkspaceInfo()
 	nb, err := app.CreateNotebook("Doomed")
 	require.NoError(t, err)
-	path := filepath.Join(info.Root, "notebooks", nb.ID+".asnb")
+	path := filepath.Join(info.Root, "notebooks", nb.ID+".slnb")
 	require.NoError(t, os.Remove(path))
 	var ev eventLog
 	app.emit = ev.sink
@@ -195,7 +195,7 @@ func TestSetWorkspaceSettings_FullMeansNoTeamLimitAndTrimsTheName(t *testing.T) 
 func TestSetWorkspaceSettings_ChangedOnDiskIsAConflictAndNothingIsWritten(t *testing.T) {
 	app := newOpenApp(t)
 	info, _ := app.GetWorkspaceInfo()
-	// An editor rewrites assay.yaml behind the app's back (the app has not reloaded).
+	// An editor rewrites slaw.yaml behind the app's back (the app has not reloaded).
 	path := filepath.Join(info.Root, workspace.ConfigFile)
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestSetWorkspaceSettings_ChangedOnDiskIsAConflictAndNothingIsWritten(t *tes
 	_, err = app.SetWorkspaceSettings(s)
 	require.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), conflictPrefix), "%v", err)
-	assert.Contains(t, err.Error(), "assay.yaml changed on disk")
+	assert.Contains(t, err.Error(), "slaw.yaml changed on disk")
 	b, _ = os.ReadFile(path)
 	assert.Contains(t, string(b), "edited elsewhere")
 	assert.NotContains(t, string(b), "Mine")
@@ -249,7 +249,7 @@ func TestSetWorkspaceSettings_RefusesWhenLocalSettingsAreUntrusted(t *testing.T)
 	info, _ := app.GetWorkspaceInfo()
 	// The folder was deleted and cloned again: its nonce no longer matches.
 	require.NoError(t, app.ws.SaveLocal(app.ws.Local()))
-	require.NoError(t, os.RemoveAll(filepath.Join(info.Root, ".assay-local", "nonce")))
+	require.NoError(t, os.RemoveAll(filepath.Join(info.Root, ".slaw-local", "nonce")))
 	require.NoError(t, app.ws.Reload())
 	require.False(t, app.ws.LocalTrusted())
 	_, err := app.SetWorkspaceSettings(settingsFor(info))

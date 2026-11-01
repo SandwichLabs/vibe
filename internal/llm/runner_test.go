@@ -13,22 +13,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/semantics/proposals"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/session/sessiontest"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session/sessiontest"
+	"github.com/SandwichLabs/slaw/internal/skills"
 
 	"charm.land/fantasy"
 	_ "github.com/duckdb/duckdb-go/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // --- Test fixtures: a real *agents.Handler over an in-memory DuckDB db, so

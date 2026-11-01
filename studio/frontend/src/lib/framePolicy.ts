@@ -1,7 +1,7 @@
 // The frame policy check of a static HTML page (docs/plans/html-artifacts.md, H3).
 // A page is shown in a sandbox="" iframe, which is safe only because Studio's own
 // page forbids every other frame navigation with a meta CSP narrowed to the view
-// server's route (frame-src <origin>/assay-view/, emitted at build time per origin:
+// server's route (frame-src <origin>/slaw-view/, emitted at build time per origin:
 // scripts/frame-csp.mjs). Before a page is opened this checks that the policy is
 // really there and names this window's origin, and refuses otherwise: no policy
 // means an outside link in the page could navigate its frame (the isolation the
@@ -30,6 +30,6 @@ export function frameSources(doc: Document): string[][] {
  */
 export function frameAllowed(doc: Document, origin: string): boolean {
   const policies = frameSources(doc)
-  const route = `${origin}/assay-view/`
-  return policies.length > 0 && policies.every((sources) => sources.length > 0 && sources.every((s) => s.endsWith('/assay-view/')) && sources.includes(route))
+  const route = `${origin}/slaw-view/`
+  return policies.length > 0 && policies.every((sources) => sources.length > 0 && sources.every((s) => s.endsWith('/slaw-view/')) && sources.includes(route))
 }

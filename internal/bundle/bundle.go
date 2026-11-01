@@ -7,19 +7,19 @@ import (
 	"path"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/connname"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/skills"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // Manifest identity.
 const (
-	Kind          = "assay/bundle"
+	Kind          = "slaw/bundle"
 	FormatVersion = 2
 
 	// ManifestName and ConnectionsName are the two fixed entries.
@@ -45,17 +45,17 @@ const (
 // Errors a caller can test with errors.Is.
 var (
 	// ErrLegacy is a formatVersion 1 or SQLCipher file (a Vibe .vibe container):
-	// one that holds data. Assay doesn't open these.
-	ErrLegacy = errors.New("This is an older Vibe file that holds data. Assay doesn't open these.")
-	// ErrNotBundle is a file that is not an Assay bundle at all.
-	ErrNotBundle = errors.New("this is not an Assay bundle (an older Vibe file that held data is not opened either)")
+	// one that holds data. Slaw doesn't open these.
+	ErrLegacy = errors.New("This is an older Vibe file that holds data. Slaw doesn't open these.")
+	// ErrNotBundle is a file that is not a Slaw bundle at all.
+	ErrNotBundle = errors.New("this is not a Slaw bundle (an older Vibe file that held data is not opened either)")
 	// ErrPassphraseRequired means the bundle is encrypted and no passphrase was given.
 	ErrPassphraseRequired = errors.New("this bundle is encrypted: a passphrase is required")
 	// ErrWrongPassphrase means the passphrase did not open the bundle.
 	ErrWrongPassphrase = errors.New("wrong passphrase: that passphrase does not open this bundle")
 	// ErrUnsupportedKDF means the envelope asks for more passphrase-hashing
-	// work than Assay will do.
-	ErrUnsupportedKDF = errors.New("this bundle was made with settings Assay won't use")
+	// work than Slaw will do.
+	ErrUnsupportedKDF = errors.New("this bundle was made with settings Slaw won't use")
 	// ErrTooLarge means a size cap was exceeded.
 	ErrTooLarge = errors.New("bundle is too large")
 	// ErrCorrupt means the bundle failed verification: a checksum, an unknown
@@ -134,7 +134,7 @@ type Selection struct {
 	Skills    []string `json:"skills"`
 	Artifacts []string `json:"artifacts"`
 	Semantics []string `json:"semantics"`
-	// SharedConnections adds every committed (team) assay.yaml definition;
+	// SharedConnections adds every committed (team) slaw.yaml definition;
 	// TeamConnections names just some of them.
 	SharedConnections bool     `json:"sharedConnections"`
 	TeamConnections   []string `json:"teamConnections"`

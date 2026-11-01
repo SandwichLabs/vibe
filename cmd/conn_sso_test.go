@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/awssso"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/testsupport/ssofake"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/awssso"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const ssoCLIConfig = `[profile dev]
@@ -44,7 +44,7 @@ func ssoHome(t *testing.T) {
 
 func connNames(t *testing.T, root string) string {
 	t.Helper()
-	out, stderr, err := runAssay("conn", "list", "--workspace", root)
+	out, stderr, err := runSlaw("conn", "list", "--workspace", root)
 	require.NoError(t, err, stderr)
 	return out
 }
@@ -52,7 +52,7 @@ func connNames(t *testing.T, root string) string {
 func TestConnAdd_AWSSSOSignIn(t *testing.T) {
 	ssoHome(t)
 	root := newWS(t)
-	out, stderr, err := runAssay("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--region", "us-east-1", "--sign-in", "aws-sso:dev", "--workspace", root)
+	out, stderr, err := runSlaw("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--region", "us-east-1", "--sign-in", "aws-sso:dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Added s3 connection dev")
 	assert.Contains(t, out, "signs in with your AWS profile dev")
@@ -79,7 +79,7 @@ func TestConnAdd_RefusedSSOSignInLeavesNoConnectionBehind(t *testing.T) {
 			profile = "aws-sso:a b"
 		}
 		a := append([]string{"conn", "add", "x", "--scope", "shared", "--sign-in", profile, "--workspace", root}, args...)
-		_, _, err := runAssay(a...)
+		_, _, err := runSlaw(a...)
 		require.Error(t, err, name)
 		assert.NotContains(t, readSharedConfig(t, root), "name: x", name+": nothing was saved")
 		assert.NotContains(t, connNames(t, root), "x ", name)
@@ -89,10 +89,10 @@ func TestConnAdd_RefusedSSOSignInLeavesNoConnectionBehind(t *testing.T) {
 func TestConnCredentials_AWSSSOStatusAndSetRefuseAKey(t *testing.T) {
 	ssoHome(t)
 	root := newWS(t)
-	_, stderr, err := runAssay("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	_, stderr, err := runSlaw("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 
-	out, stderr, err := runAssay("conn", "credentials", "status", "dev", "--workspace", root)
+	out, stderr, err := runSlaw("conn", "credentials", "status", "dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "method:        aws-sso:dev")
 	assert.Contains(t, out, "profile:       dev")
@@ -104,7 +104,7 @@ func TestConnCredentials_AWSSSOStatusAndSetRefuseAKey(t *testing.T) {
 	}
 
 	// `credentials set` asks for nothing and stores nothing.
-	out, stderr, err = runAssay("conn", "credentials", "set", "dev", "--workspace", root)
+	out, stderr, err = runSlaw("conn", "credentials", "set", "dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Nothing is stored")
 }
@@ -113,9 +113,9 @@ func TestConnTest_AWSSSOWithoutASessionSaysSignIn(t *testing.T) {
 	ssoHome(t)
 	root := newWS(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	_, stderr, err := runAssay("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	_, stderr, err := runSlaw("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
 	require.NoError(t, err, stderr)
-	_, _, err = runAssay("conn", "test", "dev", "--workspace", root)
+	_, _, err = runSlaw("conn", "test", "dev", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "needs credentials")
 	assert.Contains(t, err.Error(), "aws sso login --profile dev")
@@ -128,9 +128,9 @@ func TestCLIResolverKnowsAWSSSO(t *testing.T) {
 	assert.Equal(t, "dev", st.Profile)
 }
 
-// runAssayCtx is runAssay with a context, which is how a test hands the command a
+// runSlawCtx is runSlaw with a context, which is how a test hands the command a
 // loopback fake in place of AWS.
-func runAssayCtx(ctx context.Context, args ...string) (stdout, stderr string, err error) {
+func runSlawCtx(ctx context.Context, args ...string) (stdout, stderr string, err error) {
 	var out, errb bytes.Buffer
 	resetFlags(rootCmd)
 	rootCmd.SetOut(&out)
@@ -147,7 +147,7 @@ func TestConnCredentialsSignIn_PrintsPageAndCodeOpensNothingAndSignsIn(t *testin
 	fake := ssofake.New()
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	_, stderr, err := runAssay("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	_, stderr, err := runSlaw("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 
 	ctx := context.WithValue(context.Background(), ssoTestKey{}, []workspace.ResolverOption{
@@ -171,7 +171,7 @@ func TestConnCredentialsSignIn_PrintsPageAndCodeOpensNothingAndSignsIn(t *testin
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
-	out, stderr, err := runAssayCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	out, stderr, err := runSlawCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "open this page")
 	assert.Contains(t, out, srv.URL+"/verify")
@@ -183,7 +183,7 @@ func TestConnCredentialsSignIn_PrintsPageAndCodeOpensNothingAndSignsIn(t *testin
 	// The token went where the AWS CLI keeps it, and the session now reads as signed in.
 	cache, _ := filepath.Glob(filepath.Join(os.Getenv("HOME"), ".aws", "sso", "cache", "*.json"))
 	assert.Len(t, cache, 1)
-	st, _, err := runAssayCtx(ctx, "conn", "credentials", "status", "dev", "--workspace", root)
+	st, _, err := runSlawCtx(ctx, "conn", "credentials", "status", "dev", "--workspace", root)
 	require.NoError(t, err)
 	assert.Contains(t, st, "signed in:     true")
 }
@@ -191,12 +191,12 @@ func TestConnCredentialsSignIn_PrintsPageAndCodeOpensNothingAndSignsIn(t *testin
 func TestConnCredentialsSignIn_RefusesWhatIsNotAnAWSSignIn(t *testing.T) {
 	ssoHome(t)
 	root := newWS(t)
-	_, stderr, err := runAssay("conn", "add", "pg", "--type", "postgres", "--host", "db.internal", "--database", "d", "--workspace", root)
+	_, stderr, err := runSlaw("conn", "add", "pg", "--type", "postgres", "--host", "db.internal", "--database", "d", "--workspace", root)
 	require.NoError(t, err, stderr)
-	_, _, err = runAssay("conn", "credentials", "sign-in", "pg", "--workspace", root)
+	_, _, err = runSlaw("conn", "credentials", "sign-in", "pg", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "conn credentials set pg")
-	_, _, err = runAssay("conn", "credentials", "sign-in", "nope", "--workspace", root)
+	_, _, err = runSlaw("conn", "credentials", "sign-in", "nope", "--workspace", root)
 	require.Error(t, err)
 }
 
@@ -206,7 +206,7 @@ func TestConnCredentialsSignIn_DeniedAndCancelled(t *testing.T) {
 	fake := ssofake.New()
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	_, stderr, err := runAssay("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
+	_, stderr, err := runSlaw("conn", "add", "dev", "--type", "s3", "--prefix", "s3://acme-dev/", "--sign-in", "aws-sso:dev", "--workspace", root)
 	require.NoError(t, err, stderr)
 	opts := []workspace.ResolverOption{workspace.WithSSOTestEndpoints(srv.URL, srv.URL), workspace.WithSSOOptions(awssso.WithSleep(func(c context.Context, _ time.Duration) error {
 		select {
@@ -226,7 +226,7 @@ func TestConnCredentialsSignIn_DeniedAndCancelled(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
-	_, _, err = runAssayCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	_, _, err = runSlawCtx(ctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "denied")
 
@@ -240,7 +240,7 @@ func TestConnCredentialsSignIn_DeniedAndCancelled(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
-	_, _, err = runAssayCtx(cctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
+	_, _, err = runSlawCtx(cctx, "conn", "credentials", "sign-in", "dev", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cancelled")
 }

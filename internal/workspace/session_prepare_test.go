@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ func (failingPreparer) Prepare(context.Context, prepareEnv, ResolvedConnection, 
 
 func TestWithPreparerReplacesTheStepForAType(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
+	ws := writeSlaw(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
 	sess, issues, err := OpenSession(context.Background(), ws, nil, withPreparer("duckdb", failingPreparer{}))
 	require.NoError(t, err, "a connection that cannot be set up never fails the hub")
 	defer sess.Close()
@@ -43,7 +43,7 @@ func TestWithPreparerReplacesTheStepForAType(t *testing.T) {
 
 func TestSkipLocalFilesRegistersWithoutAttachingOrCreating(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
+	ws := writeSlaw(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
 	sess, issues, err := OpenSession(context.Background(), ws, nil, WithSkipLocalFiles())
 	require.NoError(t, err)
 	defer sess.Close()
@@ -61,7 +61,7 @@ func TestSkipLocalFilesRegistersWithoutAttachingOrCreating(t *testing.T) {
 
 func TestForceReadOnlyReportsAMissingLocalFileInsteadOfCreatingIt(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
+	ws := writeSlaw(t, dir, "connections:\n  - {name: mine, type: duckdb, path: data/mine.duckdb, read_only: false}\n")
 	sess, issues, err := OpenSession(context.Background(), ws, nil, WithForceReadOnly())
 	require.NoError(t, err)
 	defer sess.Close()
@@ -133,7 +133,7 @@ func attachSQLFor(t *testing.T, spec session.Spec) ([]string, error) {
 }
 
 // A read-only open leaves MotherDuck registered but unconnectable (it cannot be
-// attached read-only); a policy-gated one (`assay semantics check|profile`,
+// attached read-only); a policy-gated one (`slaw semantics check|profile`,
 // where every statement is the agent policy's read-only path) attaches it as
 // defined. Everything else stays read-only either way (#302).
 func TestPolicyGatedReadOnlyReachesMotherDuckAndKeepsTheRestReadOnly(t *testing.T) {

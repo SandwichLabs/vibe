@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // RowQuerier is the subset of *sql.DB / *sql.Conn-less callers need: a plain
@@ -125,14 +125,14 @@ func constraintColumns(db RowQuerier, ref session.TableRef, constraintType strin
 // around it, not a second implementation) used to gate identifiers that are
 // interpolated into DDL/DML.
 //
-// The "_assay_" prefix (and the pre-rename "_vibe_") is always rejected: reserved for this
-// app's own internal tables (_vibe_meta, _vibe_skills, _assay_import_stage,
+// The "_slaw_" prefix (and the pre-rename "_vibe_") is always rejected: reserved for this
+// app's own internal tables (_vibe_meta, _vibe_skills, _slaw_import_stage,
 // ...), and a caller validating a target for its own read/write must never
 // be allowed to touch one, whether by a crafted table name in a shared file
 // or an import/create-table request that happens to collide with the
 // prefix.
 func ValidIdentifier(name string) bool {
-	if name == "" || strings.HasPrefix(name, "_assay_") || strings.HasPrefix(name, "_vibe_") {
+	if name == "" || strings.HasPrefix(name, "_slaw_") || strings.HasPrefix(name, "_vibe_") {
 		return false
 	}
 	for i, r := range name {

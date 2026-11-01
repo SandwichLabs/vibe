@@ -1,17 +1,17 @@
 # Architecture
 
-How Assay fits together, at the level an outsider or new contributor needs. The contributor map of every package is the tree in [`CLAUDE.md`](../CLAUDE.md); the product reasoning is in [`direction.md`](direction.md).
+How Slaw fits together, at the level an outsider or new contributor needs. The contributor map of every package is the tree in [`CLAUDE.md`](../CLAUDE.md); the product reasoning is in [`direction.md`](direction.md).
 
 ## The idea in one picture
 
 ```
 workspace folder (git, optional)            external agents
-  assay.yaml  notebooks/  queries/             Claude Code, Claude Desktop,
-  skills/    data/       .assay-local/         Cursor, ...  (MCP)
+  slaw.yaml  notebooks/  queries/             Claude Code, Claude Desktop,
+  skills/    data/       .slaw-local/         Cursor, ...  (MCP)
         |                                           |
         v                                           v
-   Studio (desktop)  <-- same tool surface -->  assay mcp serve
-   assay CLI / TUI                                   |
+   Studio (desktop)  <-- same tool surface -->  slaw mcp serve
+   slaw CLI / TUI                                   |
         \                                          /
          +---------- session: one DuckDB hub -----+
                           |
@@ -22,13 +22,13 @@ workspace folder (git, optional)            external agents
         credentials <-- OS keychain or environment variables
 ```
 
-Assay keeps data where it lives. Each connection is attached into one in-memory DuckDB per workspace (the **hub**); the connection name becomes the catalog name, so `prod_pg.public.orders` and `local.main.customers` can be joined in one query. Nothing is copied into an Assay-specific format.
+Slaw keeps data where it lives. Each connection is attached into one in-memory DuckDB per workspace (the **hub**); the connection name becomes the catalog name, so `prod_pg.public.orders` and `local.main.customers` can be joined in one query. Nothing is copied into a Slaw-specific format.
 
 ## The workspace is a folder
 
-A workspace is a directory with an `assay.yaml` at its root. Notebooks (`notebooks/*.asnb`), saved queries (`queries/*.sql`), skills (`skills/<name>/SKILL.md`) and local data (`data/`) are plain, diff-friendly files you can commit and review. Machine-local state lives in `.assay-local/` (git-ignored). Files are the source of truth: writes are compare-and-write, and a watcher picks up changes made by git, an editor or another process.
+A workspace is a directory with a `slaw.yaml` at its root. Notebooks (`notebooks/*.slnb`), saved queries (`queries/*.sql`), skills (`skills/<name>/SKILL.md`) and local data (`data/`) are plain, diff-friendly files you can commit and review. Machine-local state lives in `.slaw-local/` (git-ignored). Files are the source of truth: writes are compare-and-write, and a watcher picks up changes made by git, an editor or another process.
 
-Trust moves out of the folder. A workspace arrives with whatever its authors committed, so a committed `assay.yaml` can only tighten the agent's limits; looser, per-person settings and sign-in methods live in your own config directory, keyed by workspace id. Reference: [workspaces](reference/workspaces.md).
+Trust moves out of the folder. A workspace arrives with whatever its authors committed, so a committed `slaw.yaml` can only tighten the agent's limits; looser, per-person settings and sign-in methods live in your own config directory, keyed by workspace id. Reference: [workspaces](reference/workspaces.md).
 
 ## Connections and credentials
 
@@ -36,7 +36,7 @@ A connection is a typed definition (Postgres, MotherDuck, S3, ...) in one of thr
 
 ## One owner per workspace
 
-DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.assay-local/hub.lock`: Studio, or `assay mcp serve`. Other `assay mcp serve` processes proxy to the owner when it is serving MCP (Studio only does so after you press Start in Settings), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
+DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.slaw-local/hub.lock`: Studio, or `slaw mcp serve`. Other `slaw mcp serve` processes proxy to the owner when it is serving MCP (Studio only does so after you press Start in Settings), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
 
 ## One tool surface
 
@@ -58,9 +58,9 @@ Reference: [agent policy](reference/agent-policy.md), [MCP](reference/mcp.md).
 
 ## The programs
 
-- **`assay`** (Cobra CLI in `cmd/`): workspaces, queries, import and export, connections, config, the terminal UI (BubbleTea) and `assay mcp serve`.
+- **`slaw`** (Cobra CLI in `cmd/`): workspaces, queries, import and export, connections, config, the terminal UI (BubbleTea) and `slaw mcp serve`.
 - **Studio** (`studio/`): a Wails v2 desktop app, with a Go backend that binds to the same packages as the CLI and a Vue 3 frontend. It starts, owns and serves the hub.
-- **Bundles** (`internal/bundle`): a `.assay` file is a zip of notebooks, queries, skills and connection definitions, optionally age-encrypted. It never holds data or credentials.
+- **Bundles** (`internal/bundle`): a `.slaw` file is a zip of notebooks, queries, skills and connection definitions, optionally age-encrypted. It never holds data or credentials.
 
 ## Where to read next
 

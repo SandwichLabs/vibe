@@ -2,7 +2,7 @@ package connections
 
 import (
 	"context"
-	"github.com/SandwichLabs/assay/internal/storageurl"
+	"github.com/SandwichLabs/slaw/internal/storageurl"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 func TestMain(m *testing.M) {
@@ -68,19 +68,19 @@ func TestPostgresEmittedSQL(t *testing.T) {
 	typ := registry["postgres"]
 	stmts, err := typ.AttachSQL(sp)
 	require.NoError(t, err)
-	assert.Equal(t, []string{`ATTACH 'connect_timeout=10 sslmode=require' AS "pg" (TYPE postgres, SECRET "assay_pg", READ_ONLY)`}, stmts)
+	assert.Equal(t, []string{`ATTACH 'connect_timeout=10 sslmode=require' AS "pg" (TYPE postgres, SECRET "slaw_pg", READ_ONLY)`}, stmts)
 
 	d := pgDef()
 	d.ReadOnly = false
 	d.Options = nil
 	stmts, err = registry["postgres"].AttachSQL(d.Spec())
 	require.NoError(t, err)
-	assert.Equal(t, []string{`ATTACH 'connect_timeout=10' AS "pg" (TYPE postgres, SECRET "assay_pg")`}, stmts)
+	assert.Equal(t, []string{`ATTACH 'connect_timeout=10' AS "pg" (TYPE postgres, SECRET "slaw_pg")`}, stmts)
 
 	steps, err := asCred(typ).SecretSteps(sp, secrets.Credential{User: "rosa", Password: "pw'1"})
 	require.NoError(t, err)
 	require.Len(t, steps, 1)
-	assert.Equal(t, session.SecretStep{Name: "assay_pg", Type: "postgres", Params: []session.SecretParam{
+	assert.Equal(t, session.SecretStep{Name: "slaw_pg", Type: "postgres", Params: []session.SecretParam{
 		{Key: "HOST", Value: "db.internal"},
 		{Key: "PORT", Value: 5433},
 		{Key: "DATABASE", Value: "analytics"},
@@ -130,7 +130,7 @@ func TestStorageEmittedSQL(t *testing.T) {
 	}{
 		{
 			Def{Name: "lake", Type: "s3", Scope: "s3://acme-lake/raw/", Region: "us-east-1", Options: map[string]string{"endpoint": "minio.local:9000", "url_style": "path", "use_ssl": "false"}},
-			session.SecretStep{Name: "assay_lake", Type: "s3", Params: []session.SecretParam{
+			session.SecretStep{Name: "slaw_lake", Type: "s3", Params: []session.SecretParam{
 				{Key: "SCOPE", Value: "s3://acme-lake/raw/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
 				{Key: "SESSION_TOKEN", Value: "sess+needle", Secret: true}, {Key: "REGION", Value: "us-east-1"},
 				{Key: "ENDPOINT", Value: "minio.local:9000"}, {Key: "URL_STYLE", Value: "path"}, {Key: "USE_SSL", Value: false},
@@ -138,7 +138,7 @@ func TestStorageEmittedSQL(t *testing.T) {
 		},
 		{
 			Def{Name: "gcp", Type: "gcs", Scope: "gs://bkt/p/"},
-			session.SecretStep{Name: "assay_gcp", Type: "gcs", Params: []session.SecretParam{
+			session.SecretStep{Name: "slaw_gcp", Type: "gcs", Params: []session.SecretParam{
 				{Key: "SCOPE", Value: "gs://bkt/p/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
 				// Explicit and empty/default, so the host's AWS_SESSION_TOKEN and AWS_REGION never fill in (#135).
 				{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "auto"},
@@ -146,7 +146,7 @@ func TestStorageEmittedSQL(t *testing.T) {
 		},
 		{
 			Def{Name: "cf", Type: "r2", Scope: "r2://bkt/", Options: map[string]string{"account_id": "abc123"}},
-			session.SecretStep{Name: "assay_cf", Type: "r2", Params: []session.SecretParam{
+			session.SecretStep{Name: "slaw_cf", Type: "r2", Params: []session.SecretParam{
 				{Key: "SCOPE", Value: "r2://bkt/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
 				{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "auto"},
 				{Key: "ACCOUNT_ID", Value: "abc123"},
@@ -422,7 +422,7 @@ func TestStorageDefaultS3WritesTokenAndRegionExplicitly(t *testing.T) {
 	d := Def{Name: "plain", Type: "s3", Scope: "s3://b/"}
 	steps, err := asCred(registry["s3"]).SecretSteps(d.Spec(), secrets.Credential{KeyID: "AKIA123", Secret: "sk/needle"})
 	require.NoError(t, err)
-	assert.Equal(t, []session.SecretStep{{Name: "assay_plain", Type: "s3", Params: []session.SecretParam{
+	assert.Equal(t, []session.SecretStep{{Name: "slaw_plain", Type: "s3", Params: []session.SecretParam{
 		{Key: "SCOPE", Value: "s3://b/"}, {Key: "KEY_ID", Value: "AKIA123"}, {Key: "SECRET", Value: "sk/needle", Secret: true},
 		{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "us-east-1"},
 	}}}, steps)

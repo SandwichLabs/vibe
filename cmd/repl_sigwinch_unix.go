@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/assay/internal/repl"
+	"github.com/SandwichLabs/slaw/internal/repl"
 )
 
 // watchResize tells the console when the terminal is resized. The returned

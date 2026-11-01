@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/slaw/internal/strictyaml"
 )
 
 // decodeDoc is the one strict path for the three yaml kinds.

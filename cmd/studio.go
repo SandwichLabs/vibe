@@ -10,12 +10,12 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/tui"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/tui"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -23,11 +23,11 @@ import (
 
 var studioCmd = &cobra.Command{
 	Use:   "studio [dir]",
-	Short: "Open Assay on a workspace (terminal UI; --gui for the desktop app)",
+	Short: "Open Slaw on a workspace (terminal UI; --gui for the desktop app)",
 	Long: `Open a workspace in the terminal UI: a SQL REPL on the workspace's DuckDB
 session, a read-only table browser across its connections, and a notebook list
 (source only). The workspace is dir or the nearest folder above the current
-directory that holds an assay.yaml.
+directory that holds a slaw.yaml.
 
 The TUI takes ownership of the workspace's database while it runs, like Studio
 does. If something else has it open you are told who; when stdin is a terminal
@@ -37,9 +37,9 @@ workspace's local .duckdb files locked, so read-only cannot reach those.
 
 --gui launches the desktop app instead and opens the workspace there: dir (or
 --workspace), else the nearest folder above the current directory that holds a
-assay.yaml. A .assay bundle opens its Import dialog. Outside any workspace it
-starts at the launcher; an assay.yaml in your home folder, above it, or in / is
-never opened automatically. Run from a terminal, the desktop app (assay-studio)
+slaw.yaml. A .slaw bundle opens its Import dialog. Outside any workspace it
+starts at the launcher; a slaw.yaml in your home folder, above it, or in / is
+never opened automatically. Run from a terminal, the desktop app (slaw-studio)
 does the same with its own path argument or working directory.
 
 Notebooks, skills and A2UI dashboards are authored in the desktop app.`,
@@ -56,11 +56,11 @@ func runStudio(cmd *cobra.Command, args []string) error {
 		}
 		dir = args[0]
 	}
-	// The desktop app takes a .assay bundle too: it opens the Import dialog.
+	// The desktop app takes a .slaw bundle too: it opens the Import dialog.
 	if gui, _ := cmd.Flags().GetBool("gui"); gui {
 		return launchGUI(guiTarget(dir))
 	}
-	if isAssayFile(dir) {
+	if isSlawFile(dir) {
 		return errLegacyFileArg
 	}
 	return runTUI(cmd, dir, cmd.InOrStdin(), cmd.OutOrStdout())
@@ -127,12 +127,12 @@ func runTUI(cmd *cobra.Command, dir string, in io.Reader, out io.Writer) error {
 // since a locked default database would leave the TUI empty). It returns the
 // effective read-only flag.
 func openForTUI(ctx context.Context, dir string, readOnly bool, errW io.Writer) (*openedWorkspace, bool, error) {
-	o, err := openWorkspace(ctx, dir, readOnly, true, "assay studio", errW)
+	o, err := openWorkspace(ctx, dir, readOnly, true, "slaw studio", errW)
 	if err == nil || readOnly || !errors.Is(err, hub.ErrHubHeld) || !stdinIsTerminal() {
 		return o, readOnly, err
 	}
 	suppressDotEnvPrompt = true
-	probe, perr := openWorkspace(ctx, dir, true, true, "assay studio", io.Discard)
+	probe, perr := openWorkspace(ctx, dir, true, true, "slaw studio", io.Discard)
 	suppressDotEnvPrompt = false
 	switch {
 	case perr != nil:
@@ -277,14 +277,14 @@ func startAgentListener(addr string, handler *agents.Handler, ctx context.Contex
 // a folder inside a workspace becomes that workspace's root, and with no dir
 // the workspace around the current directory is used (never the home folder, an
 // ancestor of it, or /); the app repeats the same discovery from its own
-// working directory, so an empty result still lands on the launcher. A .assay
+// working directory, so an empty result still lands on the launcher. A .slaw
 // bundle or anything unresolvable is passed through for the app to explain.
 func guiTarget(dir string) string {
 	home, _ := os.UserHomeDir()
 	start := dir
 	if dir == "" {
 		start, _ = os.Getwd()
-	} else if isAssayFile(dir) {
+	} else if isSlawFile(dir) {
 		return dir
 	}
 	if start == "" {
@@ -313,7 +313,7 @@ func init() {
 	rootCmd.AddCommand(studioCmd)
 }
 
-// tuiSnapshotPath is the root whose snapshot the TUI keeps for `assay lsp`: only
+// tuiSnapshotPath is the root whose snapshot the TUI keeps for `slaw lsp`: only
 // when it owns the workspace ("" otherwise), since a read-only TUI cannot see
 // the owner's local files and would write a thinner snapshot than the owner's.
 func tuiSnapshotPath(o *openedWorkspace, readOnly bool) string {

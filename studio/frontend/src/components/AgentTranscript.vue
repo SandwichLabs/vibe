@@ -25,7 +25,7 @@ const emit = defineEmits<{ resolve: [step: ToolStep, ok: boolean]; openNotebook:
       </div>
       <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
       <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>
-      <div v-else-if="m.text" class="agent-text agent-md assay-content assay-md-content" v-html="renderMarkdown(m.text)"></div>
+      <div v-else-if="m.text" class="agent-text agent-md slaw-content slaw-md-content" v-html="renderMarkdown(m.text)"></div>
       <p v-else-if="m.streaming && !m.cancelled" class="agent-text agent-dim">Thinking…</p>
       <p v-if="m.cancelled" class="agent-text agent-dim" data-testid="agent-cancelled">Cancelled</p>
       <p v-if="m.verifying" class="agent-text agent-dim" data-testid="agent-verifying">Verifying that answer against the data…</p>
@@ -50,8 +50,8 @@ const emit = defineEmits<{ resolve: [step: ToolStep, ok: boolean]; openNotebook:
 .agent-md { white-space: normal; }
 .agent-md :deep(p) { margin: 0 0 6px; }
 .agent-md :deep(pre) {
-  background: var(--assay-code-bg);
-  color: var(--assay-code-fg);
+  background: var(--slaw-code-bg);
+  color: var(--slaw-code-fg);
   padding: 10px 12px;
   border-radius: var(--sh-radius-sm);
   overflow-x: auto;
@@ -65,7 +65,7 @@ const emit = defineEmits<{ resolve: [step: ToolStep, ok: boolean]; openNotebook:
    its own light --sh-paper-2 background + ink border. Inside a fenced block that
    collides with the dark <pre> above it: the <code> painted its own near-white
    box under near-white inherited text. Reset it like the Pages renderer's
-   `.assay-content pre code` already does, so fenced code reads light on dark. */
+   `.slaw-content pre code` already does, so fenced code reads light on dark. */
 .agent-md :deep(pre code) {
   background: transparent;
   border: none;

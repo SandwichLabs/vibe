@@ -22,7 +22,7 @@ const content = (): BundleContent => ({
 function makeApp(over: Record<string, any> = {}) {
   const app = {
     GetBundleContent: vi.fn(async () => content()),
-    ExportBundle: vi.fn(async (req: BundleExportRequest) => ({ path: '/out/a.assay', cancelled: false, encrypted: !!req.passphrase, notebooks: 1, queries: 1, skills: 1, artifacts: 1, semantics: 1, connections: 0, bytes: 2048, warnings: [] })),
+    ExportBundle: vi.fn(async (req: BundleExportRequest) => ({ path: '/out/a.slaw', cancelled: false, encrypted: !!req.passphrase, notebooks: 1, queries: 1, skills: 1, artifacts: 1, semantics: 1, connections: 0, bytes: 2048, warnings: [] })),
     ...over,
   }
   ;(globalThis as any).window = (globalThis as any).window || {}

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // Bind turns (manifest, query name, raw values, now) into the statement to run

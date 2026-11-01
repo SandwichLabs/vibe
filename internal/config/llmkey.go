@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // KeySource says where the LLM API key in effect came from.
@@ -33,19 +33,19 @@ func LLMKeyRef(provider string) secrets.Ref {
 	return secrets.AppRef("llm-" + provider)
 }
 
-// envKey returns the environment key in effect: ASSAY_LLM_API_KEY first, then
+// envKey returns the environment key in effect: SLAW_LLM_API_KEY first, then
 // the provider's standard variable.
 func envKey(provider string) string {
-	if k := os.Getenv("ASSAY_LLM_API_KEY"); k != "" {
+	if k := os.Getenv("SLAW_LLM_API_KEY"); k != "" {
 		return k
 	}
 	return providerKeyEnv(provider)
 }
 
 // ResolveLLMKey finds the API key for cfg's provider, in this order:
-// ASSAY_LLM_API_KEY, the provider's standard env var (ANTHROPIC_API_KEY,
+// SLAW_LLM_API_KEY, the provider's standard env var (ANTHROPIC_API_KEY,
 // OPENAI_API_KEY, GEMINI_API_KEY), the keychain item {app, llm-<provider>}, then the legacy
-// plaintext llm.api_key in ~/.assay.yaml (read-only). An unreachable keychain
+// plaintext llm.api_key in ~/.slaw.yaml (read-only). An unreachable keychain
 // is skipped, not fatal. The key is for the model client only: it must never
 // cross the Wails bridge, MCP or the agent.
 func ResolveLLMKey(ctx context.Context, store secrets.Store, cfg LLMConfig) (string, KeySource) {
@@ -63,7 +63,7 @@ func ResolveLLMKey(ctx context.Context, store secrets.Store, cfg LLMConfig) (str
 	return "", KeySourceNone
 }
 
-// ErrNothingToMigrate means ~/.assay.yaml holds no plaintext API key.
+// ErrNothingToMigrate means ~/.slaw.yaml holds no plaintext API key.
 var ErrNothingToMigrate = errors.New("there is no API key in the config file to move")
 
 // SetLLMKey stores the provider's key in the keychain (write-only).
@@ -134,7 +134,7 @@ func MigrateFileKey(ctx context.Context, store secrets.Store, path, provider str
 		return ErrNothingToMigrate
 	}
 	byHand := func(why error) error {
-		return fmt.Errorf("Assay can't safely edit %s (%w). Save the key with \"assay config llm-key set\" and delete llm.api_key from the file by hand", path, why)
+		return fmt.Errorf("Slaw can't safely edit %s (%w). Save the key with \"slaw config llm-key set\" and delete llm.api_key from the file by hand", path, why)
 	}
 	if n, derr := yamlDocCount(data); derr != nil || n != 1 {
 		return byHand(errors.New("the file is not a single YAML document"))
@@ -144,7 +144,7 @@ func MigrateFileKey(ctx context.Context, store secrets.Store, path, provider str
 		return byHand(err)
 	}
 	if strings.TrimSpace(loc.value) != want {
-		return byHand(errors.New("the key is written in a form Assay does not edit"))
+		return byHand(errors.New("the key is written in a form Slaw does not edit"))
 	}
 	blanked, err := loc.blank(data)
 	if err != nil {

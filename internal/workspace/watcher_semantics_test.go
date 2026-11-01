@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/semantics/proposals"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
 )
 
 const semanticsMetric = "version: 1\nname: net_revenue\nquery: base\nmeasure: sum(amount)\n"
@@ -36,9 +36,9 @@ func TestClassify_Semantics(t *testing.T) {
 		"semantics/x.yaml",
 		"semantics/metrics/a/b.yaml",
 		"semantics/glossary.md.swp",
-		".assay-local/proposals/20261029T153012Z-metric-x-7f3a.txt",
-		".assay-local/proposals/.20261029T153012Z-metric-x-7f3a.yaml.swp",
-		".assay-local/other/20261029T153012Z-metric-x-7f3a.yaml",
+		".slaw-local/proposals/20261029T153012Z-metric-x-7f3a.txt",
+		".slaw-local/proposals/.20261029T153012Z-metric-x-7f3a.yaml.swp",
+		".slaw-local/other/20261029T153012Z-metric-x-7f3a.yaml",
 	} {
 		_, _, ok := classify(rel)
 		assert.False(t, ok, rel)
@@ -110,12 +110,12 @@ func TestWatcher_ProposalsAreReportedWhenFiledElsewhereNotByOwnStore(t *testing.
 
 	// Another process files one, in a folder that may not have existed when the
 	// watcher started.
-	dir := filepath.Join(root, ".assay-local", "proposals")
+	dir := filepath.Join(root, ".slaw-local", "proposals")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	name := "20261029T153012Z-metric-x-7f3a.yaml"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644))
 	got := next(t, w)
-	assert.Equal(t, Change{Kind: KindProposal, Op: OpCreated, ID: "20261029T153012Z-metric-x-7f3a", Path: ".assay-local/proposals/" + name}, got)
+	assert.Equal(t, Change{Kind: KindProposal, Op: OpCreated, ID: "20261029T153012Z-metric-x-7f3a", Path: ".slaw-local/proposals/" + name}, got)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".x.yaml.swp"), []byte("x"), 0o644))
 	expectQuiet(t, w)
 }

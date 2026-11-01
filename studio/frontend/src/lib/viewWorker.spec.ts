@@ -1,6 +1,6 @@
 // @vitest-environment node
 // worker.js (the host-owned bootstrap of a custom view's Worker, #160) run in a
-// node `vm` context that stands in for a WorkerGlobalScope: the frozen `assay`,
+// node `vm` context that stands in for a WorkerGlobalScope: the frozen `slaw`,
 // the closed library list, the captured port, a repeated `loading`, a setter on
 // Object.prototype, and the storage APIs removed before the view loads.
 import { describe, it, expect } from 'vitest'
@@ -58,30 +58,30 @@ describe('worker.js', () => {
     expect(w.imported).toEqual([])
   })
 
-  it('exposes a frozen, non-replaceable assay', () => {
+  it('exposes a frozen, non-replaceable slaw', () => {
     const w = boot()
     w.init()
-    expect(w.run('Object.isFrozen(assay)')).toBe(true)
-    expect(w.run(`'use strict'; var r = []; try { assay.run = 1 } catch (e) { r.push('run') } try { assay = {} } catch (e) { r.push('assay') } try { delete self.assay } catch (e) {} r.push(typeof assay); r.join()`)).toBe('run,assay,object')
-    expect(w.run('typeof assay.run + typeof assay.lib + typeof assay.theme')).toBe('functionfunctionobject')
+    expect(w.run('Object.isFrozen(slaw)')).toBe(true)
+    expect(w.run(`'use strict'; var r = []; try { slaw.run = 1 } catch (e) { r.push('run') } try { slaw = {} } catch (e) { r.push('slaw') } try { delete self.slaw } catch (e) {} r.push(typeof slaw); r.join()`)).toBe('run,slaw,object')
+    expect(w.run('typeof slaw.run + typeof slaw.lib + typeof slaw.theme')).toBe('functionfunctionobject')
   })
 
   it('loads only names on its closed list, never an inherited one', () => {
     const w = boot()
     w.init()
     for (const bad of ['nope', 'constructor', '__proto__', 'toString', 'hasOwnProperty', '', 'd3', '../d3-array', 'https://x/y.js']) {
-      expect(w.run(`try { assay.lib(${JSON.stringify(bad)}); 'loaded' } catch (e) { e.message }`), bad).toBe('assay.lib: unknown library')
+      expect(w.run(`try { slaw.lib(${JSON.stringify(bad)}); 'loaded' } catch (e) { e.message }`), bad).toBe('slaw.lib: unknown library')
     }
     expect(w.imported).toEqual(['view.js'])
     // And the table itself cannot be extended or changed from the view.
-    expect(w.run(`'use strict'; var r; try { assay.lib('x'); } catch (e) {} r = Object.keys(assay).join(); r`)).toBe('run,lib,theme')
+    expect(w.run(`'use strict'; var r; try { slaw.lib('x'); } catch (e) {} r = Object.keys(slaw).join(); r`)).toBe('run,lib,theme')
   })
 
   it('loads a library chain in order, announcing each file once', () => {
     const w = boot()
     w.init()
-    w.run("self.d3 = {}; assay.lib('d3-scale'); assay.lib('d3-scale'); assay.lib('d3-array')")
-    expect(w.imported.slice(1)).toEqual(['d3-array', 'd3-color', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-scale'].map((f) => `/assay-view/lib/${f}.js`))
+    w.run("self.d3 = {}; slaw.lib('d3-scale'); slaw.lib('d3-scale'); slaw.lib('d3-array')")
+    expect(w.imported.slice(1)).toEqual(['d3-array', 'd3-color', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-scale'].map((f) => `/slaw-view/lib/${f}.js`))
     const loading = w.sent.filter((m) => m.t === 'loading').map((m) => m.file)
     expect(loading).toEqual(['d3-array', 'd3-color', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-scale'])
   })
@@ -89,8 +89,8 @@ describe('worker.js', () => {
   it('every file a library loads is one the host knows how to expect (and the build vendors)', () => {
     const w = boot()
     w.init()
-    for (const name of ['d3-array', 'd3-format', 'd3-time-format', 'd3-scale', 'd3-shape', 'd3-geo', 'vega', 'vega-lite']) w.run(`assay.lib('${name}')`)
-    const files = w.imported.slice(1).map((u) => u.replace('/assay-view/lib/', '').replace(/\.js$/, ''))
+    for (const name of ['d3-array', 'd3-format', 'd3-time-format', 'd3-scale', 'd3-shape', 'd3-geo', 'vega', 'vega-lite']) w.run(`slaw.lib('${name}')`)
+    const files = w.imported.slice(1).map((u) => u.replace('/slaw-view/lib/', '').replace(/\.js$/, ''))
     expect(files.length).toBeGreaterThan(8)
     for (const f of files) expect(LIB_FILES, f).toContain(f)
     for (const f of w.sent.filter((m) => m.t === 'loading').map((m) => m.file)) expect(LIB_FILES).toContain(f)
@@ -100,14 +100,14 @@ describe('worker.js', () => {
     const w = boot()
     w.init()
     w.run(`var hits = 0; ['d3-array', 'd3-scale', '1', 'vega'].forEach(function (k) { Object.defineProperty(Object.prototype, k, { set: function () { hits++ }, get: function () { return true }, configurable: true }) })`)
-    w.run("assay.lib('d3-array'); assay.lib('d3-array')")
+    w.run("slaw.lib('d3-array'); slaw.lib('d3-array')")
     expect(w.run('hits')).toBe(0)
     // the getter a view planted does not make an unloaded file look loaded
     expect(w.imported.filter((u) => u.endsWith('d3-array.js')).length).toBe(1)
-    w.run("assay.lib('vega')")
+    w.run("slaw.lib('vega')")
     expect(w.imported.some((u) => u.endsWith('/vega.js'))).toBe(true)
     // and a run id is not intercepted either
-    w.run("assay.run('q', {})")
+    w.run("slaw.run('q', {})")
     const run = w.sent.find((m) => m.t === 'run')
     expect(run.query).toBe('q')
   })

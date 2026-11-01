@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // DuckDBEngine executes queries against a DuckDB session.

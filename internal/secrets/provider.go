@@ -198,7 +198,7 @@ func (r *Resolver) DeviceSignIn(ctx context.Context, method string, show func(De
 	}
 	ds, ok := p.(DeviceSigner)
 	if !ok {
-		return fmt.Errorf("the %s sign-in method cannot sign in from Assay", kind)
+		return fmt.Errorf("the %s sign-in method cannot sign in from Slaw", kind)
 	}
 	return ds.DeviceLogin(ctx, subject, show)
 }

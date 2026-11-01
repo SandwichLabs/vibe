@@ -576,13 +576,13 @@ describe('TableBrowserView ?table= pre-select', () => {
 
   it('opened read-only: New and Add row are disabled and say why', async () => {
     resetWorkspace()
-    workspaceInfo.value = { readOnly: true, holder: { text: 'assay mcp serve (pid 4182)' } } as unknown as WorkspaceInfo
+    workspaceInfo.value = { readOnly: true, holder: { text: 'slaw mcp serve (pid 4182)' } } as unknown as WorkspaceInfo
     makeApp()
     const wrapper = mountView()
     await flushPromises()
     const nw = wrapper.find('[data-testid="new-table"]')
     expect((nw.element as HTMLButtonElement).disabled).toBe(true)
-    expect(nw.attributes('title')).toContain('assay mcp serve (pid 4182)')
+    expect(nw.attributes('title')).toContain('slaw mcp serve (pid 4182)')
     await openTable(wrapper)
     expect((wrapper.find('[data-testid="add-row"]').element as HTMLButtonElement).disabled).toBe(true)
     resetWorkspace()

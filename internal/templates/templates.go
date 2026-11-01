@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 // Table describes one DuckDB user-data table to create for a template.
@@ -311,7 +311,7 @@ func trainingRegistrationsTemplate() Template {
 				)`,
 				Inserts: []string{
 					`INSERT INTO courses (id, title, instructor, seats) VALUES
-						(1, 'Intro to Assay', 'Dr. Ada', 20),
+						(1, 'Intro to Slaw', 'Dr. Ada', 20),
 						(2, 'Advanced DuckDB', 'Grace H', 15)`,
 				},
 			},

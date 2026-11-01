@@ -52,7 +52,7 @@ metric's `description` or `settled_by` so the choice is reviewable.
 
 ## 3. Assertions to declare
 
-An assertion is a counted violation, run by `assay semantics check`. The kinds
+An assertion is a counted violation, run by `slaw semantics check`. The kinds
 are closed:
 
 - entity `unique` on the `id_column`, and `not_null` on the columns you rely on;
@@ -98,7 +98,7 @@ verified nothing.
 
 Each entity and metric gets a `compile` row first: its table and columns, or
 its measure and dimensions against the saved query, are bound on the real
-connection without scanning rows. `assay semantics check --compile` runs only
+connection without scanning rows. `slaw semantics check --compile` runs only
 those, fast enough after every edit; run it before the full `check`.
 
 ## 4. Using `metric()`
@@ -113,7 +113,7 @@ The grammar is only `metric('name')`, `metric('name', by => 'dim')` or
 grain or parameter in the call, and `by` takes only the metric's declared
 `dimensions`. The result column is named after the metric. A metric runs on
 its saved query's connection, so the statement must run on that connection
-(`assay query -c <conn>`, or the cell's connection).
+(`slaw query -c <conn>`, or the cell's connection).
 
 **A window: filter outside.** Put one `WHERE` on the expansion:
 
@@ -124,7 +124,7 @@ WHERE log_date >= current_date - 30 ORDER BY log_date;
 
 It can only filter a dimension or the metric value. If the window belongs in
 the data, give the saved query a `$since` parameter with a default such as
-`today-30d`. The Query Explorer, `assay query` and the console run it with
+`today-30d`. The Query Explorer, `slaw query` and the console run it with
 that default; through `run_query` you pass a value in `params`.
 
 **A derived number across two metrics: join by hand.** There is no derived
@@ -145,13 +145,13 @@ Agents never write under `semantics/`. File a definition with
 `propose_definition` (`kind`, `name`, `definition`, `rationale`, and
 `evidence`: the queries or values you checked, for example the grain result).
 It is validated now and waits in the person's inbox; **nothing changes and
-`metric()` will not find it until they accept it** (`assay semantics proposals`,
+`metric()` will not find it until they accept it** (`slaw semantics proposals`,
 `accept`, `reject`, or Studio). Save the query first (`save_query`), since a
 metric's saved query must exist. To change a definition send the `rev` from
 `get_definition` as `replaces_rev`. Do not use a proposed definition in
 answers until accepted. Use `list_definitions` first: reuse a name that
 exists rather than proposing a near-duplicate.
 
-From a shell: `assay semantics list`, `show <kind> <name>`, `check`, `profile
+From a shell: `slaw semantics list`, `show <kind> <name>`, `check`, `profile
 <join>`. Run `check` after the person accepts, and report what passed and what
 could not run.

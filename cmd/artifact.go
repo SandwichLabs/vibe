@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 var artifactCmd = &cobra.Command{

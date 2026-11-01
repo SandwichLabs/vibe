@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Wails fills the template fields from wails.json at `wails build`. Everything
      else is ours: the identifier and the document types that make Finder offer
-     "Open With > Assay" for workspace folders and .assay bundles. Both
+     "Open With > Slaw" for workspace folders and .slaw bundles. Both
      arrive in the app as an Apple Event (studio/main.go: mac.Options.OnFileOpen),
      never as argv. -->
 <plist version="1.0">
@@ -14,7 +14,7 @@
     <key>CFBundleExecutable</key>
     <string>{{.OutputFilename}}</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.sandwichlabs.assay</string>
+    <string>dev.sandwichlabs.slaw</string>
     <key>CFBundleVersion</key>
     <string>{{.Info.ProductVersion}}</string>
     <key>CFBundleGetInfoString</key>
@@ -33,11 +33,11 @@
 
     <key>CFBundleDocumentTypes</key>
     <array>
-      <!-- A folder opens as a workspace. Viewer, and Alternate rank: Assay is
+      <!-- A folder opens as a workspace. Viewer, and Alternate rank: Slaw is
            offered in "Open With" but never becomes the default for folders. -->
       <dict>
         <key>CFBundleTypeName</key>
-        <string>Assay workspace folder</string>
+        <string>Slaw workspace folder</string>
         <key>CFBundleTypeRole</key>
         <string>Viewer</string>
         <key>LSHandlerRank</key>
@@ -47,17 +47,17 @@
           <string>public.folder</string>
         </array>
       </dict>
-      <!-- A .assay file is a bundle to import, not a document to edit. -->
+      <!-- A .slaw file is a bundle to import, not a document to edit. -->
       <dict>
         <key>CFBundleTypeName</key>
-        <string>Assay bundle</string>
+        <string>Slaw bundle</string>
         <key>CFBundleTypeRole</key>
         <string>Viewer</string>
         <key>LSHandlerRank</key>
         <string>Owner</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>dev.sandwichlabs.assay-bundle</string>
+          <string>dev.sandwichlabs.slaw-bundle</string>
         </array>
       </dict>
     </array>
@@ -66,9 +66,9 @@
     <array>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>dev.sandwichlabs.assay-bundle</string>
+        <string>dev.sandwichlabs.slaw-bundle</string>
         <key>UTTypeDescription</key>
-        <string>Assay bundle</string>
+        <string>Slaw bundle</string>
         <key>UTTypeConformsTo</key>
         <array>
           <string>public.data</string>
@@ -77,10 +77,10 @@
         <dict>
           <key>public.filename-extension</key>
           <array>
-            <string>assay</string>
+            <string>slaw</string>
           </array>
           <key>public.mime-type</key>
-          <string>application/x-assay-bundle</string>
+          <string>application/x-slaw-bundle</string>
         </dict>
       </dict>
     </array>

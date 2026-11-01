@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/config"
+	"github.com/SandwichLabs/slaw/internal/config"
 )
 
 // ModelList is the answer to "which models does this server have".

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 // maxArtifactProblems caps the findings one write_artifact reply lists; the

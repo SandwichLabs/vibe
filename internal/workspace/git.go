@@ -55,7 +55,7 @@ func GitInfo(root string) (branch string, isRepo bool) {
 	return head, true
 }
 
-// HasConfigFile reports whether dir holds a regular assay.yaml (not a symlink):
+// HasConfigFile reports whether dir holds a regular slaw.yaml (not a symlink):
 // the mark of a workspace folder.
 func HasConfigFile(dir string) bool {
 	fi, err := os.Lstat(filepath.Join(dir, ConfigFile))

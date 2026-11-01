@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // A storage connection that is ready has no catalog: the Tables view's groups

@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/SandwichLabs/assay/internal/crud"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // TableInfo is one entry in the table list.

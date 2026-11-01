@@ -8,16 +8,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/lsp"
-	"github.com/SandwichLabs/assay/internal/prefs"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/selfupdate"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/lsp"
+	"github.com/SandwichLabs/slaw/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/selfupdate"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -29,7 +29,7 @@ import (
 // MCP server others reach the workspace through (wmcp). Notebooks, queries and
 // skills are plain files behind ws; data writes go straight to the source.
 type App struct {
-	// views serves custom artifact views under /assay-view/ (viewserver.go).
+	// views serves custom artifact views under /slaw-view/ (viewserver.go).
 	views *viewServer
 	// pages owns the page windows of scripted HTML pages (pagehost.go).
 	pages *pageHost
@@ -72,7 +72,7 @@ type App struct {
 	connDeps map[string]connDeps
 
 	// initial is what was named on the command line (or opened from the OS
-	// before the window was ready): a folder, a .assay bundle, or a note.
+	// before the window was ready): a folder, a .slaw bundle, or a note.
 	// frontendReady flips when the frontend first asks for it; OS open
 	// requests after that are sent as events (HandleOpenPath).
 	launchMu      sync.Mutex
@@ -126,7 +126,7 @@ type App struct {
 	recents *prefs.Recents
 
 	// llmCfg is the app-global, viper-driven LLM provider/model configuration
-	// for the wizard agent (loaded at startup from ~/.assay.yaml + ASSAY_* env).
+	// for the wizard agent (loaded at startup from ~/.slaw.yaml + SLAW_* env).
 	llmCfg config.LLMConfig
 
 	// secrets resolves credentials (keychain, env, prompt) and owns the
@@ -166,9 +166,9 @@ type App struct {
 	// cancels whatever is pending on it before the session goes away).
 	approvals *agents.ApprovalQueue
 
-	// locateAssay finds the `assay` CLI for the Claude config snippets; tests
-	// replace it (nil means hub.LocateAssay).
-	locateAssay func() (string, error)
+	// locateSlaw finds the `slaw` CLI for the Claude config snippets; tests
+	// replace it (nil means hub.LocateSlaw).
+	locateSlaw func() (string, error)
 
 	// approvalTimeout bounds how long a pending approval card waits for an
 	// answer before the tool call gives up. An App field, not a package
@@ -194,7 +194,7 @@ type App struct {
 	// consoles are the open console sessions of the workspace (repl_host.go).
 	consoles *consoleHost
 
-	// bundles holds .assay bundles that were previewed and await their commit (#118).
+	// bundles holds .slaw bundles that were previewed and await their commit (#118).
 	bundles bundleStore
 }
 

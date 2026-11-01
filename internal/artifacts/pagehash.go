@@ -9,13 +9,13 @@ import (
 )
 
 // pageHashTag versions the PageHash encoding.
-const pageHashTag = "assay-page-hash/1"
+const pageHashTag = "slaw-page-hash/1"
 
 // PageHash is the sha256 (hex) an HTML page is trusted by: ViewHash
 // generalised to a file set with a role per file. One canonical,
 // length-prefixed stream:
 //
-//	string "assay-page-hash/1"
+//	string "slaw-page-hash/1"
 //	bytes  artifact.yaml                       (entry 0: a pull that changes a
 //	                                            query's SQL or connection asks again)
 //	string derived kind ("static" or "scripted")

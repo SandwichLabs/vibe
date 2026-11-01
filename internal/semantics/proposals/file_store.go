@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
-// FileStore keeps proposals as .assay-local/proposals/<id>.yaml under a
+// FileStore keeps proposals as .slaw-local/proposals/<id>.yaml under a
 // workspace root. Writes are filestore compare-and-write; nothing is cached.
 type FileStore struct {
 	*core

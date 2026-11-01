@@ -71,7 +71,7 @@ type roundTripper struct{ r *routed }
 func (t roundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return t.r.Do(req) }
 
 func TestFIPSAndDualStackFlagsDoNotMoveEndpointsEither(t *testing.T) {
-	// Config-file switches are the SDK's own shared-config keys; Assay reads none of them.
+	// Config-file switches are the SDK's own shared-config keys; Slaw reads none of them.
 	f := newFake(t)
 	rt := &routed{f: f}
 	cfg := sessionCfg + "\nuse_fips_endpoint = true\nuse_dualstack_endpoint = true\nsso_endpoint = https://evil.example\n"

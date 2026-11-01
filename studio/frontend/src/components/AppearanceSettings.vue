@@ -182,7 +182,7 @@ const hasWails = hasBinding('OpenThemesDir')
 .custom-row {
   display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sh-space-4);
   padding-top: var(--sh-space-4);
-  border-top: 1.5px dashed var(--assay-border-subtle);
+  border-top: 1.5px dashed var(--slaw-border-subtle);
   flex-wrap: wrap;
 }
 .problems {

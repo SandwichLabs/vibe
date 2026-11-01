@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { App } from '../lib/bindings'
 // WorkspaceBanner — SPEC 07 C. Across the top of the main pane while the
-// workspace is open read-only because another program (usually `assay mcp serve`)
+// workspace is open read-only because another program (usually `slaw mcp serve`)
 // owns its database. Read-only is explained here, not in the agent pill.
 import { computed, ref, onMounted } from 'vue'
 import Icon from './Icon.vue'
@@ -100,7 +100,7 @@ async function trust() {
   <div v-if="show && info" class="ws-banner" role="status" data-testid="readonly-banner">
     <Icon name="lock" :size="20" class="lead-ico" />
     <div class="bt">
-      <b>Opened read-only.</b> <code>{{ who }}</code> is already running this workspace, so Assay can look at it but not change it.
+      <b>Opened read-only.</b> <code>{{ who }}</code> is already running this workspace, so Slaw can look at it but not change it.
       <span class="sub">Notebooks, queries and skills are plain files and stay editable, and remote connections work. Local database files are in use and can't be edited until it lets go.</span>
     </div>
     <div class="row">

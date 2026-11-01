@@ -26,9 +26,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +42,7 @@ func wizLogger() *slog.Logger {
 func newWizardFixture(t *testing.T, mode agents.SandboxMode) (*agents.Handler, workspace.Workspace) {
 	t.Helper()
 
-	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	t.Setenv("SLAW_CONFIG_DIR", t.TempDir())
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "wizard"), workspace.WithName("Wizard Tools Test"))
 	require.NoError(t, err)
 	ws := res.Workspace

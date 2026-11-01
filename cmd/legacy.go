@@ -18,7 +18,7 @@ func init() {
 			DisableFlagParsing: true,
 			SilenceUsage:       true,
 			RunE: func(_ *cobra.Command, _ []string) error {
-				return fmt.Errorf("`assay %s` worked on old .vibe container files, which Assay does not open; use `assay workspace init` to create a workspace and `assay workspace info` to inspect one", name)
+				return fmt.Errorf("`slaw %s` worked on old .vibe container files, which Slaw does not open; use `slaw workspace init` to create a workspace and `slaw workspace info` to inspect one", name)
 			},
 		})
 	}

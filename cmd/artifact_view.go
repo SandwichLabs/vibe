@@ -13,23 +13,23 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/llm"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/llm"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 var artifactViewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "Allow or deny an artifact's custom view or HTML page",
 	Long: `An artifact whose manifest says "view: script" draws itself with view.js,
-code written by someone else or by an agent. Assay shows it as source and only
+code written by someone else or by an agent. Slaw shows it as source and only
 runs it after you allow it (the view runs in a worker that cannot reach the
 network or your files, and can only run this artifact's own queries):
 
   status   show where it stands, the view's hash and its source.
   allow    allow the view as shown. Any later change to artifact.yaml or
-           view.js ends the allow and Assay asks again. On a terminal it shows
+           view.js ends the allow and Slaw asks again. On a terminal it shows
            the source and asks; otherwise pass --hash and --yes from "status".
   deny     never run it, until revoked. Edits do not ask again.
   revoke   forget the decision (the next open asks again).
@@ -101,12 +101,12 @@ func newViewActionCmd(use, short string, run func(cmd *cobra.Command, ws workspa
 func confirmViewAllow(cmd *cobra.Command, ws workspace.Workspace, name string) (string, error) {
 	if hash, _ := cmd.Flags().GetString("hash"); hash != "" {
 		if yes, _ := cmd.Flags().GetBool("yes"); !yes {
-			return "", errors.New("--hash also needs --yes, to say you read the source `assay artifact view status " + name + "` showed")
+			return "", errors.New("--hash also needs --yes, to say you read the source `slaw artifact view status " + name + "` showed")
 		}
 		return hash, nil
 	}
 	if !stdinIsTerminal() {
-		return "", errors.New("not a terminal: read the view with `assay artifact view status " + name + "`, then pass its hash with --hash --yes")
+		return "", errors.New("not a terminal: read the view with `slaw artifact view status " + name + "`, then pass its hash with --hash --yes")
 	}
 	st, err := ws.ArtifactViewState(name)
 	if err != nil {

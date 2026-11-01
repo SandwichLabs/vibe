@@ -9,8 +9,8 @@ package main
 import (
 	"runtime"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // PageDisclosureLine is one declared capability with its plain line.

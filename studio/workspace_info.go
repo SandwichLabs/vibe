@@ -6,11 +6,11 @@ package main
 import (
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // ConnectionInfo is one connection as the workspace screens show it.
@@ -74,7 +74,7 @@ type WorkspaceInfo struct {
 	Policy AgentPolicyInfo `json:"policy"`
 	Team   AgentPolicyInfo `json:"team"`
 	Local  AgentPolicyInfo `json:"local"`
-	// TeamSandboxSet is false when assay.yaml sets no tier limit.
+	// TeamSandboxSet is false when slaw.yaml sets no tier limit.
 	TeamSandboxSet bool `json:"teamSandboxSet"`
 	// ReadOnly is true when another process owns the hub.
 	ReadOnly bool                     `json:"readOnly"`

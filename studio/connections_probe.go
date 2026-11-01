@@ -8,10 +8,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // TestConnectionRequest tests a definition without saving it. Credentials are
@@ -167,7 +167,7 @@ func (a *App) ListMotherDuckDatabases(req ListMotherDuckDatabasesRequest) (*Moth
 func listFailureMessage(res connections.MDDatabasesResult) string {
 	switch {
 	case res.InstallExtension != "" || res.Status == session.StatusExtensionMissing:
-		return "Assay's database engine needs the motherduck extension, which isn't installed yet. Install it, then load again."
+		return "Slaw's database engine needs the motherduck extension, which isn't installed yet. Install it, then load again."
 	case res.Status == session.StatusNeedsCredentials:
 		return "MotherDuck turned down this token. Check it and try again."
 	case res.TimedOut:

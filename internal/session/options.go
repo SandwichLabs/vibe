@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 	"log/slog"
 	"sync/atomic"
 	"time"

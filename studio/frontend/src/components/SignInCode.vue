@@ -29,7 +29,7 @@ async function copy() {
 .sic-code {
   font-family: var(--sh-font-mono); font-size: 20px; font-weight: 700; letter-spacing: 0.12em;
   padding: 2px 10px; background: var(--sh-surface); color: var(--sh-ink);
-  border: 2px solid var(--assay-border); border-radius: var(--sh-radius-sm); user-select: all;
+  border: 2px solid var(--slaw-border); border-radius: var(--sh-radius-sm); user-select: all;
 }
 .sic-url { flex-basis: 100%; overflow-wrap: anywhere; }
 </style>

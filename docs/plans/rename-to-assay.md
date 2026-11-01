@@ -1,5 +1,7 @@
 # Rename Vibe to Assay, and rewrite the copy
 
+**Superseded by [`rename-to-slaw.md`](rename-to-slaw.md): the product is called Slaw.**
+
 **Status:** accepted 2026-11-01, not started. Settles decision D2 in [`open-source-launch.md`](open-source-launch.md) §7 ("name and trademark").
 
 **Owner decisions (2026-11-01):**

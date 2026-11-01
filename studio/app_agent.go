@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/llm"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/llm"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // --- Agent ---
@@ -35,8 +35,8 @@ func (a *App) agentPolicy() agents.FilePolicy {
 }
 
 // AgentConfig surfaces the agent configuration to the UI. Provider/model/endpoint
-// are app-global and viper-driven (read-only here — configured via ~/.assay.yaml
-// or ASSAY_LLM_* env); the rest is per workspace: Sandbox and AskBeforeWrites are
+// are app-global and viper-driven (read-only here — configured via ~/.slaw.yaml
+// or SLAW_LLM_* env); the rest is per workspace: Sandbox and AskBeforeWrites are
 // what is in effect for this person (the committed team limit and this
 // person's own choice, whichever is stricter), TeamSandbox and TeamAsk are the
 // committed limit alone.
@@ -46,9 +46,9 @@ type AgentConfig struct {
 	Endpoint        string `json:"endpoint"`        // effective (viper-driven); edit via SetLLMSettings
 	Sandbox         string `json:"sandbox"`         // effective tier
 	AskBeforeWrites bool   `json:"askBeforeWrites"` // effective gate
-	// TeamSandbox is the highest tier assay.yaml allows ("" means no limit).
+	// TeamSandbox is the highest tier slaw.yaml allows ("" means no limit).
 	TeamSandbox string `json:"teamSandbox"`
-	// TeamAskBeforeWrites is true when assay.yaml requires the gate for everyone.
+	// TeamAskBeforeWrites is true when slaw.yaml requires the gate for everyone.
 	TeamAskBeforeWrites bool `json:"teamAskBeforeWrites"`
 }
 
@@ -339,7 +339,7 @@ func (a *App) CancelAgentTask(taskID string) {
 // agentToolHandler.ceiling's doc comment for why a ceiling is needed at all
 // (AgentTask's "always read-only" contract must survive the per-dispatch
 // policy refresh). The underlying *agents.Handler is the same one
-// hub.NewAgentHandler builds for `assay mcp serve` and Studio's own MCP server,
+// hub.NewAgentHandler builds for `slaw mcp serve` and Studio's own MCP server,
 // so every caller dispatches every tool call through one registry with one set
 // of sandbox/approval rules (#63). It is wrapped in agentToolHandler so each
 // individual tool call — not just this construction — is locked and

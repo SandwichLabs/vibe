@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // agentCall runs one tool exactly as an MCP client or the chat agent would:
@@ -57,42 +57,42 @@ func proposeNetRevenue(t *testing.T, root string, extra map[string]any) string {
 }
 
 // The exit criterion: an agent proposes a metric, a person accepts it with the
-// CLI, and `assay query` runs it.
+// CLI, and `slaw query` runs it.
 func TestSemanticsProposals_AgentProposesPersonAcceptsQueryRuns(t *testing.T) {
 	root := proposalWorkspace(t)
 	id := proposeNetRevenue(t, root, nil)
 
 	// proposing wrote the machine-local inbox and nothing under semantics/
-	_, err := os.Stat(filepath.Join(root, ".assay-local", "proposals", id+".yaml"))
+	_, err := os.Stat(filepath.Join(root, ".slaw-local", "proposals", id+".yaml"))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
 	assert.True(t, os.IsNotExist(err))
-	_, _, err = runAssay("query", "--workspace", root, "SELECT * FROM metric('net_revenue')")
+	_, _, err = runSlaw("query", "--workspace", root, "SELECT * FROM metric('net_revenue')")
 	require.Error(t, err, "the metric does not exist until it is accepted")
 
-	out, stderr, err := runAssay("semantics", "proposals", "--workspace", root)
+	out, stderr, err := runSlaw("semantics", "proposals", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Regexp(t, id+`\s+metric\s+net_revenue\s+open\s+agent\s+Refunds are excluded`, out)
 
-	_, stderr, err = runAssay("semantics", "list", "--workspace", root)
+	_, stderr, err = runSlaw("semantics", "list", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stderr, "1 proposed definition(s) waiting")
 
-	out, stderr, err = runAssay("semantics", "show-proposal", id, "--workspace", root)
+	out, stderr, err = runSlaw("semantics", "show-proposal", id, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "semantics/metrics/net_revenue.yaml is new.")
 	assert.Contains(t, out, "+ measure: sum(amount)")
 	assert.Contains(t, out, "Refunds are excluded")
 
 	// a --rev that is not the version on screen is refused, and nothing is written
-	_, _, err = runAssay("semantics", "accept", id, "--rev", "0000", "--workspace", root)
+	_, _, err = runSlaw("semantics", "accept", id, "--rev", "0000", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "changed again since you looked")
 	_, err = os.Stat(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
 	assert.True(t, os.IsNotExist(err))
 
 	// plain accept looks right then and shows what it is writing
-	out, stderr, err = runAssay("semantics", "accept", id, "--workspace", root)
+	out, stderr, err = runSlaw("semantics", "accept", id, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stderr, "+ measure: sum(amount)")
 	assert.Regexp(t, `(?m)^Rev\s+\S+`, stderr)
@@ -101,22 +101,22 @@ func TestSemanticsProposals_AgentProposesPersonAcceptsQueryRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "measure: sum(amount)")
 
-	out, stderr, err = runAssay("query", "--workspace", root, "--format", "csv", "SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region")
+	out, stderr, err = runSlaw("query", "--workspace", root, "--format", "csv", "SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "region,net_revenue\neast,30\nwest,5\n", out)
 
 	// decided proposals leave the default list and stay in --all
-	out, _, err = runAssay("semantics", "proposals", "--workspace", root)
+	out, _, err = runSlaw("semantics", "proposals", "--workspace", root)
 	require.NoError(t, err)
 	assert.Contains(t, out, "No proposals are waiting")
-	out, _, err = runAssay("semantics", "proposals", "--all", "--json", "--workspace", root)
+	out, _, err = runSlaw("semantics", "proposals", "--all", "--json", "--workspace", root)
 	require.NoError(t, err)
 	var all []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &all))
 	require.Len(t, all, 1)
 	assert.Equal(t, "accepted", all[0]["status"])
 
-	_, _, err = runAssay("semantics", "accept", id, "--workspace", root)
+	_, _, err = runSlaw("semantics", "accept", id, "--workspace", root)
 	require.Error(t, err, "a decided proposal cannot be accepted again")
 }
 
@@ -134,31 +134,31 @@ func TestSemanticsProposals_StaleNeedsOverwrite(t *testing.T) {
 	// the person edits the file after the proposal
 	seedMetricFile(t, root, "net_revenue", cliMetric+"description: edited by hand\n")
 
-	out, stderr, err := runAssay("semantics", "show-proposal", id, "--workspace", root)
+	out, stderr, err := runSlaw("semantics", "show-proposal", id, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "WARNING: semantics/metrics/net_revenue.yaml changed since this was proposed")
 	assert.Contains(t, out, "- description: edited by hand")
 	assert.Contains(t, out, "+ measure: sum(amount) FILTER (WHERE amount > 1)")
 
-	_, _, err = runAssay("semantics", "accept", id, "--workspace", root)
+	_, _, err = runSlaw("semantics", "accept", id, "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--overwrite")
 	still, _ := os.ReadFile(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
 	assert.Contains(t, string(still), "edited by hand", "nothing was written")
 
 	// --overwrite alone refuses and says which version it would accept
-	_, _, err = runAssay("semantics", "accept", id, "--overwrite", "--workspace", root)
+	_, _, err = runSlaw("semantics", "accept", id, "--overwrite", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--overwrite needs --rev")
 	// a rev that is not the one on screen now is refused even with --overwrite
-	_, _, err = runAssay("semantics", "accept", id, "--overwrite", "--rev", "0000", "--workspace", root)
+	_, _, err = runSlaw("semantics", "accept", id, "--overwrite", "--rev", "0000", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "changed again since you looked")
 	revM := regexp.MustCompile(`(?m)^Rev\s+(\S+)`).FindStringSubmatch(out)
 	require.Len(t, revM, 2)
-	assert.Contains(t, out, "assay semantics accept "+id+" --overwrite --rev "+revM[1])
+	assert.Contains(t, out, "slaw semantics accept "+id+" --overwrite --rev "+revM[1])
 	assert.Contains(t, out, "comments")
-	_, stderr, err = runAssay("semantics", "accept", id, "--overwrite", "--rev", revM[1], "--workspace", root)
+	_, stderr, err = runSlaw("semantics", "accept", id, "--overwrite", "--rev", revM[1], "--workspace", root)
 	require.NoError(t, err, stderr)
 	now, _ := os.ReadFile(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
 	assert.Contains(t, string(now), "FILTER (WHERE amount > 1)")
@@ -168,7 +168,7 @@ func TestSemanticsProposals_StaleNeedsOverwrite(t *testing.T) {
 func TestSemanticsProposals_RejectAndGlossary(t *testing.T) {
 	root := proposalWorkspace(t)
 	id := proposeNetRevenue(t, root, nil)
-	out, stderr, err := runAssay("semantics", "reject", id, "--workspace", root)
+	out, stderr, err := runSlaw("semantics", "reject", id, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Nothing in semantics/ changed")
 	_, err = os.Stat(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
@@ -180,7 +180,7 @@ func TestSemanticsProposals_RejectAndGlossary(t *testing.T) {
 	})
 	require.Nil(t, resp.Error, "%+v", resp.Error)
 	gid, _ := resp.Result.(map[string]any)["id"].(string)
-	_, stderr, err = runAssay("semantics", "accept", gid, "--workspace", root)
+	_, stderr, err = runSlaw("semantics", "accept", gid, "--workspace", root)
 	require.NoError(t, err, stderr)
 	g, err := os.ReadFile(filepath.Join(root, "semantics", "glossary.md"))
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestSemanticsProposals_IDsAreValidatedEverywhere(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "secret.yaml"), []byte("x: 1\n"), 0o600))
 	for _, id := range []string{"../../secret", "..%2f..%2fsecret", "/etc/passwd", strings.Repeat("a", 300), ""} {
 		for _, verb := range []string{"show-proposal", "accept", "reject"} {
-			_, _, err := runAssay("semantics", verb, id, "--workspace", root)
+			_, _, err := runSlaw("semantics", verb, id, "--workspace", root)
 			require.Error(t, err, "%s %q", verb, id)
 		}
 	}
@@ -203,8 +203,8 @@ func TestSemanticsProposals_IDsAreValidatedEverywhere(t *testing.T) {
 func TestSemanticsProposals_NeverInABundle(t *testing.T) {
 	root := proposalWorkspace(t)
 	id := proposeNetRevenue(t, root, nil)
-	out := filepath.Join(t.TempDir(), "all.assay")
-	_, stderr, err := runAssay("export", "bundle", "--workspace", root, "--output", out)
+	out := filepath.Join(t.TempDir(), "all.slaw")
+	_, stderr, err := runSlaw("export", "bundle", "--workspace", root, "--output", out)
 	if err != nil {
 		t.Skipf("bundle export is not available in this build: %v %s", err, stderr)
 	}

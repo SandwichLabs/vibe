@@ -12,7 +12,7 @@
 // Every string is text.
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
-import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
+import { createSlawEditor, type SlawEditorInstance } from '../composables/useSlawEditor'
 import CustomView from './CustomView.vue'
 import PageFiles from './PageFiles.vue'
 import PagePrompt from './PagePrompt.vue'
@@ -35,11 +35,11 @@ type FileTab = 'script' | 'manifest'
 const tab = ref<FileTab>('script')
 const scriptEl = ref<HTMLElement | null>(null)
 const manifestEl = ref<HTMLElement | null>(null)
-const editors: Partial<Record<FileTab, AssayEditorInstance>> = {}
+const editors: Partial<Record<FileTab, SlawEditorInstance>> = {}
 
 function mount(which: FileTab, el: HTMLElement | null) {
   if (!el || editors[which]) return
-  editors[which] = createAssayEditor(el, {
+  editors[which] = createSlawEditor(el, {
     value: (which === 'script' ? status.value?.source : status.value?.manifest) ?? '',
     lang: which === 'script' ? 'javascript' : 'yaml',
     readOnly: true,

@@ -1,6 +1,6 @@
 package skills
 
-import "github.com/SandwichLabs/assay/internal/session"
+import "github.com/SandwichLabs/slaw/internal/session"
 
 // SaveUserSkill is SaveUserSkillAt without a revision check: the shape most
 // of this package's tests want.

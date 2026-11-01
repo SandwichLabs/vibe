@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // --- connections ---

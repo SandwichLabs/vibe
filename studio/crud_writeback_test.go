@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/crud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

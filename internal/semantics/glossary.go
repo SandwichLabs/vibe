@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/slaw/internal/strictyaml"
 )
 
 // MaxTermText caps the body of one glossary term a proposal carries.

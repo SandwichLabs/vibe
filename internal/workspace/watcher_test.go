@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 func startWatcher(t *testing.T, ws Workspace) *Watcher {
@@ -50,30 +50,30 @@ func TestWatcher_ExternalEditsAreReported(t *testing.T) {
 	require.NoError(t, err)
 	w := startWatcher(t, ws)
 
-	path := filepath.Join(root, "notebooks", nb.ID+".asnb")
+	path := filepath.Join(root, "notebooks", nb.ID+".slnb")
 	data, _ := os.ReadFile(path)
 
 	// An editor saves the notebook.
 	require.NoError(t, os.WriteFile(path, append(data[:len(data)-2:len(data)-2], []byte(" \n}\n")...), 0o644))
 	c := next(t, w)
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpChanged, ID: "report", Path: "notebooks/report.asnb"}, c)
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpChanged, ID: "report", Path: "notebooks/report.slnb"}, c)
 
 	// A new file from a git pull.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "pulled.asnb"), []byte(`{"schemaVersion":2,"title":"P","cells":[]}`), 0o644))
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "pulled", Path: "notebooks/pulled.asnb"}, next(t, w))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "pulled.slnb"), []byte(`{"schemaVersion":2,"title":"P","cells":[]}`), 0o644))
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "pulled", Path: "notebooks/pulled.slnb"}, next(t, w))
 
 	// Deleted.
-	require.NoError(t, os.Remove(filepath.Join(root, "notebooks", "pulled.asnb")))
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpDeleted, ID: "pulled", Path: "notebooks/pulled.asnb"}, next(t, w))
+	require.NoError(t, os.Remove(filepath.Join(root, "notebooks", "pulled.slnb")))
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpDeleted, ID: "pulled", Path: "notebooks/pulled.slnb"}, next(t, w))
 
 	// Queries and config.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "queries"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "queries", "q1.sql"), []byte("select 1\n"), 0o644))
 	assert.Equal(t, Change{Kind: KindQuery, Op: OpCreated, ID: "q1", Path: "queries/q1.sql"}, next(t, w))
 
-	cfg, _ := os.ReadFile(filepath.Join(root, "assay.yaml"))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "assay.yaml"), append(cfg, []byte("# edited\n")...), 0o644))
-	assert.Equal(t, Change{Kind: KindConfig, Op: OpChanged, ID: "assay.yaml", Path: "assay.yaml"}, next(t, w))
+	cfg, _ := os.ReadFile(filepath.Join(root, "slaw.yaml"))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "slaw.yaml"), append(cfg, []byte("# edited\n")...), 0o644))
+	assert.Equal(t, Change{Kind: KindConfig, Op: OpChanged, ID: "slaw.yaml", Path: "slaw.yaml"}, next(t, w))
 	expectQuiet(t, w)
 }
 
@@ -97,7 +97,7 @@ func TestWatcher_IgnoresOwnWritesByHash(t *testing.T) {
 	expectQuiet(t, w)
 
 	// ...but an external edit right after is still seen.
-	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "notebooks", "x.asnb"), []byte(`{"schemaVersion":2,"title":"X","cells":[]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "notebooks", "x.slnb"), []byte(`{"schemaVersion":2,"title":"X","cells":[]}`), 0o644))
 	assert.Equal(t, KindNotebook, next(t, w).Kind)
 }
 
@@ -106,7 +106,7 @@ func TestWatcher_UntouchedFilesProduceNoEvents(t *testing.T) {
 	_, err := ws.Notebooks().Create(context.Background(), "Still")
 	require.NoError(t, err)
 	w := startWatcher(t, ws)
-	path := filepath.Join(root, "notebooks", "still.asnb")
+	path := filepath.Join(root, "notebooks", "still.slnb")
 	data, _ := os.ReadFile(path)
 	// Rewriting identical bytes (touch, a checkout of the same content).
 	require.NoError(t, os.WriteFile(path, data, 0o644))
@@ -115,9 +115,9 @@ func TestWatcher_UntouchedFilesProduceNoEvents(t *testing.T) {
 }
 
 func TestWatcher_DirectoriesCreatedLaterAreWatched(t *testing.T) {
-	// Fresh folder with a hand-written assay.yaml: no notebooks/, queries/ or skills/ yet.
+	// Fresh folder with a hand-written slaw.yaml: no notebooks/, queries/ or skills/ yet.
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	ws, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	defer ws.Close()
@@ -125,8 +125,8 @@ func TestWatcher_DirectoriesCreatedLaterAreWatched(t *testing.T) {
 
 	// git pull creates the directory and files in one go.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "notebooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "notebooks", "late.asnb"), []byte(`{"schemaVersion":2,"title":"L","cells":[]}`), 0o644))
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "late", Path: "notebooks/late.asnb"}, next(t, w))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "notebooks", "late.slnb"), []byte(`{"schemaVersion":2,"title":"L","cells":[]}`), 0o644))
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "late", Path: "notebooks/late.slnb"}, next(t, w))
 
 	// skills/<name>/ is its own directory on Linux: both levels appear later.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "skills", "revenue"), 0o755))
@@ -144,9 +144,9 @@ func TestWatcher_AtomicRenameOverIsOneChange(t *testing.T) {
 	_, err := ws.Notebooks().Create(context.Background(), "Atomic")
 	require.NoError(t, err)
 	w := startWatcher(t, ws)
-	tmp := filepath.Join(root, "notebooks", ".atomic.asnb.swp")
+	tmp := filepath.Join(root, "notebooks", ".atomic.slnb.swp")
 	require.NoError(t, os.WriteFile(tmp, []byte(`{"schemaVersion":2,"title":"New","cells":[]}`), 0o644))
-	require.NoError(t, os.Rename(tmp, filepath.Join(root, "notebooks", "atomic.asnb")))
+	require.NoError(t, os.Rename(tmp, filepath.Join(root, "notebooks", "atomic.slnb")))
 	c := next(t, w)
 	assert.Equal(t, OpChanged, c.Op)
 	assert.Equal(t, "atomic", c.ID)
@@ -160,7 +160,7 @@ func TestWatcher_BurstIsDebounced(t *testing.T) {
 	w, err := ws.Watch(WithDebounce(300 * time.Millisecond))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
-	p := filepath.Join(root, "notebooks", "burst.asnb")
+	p := filepath.Join(root, "notebooks", "burst.slnb")
 	for i := 0; i < 10; i++ {
 		require.NoError(t, os.WriteFile(p, []byte(`{"schemaVersion":2,"title":"B`+string(rune('a'+i))+`","cells":[]}`), 0o644))
 		time.Sleep(5 * time.Millisecond)
@@ -220,18 +220,18 @@ func TestWatcher_RecreatedNotebooksDirIsWatchedAgain(t *testing.T) {
 	dir := filepath.Join(root, "notebooks")
 
 	require.NoError(t, os.RemoveAll(dir))
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpDeleted, ID: nb.ID, Path: "notebooks/" + nb.ID + ".asnb"}, next(t, w))
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpDeleted, ID: nb.ID, Path: "notebooks/" + nb.ID + ".slnb"}, next(t, w))
 
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	time.Sleep(100 * time.Millisecond)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.asnb"), []byte(`{"schemaVersion":2,"title":"a","cells":[]}`+"\n"), 0o644))
-	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "a", Path: "notebooks/a.asnb"}, next(t, w))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.slnb"), []byte(`{"schemaVersion":2,"title":"a","cells":[]}`+"\n"), 0o644))
+	assert.Equal(t, Change{Kind: KindNotebook, Op: OpCreated, ID: "a", Path: "notebooks/a.slnb"}, next(t, w))
 
 	// And a rename of the whole directory away and back.
 	require.NoError(t, os.Rename(dir, dir+".bak"))
 	assert.Equal(t, OpDeleted, next(t, w).Op)
 	require.NoError(t, os.Rename(dir+".bak", dir))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.asnb"), []byte(`{"schemaVersion":2,"title":"b","cells":[]}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.slnb"), []byte(`{"schemaVersion":2,"title":"b","cells":[]}`+"\n"), 0o644))
 	got := map[string]ChangeOp{}
 	for i := 0; i < 2; i++ {
 		c := next(t, w)
@@ -249,7 +249,7 @@ func TestWatcher_OwnWriteDuringFlushHashIsNotReported(t *testing.T) {
 	require.NoError(t, err)
 	w := startWatcher(t, ws)
 
-	abs := filepath.Join(root, "notebooks", nb.ID+".asnb")
+	abs := filepath.Join(root, "notebooks", nb.ID+".slnb")
 	var once sync.Once
 	var fired atomic.Bool
 	w.mu.Lock()
@@ -298,7 +298,7 @@ func TestWatcher_FlushBetweenAnnounceAndRemoveIsNotReported(t *testing.T) {
 	nb, err := ws.Notebooks().Create(context.Background(), "G")
 	require.NoError(t, err)
 	w := startWatcher(t, ws)
-	abs := filepath.Join(root, "notebooks", nb.ID+".asnb")
+	abs := filepath.Join(root, "notebooks", nb.ID+".slnb")
 
 	done := w.noteWrite(abs, "")
 	w.queue(abs)

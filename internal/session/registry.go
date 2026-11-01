@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // ConnectionType is the seam #115 extends: each type validates its Spec and

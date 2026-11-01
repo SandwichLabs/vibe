@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Failure codes of a connection test (TestResult.Code). They are what a UI
@@ -61,7 +61,7 @@ func Classify(f Failure) (code, message string) {
 	if host == "" {
 		host = "the server"
 	}
-	code, message = CodeError, "Assay couldn't connect with these settings."
+	code, message = CodeError, "Slaw couldn't connect with these settings."
 	switch {
 	case isRequirementMessage(low):
 		// "needs the "store" connection: it could not connect" is about another
@@ -72,7 +72,7 @@ func Classify(f Failure) (code, message string) {
 			ext = "missing"
 		}
 		code = CodeExtensionMissing
-		message = fmt.Sprintf("Assay's database engine needs the %s extension, which isn't installed yet. Install it, then test again.", ext)
+		message = fmt.Sprintf("Slaw's database engine needs the %s extension, which isn't installed yet. Install it, then test again.", ext)
 	case f.TimedOut || strings.Contains(low, "timed out"):
 		code = CodeTimeout
 		message = "No answer after 10 seconds. Check the address and whether you need a VPN."
@@ -100,11 +100,11 @@ func Classify(f Failure) (code, message string) {
 		message = "The server needs an encrypted connection. Open Advanced options and set SSL mode to require."
 	case strings.Contains(low, "keychain"):
 		code = CodeKeychain
-		message = "Assay can't reach your keychain. Use environment variables for this connection instead."
+		message = "Slaw can't reach your keychain. Use environment variables for this connection instead."
 	case strings.Contains(low, "could not connect") || strings.Contains(low, "connection refused") || strings.Contains(low, "no such host") ||
 		strings.Contains(low, "could not translate host") || strings.Contains(low, "network is unreachable") || strings.Contains(low, "unable to connect"):
 		code = CodeUnreachable
-		message = fmt.Sprintf("Assay couldn't reach %s. Is the VPN on?", host)
+		message = fmt.Sprintf("Slaw couldn't reach %s. Is the VPN on?", host)
 	}
 	return code, message
 }

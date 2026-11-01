@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// BundleImportDialog — "Import .assay…" (#118), from the workspace menu (into the
+// BundleImportDialog — "Import .slaw…" (#118), from the workspace menu (into the
 // open workspace) and from the launcher (into a new one). The file is verified
 // and previewed before anything is written; each item that already exists gets
 // its own Rename / Overwrite / Skip. A bundle holds no data and no credentials.
@@ -24,21 +24,21 @@ useModalKeys(open, () => close(), root)
   <div v-if="open" class="modal-overlay" role="presentation" @click.self="close">
     <div ref="root" class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="bi-h" data-testid="bundle-import-dialog">
       <div class="d-head">
-        <h2 id="bi-h">Import .assay</h2>
+        <h2 id="bi-h">Import .slaw</h2>
         <p v-if="mode === 'new'">Start a new workspace from a bundle someone shared with you.</p>
         <p v-else>Add notebooks, queries, skills and data artifacts from a bundle to <b>{{ workspaceInfo?.name }}</b>.</p>
       </div>
 
       <div class="d-body">
-        <div v-if="stage === 'picking' && !error" class="help">Choose a .assay file…</div>
+        <div v-if="stage === 'picking' && !error" class="help">Choose a .slaw file…</div>
 
         <form v-if="stage === 'passphrase'" class="bi-pass" @submit.prevent="load">
-          <div class="note info"><Icon name="lock" :size="16" /><span><b>This bundle is locked.</b> Enter the passphrase its author gave you. Assay can't recover it.</span></div>
+          <div class="note info"><Icon name="lock" :size="16" /><span><b>This bundle is locked.</b> Enter the passphrase its author gave you. Slaw can't recover it.</span></div>
           <div class="field">
             <label for="bi-pass">Passphrase</label>
             <input id="bi-pass" ref="passEl" v-model="passphrase" class="field-input" :class="{ 'field-input-error': !!error }" type="password" autocomplete="off" :disabled="busy"
               :aria-invalid="error ? 'true' : undefined" aria-describedby="bi-pass-e" data-testid="bi-passphrase" />
-            <div v-if="error" id="bi-pass-e" class="help" style="color: var(--assay-error);" role="alert" data-testid="bi-wrong-pass">{{ error }}</div>
+            <div v-if="error" id="bi-pass-e" class="help" style="color: var(--slaw-error);" role="alert" data-testid="bi-wrong-pass">{{ error }}</div>
           </div>
         </form>
 
@@ -123,7 +123,7 @@ useModalKeys(open, () => close(), root)
           </div>
           <div v-if="preview.makerNotes.length" class="note maker" data-testid="bi-maker-notes">
             <Icon name="fileText" :size="16" />
-            <span><b>From the person who made this bundle</b> (not checked by Assay)<span v-for="w in preview.makerNotes" :key="w" style="display: block;">{{ w }}</span></span>
+            <span><b>From the person who made this bundle</b> (not checked by Slaw)<span v-for="w in preview.makerNotes" :key="w" style="display: block;">{{ w }}</span></span>
           </div>
         </template>
 
@@ -161,10 +161,10 @@ useModalKeys(open, () => close(), root)
 .bi-from svg { flex: none; }
 .bi-from { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sh-graphite); }
 .bi-bulk { display: flex; gap: 12px; align-items: center; font-size: 13px; flex-wrap: wrap; }
-.bi-list { flex: none; list-style: none; margin: 0; padding: 0; border: 1.5px solid var(--assay-border); border-radius: var(--sh-radius-sm); overflow: hidden; }
-.bi-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--assay-border); min-width: 0; }
+.bi-list { flex: none; list-style: none; margin: 0; padding: 0; border: 1.5px solid var(--slaw-border); border-radius: var(--sh-radius-sm); overflow: hidden; }
+.bi-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--slaw-border); min-width: 0; }
 .bi-item:last-child { border-bottom: 0; }
-.bi-item.conflict { background: color-mix(in srgb, var(--assay-warn) 8%, transparent); }
+.bi-item.conflict { background: color-mix(in srgb, var(--slaw-warn) 8%, transparent); }
 .bi-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; cursor: pointer; }
 .bi-name .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sh-graphite); flex: none; min-width: 96px; }
 .bi-name .nm { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -172,14 +172,14 @@ useModalKeys(open, () => close(), root)
 .bi-choice { display: flex; align-items: center; gap: 8px; flex: none; }
 .bi-select { width: 210px; padding-top: 4px; padding-bottom: 4px; }
 .bi-result { font-size: 13px; color: var(--sh-graphite); }
-.bi-result.bad { color: var(--assay-error); }
+.bi-result.bad { color: var(--slaw-error); }
 .bi-conns { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bi-conns legend { font-weight: 600; font-size: 14px; padding: 0; margin-bottom: 4px; }
-.bi-conn { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--assay-border-subtle); }
+.bi-conn { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--slaw-border-subtle); }
 .bi-conn-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .bi-details { list-style: none; margin: 0 0 0 24px; padding: 0; font-family: var(--sh-font-mono); font-size: 12px; color: var(--sh-graphite); }
-.bi-risk { margin-left: 24px; font-size: 13px; padding: 4px 10px; border-left: 3px solid var(--assay-warn); background: color-mix(in srgb, var(--assay-warn) 10%, transparent); }
-.note.maker { border-left-color: var(--assay-border); background: var(--sh-paper-2); }
+.bi-risk { margin-left: 24px; font-size: 13px; padding: 4px 10px; border-left: 3px solid var(--slaw-warn); background: color-mix(in srgb, var(--slaw-warn) 10%, transparent); }
+.note.maker { border-left-color: var(--slaw-border); background: var(--sh-paper-2); }
 .bi-from, .bi-details li, .bi-risk, .note, .bi-name .nm, .bi-conn .nm { overflow-wrap: anywhere; }
 /* The body scrolls; nothing inside it shrinks to fit (a long list would
    otherwise be squeezed and its rows hidden). */

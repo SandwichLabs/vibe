@@ -3,7 +3,7 @@
  * model / endpoint / Cloudflare account (never the key), the form that changes
  * them, the model list for local servers, and the write-only API key: saved to
  * the OS keychain, replaced or cleared, never read back. A field set by a
- * ASSAY_LLM_* variable is disabled with the variable's name. The component only
+ * SLAW_LLM_* variable is disabled with the variable's name. The component only
  * renders it.
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
@@ -156,8 +156,8 @@ export function useLlmSettings() {
     const label = formInfo.value?.label ?? form.value.provider
     if (fileKeyHazard.value) {
       const ok = await askConfirm({
-        title: `Send your ~/.assay.yaml key to ${label}?`,
-        message: `The plaintext key in ~/.assay.yaml is used for whichever provider is selected, so it would be sent to ${label}. Cancel and move it to the keychain first, or save a key for ${label} below.`,
+        title: `Send your ~/.slaw.yaml key to ${label}?`,
+        message: `The plaintext key in ~/.slaw.yaml is used for whichever provider is selected, so it would be sent to ${label}. Cancel and move it to the keychain first, or save a key for ${label} below.`,
         confirmLabel: `Use it for ${label}`,
       })
       if (!ok) return
@@ -206,7 +206,7 @@ export function useLlmSettings() {
   }
 
   async function clearKey() {
-    const ok = await askConfirm({ title: 'Remove the API key?', message: 'Assay will forget the key saved in your keychain. You can paste it again later.', confirmLabel: 'Remove key' })
+    const ok = await askConfirm({ title: 'Remove the API key?', message: 'Slaw will forget the key saved in your keychain. You can paste it again later.', confirmLabel: 'Remove key' })
     if (!ok) return
     busy.value = true
     message.value = ''
@@ -223,7 +223,7 @@ export function useLlmSettings() {
   async function migrate() {
     let overwrite = false
     if (keyStatus.value?.keychainHasKey) {
-      const ok = await askConfirm({ title: 'Replace the key in your keychain?', message: 'Your keychain already has an API key. Moving the one from ~/.assay.yaml replaces it.', confirmLabel: 'Replace key' })
+      const ok = await askConfirm({ title: 'Replace the key in your keychain?', message: 'Your keychain already has an API key. Moving the one from ~/.slaw.yaml replaces it.', confirmLabel: 'Replace key' })
       if (!ok) return
       overwrite = true
     }
@@ -231,7 +231,7 @@ export function useLlmSettings() {
     message.value = ''
     try {
       await App.MigrateLLMKeyToKeychain(overwrite)
-      message.value = 'Moved to your keychain, and blanked in ~/.assay.yaml.'
+      message.value = 'Moved to your keychain, and blanked in ~/.slaw.yaml.'
       await refreshKey()
     } catch (e: any) {
       message.value = 'Error: ' + errorText(e)

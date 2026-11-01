@@ -11,10 +11,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/jsonenc"
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // --- write_artifact / list_artifacts / get_artifact (epic #162, step 3) ---

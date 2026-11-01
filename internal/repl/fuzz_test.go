@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // assertTerminalSafe fails when out could do anything to a terminal beyond

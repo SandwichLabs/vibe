@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 var (
@@ -374,7 +374,7 @@ func testInSubprocess(ctx context.Context, def Def, cred secrets.Credential, o t
 	return res
 }
 
-// runChildProcess re-executes the assay binary as the MotherDuck child, hands it
+// runChildProcess re-executes the slaw binary as the MotherDuck child, hands it
 // req on stdin (the credential never touches argv or the environment) and
 // returns the last line of its stdout: MotherDuck may write other text there.
 // Errors are generic and never carry the credential.
@@ -383,7 +383,7 @@ func runChildProcess(ctx context.Context, req childRequest, o testOpts) ([]byte,
 	if exe == "" {
 		var err error
 		if exe, err = os.Executable(); err != nil {
-			return nil, fmt.Errorf("failed to find the assay executable: %w", err)
+			return nil, fmt.Errorf("failed to find the slaw executable: %w", err)
 		}
 	}
 	body, err := json.Marshal(req)
@@ -409,7 +409,7 @@ func runChildProcess(ctx context.Context, req childRequest, o testOpts) ([]byte,
 // RunChild is the subprocess side of the MotherDuck test: it reads one JSON
 // request from in, runs the test in this process (which holds exactly one
 // MotherDuck token) and writes one JSON line to out. The caller is the hidden
-// `assay __conn-test` command.
+// `slaw __conn-test` command.
 func RunChild(ctx context.Context, in io.Reader, out io.Writer) error {
 	var req childRequest
 	if err := json.NewDecoder(in).Decode(&req); err != nil {

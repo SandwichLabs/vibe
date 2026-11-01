@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/connname"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/semantics/assert"
+	"github.com/SandwichLabs/slaw/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics/assert"
 )
 
 // Running a definition: assertions, join profiling and a metric's "Try it".
-// These are the person's actions (`assay semantics check|profile`, the
+// These are the person's actions (`slaw semantics check|profile`, the
 // Semantics view); no agent tool or MCP method reaches them. Every statement
 // they plan runs through the caller's ReadOnlyRunner, which is the agent
 // policy's read-only path in the tightest tier (hub.NewAgentHandler with
@@ -188,7 +188,7 @@ func entitiesNamed(ctx context.Context, st semantics.ReadStore, name string) ([]
 			return []semantics.Entity{e}, nil
 		}
 	}
-	return nil, fmt.Errorf("there is no entity named %q (`assay semantics list` shows them)", name)
+	return nil, fmt.Errorf("there is no entity named %q (`slaw semantics list` shows them)", name)
 }
 
 func metricsNamed(ctx context.Context, st semantics.ReadStore, name string) ([]semantics.Metric, error) {
@@ -204,7 +204,7 @@ func metricsNamed(ctx context.Context, st semantics.ReadStore, name string) ([]s
 			return []semantics.Metric{m}, nil
 		}
 	}
-	return nil, fmt.Errorf("there is no metric named %q (`assay semantics list` shows them)", name)
+	return nil, fmt.Errorf("there is no metric named %q (`slaw semantics list` shows them)", name)
 }
 
 // ProfileJoin profiles one join and records the measure in its file (see

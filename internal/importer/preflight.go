@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // maxBadValues bounds how many pre-flight problems Summary.BadValues carries

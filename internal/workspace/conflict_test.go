@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 func conflictFixture(t *testing.T) (Workspace, session.Session) {
@@ -55,7 +55,7 @@ func TestResolveConflict_Notebook(t *testing.T) {
 	ctx := context.Background()
 	nb, _, err := ws.Notebooks().Save(ctx, map[string]any{"title": "Weekly", "cells": []any{}})
 	require.NoError(t, err)
-	path := filepath.Join(ws.Root(), "notebooks", nb.ID+".asnb")
+	path := filepath.Join(ws.Root(), "notebooks", nb.ID+".slnb")
 	local := map[string]any{"id": nb.ID, "rev": nb.Rev, "title": "My edit", "cells": []any{}}
 
 	// Someone else saves the file.
@@ -110,7 +110,7 @@ func TestResolveConflict_Query(t *testing.T) {
 	ctx := context.Background()
 	store := ws.Queries()
 	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "queries", "daily.sql"),
-		[]byte("-- assay: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
+		[]byte("-- slaw: {\"title\":\"Daily\",\"description\":\"by the agent\",\"connection\":\"local\"}\nSELECT 1\n"), 0o600))
 	base, err := store.Get(ctx, "daily")
 	require.NoError(t, err)
 	mine := map[string]any{"title": "Daily", "sql": "SELECT 2"}

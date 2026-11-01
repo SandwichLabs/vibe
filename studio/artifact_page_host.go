@@ -8,9 +8,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // errPageScripted is the fixed refusal to open a scripted page in a frame: it
@@ -18,7 +18,7 @@ import (
 var errPageScripted = errors.New("this page has script, so it opens in a page window")
 
 // ArtifactPageGrant is what OpenArtifactPage returns: the token the page frame's
-// URL is made from (/assay-view/<token>/page), bound to one hash.
+// URL is made from (/slaw-view/<token>/page), bound to one hash.
 type ArtifactPageGrant struct {
 	Token string `json:"token"`
 	// Hash is the PageHash the token is bound to.

@@ -1,4 +1,4 @@
-// Package config loads Assay's app-level settings (Viper) and the LLM provider
+// Package config loads Slaw's app-level settings (Viper) and the LLM provider
 // settings, including provider defaults and the keychain-backed API key lookup.
 package config
 
@@ -41,8 +41,8 @@ const (
 )
 
 // LLMConfig configures the in-app conversational wizard agent's model provider.
-// It is app-global and viper-driven: set it in ~/.assay.yaml under `llm:` or via
-// ASSAY_LLM_* environment variables. Cloud API keys are read from the standard
+// It is app-global and viper-driven: set it in ~/.slaw.yaml under `llm:` or via
+// SLAW_LLM_* environment variables. Cloud API keys are read from the standard
 // provider env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) when APIKey is unset.
 type LLMConfig struct {
 	Provider string `mapstructure:"provider"` // local | ollama | openai | anthropic | gemini | cloudflare
@@ -52,9 +52,9 @@ type LLMConfig struct {
 	// gateway (cf-aig-gateway-id). Neither is secret.
 	AccountID string `mapstructure:"account_id"`
 	Gateway   string `mapstructure:"gateway"`
-	APIKey    string `mapstructure:"api_key"` // legacy: env or ~/.assay.yaml value; use ResolveLLMKey (keychain aware)
+	APIKey    string `mapstructure:"api_key"` // legacy: env or ~/.slaw.yaml value; use ResolveLLMKey (keychain aware)
 
-	// FileAPIKey is the plaintext llm.api_key found in ~/.assay.yaml (legacy,
+	// FileAPIKey is the plaintext llm.api_key found in ~/.slaw.yaml (legacy,
 	// read-only; #114 offers to move it into the keychain). Never set from the
 	// environment.
 	FileAPIKey string `mapstructure:"-"`
@@ -111,10 +111,10 @@ func DefaultConfig() Config {
 const DefaultLLMEndpoint = "http://localhost:8080/v1"
 
 // Load reads application configuration from (in increasing precedence): built-in
-// defaults, ~/.assay.yaml, and ASSAY_* environment variables. It uses an isolated
+// defaults, ~/.slaw.yaml, and SLAW_* environment variables. It uses an isolated
 // viper instance so it is safe to call from the Wails Studio binary, which does
 // not run through the cobra/viper CLI init. Nested keys map to env vars by
-// upper-snake-casing the path, e.g. llm.provider -> ASSAY_LLM_PROVIDER.
+// upper-snake-casing the path, e.g. llm.provider -> SLAW_LLM_PROVIDER.
 //
 // Cloud API keys fall back to the provider's standard env var when llm.api_key
 // is unset, so secrets stay out of config files.
@@ -125,7 +125,7 @@ func Load() Config {
 	v.SetDefault("llm.provider", cfg.LLM.Provider)
 	v.SetDefault("llm.endpoint", cfg.LLM.Endpoint)
 	v.SetDefault("llm.model", cfg.LLM.Model)
-	v.SetDefault("llm.account_id", cfg.LLM.AccountID) // a default is what lets ASSAY_LLM_ACCOUNT_ID reach Unmarshal
+	v.SetDefault("llm.account_id", cfg.LLM.AccountID) // a default is what lets SLAW_LLM_ACCOUNT_ID reach Unmarshal
 	v.SetDefault("llm.gateway", cfg.LLM.Gateway)
 	v.SetDefault("llm.api_key", cfg.LLM.APIKey)
 
@@ -134,7 +134,7 @@ func Load() Config {
 		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
 	}
-	v.SetEnvPrefix("ASSAY")
+	v.SetEnvPrefix("SLAW")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	_ = v.ReadInConfig() // missing config file is fine; defaults + env still apply
@@ -182,21 +182,21 @@ func (l *LLMConfig) resolve() {
 	}
 }
 
-// LLMConfigPath is the app config file: $ASSAY_CONFIG_FILE if set, else
-// ~/.assay.yaml. "" when neither can be determined. It holds the live LLM
+// LLMConfigPath is the app config file: $SLAW_CONFIG_FILE if set, else
+// ~/.slaw.yaml. "" when neither can be determined. It holds the live LLM
 // settings (llm.*); the other per-user home is prefs.DefaultDir() (themes,
 // recents), which is a different file on purpose.
 func LLMConfigPath() string {
-	if p := strings.TrimSpace(os.Getenv("ASSAY_CONFIG_FILE")); p != "" {
+	if p := strings.TrimSpace(os.Getenv("SLAW_CONFIG_FILE")); p != "" {
 		return p
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".assay.yaml")
+		return filepath.Join(home, ".slaw.yaml")
 	}
 	return ""
 }
 
-// FormatVersion is the current .assay format version.
+// FormatVersion is the current .slaw format version.
 const FormatVersion = "1.0.0"
 
 // AppVersion is set at build time via ldflags.

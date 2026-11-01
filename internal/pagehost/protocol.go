@@ -11,7 +11,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
 )
 
 // HelperArg is the first argument that puts the Studio binary in helper mode.
@@ -44,9 +44,9 @@ const (
 	// Helper to Studio.
 	TypeHeartbeat = "hb"     // the page is alive (posted by the injected script)
 	TypeReady     = "ready"  // the first document finished loading
-	TypeRun       = "run"    // assay.run(query, values)
+	TypeRun       = "run"    // slaw.run(query, values)
 	TypeDoc       = "doc"    // a navigation asks for the entry document with a new query string
-	TypeCall      = "call"   // assay.use(name).op(arg): a capability call
+	TypeCall      = "call"   // slaw.use(name).op(arg): a capability call
 	TypePut       = "put"    // one chunk of a capability argument too big for a call (acked with a reply)
 	TypeGone      = "gone"   // the web process died
 	TypeClosed    = "closed" // the person closed the window
@@ -338,7 +338,7 @@ func (w *Writer) Send(m *Message) error {
 
 // CSP is the policy every response of the page's scheme carries (H4). No
 // 'unsafe-eval' and no inline script: data reaches script through a JSON block.
-// 'self' is assay-page://<name>/, which serves only bytes Studio sent, and
-// nothing it serves runs a query: queries go through assay.run.
+// 'self' is slaw-page://<name>/, which serves only bytes Studio sent, and
+// nothing it serves runs a query: queries go through slaw.run.
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
 	"font-src 'self'; connect-src 'self'; worker-src blob:; frame-src 'none'; form-action 'none'; base-uri 'none'"

@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	guiBinName = "assay-studio"
-	guiAppName = "Assay.app"
+	guiBinName = "slaw-studio"
+	guiAppName = "Slaw.app"
 )
 
 // guiLauncher finds the desktop app. Every lookup is a field so tests can fake the file system.
@@ -21,12 +21,12 @@ type guiLauncher struct {
 	home         string
 	executable   func() (string, error)
 	evalSymlinks func(string) (string, error)
-	isFile       func(string) bool // a regular file (the assay-studio binary)
+	isFile       func(string) bool // a regular file (the slaw-studio binary)
 	isDir        func(string) bool // a directory (the .app bundle)
 	lookPath     func(string) (string, error)
 }
 
-// guiCommand is the argv of the process that replaces `assay`.
+// guiCommand is the argv of the process that replaces `slaw`.
 type guiCommand struct {
 	path string
 	argv []string
@@ -51,9 +51,9 @@ func newGUILauncher() guiLauncher {
 	}
 }
 
-// find looks for, in order: an assay-studio binary beside the real assay executable (symlinks are
-// resolved, so a Homebrew-style link into another directory still finds its neighbour); assay-studio
-// on PATH; on macOS only, the Assay.app bundle beside the CLI, in ~/Applications or in
+// find looks for, in order: a slaw-studio binary beside the real slaw executable (symlinks are
+// resolved, so a Homebrew-style link into another directory still finds its neighbour); slaw-studio
+// on PATH; on macOS only, the Slaw.app bundle beside the CLI, in ~/Applications or in
 // /Applications, started with `open -a`. target is the one argument Studio opens (empty for none).
 func (l guiLauncher) find(target string) (guiCommand, error) {
 	argv := []string{guiBinName}
@@ -99,7 +99,7 @@ func (l guiLauncher) find(target string) (guiCommand, error) {
 		}
 	}
 
-	return guiCommand{}, fmt.Errorf("%s binary not found; searched: %s (`assay studio` without --gui opens the terminal UI)", guiBinName, strings.Join(searched, ", "))
+	return guiCommand{}, fmt.Errorf("%s binary not found; searched: %s (`slaw studio` without --gui opens the terminal UI)", guiBinName, strings.Join(searched, ", "))
 }
 
 // launchGUI finds the desktop app and executes it, replacing the current process. dir is passed

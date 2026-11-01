@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Join profiling measures how two entities' tables really relate and records
 // it in the join's file as a measured: block, so the declared cardinality can
-// be compared with the data. It is the person's action only (`assay semantics
+// be compared with the data. It is the person's action only (`slaw semantics
 // profile`, the Semantics view's Profile button): no agent tool or MCP method
 // calls it, and the queries it plans are run by the caller's read-only runner.
 //
@@ -91,18 +91,18 @@ func PlanProfile(j *Join, left, right *Entity) (*ProfileQueries, error) {
 		}
 		return strings.Join(parts, " AND ")
 	}
-	lt, rt := lTable+" AS assay_l", rTable+" AS assay_r"
+	lt, rt := lTable+" AS slaw_l", rTable+" AS slaw_r"
 	return &ProfileQueries{
 		LeftRows:  Statement{left.Connection, "SELECT count(*) FROM " + lTable},
 		RightRows: Statement{right.Connection, "SELECT count(*) FROM " + rTable},
 		LeftOrphans: Statement{both, fmt.Sprintf("SELECT count(*) FROM %s WHERE NOT EXISTS (SELECT 1 FROM %s WHERE %s)",
-			lt, rt, match("assay_l", "assay_r"))},
+			lt, rt, match("slaw_l", "slaw_r"))},
 		RightOrphans: Statement{both, fmt.Sprintf("SELECT count(*) FROM %s WHERE NOT EXISTS (SELECT 1 FROM %s WHERE %s)",
-			rt, lt, match("assay_l", "assay_r"))},
-		MaxFanout: Statement{both, fmt.Sprintf("SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM %s WHERE %s AND EXISTS (SELECT 1 FROM %s WHERE %s) GROUP BY %s) AS assay_g",
-			rt, notNull("assay_r", rk), lt, match("assay_l", "assay_r"), groupBy("assay_r", rk))},
-		LeftDup: Statement{left.Connection, fmt.Sprintf("SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM %s WHERE %s GROUP BY %s) AS assay_g",
-			lt, notNull("assay_l", lk), groupBy("assay_l", lk))},
+			rt, lt, match("slaw_l", "slaw_r"))},
+		MaxFanout: Statement{both, fmt.Sprintf("SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM %s WHERE %s AND EXISTS (SELECT 1 FROM %s WHERE %s) GROUP BY %s) AS slaw_g",
+			rt, notNull("slaw_r", rk), lt, match("slaw_l", "slaw_r"), groupBy("slaw_r", rk))},
+		LeftDup: Statement{left.Connection, fmt.Sprintf("SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM %s WHERE %s GROUP BY %s) AS slaw_g",
+			lt, notNull("slaw_l", lk), groupBy("slaw_l", lk))},
 	}, nil
 }
 

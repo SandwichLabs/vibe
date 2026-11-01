@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/testsupport/miniotest"
 )
 
 // These are the acceptance of #131 step 7: the storage secret of an SSO-signed
@@ -228,7 +228,7 @@ func TestSSORotationFailureFailsClosedNeverAnonymous(t *testing.T) {
 	got, err := r.readObject(seen)
 	require.NoError(t, err)
 	assert.Equal(t, "seen", got)
-	assert.Equal(t, "assay_floci", r.secretNamed(seen))
+	assert.Equal(t, "slaw_floci", r.secretNamed(seen))
 
 	r.w.signOut(t)
 	r.clk.setTo(r.e0.Add(-4 * time.Minute))
@@ -244,7 +244,7 @@ func TestSSORotationFailureFailsClosedNeverAnonymous(t *testing.T) {
 	var lakes int
 	require.NoError(t, r.o.Sess.DB().QueryRow(`SELECT count(*) FROM duckdb_databases() WHERE database_name = 'lake'`).Scan(&lakes))
 	assert.Zero(t, lakes)
-	assert.Equal(t, "assay-deny-s3", r.secretNamed(fresh), "the SSO secret is gone and the deny secret answers")
+	assert.Equal(t, "slaw-deny-s3", r.secretNamed(fresh), "the SSO secret is gone and the deny secret answers")
 	assert.Contains(t, r.heard.list(), "floci", "the status listener told the UI")
 
 	got, err = r.readObject(fresh)

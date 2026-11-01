@@ -179,7 +179,7 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
   function useEnvInstead() {
     keychainBlocked.value = false
     method.value = 'env'
-    if (!envPrefix.value) envPrefix.value = f.name.toUpperCase() || 'ASSAY'
+    if (!envPrefix.value) envPrefix.value = f.name.toUpperCase() || 'SLAW'
   }
 
   // ---- remove ----

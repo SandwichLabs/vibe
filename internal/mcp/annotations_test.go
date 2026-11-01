@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/agents"
 )
 
 // Every tool an MCP client sees carries annotations that match its category.
@@ -129,12 +129,12 @@ const (
 func TestInitialize_ReportsIdentityAndInstructions(t *testing.T) {
 	calls := 0
 	s := New(refusingHandler{}, slog.New(slog.DiscardHandler),
-		WithServerInfo("assay mcp serve", "v1.2.3"),
+		WithServerInfo("slaw mcp serve", "v1.2.3"),
 		WithInstructions(func(context.Context) string { calls++; return "orientation text" }))
 	res := stdioRoundTrip(t, s, []string{initLine}, 1)
 	result := asMap(t, res[0]["result"])
 	info := asMap(t, result["serverInfo"])
-	assert.Equal(t, "assay mcp serve", info["name"])
+	assert.Equal(t, "slaw mcp serve", info["name"])
 	assert.Equal(t, "v1.2.3", info["version"])
 	assert.Equal(t, "orientation text", result["instructions"])
 	assert.Equal(t, 1, calls)
@@ -144,14 +144,14 @@ func TestInitialize_ReportsIdentityAndInstructions(t *testing.T) {
 // server/discover, which must carry the same instructions.
 func TestServerDiscover_CarriesInstructions(t *testing.T) {
 	s := New(refusingHandler{}, slog.New(slog.DiscardHandler),
-		WithServerInfo("assay mcp serve", "v1.2.3"),
+		WithServerInfo("slaw mcp serve", "v1.2.3"),
 		WithInstructions(func(context.Context) string { return "orientation text" }))
 	line := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`
 	res := stdioRoundTrip(t, s, []string{line}, 1)
 	result := asMap(t, res[0]["result"])
 	assert.Equal(t, "orientation text", result["instructions"])
 	info := asMap(t, asMap(t, result["_meta"])["io.modelcontextprotocol/serverInfo"])
-	assert.Equal(t, "assay mcp serve", info["name"])
+	assert.Equal(t, "slaw mcp serve", info["name"])
 }
 
 func TestInitialize_DefaultsWithoutOptions(t *testing.T) {

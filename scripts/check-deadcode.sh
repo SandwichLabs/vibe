@@ -11,7 +11,7 @@ command -v deadcode >/dev/null || { echo "deadcode not installed: go install gol
 allow="$(mktemp)"
 trap 'rm -f "$allow"' EXIT
 grep -vE '^[[:space:]]*(#|$)' scripts/deadcode-allow.txt > "$allow"
-out="$(deadcode -tags webkit2_41,duckdb_arrow ./cmd/assay ./studio ./tools/ssofake)"
+out="$(deadcode -tags webkit2_41,duckdb_arrow ./cmd/slaw ./studio ./tools/ssofake)"
 new="$(printf '%s\n' "$out" | grep -vEf "$allow" || true)"
 if [ -n "$new" ]; then
   echo "new unreachable functions (delete them, or move test-only helpers to export_test.go):"

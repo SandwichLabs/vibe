@@ -10,42 +10,42 @@ import (
 	"strings"
 )
 
-// Install is what install.sh recorded about the Assay it put on this machine.
+// Install is what install.sh recorded about the Slaw it put on this machine.
 type Install struct {
 	ManifestPath string
 	// Version is the manifest's "version=" line without a leading "v" (install.sh writes 0.1.2).
 	Version string
-	// InstallDir is the directory of the recorded `assay` binary (install.sh --install-dir).
+	// InstallDir is the directory of the recorded `slaw` binary (install.sh --install-dir).
 	InstallDir string
 	// Studio is true when the desktop app was installed too (so an update must not pass --cli-only).
 	Studio bool
-	// AppDir is, on macOS, the directory holding "Assay.app" (ASSAY_APP_DIR).
+	// AppDir is, on macOS, the directory holding "Slaw.app" (SLAW_APP_DIR).
 	AppDir string
-	// StudioPath is the Linux assay-studio binary, or the macOS .app directory.
+	// StudioPath is the Linux slaw-studio binary, or the macOS .app directory.
 	StudioPath string
 
 	files []string
 	dirs  []string
 }
 
-// manifestPath matches install.sh: macOS ~/Library/Application Support/assay/install-manifest,
-// elsewhere ${XDG_DATA_HOME:-~/.local/share}/assay/install-manifest.
+// manifestPath matches install.sh: macOS ~/Library/Application Support/slaw/install-manifest,
+// elsewhere ${XDG_DATA_HOME:-~/.local/share}/slaw/install-manifest.
 func (u *Updater) manifestPath() (string, error) {
 	if u.goos == "darwin" {
 		home, err := u.home()
 		if err != nil {
 			return "", fmt.Errorf("failed to locate the home directory: %w", err)
 		}
-		return filepath.Join(home, "Library", "Application Support", "assay", "install-manifest"), nil
+		return filepath.Join(home, "Library", "Application Support", "slaw", "install-manifest"), nil
 	}
 	if d := u.getenv("XDG_DATA_HOME"); d != "" {
-		return filepath.Join(d, "assay", "install-manifest"), nil
+		return filepath.Join(d, "slaw", "install-manifest"), nil
 	}
 	home, err := u.home()
 	if err != nil {
 		return "", fmt.Errorf("failed to locate the home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "assay", "install-manifest"), nil
+	return filepath.Join(home, ".local", "share", "slaw", "install-manifest"), nil
 }
 
 // ReadManifest parses an install.sh manifest: "version=X", "F <sha256> <path>" and "D - <path>".
@@ -89,11 +89,11 @@ func ReadManifest(path string) (*Install, error) {
 func (in *Install) derive() {
 	for _, p := range in.files {
 		switch filepath.Base(p) {
-		case "assay":
+		case "slaw":
 			if in.InstallDir == "" {
 				in.InstallDir = filepath.Dir(p)
 			}
-		case "assay-studio":
+		case "slaw-studio":
 			in.Studio, in.StudioPath = true, p
 			if in.InstallDir == "" {
 				in.InstallDir = filepath.Dir(p)
@@ -101,7 +101,7 @@ func (in *Install) derive() {
 		}
 	}
 	for _, d := range in.dirs {
-		if filepath.Base(d) == "Assay.app" {
+		if filepath.Base(d) == "Slaw.app" {
 			in.Studio, in.StudioPath, in.AppDir = true, d, filepath.Dir(d)
 		}
 	}

@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 func myConnDef(port int, readOnly bool) workspace.ConnectionDef {
@@ -98,7 +98,7 @@ func TestMySQLEndToEnd(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.NotContains(t, fmt.Sprint(rows[0][0]), myPassword)
 	assert.NotContains(t, fmt.Sprint(rows[0][0]), "127.0.0.1")
-	rows = queryAll(t, eng, "SELECT name, secret_string FROM duckdb_secrets() WHERE name = 'assay_shop'")
+	rows = queryAll(t, eng, "SELECT name, secret_string FROM duckdb_secrets() WHERE name = 'slaw_shop'")
 	for _, r := range rows {
 		assert.NotContains(t, fmt.Sprint(r...), myPassword)
 	}

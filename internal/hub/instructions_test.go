@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/agents"
 )
 
 func initializeResult(t *testing.T, run *serveRun) (info map[string]any, instructions string) {

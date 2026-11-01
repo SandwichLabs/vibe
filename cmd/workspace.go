@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/templates"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/templates"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -21,12 +21,12 @@ var workspaceCmd = &cobra.Command{
 	Use:   "workspace",
 	Short: "Create and inspect workspaces",
 	Long: `A workspace is a folder (optionally a git repository) holding notebooks,
-saved queries and skills as plain files, plus an assay.yaml that marks it and
+saved queries and skills as plain files, plus a slaw.yaml that marks it and
 lists its connections. Data stays where it lives; a workspace only describes
 how to reach it. See ` + docRef("workspaces"),
 }
 
-const initLong = `Turn a folder into an Assay workspace: an assay.yaml marker, notebooks/,
+const initLong = `Turn a folder into a Slaw workspace: a slaw.yaml marker, notebooks/,
 queries/, skills/ and data/ folders, a .gitignore and .gitattributes (merged
 into any that exist), and a default "local" DuckDB connection at
 data/local.duckdb.
@@ -85,7 +85,7 @@ func runWorkspaceInit(cmd *cobra.Command, args []string) error {
 	if len(args) == 1 {
 		dir = args[0]
 	}
-	if isAssayFile(dir) {
+	if isSlawFile(dir) {
 		return errLegacyFileArg
 	}
 	name, _ := cmd.Flags().GetString("name")
@@ -130,11 +130,11 @@ func runWorkspaceInit(cmd *cobra.Command, args []string) error {
 	if rel := displayDir(dir); rel != "." {
 		fmt.Fprintf(out, "  cd %s\n", rel)
 	}
-	fmt.Fprintln(out, "  assay workspace info                         see connections and counts")
-	fmt.Fprintln(out, `  assay query "SELECT 42 AS answer"            run SQL against the default connection`)
-	fmt.Fprintln(out, "  assay import data.csv --into my_table        load a CSV or Excel file")
-	fmt.Fprintln(out, "  assay studio                                 open the terminal UI (`--gui` opens the desktop app)")
-	fmt.Fprintln(out, "  assay mcp serve                              let Claude and other MCP clients use it")
+	fmt.Fprintln(out, "  slaw workspace info                         see connections and counts")
+	fmt.Fprintln(out, `  slaw query "SELECT 42 AS answer"            run SQL against the default connection`)
+	fmt.Fprintln(out, "  slaw import data.csv --into my_table        load a CSV or Excel file")
+	fmt.Fprintln(out, "  slaw studio                                 open the terminal UI (`--gui` opens the desktop app)")
+	fmt.Fprintln(out, "  slaw mcp serve                              let Claude and other MCP clients use it")
 	return nil
 }
 
@@ -156,7 +156,7 @@ func seedWorkspaceTemplate(ctx context.Context, ws workspace.Workspace, tmpl tem
 	// supplies the path and is closed by the caller). No .env question here:
 	// a brand-new workspace has no .env to ask about.
 	o, err := hub.Open(ctx, ws.Root(), hub.OpenOptions{
-		App: "assay workspace init", Logger: logger, Resolver: cliResolver(), Redactor: cliRedactor,
+		App: "slaw workspace init", Logger: logger, Resolver: cliResolver(), Redactor: cliRedactor,
 	})
 	if err != nil {
 		var oe *hub.OpenError
@@ -210,7 +210,7 @@ type infoReport struct {
 		AskBeforeWrites bool   `json:"ask_before_writes"`
 	} `json:"agent"`
 	// DuckDB is the engine version; Extensions are the downloaded extensions
-	// installed in Assay's own extension directory (never ~/.duckdb).
+	// installed in Slaw's own extension directory (never ~/.duckdb).
 	DuckDB     string   `json:"duckdb,omitempty"`
 	Extensions []string `json:"extensions"`
 	HubHolder  string   `json:"hub_holder"`
@@ -225,7 +225,7 @@ func runWorkspaceInfo(cmd *cobra.Command, _ []string) error {
 		ctx = context.Background()
 	}
 
-	o, err := openWorkspace(ctx, dir, true, false, "assay workspace info", io.Discard)
+	o, err := openWorkspace(ctx, dir, true, false, "slaw workspace info", io.Discard)
 	if err != nil {
 		return err
 	}

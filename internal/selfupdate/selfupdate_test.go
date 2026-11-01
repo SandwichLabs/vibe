@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 )
 
 // fakeGH stands in for github.com and api.github.com over TLS. Handlers read the
@@ -47,20 +47,20 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.hits = append(f.hits, r.URL.Path+" UA="+r.UserAgent()+" cookie="+r.Header.Get("Cookie")+" auth="+r.Header.Get("Authorization"))
 	switch {
-	case r.URL.Path == "/SandwichLabs/assay/releases/latest":
+	case r.URL.Path == "/SandwichLabs/slaw/releases/latest":
 		if f.status != 0 {
 			w.WriteHeader(f.status)
 			return
 		}
 		loc := f.location
 		if loc == "" {
-			loc = f.srv.URL + "/SandwichLabs/assay/releases/tag/" + f.latest
+			loc = f.srv.URL + "/SandwichLabs/slaw/releases/tag/" + f.latest
 		}
 		if loc != "-" {
 			w.Header().Set("Location", loc)
 		}
 		w.WriteHeader(http.StatusFound)
-	case strings.HasPrefix(r.URL.Path, "/api/repos/SandwichLabs/assay/releases/tags/"):
+	case strings.HasPrefix(r.URL.Path, "/api/repos/SandwichLabs/slaw/releases/tags/"):
 		if f.notesBody == "" {
 			http.NotFound(w, r)
 			return
@@ -98,9 +98,9 @@ func TestCheck_ParsesTheTagFromTheRedirect(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v0.1.2", res.Latest)
 	assert.True(t, res.UpdateAvailable)
-	assert.Equal(t, f.srv.URL+"/SandwichLabs/assay/releases/tag/v0.1.2", res.ReleaseURL)
+	assert.Equal(t, f.srv.URL+"/SandwichLabs/slaw/releases/tag/v0.1.2", res.ReleaseURL)
 	for _, h := range f.hits {
-		assert.Contains(t, h, "UA=assay-update", "the fixed User-Agent, with no version")
+		assert.Contains(t, h, "UA=slaw-update", "the fixed User-Agent, with no version")
 		assert.Contains(t, h, "cookie= auth=", "no cookies, no auth")
 	}
 }
@@ -111,9 +111,9 @@ func TestCheck_RedirectProblems(t *testing.T) {
 		status int
 	}{
 		"missing Location":   {loc: "-"},
-		"non-github host":    {loc: "https://evil.example/SandwichLabs/assay/releases/tag/v9.9.9"},
-		"junk tag":           {loc: "SELF/SandwichLabs/assay/releases/tag/v1.2.3;rm -rf"},
-		"not a tag":          {loc: "SELF/SandwichLabs/assay/releases"},
+		"non-github host":    {loc: "https://evil.example/SandwichLabs/slaw/releases/tag/v9.9.9"},
+		"junk tag":           {loc: "SELF/SandwichLabs/slaw/releases/tag/v1.2.3;rm -rf"},
+		"not a tag":          {loc: "SELF/SandwichLabs/slaw/releases"},
 		"other repository":   {loc: "SELF/Other/repo/releases/tag/v1.2.3"},
 		"no redirect at all": {status: http.StatusOK},
 		"server error":       {status: http.StatusInternalServerError},
@@ -131,7 +131,7 @@ func TestCheck_RedirectProblems(t *testing.T) {
 
 func TestCheck_AcceptsARelativeLocation(t *testing.T) {
 	f := newFakeGH(t)
-	f.location = "/SandwichLabs/assay/releases/tag/v0.3.0"
+	f.location = "/SandwichLabs/slaw/releases/tag/v0.3.0"
 	res, err := f.updater("v0.1.1").Check(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, "v0.3.0", res.Latest)
@@ -174,7 +174,7 @@ func TestCheck_SkippedVersion(t *testing.T) {
 
 func TestCheck_NotesAreBestEffortPlainTextAndOnlyWhenNewer(t *testing.T) {
 	f := newFakeGH(t)
-	f.notesBody = `{"body":"## Fixes\r\n- a\u001b[31mred\u001b[0m\u0007","html_url":"` + f.srv.URL + `/SandwichLabs/assay/releases/tag/v0.1.2"}`
+	f.notesBody = `{"body":"## Fixes\r\n- a\u001b[31mred\u001b[0m\u0007","html_url":"` + f.srv.URL + `/SandwichLabs/slaw/releases/tag/v0.1.2"}`
 	res, err := f.updater("v0.1.1").Check(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, "## Fixes\n- a[31mred[0m", res.Notes, "control characters are stripped, markdown stays as text")
@@ -188,7 +188,7 @@ func TestCheck_NotesAreBestEffortPlainTextAndOnlyWhenNewer(t *testing.T) {
 	res, err = f.updater("v0.1.1").Check(context.Background(), "")
 	require.NoError(t, err, "no notes is not an error")
 	assert.Empty(t, res.Notes)
-	assert.Equal(t, f.srv.URL+"/SandwichLabs/assay/releases/tag/v0.1.2", res.ReleaseURL)
+	assert.Equal(t, f.srv.URL+"/SandwichLabs/slaw/releases/tag/v0.1.2", res.ReleaseURL)
 }
 
 func TestCheck_NotesLimits(t *testing.T) {
@@ -210,7 +210,7 @@ func TestCheck_ForeignReleaseURLIsIgnored(t *testing.T) {
 	f.notesBody = `{"body":"x","html_url":"https://evil.example/phish"}`
 	res, err := f.updater("v0.1.1").Check(context.Background(), "")
 	require.NoError(t, err)
-	assert.Equal(t, f.srv.URL+"/SandwichLabs/assay/releases/tag/v0.1.2", res.ReleaseURL)
+	assert.Equal(t, f.srv.URL+"/SandwichLabs/slaw/releases/tag/v0.1.2", res.ReleaseURL)
 }
 
 func TestHTTPHygiene(t *testing.T) {
@@ -239,13 +239,13 @@ func TestRedirectAllowList(t *testing.T) {
 	t.Cleanup(evil.Close)
 	f.redirect["checksums.txt"] = evil.URL + "/checksums.txt"
 	u := f.updater("v0.1.1")
-	_, err := u.getOK(context.Background(), f.srv.URL+"/SandwichLabs/assay/releases/download/v0.1.2/checksums.txt", 1024, time.Second)
+	_, err := u.getOK(context.Background(), f.srv.URL+"/SandwichLabs/slaw/releases/download/v0.1.2/checksums.txt", 1024, time.Second)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "refusing redirect")
 
-	f.redirect["checksums.txt"] = f.srv.URL + "/SandwichLabs/assay/releases/download/v0.1.2/other"
+	f.redirect["checksums.txt"] = f.srv.URL + "/SandwichLabs/slaw/releases/download/v0.1.2/other"
 	f.files["other"] = []byte("fine")
-	b, err := u.getOK(context.Background(), f.srv.URL+"/SandwichLabs/assay/releases/download/v0.1.2/checksums.txt", 1024, time.Second)
+	b, err := u.getOK(context.Background(), f.srv.URL+"/SandwichLabs/slaw/releases/download/v0.1.2/checksums.txt", 1024, time.Second)
 	require.NoError(t, err)
 	assert.Equal(t, "fine", string(b))
 }
@@ -253,15 +253,15 @@ func TestRedirectAllowList(t *testing.T) {
 func TestSizeCap(t *testing.T) {
 	f := newFakeGH(t)
 	f.files["big"] = []byte(strings.Repeat("x", 100))
-	_, err := f.updater("v0.1.1").getOK(context.Background(), f.srv.URL+"/SandwichLabs/assay/releases/download/v/big", 99, time.Second)
+	_, err := f.updater("v0.1.1").getOK(context.Background(), f.srv.URL+"/SandwichLabs/slaw/releases/download/v/big", 99, time.Second)
 	assert.ErrorIs(t, err, ErrTooLarge)
-	b, err := f.updater("v0.1.1").getOK(context.Background(), f.srv.URL+"/SandwichLabs/assay/releases/download/v/big", 100, time.Second)
+	b, err := f.updater("v0.1.1").getOK(context.Background(), f.srv.URL+"/SandwichLabs/slaw/releases/download/v/big", 100, time.Second)
 	require.NoError(t, err)
 	assert.Len(t, b, 100)
 }
 
 func TestDevHooks(t *testing.T) {
-	env := map[string]string{"ASSAY_UPDATE_BASE_URL": "http://127.0.0.1:9/", "ASSAY_UPDATE_PRETEND_VERSION": "v0.1.0"}
+	env := map[string]string{"SLAW_UPDATE_BASE_URL": "http://127.0.0.1:9/", "SLAW_UPDATE_PRETEND_VERSION": "v0.1.0"}
 	getenv := func(k string) string { return env[k] }
 
 	dev := New("dev", WithGetenv(getenv))
@@ -283,27 +283,27 @@ func TestDevHooks(t *testing.T) {
 
 // ---------------------------------------------------------------- manifest + detection
 
-// layout is a fake machine: an install dir with assay (and assay-studio), a manifest in a temp XDG_DATA_HOME.
+// layout is a fake machine: an install dir with slaw (and slaw-studio), a manifest in a temp XDG_DATA_HOME.
 type layout struct {
 	home, data, bin, manifest string
-	assay                     string
+	slaw                      string
 }
 
 func newLayout(t *testing.T, studio bool, version string) layout {
 	t.Helper()
 	root := t.TempDir()
 	l := layout{home: filepath.Join(root, "home"), data: filepath.Join(root, "data"), bin: filepath.Join(root, "bin")}
-	require.NoError(t, os.MkdirAll(filepath.Join(l.data, "assay"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(l.data, "slaw"), 0o755))
 	require.NoError(t, os.MkdirAll(l.bin, 0o755))
-	l.assay = filepath.Join(l.bin, "assay")
-	require.NoError(t, os.WriteFile(l.assay, []byte("assay"), 0o755))
-	m := "version=" + version + "\nF " + strings.Repeat("a", 64) + " " + l.assay + "\n"
+	l.slaw = filepath.Join(l.bin, "slaw")
+	require.NoError(t, os.WriteFile(l.slaw, []byte("slaw"), 0o755))
+	m := "version=" + version + "\nF " + strings.Repeat("a", 64) + " " + l.slaw + "\n"
 	if studio {
-		st := filepath.Join(l.bin, "assay-studio")
+		st := filepath.Join(l.bin, "slaw-studio")
 		require.NoError(t, os.WriteFile(st, []byte("studio"), 0o755))
 		m += "F " + strings.Repeat("b", 64) + " " + st + "\n"
 	}
-	l.manifest = filepath.Join(l.data, "assay", "install-manifest")
+	l.manifest = filepath.Join(l.data, "slaw", "install-manifest")
 	require.NoError(t, os.WriteFile(l.manifest, []byte(m), 0o644))
 	return l
 }
@@ -326,18 +326,18 @@ func TestManifestPathMatchesInstallSh(t *testing.T) {
 	home := func() (string, error) { return "/h", nil }
 	none := func(string) string { return "" }
 	p, _ := New("v1.0.0", WithPlatform("linux"), WithHomeDir(home), WithGetenv(none)).manifestPath()
-	assert.Equal(t, "/h/.local/share/assay/install-manifest", p)
+	assert.Equal(t, "/h/.local/share/slaw/install-manifest", p)
 	p, _ = New("v1.0.0", WithPlatform("linux"), WithHomeDir(home), WithGetenv(func(string) string { return "/x" })).manifestPath()
-	assert.Equal(t, "/x/assay/install-manifest", p)
+	assert.Equal(t, "/x/slaw/install-manifest", p)
 	p, _ = New("v1.0.0", WithPlatform("darwin"), WithHomeDir(home), WithGetenv(func(string) string { return "/x" })).manifestPath()
-	assert.Equal(t, "/h/Library/Application Support/assay/install-manifest", p, "macOS ignores XDG_DATA_HOME, as install.sh does")
+	assert.Equal(t, "/h/Library/Application Support/slaw/install-manifest", p, "macOS ignores XDG_DATA_HOME, as install.sh does")
 }
 
 func TestReadManifest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "m")
-	body := "version=0.1.1\nF " + strings.Repeat("a", 64) + " /opt/my bin/assay\nF " + strings.Repeat("b", 64) + " /opt/my bin/assay-studio\n" +
-		"D - /Users/me/Applications/Assay.app\nF " + strings.Repeat("c", 64) + " relative/ignored\nnoise\n"
+	body := "version=0.1.1\nF " + strings.Repeat("a", 64) + " /opt/my bin/slaw\nF " + strings.Repeat("b", 64) + " /opt/my bin/slaw-studio\n" +
+		"D - /Users/me/Applications/Slaw.app\nF " + strings.Repeat("c", 64) + " relative/ignored\nnoise\n"
 	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	in, err := ReadManifest(path)
 	require.NoError(t, err)
@@ -345,10 +345,10 @@ func TestReadManifest(t *testing.T) {
 	assert.Equal(t, "/opt/my bin", in.InstallDir, "paths with spaces survive")
 	assert.True(t, in.Studio)
 	assert.Equal(t, "/Users/me/Applications", in.AppDir)
-	assert.Equal(t, "/Users/me/Applications/Assay.app", in.StudioPath)
+	assert.Equal(t, "/Users/me/Applications/Slaw.app", in.StudioPath)
 
 	cli := filepath.Join(dir, "c")
-	require.NoError(t, os.WriteFile(cli, []byte("version=0.1.1\nF "+strings.Repeat("a", 64)+" /opt/bin/assay\n"), 0o644))
+	require.NoError(t, os.WriteFile(cli, []byte("version=0.1.1\nF "+strings.Repeat("a", 64)+" /opt/bin/slaw\n"), 0o644))
 	in, err = ReadManifest(cli)
 	require.NoError(t, err)
 	assert.False(t, in.Studio, "no studio entry: --cli-only")
@@ -356,27 +356,27 @@ func TestReadManifest(t *testing.T) {
 
 func TestDetect(t *testing.T) {
 	l := newLayout(t, true, "0.1.1")
-	in, err := New("v0.1.1", l.opts(l.assay)...).Detect()
+	in, err := New("v0.1.1", l.opts(l.slaw)...).Detect()
 	require.NoError(t, err)
 	assert.Equal(t, l.bin, in.InstallDir)
 
 	// A symlinked path to the recorded binary is the same program.
-	link := filepath.Join(t.TempDir(), "assay-link")
-	require.NoError(t, os.Symlink(l.assay, link))
+	link := filepath.Join(t.TempDir(), "slaw-link")
+	require.NoError(t, os.Symlink(l.slaw, link))
 	_, err = New("v0.1.1", l.opts(link)...).Detect()
 	assert.NoError(t, err)
 
 	// A manifest entry that is itself a symlink to the running binary.
-	real := filepath.Join(t.TempDir(), "real-assay")
+	real := filepath.Join(t.TempDir(), "real-slaw")
 	require.NoError(t, os.WriteFile(real, []byte("x"), 0o755))
 	l2 := newLayout(t, false, "0.1.1")
-	require.NoError(t, os.Remove(l2.assay))
-	require.NoError(t, os.Symlink(real, l2.assay))
+	require.NoError(t, os.Remove(l2.slaw))
+	require.NoError(t, os.Symlink(real, l2.slaw))
 	_, err = New("v0.1.1", l2.opts(real)...).Detect()
 	assert.NoError(t, err)
 
 	// A different binary (go install, dev build) is external, even with a manifest present.
-	other := filepath.Join(t.TempDir(), "assay")
+	other := filepath.Join(t.TempDir(), "slaw")
 	require.NoError(t, os.WriteFile(other, []byte("other"), 0o755))
 	_, err = New("v0.1.1", l.opts(other)...).Detect()
 	assert.ErrorIs(t, err, ErrExternal)
@@ -384,14 +384,14 @@ func TestDetect(t *testing.T) {
 	// No manifest at all.
 	empty := newLayout(t, false, "0.1.1")
 	require.NoError(t, os.Remove(empty.manifest))
-	_, err = New("v0.1.1", empty.opts(empty.assay)...).Detect()
+	_, err = New("v0.1.1", empty.opts(empty.slaw)...).Detect()
 	assert.ErrorIs(t, err, ErrExternal)
 }
 
 func TestCheck_ReportsExternal(t *testing.T) {
 	f := newFakeGH(t)
 	l := newLayout(t, false, "0.1.1")
-	other := filepath.Join(t.TempDir(), "assay")
+	other := filepath.Join(t.TempDir(), "slaw")
 	require.NoError(t, os.WriteFile(other, nil, 0o755))
 	res, err := f.updater("v0.1.1", l.opts(other)...).Check(context.Background(), "")
 	require.NoError(t, err)
@@ -399,7 +399,7 @@ func TestCheck_ReportsExternal(t *testing.T) {
 	assert.False(t, res.Updatable)
 	assert.Contains(t, res.ManagedNote, "update it the way you installed it")
 
-	res, err = f.updater("v0.1.1", l.opts(l.assay)...).Check(context.Background(), "")
+	res, err = f.updater("v0.1.1", l.opts(l.slaw)...).Check(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, ManagedInstaller, res.Managed)
 	assert.True(t, res.Updatable)
@@ -409,7 +409,7 @@ func TestCheck_ReportsExternal(t *testing.T) {
 
 func TestChecksumFor(t *testing.T) {
 	a, b, c := strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64)
-	sums := a + "  install.sh.bak\n" + b + "  ./install.sh\n" + c + "  assay_linux_amd64.tar.gz\n" + a + "  install.sh\n"
+	sums := a + "  install.sh.bak\n" + b + "  ./install.sh\n" + c + "  slaw_linux_amd64.tar.gz\n" + a + "  install.sh\n"
 	got, err := checksumFor([]byte(sums), "install.sh")
 	require.NoError(t, err)
 	assert.Equal(t, a, got)
@@ -441,17 +441,17 @@ func newApplyRig(t *testing.T, studio bool) *applyRig {
 	r.script = []byte(`#!/bin/sh
 {
   for a in "$@"; do printf 'ARG:%s\n' "$a"; done
-  printf 'ENV_ASSAY_APP_DIR=%s\n' "${ASSAY_APP_DIR:-}"
-  printf 'ENV_ASSAY_VERSION=%s\n' "${ASSAY_VERSION:-}"
-  printf 'ENV_ASSAY_INSTALL_DIR=%s\n' "${ASSAY_INSTALL_DIR:-}"
-  printf 'ENV_ASSAY_DOWNLOAD_BASE=%s\n' "${ASSAY_DOWNLOAD_BASE:-}"
+  printf 'ENV_SLAW_APP_DIR=%s\n' "${SLAW_APP_DIR:-}"
+  printf 'ENV_SLAW_VERSION=%s\n' "${SLAW_VERSION:-}"
+  printf 'ENV_SLAW_INSTALL_DIR=%s\n' "${SLAW_INSTALL_DIR:-}"
+  printf 'ENV_SLAW_DOWNLOAD_BASE=%s\n' "${SLAW_DOWNLOAD_BASE:-}"
 } > "$OUT/record"
 echo "0.1.1 -> 0.1.2"
 if [ -n "${WAIT_FOR:-}" ]; then while [ ! -e "$WAIT_FOR" ]; do sleep 0.05; done; fi
 if [ -z "${NO_MANIFEST_BUMP:-}" ]; then sed -i.bak 's/^version=.*/version=0.1.2/' "$MANIFEST" && rm -f "$MANIFEST.bak"; fi
 `)
 	r.baseEnv = []string{"OUT=" + r.out, "MANIFEST=" + r.l.manifest, "PATH=" + os.Getenv("PATH"),
-		"ASSAY_VERSION=v9.9.9", "ASSAY_INSTALL_DIR=/evil", "ASSAY_DOWNLOAD_BASE=https://evil.example", "ASSAY_APP_DIR=/evil-apps"}
+		"SLAW_VERSION=v9.9.9", "SLAW_INSTALL_DIR=/evil", "SLAW_DOWNLOAD_BASE=https://evil.example", "SLAW_APP_DIR=/evil-apps"}
 	r.publish()
 	return r
 }
@@ -460,12 +460,12 @@ func (r *applyRig) publish() {
 	r.f.mu.Lock()
 	defer r.f.mu.Unlock()
 	r.f.files["install.sh"] = r.script
-	r.f.files["checksums.txt"] = []byte(sum(r.script) + "  install.sh\n" + strings.Repeat("0", 64) + "  assay_linux_amd64.tar.gz\n")
+	r.f.files["checksums.txt"] = []byte(sum(r.script) + "  install.sh\n" + strings.Repeat("0", 64) + "  slaw_linux_amd64.tar.gz\n")
 }
 
 func (r *applyRig) updater(extra ...string) *Updater {
 	env := append(append([]string{}, r.baseEnv...), extra...)
-	opts := append(r.l.opts(r.l.assay), WithEnviron(func() []string { return env }))
+	opts := append(r.l.opts(r.l.slaw), WithEnviron(func() []string { return env }))
 	return r.f.updater("v0.1.1", opts...)
 }
 
@@ -483,18 +483,18 @@ func TestApply_RunsTheVerifiedScript(t *testing.T) {
 	assert.Equal(t, "0.1.1", res.From)
 	assert.Equal(t, "0.1.2", res.To)
 	assert.Contains(t, res.Output, "0.1.1 -> 0.1.2")
-	assert.Equal(t, filepath.Join(r.l.bin, "assay-studio"), res.Restart)
+	assert.Equal(t, filepath.Join(r.l.bin, "slaw-studio"), res.Restart)
 	assert.True(t, res.Studio)
 
 	rec := r.record(t)
 	assert.Contains(t, rec, "ARG:--version\nARG:v0.1.2\nARG:--install-dir\nARG:"+r.l.bin+"\n")
 	assert.NotContains(t, rec, "--force", "never --force")
 	assert.NotContains(t, rec, "--cli-only", "studio was installed")
-	assert.Contains(t, rec, "ENV_ASSAY_VERSION=\n", "the caller's install.sh variables are scrubbed")
-	assert.Contains(t, rec, "ENV_ASSAY_INSTALL_DIR=\n")
-	assert.Contains(t, rec, "ENV_ASSAY_DOWNLOAD_BASE=\n")
-	assert.Contains(t, rec, "ENV_ASSAY_APP_DIR=\n")
-	assert.NoFileExists(t, filepath.Join(r.l.data, "assay", "update.lock"), "lock released")
+	assert.Contains(t, rec, "ENV_SLAW_VERSION=\n", "the caller's install.sh variables are scrubbed")
+	assert.Contains(t, rec, "ENV_SLAW_INSTALL_DIR=\n")
+	assert.Contains(t, rec, "ENV_SLAW_DOWNLOAD_BASE=\n")
+	assert.Contains(t, rec, "ENV_SLAW_APP_DIR=\n")
+	assert.NoFileExists(t, filepath.Join(r.l.data, "slaw", "update.lock"), "lock released")
 }
 
 func TestApply_CLIOnlyWhenStudioWasNotInstalled(t *testing.T) {
@@ -510,14 +510,14 @@ func TestApply_DevDownloadBaseIsPassedOnlyWhenConfigured(t *testing.T) {
 	u.dlBase = "https://mirror.test/%s"
 	_, err := u.Apply(context.Background(), "v0.1.2")
 	require.NoError(t, err)
-	assert.Contains(t, r.record(t), "ENV_ASSAY_DOWNLOAD_BASE=https://mirror.test/v0.1.2\n")
+	assert.Contains(t, r.record(t), "ENV_SLAW_DOWNLOAD_BASE=https://mirror.test/v0.1.2\n")
 }
 
 func TestApply_RefusesBadChecksums(t *testing.T) {
 	good := sum([]byte("whatever"))
 	cases := map[string]string{
 		"mismatch":   strings.Repeat("0", 64) + "  install.sh\n",
-		"missing":    good + "  assay_linux_amd64.tar.gz\n",
+		"missing":    good + "  slaw_linux_amd64.tar.gz\n",
 		"decoy bak":  "SUM  install.sh.bak\n",
 		"decoy ./":   "SUM  ./install.sh\n",
 		"empty file": "",
@@ -563,7 +563,7 @@ func TestApply_Refusals(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotNewer, tag)
 	}
 
-	other := filepath.Join(t.TempDir(), "assay")
+	other := filepath.Join(t.TempDir(), "slaw")
 	require.NoError(t, os.WriteFile(other, nil, 0o755))
 	ext := r.f.updater("v0.1.1", r.l.opts(other)...)
 	_, err := ext.Apply(ctx, "v0.1.2")
@@ -608,12 +608,12 @@ func TestApply_OnlyOneAtATime(t *testing.T) {
 }
 
 func TestRelaunch(t *testing.T) {
-	assert.Error(t, Relaunch("linux", "relative/assay-studio"))
+	assert.Error(t, Relaunch("linux", "relative/slaw-studio"))
 	assert.Error(t, Relaunch("linux", filepath.Join(t.TempDir(), "missing")))
 
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "started")
-	bin := filepath.Join(dir, "assay-studio")
+	bin := filepath.Join(dir, "slaw-studio")
 	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" > \""+marker+"\"\n"), 0o755))
 	require.NoError(t, Relaunch("linux", bin, "/some/workspace"))
 	require.Eventually(t, func() bool {

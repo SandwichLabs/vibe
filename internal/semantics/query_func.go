@@ -3,7 +3,7 @@ package semantics
 import (
 	"context"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // QueryFunc runs one read statement on a connection ("" is the workspace

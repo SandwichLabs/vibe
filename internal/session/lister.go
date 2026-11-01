@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/storageurl"
+	"github.com/SandwichLabs/slaw/internal/storageurl"
 )
 
 // ObjectLister is implemented by the hub: it counts the objects under a
@@ -15,7 +15,7 @@ import (
 //
 // The hub itself reads every S3-like URL literally (no ?s3_* parameters, no
 // globs; storage_deny.go, #138), and DuckDB lists a bucket only through a glob.
-// The one thing Assay needs a listing for is Test's proof that a connection's
+// The one thing Slaw needs a listing for is Test's proof that a connection's
 // key, region and scope work, so that listing runs here, in a throwaway
 // in-memory session that holds one connection's secret and is asked one
 // question about a scope the caller has already vetted (no "?", no wildcard

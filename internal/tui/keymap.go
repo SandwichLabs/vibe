@@ -4,7 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 )
 
-// KeyMap defines all key bindings for Assay's TUI.
+// KeyMap defines all key bindings for Slaw's TUI.
 type KeyMap struct {
 	SwitchView  key.Binding
 	Select      key.Binding

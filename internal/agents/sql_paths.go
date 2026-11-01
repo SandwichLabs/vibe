@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/storageurl"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/storageurl"
 )
 
 // pathPolicy decides which files and URLs agent SQL may read or write (#116).
@@ -217,7 +217,7 @@ func (p *pathPolicy) vetURL(lit string) string {
 	if err := storageurl.ValidateRead(lit); err != nil {
 		hint := ""
 		if strings.Contains(lit, "*") && storageurl.IsS3Like(lit) {
-			hint = "; Assay expands a wildcard on s3, gcs and r2 only as a reader function's path (read_parquet('s3://b/*.parquet')) or a FROM 's3://b/*.parquet', so this one was not expanded"
+			hint = "; Slaw expands a wildcard on s3, gcs and r2 only as a reader function's path (read_parquet('s3://b/*.parquet')) or a FROM 's3://b/*.parquet', so this one was not expanded"
 		}
 		return fmt.Sprintf("the URL %q is not a plain storage URL (%v); only plain object paths inside a storage connection's scope can be read%s", lit, err, hint)
 	}

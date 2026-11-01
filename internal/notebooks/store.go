@@ -3,11 +3,11 @@ package notebooks
 import (
 	"context"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Store is where a workspace keeps its notebooks (plan §4.1). Two
-// implementations exist: the file store (notebooks/<id>.asnb in a workspace
+// implementations exist: the file store (notebooks/<id>.slnb in a workspace
 // folder, with compare-and-write) and the SQLite store that wraps the legacy
 // container's _vibe_notebooks table so `.vibe` files keep working.
 //

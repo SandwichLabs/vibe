@@ -11,8 +11,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/SandwichLabs/assay/internal/filelock"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/filelock"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const releaseSupported = true
@@ -87,7 +87,7 @@ func listenForRelease(fn func()) (stop func(), err error) {
 // isSymlinkErr reports whether err is the refusal O_NOFOLLOW gives a symlink.
 func isSymlinkErr(err error) bool { return errors.Is(err, syscall.ELOOP) }
 
-// openLocalDir opens <root>/.assay-local as a directory file descriptor,
+// openLocalDir opens <root>/.slaw-local as a directory file descriptor,
 // refusing a symlink (a cloned repository can ship one), checking it is owned
 // by this user, and creating it 0700 when create is set. Everything the hub
 // does afterwards is relative to this descriptor, so the path cannot be

@@ -77,11 +77,11 @@ describe('AboutSettings', () => {
     makeApp()
     const w = await mountAbout()
     await w.find('[data-testid="about-report"]').trigger('click')
-    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/assay/issues/new/choose')
+    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/slaw/issues/new/choose')
     await w.find('[data-testid="about-privacy"]').trigger('click')
-    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/assay/blob/main/docs/privacy.md')
+    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/slaw/blob/main/docs/privacy.md')
     await w.find('[data-testid="about-license"]').trigger('click')
-    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/assay/blob/main/LICENSE')
+    expect(openURL).toHaveBeenLastCalledWith('https://github.com/SandwichLabs/slaw/blob/main/LICENSE')
   })
 
   it('Copy build info puts the build details (and nothing else) on the clipboard', async () => {
@@ -92,7 +92,7 @@ describe('AboutSettings', () => {
     await w.find('[data-testid="about-copy"]').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith(buildInfoText(INFO))
-    expect(writeText.mock.calls[0][0]).toContain('Assay: v0.1.0')
+    expect(writeText.mock.calls[0][0]).toContain('Slaw: v0.1.0')
     expect(writeText.mock.calls[0][0]).toContain('DuckDB: v1.4.1')
   })
 

@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // memWorkspace opens a fresh workspace whose credentials live in memory.
@@ -53,8 +53,8 @@ func TestAddUpdateRemoveInEachScope(t *testing.T) {
 	assert.Equal(t, ScopeLocal, scopes["local_pg"])
 	assert.Equal(t, ScopeUser, scopes["user_lite"])
 
-	// assay.yaml carries the definition and no username or secret.
-	b, err := os.ReadFile(filepath.Join(ws.Root(), "assay.yaml"))
+	// slaw.yaml carries the definition and no username or secret.
+	b, err := os.ReadFile(filepath.Join(ws.Root(), "slaw.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(b), "db.internal")
 	assert.NotContains(t, string(b), "password:")
@@ -126,7 +126,7 @@ func TestSignInIsPerPersonAndOutsideTheFolder(t *testing.T) {
 			assert.Equal(t, "env:PG_PROD", c.SignIn)
 		}
 	}
-	b, _ := os.ReadFile(filepath.Join(ws.Root(), "assay.yaml"))
+	b, _ := os.ReadFile(filepath.Join(ws.Root(), "slaw.yaml"))
 	assert.NotContains(t, string(b), "PG_PROD", "the committed file never says how you sign in")
 	assert.Contains(t, readLocalYAML(t, ws), "PG_PROD")
 	assert.True(t, strings.HasPrefix(ws.LocalConfigPath(), cfg+string(filepath.Separator)))
@@ -241,7 +241,7 @@ func TestEnvSignInDoesNotNeedTheKeychain(t *testing.T) {
 	cred, _, err := ConnectionCredential(ctx, ws, "pg", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "svc", cred.User)
-	require.Error(t, ws.SetCredentials(ctx, "pg", secrets.Credential{Password: "x"}, false), "env credentials are set outside Assay")
+	require.Error(t, ws.SetCredentials(ctx, "pg", secrets.Credential{Password: "x"}, false), "env credentials are set outside Slaw")
 }
 
 // --- OpenSession ---
@@ -476,7 +476,7 @@ func TestMotherDuckReadOnlyRules(t *testing.T) {
 	require.NoError(t, ws.AddConnection(ScopeShared, d))
 	assert.False(t, mustConn(t, ws, "md").IsReadOnly(), "MotherDuck defaults to read_only: false")
 
-	// A hand-written assay.yaml that says true is an issue, not a silent write.
+	// A hand-written slaw.yaml that says true is an issue, not a silent write.
 	writeLocal(t, ws, "connections:\n  - {name: md2, type: motherduck, database: d2, read_only: true}\n")
 	require.NoError(t, ws.SetSignIn("md", "env:MOTHERDUCK"))
 	sess, issues, err := OpenSession(context.Background(), ws, nil, WithSessionOptions(session.WithExtensionDirectory(t.TempDir())))

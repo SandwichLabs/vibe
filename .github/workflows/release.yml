@@ -103,10 +103,10 @@ jobs:
         shell: bash
         run: |
           go build -ldflags "-s -w \
-            -X github.com/SandwichLabs/assay/cmd.version=$VER \
-            -X github.com/SandwichLabs/assay/cmd.commit=$COMMIT \
-            -X github.com/SandwichLabs/assay/cmd.date=$DATE" \
-            -o assay ./cmd/assay
+            -X github.com/SandwichLabs/slaw/cmd.version=$VER \
+            -X github.com/SandwichLabs/slaw/cmd.commit=$COMMIT \
+            -X github.com/SandwichLabs/slaw/cmd.date=$DATE" \
+            -o slaw ./cmd/slaw
 
       - name: Frontend install
         working-directory: studio/frontend
@@ -131,8 +131,8 @@ jobs:
       - name: Check the Studio binary has no ssofake tag
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/assay-studio.app/Contents/MacOS/assay-studio; else studio=studio/build/bin/assay-studio; fi
-          scripts/check-binary-tags.sh assay "$studio"
+          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/slaw-studio.app/Contents/MacOS/slaw-studio; else studio=studio/build/bin/slaw-studio; fi
+          scripts/check-binary-tags.sh slaw "$studio"
 
       - name: Package (and ad-hoc sign on macOS)
         shell: bash
@@ -144,28 +144,28 @@ jobs:
         shell: bash
         run: |
           d="$(mktemp -d)"
-          tar -xzf "dist/assay-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
-          scripts/check-macos-minos.sh "$d/Assay.app/Contents/Info.plist" \
-            "$d/assay" "$d/Assay.app/Contents/MacOS/assay-studio"
+          tar -xzf "dist/slaw-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          scripts/check-macos-minos.sh "$d/Slaw.app/Contents/Info.plist" \
+            "$d/slaw" "$d/Slaw.app/Contents/MacOS/slaw-studio"
 
       - name: Smoke test the packaged binaries
         shell: bash
         run: |
           set -euo pipefail
           d="$(mktemp -d)"
-          tar -xzf "dist/assay-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          tar -xzf "dist/slaw-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
           if [ "$RUNNER_OS" = Linux ]; then
-            assay="$d/bin/assay"; studio="$d/bin/assay-studio"
+            slaw="$d/bin/slaw"; studio="$d/bin/slaw-studio"
           else
-            assay="$d/assay"; studio="$d/Assay.app/Contents/MacOS/assay-studio"
-            codesign --verify --deep --strict "$d/Assay.app"
+            slaw="$d/slaw"; studio="$d/Slaw.app/Contents/MacOS/slaw-studio"
+            codesign --verify --deep --strict "$d/Slaw.app"
           fi
           # Capture first: grep -q closing a pipe early gives the writer SIGPIPE (exit 141) under pipefail.
-          out="$("$assay" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
+          out="$("$slaw" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
           out="$("$studio" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
           cd "$(mktemp -d)"
-          "$assay" workspace init . --name smoke </dev/null
-          out="$("$assay" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
+          "$slaw" workspace init . --name smoke </dev/null
+          out="$("$slaw" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -215,7 +215,7 @@ jobs:
       # Artifact attestations on a private repo need GitHub Enterprise Cloud; this org is on the free
       # plan, so the step would fail. It is skipped while the repo is private and turns itself on the
       # moment the repo is made public (github.event.repository.private becomes false). Verify with
-      #   gh attestation verify <archive> --repo SandwichLabs/assay
+      #   gh attestation verify <archive> --repo SandwichLabs/slaw
       - name: Attest build provenance
         if: ${{ github.event.repository.private == false }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

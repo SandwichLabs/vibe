@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // TableCapabilities says whether a table can be edited and, when not, why.

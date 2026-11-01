@@ -2,7 +2,7 @@
  * useViewBridge — runs one custom artifact view (view: script, #160) in a
  * dedicated Worker and is its only line to the rest of the app.
  *
- * The Worker comes from /assay-view/<token>/worker.js (a token Go issues only for
+ * The Worker comes from /slaw-view/<token>/worker.js (a token Go issues only for
  * a view that is allowed right now) and gets a MessagePort in its first message;
  * every later message uses that port, never a broadcast. It can ask for exactly
  * one thing, `run(query, params)`, which goes through the RunArtifactQuery
@@ -150,7 +150,7 @@ export function useViewBridge(name: () => string, theme: () => Record<string, un
     const channel = deps.makeChannel()
     port = channel.port1
     port.onmessage = (e) => onMessage(mine, e.data)
-    worker = deps.makeWorker(`/assay-view/${grant.token}/worker.js`)
+    worker = deps.makeWorker(`/slaw-view/${grant.token}/worker.js`)
     worker.postMessage({ t: 'init', theme: theme() }, [channel.port2 as Transferable])
     lastMsg = Date.now()
     allowance = STARTUP_TIMEOUT_MS

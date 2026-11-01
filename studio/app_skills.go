@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 // --- Skills (#62) ---

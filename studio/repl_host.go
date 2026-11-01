@@ -12,9 +12,9 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/repl"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/repl"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // maxConsoles is how many console tabs one workspace may have open; each pins

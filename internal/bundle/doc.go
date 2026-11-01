@@ -1,4 +1,4 @@
-// Package bundle reads and writes `.assay` bundles, format version 2 (#118,
+// Package bundle reads and writes `.slaw` bundles, format version 2 (#118,
 // plan section 4.6): a zip of a workspace's notebooks, queries, skills and
 // (optionally) connection definitions, with a manifest that carries a SHA-256
 // for every entry.
@@ -22,5 +22,5 @@
 // stores, so overwrite is a compare-and-write and imported skills can never
 // claim to be built-in.
 //
-// Single-notebook .asnb import and export share CheckNotebook with this path.
+// Single-notebook .slnb import and export share CheckNotebook with this path.
 package bundle

@@ -8,7 +8,7 @@ import (
 )
 
 // depsHashTag versions the DepsHash encoding.
-const depsHashTag = "assay-deps-hash/1"
+const depsHashTag = "slaw-deps-hash/1"
 
 // DepPart is one file a page or view reads without owning it, as its hash
 // covers it: a kind ("metric" or "query"), its name and the revision of its
@@ -25,7 +25,7 @@ type DepPart struct {
 // metric files and saved queries it reads, so a git pull that changes what an
 // allowed page reads asks again. One canonical, length-prefixed stream:
 //
-//	string "assay-deps-hash/1"
+//	string "slaw-deps-hash/1"
 //	string base                       (the ViewHash or PageHash, hex)
 //	uint64 number of parts
 //	then, sorted by kind and name: string kind, string name, string rev
@@ -66,4 +66,4 @@ func DepsHash(base string, parts []DepPart) string {
 
 // MetricsLine is the allow prompt's plain line about the metrics a page or
 // view reads, shared by Studio and the CLI.
-const MetricsLine = "It reads these metrics through their saved queries. Your allow covers their definitions as they are now: if a metric file or its saved query changes, Assay asks again."
+const MetricsLine = "It reads these metrics through their saved queries. Your allow covers their definitions as they are now: if a metric file or its saved query changes, Slaw asks again."

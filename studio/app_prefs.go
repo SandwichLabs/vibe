@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -49,7 +49,7 @@ type UserThemesResult struct {
 	Dir      string            `json:"dir"`
 }
 
-// ListUserThemes scans <config dir>/assay/themes/*.json. Validation happens in
+// ListUserThemes scans <config dir>/slaw/themes/*.json. Validation happens in
 // the frontend (studio/frontend/src/theme/schema.ts) so the rules live once.
 func (a *App) ListUserThemes() (UserThemesResult, error) {
 	s, err := a.prefsStore()

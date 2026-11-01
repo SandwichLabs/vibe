@@ -26,7 +26,7 @@ func renderHelp(keys KeyMap, helpModel help.Model, width, height int) string {
 		Bold(true).
 		Foreground(accentColor).
 		MarginBottom(1).
-		Render("Assay - Key Bindings")
+		Render("Slaw - Key Bindings")
 
 	footer := dimStyle.Render("Press any key to dismiss")
 

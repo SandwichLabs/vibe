@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -17,10 +17,10 @@ var workspaceEnvCmd = &cobra.Command{
 	Short: "Allow or deny loading the workspace's .env file",
 	Long: `A workspace can keep connection credentials in a git-ignored .env file
 (for example MOTHERDUCK_TOKEN for a connection that signs in with
-"env:MOTHERDUCK"). Assay only loads it after you allow it, like direnv:
+"env:MOTHERDUCK"). Slaw only loads it after you allow it, like direnv:
 
   allow    load this .env as it is now. Any later change to the file ends the
-           approval and Assay asks again.
+           approval and Slaw asks again.
   deny     never load it, until revoked. Edits do not ask again.
   revoke   forget the decision (the next open asks again).
   status   show where it stands: variable names and the env: sign-ins they

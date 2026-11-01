@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 	"time"
 
 	"github.com/stretchr/testify/assert"

@@ -1,7 +1,7 @@
 // Package proposals is the inbox of proposed semantic definitions: an agent
 // (or, later, a verifier) suggests an entity, metric, join or glossary term,
 // and a person accepts or rejects it. A proposal is a file in
-// .assay-local/proposals/ (machine-local, git-ignored, never in a bundle) that
+// .slaw-local/proposals/ (machine-local, git-ignored, never in a bundle) that
 // holds the exact definition that would be written, so accepting it can never
 // produce a file the semantics decoder would refuse: the definition is
 // validated with the kind's own decoder when it is proposed, again whenever
@@ -10,7 +10,7 @@
 // Two interfaces keep the roles apart. Proposer (create, list, count) is all an
 // agent surface is given. Store adds Get and Decide, and Accept and Reject
 // (which also need a semantics.Store) are functions only a person's surface
-// calls: the CLI's `assay semantics accept` and Studio's bindings. Nothing in
+// calls: the CLI's `slaw semantics accept` and Studio's bindings. Nothing in
 // internal/agents can reach them. Reference: docs/reference/semantics.md.
 package proposals
 
@@ -24,15 +24,15 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/assay/internal/connname"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/slaw/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/strictyaml"
 )
 
 // Dir is the proposals folder under the workspace root. It sits in the
-// git-ignored .assay-local/ and no bundle ever reads it.
-const Dir = ".assay-local/proposals"
+// git-ignored .slaw-local/ and no bundle ever reads it.
+const Dir = ".slaw-local/proposals"
 
 // Extension of a proposal file.
 const Extension = ".yaml"
@@ -103,7 +103,7 @@ func ValidKind(k semantics.Kind) bool {
 // can never name a path.
 var idRE = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}Z-(entity|metric|join|glossary)-[a-z_][a-z0-9_]{0,62}-[0-9a-f]{4}$`)
 
-// ValidID reports whether id has the shape Assay generates.
+// ValidID reports whether id has the shape Slaw generates.
 func ValidID(id string) bool { return idRE.MatchString(id) }
 
 // Proposal is one suggested definition. Definition is the exact document to

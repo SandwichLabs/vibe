@@ -16,10 +16,10 @@ import (
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/lsp"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/lsp"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Options configures one console session.
@@ -27,7 +27,7 @@ type Options struct {
 	Engine     *engine.Manager // required
 	Sess       session.Session // required
 	Workspace  string          // the workspace name, for the prompt ("" = no name)
-	Root       string          // workspace root; history lives in Root/.assay-local/repl/history ("" = no history)
+	Root       string          // workspace root; history lives in Root/.slaw-local/repl/history ("" = no history)
 	Queries    queries.Store   // for .read and .save (nil: both answer "no saved queries here")
 	Connection string          // initial catalog ("" = the session default)
 	Cols, Rows int             // terminal size (0 = 80x24)
@@ -290,7 +290,7 @@ func bannerText(workspace string) string {
 	if workspace != "" {
 		who = " on " + runewidth.Truncate(safe(workspace), 32, "…")
 	}
-	return "Assay console" + who + ". Statements end with ';'. Enter .help for commands."
+	return "Slaw console" + who + ". Statements end with ';'. Enter .help for commands."
 }
 
 func (s *Session) banner() { s.printf("%s\n", s.pal().dim(bannerText(s.o.Workspace))) }

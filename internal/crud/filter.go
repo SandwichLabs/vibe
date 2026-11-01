@@ -18,7 +18,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // FilterCondition is one structured QBE filter clause. Op is one of

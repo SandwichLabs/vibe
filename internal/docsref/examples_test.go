@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
-// exampleWorkspaces lists docs/examples/*/ (the folders that have an assay.yaml).
+// exampleWorkspaces lists docs/examples/*/ (the folders that have a slaw.yaml).
 func exampleWorkspaces(t *testing.T) []string {
 	t.Helper()
 	root := filepath.Join(repoRoot(t), "docs", "examples")
@@ -27,7 +27,7 @@ func exampleWorkspaces(t *testing.T) []string {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		if _, err := os.Stat(filepath.Join(dir, "assay.yaml")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "slaw.yaml")); err == nil {
 			dirs = append(dirs, dir)
 		}
 	}
@@ -57,7 +57,7 @@ func TestExampleWorkspacesStillValidate(t *testing.T) {
 				assert.Empty(t, q.Error, "saved query %s: %s", q.ID, q.Error)
 				ids[q.ID] = true
 				// The declared parameters are valid, every $name is declared and
-				// every default binds (what `assay query --saved` does first).
+				// every default binds (what `slaw query --saved` does first).
 				full, err := qs.Get(ctx, q.ID)
 				require.NoError(t, err, "saved query %s", q.ID)
 				_, err = queries.Bind(full, nil, queries.BindOptions{Strict: true})

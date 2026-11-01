@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

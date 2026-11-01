@@ -3,7 +3,7 @@ package skills
 import (
 	"context"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Skill sources.

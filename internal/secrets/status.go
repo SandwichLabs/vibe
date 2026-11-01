@@ -120,7 +120,7 @@ func (r *Resolver) ProbeKeychain(ctx context.Context) Probe {
 		err = gerr
 	}
 	if err != nil {
-		p.Detail = "Assay can't reach your keychain (" + strings.TrimPrefix(err.Error(), ErrUnavailable.Error()+": ") + "). Set credentials as environment variables instead."
+		p.Detail = "Slaw can't reach your keychain (" + strings.TrimPrefix(err.Error(), ErrUnavailable.Error()+": ") + "). Set credentials as environment variables instead."
 		return p
 	}
 	p.Available = true

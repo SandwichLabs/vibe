@@ -1,4 +1,4 @@
-module github.com/SandwichLabs/assay
+module github.com/SandwichLabs/slaw
 
 go 1.27.3
 

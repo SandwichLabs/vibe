@@ -11,15 +11,15 @@ import (
 
 // Caps on a page's file set (H1). The byte caps apply before any parse.
 const (
-	MaxPageFiles        = 200
-	MaxPageBytes        = 5 << 20
-	MaxPageFileBytes    = 1 << 20
-	MaxTemplateBytes    = 256 << 10
-	maxPageSegmentLen   = 100
-	maxPagePathLen      = 200
-	assetsDir           = "assets"
-	reservedAssayDir    = "_assay"
-	reservedAssayLibDir = "assay-lib"
+	MaxPageFiles       = 200
+	MaxPageBytes       = 5 << 20
+	MaxPageFileBytes   = 1 << 20
+	MaxTemplateBytes   = 256 << 10
+	maxPageSegmentLen  = 100
+	maxPagePathLen     = 200
+	assetsDir          = "assets"
+	reservedSlawDir    = "_slaw"
+	reservedSlawLibDir = "slaw-lib"
 )
 
 // Roles a page file can have; the role is part of PageHash.
@@ -79,7 +79,7 @@ func checkPageFilePath(p string) (string, error) {
 			return "", invalid("html/%s: %s is not a usable name (letters, digits, . _ -; no dotfiles)", asciiPath(truncateForError(p)), strconv.QuoteToASCII(s))
 		}
 	}
-	if segs[0] == reservedAssayDir || segs[0] == reservedAssayLibDir {
+	if segs[0] == reservedSlawDir || segs[0] == reservedSlawLibDir {
 		return "", invalid("html/%s: %s is reserved for the host", qp, segs[0])
 	}
 	if len(segs) > 1 && segs[0] != assetsDir {
