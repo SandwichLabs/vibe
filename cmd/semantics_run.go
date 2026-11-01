@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -51,16 +52,25 @@ accepted_values, a metric's non_negative and not_null (checked at the metric's
 full dimension set). With no argument every entity and metric is checked;
 "entity" or "metric" alone checks all of that kind, and a name checks one.
 
-Every check is a read-only count of violating rows, run through the agent
+Each entity and metric starts with a compile check: its SQL (an entity's table
+and declared columns, a metric's measure and dimensions against its saved
+query) is bound against the real connection and never run. Binding may read
+file headers or list object names, but no rows are scanned.
+A definition that does not compile fails with the database's own message and
+its assertions are not run. --compile runs only these checks, quickly enough
+for every edit.
+
+Every other check is a read-only count of violating rows, run through the agent
 policy's read-only path whatever the sandbox setting, so a definition from a
 cloned repository cannot do more than read. Values travel as bound parameters.
-A check that cannot run (a connection down, a statement the policy refuses) is
-reported as an error and the others still run.
+A check that cannot run (a connection down, a failed read while binding) is
+reported as an error and the others still run. A definition the policy or the
+database's binder refuses fails to compile (exit 1), not an error.
 
 Exit status: 0 when every check passes (or none is declared), 1 when any check
 fails, 2 when none failed but some could not run, and 2 for a usage or open
-error (an unknown name or kind, a bad flag, no workspace). Names and messages printed
-here are shown with control characters as <U+XXXX>. See
+error (an unknown name or kind, a bad flag, no workspace). Names and messages
+printed here are shown with control characters as <U+XXXX>. See
 docs/reference/semantics.md.`,
 	SilenceUsage: true,
 }
@@ -84,6 +94,7 @@ func init() {
 	runsAs2(semanticsCheckCmd, cobra.MaximumNArgs(2), runSemanticsCheck)
 	runsAs2(semanticsProfileCmd, cobra.ExactArgs(1), runSemanticsProfile)
 	semanticsCheckCmd.Flags().Bool("json", false, "output as JSON")
+	semanticsCheckCmd.Flags().Bool("compile", false, "only check that each definition compiles against its connection; no rows are scanned")
 	semanticsProfileCmd.Flags().Bool("json", false, "output as JSON")
 	addWorkspaceFlag(semanticsCheckCmd)
 	addWorkspaceFlag(semanticsProfileCmd)
@@ -96,7 +107,7 @@ func init() {
 // runner, so the open is policy-gated (hub.OpenOptions.PolicyGatedRuns): a
 // connection that cannot be attached read-only at all (MotherDuck) is attached
 // as defined instead of being unreachable (#302).
-func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, semantics.QueryFunc, error) {
+func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, workspace.ReadOnlyRunner, error) {
 	dir, _ := cmd.Flags().GetString("workspace")
 	o, err := cliOpenWith(cmdCtx(cmd), dir, semanticsRunOpenOptions(app), false, cmd.ErrOrStderr())
 	if err != nil {
@@ -107,7 +118,7 @@ func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, semanti
 		o.Close()
 		return nil, nil, err
 	}
-	return o, workspace.ReadOnlyRunFunc(r), nil
+	return o, r, nil
 }
 
 // semanticsRunOpenOptions is the open openSemanticsRun asks for.
@@ -124,12 +135,14 @@ func runSemanticsCheck(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
 		name = args[1]
 	}
-	o, run, err := openSemanticsRun(cmd, "vibe semantics check")
+	compileOnly, _ := cmd.Flags().GetBool("compile")
+	o, r, err := openSemanticsRun(cmd, "vibe semantics check")
 	if err != nil {
 		return err
 	}
 	defer o.Close()
-	results, err := workspace.RunAssertions(cmdCtx(cmd), o.WS, kind, name, run, time.Now())
+	results, err := workspace.RunAssertions(cmdCtx(cmd), o.WS, kind, name, workspace.AssertionRunner(r), time.Now(),
+		workspace.AssertionOptions{CompileOnly: compileOnly})
 	if err != nil {
 		return err
 	}
@@ -149,10 +162,11 @@ func runSemanticsCheck(cmd *cobra.Command, args []string) error {
 
 func printCheckReport(out io.Writer, rows []assert.Row) {
 	if len(rows) == 0 {
-		fmt.Fprintln(out, "No assertions declared. Add assertions: to an entity or metric under semantics/ (see docs/reference/semantics.md).")
+		fmt.Fprintln(out, "No entities or metrics defined. Add them under semantics/ (see docs/reference/semantics.md).")
 		return
 	}
-	var pass, fail, errs int
+	var pass, fail, errs, dataPass, dataFail int
+	hasData := false
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "STATUS\tSUBJECT\tCHECK\tDETAIL")
 	for _, r := range rows {
@@ -160,12 +174,28 @@ func printCheckReport(out io.Writer, rows []assert.Row) {
 		switch r.Status {
 		case assert.StatusPass:
 			pass++
+			if r.Assertion == assert.KindCompile {
+				detail = "compiles"
+			}
 		case assert.StatusFail:
 			fail++
-			detail = fmt.Sprintf("%d violating row%s", r.Violations, plural(int(r.Violations)))
+			if r.Assertion == assert.KindCompile {
+				detail = "does not compile: " + strings.Join(strings.Fields(r.Error), " ")
+			} else {
+				detail = fmt.Sprintf("%d violating row%s", r.Violations, plural(int(r.Violations)))
+			}
 		default:
 			errs++
 			detail = "could not run: " + oneLine(r.Error)
+		}
+		if r.Assertion != assert.KindCompile {
+			hasData = true
+			switch r.Status {
+			case assert.StatusPass:
+				dataPass++
+			case assert.StatusFail:
+				dataFail++
+			}
 		}
 		check := r.Assertion
 		if r.Column != "" {
@@ -176,8 +206,11 @@ func printCheckReport(out io.Writer, rows []assert.Row) {
 	}
 	_ = tw.Flush()
 	fmt.Fprintf(out, "\n%d passed, %d failed, %d could not run\n", pass, fail, errs)
-	if pass+fail == 0 && errs > 0 {
+	switch {
+	case errs > 0 && pass+fail == 0:
 		fmt.Fprintln(out, "Nothing was verified: no check could run. Fix the errors above and run it again.")
+	case errs > 0 && dataPass+dataFail == 0 && hasData:
+		fmt.Fprintln(out, "No data check could run, so nothing was checked against the data. Fix the errors above and run it again.")
 	}
 }
 
@@ -203,12 +236,12 @@ func checkExit(rows []assert.Row) error {
 
 func runSemanticsProfile(cmd *cobra.Command, args []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
-	o, run, err := openSemanticsRun(cmd, "vibe semantics profile")
+	o, r, err := openSemanticsRun(cmd, "vibe semantics profile")
 	if err != nil {
 		return err
 	}
 	defer o.Close()
-	p, err := workspace.ProfileJoin(cmdCtx(cmd), o.WS, args[0], run, time.Now())
+	p, err := workspace.ProfileJoin(cmdCtx(cmd), o.WS, args[0], workspace.ReadOnlyRunFunc(r), time.Now())
 	if err != nil {
 		if errors.Is(err, semantics.ErrConflict) {
 			return fmt.Errorf("the join file changed while it was being profiled, so nothing was written; run the profile again: %w", err)

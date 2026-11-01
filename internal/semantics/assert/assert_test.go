@@ -3,6 +3,7 @@ package assert
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"regexp"
 	"strings"
@@ -180,7 +181,7 @@ func TestRun_StatusesAndPartialFailure(t *testing.T) {
 		{Kind: "e", PlanError: "no saved query"}, {Kind: "f", SQL: "empty"}, {Kind: "g", SQL: "wide"},
 	}
 	var ran []string
-	res := Run(context.Background(), checks, func(_ context.Context, _ string, sql string, _ map[string]any) (*engine.ResultSet, error) {
+	res := Run(context.Background(), checks, Runner{Run: func(_ context.Context, _ string, sql string, _ map[string]any) (*engine.ResultSet, error) {
 		ran = append(ran, sql)
 		switch sql {
 		case "pass":
@@ -195,7 +196,7 @@ func TestRun_StatusesAndPartialFailure(t *testing.T) {
 			return rs(int32(1)), nil
 		}
 		return nil, nil
-	})
+	}})
 	require.Len(t, res, 7)
 	got := []string{}
 	for _, r := range res {
@@ -215,11 +216,11 @@ func TestRun_StatusesAndPartialFailure(t *testing.T) {
 func TestRun_CanceledContextMarksTheRestAsErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	calls := 0
-	res := Run(ctx, []Check{{SQL: "a"}, {SQL: "b"}}, func(context.Context, string, string, map[string]any) (*engine.ResultSet, error) {
+	res := Run(ctx, []Check{{SQL: "a"}, {SQL: "b"}}, Runner{Run: func(context.Context, string, string, map[string]any) (*engine.ResultSet, error) {
 		calls++
 		cancel()
 		return rs(int64(0)), nil
-	})
+	}})
 	assert.Equal(t, 1, calls)
 	assert.Equal(t, []string{StatusPass, StatusError}, []string{res[0].Status, res[1].Status})
 }
@@ -228,4 +229,132 @@ func TestFailure(t *testing.T) {
 	r := Failure(SubjectMetric, "x", errors.New("nope"))
 	assert.Equal(t, StatusError, r.Status)
 	assert.Equal(t, "x", r.Check.Subject)
+}
+
+func TestPlanEntityCompile_QuotedDeclaredColumnsOnly(t *testing.T) {
+	e := entity("prod_pg.public.customers")
+	e.Connection = "prod_pg"
+	e.Columns = []semantics.Column{{Name: "email", PII: true}, {Name: "customer_id"}, {Name: "created_at"}}
+	c, err := PlanEntityCompile(e)
+	require.NoError(t, err)
+	assert.Equal(t, `SELECT "customer_id", "email", "created_at" FROM "prod_pg"."public"."customers"`, c.SQL)
+	assert.True(t, c.VetOnly)
+	assert.Equal(t, KindCompile, c.Kind)
+	assert.Equal(t, "prod_pg", c.Connection)
+	assert.Empty(t, c.Params)
+
+	_, err = PlanEntityCompile(entity("customers; DROP TABLE x"))
+	assert.ErrorIs(t, err, semantics.ErrInvalid)
+	_, err = PlanEntityCompile(nil)
+	assert.Error(t, err)
+}
+
+func TestPlanMetricCompile_EveryDimensionAndTheSavedQueryDefaults(t *testing.T) {
+	m, src := metricFixture()
+	c, err := PlanMetricCompile(context.Background(), m, src, time.Now())
+	require.NoError(t, err)
+	assert.True(t, c.VetOnly)
+	assert.Equal(t, KindCompile, c.Kind)
+	assert.Equal(t, "prod_pg", c.Connection)
+	assert.Contains(t, c.SQL, `GROUP BY "region", "month"`)
+	assert.Contains(t, c.SQL, `sum(amount) AS "net_revenue"`)
+	assert.NotContains(t, strings.ToLower(c.SQL), "metric(")
+	assert.EqualValues(t, 2, c.Params["floor"])
+
+	// No dimensions: the scalar, no by.
+	m.Dimensions = nil
+	c, err = PlanMetricCompile(context.Background(), m, src, time.Now())
+	require.NoError(t, err)
+	assert.NotContains(t, c.SQL, "GROUP BY")
+
+	src.q = nil
+	_, err = PlanMetricCompile(context.Background(), m, src, time.Now())
+	assert.ErrorContains(t, err, `saved query "base"`)
+}
+
+type connDown struct{}
+
+func (connDown) Error() string        { return "failed to connect \"md\": token refused" }
+func (connDown) ConnectFailure() bool { return true }
+
+type defErr struct{ msg string }
+
+func (e defErr) Error() string         { return e.msg }
+func (defErr) DefinitionProblem() bool { return true }
+
+func TestRun_CompileChecks(t *testing.T) {
+	compile := func(sub string) Check {
+		return Check{SubjectKind: SubjectMetric, Subject: sub, Kind: KindCompile, SQL: sub, VetOnly: true}
+	}
+	data := func(sub string) Check {
+		return Check{SubjectKind: SubjectMetric, Subject: sub, Kind: "non_negative", SQL: "count"}
+	}
+	var vetted, ran []string
+	r := Runner{
+		Vet: func(_ context.Context, _ string, sql string, _ map[string]any) error {
+			vetted = append(vetted, sql)
+			switch sql {
+			case "bad":
+				return defErr{"could not validate query: Binder Error: column \"x\" not found"}
+			case "down":
+				return connDown{}
+			}
+			return nil
+		},
+		Run: func(_ context.Context, _ string, sql string, _ map[string]any) (*engine.ResultSet, error) {
+			ran = append(ran, sql)
+			return rs(int64(0)), nil
+		},
+	}
+	res := Run(context.Background(), []Check{compile("ok"), data("ok"), compile("bad"), data("bad"), data("bad"), compile("down")}, r)
+	got := []string{}
+	for _, x := range res {
+		got = append(got, x.Status)
+	}
+	assert.Equal(t, []string{"pass", "pass", "fail", "error", "error", "error"}, got)
+	assert.Contains(t, res[2].Error, "Binder Error", "a binder error is a fail")
+	assert.Equal(t, "not run: the definition does not compile", res[3].Error)
+	assert.Contains(t, res[5].Error, "token refused", "a connection that cannot connect is an error, not a fail")
+	assert.Equal(t, []string{"ok", "bad", "down"}, vetted)
+	assert.Equal(t, []string{"count"}, ran, "only the compiling subject's data check ran")
+
+	// A wrapped connect failure is still a connect failure.
+	r.Vet = func(context.Context, string, string, map[string]any) error { return fmt.Errorf("vet: %w", connDown{}) }
+	assert.Equal(t, StatusError, Run(context.Background(), []Check{compile("w")}, r)[0].Status)
+
+	// A canceled context is an error, whatever the vet said.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r.Vet = func(context.Context, string, string, map[string]any) error { return errors.New("interrupted") }
+	assert.Equal(t, StatusError, Run(ctx, []Check{compile("c")}, r)[0].Status)
+
+	assert.Equal(t, StatusError, Run(context.Background(), []Check{compile("n")}, Runner{})[0].Status, "no vet is an error")
+
+	// Anything that is not a definition problem (an I/O failure while binding,
+	// a closed workspace) says nothing about the files: an error, not a fail.
+	r.Vet = func(context.Context, string, string, map[string]any) error {
+		return errors.New("IO Error: connection reset")
+	}
+	assert.Equal(t, StatusError, Run(context.Background(), []Check{compile("io")}, r)[0].Status)
+	r.Vet = func(context.Context, string, string, map[string]any) error {
+		return fmt.Errorf("vet: %w", defErr{"nope"})
+	}
+	assert.Equal(t, StatusFail, Run(context.Background(), []Check{compile("wrapped")}, r)[0].Status)
+}
+
+func TestPlanMetricCompile_RequiredParameterWithoutDefaultStillCompiles(t *testing.T) {
+	m, src := metricFixture()
+	src.q.SQL = "SELECT region, month, amount FROM sales WHERE amount > $floor AND month >= $since AND live = $live AND note <> $note"
+	src.q.Parameters = []queries.Param{
+		{Name: "floor", Type: "number", Required: true},
+		{Name: "since", Type: "date", Required: true},
+		{Name: "live", Type: "boolean", Required: true},
+		{Name: "note", Type: "text", Required: true},
+	}
+	m.Assertions = nil
+	c, err := PlanMetricCompile(context.Background(), m, src, time.Now())
+	require.NoError(t, err)
+	assert.Len(t, c.Params, 4, "every required parameter gets a type-valid placeholder")
+	assert.EqualValues(t, 0, c.Params["floor"])
+	assert.Equal(t, false, c.Params["live"])
 }

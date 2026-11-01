@@ -164,8 +164,9 @@ func (a *App) definitionRunner() (*agentToolHandler, error) {
 
 // RunAssertions runs the declared assertions of one entity or metric (kind
 // "entity" or "metric" with a name), of every one of a kind (no name) or of
-// everything (neither). A check that cannot run is an "error" row and the
-// others still run.
+// everything (neither). Each subject starts with a "compile" row (its SQL
+// binds against the connection, no data is read). A check that cannot run is
+// an "error" row and the others still run.
 func (a *App) RunAssertions(kind, name string) ([]AssertionRow, error) {
 	h, err := a.definitionRunner()
 	if err != nil {
@@ -174,7 +175,7 @@ func (a *App) RunAssertions(kind, name string) ([]AssertionRow, error) {
 	ctx, end := a.runs.begin(a.ctxOrBackground(), runKeyAssertions)
 	defer end()
 	before := session.StatusSnapshot(h.sess)
-	results, err := workspace.RunAssertions(ctx, h.ws, kind, name, workspace.ReadOnlyRunFunc(h), time.Now())
+	results, err := workspace.RunAssertions(ctx, h.ws, kind, name, workspace.AssertionRunner(h), time.Now(), workspace.AssertionOptions{})
 	a.afterReadOnlyRun(h.sess, before)
 	if ctx.Err() != nil {
 		return nil, errRunCancelled // a stopped run's remaining checks are errors, not results

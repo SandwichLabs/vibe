@@ -56,7 +56,7 @@ function makeApp(overrides: MockApp = {}) {
     AcceptProposal: vi.fn(async () => {}),
     RejectProposal: vi.fn(async () => {}),
     RunMetric: vi.fn(async () => result()),
-    RunAssertions: vi.fn(async () => [{ subject_kind: 'metric', subject: 'net_revenue', assertion: 'non_negative', status: 'pass', violations: 0, duration_ms: 3 }]),
+    RunAssertions: vi.fn(async () => [{ subject_kind: 'metric', subject: 'net_revenue', assertion: 'compile', status: 'pass', violations: 0, duration_ms: 1 }, { subject_kind: 'metric', subject: 'net_revenue', assertion: 'non_negative', status: 'pass', violations: 0, duration_ms: 3 }]),
     ProfileJoin: vi.fn(async () => ({
       join: 'orders_customers', declared: 'many_to_one', rev: 'r2', left_max_dup: 1,
       measured: { at: '2026-10-29T16:00:00Z', left_rows: 12, right_rows: 4, max_fanout: 3, left_orphans: 0, right_orphans: 0, verdict: 'fan_out' },
@@ -156,8 +156,9 @@ describe('SemanticsView', () => {
     await w.get('[data-testid="run-assertions"]').trigger('click')
     await flushPromises()
     expect(app.RunAssertions).toHaveBeenCalledWith('metric', 'net_revenue')
-    expect(w.get('[data-testid="assertion-summary"]').text()).toContain('1 passed')
-    expect(w.get('[data-testid="assertion-row-0"]').text()).toContain('non_negative')
+    expect(w.get('[data-testid="assertion-summary"]').text()).toContain('2 passed')
+    expect(w.get('[data-testid="assertion-row-0"]').text()).toContain('Compiles')
+    expect(w.get('[data-testid="assertion-row-1"]').text()).toContain('non_negative')
   })
 
   it('an entity card shows the grain, table and personal-data columns', async () => {

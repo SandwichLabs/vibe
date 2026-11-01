@@ -26,6 +26,10 @@ import (
 // it). The workspace package cannot import agents, so each surface hands it in.
 type ReadOnlyRunner interface {
 	RunReadOnlySQLIn(ctx context.Context, connection, sql string, params map[string]any, maxRows int) (*engine.ResultSet, bool, error)
+	// VetReadOnlySQLIn gives the same verdict without running the statement:
+	// it binds against the real connection (EXPLAIN, no row is read). An error
+	// reporting ConnectFailure() true is the connection, not the statement.
+	VetReadOnlySQLIn(ctx context.Context, connection, sql string, params map[string]any) error
 }
 
 // Caps and limits of a run.
@@ -47,12 +51,44 @@ func ReadOnlyRunFunc(r ReadOnlyRunner) semantics.QueryFunc {
 	}
 }
 
+// ReadOnlyVetFunc adapts a ReadOnlyRunner to the VetFunc compile checks take,
+// with CheckStatementTimeout per statement.
+func ReadOnlyVetFunc(r ReadOnlyRunner) assert.VetFunc {
+	return func(ctx context.Context, connection, sql string, params map[string]any) error {
+		ctx, cancel := context.WithTimeout(ctx, CheckStatementTimeout)
+		defer cancel()
+		err := r.VetReadOnlySQLIn(ctx, connection, sql, params)
+		if err != nil && ctx.Err() != nil {
+			// The policy flattens the database's error to text, so the deadline
+			// is only visible here: a statement that ran out of time says
+			// nothing about the definition.
+			return fmt.Errorf("the compile check did not finish: %w", ctx.Err())
+		}
+		return err
+	}
+}
+
+// AssertionRunner is what RunAssertions runs checks with: the runner's read
+// path for counting checks and its vet for compile checks.
+func AssertionRunner(r ReadOnlyRunner) assert.Runner {
+	return assert.Runner{Run: assert.RunFunc(ReadOnlyRunFunc(r)), Vet: ReadOnlyVetFunc(r)}
+}
+
+// AssertionOptions narrow a run of RunAssertions.
+type AssertionOptions struct {
+	// CompileOnly runs only the compile checks: each definition is bound
+	// against its connection and no rows are scanned.
+	CompileOnly bool
+}
+
 // RunAssertions plans and runs the declared assertions of one entity or metric
 // (kind "entity" or "metric" with a name), of every entity or metric (a kind
 // with no name), or of everything (neither). A subject whose checks cannot be
 // planned (an unreadable file, a missing saved query) is one error result and
-// the others still run.
-func RunAssertions(ctx context.Context, ws Workspace, kind, name string, run semantics.QueryFunc, now time.Time) ([]assert.Result, error) {
+// the others still run. Every subject starts with its compile check (it binds
+// the definition against the connection and reads no data); when it fails the
+// subject's assertions are not run.
+func RunAssertions(ctx context.Context, ws Workspace, kind, name string, runner assert.Runner, now time.Time, opts AssertionOptions) ([]assert.Result, error) {
 	plans, err := planAssertions(ctx, ws, kind, name, now)
 	if err != nil {
 		return nil, err
@@ -63,7 +99,11 @@ func RunAssertions(ctx context.Context, ws Workspace, kind, name string, run sem
 			out = append(out, assert.Failure(p.kind, p.name, p.err))
 			continue
 		}
-		out = append(out, assert.Run(ctx, p.checks, assert.RunFunc(run))...)
+		checks := p.checks
+		if opts.CompileOnly {
+			checks = checks[:1] // the compile check is always first
+		}
+		out = append(out, assert.Run(ctx, checks, runner)...)
 	}
 	return out, nil
 }
@@ -90,10 +130,8 @@ func planAssertions(ctx context.Context, ws Workspace, kind, name string, now ti
 		}
 		for i := range list {
 			p := subjectPlan{kind: assert.SubjectEntity, name: list[i].Name}
-			p.checks, p.err = assert.PlanEntity(&list[i])
-			if p.err != nil || len(p.checks) > 0 || name != "" {
-				out = append(out, p)
-			}
+			p.checks, p.err = planEntityChecks(&list[i])
+			out = append(out, p)
 		}
 	}
 	if kind == "" || kind == assert.SubjectMetric {
@@ -104,13 +142,37 @@ func planAssertions(ctx context.Context, ws Workspace, kind, name string, now ti
 		src := semantics.NewReader(st, ws.Queries())
 		for i := range list {
 			p := subjectPlan{kind: assert.SubjectMetric, name: list[i].Name}
-			p.checks, p.err = assert.PlanMetric(ctx, &list[i], src, now)
-			if p.err != nil || len(p.checks) > 0 || name != "" {
-				out = append(out, p)
-			}
+			p.checks, p.err = planMetricChecks(ctx, &list[i], src, now)
+			out = append(out, p)
 		}
 	}
 	return out, nil
+}
+
+// planEntityChecks is the compile check followed by the declared assertions.
+func planEntityChecks(e *semantics.Entity) ([]assert.Check, error) {
+	compile, err := assert.PlanEntityCompile(e)
+	if err != nil {
+		return nil, err
+	}
+	rest, err := assert.PlanEntity(e)
+	if err != nil {
+		return nil, err
+	}
+	return append([]assert.Check{compile}, rest...), nil
+}
+
+// planMetricChecks is the compile check followed by the declared assertions.
+func planMetricChecks(ctx context.Context, m *semantics.Metric, src semantics.Reader, now time.Time) ([]assert.Check, error) {
+	compile, err := assert.PlanMetricCompile(ctx, m, src, now)
+	if err != nil {
+		return nil, err
+	}
+	rest, err := assert.PlanMetric(ctx, m, src, now)
+	if err != nil {
+		return nil, err
+	}
+	return append([]assert.Check{compile}, rest...), nil
 }
 
 func entitiesNamed(ctx context.Context, st semantics.ReadStore, name string) ([]semantics.Entity, error) {

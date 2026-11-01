@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SandwichLabs/vibe/internal/queries"
 	"github.com/SandwichLabs/vibe/internal/semantics"
 	"github.com/SandwichLabs/vibe/internal/session"
 )
@@ -28,6 +29,11 @@ const (
 	StatusFail  = "fail"
 	StatusError = "error"
 )
+
+// KindCompile is the check kind of a compile check: not a declared assertion
+// but a bind of the definition's SQL (an entity's table and columns, a
+// metric's measure and dimensions against its saved query) that reads no data.
+const KindCompile = "compile"
 
 // Subject kinds a check belongs to.
 const (
@@ -49,6 +55,10 @@ type Check struct {
 	Connection string         `json:"connection,omitempty"`
 	SQL        string         `json:"-"`
 	Params     map[string]any `json:"-"`
+	// VetOnly marks a compile check: SQL is vetted (bound against the real
+	// connection by the read-only policy's EXPLAIN) and never executed, so no
+	// row is read. Such a check passes when the vet passes.
+	VetOnly bool `json:"-"`
 	// PlanError is set when the check could not be planned (a metric whose
 	// saved query is gone, say): Run reports it as an error without running
 	// anything, and the other checks still run.
@@ -149,4 +159,87 @@ func PlanMetric(ctx context.Context, m *semantics.Metric, src semantics.Reader, 
 		out = append(out, Check{SubjectKind: SubjectMetric, Subject: m.Name, Kind: a.Kind, Connection: q.Connection, SQL: res.SQL, Params: params})
 	}
 	return out, nil
+}
+
+// PlanEntityCompile plans the compile check of an entity: its declared columns
+// (the id column and every annotated column) selected from its table, vetted
+// and not run, so a missing table or column fails with the binder's message.
+func PlanEntityCompile(e *semantics.Entity) (Check, error) {
+	if e == nil {
+		return Check{}, fmt.Errorf("no entity to plan")
+	}
+	if e.Error != "" {
+		return Check{}, fmt.Errorf("entity %q cannot be read: %s", e.Name, e.Error)
+	}
+	if err := semantics.ValidateEntity(e); err != nil {
+		return Check{}, err
+	}
+	cols := []string{session.QuoteIdent(e.IDColumn)}
+	seen := map[string]bool{e.IDColumn: true}
+	for _, c := range e.Columns {
+		if !seen[c.Name] {
+			seen[c.Name] = true
+			cols = append(cols, session.QuoteIdent(c.Name))
+		}
+	}
+	sql := fmt.Sprintf("SELECT %s FROM %s", strings.Join(cols, ", "), semantics.QuoteTable(e.Table))
+	return Check{SubjectKind: SubjectEntity, Subject: e.Name, Kind: KindCompile, Connection: e.Connection, SQL: sql, VetOnly: true}, nil
+}
+
+// PlanMetricCompile plans the compile check of a metric: the metric at its full
+// dimension set (none for a metric with no dimensions), expanded like any
+// metric() call, so the measure and every dimension are bound against the
+// saved query's output and a $name parameter takes its declared default.
+func PlanMetricCompile(ctx context.Context, m *semantics.Metric, src semantics.Reader, now time.Time) (Check, error) {
+	if m == nil {
+		return Check{}, fmt.Errorf("no metric to plan")
+	}
+	if m.Error != "" {
+		return Check{}, fmt.Errorf("metric %q cannot be read: %s", m.Name, m.Error)
+	}
+	if err := semantics.ValidateMetric(m); err != nil {
+		return Check{}, err
+	}
+	q, err := src.Query(ctx, m.Query)
+	if err != nil {
+		return Check{}, fmt.Errorf("metric %q: its saved query %q cannot be read: %w", m.Name, m.Query, err)
+	}
+	res, err := semantics.Expand(ctx, "SELECT * FROM "+semantics.MetricCall(m.Name, m.Dimensions), src, semantics.Options{Connection: q.Connection, DefaultConnection: q.Connection})
+	if err != nil {
+		return Check{}, err
+	}
+	params, err := res.BindParams(placeholderValues(res.Params), now)
+	if err != nil {
+		return Check{}, err
+	}
+	return Check{SubjectKind: SubjectMetric, Subject: m.Name, Kind: KindCompile, Connection: q.Connection, SQL: res.SQL, Params: params, VetOnly: true}, nil
+}
+
+// placeholderValues gives each saved-query parameter that has no default a
+// value valid for its type, so a required parameter does not stop a bind that
+// only checks names and types. The value is never run: a compile check is
+// vetted, not executed.
+func placeholderValues(ps []queries.Param) map[string]any {
+	var out map[string]any
+	for _, p := range ps {
+		if p.Default != "" {
+			continue
+		}
+		var v any = ""
+		switch p.Type {
+		case "number":
+			v = float64(0)
+		case "integer":
+			v = int64(0)
+		case "boolean":
+			v = false
+		case "date":
+			v = "2000-01-01"
+		}
+		if out == nil {
+			out = map[string]any{}
+		}
+		out[p.Name] = v
+	}
+	return out
 }

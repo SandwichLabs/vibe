@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // AssertionResults — the outcome of "Run assertions": one row per check with
 // pass, fail (the rows that broke it) or error (the check could not run, which
-// says nothing about the data). The error text is shown as text.
+// says nothing about the data). A subject's first row is its compile check
+// (its SQL binds against the connection, no rows are scanned): "Compiles" or
+// "Does not compile" with the database's message beneath. The error text is shown as text.
 import { computed } from 'vue'
 
 const props = defineProps<{ rows: AssertionRow[] }>()
@@ -9,6 +11,8 @@ const summary = computed(() => {
   const n = (s: string) => props.rows.filter((r) => r.status === s).length
   return { pass: n('pass'), fail: n('fail'), error: n('error') }
 })
+const isCompile = (r: AssertionRow) => r.assertion === 'compile'
+const compileLabel = (r: AssertionRow) => (r.status === 'pass' ? 'Compiles' : r.status === 'fail' ? 'Does not compile' : 'Compile check')
 const badge = (s: AssertionRow['status']) => (s === 'pass' ? 'badge--success' : s === 'fail' ? 'badge--error' : 'badge--warn')
 </script>
 
@@ -22,12 +26,13 @@ const badge = (s: AssertionRow['status']) => (s === 'pass' ? 'badge--success' : 
       <tbody>
         <tr v-for="(r, i) in rows" :key="i" :data-testid="`assertion-row-${i}`">
           <td><code>{{ r.subject }}</code></td>
-          <td>{{ r.assertion }}<template v-if="r.column"> on <code>{{ r.column }}</code></template></td>
+          <td v-if="isCompile(r)" :data-testid="`assertion-compile-${i}`">{{ compileLabel(r) }}</td>
+          <td v-else>{{ r.assertion }}<template v-if="r.column"> on <code>{{ r.column }}</code></template></td>
           <td>
             <span class="badge" :class="badge(r.status)"><span class="dot"></span>{{ r.status }}</span>
             <div v-if="r.error" class="help" style="margin: 4px 0 0; color: var(--sh-error);">{{ r.error }}</div>
           </td>
-          <td class="cell-num">{{ r.status === 'error' ? '' : r.violations.toLocaleString() }}</td>
+          <td class="cell-num">{{ r.status === 'error' || isCompile(r) ? '' : r.violations.toLocaleString() }}</td>
         </tr>
       </tbody>
     </table>

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/SandwichLabs/vibe/internal/hub"
 	"github.com/SandwichLabs/vibe/internal/queries"
+	semassert "github.com/SandwichLabs/vibe/internal/semantics/assert"
 	"github.com/SandwichLabs/vibe/internal/workspace"
 )
 
@@ -91,7 +93,9 @@ func TestSemanticsCheck_CleanDataPasses(t *testing.T) {
 	root := checkWorkspace(t)
 	out, stderr, err := runVibe("semantics", "check", "--workspace", root)
 	require.NoError(t, err, out+stderr)
-	assert.Contains(t, out, "6 passed, 0 failed, 0 could not run")
+	assert.Contains(t, out, "9 passed, 0 failed, 0 could not run")
+	assert.Regexp(t, `pass\s+entity customer\s+compile\s+compiles`, out)
+	assert.Regexp(t, `pass\s+metric revenue\s+compile\s+compiles`, out)
 	assert.Regexp(t, `pass\s+entity customer\s+unique customer_id`, out)
 	assert.Regexp(t, `pass\s+metric revenue\s+non_negative`, out)
 }
@@ -113,20 +117,22 @@ func TestSemanticsCheck_BadDataFailsWithAReadableReport(t *testing.T) {
 	assert.Regexp(t, `fail\s+entity customer\s+accepted_values status\s+1 violating row\n`, out)
 	assert.Regexp(t, `fail\s+metric revenue\s+non_negative\s+1 violating row\n`, out)
 	assert.Regexp(t, `pass\s+metric revenue\s+not_null`, out)
-	assert.Contains(t, out, "2 passed, 4 failed, 0 could not run")
+	assert.Contains(t, out, "5 passed, 4 failed, 0 could not run")
 
 	out, _, err = runVibe("semantics", "check", "entity", "order_line", "--workspace", root)
 	require.NoError(t, err)
-	assert.Contains(t, out, "1 passed")
+	assert.Contains(t, out, "2 passed")
 	assert.NotContains(t, out, "customer")
 
 	out, _, err = runVibe("semantics", "check", "--json", "--workspace", root)
 	assert.Equal(t, 1, exitStatus(err))
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &rows))
-	require.Len(t, rows, 6)
-	assert.Equal(t, "fail", rows[0]["status"])
-	assert.EqualValues(t, 1, rows[0]["violations"])
+	require.Len(t, rows, 9)
+	assert.Equal(t, "compile", rows[0]["assertion"], "each subject starts with its compile row")
+	assert.Equal(t, "pass", rows[0]["status"])
+	assert.Equal(t, "fail", rows[1]["status"])
+	assert.EqualValues(t, 1, rows[1]["violations"])
 }
 
 // A check that cannot run is an error, not a failure, and the rest still run.
@@ -145,8 +151,9 @@ func TestSemanticsCheck_ErrorsAreReportedAndOthersStillRun(t *testing.T) {
 
 	out, _, err := runVibe("semantics", "check", "metric", "--workspace", root)
 	require.Error(t, err)
-	assert.Equal(t, 2, exitStatus(err), "nothing failed, two could not run")
-	assert.Regexp(t, `error\s+metric pv\s+non_negative\s+could not run: live bindings are read-only queries`, out, "the agent policy refused it, not some other failure")
+	assert.Equal(t, 1, exitStatus(err), "a definition the policy refuses fails to compile; the missing saved query could not run")
+	assert.Regexp(t, `fail\s+metric pv\s+compile\s+does not compile: .*outside the workspace`, out, "the agent policy refused it, not some other failure")
+	assert.Regexp(t, `error\s+metric pv\s+non_negative\s+could not run: not run: the definition does not compile`, out)
 	assert.Regexp(t, `error\s+metric gone\s+plan\s+could not run: .*no_such_query`, out)
 	assert.Regexp(t, `pass\s+metric revenue\s+non_negative`, out)
 	assert.NotContains(t, out, "-99")
@@ -196,7 +203,7 @@ func TestSemanticsCheck_NoAssertions(t *testing.T) {
 	root := newWS(t)
 	out, _, err := runVibe("semantics", "check", "--workspace", root)
 	require.NoError(t, err)
-	assert.Contains(t, out, "No assertions declared")
+	assert.Contains(t, out, "No entities or metrics defined")
 }
 
 func TestSemanticsProfile_WritesMeasuredBlock(t *testing.T) {
@@ -248,6 +255,46 @@ func TestSemanticsProfile_WritesMeasuredBlock(t *testing.T) {
 // A hand-written entity whose table tries to smuggle SQL never reaches the
 // database: the file is unreadable (the table-name rule), so its checks are
 // errors and the data is untouched.
+// A metric whose measure names a column its saved query does not return fails
+// to compile with the database's own message, and its data checks do not run.
+func TestSemanticsCheck_CompileCatchesWhatTheDataChecksWouldHide(t *testing.T) {
+	root := checkWorkspace(t)
+	seedMetricFile(t, root, "revenue", "version: 1\nname: revenue\nquery: revenue_base\nmeasure: sum(amunt)\ndimensions: [region]\nassertions:\n  - {kind: non_negative}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "semantics", "entities", "order_line.yaml"),
+		[]byte("version: 1\nname: order_line\ngrain: one row per order\ntable: no_such_table\nid_column: order_id\n"), 0o644))
+
+	out, _, err := runVibe("semantics", "check", "--workspace", root)
+	require.Error(t, err)
+	assert.Equal(t, 1, exitStatus(err))
+	assert.Regexp(t, `fail\s+metric revenue\s+compile\s+does not compile: .*amunt`, out)
+	assert.Regexp(t, `error\s+metric revenue\s+non_negative\s+could not run: not run: the definition does not compile`, out)
+	assert.Regexp(t, `fail\s+entity order_line\s+compile\s+does not compile: .*no_such_table`, out)
+	assert.Regexp(t, `pass\s+entity customer\s+compile`, out)
+
+	// --compile runs only compile rows and names the same culprits.
+	out, _, err = runVibe("semantics", "check", "--compile", "--json", "--workspace", root)
+	assert.Equal(t, 1, exitStatus(err))
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &rows))
+	require.Len(t, rows, 3, "one row per entity and metric")
+	for _, r := range rows {
+		assert.Equal(t, "compile", r["assertion"])
+	}
+	statuses := map[string]any{}
+	for _, r := range rows {
+		statuses[fmt.Sprint(r["subject"])] = r["status"]
+	}
+	assert.Equal(t, map[string]any{"customer": "pass", "order_line": "fail", "revenue": "fail"}, statuses)
+
+	// Fix both: --compile passes and exits 0.
+	seedMetricFile(t, root, "revenue", "version: 1\nname: revenue\nquery: revenue_base\nmeasure: sum(amount)\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "semantics", "entities", "order_line.yaml"),
+		[]byte("version: 1\nname: order_line\ngrain: one row per order\ntable: orders\nid_column: order_id\n"), 0o644))
+	out, _, err = runVibe("semantics", "check", "--compile", "--workspace", root)
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "3 passed, 0 failed, 0 could not run", "a metric with no dimensions compiles without by")
+}
+
 func TestSemanticsCheck_HostileEntityTableNeverRuns(t *testing.T) {
 	root := checkWorkspace(t)
 	p := filepath.Join(root, "semantics", "entities", "evil.yaml")
@@ -273,10 +320,11 @@ func TestSemanticsCheck_ColumnNamedLikeAFunction(t *testing.T) {
 	assert.Equal(t, 1, exitStatus(err))
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &rows))
-	require.Len(t, rows, 3)
-	assert.EqualValues(t, 1, rows[0]["violations"], "one surplus duplicate, not a count of today's date")
-	assert.EqualValues(t, 1, rows[1]["violations"])
-	assert.EqualValues(t, 2, rows[2]["violations"])
+	require.Len(t, rows, 4)
+	assert.Equal(t, "pass", rows[0]["status"], "the compile row binds the quoted column")
+	assert.EqualValues(t, 1, rows[1]["violations"], "one surplus duplicate, not a count of today's date")
+	assert.EqualValues(t, 1, rows[2]["violations"])
+	assert.EqualValues(t, 2, rows[3]["violations"])
 }
 
 // When no check could run, the report says loudly that nothing was verified
@@ -303,4 +351,30 @@ func TestSemanticsRunOpensReadOnlyAndPolicyGated(t *testing.T) {
 	o := semanticsRunOpenOptions("vibe semantics check")
 	assert.Equal(t, hub.ModeReadOnly, o.Mode)
 	assert.True(t, o.PolicyGatedRuns)
+}
+
+// Compile rows that passed do not make a run that checked no data look clean.
+func TestSemanticsCheck_NoDataCheckCouldRunIsSaidOutLoud(t *testing.T) {
+	root := checkWorkspace(t)
+	// The saved query now reads a table the data check cannot get at: both the
+	// compile and the data checks of "revenue" would fail, so use a closed ctx
+	// stand-in instead: an entity with an assertion and a metric, checked
+	// compile-only, says nothing extra.
+	out, _, err := runVibe("semantics", "check", "--compile", "--workspace", root)
+	require.NoError(t, err, out)
+	assert.NotContains(t, out, "Nothing was verified")
+	assert.NotContains(t, out, "No data check could run")
+
+	rows := []semassert.Row{
+		{SubjectKind: "metric", Subject: "m", Assertion: "compile", Status: "pass"},
+		{SubjectKind: "metric", Subject: "m", Assertion: "non_negative", Status: "error", Error: "connection lost"},
+	}
+	var buf strings.Builder
+	printCheckReport(&buf, rows)
+	assert.Contains(t, buf.String(), "No data check could run")
+	assert.NotContains(t, buf.String(), "Nothing was verified")
+
+	buf.Reset()
+	printCheckReport(&buf, []semassert.Row{{SubjectKind: "metric", Subject: "m", Assertion: "compile", Status: "error", Error: "x"}})
+	assert.Contains(t, buf.String(), "Nothing was verified")
 }

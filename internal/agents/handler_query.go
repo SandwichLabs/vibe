@@ -153,7 +153,7 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 	// keep the metric call and the wildcard.
 	mx, params, err := h.expandMetrics(ctx, connection, orig, params)
 	if err != nil {
-		return "", params, ctx, "", fmt.Errorf("query execution failed: %w", err)
+		return "", params, ctx, "", fmt.Errorf("query execution failed: %w", &DefinitionError{Err: err})
 	}
 	connectErr := h.connectReferenced(ctx, connection, mx.SQL)
 	runSQL, runCtx, err = h.expand(ctx, mx.SQL)
@@ -168,7 +168,7 @@ func (h *Handler) readOnlyVerdict(ctx context.Context, connection, orig string, 
 	}
 	if err := h.sandboxFor(ctx).checkSQLClassReadOnly(v.Class, v.Reason); err != nil {
 		if connectErr != nil {
-			return "", params, ctx, v.Reason, connectErr
+			return "", params, ctx, v.Reason, withConnectError(err, connectErr)
 		}
 		// The user/agent-facing error is one fixed, mode-agnostic message
 		// (see ErrReadOnlyBindingDenied) — it never surfaces the policy's

@@ -122,6 +122,7 @@ The workspace says what its data means in reviewed files under ` + "`semantics/`
 
 - **` + "`list_definitions`" + `** lists them all, with each one's ` + "`rev`" + ` and how many proposals wait. **` + "`get_definition`" + `** returns one as data; for a metric it also returns the declared parameters of its saved query. Both work in every tier.
 - In SQL, call a metric by name: ` + "`SELECT * FROM metric('net_revenue')`" + `, ` + "`metric('net_revenue', by => 'region')`" + `, ` + "`by => ['region', 'month']`" + `. The name and dimensions are quoted literals; a dimension must be one the metric lists. The call is replaced by the metric's own query before any check runs, so it is held to the same read-only policy. Use a defined metric instead of re-deriving its measure by hand.
+- The person can check that every definition still binds against its connection with ` + "`vibe semantics check --compile`" + ` (or Studio's Run assertions); no tool runs it, so a metric you cannot query may simply not compile.
 
 ## Proposing a change
 
