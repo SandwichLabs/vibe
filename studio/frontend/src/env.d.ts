@@ -617,7 +617,7 @@ interface DefinitionList {
   glossary_error?: string
   open_proposals: number
 }
-interface SemanticAssertion { kind: string; column?: string; values?: string[] }
+interface SemanticAssertion { kind: string; column?: string; values?: string[]; min?: number; max?: number; max_age?: string; min_rows?: number }
 interface SemanticEntity {
   name: string
   description?: string
@@ -675,6 +675,7 @@ interface AssertionRow {
   column?: string
   status: 'pass' | 'fail' | 'error'
   violations: number
+  detail?: string // what a freshness or row_count check saw, e.g. 'latest 2026-09-30'
   duration_ms: number
   error?: string
   receipt?: string // reserved for receipts; empty for now

@@ -47,9 +47,10 @@ func runsAs2(c *cobra.Command, args cobra.PositionalArgs, run func(*cobra.Comman
 var semanticsCheckCmd = &cobra.Command{
 	Use:   "check [entity|metric [name]]",
 	Short: "Run the assertions the definitions declare",
-	Long: `Run the assertions declared in semantics/: an entity's unique, not_null and
-accepted_values, a metric's non_negative and not_null (checked at the metric's
-full dimension set). With no argument every entity and metric is checked;
+	Long: `Run the assertions declared in semantics/: an entity's unique, not_null,
+accepted_values, range, freshness and row_count; a metric's non_negative,
+not_null and range (checked at the metric's full dimension set) and unique
+(its saved query has one row per dimension set). With no argument every entity and metric is checked;
 "entity" or "metric" alone checks all of that kind, and a name checks one.
 
 Each entity and metric starts with a compile check: its SQL (an entity's table
@@ -174,6 +175,7 @@ func printCheckReport(out io.Writer, rows []assert.Row) {
 		switch r.Status {
 		case assert.StatusPass:
 			pass++
+			detail = r.Detail
 			if r.Assertion == assert.KindCompile {
 				detail = "compiles"
 			}
@@ -182,7 +184,7 @@ func printCheckReport(out io.Writer, rows []assert.Row) {
 			if r.Assertion == assert.KindCompile {
 				detail = "does not compile: " + strings.Join(strings.Fields(r.Error), " ")
 			} else {
-				detail = fmt.Sprintf("%d violating row%s", r.Violations, plural(int(r.Violations)))
+				detail = failDetail(r)
 			}
 		default:
 			errs++
@@ -265,4 +267,16 @@ func runSemanticsProfile(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(out, "recorded in semantics/joins/%s.yaml (measured:)\n", name)
 	return nil
+}
+
+// failDetail is the DETAIL of a failed data check: a freshness or row_count
+// check names what it saw; every other kind counts its violating rows.
+func failDetail(r assert.Row) string {
+	switch r.Assertion {
+	case semantics.AssertFreshness:
+		return "stale: " + r.Detail
+	case semantics.AssertRowCount:
+		return "too few rows: " + r.Detail
+	}
+	return fmt.Sprintf("%d violating row%s", r.Violations, plural(int(r.Violations)))
 }

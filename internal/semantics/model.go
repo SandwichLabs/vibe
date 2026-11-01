@@ -17,8 +17,10 @@ package semantics
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -73,13 +75,17 @@ const (
 	KindGlossary Kind = "glossary"
 )
 
-// Assertion kinds. Entities take unique, not_null and accepted_values; metrics
-// take non_negative and not_null.
+// Assertion kinds. Entities take unique, not_null, accepted_values, range,
+// freshness and row_count; metrics take non_negative, not_null, range and
+// unique (the saved query has one row per full dimension set).
 const (
 	AssertUnique         = "unique"
 	AssertNotNull        = "not_null"
 	AssertAcceptedValues = "accepted_values"
 	AssertNonNegative    = "non_negative"
+	AssertRange          = "range"
+	AssertFreshness      = "freshness"
+	AssertRowCount       = "row_count"
 )
 
 // Join cardinalities.
@@ -165,12 +171,17 @@ type Column struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
-// Assertion is a check a person declares; a runner (a later phase) plans and
-// runs it. Column and Values apply to entity assertions only.
+// Assertion is a check a person declares; the assert package plans and runs
+// it. Column and Values apply to entity assertions only; Min and Max belong to
+// range, MaxAge to freshness and MinRows to row_count.
 type Assertion struct {
-	Kind   string   `yaml:"kind" json:"kind"`
-	Column string   `yaml:"column,omitempty" json:"column,omitempty"`
-	Values []string `yaml:"values,omitempty" json:"values,omitempty"`
+	Kind    string   `yaml:"kind" json:"kind"`
+	Column  string   `yaml:"column,omitempty" json:"column,omitempty"`
+	Values  []string `yaml:"values,omitempty" json:"values,omitempty"`
+	Min     *Number  `yaml:"min,omitempty" json:"min,omitempty"`
+	Max     *Number  `yaml:"max,omitempty" json:"max,omitempty"`
+	MaxAge  string   `yaml:"max_age,omitempty" json:"max_age,omitempty"`
+	MinRows *Count   `yaml:"min_rows,omitempty" json:"min_rows,omitempty"`
 }
 
 // Metric is a named measure over a saved query.
@@ -256,3 +267,38 @@ type Glossary struct {
 
 	Meta
 }
+
+// Number is a bound of a range assertion. It is read strictly: a finite
+// decimal number written plainly (-5, 0, 100, 0.25). A quoted "100", 1e3, 0x10,
+// .inf and .nan are refused rather than coerced, so what the file says is what
+// is compared.
+type Number float64
+
+var numberRE = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,14})(\.[0-9]{1,15})?$`)
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (v *Number) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.ScalarNode || (n.Tag != "!!int" && n.Tag != "!!float") || !numberRE.MatchString(n.Value) {
+		return fmt.Errorf("line %d: a bound must be a plain decimal number such as 0, -5 or 99.5, not quoted and without an exponent (got %q)", n.Line, n.Value)
+	}
+	f, err := strconv.ParseFloat(n.Value, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return fmt.Errorf("line %d: %q is not a finite number", n.Line, n.Value)
+	}
+	*v = Number(f)
+	return nil
+}
+
+// MarshalYAML writes the number back in the plain decimal form UnmarshalYAML
+// reads (never an exponent).
+func (v Number) MarshalYAML() (any, error) {
+	text := strconv.FormatFloat(float64(v), 'f', -1, 64)
+	tag := "!!int"
+	if strings.Contains(text, ".") {
+		tag = "!!float"
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: text}, nil
+}
+
+// Float is the bound as a float64, for a bound parameter.
+func (v Number) Float() float64 { return float64(v) }

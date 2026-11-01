@@ -10,14 +10,12 @@ import ResultGrid from './ResultGrid.vue'
 import AssertionResults from './AssertionResults.vue'
 import RunStatus from './RunStatus.vue'
 import SourceText from './SourceText.vue'
+import { describeAssertion } from '../lib/describeAssertion'
 import type { DefinitionRuns } from '../composables/useDefinitionRuns'
 
 const props = defineProps<{ detail: DefinitionDetail; runs: DefinitionRuns }>()
 const dims = ref<string[]>([])
 watch(() => props.detail.name, () => { dims.value = [] })
-function describeAssertion(a: SemanticAssertion) {
-  return a.kind + (a.column ? ` on ${a.column}` : '')
-}
 </script>
 
 <template>

@@ -18,6 +18,8 @@ import (
 	"github.com/SandwichLabs/vibe/internal/semantics"
 )
 
+var fixedNow = time.Date(2026, time.October, 7, 12, 0, 0, 0, time.UTC)
+
 func entity(table string, as ...semantics.Assertion) *semantics.Entity {
 	return &semantics.Entity{Version: 1, Name: "customer", Grain: "one row per customer", Table: table, IDColumn: "customer_id", Assertions: as}
 }
@@ -29,7 +31,7 @@ func TestPlanEntity_Shapes(t *testing.T) {
 		semantics.Assertion{Kind: semantics.AssertAcceptedValues, Column: "status", Values: []string{"active", "x'); DROP TABLE t; --"}},
 	)
 	e.Connection = "prod_pg"
-	checks, err := PlanEntity(e)
+	checks, err := PlanEntity(e, fixedNow)
 	require.NoError(t, err)
 	require.Len(t, checks, 3)
 	assert.Equal(t, `SELECT count("customer_id") - count(DISTINCT "customer_id") FROM "prod_pg"."public"."customers"`, checks[0].SQL)
@@ -48,12 +50,12 @@ func TestPlanEntity_HostileNamesAreRefused(t *testing.T) {
 		"customers; DROP TABLE customers", "customers--", `"customers"`, "a.b.c.d", "customers UNION SELECT 1",
 		"customers WHERE 1=1", "c'; ATTACH 'x' AS y; --", "", "select", "read_csv('/etc/passwd')", "t\nx", "ünï",
 	} {
-		_, err := PlanEntity(entity(table, semantics.Assertion{Kind: semantics.AssertNotNull, Column: "id"}))
+		_, err := PlanEntity(entity(table, semantics.Assertion{Kind: semantics.AssertNotNull, Column: "id"}), fixedNow)
 		require.Error(t, err, table)
 		assert.ErrorIs(t, err, semantics.ErrInvalid, table)
 	}
 	for _, col := range []string{"id; DROP TABLE x", "id) OR (1=1", `"id"`, "ID", "id--", "from"} {
-		_, err := PlanEntity(entity("customers", semantics.Assertion{Kind: semantics.AssertNotNull, Column: col}))
+		_, err := PlanEntity(entity("customers", semantics.Assertion{Kind: semantics.AssertNotNull, Column: col}), fixedNow)
 		require.Error(t, err, col)
 	}
 }
@@ -74,7 +76,7 @@ func FuzzPlanEntity(f *testing.F) {
 			{Kind: semantics.AssertNotNull, Column: column},
 			{Kind: semantics.AssertAcceptedValues, Column: column, Values: []string{value}},
 		} {
-			checks, err := PlanEntity(entity(table, a))
+			checks, err := PlanEntity(entity(table, a), fixedNow)
 			if err != nil {
 				continue
 			}
@@ -94,7 +96,7 @@ func TestPlanEntity_RandomHostileNamesNeverReachSQL(t *testing.T) {
 			b[j] = alphabet[rng.Intn(len(alphabet))]
 		}
 		s := string(b)
-		checks, err := PlanEntity(entity(s, semantics.Assertion{Kind: semantics.AssertNotNull, Column: s}))
+		checks, err := PlanEntity(entity(s, semantics.Assertion{Kind: semantics.AssertNotNull, Column: s}), fixedNow)
 		if err == nil {
 			require.Regexp(t, safeSQL, checks[0].SQL, s)
 		}
@@ -102,11 +104,11 @@ func TestPlanEntity_RandomHostileNamesNeverReachSQL(t *testing.T) {
 }
 
 func TestPlanEntity_RefusesAnUnreadableOrOtherKind(t *testing.T) {
-	_, err := PlanEntity(&semantics.Entity{Name: "bad", Meta: semantics.Meta{Error: "line 3: nope"}})
+	_, err := PlanEntity(&semantics.Entity{Name: "bad", Meta: semantics.Meta{Error: "line 3: nope"}}, fixedNow)
 	assert.ErrorContains(t, err, "cannot be read")
-	_, err = PlanEntity(entity("t", semantics.Assertion{Kind: semantics.AssertNonNegative}))
+	_, err = PlanEntity(entity("t", semantics.Assertion{Kind: semantics.AssertNonNegative}), fixedNow)
 	assert.Error(t, err)
-	_, err = PlanEntity(nil)
+	_, err = PlanEntity(nil, fixedNow)
 	assert.Error(t, err)
 }
 
@@ -357,4 +359,58 @@ func TestPlanMetricCompile_RequiredParameterWithoutDefaultStillCompiles(t *testi
 	assert.Len(t, c.Params, 4, "every required parameter gets a type-valid placeholder")
 	assert.EqualValues(t, 0, c.Params["floor"])
 	assert.Equal(t, false, c.Params["live"])
+}
+
+func TestPlan_NewKindShapes(t *testing.T) {
+	min, max, rows := semantics.Number(0), semantics.Number(99.5), semantics.Count(5)
+	e := entity("prod_pg.public.logs",
+		semantics.Assertion{Kind: semantics.AssertRange, Column: "score", Min: &min, Max: &max},
+		semantics.Assertion{Kind: semantics.AssertRange, Column: "score", Max: &max},
+		semantics.Assertion{Kind: semantics.AssertFreshness, Column: "log_date", MaxAge: "7d"},
+		semantics.Assertion{Kind: semantics.AssertRowCount, MinRows: &rows})
+	checks, err := PlanEntity(e, fixedNow)
+	require.NoError(t, err)
+	require.Len(t, checks, 4)
+	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" < $vibe_min OR "score" > $vibe_max`, checks[0].SQL)
+	assert.Equal(t, map[string]any{"vibe_min": 0.0, "vibe_max": 99.5}, checks[0].Params)
+	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" > $vibe_max`, checks[1].SQL)
+	assert.Equal(t, map[string]any{"vibe_max": 99.5}, checks[1].Params)
+	assert.Contains(t, checks[2].SQL, `max("log_date")`)
+	assert.Equal(t, map[string]any{"vibe_threshold": fixedNow.Add(-7 * 24 * time.Hour)}, checks[2].Params)
+	assert.Contains(t, checks[3].SQL, `count(*) AS n FROM "prod_pg"."public"."logs"`)
+	assert.Equal(t, map[string]any{"vibe_min_rows": int64(5)}, checks[3].Params)
+	for _, c := range checks {
+		assert.NotContains(t, c.SQL, "7d")
+		assert.NotContains(t, c.SQL, "99.5")
+	}
+}
+
+func TestPlanMetric_NewKinds(t *testing.T) {
+	m, src := metricFixture()
+	max := semantics.Number(100)
+	m.Assertions = []semantics.Assertion{{Kind: semantics.AssertUnique}, {Kind: semantics.AssertRange, Max: &max}}
+	checks, err := PlanMetric(context.Background(), m, src, fixedNow)
+	require.NoError(t, err)
+	require.Len(t, checks, 2)
+	assert.Contains(t, checks[0].SQL, `GROUP BY "region", "month" HAVING count(*) > 1`)
+	assert.Contains(t, checks[0].SQL, "vibe_grain_net_revenue")
+	assert.Equal(t, "prod_pg", checks[0].Connection)
+	assert.Equal(t, map[string]any{"floor": float64(2)}, checks[0].Params)
+	assert.Contains(t, checks[1].SQL, `WHERE "net_revenue" > $vibe_max`)
+	assert.Equal(t, map[string]any{"floor": float64(2), "vibe_max": 100.0}, checks[1].Params)
+
+	// A saved query that declares a reserved name is refused rather than shadowed.
+	src.q.Parameters = append(src.q.Parameters, queries.Param{Name: "vibe_max", Type: "number", Default: "1"})
+	src.q.SQL += " AND amount < $vibe_max"
+	_, err = PlanMetric(context.Background(), m, src, fixedNow)
+	require.Error(t, err)
+}
+
+func TestRun_DetailComesFromTheSecondColumn(t *testing.T) {
+	res := Run(context.Background(), []Check{{Kind: semantics.AssertFreshness, SQL: "x"}}, Runner{Run: func(context.Context, string, string, map[string]any) (*engine.ResultSet, error) {
+		return &engine.ResultSet{Columns: []engine.Column{{Name: "a"}, {Name: "b"}}, Rows: [][]any{{int64(1), "latest 2026-09-30"}}}, nil
+	}})
+	assert.Equal(t, StatusFail, res[0].Status)
+	assert.Equal(t, "latest 2026-09-30", res[0].Detail)
+	assert.Equal(t, "latest 2026-09-30", Rows(res)[0].Detail)
 }

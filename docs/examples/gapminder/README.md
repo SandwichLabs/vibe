@@ -63,6 +63,7 @@ metric    gdp_total                   sum(gdp_percap * pop) by continent, year, 
 metric    life_expectancy             sum(life_exp * pop) / nullif(sum(pop), 0) by continent, year, country  -
 metric    life_expectancy_by_country  avg(life_exp) by continent, year                                       -
 metric    population                  sum(pop) by continent, year, country                                   -
+metric    population_by_country       sum(pop) by country, year                                              -
 join      country_year_code           country_year to country_code (many_to_one)                             -
 glossary  glossary.md                 5 terms                                                                -
 ```
@@ -111,24 +112,37 @@ expanded 2 metrics: life_expectancy, life_expectancy_by_country
 ```console
 $ vibe semantics check
 STATUS  SUBJECT                            CHECK                      DETAIL
+pass    entity country_code                compile                    compiles
 pass    entity country_code                unique iso_alpha           
 pass    entity country_code                unique country             
+pass    entity country_year                compile                    compiles
 pass    entity country_year                unique id                  
 pass    entity country_year                not_null life_exp          
 pass    entity country_year                not_null pop               
 pass    entity country_year                accepted_values continent  
+pass    entity country_year                row_count                  1704 rows
+pass    entity country_year                range life_exp             
+pass    metric gdp_total                   compile                    compiles
 pass    metric gdp_total                   non_negative               
 pass    metric gdp_total                   not_null                   
+pass    metric life_expectancy             compile                    compiles
 pass    metric life_expectancy             non_negative               
 pass    metric life_expectancy             not_null                   
+pass    metric life_expectancy_by_country  compile                    compiles
 pass    metric life_expectancy_by_country  non_negative               
+pass    metric population                  compile                    compiles
 pass    metric population                  non_negative               
 pass    metric population                  not_null                   
+pass    metric population_by_country       compile                    compiles
+pass    metric population_by_country       unique                     
+pass    metric population_by_country       range                      
 
-13 passed, 0 failed, 0 could not run
+24 passed, 0 failed, 0 could not run
 ```
 
-All pass. `country_year` asserts the continent is one of the five known values (`accepted_values`), and that no row lacks a life expectancy or a population (a row with a NULL `life_exp` leaves `sum(life_exp * pop)` but its `pop` stays in `sum(pop)`, which drags the weighted mean down, so `not_null` guards it). There is no assertion that a country and year pair is unique, because `unique` takes one column, not two; the generated `id` is unique by construction.
+All pass. `country_year` asserts the continent is one of the five known values (`accepted_values`), and that no row lacks a life expectancy or a population (a row with a NULL `life_exp` leaves `sum(life_exp * pop)` but its `pop` stays in `sum(pop)`, which drags the weighted mean down, so `not_null` guards it). An entity's `unique` takes one column, not two, so there is no entity assertion that a country and year pair is unique (the generated `id` is unique by construction); the `population_by_country` metric covers that pair.
+
+Three more kinds are here. `country_year` declares `row_count` (at least 1,704 rows; the DETAIL says how many it found) and a `range` on `life_exp` (between 20 and 90 years; a value outside it would be counted, so a unit slip such as a fraction of 1 or a percentage over 100 is caught). `population_by_country` is measured by country and year, and its saved query has exactly one row for each, so it declares `unique`: the check counts the country-and-year pairs the saved query has more than one row for, and `range` with only a `min` keeps the sums non-negative. `unique` on a metric is for a saved query that is meant to be at the metric's grain. The other metrics here are measured over the same rows with fewer dimensions, so the same assertion on `life_expectancy_by_country` (by continent and year) would fail: pointed at `[continent, year]`, `population_by_country` reports `fail  unique  60 violating rows`, one for each of the 5 continents and 12 years that hold many rows.
 
 ## Ask the metrics
 

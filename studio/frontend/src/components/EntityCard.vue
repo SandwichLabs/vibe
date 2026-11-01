@@ -7,13 +7,11 @@ import { computed } from 'vue'
 import AssertionResults from './AssertionResults.vue'
 import RunStatus from './RunStatus.vue'
 import SourceText from './SourceText.vue'
+import { describeAssertion } from '../lib/describeAssertion'
 import type { DefinitionRuns } from '../composables/useDefinitionRuns'
 
 const props = defineProps<{ detail: DefinitionDetail; runs: DefinitionRuns }>()
 const pii = computed(() => (props.detail.entity?.columns ?? []).filter((c) => c.pii))
-function describeAssertion(a: SemanticAssertion) {
-  return a.kind + (a.column ? ` on ${a.column}` : '') + (a.values?.length ? ` (${a.values.join(', ')})` : '')
-}
 </script>
 
 <template>

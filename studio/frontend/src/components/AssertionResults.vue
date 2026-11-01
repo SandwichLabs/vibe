@@ -3,7 +3,9 @@
 // pass, fail (the rows that broke it) or error (the check could not run, which
 // says nothing about the data). A subject's first row is its compile check
 // (its SQL binds against the connection, no rows are scanned): "Compiles" or
-// "Does not compile" with the database's message beneath. The error text is shown as text.
+// "Does not compile" with the database's message beneath. A freshness or
+// row_count row also says what it saw ("latest 2026-09-30", "0 rows"). The error
+// and detail text are shown as text.
 import { computed } from 'vue'
 
 const props = defineProps<{ rows: AssertionRow[] }>()
@@ -30,6 +32,7 @@ const badge = (s: AssertionRow['status']) => (s === 'pass' ? 'badge--success' : 
           <td v-else>{{ r.assertion }}<template v-if="r.column"> on <code>{{ r.column }}</code></template></td>
           <td>
             <span class="badge" :class="badge(r.status)"><span class="dot"></span>{{ r.status }}</span>
+            <div v-if="r.detail && !isCompile(r)" class="help" style="margin: 4px 0 0;" :data-testid="`assertion-detail-${i}`">{{ r.detail }}</div>
             <div v-if="r.error" class="help" style="margin: 4px 0 0; color: var(--sh-error);">{{ r.error }}</div>
           </td>
           <td class="cell-num">{{ r.status === 'error' || isCompile(r) ? '' : r.violations.toLocaleString() }}</td>
