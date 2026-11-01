@@ -10,6 +10,6 @@ export function describeAssertion(a: SemanticAssertion): string {
     out += ` (${[lo, hi].filter(Boolean).join(', ')})`
   }
   if (a.max_age) out += ` (max age ${a.max_age})`
-  if (a.min_rows != null) out += ` (min ${a.min_rows} rows)`
+  if (a.min_rows != null) out += ` (min ${a.min_rows} ${a.min_rows === 1 ? 'row' : 'rows'})`
   return out
 }

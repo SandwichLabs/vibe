@@ -228,6 +228,17 @@ func rangePredicate(col string, a semantics.Assertion) (string, map[string]any) 
 	return strings.Join(parts, " OR "), params
 }
 
+// rangeCastPredicate is rangePredicate for a compile check: each bound is a
+// parameter cast to DOUBLE, so the binder rejects a text column the way the data
+// check's bound number would. The vet path binds plain values, so the bounds
+// travel as float64.
+func rangeCastPredicate(col string, a semantics.Assertion) (string, map[string]any) {
+	pred, params := rangePredicate(col, a)
+	pred = strings.ReplaceAll(pred, "$"+paramMin, "CAST($"+paramMin+" AS DOUBLE)")
+	pred = strings.ReplaceAll(pred, "$"+paramMax, "CAST($"+paramMax+" AS DOUBLE)")
+	return pred, params
+}
+
 // rangeSQL counts the rows of an entity's table whose column is below min or
 // above max. prefix is "SELECT count(*) FROM <table>" with the table quoted.
 func rangeSQL(prefix, col string, a semantics.Assertion) (string, map[string]any) {
@@ -287,7 +298,32 @@ func PlanEntityCompile(e *semantics.Entity) (Check, error) {
 		add(a.Column)
 	}
 	sql := fmt.Sprintf("SELECT %s FROM %s", strings.Join(cols, ", "), semantics.QuoteTable(e.Table))
-	return Check{SubjectKind: SubjectEntity, Subject: e.Name, Kind: KindCompile, Connection: e.Connection, SQL: sql, VetOnly: true}, nil
+	// A range or freshness column is compared with a bound number or timestamp;
+	// including the comparison makes a type mismatch (a text column) fail here
+	// with the binder's own message instead of in the data check.
+	var preds []string
+	params := map[string]any{}
+	for _, a := range e.Assertions {
+		col := session.QuoteIdent(a.Column)
+		switch a.Kind {
+		case semantics.AssertRange:
+			p, ps := rangeCastPredicate(col, a)
+			preds = append(preds, "("+p+")")
+			for k, v := range ps {
+				params[k] = v
+			}
+		case semantics.AssertFreshness:
+			// A string cast to TIMESTAMP: the vet path binds plain values only.
+			preds = append(preds, "("+col+" < CAST($"+paramThreshold+" AS TIMESTAMP))")
+			params[paramThreshold] = "1970-01-01 00:00:00"
+		}
+	}
+	c := Check{SubjectKind: SubjectEntity, Subject: e.Name, Kind: KindCompile, Connection: e.Connection, SQL: sql, VetOnly: true}
+	if len(preds) > 0 {
+		c.SQL += " WHERE " + strings.Join(preds, " OR ")
+		c.Params = params
+	}
+	return c, nil
 }
 
 // PlanMetricCompile plans the compile check of a metric: the metric at its full
@@ -308,11 +344,38 @@ func PlanMetricCompile(ctx context.Context, m *semantics.Metric, src semantics.R
 	if err != nil {
 		return Check{}, fmt.Errorf("metric %q: its saved query %q cannot be read: %w", m.Name, m.Query, err)
 	}
-	res, err := semantics.Expand(ctx, "SELECT * FROM "+semantics.MetricCall(m.Name, m.Dimensions), src, semantics.Options{Connection: q.Connection, DefaultConnection: q.Connection})
+	text := "SELECT * FROM " + semantics.MetricCall(m.Name, m.Dimensions)
+	var preds []string
+	extra := map[string]any{}
+	for _, a := range m.Assertions {
+		if a.Kind == semantics.AssertRange {
+			p, ps := rangeCastPredicate(session.QuoteIdent(m.Name), a)
+			preds = append(preds, "("+p+")")
+			for k, v := range ps {
+				extra[k] = v
+			}
+		}
+	}
+	if len(preds) > 0 {
+		text += " WHERE " + strings.Join(preds, " OR ")
+	}
+	res, err := semantics.Expand(ctx, text, src, semantics.Options{Connection: q.Connection, DefaultConnection: q.Connection})
 	if err != nil {
 		return Check{}, err
 	}
-	params, err := res.BindParams(placeholderValues(res.Params), now)
+	values := placeholderValues(res.Params)
+	if len(extra) > 0 && values == nil {
+		values = map[string]any{}
+	}
+	for k, v := range extra {
+		for _, p := range res.Params {
+			if p.Name == k {
+				return Check{}, fmt.Errorf("metric %q: its saved query declares the parameter $%s, which a range assertion reserves", m.Name, k)
+			}
+		}
+		values[k] = v
+	}
+	params, err := res.BindParams(values, now)
 	if err != nil {
 		return Check{}, err
 	}

@@ -10,6 +10,7 @@ describe('describeAssertion', () => {
     expect(describeAssertion({ kind: 'range', column: 'score', min: 0, max: 100 })).toBe('range on score (min 0, max 100)')
     expect(describeAssertion({ kind: 'range', max: 99.5 })).toBe('range (max 99.5)')
     expect(describeAssertion({ kind: 'freshness', column: 'log_date', max_age: '7d' })).toBe('freshness on log_date (max age 7d)')
-    expect(describeAssertion({ kind: 'row_count', min_rows: 1 })).toBe('row_count (min 1 rows)')
+    expect(describeAssertion({ kind: 'row_count', min_rows: 1 })).toBe('row_count (min 1 row)')
+    expect(describeAssertion({ kind: 'row_count', min_rows: 5 })).toBe('row_count (min 5 rows)')
   })
 })

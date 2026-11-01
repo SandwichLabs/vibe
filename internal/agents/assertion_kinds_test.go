@@ -187,3 +187,36 @@ func TestProposeDefinition_NewAssertionKinds(t *testing.T) {
 	})
 	require.NotNil(t, resp.Error)
 }
+
+func TestAssertionKinds_TypeMismatchFailsAtCompile(t *testing.T) {
+	fx := newPolicyFixture(t, ModeReadOnly)
+	fx.exec(`CREATE TABLE typed (id INTEGER, label VARCHAR, n INTEGER); INSERT INTO typed VALUES (1, 'a', 2)`)
+	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	e := &semantics.Entity{Version: 1, Name: "e", Grain: "one row", Table: "typed", IDColumn: "id", Assertions: []semantics.Assertion{
+		{Kind: semantics.AssertRange, Column: "label", Max: numPtr(5)},
+		{Kind: semantics.AssertFreshness, Column: "n", MaxAge: "7d"},
+	}}
+	compile, err := sassert.PlanEntityCompile(e)
+	require.NoError(t, err)
+	rest, err := sassert.PlanEntity(e, now)
+	require.NoError(t, err)
+	vet := func(ctx context.Context, conn, sql string, params map[string]any) error {
+		return fx.h.VetReadOnlySQLIn(ctx, conn, sql, params)
+	}
+	res := sassert.Run(context.Background(), append([]sassert.Check{compile}, rest...), sassert.Runner{Vet: vet, Run: func(ctx context.Context, conn, sql string, params map[string]any) (*engine.ResultSet, error) {
+		rs, _, err := fx.h.RunReadOnlySQLIn(ctx, conn, sql, params, 100)
+		return rs, err
+	}})
+	require.Len(t, res, 3)
+	assert.Equal(t, sassert.StatusFail, res[0].Status, res[0].Error)
+	assert.Contains(t, res[0].Error, "VARCHAR")
+	assert.Contains(t, res[1].Error, "not run")
+	assert.Contains(t, res[2].Error, "not run")
+
+	// A numeric column with a range and a date column with freshness still compile.
+	e.Assertions = []semantics.Assertion{{Kind: semantics.AssertRange, Column: "n", Min: numPtr(0)}}
+	compile, err = sassert.PlanEntityCompile(e)
+	require.NoError(t, err)
+	res = sassert.Run(context.Background(), []sassert.Check{compile}, sassert.Runner{Vet: vet})
+	assert.Equal(t, sassert.StatusPass, res[0].Status, res[0].Error)
+}
