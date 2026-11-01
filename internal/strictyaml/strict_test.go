@@ -77,3 +77,42 @@ func TestDecode_ErrorsNeverEchoRawControlCharacters(t *testing.T) {
 	assert.NotContains(t, err.Error(), "\x1b")
 	assert.Equal(t, "a<U+001B>b<U+000D>c\nd", EscapeHidden("a\x1bb\rc\nd"))
 }
+
+func TestDecode_FlowMappingHint(t *testing.T) {
+	type assertion struct {
+		Kind   string   `yaml:"kind"`
+		Column string   `yaml:"column"`
+		Values []string `yaml:"values"`
+	}
+	type file struct {
+		Assertions []assertion `yaml:"assertions"`
+	}
+	const hint = "inside {...} quote a value that contains , ( ) : or #"
+	decodeFile := func(in string) error {
+		var f file
+		return Decode([]byte(in), 512, 40, "m.yaml", &f)
+	}
+
+	// The unquoted (key, unit) splits at the comma: a type error, then an unknown field "unit)".
+	err := decodeFile("assertions: [{kind: accepted_values, column: unit, values: (key, unit)}]\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line 1: field unit) not found")
+	assert.Contains(t, err.Error(), hint)
+
+	// A flow mapping that does not parse at all.
+	err = decodeFile("assertions: [{kind: x, values: k: u}]\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not find expected ',' or '}'")
+	assert.Contains(t, err.Error(), hint)
+
+	// An ordinary unknown key, a block-style document and a flow-sequence error carry no hint.
+	for _, in := range []string{
+		"assertions: [{kind: x, zz: 1}]\n",
+		"zz: 1\n",
+		"assertions: [1, 2\nb: 3\n",
+	} {
+		err = decodeFile(in)
+		require.Error(t, err, in)
+		assert.NotContains(t, err.Error(), hint, in)
+	}
+}

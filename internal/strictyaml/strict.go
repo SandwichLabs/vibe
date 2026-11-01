@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -51,7 +53,7 @@ func Decode(data []byte, maxBytes, maxNodes int, label string, into any) error {
 		if errors.Is(err, io.EOF) {
 			return refuse("%s is empty", label)
 		}
-		return refuse("%s: %v", label, err)
+		return refuse("%s: %v%s", label, err, flowHint(err.Error(), data))
 	}
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
@@ -60,12 +62,50 @@ func Decode(data []byte, maxBytes, maxNodes int, label string, into any) error {
 	return nil
 }
 
+const flowHintText = "; inside {...} quote a value that contains , ( ) : or #"
+
+var (
+	flowLineRe  = regexp.MustCompile(`line (\d+):`)
+	flowFieldRe = regexp.MustCompile(`field (\S+) not found`)
+)
+
+// flowHint explains the usual cause of a flow-mapping failure: an unquoted
+// value such as (key, unit) inside {...} that YAML splits at the comma, which
+// shows up as a parse error ("did not find expected ',' or '}'") or as an
+// unknown field named "unit)". It returns "" for any other error, and when no
+// line the message points at holds a "{".
+func flowHint(msg string, data []byte) string {
+	parse := strings.Contains(msg, "did not find expected ',' or '}'") || strings.Contains(msg, "did not find expected key")
+	split := false
+	if m := flowFieldRe.FindStringSubmatch(msg); m != nil {
+		split = strings.ContainsAny(m[1], "()")
+	}
+	if !parse && !split {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	nums := flowLineRe.FindAllStringSubmatch(msg, -1)
+	if len(nums) == 0 {
+		// The parser sometimes reports no line; look at the whole document.
+		if strings.Contains(string(data), "{") {
+			return flowHintText
+		}
+		return ""
+	}
+	for _, m := range nums {
+		if n, err := strconv.Atoi(m[1]); err == nil && n >= 1 && n <= len(lines) && strings.Contains(lines[n-1], "{") {
+			return flowHintText
+		}
+	}
+	return ""
+}
+
 // checkShape parses into the node tree (which never expands aliases) and
 // refuses anchors, aliases, tags, merge keys and an oversized tree.
 func checkShape(data []byte, maxNodes int, label string) error {
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return refuse("%s: %v", label, err)
+		return refuse("%s: %v%s", label, err, flowHint(err.Error(), data))
 	}
 	count := 0
 	var walk func(n *yaml.Node) error
