@@ -28,7 +28,7 @@ shell and not the duckdb binary: statements take the same checks and the same
 lazy attach as the Query Explorer, and dot commands are a closed set (.help).
 Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.
 It needs a terminal on standard input. History is kept per workspace in
-.vibe-local/repl/history; see docs/reference/console.md.`,
+.vibe-local/repl/history; see ` + docRef("console"),
 	Args:         cobra.NoArgs,
 	RunE:         runREPL,
 	SilenceUsage: true,

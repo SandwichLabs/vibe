@@ -119,3 +119,19 @@ func TestSemantics_ControlCharactersNeverReachTheTerminal(t *testing.T) {
 	assert.NotContains(t, out+stderr+err.Error(), "\x1b")
 	assert.Contains(t, out, "<U+001B>]0;pwned<U+0007>")
 }
+
+func TestSemanticsList_PrintsALongErrorWhole(t *testing.T) {
+	ws := newWS(t)
+	// An unquoted (key, unit) inside {...}: a long decode error, with the quoting hint.
+	body := "version: 1\nname: sleep_avg\nquery: sleep_base\nmeasure: avg(score)\n" +
+		"assertions: [{kind: accepted_values, column: some_long_column_name_here, values: (key, unit)}]\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "semantics", "metrics"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "semantics", "metrics", "sleep_avg.yaml"), []byte(body), 0o644))
+
+	out, stderr, err := runVibe("semantics", "list", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, out, "field unit) not found")
+	assert.Contains(t, out, "inside {...} quote a value")
+	assert.NotContains(t, out, "...\n")
+	assert.Contains(t, stderr, "1 file(s) could not be read; see the ERROR column")
+}

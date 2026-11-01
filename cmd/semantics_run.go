@@ -61,7 +61,7 @@ Exit status: 0 when every check passes (or none is declared), 1 when any check
 fails, 2 when none failed but some could not run, and 2 for a usage or open
 error (an unknown name or kind, a bad flag, no workspace). Names and messages printed
 here are shown with control characters as <U+XXXX>. See
-docs/reference/semantics.md.`,
+` + docRef("semantics"),
 	SilenceUsage: true,
 }
 
@@ -76,7 +76,7 @@ with the declared cardinality; a contradiction is printed as a warning.
 This reads the two tables with a few full scans, so it can take a while on a
 large table. It is your action only: no agent tool or MCP method runs it. If the
 join file changes while the profile runs, nothing is written. See
-docs/reference/semantics.md.`,
+` + docRef("semantics"),
 	SilenceUsage: true,
 }
 
@@ -149,7 +149,7 @@ func runSemanticsCheck(cmd *cobra.Command, args []string) error {
 
 func printCheckReport(out io.Writer, rows []assert.Row) {
 	if len(rows) == 0 {
-		fmt.Fprintln(out, "No assertions declared. Add assertions: to an entity or metric under semantics/ (see docs/reference/semantics.md).")
+		fmt.Fprintln(out, "No assertions declared. Add assertions: to an entity or metric under semantics/ (see "+docRef("semantics")+").")
 		return
 	}
 	var pass, fail, errs int

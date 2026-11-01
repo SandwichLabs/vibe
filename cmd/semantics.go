@@ -25,7 +25,7 @@ Studio's Semantics view does, unreadable files included with their error, and
 "show" prints one file as stored. Both only read files: no connection is
 opened and no query is run. An agent can only propose a definition: "proposals"
 lists what is waiting, "show-proposal" shows the change, and "accept" or
-"reject" decides it. See docs/reference/semantics.md.`,
+"reject" decides it. See ` + docRef("semantics"),
 }
 
 var semanticsListCmd = &cobra.Command{
@@ -137,15 +137,32 @@ func runSemanticsList(cmd *cobra.Command, _ []string) error {
 		return enc.Encode(rows)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(out, "No semantic definitions. Add files under semantics/ (see docs/reference/semantics.md).")
+		fmt.Fprintln(out, "No semantic definitions. Add files under semantics/ (see "+docRef("semantics")+").")
 		return nil
 	}
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "KIND\tNAME\tSUMMARY\tERROR")
+	unreadable := 0
 	for _, r := range rows {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Kind, strictyaml.EscapeHidden(r.Name), dash(strictyaml.EscapeHidden(oneLine(r.Summary))), dash(strictyaml.EscapeHidden(oneLine(r.Error))))
+		if r.Error != "" {
+			unreadable++
+		}
+		// ERROR is the last column, so it is printed whole (an unreadable file's
+		// message is the only place the cause is named), with whitespace folded.
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Kind, strictyaml.EscapeHidden(r.Name), dash(strictyaml.EscapeHidden(oneLine(r.Summary))), dash(strictyaml.EscapeHidden(foldSpace(r.Error))))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if unreadable > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%d file(s) could not be read; see the ERROR column\n", unreadable)
+	}
+	return nil
+}
+
+// foldSpace joins s onto one line, whitespace runs folded to one space, without cutting it.
+func foldSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // hintProposals says on stderr how many proposals wait, so a list does not
