@@ -3,7 +3,7 @@
 package main
 
 // The macOS helper keeps its compiled content-rule list in a throwaway folder,
-// vibe-rules-<pid>, in a temporary directory. Studio ends a helper by killing its
+// assay-rules-<pid>, in a temporary directory. Studio ends a helper by killing its
 // process group, so the helper's own cleanup at exit never runs (found in the macOS
 // owner QA: 71 folders in one session). Two things remove them: Studio, after it
 // reaps a helper, and the next helper, at start. Both only ever touch a folder of
@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	rulesDirPrefix = "vibe-rules-"
+	rulesDirPrefix = "assay-rules-"
 	// rulesParentEnv is the one variable Studio gives the macOS helper: the
 	// directory to make the folder in, so both sides name the same place.
-	rulesParentEnv = "VIBE_RULES_PARENT"
+	rulesParentEnv = "ASSAY_RULES_PARENT"
 )
 
 // cleanAbs is p cleaned, when it is an absolute path with no ".." element

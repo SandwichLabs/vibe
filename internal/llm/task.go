@@ -17,10 +17,10 @@ import (
 
 	"charm.land/fantasy"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/assay/internal/agents"
 )
 
-// taskMaxSteps is task mode's step budget. Vibe's Config has no
+// taskMaxSteps is task mode's step budget. Assay's Config has no
 // user-configurable MaxSteps (unlike schoolwork-workspace's cfg.MaxSteps, an
 // existing user setting there) — the prescribed workflow
 // (introspect_schema/describe_table, run_query to sample, draft,
@@ -212,7 +212,7 @@ func (r *taskRecorder) isConcluded() bool {
 // the a2ui prompt block — task mode never calls present_data or
 // create_dashboard, and describing a component schema with no tool to use
 // only spends context and invites the model to try anyway.
-const taskSystemPrompt = `You are the Vibe cell-authoring agent: a focused tool loop that turns one plain-language request into a single notebook cell, or explains precisely why it cannot.
+const taskSystemPrompt = `You are the Assay cell-authoring agent: a focused tool loop that turns one plain-language request into a single notebook cell, or explains precisely why it cannot.
 
 You do not converse. You either call write_cell with a cell you have verified works, or call need_more_info with specific questions. Nothing else ends the turn.
 

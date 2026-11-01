@@ -12,7 +12,7 @@ import (
 const acct = "0123456789abcdef0123456789abcdef"
 
 func TestSaveLLMSettings_KeepsCommentsKeysAndAPIKey(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "vibe.yaml")
+	p := filepath.Join(t.TempDir(), "assay.yaml")
 	orig := "# my config\neditor: nano # keep\nllm:\n  # which provider\n  provider: local\n  api_key: \"sk-legacy-XYZ\"   # legacy\n  model: old\nweb:\n  port: 9\n"
 	require.NoError(t, os.WriteFile(p, []byte(orig), 0o640))
 
@@ -35,7 +35,7 @@ func TestSaveLLMSettings_KeepsCommentsKeysAndAPIKey(t *testing.T) {
 }
 
 func TestSaveLLMSettings_CreatesFile0600(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "sub", "vibe.yaml")
+	p := filepath.Join(t.TempDir(), "sub", "assay.yaml")
 	require.NoError(t, SaveLLMSettings(p, LLMSettings{Provider: "ollama", Model: "qwen3:0.6b", Endpoint: "http://localhost:11434/v1"}))
 	info, err := os.Stat(p)
 	require.NoError(t, err)
@@ -81,24 +81,24 @@ func TestSaveLLMSettings_RefusesMultiDoc(t *testing.T) {
 func TestSaveLLMSettingsKeepingEnv(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "v.yaml")
 	require.NoError(t, os.WriteFile(p, []byte("llm:\n  provider: local\n  model: filemodel\n"), 0o600))
-	t.Setenv("VIBE_LLM_MODEL", "envmodel")
+	t.Setenv("ASSAY_LLM_MODEL", "envmodel")
 	require.NoError(t, SaveLLMSettingsKeepingEnv(p, LLMSettings{Provider: "openai", Model: "envmodel"}))
 	got := ReadLLMSettings(p)
 	assert.Equal(t, "openai", got.Provider)
 	assert.Equal(t, "filemodel", got.Model, "the env value is not frozen into the file")
-	assert.Equal(t, map[string]string{"model": "VIBE_LLM_MODEL"}, LLMEnvOverrides())
+	assert.Equal(t, map[string]string{"model": "ASSAY_LLM_MODEL"}, LLMEnvOverrides())
 }
 
 func TestLoad_NewKeysFromEnvAndFallback(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_FILE", filepath.Join(t.TempDir(), "none.yaml"))
-	t.Setenv("VIBE_LLM_ACCOUNT_ID", acct)
-	t.Setenv("VIBE_LLM_GATEWAY", "gw1")
+	t.Setenv("ASSAY_CONFIG_FILE", filepath.Join(t.TempDir(), "none.yaml"))
+	t.Setenv("ASSAY_LLM_ACCOUNT_ID", acct)
+	t.Setenv("ASSAY_LLM_GATEWAY", "gw1")
 	c := Load().LLM
 	assert.Equal(t, acct, c.AccountID)
 	assert.Equal(t, "gw1", c.Gateway)
 	assert.False(t, c.AccountIDFromEnv)
 
-	t.Setenv("VIBE_LLM_ACCOUNT_ID", "")
+	t.Setenv("ASSAY_LLM_ACCOUNT_ID", "")
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", acct)
 	c = Load().LLM
 	assert.Equal(t, acct, c.AccountID)
@@ -106,8 +106,8 @@ func TestLoad_NewKeysFromEnvAndFallback(t *testing.T) {
 }
 
 func TestOllamaDefaultsAndKeys(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_FILE", filepath.Join(t.TempDir(), "none.yaml"))
-	t.Setenv("VIBE_LLM_PROVIDER", "ollama")
+	t.Setenv("ASSAY_CONFIG_FILE", filepath.Join(t.TempDir(), "none.yaml"))
+	t.Setenv("ASSAY_LLM_PROVIDER", "ollama")
 	t.Setenv("OLLAMA_API_KEY", "ok")
 	c := Load().LLM
 	assert.Equal(t, DefaultOllamaEndpoint, c.Endpoint)

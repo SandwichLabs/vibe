@@ -162,14 +162,14 @@ func TestGate_FailsClosedWithoutADisplay(t *testing.T) {
 }
 
 func TestGate_NoFileOrDirectoryIsMadeOnTheHost(t *testing.T) {
-	before, _ := filepath.Glob(filepath.Join(os.TempDir(), "vibe-pagegate-*"))
+	before, _ := filepath.Glob(filepath.Join(os.TempDir(), "assay-pagegate-*"))
 	getenv := gateRuntime(t, "wayland-0")
 	cmd, cleanup, err := gateCommand(getenv, os.Stdin, os.Stdout)
 	require.NoError(t, err)
 	cleanup()
-	after, _ := filepath.Glob(filepath.Join(os.TempDir(), "vibe-pagegate-*"))
+	after, _ := filepath.Glob(filepath.Join(os.TempDir(), "assay-pagegate-*"))
 	assert.Equal(t, len(before), len(after))
-	assert.NotContains(t, strings.Join(cmd.Args, " "), "vibe-pagegate")
+	assert.NotContains(t, strings.Join(cmd.Args, " "), "assay-pagegate")
 }
 
 func TestExeRecordRefusesAReplacedBinary(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 // Proposer is the whole of the inbox an agent surface holds: it can add a
@@ -29,7 +29,7 @@ type Proposer interface {
 // Store is the person's side of the inbox.
 type Store interface {
 	Proposer
-	// Get returns one proposal. id must have the shape Vibe generates
+	// Get returns one proposal. id must have the shape Assay generates
 	// (ValidID), so it cannot name a path; an unknown one is ErrNotFound and
 	// an unreadable file is an error wrapping ErrInvalid.
 	Get(ctx context.Context, id string) (*Proposal, error)

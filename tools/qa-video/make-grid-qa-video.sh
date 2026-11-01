@@ -17,7 +17,7 @@ mkdir -p "$OUTDIR"
 
 # Define frames: filename|step|action|test
 declare -a FRAMES=(
-  "grid-01-initial.png|1|Launch Vibe Studio|Welcome screen with Open File and Create New buttons"
+  "grid-01-initial.png|1|Launch Assay|Welcome screen with Open File and Create New buttons"
   "grid-02-dashboard.png|2|Create QA File|Dashboard: Grid Layout QA file with 0 pages, 0 tables"
   "grid-05-hd-editor.png|3|Sales Dashboard with Grids|3-col metrics row + 2-col table/chart row + full-width table"
   "grid-08-toolbar-clean.png|4|New Toolbar Buttons|8 toolbar buttons: SQL, charts, table, metric, 2-col, 3-col"
@@ -92,7 +92,7 @@ for entry in "${FRAMES[@]}"; do
     \
     -font "Courier-Bold" -fill "#FFD700" \
     -pointsize 18 -gravity SouthEast \
-    -annotate +60+30 "Vibe Studio QA — Grid Layouts // $(date +%Y-%m-%d)" \
+    -annotate +60+30 "Assay QA — Grid Layouts // $(date +%Y-%m-%d)" \
     \
     -font "Courier-Bold" -fill "#555555" \
     -pointsize 16 -gravity SouthWest \

@@ -5,7 +5,7 @@ package main
 import (
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // WorkspaceSettings is the Settings > Workspace form; the rules (validation, "can
@@ -23,9 +23,9 @@ func settingsErr(err error) error {
 }
 
 // SetWorkspaceSettings saves the Settings > Workspace form: the name and default
-// connection and the team limit go into vibe.yaml (shared through git), and this
+// connection and the team limit go into assay.yaml (shared through git), and this
 // person's own agent choice goes into the per-person file outside the folder.
-// vibe.yaml can only tighten: a person's choice above the team limit is refused.
+// assay.yaml can only tighten: a person's choice above the team limit is refused.
 func (a *App) SetWorkspaceSettings(s WorkspaceSettings) (*WorkspaceInfo, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -5,8 +5,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/repl"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/repl"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

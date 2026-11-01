@@ -87,8 +87,8 @@
 .a2ui-page .a2ui-list__items { margin: 2px 0; padding-left: 18px; font-size: var(--sh-fs-sm); }
 
 .a2ui-page .a2ui-code {
-  background: var(--vibe-code-bg);
-  color: var(--vibe-code-fg);
+  background: var(--assay-code-bg);
+  color: var(--assay-code-fg);
   padding: 8px 10px;
   border-radius: var(--sh-radius-sm);
   overflow-x: auto;
@@ -338,17 +338,17 @@
 
 /* ---- KINETIC motion charts (areaChart, ringChart, columnChart, radarChart,
    sankeyChart, heatmap, streamChart) ----
-   Series colors come only from the six theme chart roles (--vibe-chart-1..6)
+   Series colors come only from the six theme chart roles (--assay-chart-1..6)
    through .a2ui-series-N classes; a model never names a color here. Geometry
    is animated in script (a2ui/useMotion.ts), so these rules carry no
    transitions on animated attributes, and the only CSS animation (sankey
    packets) is off under prefers-reduced-motion. */
-.a2ui-page .a2ui-series-0 { --a2ui-series: var(--vibe-chart-1); }
-.a2ui-page .a2ui-series-1 { --a2ui-series: var(--vibe-chart-2); }
-.a2ui-page .a2ui-series-2 { --a2ui-series: var(--vibe-chart-3); }
-.a2ui-page .a2ui-series-3 { --a2ui-series: var(--vibe-chart-4); }
-.a2ui-page .a2ui-series-4 { --a2ui-series: var(--vibe-chart-5); }
-.a2ui-page .a2ui-series-5 { --a2ui-series: var(--vibe-chart-6); }
+.a2ui-page .a2ui-series-0 { --a2ui-series: var(--assay-chart-1); }
+.a2ui-page .a2ui-series-1 { --a2ui-series: var(--assay-chart-2); }
+.a2ui-page .a2ui-series-2 { --a2ui-series: var(--assay-chart-3); }
+.a2ui-page .a2ui-series-3 { --a2ui-series: var(--assay-chart-4); }
+.a2ui-page .a2ui-series-4 { --a2ui-series: var(--assay-chart-5); }
+.a2ui-page .a2ui-series-5 { --a2ui-series: var(--assay-chart-6); }
 
 .a2ui-page .a2ui-kchart {
   border: var(--sh-border-thin);
@@ -525,10 +525,10 @@
 @keyframes a2ui-flow { from { stroke-dashoffset: 64; } to { stroke-dashoffset: 0; } }
 
 /* heatmap: four quantized heat levels, coolest to hottest */
-.a2ui-page .a2ui-heat-0 { --a2ui-series: var(--vibe-chart-4); }
-.a2ui-page .a2ui-heat-1 { --a2ui-series: var(--vibe-chart-3); }
-.a2ui-page .a2ui-heat-2 { --a2ui-series: var(--vibe-chart-2); }
-.a2ui-page .a2ui-heat-3 { --a2ui-series: var(--vibe-chart-1); }
+.a2ui-page .a2ui-heat-0 { --a2ui-series: var(--assay-chart-4); }
+.a2ui-page .a2ui-heat-1 { --a2ui-series: var(--assay-chart-3); }
+.a2ui-page .a2ui-heat-2 { --a2ui-series: var(--assay-chart-2); }
+.a2ui-page .a2ui-heat-3 { --a2ui-series: var(--assay-chart-1); }
 .a2ui-page .a2ui-heatmap { display: grid; gap: 4px; align-items: center; overflow-x: auto; }
 .a2ui-page .a2ui-heatmap__rowlabel,
 .a2ui-page .a2ui-heatmap__collabel {
@@ -558,7 +558,7 @@
 
 /* streamChart (its color, when set, is the closed a2ui--<token> enum) */
 .a2ui-page .a2ui-stream {
-  --a2ui-stream: var(--vibe-chart-1);
+  --a2ui-stream: var(--assay-chart-1);
   position: relative;
   display: flex;
   align-items: flex-end;
@@ -630,8 +630,8 @@
 .a2ui-page .a2ui-table tbody tr.a2ui-drill-row:hover td { background: var(--sh-paper-2); }
 .a2ui-page .a2ui-drill-row--current { background: color-mix(in srgb, var(--sh-teal) 12%, transparent); box-shadow: inset 3px 0 0 var(--sh-teal); }
 .a2ui-page .a2ui-columns__col.a2ui-drill-row--current { box-shadow: inset 0 3px 0 var(--sh-teal); }
-.a2ui-page .a2ui-drill:focus-visible { box-shadow: none; outline: 2px solid var(--vibe-focus); outline-offset: 1px; border-radius: var(--sh-radius-sm); }
-.a2ui-page .a2ui-drill-row:focus-visible { box-shadow: none; outline: 2px solid var(--vibe-focus); outline-offset: -2px; }
+.a2ui-page .a2ui-drill:focus-visible { box-shadow: none; outline: 2px solid var(--assay-focus); outline-offset: 1px; border-radius: var(--sh-radius-sm); }
+.a2ui-page .a2ui-drill-row:focus-visible { box-shadow: none; outline: 2px solid var(--assay-focus); outline-offset: -2px; }
 .a2ui-page .a2ui-drill {
   background: none;
   border: none;

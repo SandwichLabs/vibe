@@ -72,7 +72,7 @@ onUnmounted(() => document.removeEventListener('keydown', onSlash))
       <div v-if="loading" class="sh-mono" style="color: var(--sh-graphite);">Loading…</div>
       <div v-else-if="all.length === 0 && errors.length === 0" class="lib-empty" data-testid="library-empty">
         <Icon name="layers" :size="32" style="color: var(--sh-graphite);" />
-        <div class="sh-mono" style="color: var(--sh-graphite); max-width: 420px;">Nothing in the library yet. <b>New</b> makes a notebook, a live view or a page, or ask the agent to build one.</div>
+        <div class="sh-mono" style="color: var(--sh-graphite); max-width: 420px;">Nothing in the library yet. <b>New</b> makes a notebook, a live view or a page, or ask the assistant to build one.</div>
       </div>
       <div v-else-if="items.length === 0 && (all.length > 0 || errors.length === 0)" class="lib-empty" data-testid="library-empty-filter">
         <div v-if="filter.trim()" class="sh-mono" style="color: var(--sh-graphite);">Nothing matches “{{ filter.trim() }}”.</div>

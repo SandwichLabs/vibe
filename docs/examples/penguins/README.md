@@ -8,34 +8,34 @@ The reference for every file here is [`docs/reference/semantics.md`](../../refer
 
 Body measurements of 344 penguins of three species on three islands of the Palmer Archipelago, Antarctica, 2007 to 2009. Collected by Dr. Kristen Gorman at Palmer Station (LTER) and published in the R package [palmerpenguins](https://github.com/allisonhorst/palmerpenguins) by Allison Horst, Alison Hill and Kristen Gorman. The data is released under **CC0** (public domain).
 
-`data/penguins.csv` is that package's `penguins.csv` with one edit: the literal `NA` of the original is an empty field. Without that, `vibe import` reads `NA` as text, and four numeric columns become `VARCHAR`. With empty fields, missing values are real NULLs and the numbers are typed (`DECIMAL`, `BIGINT`). The size is 15 KB.
+`data/penguins.csv` is that package's `penguins.csv` with one edit: the literal `NA` of the original is an empty field. Without that, `assay import` reads `NA` as text, and four numeric columns become `VARCHAR`. With empty fields, missing values are real NULLs and the numbers are typed (`DECIMAL`, `BIGINT`). The size is 15 KB.
 
 ## Setup
 
 Run every command below from this folder (`cd docs/examples/penguins`).
 
-The workspace was made with `vibe workspace init docs/examples/penguins`. The CSV is not queryable until it is a table, and an entity's `table` is a SQL name, not a file path, so the first step loads it into the workspace's local DuckDB (`data/local.duckdb`, git-ignored):
+The workspace was made with `assay workspace init docs/examples/penguins`. The CSV is not queryable until it is a table, and an entity's `table` is a SQL name, not a file path, so the first step loads it into the workspace's local DuckDB (`data/local.duckdb`, git-ignored):
 
 ```console
-$ vibe import data/penguins.csv --key auto
+$ assay import data/penguins.csv --key auto
 Imported 344 row(s) into local.main.penguins
 ```
 
 The file has no id column. `--key auto` adds a generated `id` (a `BIGINT` primary key) so the entity has something that identifies a row:
 
 ```console
-$ vibe query "DESCRIBE penguins"
-column_name        column_type    null  key   default                           extra
------------------  -------------  ----  ----  --------------------------------  -----
-id                 BIGINT         NO    PRI   nextval('_vibe_seq_penguins_id')  NULL
-species            VARCHAR        YES   NULL  NULL                              NULL
-island             VARCHAR        YES   NULL  NULL                              NULL
-bill_length_mm     DECIMAL(18,2)  YES   NULL  NULL                              NULL
-bill_depth_mm      DECIMAL(18,2)  YES   NULL  NULL                              NULL
-flipper_length_mm  BIGINT         YES   NULL  NULL                              NULL
-body_mass_g        BIGINT         YES   NULL  NULL                              NULL
-sex                VARCHAR        YES   NULL  NULL                              NULL
-year               BIGINT         YES   NULL  NULL                              NULL
+$ assay query "DESCRIBE penguins"
+column_name        column_type    null  key   default                            extra
+-----------------  -------------  ----  ----  ---------------------------------  -----
+id                 BIGINT         NO    PRI   nextval('_assay_seq_penguins_id')  NULL
+species            VARCHAR        YES   NULL  NULL                               NULL
+island             VARCHAR        YES   NULL  NULL                               NULL
+bill_length_mm     DECIMAL(18,2)  YES   NULL  NULL                               NULL
+bill_depth_mm      DECIMAL(18,2)  YES   NULL  NULL                               NULL
+flipper_length_mm  BIGINT         YES   NULL  NULL                               NULL
+body_mass_g        BIGINT         YES   NULL  NULL                               NULL
+sex                VARCHAR        YES   NULL  NULL                               NULL
+year               BIGINT         YES   NULL  NULL                               NULL
 (9 rows)
 ```
 
@@ -51,11 +51,11 @@ semantics/metrics/penguin_count.yaml
 semantics/metrics/avg_body_mass_g.yaml
 semantics/metrics/gentoo_share.yaml
 semantics/glossary.md
-notebooks/penguin-metrics.vnb
+notebooks/penguin-metrics.asnb
 ```
 
 ```console
-$ vibe semantics list
+$ assay semantics list
 KIND      NAME             SUMMARY                                                                                      ERROR
 entity    penguin          one row per penguin                                                                          -
 metric    avg_body_mass_g  avg(body_mass_g) by species, island, sex, year                                               -
@@ -67,7 +67,7 @@ glossary  glossary.md      5 terms                                              
 `list` reads the files and nothing else: no database is opened. A file that fails validation would be listed here with its error in the last column. The `-` means none do.
 
 ```console
-$ vibe semantics show metric gentoo_share
+$ assay semantics show metric gentoo_share
 version: 1
 name: gentoo_share
 title: Gentoo share
@@ -88,7 +88,7 @@ A metric is a **measure** over a **saved query**: `gentoo_share` is `1.0 * count
 The entity says what a row is and which assertions must hold:
 
 ```console
-$ vibe semantics show entity penguin
+$ assay semantics show entity penguin
 version: 1
 name: penguin
 description: One of the 344 penguins measured at Palmer Station, Antarctica, 2007-2009.
@@ -108,10 +108,10 @@ assertions:
 
 ## Check
 
-`vibe semantics check` turns each declared assertion into one read-only query that counts the violating rows:
+`assay semantics check` turns each declared assertion into one read-only query that counts the violating rows:
 
 ```console
-$ vibe semantics check
+$ assay semantics check
 STATUS  SUBJECT                 CHECK                    DETAIL
 pass    entity penguin          unique id                
 pass    entity penguin          not_null species         
@@ -130,7 +130,7 @@ Error: 1 of 8 checks failed
 One check fails on purpose. Eleven penguins have no recorded sex, so `not_null` on `sex` finds 11 rows. This is a true statement about the data, not a bug: it is what a check is for. The command exits with status 1 when any check fails (2 when a check could not run at all), so a script or CI job can tell "fix the data" from "fix the setup". To run only some:
 
 ```console
-$ vibe semantics check metric
+$ assay semantics check metric
 STATUS  SUBJECT                 CHECK         DETAIL
 pass    metric avg_body_mass_g  non_negative  
 pass    metric gentoo_share     non_negative  
@@ -140,14 +140,14 @@ pass    metric penguin_count    not_null
 4 passed, 0 failed, 0 could not run
 ```
 
-`vibe semantics check entity penguin --json` prints one object per check instead.
+`assay semantics check entity penguin --json` prints one object per check instead.
 
 ## Ask the metrics
 
-`metric('name')` is a call Vibe expands before the SQL runs. You can use it in any SQL you type, in the CLI, the Query Explorer, a notebook cell, or an agent's `run_query`. It expands to a `SELECT` over the metric's saved query, grouped by the dimensions you name in `by`:
+`metric('name')` is a call Assay expands before the SQL runs. You can use it in any SQL you type, in the CLI, the Query Explorer, a notebook cell, or an agent's `run_query`. It expands to a `SELECT` over the metric's saved query, grouped by the dimensions you name in `by`:
 
 ```console
-$ vibe query "SELECT * FROM metric('penguin_count')"
+$ assay query "SELECT * FROM metric('penguin_count')"
 penguin_count
 -------------
 344
@@ -156,7 +156,7 @@ expanded 1 metric: penguin_count
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('penguin_count', by => 'species') ORDER BY 2 DESC"
+$ assay query "SELECT * FROM metric('penguin_count', by => 'species') ORDER BY 2 DESC"
 species    penguin_count
 ---------  -------------
 Adelie     152
@@ -167,7 +167,7 @@ expanded 1 metric: penguin_count
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('avg_body_mass_g', by => ['species', 'sex']) ORDER BY 1, 2"
+$ assay query "SELECT * FROM metric('avg_body_mass_g', by => ['species', 'sex']) ORDER BY 1, 2"
 species    sex     avg_body_mass_g
 ---------  ------  ------------------
 Adelie     female  3368.8356164383563
@@ -185,7 +185,7 @@ expanded 1 metric: avg_body_mass_g
 The `NULL` sex rows are the eleven birds above. The averages leave out the two birds with no mass.
 
 ```console
-$ vibe query "SELECT * FROM metric('gentoo_share', by => 'island') ORDER BY 2 DESC, 1"
+$ assay query "SELECT * FROM metric('gentoo_share', by => 'island') ORDER BY 2 DESC, 1"
 island     gentoo_share
 ---------  ------------------
 Biscoe     0.7380952380952381
@@ -198,12 +198,12 @@ expanded 1 metric: gentoo_share
 A dimension that is not declared is refused, and the refusal names the ones that are:
 
 ```console
-$ vibe query "SELECT * FROM metric('penguin_count', by => 'colour')"
+$ assay query "SELECT * FROM metric('penguin_count', by => 'colour')"
 Error: metric('penguin_count'): 'colour' is not a dimension of penguin_count (dimensions: species, island, sex, year)
 (exit status 1)
 ```
 
-`vibe query` says `expanded 1 metric: ...` on stderr, so you can see that a metric ran. There is no join and no filter argument: filter on a dimension with an outer `WHERE`; any other restriction belongs in the saved query.
+`assay query` says `expanded 1 metric: ...` on stderr, so you can see that a metric ran. There is no join and no filter argument: filter on a dimension with an outer `WHERE`; any other restriction belongs in the saved query.
 
 ## A saved query with a parameter
 
@@ -211,14 +211,14 @@ Error: metric('penguin_count'): 'colour' is not a dimension of penguin_count (di
 
 ```console
 $ head -n 2 queries/heavy-penguins.sql
--- vibe: {"title":"Heavy penguins","description":"Penguins at or above a body mass, heaviest first","parameters":[{"name":"min_mass","type":"integer","required":false,"default":"5000"}]}
+-- assay: {"title":"Heavy penguins","description":"Penguins at or above a body mass, heaviest first","parameters":[{"name":"min_mass","type":"integer","required":false,"default":"5000"}]}
 SELECT species, island, sex, year, body_mass_g
 ```
 
 `--saved` runs it by id, and `-p name=value` sets a parameter, typed by its declaration. The value is bound, never written into the SQL:
 
 ```console
-$ vibe query --saved heavy-penguins --limit 3
+$ assay query --saved heavy-penguins --limit 3
 species  island  sex   year  body_mass_g
 -------  ------  ----  ----  -----------
 Gentoo   Biscoe  male  2007  6300
@@ -229,7 +229,7 @@ showing the first 3 of 67 rows (--limit 0 for all)
 ```
 
 ```console
-$ vibe query --saved heavy-penguins -p min_mass=5800
+$ assay query --saved heavy-penguins -p min_mass=5800
 species  island  sex   year  body_mass_g
 -------  ------  ----  ----  -----------
 Gentoo   Biscoe  male  2007  6300
@@ -248,31 +248,31 @@ Gentoo   Biscoe  male  2008  5800
 
 ## The notebook
 
-`notebooks/penguin-metrics.vnb` has four SQL cells, all calling `metric()`. Open it in Studio (Library, then Penguin metrics): every data cell re-runs on open, because a notebook stores the questions, not the answers.
+`notebooks/penguin-metrics.asnb` has four SQL cells, all calling `metric()`. Open it in Studio (Library, then Penguin metrics): every data cell re-runs on open, because a notebook stores the questions, not the answers.
 
 ## Open it in Studio
 
-Close Studio before running `vibe import`, `vibe semantics check` or `vibe semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
+Close Studio before running `assay import`, `assay semantics check` or `assay semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
 
 ```
-vibe studio --gui
+assay studio --gui
 ```
 
 Choose **Open folder** and pick `docs/examples/penguins` (run the import step first, or the metrics have no table to read). Then **Semantics** in the sidebar:
 
-- **Metrics**: each card shows the measure, the dimensions and the saved query (a link that opens it in the Query Explorer). **Try it** ticks dimensions and runs the metric by them. **Run assertions** shows the same pass and fail as `vibe semantics check`.
+- **Metrics**: each card shows the measure, the dimensions and the saved query (a link that opens it in the Query Explorer). **Try it** ticks dimensions and runs the metric by them. **Run assertions** shows the same pass and fail as `assay semantics check`.
 - **Entities**: `penguin` with its grain, table, id column and assertions. Its **Run assertions** shows `not_null sex` failing with 11 violating rows.
 - **Glossary**: the five terms, rendered.
 - **Joins**: empty here.
 
 ## The agent and proposals
 
-An agent can read all of this (`list_definitions`, `get_definition`, `metric()`), but it cannot write under `semantics/`. It can only **propose**. Ask the Studio chat, or an MCP client attached with `vibe mcp serve`, something like "propose a metric for the average flipper length by species". With **Ask before changes** on (the default), a headless `vibe mcp serve` checks the proposal but files nothing, since no one can approve it there. Use Studio's chat, keep Studio open with its MCP server on so you get an approval card, or turn that switch off. Then:
+An agent can read all of this (`list_definitions`, `get_definition`, `metric()`), but it cannot write under `semantics/`. It can only **propose**. Ask the Studio chat, or an MCP client attached with `assay mcp serve`, something like "propose a metric for the average flipper length by species". With **Ask before changes** on (the default), a headless `assay mcp serve` checks the proposal but files nothing, since no one can approve it there. Use Studio's chat, keep Studio open with its MCP server on so you get an approval card, or turn that switch off. Then:
 
 ```
-vibe semantics proposals
-vibe semantics show-proposal <id>
-vibe semantics accept <id>
+assay semantics proposals
+assay semantics show-proposal <id>
+assay semantics accept <id>
 ```
 
 Nothing changes until you accept. The [Chinook example](../chinook/README.md#proposing-a-metric) walks through that flow.

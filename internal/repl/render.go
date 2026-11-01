@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/engine"
 )
 
 // The SGR sequences the console writes itself. Dim marks NULLs, the type row,

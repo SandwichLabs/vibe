@@ -8,17 +8,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/vibe/internal/config"
-	"github.com/SandwichLabs/vibe/internal/llm"
+	"github.com/SandwichLabs/assay/internal/config"
+	"github.com/SandwichLabs/assay/internal/llm"
 )
 
 var llmCmd = &cobra.Command{
 	Use:   "llm",
-	Short: "Show or change the agent's model provider (mirrors Studio's Settings → App)",
-	Long: `Show or change which model Vibe's own agent uses. This edits llm.provider,
+	Short: "Show or change the assistant's model provider (mirrors Studio's Settings → App)",
+	Long: `Show or change which model Assay's own assistant uses. This edits llm.provider,
 llm.model, llm.endpoint, llm.account_id and llm.gateway in the config file
-(~/.vibe.yaml, or $VIBE_CONFIG_FILE), keeping its comments. API keys are not set
-here; use "vibe config llm-key".`,
+(~/.assay.yaml, or $ASSAY_CONFIG_FILE), keeping its comments. API keys are not set
+here; use "assay config llm-key".`,
 }
 
 var llmShowCmd = &cobra.Command{
@@ -44,7 +44,7 @@ var llmShowCmd = &cobra.Command{
 		case config.DefaultModelFor(c.Provider) != "":
 			fmt.Fprintf(out, "model:    %s (default)\n", config.DefaultModelFor(c.Provider))
 		default:
-			fmt.Fprintf(out, "model:    (none; %s has no default, run \"vibe config llm set --model ...\")\n", c.Provider)
+			fmt.Fprintf(out, "model:    (none; %s has no default, run \"assay config llm set --model ...\")\n", c.Provider)
 		}
 		if info.HasEndpoint {
 			fmt.Fprintf(out, "endpoint: %s%s\n", c.Endpoint, by("endpoint"))
@@ -140,7 +140,7 @@ func checkFileKeyHazard(cmd *cobra.Command, provider string) error {
 	if p, ok := config.LLMProvider(provider); ok {
 		label = p.Label
 	}
-	return fmt.Errorf("the plaintext key in %s would be sent to %s. Move it to the keychain first with \"vibe config llm-key migrate\", save a key for %s with \"vibe config llm-key set --provider %s\", or pass --yes to use it anyway",
+	return fmt.Errorf("the plaintext key in %s would be sent to %s. Move it to the keychain first with \"assay config llm-key migrate\", save a key for %s with \"assay config llm-key set --provider %s\", or pass --yes to use it anyway",
 		config.LLMConfigPath(), label, label, provider)
 }
 

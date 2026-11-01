@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template/parse"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
 )
 
 // This file is the part of the save-time page vet that catches a template which

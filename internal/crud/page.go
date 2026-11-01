@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // Paging bounds for the table browser.

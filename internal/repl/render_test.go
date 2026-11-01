@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/engine"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/assay/internal/agents"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -67,10 +67,10 @@ type Server struct {
 	sessionCeil sync.Map // string -> agents.SandboxMode
 }
 
-// SandboxHeader is the request header a proxying `vibe mcp serve --sandbox X`
+// SandboxHeader is the request header a proxying `assay mcp serve --sandbox X`
 // sends on its SSE connection. The owner caps that session's sandbox at X
 // (never above its own policy). Unknown values are rejected with 400.
-const SandboxHeader = "X-Vibe-Sandbox"
+const SandboxHeader = "X-Assay-Sandbox"
 
 // Option configures a Server.
 type Option func(*Server)
@@ -94,7 +94,7 @@ func WithInstructions(f func(ctx context.Context) string) Option {
 }
 
 // DefaultServerName is the serverInfo name when none is set.
-const DefaultServerName = "Vibe"
+const DefaultServerName = "Assay"
 
 // New creates a new MCP server backed by the given tool-dispatch Handler.
 func New(handler Handler, logger *slog.Logger, opts ...Option) *Server {
@@ -215,7 +215,7 @@ func (s *Server) Start(addr string) error {
 
 // ServeStdio serves this Server's tool registry over stdio (JSON-RPC framed
 // on stdin/stdout, one message per line), reading from in and writing to
-// out, until ctx is cancelled or in hits EOF. Used by `vibe mcp serve
+// out, until ctx is cancelled or in hits EOF. Used by `assay mcp serve
 // --transport stdio` (cmd/mcp.go), which owns ctx (cancelled on
 // SIGINT/SIGTERM) so it can checkpoint + Save + Close the container exactly
 // once, after this call returns, regardless of which of the three lifecycle
@@ -245,7 +245,7 @@ func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) er
 // version called httpServer.Shutdown(context.Background()) with no
 // deadline at all — as long as a single SSE client stayed connected (a
 // long-lived GET /sse, by design never returning on its own), Shutdown
-// never returned, so `vibe mcp serve --transport sse` hung on SIGINT for as
+// never returned, so `assay mcp serve --transport sse` hung on SIGINT for as
 // long as that client stayed connected (observed 20s+ live), and the final
 // Save never ran.
 const stopTimeout = 2 * time.Second
@@ -335,7 +335,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !s.checkToken(r) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="vibe-mcp"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="assay-mcp"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

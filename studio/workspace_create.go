@@ -5,8 +5,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/templates"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/templates"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // CreateWorkspaceRequest asks for a new workspace; WorkspaceDirCheck answers
@@ -27,7 +27,7 @@ func (a *App) CheckWorkspaceDir(parentDir, name string) (*WorkspaceDirCheck, err
 	return &chk, nil
 }
 
-// CreateWorkspace makes a new workspace (vibe.yaml, notebooks/, queries/,
+// CreateWorkspace makes a new workspace (assay.yaml, notebooks/, queries/,
 // skills/, data/, the `local` database, optionally a git repository and a
 // starter template's tables and notebook) and opens it. With InPlace it
 // initialises a folder that already has files, which is the "Make this folder

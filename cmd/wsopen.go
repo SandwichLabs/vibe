@@ -9,32 +9,32 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
-// errLegacyFileArg is what every command that used to take a .vibe file says
-// when it is handed one. `vibe mcp serve` keeps hub.ErrLegacyFile.
-var errLegacyFileArg = errors.New(".vibe files are no longer opened; create a workspace with `vibe workspace init`")
+// errLegacyFileArg is what a command that wants a workspace folder says when it
+// is handed a .assay path, which is a bundle. `assay mcp serve` keeps hub.ErrLegacyFile.
+var errLegacyFileArg = errors.New(".assay files are bundles, not workspaces; import one with `assay import <file>` or create a workspace with `assay workspace init`")
 
-// isVibeFile reports whether a path argument (a folder, --workspace, a file to
-// import) names a legacy .vibe container. It is only for arguments that are
-// paths: never SQL, and never a table name (see isVibeTableArg).
-func isVibeFile(arg string) bool {
-	return strings.EqualFold(filepath.Ext(strings.TrimSpace(arg)), ".vibe")
+// isAssayFile reports whether a path argument (a folder, --workspace, a file to
+// import) names a .assay bundle. It is only for arguments that are
+// paths: never SQL, and never a table name (see isAssayTableArg).
+func isAssayFile(arg string) bool {
+	return strings.EqualFold(filepath.Ext(strings.TrimSpace(arg)), ".assay")
 }
 
-// isVibeTableArg is isVibeFile for an argument that may be a path or a table
-// name: `s.vibe` is a legal schema.table, so it only counts as a container
+// isAssayTableArg is isAssayFile for an argument that may be a path or a table
+// name: `s.assay` is a legal schema.table, so it only counts as a container
 // when it cannot be a table: it has no whitespace or quotes and either names
 // an existing file or has a path separator.
-func isVibeTableArg(arg string) bool {
+func isAssayTableArg(arg string) bool {
 	arg = strings.TrimSpace(arg)
-	if !isVibeFile(arg) || strings.ContainsAny(arg, " \t\r\n\"'") {
+	if !isAssayFile(arg) || strings.ContainsAny(arg, " \t\r\n\"'") {
 		return false
 	}
 	if strings.ContainsAny(arg, `/\`) {
@@ -54,7 +54,7 @@ func cliResolver(extra ...workspace.ResolverOption) *secrets.Resolver {
 
 // addWorkspaceFlag registers the shared --workspace flag.
 func addWorkspaceFlag(c *cobra.Command) {
-	c.Flags().String("workspace", "", "workspace folder (default: the nearest folder above the current directory with a vibe.yaml)")
+	c.Flags().String("workspace", "", "workspace folder (default: the nearest folder above the current directory with an assay.yaml)")
 }
 
 // openedWorkspace is a workspace opened for one CLI command: its stores, its
@@ -81,7 +81,7 @@ func heldMessage(root string, err error, advise bool) error {
 	if !errors.As(err, &held) {
 		return err
 	}
-	who := "another Vibe process"
+	who := "another Assay process"
 	if held.Holder != nil {
 		who = held.Holder.String()
 	}
@@ -122,7 +122,7 @@ func cliOpen(ctx context.Context, dir string, mode hub.Mode, advise bool, app st
 // cliOpenWith is cliOpen with the caller's open options (App, Mode and the
 // rest); the CLI's logger, resolver, redactor and BeforeSession are filled in.
 func cliOpenWith(ctx context.Context, dir string, opts hub.OpenOptions, advise bool, errW io.Writer) (*openedWorkspace, error) {
-	if isVibeFile(dir) {
+	if isAssayFile(dir) {
 		return nil, errLegacyFileArg
 	}
 	root, err := hub.ResolveRoot(dir, "")
@@ -149,7 +149,7 @@ func cliOpenWith(ctx context.Context, dir string, opts hub.OpenOptions, advise b
 }
 
 // openWorkspaceRemoteOnly opens the workspace without the hub lock and without
-// attaching its local files, for `vibe conn connect` of a connection that
+// attaching its local files, for `assay conn connect` of a connection that
 // cannot be attached read-only (MotherDuck): nothing here writes a file.
 func openWorkspaceRemoteOnly(ctx context.Context, dir string, errW io.Writer) (*openedWorkspace, error) {
 	return cliOpen(ctx, dir, hub.ModeRemoteOnly, false, "", errW)

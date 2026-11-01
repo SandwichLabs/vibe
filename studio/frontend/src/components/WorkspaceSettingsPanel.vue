@@ -118,7 +118,7 @@ onUnmounted(() => unsub?.())
   <div v-if="info" id="settings-panel-workspace" role="tabpanel" aria-labelledby="settings-tab-workspace" class="col" style="max-width: 52rem; gap: var(--sh-space-6);">
     <!-- This workspace -->
     <div>
-      <div class="sec-title"><h2 style="font-size: 22px;">This workspace</h2><span class="label">Saved in vibe.yaml</span></div>
+      <div class="sec-title"><h2 style="font-size: 22px;">This workspace</h2><span class="label">Saved in assay.yaml</span></div>
       <div class="card card-pad col" style="gap: var(--sh-space-4);">
         <div>
           <label class="field-label" for="ws-name">Name</label>
@@ -154,14 +154,14 @@ onUnmounted(() => unsub?.())
           <span v-if="dotenv.state === 'allowed' && dotenv.loaded" class="help">Loaded for this workspace.</span>
         </div>
         <div v-if="dotenv.state === 'none'" class="help">
-          <template v-if="dotenv.ignored">Vibe is ignoring this workspace's .env: {{ dotenv.ignored }}.</template>
-          <template v-else>A <code>.env</code> file in the workspace folder can hold sign-in variables such as <code>MOTHERDUCK_TOKEN</code> for connections that use Environment variables. Vibe asks before it loads one.</template>
+          <template v-if="dotenv.ignored">Assay is ignoring this workspace's .env: {{ dotenv.ignored }}.</template>
+          <template v-else>A <code>.env</code> file in the workspace folder can hold sign-in variables such as <code>MOTHERDUCK_TOKEN</code> for connections that use Environment variables. Assay asks before it loads one.</template>
         </div>
         <template v-else>
           <div class="help" data-testid="dotenv-settings-names">Variables: <template v-if="dotenv.names.length"><template v-for="(n, i) in dotenv.names" :key="n"><code>{{ n }}</code><template v-if="i < dotenv.names.length - 1">, </template></template></template><template v-else>none</template>. Values are never shown.</div>
           <div v-for="s in dotenv.satisfies" :key="s.connection" class="help">Signs in <b>{{ s.connection }}</b> through <code>{{ s.signIn }}</code> ({{ s.variables.join(', ') }}).</div>
           <div v-if="dotenv.state === 'changed'" class="help">The file changed after you allowed it. {{ dotenv.loaded ? 'The values from before the change stay loaded until you allow it again.' : 'Allow it again to load the new content.' }}</div>
-          <div v-if="dotenv.state === 'denied'" class="help">Vibe won't load it, even after edits, until you revoke this.</div>
+          <div v-if="dotenv.state === 'denied'" class="help">Assay won't load it, even after edits, until you revoke this.</div>
           <div v-if="dotenv.trackedByGit" class="help" role="alert" style="color: var(--sh-error); font-weight: 600;">Git tracks this file, so a credential is committed. Remove it from git (<code>git rm --cached .env</code>) and rotate the credential.</div>
           <div v-for="w in dotenv.warnings ?? []" :key="w" class="help">{{ w }}</div>
           <div v-if="dotenvError" class="help" role="alert" style="color: var(--sh-error);">{{ dotenvError }}</div>
@@ -206,11 +206,11 @@ onUnmounted(() => unsub?.())
 
         <div class="note info">
           <Icon name="info" :size="16" />
-          <span>The copied config starts <code>vibe mcp serve</code> for this folder. It holds no password or token: when Studio has the workspace open, that program reaches Studio on its own.</span>
+          <span>The copied config starts <code>assay mcp serve</code> for this folder. It holds no password or token: when Studio has the workspace open, that program reaches Studio on its own.</span>
         </div>
         <div class="note warn">
           <Icon name="alert" :size="16" />
-          <span>With Studio closed, tools using <code>vibe mcp serve</code> can't change anything while "Ask me before it changes data" is on. Turn it off to let them change the workspace's own <code>local</code> database only; other connections always need Studio.</span>
+          <span>With Studio closed, tools using <code>assay mcp serve</code> can't change anything while "Ask me before it changes data" is on. Turn it off to let them change the workspace's own <code>local</code> database only; other connections always need Studio.</span>
         </div>
         <p v-if="isReadOnly" class="help" style="margin: 0;">This window opened the workspace read-only, so it can't serve MCP until you take it over.</p>
       </div>

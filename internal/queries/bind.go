@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/engine"
 )
 
 // BindOptions are the knobs of Bind.
@@ -26,7 +26,7 @@ type BindOptions struct {
 
 // Bind turns a saved query's declarations and the caller's values into the typed
 // params to bind. It is the one binder every surface shares (the agent's
-// run_saved_query, Studio's Query Explorer, `vibe query --saved`). The SQL text
+// run_saved_query, Studio's Query Explorer, `assay query --saved`). The SQL text
 // is q.SQL, unchanged: a value only ever becomes an entry of the returned map,
 // never SQL text.
 //

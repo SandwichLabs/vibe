@@ -6,7 +6,7 @@
       "id": "cell_1",
       "type": "markdown",
       "collapsed": false,
-      "source": "# Penguin metrics\n\nEvery SQL cell calls `metric()`. The definitions live in `semantics/metrics/`; `vibe semantics list` shows them."
+      "source": "# Penguin metrics\n\nEvery SQL cell calls `metric()`. The definitions live in `semantics/metrics/`; `assay semantics list` shows them."
     },
     {
       "id": "cell_2",

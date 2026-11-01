@@ -24,11 +24,11 @@ func mkRulesDir(t *testing.T, parent string, name string) string {
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
 func TestParseRulesDirName_OnlyTheExactPattern(t *testing.T) {
-	pid, ok := parseRulesDirName("vibe-rules-4242")
+	pid, ok := parseRulesDirName("assay-rules-4242")
 	assert.True(t, ok)
 	assert.Equal(t, 4242, pid)
-	for _, bad := range []string{"vibe-rules-", "vibe-rules-0", "vibe-rules-007", "vibe-rules--5", "vibe-rules-+5", "vibe-rules-5x",
-		"vibe-rules-5/..", "xvibe-rules-5", "vibe-rules-99999999999", "vibe-rules-5 ", "vibe-rules-"} {
+	for _, bad := range []string{"assay-rules-", "assay-rules-0", "assay-rules-007", "assay-rules--5", "assay-rules-+5", "assay-rules-5x",
+		"assay-rules-5/..", "xassay-rules-5", "assay-rules-99999999999", "assay-rules-5 ", "assay-rules-"} {
 		_, ok := parseRulesDirName(bad)
 		assert.False(t, ok, bad)
 	}
@@ -36,16 +36,16 @@ func TestParseRulesDirName_OnlyTheExactPattern(t *testing.T) {
 
 func TestSweepStaleRulesDirs_RemovesOnlyDeadHelpersOwnFolders(t *testing.T) {
 	parent := t.TempDir()
-	dead := mkRulesDir(t, parent, "vibe-rules-111")
-	alive := mkRulesDir(t, parent, "vibe-rules-999")
-	self := mkRulesDir(t, parent, "vibe-rules-5")
-	oddName := mkRulesDir(t, parent, "vibe-rules-abc")
+	dead := mkRulesDir(t, parent, "assay-rules-111")
+	alive := mkRulesDir(t, parent, "assay-rules-999")
+	self := mkRulesDir(t, parent, "assay-rules-5")
+	oddName := mkRulesDir(t, parent, "assay-rules-abc")
 	otherDir := mkRulesDir(t, parent, "something-111")
-	aFile := filepath.Join(parent, "vibe-rules-222")
+	aFile := filepath.Join(parent, "assay-rules-222")
 	require.NoError(t, os.WriteFile(aFile, []byte("x"), 0o600))
 	// A link named like a stale folder, pointing at a folder that must survive.
 	victim := mkRulesDir(t, t.TempDir(), "precious")
-	link := filepath.Join(parent, "vibe-rules-333")
+	link := filepath.Join(parent, "assay-rules-333")
 	require.NoError(t, os.Symlink(victim, link))
 
 	sweepStaleRulesDirs(parent, 5, func(pid int) bool { return pid == 999 })

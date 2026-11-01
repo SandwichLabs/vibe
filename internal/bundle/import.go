@@ -11,13 +11,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // KindConnection is one definition from connections.yaml.
@@ -105,7 +105,7 @@ type Preview struct {
 	Encrypted     bool                `json:"encrypted"`
 	Items         []PreviewItem       `json:"items"`
 	Connections   []PreviewConnection `json:"connections"`
-	// Warnings are Vibe's own; MakerNotes are the manifest's, written by
+	// Warnings are Assay's own; MakerNotes are the manifest's, written by
 	// whoever made the bundle.
 	Warnings   []string `json:"warnings"`
 	MakerNotes []string `json:"makerNotes"`
@@ -651,7 +651,7 @@ func uniqueConnectionName(t Target, name string) string {
 	}
 }
 
-// NotebookPackage wraps one notebook file (a .vnb, or Studio's single-notebook
+// NotebookPackage wraps one notebook file (a .asnb, or Studio's single-notebook
 // export with its "kind" wrapper) as a package of one item, so a lone notebook
 // goes through exactly the checks, conflict handling and stores a bundled one
 // does. name is the file's name; its stem becomes the id when it is a valid
@@ -668,7 +668,7 @@ func NotebookPackage(name string, data []byte) (*Package, error) {
 		var k string
 		_ = json.Unmarshal(kind, &k)
 		if k != notebooks.FileKind {
-			return nil, fmt.Errorf("not a Vibe notebook file (kind %q)", cleanText(k, 40))
+			return nil, fmt.Errorf("not an Assay notebook file (kind %q)", cleanText(k, 40))
 		}
 		if inner, ok := wrapper["notebook"]; ok {
 			data = inner

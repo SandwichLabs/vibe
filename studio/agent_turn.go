@@ -24,7 +24,7 @@ func (c *chatTurns) begin(parent context.Context, turnID string) (context.Contex
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.cancel != nil {
-		return nil, nil, fmt.Errorf("an agent turn is already running; cancel it or wait for it to finish")
+		return nil, nil, fmt.Errorf("an assistant turn is already running; cancel it or wait for it to finish")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	c.id, c.cancel = turnID, cancel

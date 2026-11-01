@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // This file is the agent SQL policy (#116, plan §4.5). It inverts the old

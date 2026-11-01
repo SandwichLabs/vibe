@@ -17,7 +17,7 @@ import (
 // File is the name of the dotenv file at the root of a workspace.
 const File = ".env"
 
-// MaxSize is the largest .env Vibe reads. A bigger file is ignored whole.
+// MaxSize is the largest .env Assay reads. A bigger file is ignored whole.
 const MaxSize = 64 << 10
 
 // Parsed is the result of Parse.

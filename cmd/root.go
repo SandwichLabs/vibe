@@ -1,4 +1,4 @@
-// Package cmd holds the Cobra command tree for the vibe CLI (workspace, query,
+// Package cmd holds the Cobra command tree for the assay CLI (workspace, query,
 // import, export, conn, config, bundle, mcp, studio).
 package cmd
 
@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -27,19 +27,19 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "vibe",
-	Short: "Vibe — an agentic desktop workspace for working with data where it lives",
-	Long: `Vibe is an agentic workspace for data that stays where it already lives:
+	Use:   "assay",
+	Short: "Assay — an agentic desktop workspace for working with data where it lives",
+	Long: `Assay is an agentic workspace for data that stays where it already lives:
 local DuckDB files, MotherDuck, Postgres, SQLite, object storage, all reached
 through one DuckDB hub. A workspace is a folder (optionally a git repository)
-holding notebooks, saved queries and skills as plain files, plus a vibe.yaml
+holding notebooks, saved queries and skills as plain files, plus an assay.yaml
 that lists its connections. Credentials live in your OS keychain or
 environment, never in the folder. The workspace is exposed to the Studio
-desktop app and to external agents over MCP (` + "`vibe mcp serve`" + `).
+desktop app and to external agents over MCP (` + "`assay mcp serve`" + `).
 
-Start with ` + "`vibe workspace init`" + `, then ` + "`vibe query`" + `, ` + "`vibe import`" + `,
-` + "`vibe export`" + `, ` + "`vibe studio`" + ` (the terminal UI; --gui for the desktop app)
-and ` + "`vibe mcp serve`" + `.`,
+Start with ` + "`assay workspace init`" + `, then ` + "`assay query`" + `, ` + "`assay import`" + `,
+` + "`assay export`" + `, ` + "`assay studio`" + ` (the terminal UI; --gui for the desktop app)
+and ` + "`assay mcp serve`" + `.`,
 	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 }
 
@@ -63,7 +63,7 @@ func exitStatus(err error) int {
 	return 1
 }
 
-// exitCodeError is a command failure with its own exit status (`vibe
+// exitCodeError is a command failure with its own exit status (`assay
 // semantics check` exits 2 when checks could not run but none failed). Its
 // message is printed like any error.
 type exitCodeError struct {
@@ -78,7 +78,7 @@ func (e *exitCodeError) Unwrap() error { return e.err }
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vibe.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.assay.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "enable verbose logging")
 	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 }
@@ -94,10 +94,10 @@ func initConfig() {
 		}
 		viper.AddConfigPath(home)
 		viper.SetConfigType("yaml")
-		viper.SetConfigName(".vibe")
+		viper.SetConfigName(".assay")
 	}
 
-	viper.SetEnvPrefix("VIBE")
+	viper.SetEnvPrefix("ASSAY")
 	viper.AutomaticEnv()
 
 	// Read config file if it exists; ignore "not found" errors.

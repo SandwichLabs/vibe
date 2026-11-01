@@ -194,10 +194,10 @@ async function manage() {
       </button>
       <div class="msep"></div>
       <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-export-bundle" @click="exportBundle">
-        <Icon name="upload" :size="16" /><span class="grow"><span class="t">Export workspace content…</span><span class="sub">Notebooks, queries and skills as a .vibe file</span></span>
+        <Icon name="upload" :size="16" /><span class="grow"><span class="t">Export workspace content…</span><span class="sub">Notebooks, queries and skills as a .assay file</span></span>
       </button>
       <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-import-bundle" @click="importBundle">
-        <Icon name="download" :size="16" /><span class="grow"><span class="t">Import .vibe…</span><span class="sub">Add a bundle to this workspace</span></span>
+        <Icon name="download" :size="16" /><span class="grow"><span class="t">Import .assay…</span><span class="sub">Add a bundle to this workspace</span></span>
       </button>
       <div class="msep"></div>
       <button class="mi" type="button" role="menuitem" tabindex="-1" data-testid="ws-manage" @click="manage">

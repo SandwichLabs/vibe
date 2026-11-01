@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 func emptyExt(t *testing.T) TestOption { return WithTestExtensionDir(t.TempDir()) }
@@ -60,7 +60,7 @@ func TestTestDuckDBFile(t *testing.T) {
 
 func writeScript(t *testing.T, body string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "fake-vibe")
+	p := filepath.Join(t.TempDir(), "fake-assay")
 	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755)) //nolint:gosec // test script
 	return p
 }

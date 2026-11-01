@@ -197,11 +197,11 @@ The script runs in a sandboxed worker with no network, no files and no DOM,
 **only after the person allows it** in Studio. You cannot allow it, and it asks
 again after every edit. It has no browser APIs beyond JavaScript itself, no
 `eval` or `new Function`, and cannot load anything but the libraries below. Its
-whole world is the `vibe` object and one function you define:
+whole world is the `assay` object and one function you define:
 
 ```
 function draw({params, theme, width, height}) {
-  return vibe.run('by_region', {from: params.from, to: params.to})  // Promise of {columns, rows, truncated}
+  return assay.run('by_region', {from: params.from, to: params.to})  // Promise of {columns, rows, truncated}
     .then(res => ({svg: '<svg xmlns="http://www.w3.org/2000/svg" ...>...</svg>'}))
 }
 ```
@@ -214,18 +214,18 @@ function draw({params, theme, width, height}) {
 - It runs when the artifact opens and again on every parameter change; `params`
   holds every parameter's current typed value. `width` is the space available
   in pixels and `height` is 400.
-- `vibe.run(queryName, params)` runs one of THIS artifact's named queries with
+- `assay.run(queryName, params)` runs one of THIS artifact's named queries with
   the values you pass (an object of parameter names to strings, numbers or
   booleans; the SQL is the manifest's, never yours) and resolves to `{columns,
   rows, truncated}` (at most 500 rows). It rejects with a short fixed message
   when the query fails; at most 4 run at once and 60 a minute.
-- `vibe.theme` (also `ctx.theme`) holds plain colour strings to draw with, so
+- `assay.theme` (also `ctx.theme`) holds plain colour strings to draw with, so
   the chart follows light and dark: `chart.1`..`chart.6` (also `theme.chart`, an
   array), `fg`, `fg.muted`, `bg`, `bg.alt`, `surface`, `border`, `accent`, and
   `type` (`"light"` or `"dark"`). Use them instead of hard-coded colours.
-- `vibe.lib(name)` loads a pinned library and returns it: `d3-array`,
+- `assay.lib(name)` loads a pinned library and returns it: `d3-array`,
   `d3-scale`, `d3-shape`, `d3-format`, `d3-time-format`, `d3-geo` (all leave
-  their functions on `d3`, so `vibe.lib('d3-scale')` returns an object with
+  their functions on `d3`, so `assay.lib('d3-scale')` returns an object with
   `scaleLinear`, and the other d3 pieces already loaded), `vega` and
   `vega-lite`. Nothing else can be loaded. Vega runs without `eval`: use
   `new vega.View(vega.parse(spec, null, {ast: true}), {expr:
@@ -337,15 +337,15 @@ Add controls with `{{ range params }}` and `link`: `<a href="{{ link "region"
 "EMEA" }}">EMEA</a>` re-renders the page with `region` set to EMEA (a static
 page has no forms and no script).
 
-### Scripted example (vega-lite from `vibe-lib/`)
+### Scripted example (vega-lite from `assay-lib/`)
 
 A scripted page has no network, so it can load only its own files and the
-pinned libraries at `vibe-lib/`: `d3-array`, `d3-color`, `d3-format`,
+pinned libraries at `assay-lib/`: `d3-array`, `d3-color`, `d3-format`,
 `d3-geo`, `d3-interpolate`, `d3-path`, `d3-scale`, `d3-shape`, `d3-time`,
 `d3-time-format`, `vega`, `vega-lite` and `vega-interpreter` (each a
-`<script src="vibe-lib/NAME.js">`, leaving a global such as `vega` and
+`<script src="assay-lib/NAME.js">`, leaving a global such as `vega` and
 `vegaLite`). **Data reaches the script only through a `{{ json }}` block**
-(or `vibe.run`); there is no inline script and no `eval`.
+(or `assay.run`); there is no inline script and no `eval`.
 
 ```html index.html.tmpl
 <!doctype html>
@@ -353,9 +353,9 @@ pinned libraries at `vibe-lib/`: `d3-array`, `d3-color`, `d3-format`,
 <body>
 <div id="chart"></div>
 <script type="application/json" id="rows">{{ json (query "by_region") }}</script>
-<script src="vibe-lib/vega.js"></script>
-<script src="vibe-lib/vega-lite.js"></script>
-<script src="vibe-lib/vega-interpreter.js"></script>
+<script src="assay-lib/vega.js"></script>
+<script src="assay-lib/vega-lite.js"></script>
+<script src="assay-lib/vega-interpreter.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
@@ -368,8 +368,8 @@ pinned libraries at `vibe-lib/`: `d3-array`, `d3-color`, `d3-format`,
   const spec = { data: { values }, mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } }
   const view = new vega.View(vega.parse(vegaLite.compile(spec).spec, null, { ast: true }), { expr: vegaInterpreter.expressionInterpreter, renderer: 'none' })
   document.getElementById('chart').innerHTML = await view.toSVG()
-  // vibe.run asks for another named query with new values: {columns, rows, truncated}.
-  // await vibe.run('by_region', { from: '2026-01-01' })
+  // assay.run asks for another named query with new values: {columns, rows, truncated}.
+  // await assay.run('by_region', { from: '2026-01-01' })
 })()
 ```
 
@@ -380,7 +380,7 @@ database value or a `state` value in `innerHTML`: use `textContent`.)
 
 Declare what the page needs in `html.capabilities`; the person sees each one
 in the allow prompt, and a page without a declaration gets nothing. Resolve one
-with `const st = await vibe.use('state')`, which is `null` when it is not
+with `const st = await assay.use('state')`, which is `null` when it is not
 available: **the page must work without it**.
 
 - `state` (`{"scope": "local"}`): `get(key)`, `set(key, value)`, `delete(key)`,

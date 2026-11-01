@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/bundle"
+	"github.com/SandwichLabs/assay/internal/bundle"
 )
 
 const cliArtifactManifest = "version: 1\ntitle: Sales by region\nqueries:\n  - name: rows\n    sql: SELECT secret_column FROM secret_table\n"
@@ -28,12 +28,12 @@ func seedArtifacts(t *testing.T, root string) {
 
 func TestArtifactList_EmptyValidAndBroken(t *testing.T) {
 	ws := newWS(t)
-	out, stderr, err := runVibe("artifact", "list", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "No data artifacts")
 
 	seedArtifacts(t, ws)
-	out, stderr, err = runVibe("artifact", "list", "--workspace", ws)
+	out, stderr, err = runAssay("artifact", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "NAME")
 	assert.Regexp(t, `sales\s+Sales by region\s+a2ui\s+-`, out)
@@ -41,7 +41,7 @@ func TestArtifactList_EmptyValidAndBroken(t *testing.T) {
 	assert.NotContains(t, out, "secret_table", "the list shows what the Studio list shows: never the SQL")
 	assert.NotContains(t, out, "secret_column")
 
-	out, stderr, err = runVibe("artifact", "list", "--json", "--workspace", ws)
+	out, stderr, err = runAssay("artifact", "list", "--json", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &rows))
@@ -54,13 +54,13 @@ func TestArtifactList_EmptyValidAndBroken(t *testing.T) {
 func TestBundle_ArtifactsRoundTripThroughTheCLI(t *testing.T) {
 	src := newWS(t)
 	seedArtifacts(t, src)
-	out := filepath.Join(t.TempDir(), "share.vibe")
-	stdout, stderr, err := runVibe("export", "bundle", "-o", out, "--artifacts", "sales", "--workspace", src)
+	out := filepath.Join(t.TempDir(), "share.assay")
+	stdout, stderr, err := runAssay("export", "bundle", "-o", out, "--artifacts", "sales", "--workspace", src)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stdout, "1 data artifacts")
 
 	dst := newWS(t)
-	stdout, stderr, err = runVibe("import", out, "--workspace", dst)
+	stdout, stderr, err = runAssay("import", out, "--workspace", dst)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stdout, "artifact/sales")
 	want, _ := os.ReadFile(filepath.Join(src, "artifacts", "sales", "artifact.yaml"))
@@ -76,7 +76,7 @@ func TestArtifactList_ShowsAnHTMLPageWithItsHost(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(cliArtifactManifest+"view: html\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte("<p>hi</p>"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "app.js"), []byte("1"), 0o644))
-	out, stderr, err := runVibe("artifact", "list", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Regexp(t, `page\s+\S.*html \(scripted\)`, out)
 }
@@ -89,8 +89,8 @@ func TestBundleExport_CountsArtifactsNotFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(cliArtifactManifest+"view: html\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte("<p>hi</p>"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "app.js"), []byte("1"), 0o644))
-	out := filepath.Join(t.TempDir(), "two.vibe")
-	stdout, stderr, err := runVibe("export", "bundle", "-o", out, "--artifacts", "sales,page", "--workspace", ws)
+	out := filepath.Join(t.TempDir(), "two.assay")
+	stdout, stderr, err := runAssay("export", "bundle", "-o", out, "--artifacts", "sales,page", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stdout, "2 data artifacts", "a page with three files is one artifact")
 }

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/editor"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/editor"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/usersql"
 	"github.com/spf13/cobra"
 )
 
@@ -30,13 +30,13 @@ result. Unqualified names resolve against the workspace's default connection;
 
 By default this process takes ownership of the workspace's database (the hub
 lock), so a statement that writes is allowed on a connection that is not
-read-only. If Vibe Studio or "vibe mcp serve" already has the workspace open,
+read-only. If Assay or "assay mcp serve" already has the workspace open,
 this says who. The owner keeps the workspace's local DuckDB files locked for
 writing and DuckDB cannot read a file a writer holds, so --read-only (read
 without taking ownership, every connection attached read-only, no COPY ... TO)
 only reaches the workspace's other connections, such as MotherDuck or Postgres.
 
-This is you acting directly, not the agent, so SQL runs as written. As a
+This is you acting directly, not the assistant, so SQL runs as written. As a
 courtesy, ATTACH, DETACH, INSTALL, LOAD, SET and CREATE SECRET are refused with
 an explanation (connections come from the workspace, credentials from your
 keychain). That is a check for common slips, not a security boundary.
@@ -49,16 +49,16 @@ never written into the SQL. Without --saved, a $name in the statement is an
 error, as before. A saved query is a plain file whose first line is a header
 comment, and the SQL follows it:
 
-  -- vibe: {"title":"Top customers","description":"...","connection":"prod_pg","parameters":[{"name":"n","type":"integer","default":"10"}]}
+  -- assay: {"title":"Top customers","description":"...","connection":"prod_pg","parameters":[{"name":"n","type":"integer","default":"10"}]}
   SELECT * FROM orders ORDER BY total DESC LIMIT $n
 
-Run it with: vibe query --saved top_customers -p n=5
+Run it with: assay query --saved top_customers -p n=5
 
 Pass "-" as the statement to read it from standard input. --edit (-e) opens
 the statement (or an empty buffer) in $VISUAL or $EDITOR first, as psql's \e
 does, and runs what you save; quitting the editor with an error (":cq") runs
-nothing. The buffer lives under .vibe-local/edit/ so an editor running
-"vibe lsp" completes connections, tables and columns in it. Results are capped
+nothing. The buffer lives under .assay-local/edit/ so an editor running
+"assay lsp" completes connections, tables and columns in it. Results are capped
 at --limit rows (default 1000, 0 for no cap) and the cap is reported on
 standard error.`,
 	Args:         cobra.MaximumNArgs(1),
@@ -122,7 +122,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	o, err := openWorkspace(ctx, dir, readOnly, true, "vibe query", errW)
+	o, err := openWorkspace(ctx, dir, readOnly, true, "assay query", errW)
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func queryText(cmd *cobra.Command, dir string, args []string) (string, error) {
 var errEditUnchanged = errors.New("statement unchanged")
 
 // editQuery opens text in the person's editor on a scratch buffer under the
-// workspace, so the editor's language server finds vibe.yaml.
+// workspace, so the editor's language server finds assay.yaml.
 func editQuery(dir, text string) (string, error) {
 	argv, err := editor.Resolve(os.Getenv)
 	if err != nil {
@@ -329,7 +329,7 @@ func friendlyQueryError(err error, readOnly bool) error {
 		if readOnly {
 			return fmt.Errorf("%w\n(--read-only attaches every connection read-only)", err)
 		}
-		return fmt.Errorf("%w\n(that connection is read-only; set `read_only: false` on it in vibe.yaml or your connections file to allow writes)", err)
+		return fmt.Errorf("%w\n(that connection is read-only; set `read_only: false` on it in assay.yaml or your connections file to allow writes)", err)
 	}
 	return err
 }

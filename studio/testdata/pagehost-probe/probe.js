@@ -1,5 +1,5 @@
 // The P4 hostile page: every exit the plan names, tried by a page that is allowed
-// to run. Results go to Studio through vibe.run("probe", {msg}); the test reads
+// to run. Results go to Studio through assay.run("probe", {msg}); the test reads
 // them next to a loopback listener that must see nothing.
 (async () => {
   const T = JSON.parse(document.getElementById('target').textContent), H = 'http://' + T, port = T.split(':')[1]
@@ -13,16 +13,16 @@
     let msg = buf.splice(0).join(' | ')
     while (msg.length) {
       const part = msg.slice(0, 990); msg = msg.slice(990)
-      try { await vibe.run('probe', { msg: part }) } catch (e) { /* rate limited: dropped */ }
+      try { await assay.run('probe', { msg: part }) } catch (e) { /* rate limited: dropped */ }
     }
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const tryit = async (v, f) => { try { log(v, 'ok ' + (await f())) } catch (e) { log(v, 'rejected ' + e) } }
   const add = (tag, attrs, parent) => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || document.head).appendChild(e); return e }
   document.addEventListener('securitypolicyviolation', (e) => log('csp', e.violatedDirective + ' ' + e.blockedURI))
-  log('env', JSON.stringify({ g, origin: location.origin, rtc: typeof RTCPeerConnection, md: typeof navigator.mediaDevices, handler: typeof (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.vibe), vibe: typeof vibe, use: String(await vibe.use('state')) }))
-  log('params', JSON.stringify(Object.keys(vibe.params())))
-  try { await vibe.run('nope', {}) } catch (e) { log('run-unknown', e.message) }
+  log('env', JSON.stringify({ g, origin: location.origin, rtc: typeof RTCPeerConnection, md: typeof navigator.mediaDevices, handler: typeof (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.assay), assay: typeof assay, use: String(await assay.use('state')) }))
+  log('params', JSON.stringify(Object.keys(assay.params())))
+  try { await assay.run('nope', {}) } catch (e) { log('run-unknown', e.message) }
 
   if (g === 'main') {
     await tryit('fetch', async () => (await fetch(H + '/v/fetch')).status)
@@ -60,7 +60,7 @@
     log('main', 'done')
   } else if (g === 'open') {
     const w = window.open(H + '/v/window-open'); log('window.open', w === null ? 'null' : 'window')
-    const w2 = window.open('vibe-page://' + location.host + '/?group=main'); log('window.open-self', w2 === null ? 'null' : 'window')
+    const w2 = window.open('assay-page://' + location.host + '/?group=main'); log('window.open-self', w2 === null ? 'null' : 'window')
     add('a', { href: H + '/v/target-blank', target: '_blank' }, document.body).click()
     await sleep(2000); log('open', 'done')
   } else if (g === 'form') {
@@ -88,20 +88,20 @@
   } else if (g === 'metarefresh') {
     add('meta', { 'http-equiv': 'refresh', content: '0;url=' + H + '/v/metarefresh' }); await sleep(2000); log('metarefresh', 'still here')
   } else if (g === 'selfnav') {
-    for (const href of ['other?x=1', 'about:blank', 'javascript:window.__js=1', 'blob:vibe-page://probe/x', 'data:text/html,<p>x', 'file:///etc/passwd']) {
+    for (const href of ['other?x=1', 'about:blank', 'javascript:window.__js=1', 'blob:assay-page://probe/x', 'data:text/html,<p>x', 'file:///etc/passwd']) {
       add('a', { href }, document.body).click(); await sleep(700); log('nav ' + href.slice(0, 20), 'still here js=' + window.__js); await flush()
     }
     add('a', { href: '?group=samepage' }, document.body).click(); await sleep(2000)
   } else if (g === 'samepage') {
     log('samepage', 'arrived'); await sleep(800)
   } else if (g === 'frame') {
-    const f1 = add('iframe', { srcdoc: '<script>try{window.webkit.messageHandlers.vibe.postMessage(JSON.stringify({t:"run",id:1,q:"probe",v:{msg:"posted-from-srcdoc"}}))}catch(e){}<\/script>' }, document.body)
+    const f1 = add('iframe', { srcdoc: '<script>try{window.webkit.messageHandlers.assay.postMessage(JSON.stringify({t:"run",id:1,q:"probe",v:{msg:"posted-from-srcdoc"}}))}catch(e){}<\/script>' }, document.body)
     const f2 = add('iframe', { src: 'assets/frame.html' }, document.body)
     await sleep(2500); log('frame', 'done ' + f1.contentWindow + f2.contentWindow)
   } else if (g === 'freeze') {
     await flush(); await sleep(1500); log('freeze', 'entering'); await flush(); while (true) {}
   } else if (g === 'title') {
-    document.title = 'Vibe Studio - Sign in'; await sleep(1000); log('title', document.title)
+    document.title = 'Assay - Sign in'; await sleep(1000); log('title', document.title)
   } else if (g === 'storage') {
     const prev = { ls: null, ck: document.cookie }
     try { prev.ls = localStorage.getItem('k'); localStorage.setItem('k', 'v1') } catch (e) { prev.ls = 'throw ' + e }

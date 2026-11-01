@@ -7,5 +7,5 @@ import (
 )
 
 func TestInit_GitIgnoresTheMachineLocalFolderPageStateLivesIn(t *testing.T) {
-	assert.Contains(t, gitignoreLines, LocalDir+"/", "page state is under .vibe-local/artifacts/<name>/state.json")
+	assert.Contains(t, gitignoreLines, LocalDir+"/", "page state is under .assay-local/artifacts/<name>/state.json")
 }

@@ -60,7 +60,7 @@ func revisionWithFiles(manifest, view filePart, files []PageFile) string {
 		h.Write(n[:])
 		h.Write(b)
 	}
-	put([]byte("vibe-page-rev/1"))
+	put([]byte("assay-page-rev/1"))
 	put([]byte(base))
 	var n [8]byte
 	binary.BigEndian.PutUint64(n[:], uint64(len(files)))

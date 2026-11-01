@@ -74,13 +74,13 @@ describe('ApprovalCard names the connection (#117, SPEC 10)', () => {
     destructive: false, connections: ['warehouse'], ...over,
   })
 
-  it('says where the change goes in the header, a chip and the button, and that Vibe cannot undo it', () => {
+  it('says where the change goes in the header, a chip and the button, and that Assay cannot undo it', () => {
     const w = mount(ApprovalCard, { props: { approval: remote() }, attachTo: document.body })
     expect(w.find('.approval-card__title').text()).toContain('Allow this change to warehouse?')
     expect(w.find('[data-testid="approval-connection"]').text()).toContain('warehouse')
     expect(w.find('[data-testid="approval-connection"]').text()).toContain('not your local data')
     expect(w.find('[data-testid="approval-do-it"]').text()).toBe('Allow change to warehouse')
-    expect(w.find('[data-testid="approval-undo-note"]').text()).toContain("so Vibe can't undo it for you")
+    expect(w.find('[data-testid="approval-undo-note"]').text()).toContain("so Assay can't undo it for you")
   })
 
   it('a destructive statement says so, in the title, the button and the warning', () => {

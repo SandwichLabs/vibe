@@ -1,6 +1,6 @@
-# Vibe reference
+# Assay reference
 
-This is the shipped reference documentation for the Vibe application surface —
+This is the shipped reference documentation for the Assay application surface —
 an agentic data workspace: a folder of plain files that points at your data, which stays in its connections. It is split by
 surface so each area is easy to find:
 
@@ -8,21 +8,21 @@ surface so each area is easy to find:
 |---|---|
 | [`notebooks.md`](notebooks.md) | **Notebooks** (sql/markdown/a2ui cells) and the **A2UI** component reference |
 | [`artifacts.md`](artifacts.md) | **Data artifacts**: `artifacts/<name>/`, the manifest, parameter types, date defaults, view rules, controls, `pivot` and drill-down |
-| [`semantics.md`](semantics.md) | **The semantic layer**: `semantics/` entities, metrics, joins and the glossary, their formats, caps and name rule, `vibe semantics`, the proposals inbox |
-| [`workspaces.md`](workspaces.md) | **Workspaces**: the folder layout, `vibe.yaml`, connection scopes and precedence, the agent limit, file formats, conflicts |
+| [`semantics.md`](semantics.md) | **The semantic layer**: `semantics/` entities, metrics, joins and the glossary, their formats, caps and name rule, `assay semantics`, the proposals inbox |
+| [`workspaces.md`](workspaces.md) | **Workspaces**: the folder layout, `assay.yaml`, connection scopes and precedence, the agent limit, file formats, conflicts |
 | [`import-office.md`](import-office.md) | **Import** (CSV/TSV/XLSX) into a connection's table and table/query **export** (CSV, Parquet, XLSX, JSON) |
 | [`templates.md`](templates.md) | Bundled starter **templates** |
 | [`themes.md`](themes.md) | Studio **themes**: built-ins, the theme file format, colour roles, where preferences live |
 | [`connections.md`](connections.md) | **Connections**: every type (DuckDB file, Postgres, MySQL, MotherDuck, SQLite, S3/GCS/R2, Azure, DuckLake, Iceberg, Delta), fields, credentials, read-only, Test, extensions |
 | [`console.md`](console.md) | **The Data Console**: the terminal tab in the Query Explorer, keys, dot commands, history rules, limits |
-| [`mcp.md`](mcp.md) | **MCP**: `vibe mcp serve` (stdio/SSE), client configuration, SSE auth and security |
-| [`editor.md`](editor.md) | **Your own editor**: `$VISUAL`/`$EDITOR` from the TUI and `vibe query -e`, and `vibe lsp` (completion and hover) for Neovim, Helix and eglot |
+| [`mcp.md`](mcp.md) | **MCP**: `assay mcp serve` (stdio/SSE), client configuration, SSE auth and security |
+| [`editor.md`](editor.md) | **Your own editor**: `$VISUAL`/`$EDITOR` from the TUI and `assay query -e`, and `assay lsp` (completion and hover) for Neovim, Helix and eglot |
 | [`llm-config.md`](llm-config.md) | **LLM provider** configuration and the API key |
 | [`agent-policy.md`](agent-policy.md) | **The agent's SQL policy**: what each tier allows, the three-gate rule for writes, file and URL rules, the never-list, `list_connections` |
 
 A test in `internal/docsref/` keeps these docs honest: every A2UI component
 type registered in `internal/a2ui`, every starter template in
-`internal/templates` and every `vibe.yaml` / connections.yaml key in the
+`internal/templates` and every `assay.yaml` / connections.yaml key in the
 workspace schema must appear here, as must every assertion kind, join cardinality and metric format of the semantic layer.
 
 > **Direction note.** Per [`../direction.md`](../direction.md), the page

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/queries"
 )
 
 // This file is the save-time vet of a data artifact (D5, epic #162). The

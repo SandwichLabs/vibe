@@ -7,7 +7,7 @@ import { reactive } from 'vue'
 import { toPoints } from '../a2ui/query'
 import type { A2UIPageT } from '../a2ui/types'
 import type { MotionT } from '../a2ui/motion'
-import type { VibeEditorInstance } from '../composables/useVibeEditor'
+import type { AssayEditorInstance } from '../composables/useAssayEditor'
 import type { EnvelopeCell } from '../composables/useAiCellDialog'
 import { describeShape, viewFit, VIEW_COMPONENT, VIEW_HINTS, VIEW_LABELS, VIEWS, type Shape, type ViewKind } from './notebookViews'
 import { sqlSummary, cellTitle, CELL_FALLBACK_TITLE } from './cellSummary'
@@ -48,7 +48,7 @@ export interface CellState {
   // in buildSavePayload or the autosave key).
   sourceOpen: boolean
   editorEl?: HTMLElement | null
-  editor?: VibeEditorInstance | null
+  editor?: AssayEditorInstance | null
   // Lazy-mount (review fix, step 4a #1): an a2ui cell's A2UIPage — and every
   // live query its data-bound components fire — is not rendered until the
   // cell has actually scrolled into view, via the IntersectionObserver set

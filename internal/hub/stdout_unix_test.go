@@ -17,7 +17,7 @@ import (
 // TestHelperProtectStdout is the body of the subprocess run by
 // TestProtectStdoutKeepsNoiseOutOfTheProtocolChannel.
 func TestHelperProtectStdout(t *testing.T) {
-	if os.Getenv("VIBE_HUB_TEST_STDOUT") == "" {
+	if os.Getenv("ASSAY_HUB_TEST_STDOUT") == "" {
 		t.Skip("not a helper invocation")
 	}
 	proto, err := ProtectStdout()
@@ -34,7 +34,7 @@ func TestHelperProtectStdout(t *testing.T) {
 
 func TestProtectStdoutKeepsNoiseOutOfTheProtocolChannel(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperProtectStdout$")
-	cmd.Env = append(os.Environ(), "VIBE_HUB_TEST_STDOUT=1")
+	cmd.Env = append(os.Environ(), "ASSAY_HUB_TEST_STDOUT=1")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	require.NoError(t, cmd.Run(), stderr.String())

@@ -7,10 +7,10 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // MCPOption configures StartWorkspaceMCP.
@@ -18,7 +18,7 @@ type MCPOption func(*mcpOptions)
 
 type mcpOptions struct {
 	logger   *slog.Logger
-	wrap     func(vibemcp.Handler) vibemcp.Handler
+	wrap     func(assaymcp.Handler) assaymcp.Handler
 	addr     string
 	handler  *agents.Handler
 	remember bool
@@ -31,7 +31,7 @@ func WithMCPLogger(l *slog.Logger) MCPOption { return func(o *mcpOptions) { o.lo
 
 // WithMCPHandlerWrap wraps the tool handler, e.g. so Studio can take its own
 // lock around every call.
-func WithMCPHandlerWrap(f func(vibemcp.Handler) vibemcp.Handler) MCPOption {
+func WithMCPHandlerWrap(f func(assaymcp.Handler) assaymcp.Handler) MCPOption {
 	return func(o *mcpOptions) { o.wrap = f }
 }
 
@@ -58,14 +58,14 @@ func WithMCPPolicyRefresh(f func()) MCPOption { return func(o *mcpOptions) { o.r
 func WithMCPRememberPort() MCPOption { return func(o *mcpOptions) { o.remember = true } }
 
 // WorkspaceMCP is a running SSE MCP server for one workspace, published in the
-// hub lock so `vibe mcp serve` can proxy to it.
+// hub lock so `assay mcp serve` can proxy to it.
 type WorkspaceMCP struct {
 	// Handler is the tool handler being served. The owner may call
 	// SetApprover on it (Studio's approval card); nil only when the caller
 	// supplied a handler that is not an *agents.Handler.
 	Handler *agents.Handler
 	policy  agents.FilePolicy
-	srv     *vibemcp.Server
+	srv     *assaymcp.Server
 	hold    *Hold
 }
 
@@ -94,11 +94,11 @@ func StartWorkspaceMCP(ws workspace.Workspace, sess session.Session, hold *Hold,
 		}
 	}
 	m.Handler = h
-	var handler vibemcp.Handler = h
+	var handler assaymcp.Handler = h
 	if o.wrap != nil {
 		handler = o.wrap(handler)
 	}
-	m.srv = vibemcp.New(handler, o.logger, mcpServerOptions(ws, sess, h, hold.Holder().App, o.version, o.refresh)...)
+	m.srv = assaymcp.New(handler, o.logger, mcpServerOptions(ws, sess, h, hold.Holder().App, o.version, o.refresh)...)
 
 	port := ws.Local().MCPPort
 	addr := o.addr

@@ -39,8 +39,8 @@ onMounted(async () => {
     // first open is not lost (macOS Finder, or a second launch).
     unsubOpenPath = EventsOn('app:open-path', (req: OpenRequest) => { void handleOpenRequest(req) })
     if (!workspaceOpen.value) {
-      // A folder or .vibe bundle passed on the command line (`vibe studio --gui <dir>`,
-      // or the OS opening one with Vibe before the window was ready).
+      // A folder or .assay bundle passed on the command line (`assay studio --gui <dir>`,
+      // or the OS opening one with Assay before the window was ready).
       try {
         await handleOpenRequest(await App.GetInitialWorkspace())
       } catch {

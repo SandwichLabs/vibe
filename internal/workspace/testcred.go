@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 // credentialTimeout bounds the credential lookup of one test (a keychain may
 // prompt).
 const credentialTimeout = 15 * time.Second
 
-// TestCredential is the credential `vibe conn test` and Studio's Test send for
+// TestCredential is the credential `assay conn test` and Studio's Test send for
 // rc: this person's saved sign-in by the method in effect (signIn, or the saved
 // connection's, or the keychain), with whatever was typed in this edit laid
 // over it. rc is the definition being tested: the saved one, or an edit of it.

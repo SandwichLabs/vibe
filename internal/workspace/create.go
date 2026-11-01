@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/templates"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/templates"
 )
 
 // NewRequest asks for a new workspace.
@@ -86,7 +86,7 @@ func CheckNewDir(parentDir, name string) (DirCheck, error) {
 	return chk, nil
 }
 
-// CreateNew makes a new workspace on disk (vibe.yaml, notebooks/, queries/,
+// CreateNew makes a new workspace on disk (assay.yaml, notebooks/, queries/,
 // skills/, data/, optionally a git repository) and closes it again; the caller
 // opens it. Without InPlace a folder that already has files is refused.
 func CreateNew(req NewRequest, logger *slog.Logger) (*Created, error) {
@@ -108,7 +108,7 @@ func CreateNew(req NewRequest, logger *slog.Logger) (*Created, error) {
 	}
 	if !req.InPlace {
 		if entries, rerr := os.ReadDir(dir); rerr == nil && len(entries) > 0 {
-			return nil, fmt.Errorf("There's already a folder called %s in %s. Pick another name or location. Vibe won't put a workspace inside a folder that already has files in it, unless you use Open folder instead.", filepath.Base(dir), filepath.Dir(dir))
+			return nil, fmt.Errorf("There's already a folder called %s in %s. Pick another name or location. Assay won't put a workspace inside a folder that already has files in it, unless you use Open folder instead.", filepath.Base(dir), filepath.Dir(dir))
 		}
 	}
 	initOpts := []InitOption{WithGit(req.Git), WithInitLogger(logger)}

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/assay/internal/agents"
 )
 
 // --- buildTaskTools: task-only tools present, chat's buildTools never has

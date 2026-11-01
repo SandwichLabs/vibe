@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { App } from '../lib/bindings'
 // WorkspaceBanner — SPEC 07 C. Across the top of the main pane while the
-// workspace is open read-only because another program (usually `vibe mcp serve`)
+// workspace is open read-only because another program (usually `assay mcp serve`)
 // owns its database. Read-only is explained here, not in the agent pill.
 import { computed, ref, onMounted } from 'vue'
 import Icon from './Icon.vue'
@@ -60,7 +60,7 @@ async function trust() {
     <div class="bt">
       <b v-if="dotenv.state === 'changed'">This workspace's .env changed since you allowed it.</b> <template v-if="dotenv.loaded">The previous values stay loaded until you allow it again.</template>
       <b v-else>This workspace has a .env file. Load it?</b>
-      Loading it lets this workspace's <code>env:</code> sign-ins read the variables below. They are used only here, are never shown, and are not shared with other workspaces or with the agent.
+      Loading it lets this workspace's <code>env:</code> sign-ins read the variables below. They are used only here, are never shown, and are not shared with other workspaces or with the assistant.
       <span class="sub" data-testid="dotenv-names">Variables: <template v-if="dotenv.names.length"><template v-for="(n, i) in dotenv.names" :key="n"><code>{{ n }}</code><template v-if="i < dotenv.names.length - 1">, </template></template></template><template v-else>none</template></span>
       <span v-for="s in dotenv.satisfies" :key="s.connection" class="sub" data-testid="dotenv-feeds">Would sign in <b>{{ s.connection }}</b> with <code>{{ s.signIn }}</code> ({{ s.variables.join(', ') }}).</span>
       <span v-if="dotenv.trackedByGit" class="sub" role="alert" style="color: var(--sh-error); font-weight: 600;" data-testid="dotenv-tracked">Git tracks this file, so a credential is committed. Remove it from git (<code>git rm --cached .env</code>) and rotate the credential.</span>
@@ -84,7 +84,7 @@ async function trust() {
   <div v-if="info?.localUntrusted" class="ws-banner attn" role="alert" data-testid="untrusted-banner">
     <Icon name="alert" :size="20" class="lead-ico" />
     <div class="bt">
-      <b>This folder isn't the one your saved settings were made for.</b> It may have been deleted and cloned again, so the agent limits you loosened, your sign-in choices and your own connections are being ignored.
+      <b>This folder isn't the one your saved settings were made for.</b> It may have been deleted and cloned again, so the assistant limits you loosened, your sign-in choices and your own connections are being ignored.
       <span class="sub">If this is the same project, confirm your saved settings. {{ error }}</span>
     </div>
     <div class="row"><button class="btn btn-primary btn-sm" type="button" :disabled="busy" data-testid="trust-local" @click="trust">Use my saved settings</button></div>
@@ -100,7 +100,7 @@ async function trust() {
   <div v-if="show && info" class="ws-banner" role="status" data-testid="readonly-banner">
     <Icon name="lock" :size="20" class="lead-ico" />
     <div class="bt">
-      <b>Opened read-only.</b> <code>{{ who }}</code> is already running this workspace, so Vibe can look at it but not change it.
+      <b>Opened read-only.</b> <code>{{ who }}</code> is already running this workspace, so Assay can look at it but not change it.
       <span class="sub">Notebooks, queries and skills are plain files and stay editable, and remote connections work. Local database files are in use and can't be edited until it lets go.</span>
     </div>
     <div class="row">

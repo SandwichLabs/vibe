@@ -109,8 +109,8 @@ function editConnection() {
       <template v-if="keychainDown && !isEnv && !isSso">
         <div class="d-head"><h2 id="cp-h">Can't reach your keychain</h2></div>
         <div id="cp-d" class="d-body">
-          <p>Vibe stores passwords in this computer's keychain, but it isn't answering. That's common over SSH or when no one is signed in to the desktop.</p>
-          <div class="note info"><Icon name="info" :size="16" /><span>You can still connect. Set the variables in the environment Vibe starts from, then choose <b>Environment variables</b> for this connection. Vibe never writes passwords to a file instead.</span></div>
+          <p>Assay stores passwords in this computer's keychain, but it isn't answering. That's common over SSH or when no one is signed in to the desktop.</p>
+          <div class="note info"><Icon name="info" :size="16" /><span>You can still connect. Set the variables in the environment Assay starts from, then choose <b>Environment variables</b> for this connection. Assay never writes passwords to a file instead.</span></div>
         </div>
         <div class="d-foot">
           <button class="btn" type="button" data-testid="signin-retry" @click="tryAgain">Try again</button>
@@ -135,7 +135,7 @@ function editConnection() {
       <template v-else-if="isEnv">
         <div class="d-head"><h2 id="cp-h">{{ name }} signs in from environment variables</h2></div>
         <div id="cp-d" class="d-body">
-          <p>{{ cred?.detail || 'The variables below are not all set in the environment Vibe started from.' }}</p>
+          <p>{{ cred?.detail || 'The variables below are not all set in the environment Assay started from.' }}</p>
           <div v-for="e in cred?.env ?? []" :key="e.name" class="envvar"><code>{{ e.name }}</code><span class="set" :class="e.set ? 'yes' : 'no'">{{ e.set ? 'Set' : 'Not set' }}</span></div>
         </div>
         <div class="d-foot">
@@ -152,7 +152,7 @@ function editConnection() {
               <p><b>{{ name }}</b>'s server changed since you signed in ({{ serverChanged.old }} to {{ serverChanged.new }}). Sign in again to confirm it's the one you mean.</p>
               <div class="note info"><Icon name="info" :size="16" /><span>This usually happens after you pull a change from your team. Your saved password is only used with the server it was saved for, so it isn't sent to the new one.</span></div>
             </template>
-            <p v-else>Vibe doesn't have {{ spec?.id === 'motherduck' ? 'a token' : spec?.id === 'postgres' ? 'a username and password' : 'access keys' }} for this connection on this computer yet.</p>
+            <p v-else>Assay doesn't have {{ spec?.id === 'motherduck' ? 'a token' : spec?.id === 'postgres' ? 'a username and password' : 'access keys' }} for this connection on this computer yet.</p>
 
             <div v-for="(f, i) in fields" :key="f.name" class="field">
               <label class="field-label" :for="`cp-${f.name}`">{{ f.label }}</label>
@@ -176,7 +176,7 @@ function editConnection() {
               <input v-model="remember" type="checkbox" data-testid="signin-remember" />
               <span>
                 <span class="st-t">Remember in my keychain</span>
-                <span class="st-d">{{ remember ? "Saved on this computer only. Vibe can't show it again, only replace or clear it." : 'Kept for this session only, then forgotten. Your sign-in method does not change.' }}</span>
+                <span class="st-d">{{ remember ? "Saved on this computer only. Assay can't show it again, only replace or clear it." : 'Kept for this session only, then forgotten. Your sign-in method does not change.' }}</span>
               </span>
             </label>
 

@@ -1,5 +1,5 @@
 // errorText turns a thrown binding error into user-facing text: the
-// message, minus Vibe's Go wrap-chain prefixes ("query failed: ",
+// message, minus Assay's Go wrap-chain prefixes ("query failed: ",
 // "failed to ...: "). Every catch site that shows an error to the user
 // should go through this helper instead of reading e.message ad hoc, so the
 // stripping rule lives in exactly one place (#91).

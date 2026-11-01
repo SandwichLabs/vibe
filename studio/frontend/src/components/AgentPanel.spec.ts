@@ -37,7 +37,7 @@ async function mountPanel() {
 describe('AgentPanel (W0.5)', () => {
   beforeEach(() => { streamHandler = null; useAgentChat().resetAll() })
 
-  it('renders the agent answer as markdown and a done tool chip', async () => {
+  it('renders the assistant answer as markdown and a done tool chip', async () => {
     setBinding(async (turnId) => {
       streamHandler!({ turnId, kind: 'tool', id: 't1', tool: 'query', input: 'SELECT 1' })
       streamHandler!({ turnId, kind: 'tool_done', id: 't1', tool: 'query', output: '1 row' })
@@ -64,7 +64,7 @@ describe('AgentPanel (W0.5)', () => {
     await wrapper.find('[data-testid="agent-input"]').setValue('hi')
     await wrapper.find('[data-testid="agent-send"]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Agent error')
+    expect(wrapper.text()).toContain('Assistant error')
     expect(wrapper.text()).toContain('connection refused')
   })
 

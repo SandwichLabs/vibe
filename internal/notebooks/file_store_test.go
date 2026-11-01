@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/a2ui"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
@@ -36,7 +36,7 @@ func newFileStore(t *testing.T) (*FileStore, string) {
 func TestEncodeFile_Golden(t *testing.T) {
 	got, err := EncodeFile(goldenNotebook(t))
 	require.NoError(t, err)
-	path := filepath.Join("testdata", "golden", "weekly-revenue.vnb")
+	path := filepath.Join("testdata", "golden", "weekly-revenue.asnb")
 	if *update {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, got, 0o644))
@@ -53,10 +53,10 @@ func TestEncodeFile_Golden(t *testing.T) {
 func TestFileStore_SaveLoadSaveIsByteIdentical(t *testing.T) {
 	s, root := newFileStore(t)
 	ctx := context.Background()
-	golden, err := os.ReadFile(filepath.Join("testdata", "golden", "weekly-revenue.vnb"))
+	golden, err := os.ReadFile(filepath.Join("testdata", "golden", "weekly-revenue.asnb"))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "weekly-revenue.vnb"), golden, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "weekly-revenue.asnb"), golden, 0o644))
 
 	for i := 0; i < 3; i++ {
 		nb, warnings, err := s.Get(ctx, "weekly-revenue")
@@ -65,7 +65,7 @@ func TestFileStore_SaveLoadSaveIsByteIdentical(t *testing.T) {
 		assert.Equal(t, "weekly-revenue", nb.ID)
 		_, _, err = s.Save(ctx, nb)
 		require.NoError(t, err)
-		after, err := os.ReadFile(filepath.Join(root, "notebooks", "weekly-revenue.vnb"))
+		after, err := os.ReadFile(filepath.Join(root, "notebooks", "weekly-revenue.asnb"))
 		require.NoError(t, err)
 		assert.Equal(t, string(golden), string(after), "cycle %d", i)
 	}
@@ -80,8 +80,8 @@ func TestFileStore_CreateNamesFileAfterTitleAndDedupes(t *testing.T) {
 	b, err := s.Create(ctx, "Weekly Revenue!")
 	require.NoError(t, err)
 	assert.Equal(t, "weekly-revenue-2", b.ID)
-	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue.vnb"))
-	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue-2.vnb"))
+	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue.asnb"))
+	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue-2.asnb"))
 
 	list, err := s.List(ctx)
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestFileStore_RenameKeepsID(t *testing.T) {
 	got, _, err := s.Get(ctx, "draft")
 	require.NoError(t, err)
 	assert.Equal(t, "Final report", got.Title)
-	assert.FileExists(t, filepath.Join(root, "notebooks", "draft.vnb"))
+	assert.FileExists(t, filepath.Join(root, "notebooks", "draft.asnb"))
 }
 
 func TestFileStore_StaleSaveIsAConflict(t *testing.T) {
@@ -111,7 +111,7 @@ func TestFileStore_StaleSaveIsAConflict(t *testing.T) {
 	require.NoError(t, err)
 
 	// Something else (git pull, an editor, another process) rewrites the file.
-	path := filepath.Join(root, "notebooks", "shared.vnb")
+	path := filepath.Join(root, "notebooks", "shared.asnb")
 	disk, err := os.ReadFile(path)
 	require.NoError(t, err)
 	changed := strings.Replace(string(disk), `"title": "Shared"`, `"title": "Edited elsewhere"`, 1)
@@ -168,7 +168,7 @@ func TestFileStore_SecondCreateOfExistingFileConflicts(t *testing.T) {
 	ctx := context.Background()
 	s, root := newFileStore(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "hand.vnb"), []byte(`{"schemaVersion":2,"title":"Hand","cells":[]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "hand.asnb"), []byte(`{"schemaVersion":2,"title":"Hand","cells":[]}`), 0o644))
 	nb := Empty("Mine")
 	nb.ID = "hand"
 	_, _, err := s.Save(ctx, notebookToRaw(nb))
@@ -181,7 +181,7 @@ func TestFileStore_DeleteAndMissing(t *testing.T) {
 	nb, err := s.Create(ctx, "Gone")
 	require.NoError(t, err)
 	require.NoError(t, s.Delete(ctx, nb.ID))
-	assert.NoFileExists(t, filepath.Join(root, "notebooks", "gone.vnb"))
+	assert.NoFileExists(t, filepath.Join(root, "notebooks", "gone.asnb"))
 	require.NoError(t, s.Delete(ctx, nb.ID), "deleting a missing notebook is a no-op")
 	_, _, err = s.Get(ctx, nb.ID)
 	assert.ErrorIs(t, err, ErrNotFound)
@@ -192,7 +192,7 @@ func TestFileStore_HandEditedFilesAreCoerced(t *testing.T) {
 	s, root := newFileStore(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
 	raw := `{"schemaVersion":1,"title":"Old v1","cells":[{"id":"c1","type":"sql","source":"select 1","view":"sparkly"},{"id":"c2","type":"nope"}],"junk":1}`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "old.vnb"), []byte(raw), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "old.asnb"), []byte(raw), 0o644))
 	nb, warnings, err := s.Get(ctx, "old")
 	require.NoError(t, err)
 	assert.NotEmpty(t, warnings)
@@ -200,7 +200,7 @@ func TestFileStore_HandEditedFilesAreCoerced(t *testing.T) {
 	assert.Equal(t, "table", nb.Cells[0].View)
 
 	// A corrupt file lists (so it can be found) and carries the error.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "bad.vnb"), []byte("{not json"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "bad.asnb"), []byte("{not json"), 0o644))
 	list, err := s.List(ctx)
 	require.NoError(t, err)
 	var bad *Summary
@@ -219,7 +219,7 @@ func TestFileStore_NewerSchemaRejected(t *testing.T) {
 	ctx := context.Background()
 	s, root := newFileStore(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "future.vnb"), []byte(`{"schemaVersion":99,"title":"F","cells":[]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "future.asnb"), []byte(`{"schemaVersion":99,"title":"F","cells":[]}`), 0o644))
 	_, _, err := s.Get(ctx, "future")
 	assert.ErrorContains(t, err, "newer version")
 }
@@ -246,9 +246,9 @@ func TestFileStore_SymlinkedFileIsRefused(t *testing.T) {
 	ctx := context.Background()
 	s, root := newFileStore(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	secret := filepath.Join(t.TempDir(), "secret.vnb")
+	secret := filepath.Join(t.TempDir(), "secret.asnb")
 	require.NoError(t, os.WriteFile(secret, []byte(`{"schemaVersion":2,"title":"S","cells":[]}`), 0o644))
-	require.NoError(t, os.Symlink(secret, filepath.Join(root, "notebooks", "link.vnb")))
+	require.NoError(t, os.Symlink(secret, filepath.Join(root, "notebooks", "link.asnb")))
 	_, _, err := s.Get(ctx, "link")
 	assert.Error(t, err)
 	list, err := s.List(ctx)
@@ -262,7 +262,7 @@ func TestFileStore_ObserverSeesOwnWrites(t *testing.T) {
 	s := NewFileStore(root, WithObserver(func(p, h string) func() { gotPath, gotHash = p, h; return nil }))
 	nb, err := s.Create(context.Background(), "Obs")
 	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(gotPath, "obs.vnb"))
+	assert.True(t, strings.HasSuffix(gotPath, "obs.asnb"))
 	assert.Equal(t, nb.Rev, gotHash)
 	require.NoError(t, s.Delete(context.Background(), nb.ID))
 	assert.Equal(t, "", gotHash, "a delete reports an empty hash")
@@ -279,9 +279,9 @@ func TestFileStore_InvalidNamesAndOversizeFilesListWithError(t *testing.T) {
 	ctx := context.Background()
 	s, root := newFileStore(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "My Notes.vnb"), []byte(`{"schemaVersion":2,"title":"M","cells":[]}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "con.vnb"), []byte(`{"schemaVersion":2,"title":"C","cells":[]}`), 0o644))
-	f, err := os.Create(filepath.Join(root, "notebooks", "huge.vnb"))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "My Notes.asnb"), []byte(`{"schemaVersion":2,"title":"M","cells":[]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notebooks", "con.asnb"), []byte(`{"schemaVersion":2,"title":"C","cells":[]}`), 0o644))
+	f, err := os.Create(filepath.Join(root, "notebooks", "huge.asnb"))
 	require.NoError(t, err)
 	require.NoError(t, f.Truncate(11<<20))
 	require.NoError(t, f.Close())

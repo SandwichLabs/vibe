@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 // A semantics item's id is "<folder>/<name>" ("metrics/net_revenue") or

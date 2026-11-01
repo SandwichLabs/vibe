@@ -17,7 +17,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // nativeAvailable says this binary has a native page window: WebKitGTK 4.1 on
@@ -46,7 +46,7 @@ func nativeRun(cfg nativeConfig, hk nativeHooks) error {
 	nativeMu.Lock()
 	activeHooks = hk
 	nativeMu.Unlock()
-	prefix := "vibe-page://" + cfg.name + "/"
+	prefix := "assay-page://" + cfg.name + "/"
 	start := prefix
 	if cfg.query != "" {
 		start += "?" + cfg.query
@@ -59,7 +59,7 @@ func nativeRun(cfg nativeConfig, hk nativeHooks) error {
 	defer C.free(unsafe.Pointer(cStart))
 	defer C.free(unsafe.Pointer(cTitle))
 	defer C.free(unsafe.Pointer(cScript))
-	switch C.vibe_host_run(cStart, cPrefix, cTitle, C.int(cfg.width), C.int(cfg.height), cScript) {
+	switch C.assay_host_run(cStart, cPrefix, cTitle, C.int(cfg.width), C.int(cfg.height), cScript) {
 	case 0:
 		return nil
 	case 2:
@@ -84,39 +84,39 @@ func nativeRespond(id uint64, ok bool, ct string, body []byte) {
 	if ok {
 		good = 1
 	}
-	C.vibe_host_respond(C.ulong(id), good, cCT, cCSP, p, C.int(len(body)))
+	C.assay_host_respond(C.ulong(id), good, cCT, cCSP, p, C.int(len(body)))
 }
 
 // nativeEval runs script in the page (any goroutine).
 func nativeEval(js string) {
 	c := C.CString(js)
 	defer C.free(unsafe.Pointer(c))
-	C.vibe_host_eval(c)
+	C.assay_host_eval(c)
 }
 
 // nativeTakeInput reports and consumes the person's last physical input in the
 // window, within 5 seconds (any goroutine).
-func nativeTakeInput() bool { return C.vibe_host_take_input() != 0 }
+func nativeTakeInput() bool { return C.assay_host_take_input() != 0 }
 
 // nativeQuit ends the loop (any goroutine).
-func nativeQuit() { C.vibe_host_quit() }
+func nativeQuit() { C.assay_host_quit() }
 
-//export vibePageServe
-func vibePageServe(uri *C.char, id C.ulong) {
+//export assayPageServe
+func assayPageServe(uri *C.char, id C.ulong) {
 	if h := currentHooks(); h != nil {
 		h.serve(uint64(id), C.GoString(uri))
 	}
 }
 
-//export vibePageMessage
-func vibePageMessage(s *C.char) {
+//export assayPageMessage
+func assayPageMessage(s *C.char) {
 	if h := currentHooks(); h != nil {
 		h.message(C.GoString(s))
 	}
 }
 
-//export vibePageEvent
-func vibePageEvent(kind C.int) {
+//export assayPageEvent
+func assayPageEvent(kind C.int) {
 	if h := currentHooks(); h != nil {
 		h.event(nativeEvent(kind))
 	}

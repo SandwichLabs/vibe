@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/assay/internal/session/sessiontest"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,8 +12,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

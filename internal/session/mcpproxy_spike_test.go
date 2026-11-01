@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
+	"github.com/SandwichLabs/assay/internal/agents"
+	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
@@ -70,12 +70,12 @@ func stdioToSSE(ctx context.Context, baseURL, token string, in io.Reader, out io
 	return sc.Err()
 }
 
-// Spike #107: can `vibe mcp serve` proxy stdio to Studio's SSE server using
+// Spike #107: can `assay mcp serve` proxy stdio to Studio's SSE server using
 // only mcp-go primitives, including the bearer token and Origin rules?
 func TestSpikeMCPStdioToSSEProxy(t *testing.T) {
 	h := &stubHandler{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	srv := vibemcp.New(h, logger)
+	srv := assaymcp.New(h, logger)
 	require.NoError(t, srv.Start("127.0.0.1:0"))
 	t.Cleanup(func() { _ = srv.Stop() })
 	base := "http://" + srv.Addr() + "/sse"
@@ -142,7 +142,7 @@ func TestSpikeMCPStdioToSSEProxy(t *testing.T) {
 
 	t.Run("upstream death surfaces as an error, not a hang", func(t *testing.T) {
 		h2 := &stubHandler{}
-		srv2 := vibemcp.New(h2, logger)
+		srv2 := assaymcp.New(h2, logger)
 		require.NoError(t, srv2.Start("127.0.0.1:0"))
 		inR, inW := io.Pipe()
 		outR, outW := io.Pipe()

@@ -241,8 +241,8 @@ func TestImport_TableExistsCaseInsensitive(t *testing.T) {
 // that match (the sequence name, the Replace DROP/recreate, the skill this
 // Import's caller writes from Summary.Table) has to keep using the
 // catalog's own spelling, or the sequence bump silently no-ops (looking for
-// '_vibe_seq_customers_id' in a default of
-// nextval('_vibe_seq_Customers_id')) and a manual insert collides with an
+// '_assay_seq_customers_id' in a default of
+// nextval('_assay_seq_Customers_id')) and a manual insert collides with an
 // upserted high id.
 func TestImport_CaseDifferentTable_SequenceAndReplaceUseCanonicalName(t *testing.T) {
 	db := openDuckDB(t)

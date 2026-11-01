@@ -52,7 +52,7 @@ func Interpolate(s string, lookup LookupFunc) (string, error) {
 // naming the connection and field, never the value.
 //
 // Interpolation is only for the scopes that belong to one person (local and
-// user): the shared vibe.yaml is written by someone else and its values are
+// user): the shared assay.yaml is written by someone else and its values are
 // used as written (review #109, D-B). A variable whose name looks like a
 // credential is refused even there.
 func (d ConnectionDef) Resolve(lookup LookupFunc, scope Scope) (ConnectionDef, error) {

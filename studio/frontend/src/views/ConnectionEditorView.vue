@@ -107,7 +107,7 @@ const {
             <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
             <div v-if="fd.name === 'scope' && handoff.wholeBucket.value" class="help">
               <button type="button" class="linkbtn" data-testid="whole-bucket" @click="handoff.useWholeBucket">Use the whole bucket, <code>{{ handoff.wholeBucket.value }}</code></button>
-              Queries and the agent can then read anything in it.
+              Queries and the assistant can then read anything in it.
             </div>
             <div v-if="storageSlot(fd)" class="storage-slot" role="status" aria-live="polite">
               <StorageNeed v-if="storageLine(fd)" :need="storageLine(fd)!" :testid="`storage-${fd.name}`" @setup="handoff.setup" />
@@ -166,10 +166,10 @@ const {
             <span><span class="ot">My keychain</span><span class="od">Saved once on this computer.</span></span>
           </button>
           <button type="button" role="radio" class="opt-card" :class="{ on: method === 'env' }" :aria-checked="method === 'env'" data-testid="method-env" @click="method = 'env'; envPrefix = envPrefix || f.name.toUpperCase()">
-            <span><span class="ot">Environment variables</span><span class="od">Read from <code>{{ envVars[0]?.name }}</code> and friends when Vibe starts. Good for scripts and servers.</span></span>
+            <span><span class="ot">Environment variables</span><span class="od">Read from <code>{{ envVars[0]?.name }}</code> and friends when Assay starts. Good for scripts and servers.</span></span>
           </button>
           <button type="button" role="radio" class="opt-card" :class="{ on: method === 'prompt' }" :aria-checked="method === 'prompt'" data-testid="method-prompt" @click="method = 'prompt'">
-            <span><span class="ot">Ask me each time</span><span class="od">Vibe asks when it connects and forgets it when you close the workspace.</span></span>
+            <span><span class="ot">Ask me each time</span><span class="od">Assay asks when it connects and forgets it when you close the workspace.</span></span>
           </button>
           <button v-if="spec?.signInMethods.includes('aws-sso')" type="button" role="radio" class="opt-card" :class="{ on: method === 'aws-sso' }" :aria-checked="method === 'aws-sso'" data-testid="method-aws-sso" @click="method = 'aws-sso'">
             <span><span class="ot">AWS profile (SSO)</span><span class="od">Sign in with your IAM Identity Center profile. Short-lived keys, nothing stored.</span></span>
@@ -211,9 +211,9 @@ const {
             <code>{{ v.name }}</code>
             <span v-if="v.set !== null" class="set" :class="v.set ? 'yes' : 'no'"><Icon :name="v.set ? 'circleCheck' : 'alert'" :size="14" /> {{ v.set ? 'Set' : 'Not set' }}</span>
           </div>
-          <p class="help">Vibe shows whether each variable is set, never what it is. Set them in the environment Vibe starts from.</p>
+          <p class="help">Assay shows whether each variable is set, never what it is. Set them in the environment Assay starts from.</p>
         </template>
-        <p v-else class="help">When you connect, Vibe asks for {{ credFields.map((c) => c.label.toLowerCase()).join(' and ') }} and forgets {{ credFields.length > 1 ? 'them' : 'it' }} when you close the workspace. The prompt can offer to remember {{ credFields.length > 1 ? 'them' : 'it' }} in your keychain, off by default.</p>
+        <p v-else class="help">When you connect, Assay asks for {{ credFields.map((c) => c.label.toLowerCase()).join(' and ') }} and forgets {{ credFields.length > 1 ? 'them' : 'it' }} when you close the workspace. The prompt can offer to remember {{ credFields.length > 1 ? 'them' : 'it' }} in your keychain, off by default.</p>
         <p class="help">The team's file only says which details are needed. How you sign in is your own choice and stays on this computer, so teammates can use a different way.</p>
       </div>
 
@@ -221,7 +221,7 @@ const {
       <div v-if="spec?.capabilities.catalog" class="form-sec">
         <h3>Safety</h3>
         <template v-if="isMD">
-          <div class="note info" data-testid="md-note"><Icon name="info" :size="16" /><span>MotherDuck connections can't be set read-only here. For read-only access, sign in with a <b>read-scaling token</b>. The agent still asks before every change.</span></div>
+          <div class="note info" data-testid="md-note"><Icon name="info" :size="16" /><span>MotherDuck connections can't be set read-only here. For read-only access, sign in with a <b>read-scaling token</b>. The assistant still asks before every change.</span></div>
         </template>
         <template v-else>
           <div class="switch-row">
@@ -229,8 +229,8 @@ const {
             <span>
               <span id="ro-t" class="st-t">Read-only{{ readOnly ? ' (recommended)' : '' }}</span>
               <span id="ro-d" class="st-d">
-                <template v-if="readOnly">Vibe will refuse to run changes on this connection, from you or the agent. This is a safety belt inside Vibe, not a lock on the database: a determined query can still get around it.</template>
-                <template v-else>Changes are allowed. You and the agent can edit data here. The agent will still ask you before every change.</template>
+                <template v-if="readOnly">Assay will refuse to run changes on this connection, from you or the assistant. This is a safety belt inside Assay, not a lock on the database: a determined query can still get around it.</template>
+                <template v-else>Changes are allowed. You and the assistant can edit data here. The assistant will still ask you before every change.</template>
               </span>
             </span>
           </div>
@@ -264,9 +264,9 @@ const {
       <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="kb-h" data-testid="keychain-dialog">
         <div class="d-head"><h2 id="kb-h">Can't reach your keychain</h2></div>
         <div class="d-body">
-          <p>Vibe stores passwords in this computer's keychain, but it isn't answering. That's common over SSH or when no one is signed in to the desktop.</p>
+          <p>Assay stores passwords in this computer's keychain, but it isn't answering. That's common over SSH or when no one is signed in to the desktop.</p>
           <p v-if="keychainDetail" class="help">{{ keychainDetail }}</p>
-          <div class="note info"><Icon name="info" :size="16" /><span>You can still connect. Set the variables in the environment Vibe starts from, then choose <b>Environment variables</b> for this connection. Vibe never writes passwords to a file instead.</span></div>
+          <div class="note info"><Icon name="info" :size="16" /><span>You can still connect. Set the variables in the environment Assay starts from, then choose <b>Environment variables</b> for this connection. Assay never writes passwords to a file instead.</span></div>
         </div>
         <div class="d-foot">
           <button class="btn" type="button" @click="keychainBlocked = false">Try again</button>

@@ -40,7 +40,7 @@ var forbiddenPackages = map[string]map[string]bool{
 // fine to call: a binding may use filestore.Slug, but not filestore.Write*,
 // which are file writes in a wrapper.
 var forbiddenFuncPrefixes = map[string][]string{
-	"github.com/SandwichLabs/vibe/internal/filestore": {"Write", "Remove", "Sweep", "Read", "List", "Resolve", "StatStamp"},
+	"github.com/SandwichLabs/assay/internal/filestore": {"Write", "Remove", "Sweep", "Read", "List", "Resolve", "StatStamp"},
 }
 
 // forbiddenDBMethods are the *sql.DB / *sql.Tx entry points: a binding that

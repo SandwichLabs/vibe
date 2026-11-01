@@ -2,7 +2,7 @@ id: go-no-subprocess-in-repl
 language: go
 severity: error
 message: >-
-  The data console is a renderer for Vibe's own REPL (#255). internal/repl starts no shell, PTY or subprocess and never calls a duckdb binary. Do not import os/exec (or a PTY package), and do not call os.StartProcess or syscall.Exec/ForkExec, here.
+  The data console is a renderer for Assay's own REPL (#255). internal/repl starts no shell, PTY or subprocess and never calls a duckdb binary. Do not import os/exec (or a PTY package), and do not call os.StartProcess or syscall.Exec/ForkExec, here.
 rule:
   any:
     - kind: import_spec

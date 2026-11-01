@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 const testOrigin = "http://localhost:34115"
@@ -57,23 +57,23 @@ func TestViewServer_EveryResponseCarriesTheHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	targets := []string{
-		"/vibe-view/" + tok + "/worker.js",
-		"/vibe-view/" + tok + "/view.js",
-		"/vibe-view/lib/d3-array.js",
-		"/vibe-view/lib/missing.js",
-		"/vibe-view/lib/notjs.txt",
-		"/vibe-view/" + strings.Repeat("0", 64) + "/view.js",
-		"/vibe-view/nothex/view.js",
-		"/vibe-view/" + tok + "/other.js",
-		"/vibe-view/" + tok + "/",
-		"/vibe-view/" + tok + "/index.html",
-		"/vibe-view/",
-		"/vibe-view/lib/",
-		"/vibe-view",
-		"/vibe-view/lib/../" + tok + "/view.js",
-		"/vibe-view/lib//d3-array.js",
-		"/vibe-view/lib/%2e%2e/x.js",
-		"/vibe-view/lib/a%5cb.js",
+		"/assay-view/" + tok + "/worker.js",
+		"/assay-view/" + tok + "/view.js",
+		"/assay-view/lib/d3-array.js",
+		"/assay-view/lib/missing.js",
+		"/assay-view/lib/notjs.txt",
+		"/assay-view/" + strings.Repeat("0", 64) + "/view.js",
+		"/assay-view/nothex/view.js",
+		"/assay-view/" + tok + "/other.js",
+		"/assay-view/" + tok + "/",
+		"/assay-view/" + tok + "/index.html",
+		"/assay-view/",
+		"/assay-view/lib/",
+		"/assay-view",
+		"/assay-view/lib/../" + tok + "/view.js",
+		"/assay-view/lib//d3-array.js",
+		"/assay-view/lib/%2e%2e/x.js",
+		"/assay-view/lib/a%5cb.js",
 	}
 	for _, target := range targets {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
@@ -81,20 +81,20 @@ func TestViewServer_EveryResponseCarriesTheHeaders(t *testing.T) {
 			requireHardened(t, r, method+" "+target)
 		}
 	}
-	r := get(h, http.MethodPost, "/vibe-view/lib/d3-array.js")
+	r := get(h, http.MethodPost, "/assay-view/lib/d3-array.js")
 	requireHardened(t, r, "POST")
 	assert.Equal(t, http.StatusMethodNotAllowed, r.StatusCode)
-	assert.Zero(t, *hits, "nothing under /vibe-view/ reaches the asset handler")
+	assert.Zero(t, *hits, "nothing under /assay-view/ reaches the asset handler")
 }
 
 func TestViewServer_ScriptCSPNamesOnlyTheTokensViewAndTheLibraries(t *testing.T) {
 	vs, h, _ := testViewServer(func(*viewGrant) bool { return true })
 	tok, err := vs.issue(&viewGrant{name: "a", hash: "h", origin: "wails://wails.localhost:34115", script: []byte("x")})
 	require.NoError(t, err)
-	r := get(h, http.MethodGet, "/vibe-view/"+tok+"/worker.js")
+	r := get(h, http.MethodGet, "/assay-view/"+tok+"/worker.js")
 	require.Equal(t, http.StatusOK, r.StatusCode)
 	csp := r.Header.Get("Content-Security-Policy")
-	assert.Equal(t, "default-src 'none'; script-src wails://wails.localhost:34115/vibe-view/"+tok+"/view.js wails://wails.localhost:34115/vibe-view/lib/"+
+	assert.Equal(t, "default-src 'none'; script-src wails://wails.localhost:34115/assay-view/"+tok+"/view.js wails://wails.localhost:34115/assay-view/lib/"+
 		"; connect-src 'none'; worker-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'", csp)
 	assert.Equal(t, "/* worker */", body(t, r))
 	assert.Contains(t, r.Header.Get("Content-Type"), "javascript")
@@ -102,13 +102,13 @@ func TestViewServer_ScriptCSPNamesOnlyTheTokensViewAndTheLibraries(t *testing.T)
 
 func TestViewServer_InjectionMatchPathsAreBadRequestNotNotFound(t *testing.T) {
 	_, h, hits := testViewServer(func(*viewGrant) bool { return true })
-	for _, target := range []string{"/vibe-view/", "/vibe-view/lib/", "/vibe-view/x/index.html", "/vibe-view/index.html", "/vibe-view/lib/index.html", "/vibe-view/a/b/"} {
+	for _, target := range []string{"/assay-view/", "/assay-view/lib/", "/assay-view/x/index.html", "/assay-view/index.html", "/assay-view/lib/index.html", "/assay-view/a/b/"} {
 		r := get(h, http.MethodGet, target)
 		assert.Equal(t, http.StatusBadRequest, r.StatusCode, target)
 	}
 	assert.Zero(t, *hits)
-	// A path outside /vibe-view/ is none of this server's business.
-	r := get(h, http.MethodGet, "/vibe-viewer/x")
+	// A path outside /assay-view/ is none of this server's business.
+	r := get(h, http.MethodGet, "/assay-viewer/x")
 	assert.Equal(t, http.StatusTeapot, r.StatusCode)
 	assert.Equal(t, 1, *hits)
 }
@@ -119,36 +119,36 @@ func TestViewServer_UnknownRevokedOrChangedTokenGetsNoBytes(t *testing.T) {
 	tok, err := vs.issue(&viewGrant{name: "a", hash: "h", origin: testOrigin, script: []byte("SECRET-VIEW")})
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusOK, get(h, http.MethodGet, "/vibe-view/"+tok+"/view.js").StatusCode)
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/vibe-view/"+strings.Repeat("a", 64)+"/view.js").StatusCode)
+	assert.Equal(t, http.StatusOK, get(h, http.MethodGet, "/assay-view/"+tok+"/view.js").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+strings.Repeat("a", 64)+"/view.js").StatusCode)
 
 	allowed = false // revoked, denied or changed
 	for _, f := range []string{"view.js", "worker.js"} {
-		r := get(h, http.MethodGet, "/vibe-view/"+tok+"/"+f)
+		r := get(h, http.MethodGet, "/assay-view/"+tok+"/"+f)
 		assert.Equal(t, http.StatusNotFound, r.StatusCode, f)
 		assert.NotContains(t, body(t, r), "SECRET")
 	}
 	allowed = true // and the dropped token does not come back by itself
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/vibe-view/"+tok+"/view.js").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+tok+"/view.js").StatusCode)
 }
 
 func TestViewServer_NoTraversalAndOnlyLibraryFiles(t *testing.T) {
 	vs, h, _ := testViewServer(func(*viewGrant) bool { return true })
 	tok, _ := vs.issue(&viewGrant{name: "a", hash: "h", origin: testOrigin, script: []byte("x")})
 	for _, target := range []string{
-		"/vibe-view/lib/../../etc/passwd",
-		"/vibe-view/lib/..%2f..%2fetc%2fpasswd",
-		"/vibe-view/lib/sub/d3-array.js",
-		"/vibe-view/lib/.hidden.js",
-		"/vibe-view/" + tok + "/../" + tok + "/view.js",
-		"/vibe-view/" + tok + "/view.js/..",
-		"/vibe-view/" + tok + "/sub/view.js",
+		"/assay-view/lib/../../etc/passwd",
+		"/assay-view/lib/..%2f..%2fetc%2fpasswd",
+		"/assay-view/lib/sub/d3-array.js",
+		"/assay-view/lib/.hidden.js",
+		"/assay-view/" + tok + "/../" + tok + "/view.js",
+		"/assay-view/" + tok + "/view.js/..",
+		"/assay-view/" + tok + "/sub/view.js",
 	} {
 		r := get(h, http.MethodGet, target)
 		assert.GreaterOrEqual(t, r.StatusCode, 400, target)
 		assert.NotContains(t, body(t, r), "root:", target)
 	}
-	assert.Equal(t, "/* d3-array */", body(t, get(h, http.MethodGet, "/vibe-view/lib/d3-array.js")))
+	assert.Equal(t, "/* d3-array */", body(t, get(h, http.MethodGet, "/assay-view/lib/d3-array.js")))
 }
 
 func TestViewServer_ATokenServesOnlyItsOwnArtifact(t *testing.T) {
@@ -158,10 +158,10 @@ func TestViewServer_ATokenServesOnlyItsOwnArtifact(t *testing.T) {
 	b, err := vs.issue(&viewGrant{name: "b", hash: "hb", origin: testOrigin, script: []byte("VIEW-B")})
 	require.NoError(t, err)
 	assert.NotEqual(t, a, b)
-	assert.Equal(t, "VIEW-A", body(t, get(h, http.MethodGet, "/vibe-view/"+a+"/view.js")))
-	assert.Equal(t, "VIEW-B", body(t, get(h, http.MethodGet, "/vibe-view/"+b+"/view.js")))
+	assert.Equal(t, "VIEW-A", body(t, get(h, http.MethodGet, "/assay-view/"+a+"/view.js")))
+	assert.Equal(t, "VIEW-B", body(t, get(h, http.MethodGet, "/assay-view/"+b+"/view.js")))
 	// No path under A's token reaches B.
-	r := get(h, http.MethodGet, "/vibe-view/"+a+"/../"+b+"/view.js")
+	r := get(h, http.MethodGet, "/assay-view/"+a+"/../"+b+"/view.js")
 	assert.Equal(t, http.StatusBadRequest, r.StatusCode)
 	assert.NotContains(t, body(t, r), "VIEW-B")
 }
@@ -170,8 +170,8 @@ func TestViewServer_NewTokenReplacesTheArtifactsOldOneAndTheSetIsBounded(t *test
 	vs, h, _ := testViewServer(func(*viewGrant) bool { return true })
 	first, _ := vs.issue(&viewGrant{name: "a", origin: testOrigin, script: []byte("1")})
 	second, _ := vs.issue(&viewGrant{name: "a", origin: testOrigin, script: []byte("2")})
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/vibe-view/"+first+"/view.js").StatusCode)
-	assert.Equal(t, "2", body(t, get(h, http.MethodGet, "/vibe-view/"+second+"/view.js")))
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+first+"/view.js").StatusCode)
+	assert.Equal(t, "2", body(t, get(h, http.MethodGet, "/assay-view/"+second+"/view.js")))
 	for i := 0; i < maxViewGrants+5; i++ {
 		_, err := vs.issue(&viewGrant{name: "n" + string(rune('a'+i%26)) + string(rune('a'+i/26)), origin: testOrigin, script: []byte("x")})
 		require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestOpenArtifactView_ServesTheBytesThatWereHashed(t *testing.T) {
 	assert.Equal(t, hash, g.Hash)
 	assert.Len(t, g.Token, 64)
 
-	r := get(h, http.MethodGet, "/vibe-view/"+g.Token+"/view.js")
+	r := get(h, http.MethodGet, "/assay-view/"+g.Token+"/view.js")
 	require.Equal(t, http.StatusOK, r.StatusCode)
 	served := body(t, r)
 	got, err := artifacts.ViewHash([]byte(studioScriptManifest), []artifacts.ViewPart{{Path: artifacts.ScriptFile, Data: []byte(served)}})
@@ -257,7 +257,7 @@ func TestOpenArtifactView_AFileChangedAfterTheTokenGetsNoBytes(t *testing.T) {
 	dir := filepath.Join(app.ws.Root(), artifacts.Dir, "chart")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, artifacts.ScriptFile), []byte("function draw(){ return {svg:'<svg/>'} } // evil\n"), 0o644))
 	for _, f := range []string{"view.js", "worker.js"} {
-		r := get(h, http.MethodGet, "/vibe-view/"+g.Token+"/"+f)
+		r := get(h, http.MethodGet, "/assay-view/"+g.Token+"/"+f)
 		assert.Equal(t, http.StatusNotFound, r.StatusCode, f)
 		assert.NotContains(t, body(t, r), "evil")
 	}
@@ -269,7 +269,7 @@ func TestOpenArtifactView_ARevokedViewGetsNoBytes(t *testing.T) {
 	require.NoError(t, err)
 	_, err = app.RevokeArtifactView("chart")
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/vibe-view/"+g.Token+"/view.js").StatusCode)
+	assert.Equal(t, http.StatusNotFound, get(h, http.MethodGet, "/assay-view/"+g.Token+"/view.js").StatusCode)
 }
 
 func TestOpenArtifactView_AnotherArtifactsTokenCannotFetchThisOne(t *testing.T) {
@@ -284,12 +284,12 @@ func TestOpenArtifactView_AnotherArtifactsTokenCannotFetchThisOne(t *testing.T) 
 	require.NoError(t, err)
 
 	// Each token serves its own bytes and no path under one reaches the other.
-	assert.Equal(t, studioScriptSource, body(t, get(h, http.MethodGet, "/vibe-view/"+a.Token+"/view.js")))
-	assert.Contains(t, body(t, get(h, http.MethodGet, "/vibe-view/"+b.Token+"/view.js")), `id="other"`)
+	assert.Equal(t, studioScriptSource, body(t, get(h, http.MethodGet, "/assay-view/"+a.Token+"/view.js")))
+	assert.Contains(t, body(t, get(h, http.MethodGet, "/assay-view/"+b.Token+"/view.js")), `id="other"`)
 	for _, target := range []string{
-		"/vibe-view/" + a.Token + "/../" + b.Token + "/view.js",
-		"/vibe-view/" + a.Token + "/" + b.Token + "/view.js",
-		"/vibe-view/" + a.Token + "/other/view.js",
+		"/assay-view/" + a.Token + "/../" + b.Token + "/view.js",
+		"/assay-view/" + a.Token + "/" + b.Token + "/view.js",
+		"/assay-view/" + a.Token + "/other/view.js",
 	} {
 		r := get(h, http.MethodGet, target)
 		assert.GreaterOrEqual(t, r.StatusCode, 400, target)

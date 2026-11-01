@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // Loaded is a read .env file. Vars holds values and must never cross the
@@ -34,7 +34,7 @@ type Loaded struct {
 }
 
 // Read reads <root>/.env. root should be the symlink-resolved workspace root.
-// A missing file is Present=false with no error. A file Vibe refuses to use
+// A missing file is Present=false with no error. A file Assay refuses to use
 // (symlink out of the workspace, over MaxSize, not a regular file) is
 // reported through Ignored, never as an error.
 func Read(root string) Loaded {

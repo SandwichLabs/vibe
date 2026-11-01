@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // mysqlType attaches a MySQL (or MariaDB) database through a temporary secret,
 // exactly like postgres:
 //
-//	CREATE OR REPLACE TEMPORARY SECRET "vibe_x" (TYPE mysql, HOST '...', PORT 3306,
+//	CREATE OR REPLACE TEMPORARY SECRET "assay_x" (TYPE mysql, HOST '...', PORT 3306,
 //	    DATABASE '...', USER '...', PASSWORD '...' [, SSL_MODE '...'])
-//	ATTACH '' AS "x" (TYPE mysql, SECRET "vibe_x" [, READ_ONLY])
+//	ATTACH '' AS "x" (TYPE mysql, SECRET "assay_x" [, READ_ONLY])
 //
 // A connection string would put the password into duckdb_databases().path; the
 // secret keeps it out of every statement the session can show.

@@ -9,9 +9,9 @@ package main
 // nativeConfig is what a window is opened with. Everything in it came from
 // Studio, validated by the protocol.
 type nativeConfig struct {
-	// name is the host of the page's one origin, vibe-page://<name>/.
+	// name is the host of the page's one origin, assay-page://<name>/.
 	name string
-	// title is the fixed native title: "<artifact title> — Vibe page".
+	// title is the fixed native title: "<artifact title> — Assay page".
 	title         string
 	width, height int
 	// script is the injected page API (pagehost.APIScript).

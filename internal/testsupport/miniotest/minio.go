@@ -16,7 +16,7 @@ import (
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 const (
@@ -43,7 +43,7 @@ func containerBin() string {
 // ExtensionDir is the extension cache shared by integration runs.
 func ExtensionDir(t testing.TB) string {
 	t.Helper()
-	d := filepath.Join(os.TempDir(), "vibe-conn-it-ext")
+	d := filepath.Join(os.TempDir(), "assay-conn-it-ext")
 	require.NoError(t, os.MkdirAll(d, 0o755))
 	return d
 }
@@ -54,7 +54,7 @@ func ExtensionDir(t testing.TB) string {
 func UseExtensionCache(t *testing.T) {
 	t.Helper()
 	cache := t.TempDir()
-	dir := filepath.Join(cache, "vibe", "duckdb")
+	dir := filepath.Join(cache, "assay", "duckdb")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.Symlink(ExtensionDir(t), filepath.Join(dir, "extensions")))
 	t.Setenv("XDG_CACHE_HOME", cache)

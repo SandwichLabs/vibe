@@ -3,7 +3,7 @@ package main
 // What Studio sends a page window (docs/plans/html-artifacts.md, H4): the
 // page's files as they were hashed, the rendered entry document, the host's
 // theme stylesheet and the vendored libraries the page names. The helper holds
-// them in memory and serves them under vibe-page://<name>/; it has no other
+// them in memory and serves them under assay-page://<name>/; it has no other
 // source, so a path the page asks for that is not here does not exist.
 
 import (
@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // sentFile is one file of the page window's file set.
@@ -32,14 +32,14 @@ type sentFile struct {
 }
 
 const (
-	themePath = "_vibe/theme.css"
-	libPrefix = "vibe-lib/"
+	themePath = "_assay/theme.css"
+	libPrefix = "assay-lib/"
 	cssType   = "text/css; charset=utf-8"
 	jsType    = "text/javascript; charset=utf-8"
 )
 
 // libRefRe finds a vendored library a document or a script names.
-var libRefRe = regexp.MustCompile(`vibe-lib/([A-Za-z0-9][A-Za-z0-9._-]*\.js)`)
+var libRefRe = regexp.MustCompile(`assay-lib/([A-Za-z0-9][A-Za-z0-9._-]*\.js)`)
 
 // pageFileTypes is the Content-Type of a page file by extension. Templates are
 // never sent: they are rendered in Studio and nothing asks for their source.
@@ -156,12 +156,12 @@ func withThemeLink(doc []byte) []byte {
 }
 
 var (
-	themeNameRe  = regexp.MustCompile(`^--vibe-[a-z0-9][a-z0-9-]{0,40}$`)
+	themeNameRe  = regexp.MustCompile(`^--assay-[a-z0-9][a-z0-9-]{0,40}$`)
 	themeValueRe = regexp.MustCompile(`^[A-Za-z0-9 #(),.%/'"_+-]{1,160}$`)
 )
 
-// themeStylesheet builds _vibe/theme.css from the roles the person's theme set
-// on Studio's window. Only a --vibe-* name with a plain value gets through; a
+// themeStylesheet builds _assay/theme.css from the roles the person's theme set
+// on Studio's window. Only a --assay-* name with a plain value gets through; a
 // value that could close a declaration, open a function that loads something
 // or unbalance a quote is dropped, so this is not a way to write CSS.
 func themeStylesheet(roles map[string]string) string {
@@ -175,7 +175,7 @@ func themeStylesheet(roles map[string]string) string {
 	scheme := ""
 	for _, n := range names {
 		v := strings.TrimSpace(roles[n])
-		if n == "--vibe-theme-type" {
+		if n == "--assay-theme-type" {
 			if v == "light" || v == "dark" {
 				scheme = v
 			}
@@ -242,7 +242,7 @@ func buildWindowSetup(ctx context.Context, run artifacts.PageRunner, page *artif
 	return append(msgs, &pagehost.Message{T: pagehost.TypeGo}), nil
 }
 
-// pageParamsJSON is what vibe.params() returns: for each declared parameter its
+// pageParamsJSON is what assay.params() returns: for each declared parameter its
 // type, label, default, static options, and the value this page was drawn with.
 func pageParamsJSON(m *artifacts.Manifest, rawQuery string) ([]byte, error) {
 	q, err := url.ParseQuery(rawQuery)

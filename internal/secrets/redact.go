@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
 )
 
 // Mask replaces a scrubbed value.

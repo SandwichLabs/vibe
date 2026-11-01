@@ -24,7 +24,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // Folder layout.

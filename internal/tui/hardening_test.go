@@ -7,8 +7,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -106,7 +106,7 @@ func TestCapRowsIfSafe(t *testing.T) {
 	for _, c := range cases {
 		got := capRowsIfSafe(c.query, c.readOnly)
 		if c.wantWrapped {
-			assert.Contains(t, got, "_vibe_repl_cap", "expected %q (readOnly=%v) to be wrapped", c.query, c.readOnly)
+			assert.Contains(t, got, "_assay_repl_cap", "expected %q (readOnly=%v) to be wrapped", c.query, c.readOnly)
 			assert.Contains(t, got, "LIMIT")
 		} else {
 			assert.Equal(t, c.query, got, "expected %q (readOnly=%v) to pass through unchanged", c.query, c.readOnly)

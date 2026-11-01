@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 const childActionListDatabases = "list-databases"

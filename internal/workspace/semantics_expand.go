@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/usersql"
 )
 
 // PersonExpansion is a statement a person typed, with its metric() calls
@@ -41,7 +41,7 @@ type PersonOptions struct {
 }
 
 // ExpandForPerson expands metric('name', by => ...) calls in text a person
-// typed (the Query Explorer, `vibe query`, a notebook's console, `vibe repl`)
+// typed (the Query Explorer, `assay query`, a notebook's console, `assay repl`)
 // before the editor's gate looks at it, with the same expander the agent's
 // policy uses (internal/semantics). connection is the connection the statement
 // runs on ("" is the workspace default).

@@ -149,11 +149,11 @@ func TestCheckRendered(t *testing.T) {
 
 	// A scripted page's own script file and a vendored library may be loaded; nothing else may.
 	files := map[string]bool{"app.js": true, "assets/x.js": true, "index.html.tmpl": true}
-	assert.NoError(t, checkRendered([]byte(`<script src="app.js"></script><script src="vibe-lib/d3-array.js"></script>`), true, files))
+	assert.NoError(t, checkRendered([]byte(`<script src="app.js"></script><script src="assay-lib/d3-array.js"></script>`), true, files))
 	for _, bad := range []string{
-		`<script src="missing.js"></script>`, `<script src="http://x.test/a.js"></script>`, `<script src="vibe-lib/../x.js"></script>`,
-		`<script src="vibe-lib/x.css"></script>`, `<script src="//x.test/a.js"></script>`,
-		`<img src="app.js">`, `<img src="vibe-lib/d3.js">`, `<script src="app.js?x=1"></script>`,
+		`<script src="missing.js"></script>`, `<script src="http://x.test/a.js"></script>`, `<script src="assay-lib/../x.js"></script>`,
+		`<script src="assay-lib/x.css"></script>`, `<script src="//x.test/a.js"></script>`,
+		`<img src="app.js">`, `<img src="assay-lib/d3.js">`, `<script src="app.js?x=1"></script>`,
 	} {
 		assert.Error(t, checkRendered([]byte(bad), true, files), bad)
 	}
@@ -162,7 +162,7 @@ func TestCheckRendered(t *testing.T) {
 
 func TestRender_AFailingQueryIsAFixedBlockAndWritesNothing(t *testing.T) {
 	f := newFakeRunner()
-	f.err = errors.New("SECRET-POLICY-REASON /home/zac/vibe-workspace/orders.sql")
+	f.err = errors.New("SECRET-POLICY-REASON /home/zac/assay-workspace/orders.sql")
 	var out bytes.Buffer
 	err := RenderHTMLPage(context.Background(), f.run, pageOf(t, PageStatic, entry(`<p>before</p>{{ range (query "by_region").Rows }}x{{ end }}`)), nil, &out)
 	var re *RenderError
@@ -326,14 +326,14 @@ func TestRender_TemplateCallsAreBoundedAndRecursionIsRefused(t *testing.T) {
 
 func TestRender_TemplatesCannotNameTheGuards(t *testing.T) {
 	f := newFakeRunner()
-	for _, tmpl := range []string{`{{ vibeRange__ 1 }}`, `{{ $x := vibeStep__ }}`} {
+	for _, tmpl := range []string{`{{ assayRange__ 1 }}`, `{{ $x := assayStep__ }}`} {
 		_, err := renderOf(t, pageOf(t, PageStatic, entry(tmpl)), f, nil)
 		var re *RenderError
 		require.ErrorAs(t, err, &re, tmpl)
 		assert.Equal(t, RenderTemplate, re.Kind, tmpl)
 	}
 	// And the save-time vet already refuses them, being unknown functions.
-	_, err := vetIndex(t, `{{ vibeRange__ 1 }}`)
+	_, err := vetIndex(t, `{{ assayRange__ 1 }}`)
 	require.Error(t, err)
 }
 

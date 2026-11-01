@@ -1,6 +1,6 @@
 package main
 
-import "github.com/SandwichLabs/vibe/internal/workspace"
+import "github.com/SandwichLabs/assay/internal/workspace"
 
 // Test-only helpers: kept out of the production build.
 
@@ -29,8 +29,8 @@ func (a *App) ExecuteQuery(sqlStr string) (*QueryResult, error) {
 
 // SetAgentConfig saves THIS PERSON's agent settings for the workspace (the
 // "On this computer" layer, kept outside the folder). It can lower the tier
-// freely and raise it only up to the team limit in vibe.yaml, and it cannot turn
-// the gate off when vibe.yaml requires it. Provider/model/endpoint are
+// freely and raise it only up to the team limit in assay.yaml, and it cannot turn
+// the gate off when assay.yaml requires it. Provider/model/endpoint are
 // app-global config and are not settable here. Studio-only.
 func (a *App) SetAgentConfig(cfg AgentConfig) error {
 	a.mu.Lock()

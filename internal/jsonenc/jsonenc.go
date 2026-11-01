@@ -1,5 +1,5 @@
 // Package jsonenc is the one JSON encoder configuration for the files and
-// strings Vibe writes: HTML escaping off (Encode), so < > & stay readable and diffs
+// strings Assay writes: HTML escaping off (Encode), so < > & stay readable and diffs
 // stay small. It is a leaf package so any package may use it.
 package jsonenc
 

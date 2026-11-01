@@ -55,11 +55,11 @@ describe('CustomView', () => {
   })
 
   it('shows an SVG only as an <img> with a blob URL', () => {
-    state.svgUrl.value = 'blob:vibe/1'
+    state.svgUrl.value = 'blob:assay/1'
     const { w } = mountView()
     const img = w.get('[data-testid="custom-view-image"]')
     expect(img.element.tagName).toBe('IMG')
-    expect(img.attributes('src')).toBe('blob:vibe/1')
+    expect(img.attributes('src')).toBe('blob:assay/1')
     expect(img.attributes('alt')).toBe('Sales chart')
     expect(w.html()).not.toContain('<svg')
     state.svgUrl.value = ''
@@ -92,7 +92,7 @@ describe('CustomView', () => {
   })
 
   it('a failed image does not hide a later A2UI page, and clears when the drawing changes', async () => {
-    state.svgUrl.value = 'blob:vibe/bad'
+    state.svgUrl.value = 'blob:assay/bad'
     const { w } = mountView()
     await w.get('[data-testid="custom-view-image"]').trigger('error')
     expect(w.find('[data-testid="custom-view-image-error"]').exists()).toBe(true)

@@ -13,7 +13,7 @@ import (
 	_ "github.com/duckdb/duckdb-go/v2" // DuckDB driver, for the dedicated parser connection below
 	"github.com/duckdb/duckdb-go/v2/mapping"
 
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/usersql"
 )
 
 // sqlClass is what a run_query statement is allowed to do, used to gate it per
@@ -94,7 +94,7 @@ const (
 // attaches with a DuckDB secret. It is denied in EVERY sandbox mode, full
 // included, and no approval can lift it: credentials are the session's to
 // create (Session.CreateTemporarySecret), never the agent's (#114).
-const secretsDeniedMsg = "run_query: secrets are managed by Vibe and cannot be created, listed or referenced from SQL"
+const secretsDeniedMsg = "run_query: secrets are managed by Assay and cannot be created, listed or referenced from SQL"
 
 // gateReason is the reason checkSQLClass is given: the verdict's own, or the TEMP
 // explanation for the tier refusal of a TEMP create (kept out of Reason so no

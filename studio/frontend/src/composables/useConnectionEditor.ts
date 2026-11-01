@@ -91,7 +91,7 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
     const name = f.name.trim()
     // Letting the agent and you change a remote database deserves one more look.
     if (remote.value && !isMD.value && !readOnly.value && (isNew.value || detail.value?.def.read_only !== false)) {
-      const ok = await askConfirm({ title: `Allow changes to ${name}?`, message: 'Changes are allowed on this connection. You and the agent can edit data there. The agent will still ask you before every change.', variant: 'primary', confirmLabel: 'Allow changes' })
+      const ok = await askConfirm({ title: `Allow changes to ${name}?`, message: 'Changes are allowed on this connection. You and the assistant can edit data there. The assistant will still ask you before every change.', variant: 'primary', confirmLabel: 'Allow changes' })
       if (!ok) return
     }
     // An environment sign-in is bound to the server it was chosen for. Saving a
@@ -179,7 +179,7 @@ export function useConnectionEditor(form: ConnectionForm, md: MotherDuckPicker) 
   function useEnvInstead() {
     keychainBlocked.value = false
     method.value = 'env'
-    if (!envPrefix.value) envPrefix.value = f.name.toUpperCase() || 'VIBE'
+    if (!envPrefix.value) envPrefix.value = f.name.toUpperCase() || 'ASSAY'
   }
 
   // ---- remove ----

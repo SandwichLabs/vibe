@@ -3,11 +3,11 @@
 #
 #   scripts/package.sh <os> <arch> <version> <outdir>
 #
-# Expects ./vibe (CLI) and studio/build/bin/vibe-studio (Linux) or
-# studio/build/bin/vibe-studio.app (macOS) to be built already. <version> has no leading "v".
-# macOS: the bundle is renamed to "Vibe Studio.app" and LSMinimumSystemVersion is set for <arch>.
-# Writes <outdir>/vibe_<ver>_<os>_<arch>.tar.gz (CLI only) and
-# <outdir>/vibe-studio_<ver>_<os>_<arch>.tar.gz (CLI plus Studio).
+# Expects ./assay (CLI) and studio/build/bin/assay-studio (Linux) or
+# studio/build/bin/assay-studio.app (macOS) to be built already. <version> has no leading "v".
+# macOS: the bundle is renamed to "Assay.app" and LSMinimumSystemVersion is set for <arch>.
+# Writes <outdir>/assay_<ver>_<os>_<arch>.tar.gz (CLI only) and
+# <outdir>/assay-studio_<ver>_<os>_<arch>.tar.gz (CLI plus Studio).
 set -euo pipefail
 
 os="${1:?os (linux|darwin)}" arch="${2:?arch (amd64|arm64)}" ver="${3:?version}" out="${4:?outdir}"
@@ -54,9 +54,9 @@ pack() { # $1 = stage dir, $2 = archive path
 # CLI-only archive: the binary at the root.
 cli="$stage/cli"
 mkdir -p "$cli"
-cp "$root/vibe" "$cli/vibe"
+cp "$root/assay" "$cli/assay"
 docs "$cli"
-pack "$cli" "$out/vibe_${ver}_${os}_${arch}.tar.gz"
+pack "$cli" "$out/assay_${ver}_${os}_${arch}.tar.gz"
 
 # CLI plus Studio.
 st="$stage/studio"
@@ -65,32 +65,32 @@ docs "$st"
 case "$os" in
 linux)
 	mkdir -p "$st/bin" "$st/share/applications" "$st/share/mime/packages"
-	cp "$root/vibe" "$st/bin/vibe"
-	cp "$root/studio/build/bin/vibe-studio" "$st/bin/vibe-studio"
-	cp "$root/studio/build/linux/vibe-studio.desktop" "$st/share/applications/vibe-studio.desktop"
-	cp "$root/studio/build/linux/vibe-mime.xml" "$st/share/mime/packages/vibe-bundle.xml"
-	# Icons: the hicolor tree from scripts/gen-icons.sh (name "vibe-studio", matching Icon= in the .desktop file).
+	cp "$root/assay" "$st/bin/assay"
+	cp "$root/studio/build/bin/assay-studio" "$st/bin/assay-studio"
+	cp "$root/studio/build/linux/assay.desktop" "$st/share/applications/assay.desktop"
+	cp "$root/studio/build/linux/assay-mime.xml" "$st/share/mime/packages/assay-bundle.xml"
+	# Icons: the hicolor tree from scripts/gen-icons.sh (name "assay", matching Icon= in the .desktop file).
 	mkdir -p "$st/share/icons"
 	cp -R "$root/studio/build/linux/icons/hicolor" "$st/share/icons/hicolor"
-	chmod 755 "$st/bin/vibe" "$st/bin/vibe-studio"
+	chmod 755 "$st/bin/assay" "$st/bin/assay-studio"
 	;;
 darwin)
-	cp -R "$root/studio/build/bin/vibe-studio.app" "$st/Vibe Studio.app"
-	cp "$root/vibe" "$st/vibe"
+	cp -R "$root/studio/build/bin/assay-studio.app" "$st/Assay.app"
+	cp "$root/assay" "$st/assay"
 	# The plist template says the lowest macOS we support; the archive is per arch, so stamp this arch's
 	# minimum (scripts/macos-target.sh) before signing. release.yml then checks the binaries' minos against it.
 	plutil -replace LSMinimumSystemVersion -string "$("$root/scripts/macos-target.sh" "$arch")" \
-		"$st/Vibe Studio.app/Contents/Info.plist"
+		"$st/Assay.app/Contents/Info.plist"
 	# Ad-hoc sign once every file is in place; nothing may touch the bundle afterwards.
 	# No --options runtime: without the hardened runtime, library validation is not enforced, so
 	# DuckDB extension dylibs downloaded at run time still load.
-	codesign --force --deep -s - "$st/Vibe Studio.app"
-	codesign --verify --deep --strict --verbose=2 "$st/Vibe Studio.app"
+	codesign --force --deep -s - "$st/Assay.app"
+	codesign --verify --deep --strict --verbose=2 "$st/Assay.app"
 	;;
 *)
 	echo "unsupported os: $os" >&2
 	exit 1
 	;;
 esac
-pack "$st" "$out/vibe-studio_${ver}_${os}_${arch}.tar.gz"
+pack "$st" "$out/assay-studio_${ver}_${os}_${arch}.tar.gz"
 ls -l "$out"

@@ -20,7 +20,7 @@ const (
 const DefaultOllamaEndpoint = "http://localhost:11434/v1"
 
 // ProviderInfo describes one model provider. It is the single source of truth
-// for the provider list: the Settings picker, `vibe config llm`, the key
+// for the provider list: the Settings picker, `assay config llm`, the key
 // bindings and the key resolution order all read it.
 type ProviderInfo struct {
 	ID          string `json:"id"`

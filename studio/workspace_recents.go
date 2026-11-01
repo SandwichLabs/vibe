@@ -6,8 +6,8 @@ package main
 import (
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/prefs"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // RecentWorkspace is one entry of the launcher's list.
@@ -17,7 +17,7 @@ type RecentWorkspace struct {
 	Name       string `json:"name"`
 	LastOpened string `json:"lastOpened"` // RFC 3339
 	GitBranch  string `json:"gitBranch"`
-	// Missing is true when the folder (or its vibe.yaml) is gone: an unplugged
+	// Missing is true when the folder (or its assay.yaml) is gone: an unplugged
 	// drive, a deleted folder. The entry is never removed automatically.
 	Missing bool `json:"missing"`
 }
@@ -64,7 +64,7 @@ func (a *App) RestoreRecentWorkspace(r RecentWorkspace) error {
 func (a *App) RelocateRecentWorkspace(oldPath, newPath string) error {
 	root, ok := workspace.ExactRoot(newPath)
 	if !ok {
-		return errors.New("That folder isn't a Vibe workspace (it has no vibe.yaml).")
+		return errors.New("That folder isn't an Assay workspace (it has no assay.yaml).")
 	}
 	return a.recents.Relocate(oldPath, root)
 }

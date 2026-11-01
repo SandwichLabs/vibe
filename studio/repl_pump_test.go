@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/repl"
+	"github.com/SandwichLabs/assay/internal/repl"
 )
 
 type frameLog struct {

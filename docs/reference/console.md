@@ -8,24 +8,24 @@ In the Query Explorer, choose the **Console** tab under the editor. It starts wh
 
 A console that ends (you typed `.exit`, the window stopped responding, the workspace closed) shows "Console closed: reason" and a **Reopen** button. Reopening starts a new session with a fresh screen.
 
-## In a terminal: `vibe repl`
+## In a terminal: `assay repl`
 
-`vibe repl` runs the same console, the same `internal/repl` engine, on your terminal. It mirrors the Studio tab, so the gates, the lazy attach, `metric()` expansion, the dot commands, the keys below and the history file are the same. It is for people: it needs a terminal on standard input and refuses to start otherwise, and the agent never reads a console.
+`assay repl` runs the same console, the same `internal/repl` engine, on your terminal. It mirrors the Studio tab, so the gates, the lazy attach, `metric()` expansion, the dot commands, the keys below and the history file are the same. It is for people: it needs a terminal on standard input and refuses to start otherwise, and the agent never reads a console.
 
 ```sh
-vibe repl                       # the nearest workspace at or above the current folder
-vibe repl -c prod_pg            # unqualified names resolve in connection prod_pg
-vibe repl --workspace ~/work/sales
+assay repl                       # the nearest workspace at or above the current folder
+assay repl -c prod_pg            # unqualified names resolve in connection prod_pg
+assay repl --workspace ~/work/sales
 ```
 
 | Flag | Does |
 |---|---|
 | `-c`, `--connection NAME` | the connection whose catalog unqualified names use (default: the workspace's default connection); unknown names are refused |
-| `--workspace DIR` | the workspace folder (default: the nearest folder at or above the current directory with a `vibe.yaml`) |
+| `--workspace DIR` | the workspace folder (default: the nearest folder at or above the current directory with an `assay.yaml`) |
 
-`vibe repl` opens the workspace's hub, so while Studio has the workspace open it fails with the "held" error naming Studio: use Studio's Console tab, or close Studio first.
+`assay repl` opens the workspace's hub, so while Studio has the workspace open it fails with the "held" error naming Studio: use Studio's Console tab, or close Studio first.
 
-The terminal is put in raw mode while it runs and restored on exit. Ctrl+C cancels the running statement and Ctrl+D leaves; the console follows terminal resizes. The terminal UI's REPL (`vibe studio` without `--gui`) draws its results with this console's duckbox renderer.
+The terminal is put in raw mode while it runs and restored on exit. Ctrl+C cancels the running statement and Ctrl+D leaves; the console follows terminal resizes. The terminal UI's REPL (`assay studio` without `--gui`) draws its results with this console's duckbox renderer.
 
 ## Typing
 
@@ -73,7 +73,7 @@ Some DuckDB CLI commands (for example `.shell`) are refused with an explanation.
 
 ## History
 
-History is kept per workspace in `.vibe-local/repl/history` (git-ignored, owner-only). Text is not recorded when it is refused by the gates, holds terminal control characters, or when the secret redactor would change it: a `password = '...'`, a bearer token, an API-key header, a JWT or a well-known token prefix (`sk-`, `ghp_`, `glpat-`, `xox*-`, `AKIA...`). The same rule decides what `.save` offers. Ordinary SQL that merely mentions `token` or `password` as a column name is recorded.
+History is kept per workspace in `.assay-local/repl/history` (git-ignored, owner-only). Text is not recorded when it is refused by the gates, holds terminal control characters, or when the secret redactor would change it: a `password = '...'`, a bearer token, an API-key header, a JWT or a well-known token prefix (`sk-`, `ghp_`, `glpat-`, `xox*-`, `AKIA...`). The same rule decides what `.save` offers. Ordinary SQL that merely mentions `token` or `password` as a column name is recorded.
 
 ## Limits
 

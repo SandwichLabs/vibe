@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 // The starters New artifact offers (Library plan L1/L6). They are Studio's
@@ -90,15 +90,15 @@ const starterPageScriptTag = `<script src="app.js"></script>
 `
 
 // starterPageCSS uses the person's theme roles, which only the page window
-// links (_vibe/theme.css); a static page shows in a sandboxed frame without
+// links (_assay/theme.css); a static page shows in a sandboxed frame without
 // them, so each role has a system-colour fallback. No resource is loaded.
 const starterPageCSS = `:root {
   color-scheme: light dark;
 }
 body {
   margin: 0;
-  background: var(--vibe-bg, Canvas);
-  color: var(--vibe-fg, CanvasText);
+  background: var(--assay-bg, Canvas);
+  color: var(--assay-fg, CanvasText);
   font-family: system-ui, sans-serif;
 }
 main {
@@ -111,28 +111,28 @@ h1 {
   font-size: 1.5rem;
 }
 .muted {
-  color: var(--vibe-fg-muted, GrayText);
+  color: var(--assay-fg-muted, GrayText);
 }
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--vibe-surface, Canvas);
+  background: var(--assay-surface, Canvas);
 }
 th,
 td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--vibe-border, GrayText);
+  border-bottom: 1px solid var(--assay-border, GrayText);
   text-align: left;
 }
 `
 
 // starterPageJS asks for the same query again from the page. It shows how
-// vibe.run reaches a named query; the page works without it.
+// assay.run reaches a named query; the page works without it.
 const starterPageJS = `// Runs the "span" query again from the page and updates the cell.
-// vibe.run only reaches the named queries in artifact.yaml.
+// assay.run only reaches the named queries in artifact.yaml.
 async function refresh() {
-  const params = await vibe.params()
-  const res = await vibe.run('span', { from: params.from.value, to: params.to.value })
+  const params = await assay.params()
+  const res = await assay.run('span', { from: params.from.value, to: params.to.value })
   const cell = document.getElementById('days')
   if (cell && res.rows.length > 0) {
     cell.textContent = String(res.rows[0][0])
@@ -142,18 +142,18 @@ refresh().catch(() => {})
 `
 
 // starterScriptJS draws a one-bar SVG from the "span" query.
-const starterScriptJS = `// draw() is called by Vibe with the current parameters and the space available.
-// It returns an SVG string. vibe.run only reaches the named queries in artifact.yaml.
+const starterScriptJS = `// draw() is called by Assay with the current parameters and the space available.
+// It returns an SVG string. assay.run only reaches the named queries in artifact.yaml.
 function draw(ctx) {
-  return vibe.run('span', { from: ctx.params.from, to: ctx.params.to }).then((res) => {
+  return assay.run('span', { from: ctx.params.from, to: ctx.params.to }).then((res) => {
     const days = Number(res.rows.length > 0 ? res.rows[0][0] : 0)
     const w = Math.max(200, ctx.width)
     const h = 120
     const bar = Math.min(w - 40, Math.max(2, days * 4))
     return {
       svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
-        '<rect x="20" y="30" width="' + bar + '" height="30" fill="' + vibe.theme['chart.1'] + '"/>' +
-        '<text x="20" y="90" font-family="sans-serif" font-size="14" fill="' + vibe.theme.fg + '">' +
+        '<rect x="20" y="30" width="' + bar + '" height="30" fill="' + assay.theme['chart.1'] + '"/>' +
+        '<text x="20" y="90" font-family="sans-serif" font-size="14" fill="' + assay.theme.fg + '">' +
         days + ' days in range</text></svg>',
     }
   })

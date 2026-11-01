@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/storageurl"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/storageurl"
 )
 
 // ducklakeType attaches a DuckLake: a lakehouse whose catalog (the metadata)

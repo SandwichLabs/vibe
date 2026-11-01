@@ -10,11 +10,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -30,7 +30,7 @@ they go to your OS keychain, or are read from environment variables you name
 (--sign-in env:PREFIX), and are never printed back.
 
 Scopes: --scope local (default; this computer, this workspace), shared (in the
-committed vibe.yaml, so teammates get the definition and enter their own
+committed assay.yaml, so teammates get the definition and enter their own
 credentials) or user (every workspace you open). See ` + docRef("connections"),
 }
 
@@ -40,7 +40,7 @@ func addConnWorkspaceFlag(c *cobra.Command) { addWorkspaceFlag(c) }
 // management is configuration and the keychain.
 func openWS(cmd *cobra.Command) (workspace.Workspace, error) {
 	dir, _ := cmd.Flags().GetString("workspace")
-	if isVibeFile(dir) {
+	if isAssayFile(dir) {
 		return nil, errLegacyFileArg
 	}
 	root, err := hub.ResolveRoot(dir, "")
@@ -84,20 +84,20 @@ var connAddCmd = &cobra.Command{
 	Long: `Add a connection definition and, on a terminal, prompt for its credentials
 (no echo) and store them in the keychain. Types: ` + "duckdb, sqlite, postgres, mysql, motherduck, ducklake, s3, gcs, r2, azure, iceberg, delta" + `.
 
-  vibe conn add pg --type postgres --host db.internal --database analytics
-  vibe conn add lake --type s3 --prefix s3://acme-lake/raw/ --region us-east-1
-  vibe conn add md --type motherduck --database my_db --sign-in env:MOTHERDUCK
-  vibe conn add dev --type s3 --prefix s3://acme-dev/ --region us-east-1 --sign-in aws-sso:dev
-  vibe conn add b2 --type s3 --prefix s3://bucket/ --preset b2 --region us-west-004
-  vibe conn add legacy --type sqlite --path data/legacy.sqlite
-  vibe conn add shop --type mysql --host db.internal --database shop --option ssl_mode=required
-  vibe conn add events --type azure --prefix az://events/2024/ --option sign_in=account_key --option account_name=acmelake
-  vibe conn add wh --type ducklake --path data/wh.ducklake --option data_path=data/wh_files --read-only=false
-  vibe conn add sales --type delta --path data/sales
+  assay conn add pg --type postgres --host db.internal --database analytics
+  assay conn add lake --type s3 --prefix s3://acme-lake/raw/ --region us-east-1
+  assay conn add md --type motherduck --database my_db --sign-in env:MOTHERDUCK
+  assay conn add dev --type s3 --prefix s3://acme-dev/ --region us-east-1 --sign-in aws-sso:dev
+  assay conn add b2 --type s3 --prefix s3://bucket/ --preset b2 --region us-west-004
+  assay conn add legacy --type sqlite --path data/legacy.sqlite
+  assay conn add shop --type mysql --host db.internal --database shop --option ssl_mode=required
+  assay conn add events --type azure --prefix az://events/2024/ --option sign_in=account_key --option account_name=acmelake
+  assay conn add wh --type ducklake --path data/wh.ducklake --option data_path=data/wh_files --read-only=false
+  assay conn add sales --type delta --path data/sales
 
 Connections are read-only unless --read-only=false (MotherDuck is always
 writable: it has no read-only attach). Without a terminal no
-credentials are asked for; use "vibe conn credentials set <name>" (reads
+credentials are asked for; use "assay conn credentials set <name>" (reads
 stdin), --sign-in env:PREFIX or, for S3, --sign-in aws-sso:PROFILE (your AWS
 IAM Identity Center profile; nothing is stored). Nothing secret ever goes on the
 command line.`,
@@ -180,7 +180,7 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if !stdinIsTerminal() {
-		fmt.Fprintf(out, "No terminal, so no credentials were asked for. Run: vibe conn credentials set %s\n", def.Name)
+		fmt.Fprintf(out, "No terminal, so no credentials were asked for. Run: assay conn credentials set %s\n", def.Name)
 		return nil
 	}
 	cred, err := promptCredentials(cmd.InOrStdin(), cmd.ErrOrStderr(), typ, secrets.Credential{})
@@ -190,7 +190,7 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	if err := ws.SetCredentials(ctx, def.Name, cred, false); err != nil {
 		return errors.New(cliRedactor.Redact(err.Error()))
 	}
-	fmt.Fprintf(out, "Credentials saved (%s). Try: vibe conn test %s\n", method, def.Name)
+	fmt.Fprintf(out, "Credentials saved (%s). Try: assay conn test %s\n", method, def.Name)
 	return nil
 }
 
@@ -259,7 +259,7 @@ type connRow struct {
 
 func runConnList(cmd *cobra.Command, _ []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
-	o, err := openWorkspace(cmdCtx(cmd), flagString(cmd, "workspace"), true, false, "vibe conn", io.Discard)
+	o, err := openWorkspace(cmdCtx(cmd), flagString(cmd, "workspace"), true, false, "assay conn", io.Discard)
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func runConnList(cmd *cobra.Command, _ []string) error {
 		return enc.Encode(rows)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(out, "No connections. Add one with: vibe conn add <name> --type <type>")
+		fmt.Fprintln(out, "No connections. Add one with: assay conn add <name> --type <type>")
 		return nil
 	}
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
@@ -380,7 +380,7 @@ func runConnTest(cmd *cobra.Command, args []string) error {
 		if errors.As(err, &nc) || errors.As(err, &fp) || errors.Is(err, secrets.ErrUnavailable) {
 			msg := cliRedactor.Redact(err.Error())
 			if nc != nil && nc.SignIn != nil {
-				msg += " Or run: vibe conn credentials sign-in " + args[0]
+				msg += " Or run: assay conn credentials sign-in " + args[0]
 			}
 			return fmt.Errorf("%s: needs credentials: %s", args[0], msg)
 		}
@@ -406,7 +406,7 @@ func connTestFailure(name string, res connections.TestResult) string {
 		if why == "" {
 			why = res.Message
 		}
-		msg = fmt.Sprintf("%s: storage connection %q failed (%s): %s\n(%s was not tried; fix %q with `vibe conn test %s`)", name, res.Requirement, res.Status, why, name, res.Requirement, res.Requirement)
+		msg = fmt.Sprintf("%s: storage connection %q failed (%s): %s\n(%s was not tried; fix %q with `assay conn test %s`)", name, res.Requirement, res.Status, why, name, res.Requirement, res.Requirement)
 	}
 	if res.InstallExtension != "" {
 		msg += fmt.Sprintf("\n(re-run with --install to download the %q extension)", res.InstallExtension)
@@ -437,7 +437,7 @@ func runConnConnect(cmd *cobra.Command, args []string) error {
 	if isMotherDuck(cmd, name) {
 		o, err = openWorkspaceRemoteOnly(ctx, flagString(cmd, "workspace"), io.Discard)
 	} else {
-		o, err = openWorkspace(ctx, flagString(cmd, "workspace"), true, false, "vibe conn", io.Discard)
+		o, err = openWorkspace(ctx, flagString(cmd, "workspace"), true, false, "assay conn", io.Discard)
 	}
 	if err != nil {
 		return err
@@ -633,7 +633,7 @@ var connChildCmd = &cobra.Command{
 func init() {
 	f := connAddCmd.Flags()
 	f.String("type", "", "connection type: "+strings.Join(connections.AllTypeNames(), ", "))
-	f.String("scope", "local", "where to keep the definition: local (this computer), shared (vibe.yaml) or user (all workspaces)")
+	f.String("scope", "local", "where to keep the definition: local (this computer), shared (assay.yaml) or user (all workspaces)")
 	f.String("path", "", "file path (duckdb, sqlite; ducklake: catalog file or storage URL; iceberg, delta: the table folder or storage URL)")
 	f.String("host", "", "host (postgres, mysql)")
 	f.Int("port", 0, "port (postgres, mysql; default 5432 / 3306)")

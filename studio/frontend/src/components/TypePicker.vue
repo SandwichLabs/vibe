@@ -68,7 +68,7 @@ function toggleAdvanced() {
 
 <style scoped>
 .tp-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sh-space-3); }
-.tp-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sh-space-2); text-align: left; font: inherit; color: var(--sh-ink); background: var(--sh-paper); border: 2px solid var(--vibe-border); border-radius: var(--sh-radius); padding: var(--sh-space-3); cursor: pointer; }
+.tp-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sh-space-2); text-align: left; font: inherit; color: var(--sh-ink); background: var(--sh-paper); border: 2px solid var(--assay-border); border-radius: var(--sh-radius); padding: var(--sh-space-3); cursor: pointer; }
 .tp-card:focus-visible { box-shadow: var(--sh-focus-ring), var(--sh-shadow-teal); }
 .tp-card--on { border-color: var(--sh-teal); box-shadow: var(--sh-shadow-teal); background: var(--sh-paper-2); }
 .tp-head { display: flex; align-items: center; gap: var(--sh-space-2); font-weight: 600; }

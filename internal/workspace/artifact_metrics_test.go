@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 const (
@@ -127,7 +127,7 @@ func TestArtifactView_AScriptedPageReadsEveryMetricOfEveryQuery(t *testing.T) {
 	putMetric(t, ws, "orders", "base", "count(*)")
 	pageArtifactManifest(t, ws, "pg", metricPageManifest,
 		artifacts.PageFile{Path: "index.html.tmpl", Data: []byte(`<p>{{ query "q" }}</p><script src="app.js"></script>`)},
-		artifacts.PageFile{Path: "app.js", Data: []byte(`vibe.run("other")`)})
+		artifacts.PageFile{Path: "app.js", Data: []byte(`assay.run("other")`)})
 	st := viewState(t, ws, "pg")
 	require.Equal(t, "scripted", st.PageKind)
 	require.Len(t, st.MetricsUsed, 2)

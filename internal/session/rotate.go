@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/storageurl"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/storageurl"
 )
 
 const (
@@ -360,8 +360,8 @@ func (h *hub) clock() time.Time {
 
 // reviveSignedOut re-reads the sign-in of storage connections that are signed
 // out with an AWS SSO hint, at most once per rotateInterval each. A session made
-// elsewhere (`aws sso login`, or another Vibe window) is found in the shared
-// token cache, so the statement about to run, in a long-lived `vibe mcp serve`
+// elsewhere (`aws sso login`, or another Assay window) is found in the shared
+// token cache, so the statement about to run, in a long-lived `assay mcp serve`
 // as much as in Studio, finds the connection ready again instead of refusing
 // until a restart. Preflight reads the cache without any network when there is
 // still no session, so a statement waits for nothing.

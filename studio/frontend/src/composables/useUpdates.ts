@@ -113,7 +113,7 @@ export function putOffConsent(): void { consentLater.value = true }
 export async function installUpdate(tag: string): Promise<void> {
   const yes = await askConfirm({
     title: `Install ${tag}?`,
-    message: `Vibe will download ${tag}'s installer, check it against the release's checksums and run it. Your workspaces, settings and credentials are not touched. This running Vibe keeps its current version until you restart it.`,
+    message: `Assay will download ${tag}'s installer, check it against the release's checksums and run it. Your workspaces, settings and credentials are not touched. This running Assay keeps its current version until you restart it.`,
     variant: 'primary',
     confirmLabel: `Install ${tag}`,
   })
@@ -121,7 +121,7 @@ export async function installUpdate(tag: string): Promise<void> {
 }
 
 /** The note App.vue shows when a quit is held because an update is installing. */
-export const INSTALLING_NOTICE = 'An update is installing. Close Vibe again when it finishes, in a minute or so.'
+export const INSTALLING_NOTICE = 'An update is installing. Close Assay again when it finishes, in a minute or so.'
 
 async function applyUpdateTo(tag: string): Promise<void> {
   updateApplying.value = true

@@ -25,9 +25,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/templates"
+	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,7 +121,7 @@ func TestReferenceDocsDocumentEveryTemplate(t *testing.T) {
 }
 
 // TestReferenceDocsCoverRequiredSections asserts the reference covers each
-// surface Vibe still ships (#68 dropped forms/reports/macros/switchboard;
+// surface Assay still ships (#68 dropped forms/reports/macros/switchboard;
 // #69 dropped the page system): notebooks, the A2UI component schema, the
 // Import Spreadsheet Wizard, Office Links, and starter templates.
 func TestReferenceDocsCoverRequiredSections(t *testing.T) {

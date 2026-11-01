@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,9 +132,9 @@ func TestSnapshot_RefusesSymlinksOutOfTheWorkspace(t *testing.T) {
 	sess := hubWith(t)
 	outside := t.TempDir()
 
-	// .vibe-local itself is a link out of the workspace.
+	// .assay-local itself is a link out of the workspace.
 	root := t.TempDir()
-	require.NoError(t, os.Symlink(outside, filepath.Join(root, ".vibe-local")))
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, ".assay-local")))
 	n, err := Snapshot(context.Background(), sess, root)
 	require.Error(t, err)
 	assert.Zero(t, n)
@@ -143,7 +143,7 @@ func TestSnapshot_RefusesSymlinksOutOfTheWorkspace(t *testing.T) {
 
 	// catalog.json is a link: refused, and the target is untouched.
 	root = t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".vibe-local"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".assay-local"), 0o700))
 	target := filepath.Join(outside, "victim.json")
 	require.NoError(t, os.WriteFile(target, []byte("keep"), 0o600))
 	require.NoError(t, os.Symlink(target, SnapshotPath(root)))

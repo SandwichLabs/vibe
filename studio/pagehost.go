@@ -23,10 +23,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/pagehost"
-	"github.com/SandwichLabs/vibe/internal/pagestate"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagestate"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // Limits of the manager.
@@ -521,7 +521,7 @@ func (w *pageWindow) stillAllowed() bool {
 }
 
 // windowTitle is the artifact's title as the native title shows it: one line of
-// plain text. The helper adds " — Vibe page", and nothing the page does changes it.
+// plain text. The helper adds " — Assay page", and nothing the page does changes it.
 func windowTitle(m *artifacts.Manifest, name string) string {
 	t := strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {

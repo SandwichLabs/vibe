@@ -16,13 +16,13 @@ export const SANDBOX_MODES = [
 export function sandboxIntro(mode: string, ask: boolean = true): string {
   switch (mode) {
     case 'read-only':
-      return "Read-only: the agent can read your schema and run read-only SQL. It can't change anything in this workspace."
+      return "Read-only: the assistant can read your schema and run read-only SQL. It can't change anything in this workspace."
     case 'read-write':
-      return "Read-write: the agent can read your schema, run SQL, add, change or delete rows, add notebook cells and save skills. It can't create or drop tables, or save queries." + writeSuffix(ask)
+      return "Read-write: the assistant can read your schema, run SQL, add, change or delete rows, add notebook cells and save skills. It can't create or drop tables, or save queries." + writeSuffix(ask)
     case 'full':
-      return 'Full access: the agent can read and change rows, create, alter and drop tables, and save queries, notebooks and skills.' + writeSuffix(ask)
+      return 'Full access: the assistant can read and change rows, create, alter and drop tables, and save queries, notebooks and skills.' + writeSuffix(ask)
     default:
-      return 'Ask about your data or ask the agent to build something. Every step it takes is shown below.'
+      return 'Ask about your data or ask the assistant to build something. Every step it takes is shown below.'
   }
 }
 

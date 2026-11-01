@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // play runs the injected API in node with a fake webview (skipped where node is

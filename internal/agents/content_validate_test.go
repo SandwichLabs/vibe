@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/skills"
 )
 
 // contentCase is one content tool with a valid and an invalid request, and a

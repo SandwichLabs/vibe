@@ -28,14 +28,14 @@ export function onMac(): boolean {
 
 export type PageWindowState = 'unavailable' | 'idle' | 'opening' | 'open' | 'stopped' | 'setup' | 'changed' | 'closed'
 
-/** The --vibe-* roles of the window the person is looking at, from which Go builds the page's host stylesheet. */
+/** The --assay-* roles of the window the person is looking at, from which Go builds the page's host stylesheet. */
 function themeRoles(root: HTMLElement = document.documentElement): Record<string, string> {
   const out: Record<string, string> = {}
   for (let i = 0; i < root.style.length; i++) {
     const k = root.style.item(i)
-    if (k.startsWith('--vibe-')) out[k] = root.style.getPropertyValue(k).trim()
+    if (k.startsWith('--assay-')) out[k] = root.style.getPropertyValue(k).trim()
   }
-  if (root.dataset.themeType) out['--vibe-theme-type'] = root.dataset.themeType
+  if (root.dataset.themeType) out['--assay-theme-type'] = root.dataset.themeType
   return out
 }
 

@@ -16,7 +16,7 @@ export const typeLabel = (t: string) => TYPE_LABEL[t] ?? t
 export const SCOPE_LABEL: Record<ConnScope, string> = { user: 'All my workspaces', shared: 'Team', local: 'This computer' }
 export const SCOPE_TIP: Record<ConnScope, string> = {
   user: 'Saved for you, in every workspace',
-  shared: 'Saved in vibe.yaml, shared with the team through git',
+  shared: 'Saved in assay.yaml, shared with the team through git',
   local: 'Saved on this computer only, for this workspace',
 }
 export const scopeLabel = (s: string) => SCOPE_LABEL[s as ConnScope] ?? s
@@ -126,6 +126,6 @@ export const NAME_RE = /^[a-z_][a-z0-9_]{0,62}$/
 
 // The request key for a type's credential field name (ConnTypeSpec.credentials
 // name -> CredentialInput), and the suffix an environment sign-in appends to its
-// prefix (VIBE_PASSWORD). One map for the editor form and the sign-in prompt.
+// prefix (ASSAY_PASSWORD). One map for the editor form and the sign-in prompt.
 export const CRED_KEY: Record<string, keyof CredentialInput> = { user: 'username', key_id: 'keyId', password: 'password', token: 'token', secret: 'secret' }
 export const CRED_ENV_SUFFIX: Record<string, string> = { user: 'USER', key_id: 'KEY_ID', password: 'PASSWORD', token: 'TOKEN', secret: 'SECRET' }

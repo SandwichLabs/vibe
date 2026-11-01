@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics"
 	"time"
 
 	"github.com/stretchr/testify/assert"

@@ -118,7 +118,7 @@ async function reject() {
         <p>The semantic layer names what your data means: entities (what a row is), metrics (one agreed way to compute a number, over a saved query), joins and a glossary. Two ways to start:</p>
         <ul>
           <li>Write the files yourself: <code>semantics/metrics/net_revenue.yaml</code> naming a saved query and a measure like <code>sum(amount)</code>. They appear here as soon as they are saved. <code>docs/reference/semantics.md</code> has the formats.</li>
-          <li>Ask the agent to model your data. It proposes definitions into the Proposals inbox here, and nothing changes in your folder until you accept.</li>
+          <li>Ask the assistant to model your data. It proposes definitions into the Proposals inbox here, and nothing changes in your folder until you accept.</li>
         </ul>
       </div>
       <div v-else-if="!selected" class="sh-mono semantics-empty" data-testid="semantics-pick">Select a definition to read it.</div>

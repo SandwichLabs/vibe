@@ -58,7 +58,7 @@ function cancelReplace() {
         @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       />
       <div :id="`${id}-h`" class="help">
-        Saved to your keychain when you press Save. Vibe can't show it again after you save. You can only replace or clear it.
+        Saved to your keychain when you press Save. Assay can't show it again after you save. You can only replace or clear it.
         <button v-if="isSet" type="button" class="linkbtn" @click="cancelReplace">Keep the saved one</button>
       </div>
     </template>

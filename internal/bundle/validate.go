@@ -10,11 +10,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // Skill limits, the same ones skills.SaveUserSkillAt applies to a skill the
@@ -25,7 +25,7 @@ const (
 )
 
 // CheckNotebook is the one validation path for a notebook document, whether it
-// arrives in a bundle or as a single .vnb file: size cap, then the notebooks
+// arrives in a bundle or as a single .asnb file: size cap, then the notebooks
 // package's own whitelisting Coerce. The returned warnings are Coerce's
 // (truncated titles and cells).
 func CheckNotebook(data []byte) (notebooks.Notebook, []string, error) {
@@ -154,7 +154,7 @@ type connectionsDoc struct {
 // SanitizeConnection makes a definition fit to leave this computer, or says
 // why it cannot. It keeps only what a definition is made of (name, type, host,
 // port, database, region, scope, read_only, options) and applies the strictest
-// rules there are, the committed vibe.yaml's: no absolute or out-of-workspace
+// rules there are, the committed assay.yaml's: no absolute or out-of-workspace
 // path, no ${ENV} (which could be pointed at an attacker's host and expand a
 // secret into it), nothing credential-shaped. The sign-in suggestion is
 // dropped, and so is any option whose value is an absolute path. The returned
@@ -215,7 +215,7 @@ func parseConnections(data []byte) ([]workspace.ConnectionDef, map[string]bool, 
 		return nil, nil, nil, corrupt("%s: %v", ConnectionsName, err)
 	}
 	if doc.Version > workspace.ConfigVersion {
-		return nil, nil, nil, corrupt("%s: written by a newer version of Vibe", ConnectionsName)
+		return nil, nil, nil, corrupt("%s: written by a newer version of Assay", ConnectionsName)
 	}
 	var (
 		out      []workspace.ConnectionDef
@@ -251,14 +251,14 @@ func parseConnections(data []byte) ([]workspace.ConnectionDef, map[string]bool, 
 }
 
 // maxTextRunes caps text that comes from the bundle's maker and is shown in
-// Vibe's own dialogs (workspace name, createdBy, manifest notes, titles).
+// Assay's own dialogs (workspace name, createdBy, manifest notes, titles).
 const (
 	maxTextRunes = 120
 	maxNoteRunes = 300
 	maxNotes     = 20
 )
 
-// cleanText makes maker-supplied text safe to show beside Vibe's own: control
+// cleanText makes maker-supplied text safe to show beside Assay's own: control
 // characters, newlines and bidirectional or invisible formatting characters
 // are removed, and the length is capped.
 func cleanText(s string, limit int) string {

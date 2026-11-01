@@ -20,7 +20,7 @@ import (
 //
 // It uses a throwaway service name and removes everything it creates.
 func TestKeyringIntegrationFullCycle(t *testing.T) {
-	svc := fmt.Sprintf("vibe-test-114-%d", os.Getpid())
+	svc := fmt.Sprintf("assay-test-114-%d", os.Getpid())
 	store := NewKeyringStore(WithKeyringService(svc))
 	ctx := context.Background()
 

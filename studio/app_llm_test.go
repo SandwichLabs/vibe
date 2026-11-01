@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/assay/internal/config"
 )
 
 func TestLLMSettings_NoWorkspaceNeeded_SaveReloads(t *testing.T) {
 	a, _, path := secretsApp(t, "# keep me\nllm:\n  provider: local\n  api_key: \"sk-legacy-NEEDLE\"\n")
-	for _, k := range []string{"VIBE_LLM_PROVIDER", "VIBE_LLM_MODEL", "VIBE_LLM_ENDPOINT", "VIBE_LLM_ACCOUNT_ID", "VIBE_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
+	for _, k := range []string{"ASSAY_LLM_PROVIDER", "ASSAY_LLM_MODEL", "ASSAY_LLM_ENDPOINT", "ASSAY_LLM_ACCOUNT_ID", "ASSAY_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
 		t.Setenv(k, "")
 	}
 	v := a.GetLLMSettings()
@@ -41,11 +41,11 @@ func TestLLMSettings_NoWorkspaceNeeded_SaveReloads(t *testing.T) {
 
 func TestLLMSettings_EnvOverrideReportedAndKept(t *testing.T) {
 	a, _, path := secretsApp(t, "llm:\n  provider: local\n  model: filemodel\n")
-	t.Setenv("VIBE_LLM_MODEL", "envmodel")
+	t.Setenv("ASSAY_LLM_MODEL", "envmodel")
 	a.llmCfg = config.Load().LLM
 	v := a.GetLLMSettings()
 	assert.Equal(t, "envmodel", v.EffectiveModel)
-	assert.Equal(t, "VIBE_LLM_MODEL", v.EnvOverrides["model"])
+	assert.Equal(t, "ASSAY_LLM_MODEL", v.EnvOverrides["model"])
 	require.NoError(t, a.SetLLMSettings(config.LLMSettings{Provider: "openai", Model: "envmodel"}))
 	assert.Equal(t, "filemodel", config.ReadLLMSettings(path).Model)
 }

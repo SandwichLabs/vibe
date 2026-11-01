@@ -145,7 +145,7 @@ interface StreamPayload {
 // carry its own marked/DOMPurify call here, a second copy that had drifted
 // from Skills' sanitization (weaker FORBID_TAGS, no image/link handling).
 // Consumers (AgentPanel, AgentView) must render the result inside a
-// `.vibe-md-content` container (see lib/markdown.ts's vibeMdContentClass)
+// `.assay-md-content` container (see lib/markdown.ts's assayMdContentClass)
 // so installSafeLinkHandling's click interception actually applies to it.
 export const renderMarkdown = renderSafeMarkdown
 
@@ -195,7 +195,7 @@ function nextTurnId(): string {
   return `turn-${turnSeq}-${turnSeq * 2654435761 % 1000000}`
 }
 
-// The conversation is a module singleton (SandwichLabs/vibe#2): the slide-in
+// The conversation is a module singleton (SandwichLabs/assay#2): the slide-in
 // panel and the Agent page share ONE chat, and it outlives whichever view is
 // mounted. The per-turn Wails listeners live in send()'s closure, not in a
 // view, so a turn keeps streaming into this state while the person is on
@@ -352,7 +352,7 @@ export function useAgentChat() {
         case 'error':
           if (agentMsg.cancelled) break
           agentMsg.role = 'error'
-          agentMsg.text = `Agent error: ${stripPrefix(p.text)}.`
+          agentMsg.text = `Assistant error: ${stripPrefix(p.text)}.`
           void addHint(agentMsg)
           agentMsg.verifying = false
           break
@@ -381,7 +381,7 @@ export function useAgentChat() {
       if (agentMsg.cancelled) return
       const m = errorText(e)
       agentMsg.role = 'error'
-      agentMsg.text = `Agent error: ${stripPrefix(m)}.`
+      agentMsg.text = `Assistant error: ${stripPrefix(m)}.`
       if (/already running/i.test(m)) busyElsewhere.value = true
       else await addHint(agentMsg)
     } finally {

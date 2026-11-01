@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 var fixedNow = time.Date(2026, time.October, 7, 12, 0, 0, 0, time.UTC)
@@ -371,14 +371,14 @@ func TestPlan_NewKindShapes(t *testing.T) {
 	checks, err := PlanEntity(e, fixedNow)
 	require.NoError(t, err)
 	require.Len(t, checks, 4)
-	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" < $vibe_min OR "score" > $vibe_max`, checks[0].SQL)
-	assert.Equal(t, map[string]any{"vibe_min": 0.0, "vibe_max": 99.5}, checks[0].Params)
-	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" > $vibe_max`, checks[1].SQL)
-	assert.Equal(t, map[string]any{"vibe_max": 99.5}, checks[1].Params)
+	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" < $assay_min OR "score" > $assay_max`, checks[0].SQL)
+	assert.Equal(t, map[string]any{"assay_min": 0.0, "assay_max": 99.5}, checks[0].Params)
+	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."logs" WHERE "score" > $assay_max`, checks[1].SQL)
+	assert.Equal(t, map[string]any{"assay_max": 99.5}, checks[1].Params)
 	assert.Contains(t, checks[2].SQL, `max("log_date")`)
-	assert.Equal(t, map[string]any{"vibe_threshold": fixedNow.Add(-7 * 24 * time.Hour)}, checks[2].Params)
+	assert.Equal(t, map[string]any{"assay_threshold": fixedNow.Add(-7 * 24 * time.Hour)}, checks[2].Params)
 	assert.Contains(t, checks[3].SQL, `count(*) AS n FROM "prod_pg"."public"."logs"`)
-	assert.Equal(t, map[string]any{"vibe_min_rows": int64(5)}, checks[3].Params)
+	assert.Equal(t, map[string]any{"assay_min_rows": int64(5)}, checks[3].Params)
 	for _, c := range checks {
 		assert.NotContains(t, c.SQL, "7d")
 		assert.NotContains(t, c.SQL, "99.5")
@@ -393,15 +393,15 @@ func TestPlanMetric_NewKinds(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, checks, 2)
 	assert.Contains(t, checks[0].SQL, `GROUP BY "region", "month" HAVING count(*) > 1`)
-	assert.Contains(t, checks[0].SQL, "vibe_grain_net_revenue")
+	assert.Contains(t, checks[0].SQL, "assay_grain_net_revenue")
 	assert.Equal(t, "prod_pg", checks[0].Connection)
 	assert.Equal(t, map[string]any{"floor": float64(2)}, checks[0].Params)
-	assert.Contains(t, checks[1].SQL, `WHERE "net_revenue" > $vibe_max`)
-	assert.Equal(t, map[string]any{"floor": float64(2), "vibe_max": 100.0}, checks[1].Params)
+	assert.Contains(t, checks[1].SQL, `WHERE "net_revenue" > $assay_max`)
+	assert.Equal(t, map[string]any{"floor": float64(2), "assay_max": 100.0}, checks[1].Params)
 
 	// A saved query that declares a reserved name is refused rather than shadowed.
-	src.q.Parameters = append(src.q.Parameters, queries.Param{Name: "vibe_max", Type: "number", Default: "1"})
-	src.q.SQL += " AND amount < $vibe_max"
+	src.q.Parameters = append(src.q.Parameters, queries.Param{Name: "assay_max", Type: "number", Default: "1"})
+	src.q.SQL += " AND amount < $assay_max"
 	_, err = PlanMetric(context.Background(), m, src, fixedNow)
 	require.Error(t, err)
 }

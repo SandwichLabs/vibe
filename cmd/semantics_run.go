@@ -11,14 +11,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/semantics/assert"
-	"github.com/SandwichLabs/vibe/internal/strictyaml"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics/assert"
+	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
-// Exit statuses of `vibe semantics check` and `profile`: 0 ok, 1 a check
+// Exit statuses of `assay semantics check` and `profile`: 0 ok, 1 a check
 // failed (the data is wrong), 2 anything that stopped the run from saying
 // whether it is: a check that could not run, a typo (unknown kind or name, a
 // bad flag), no workspace, a join file that changed under a profile. A script
@@ -137,7 +137,7 @@ func runSemanticsCheck(cmd *cobra.Command, args []string) error {
 		name = args[1]
 	}
 	compileOnly, _ := cmd.Flags().GetBool("compile")
-	o, r, err := openSemanticsRun(cmd, "vibe semantics check")
+	o, r, err := openSemanticsRun(cmd, "assay semantics check")
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func checkExit(rows []assert.Row) error {
 
 func runSemanticsProfile(cmd *cobra.Command, args []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
-	o, r, err := openSemanticsRun(cmd, "vibe semantics profile")
+	o, r, err := openSemanticsRun(cmd, "assay semantics profile")
 	if err != nil {
 		return err
 	}

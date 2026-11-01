@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/testsupport/miniotest"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // The Studio query editor (#138 follow-up): a wildcard on an s3, gcs or r2 URL
-// is expanded by Vibe when the statement runs, the person's SQL is unchanged,
+// is expanded by Assay when the statement runs, the person's SQL is unchanged,
 // and an error never lists the files.
 func TestRunQueryExpandsAnS3Wildcard(t *testing.T) {
 	ep := miniotest.Start(t)

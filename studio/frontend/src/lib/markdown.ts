@@ -1,6 +1,6 @@
 // renderSafeMarkdown: the ONE markdown -> sanitized HTML renderer for every
 // v-html sink that shows untrusted markdown — Skill bodies (model-authored
-// via create_or_update_skill, or arriving inside a shared .vibe file from
+// via create_or_update_skill, or arriving inside a shared .assay file from
 // someone else) and agent chat output (useAgentChat.ts's renderMarkdown,
 // which just delegates here — see the comment there). Never raw HTML, never
 // a zero-click remote fetch, never a link that navigates the app away
@@ -101,11 +101,11 @@ export function renderSafeMarkdown(text: string): string {
   return DOMPurify.sanitize(raw, SANITIZE_CONFIG)
 }
 
-// vibeMdContentClass marks a v-html container as rendered-markdown content
+// assayMdContentClass marks a v-html container as rendered-markdown content
 // so installSafeLinkHandling knows to intercept clicks inside it — normal
 // app chrome (sidebar links, router-links, buttons) is never touched.
 // Add this class alongside any v-html="renderSafeMarkdown(...)" container.
-export const vibeMdContentClass = 'vibe-md-content'
+export const assayMdContentClass = 'assay-md-content'
 
 let installed = false
 
@@ -121,7 +121,7 @@ async function handleLinkActivation(e: MouseEvent) {
   // click handler doesn't know whether the markup it's attached to always
   // went through renderSafeMarkdown.
   const anchor = target?.closest?.('a, area')
-  if (!anchor || !anchor.closest(`.${vibeMdContentClass}`)) return
+  if (!anchor || !anchor.closest(`.${assayMdContentClass}`)) return
   e.preventDefault()
   e.stopPropagation()
   const href = anchor.getAttribute('href') || ''
@@ -140,7 +140,7 @@ async function handleLinkActivation(e: MouseEvent) {
 // (call once, at app startup — see main.ts) that intercept every link
 // activation — a normal click AND a middle-click (auxclick), which opens a
 // link in a new tab/window in a real browser without ever calling into the
-// click handler — inside a .vibe-md-content container: an http(s) link is
+// click handler — inside a .assay-md-content container: an http(s) link is
 // only opened after the user confirms (via the project's own SchoolHouse
 // ConfirmDialog, never the native window.confirm — see
 // composables/useConfirm.ts), through the Wails runtime's BrowserOpenURL

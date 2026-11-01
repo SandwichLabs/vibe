@@ -17,7 +17,7 @@ mkdir -p "$OUTDIR"
 
 # Define frames: filename|step|action|test
 declare -a FRAMES=(
-  "qa-01-unlock.png|1|Launch Vibe Studio|Unlock screen renders with Open File and Create New buttons"
+  "qa-01-unlock.png|1|Launch Assay|Unlock screen renders with Open File and Create New buttons"
   "qa-02-dashboard.png|2|Open Dashboard|Stat cards show page/table/query counts and file size"
   "qa-03-new-page-validation.png|3|New Page from Dashboard|#4 fix: ?new=1 opens modal, #6 fix: Create disabled when title empty"
   "qa-03-pages.png|4|Browse Pages|#1 fix: Goldmark renders markdown bold/italic in page content"
@@ -100,7 +100,7 @@ for entry in "${FRAMES[@]}"; do
     \
     -font "Courier-Bold" -fill "#FFD700" \
     -pointsize 18 -gravity SouthEast \
-    -annotate +60+30 "Vibe Studio QA // $(date +%Y-%m-%d)" \
+    -annotate +60+30 "Assay QA // $(date +%Y-%m-%d)" \
     \
     -font "Courier-Bold" -fill "#555555" \
     -pointsize 16 -gravity SouthWest \

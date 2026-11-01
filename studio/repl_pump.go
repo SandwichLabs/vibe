@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/vibe/internal/repl"
+	"github.com/SandwichLabs/assay/internal/repl"
 )
 
 const (

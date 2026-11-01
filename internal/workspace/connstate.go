@@ -1,13 +1,13 @@
 package workspace
 
 import (
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // ConnectionState is one connection as every surface shows it: Studio's rail,
-// `vibe conn list` and `vibe workspace info`. It is built from typed fields (the
+// `assay conn list` and `assay workspace info`. It is built from typed fields (the
 // session's status, the open issues), never by reading a message back, so the
 // three cannot disagree on a status word or detect a lock or a changed server
 // differently.

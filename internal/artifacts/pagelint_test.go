@@ -116,7 +116,7 @@ func TestVetPage_InlineScript(t *testing.T) {
 	// A script file, a vendored library and a JSON data block are the right shapes.
 	files := goodPageFiles()
 	files["app.js"] = "1"
-	files["index.html.tmpl"] = `<p>x</p><script type="application/json" id="d">{{ json (query "by_region") }}</script><script src="app.js"></script><script src="vibe-lib/d3-scale.js"></script>`
+	files["index.html.tmpl"] = `<p>x</p><script type="application/json" id="d">{{ json (query "by_region") }}</script><script src="app.js"></script><script src="assay-lib/d3-scale.js"></script>`
 	info, err := VetPageForWrite(pageManifest(t, ""), toFiles(files))
 	require.NoError(t, err)
 	assert.Equal(t, PageScripted, info.Kind)

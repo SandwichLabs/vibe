@@ -1,17 +1,17 @@
 # Architecture
 
-How Vibe fits together, at the level an outsider or new contributor needs. The contributor map of every package is the tree in [`CLAUDE.md`](../CLAUDE.md); the product reasoning is in [`direction.md`](direction.md).
+How Assay fits together, at the level an outsider or new contributor needs. The contributor map of every package is the tree in [`CLAUDE.md`](../CLAUDE.md); the product reasoning is in [`direction.md`](direction.md).
 
 ## The idea in one picture
 
 ```
 workspace folder (git, optional)            external agents
-  vibe.yaml  notebooks/  queries/             Claude Code, Claude Desktop,
-  skills/    data/       .vibe-local/         Cursor, ...  (MCP)
+  assay.yaml  notebooks/  queries/             Claude Code, Claude Desktop,
+  skills/    data/       .assay-local/         Cursor, ...  (MCP)
         |                                           |
         v                                           v
-   Studio (desktop)  <-- same tool surface -->  vibe mcp serve
-   vibe CLI / TUI                                   |
+   Studio (desktop)  <-- same tool surface -->  assay mcp serve
+   assay CLI / TUI                                   |
         \                                          /
          +---------- session: one DuckDB hub -----+
                           |
@@ -22,13 +22,13 @@ workspace folder (git, optional)            external agents
         credentials <-- OS keychain or environment variables
 ```
 
-Vibe keeps data where it lives. Each connection is attached into one in-memory DuckDB per workspace (the **hub**); the connection name becomes the catalog name, so `prod_pg.public.orders` and `local.main.customers` can be joined in one query. Nothing is copied into a Vibe-specific format.
+Assay keeps data where it lives. Each connection is attached into one in-memory DuckDB per workspace (the **hub**); the connection name becomes the catalog name, so `prod_pg.public.orders` and `local.main.customers` can be joined in one query. Nothing is copied into an Assay-specific format.
 
 ## The workspace is a folder
 
-A workspace is a directory with a `vibe.yaml` at its root. Notebooks (`notebooks/*.vnb`), saved queries (`queries/*.sql`), skills (`skills/<name>/SKILL.md`) and local data (`data/`) are plain, diff-friendly files you can commit and review. Machine-local state lives in `.vibe-local/` (git-ignored). Files are the source of truth: writes are compare-and-write, and a watcher picks up changes made by git, an editor or another process.
+A workspace is a directory with an `assay.yaml` at its root. Notebooks (`notebooks/*.asnb`), saved queries (`queries/*.sql`), skills (`skills/<name>/SKILL.md`) and local data (`data/`) are plain, diff-friendly files you can commit and review. Machine-local state lives in `.assay-local/` (git-ignored). Files are the source of truth: writes are compare-and-write, and a watcher picks up changes made by git, an editor or another process.
 
-Trust moves out of the folder. A workspace arrives with whatever its authors committed, so a committed `vibe.yaml` can only tighten the agent's limits; looser, per-person settings and sign-in methods live in your own config directory, keyed by workspace id. Reference: [workspaces](reference/workspaces.md).
+Trust moves out of the folder. A workspace arrives with whatever its authors committed, so a committed `assay.yaml` can only tighten the agent's limits; looser, per-person settings and sign-in methods live in your own config directory, keyed by workspace id. Reference: [workspaces](reference/workspaces.md).
 
 ## Connections and credentials
 
@@ -36,11 +36,11 @@ A connection is a typed definition (Postgres, MotherDuck, S3, ...) in one of thr
 
 ## One owner per workspace
 
-DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.vibe-local/hub.lock`: Studio, or `vibe mcp serve`. Other `vibe mcp serve` processes proxy to the owner when it is serving MCP (Studio only does so after you press Start in Settings), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
+DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.assay-local/hub.lock`: Studio, or `assay mcp serve`. Other `assay mcp serve` processes proxy to the owner when it is serving MCP (Studio only does so after you press Start in Settings), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
 
 ## One tool surface
 
-Everything the agent can do is a `ToolDef` in a single registry (`internal/agents`): run a query, describe a table, create a record, author a notebook cell, read a skill, and so on. Studio's chat agent (`internal/llm`, built on `charmbracelet/fantasy`) and external MCP clients (`internal/mcp`) consume the same registry and pass through the same gating:
+Everything the agent can do is a `ToolDef` in a single registry (`internal/agents`): run a query, describe a table, create a record, author a notebook cell, read a skill, and so on. Studio's assistant (`internal/llm`, built on `charmbracelet/fantasy`) and external MCP clients (`internal/mcp`) consume the same registry and pass through the same gating:
 
 - **Sandbox tiers:** `read-only`, `read-write`, `full`.
 - **SQL allow-list:** the agent's SQL is parsed and checked against what the tier permits before DuckDB ever binds it. Your own SQL in the query editor is not restricted; notebook cells and live bindings re-run under the read-only policy.
@@ -58,9 +58,9 @@ Reference: [agent policy](reference/agent-policy.md), [MCP](reference/mcp.md).
 
 ## The programs
 
-- **`vibe`** (Cobra CLI in `cmd/`): workspaces, queries, import and export, connections, config, the terminal UI (BubbleTea) and `vibe mcp serve`.
+- **`assay`** (Cobra CLI in `cmd/`): workspaces, queries, import and export, connections, config, the terminal UI (BubbleTea) and `assay mcp serve`.
 - **Studio** (`studio/`): a Wails v2 desktop app, with a Go backend that binds to the same packages as the CLI and a Vue 3 frontend. It starts, owns and serves the hub.
-- **Bundles** (`internal/bundle`): a `.vibe` file is a zip of notebooks, queries, skills and connection definitions, optionally age-encrypted. It never holds data or credentials.
+- **Bundles** (`internal/bundle`): a `.assay` file is a zip of notebooks, queries, skills and connection definitions, optionally age-encrypted. It never holds data or credentials.
 
 ## Where to read next
 

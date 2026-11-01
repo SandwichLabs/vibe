@@ -91,12 +91,12 @@ func TestDeviceLoginSessionProfileWritesACLICompatibleCache(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// A token Vibe wrote is refreshed by the SDK's own provider: the registration
+// A token Assay wrote is refreshed by the SDK's own provider: the registration
 // and refresh token are in the file.
 func TestDeviceLoginTokenIsRefreshableBySSOTokenProvider(t *testing.T) {
 	f := newFake(t)
 	h := home(t, sessionCfg)
-	// Vibe's clock is 2 hours ago, so the token it writes has already expired by the real clock the SDK uses.
+	// Assay's clock is 2 hours ago, so the token it writes has already expired by the real clock the SDK uses.
 	c := &clock{now: time.Now().Add(-2 * time.Hour)}
 	_, err := login(t, New(h, nil, fastOpts(f, c)...), "dev")
 	require.NoError(t, err)

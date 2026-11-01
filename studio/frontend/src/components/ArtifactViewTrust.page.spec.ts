@@ -11,7 +11,7 @@ import ArtifactViewTrust from './ArtifactViewTrust.vue'
 
 const disclosure: PageDisclosure = {
   host: 'This page has no script. It shows inside Studio.',
-  capabilities: [], network: '', credential: 'Vibe never asks for a password, key or token inside a page.', askProvider: '',
+  capabilities: [], network: '', credential: 'Assay never asks for a password, key or token inside a page.', askProvider: '',
 }
 
 const status = (over: Partial<ArtifactViewStatus> = {}): ArtifactViewStatus => ({
@@ -145,7 +145,7 @@ describe('ArtifactViewTrust, HTML page source', () => {
   it('lists the metrics the page reads and says their files are part of the allow (#282)', async () => {
     makeApp(status({
       metrics_used: [{ name: 'net_revenue', query: 'net_revenue_base', measure: 'sum(amount)', dimensions: ['region'] }, { name: 'ghost', missing: true }],
-      metrics_note: 'It reads these metrics through their saved queries. Your allow covers their definitions as they are now: if a metric file or its saved query changes, Vibe asks again.',
+      metrics_note: 'It reads these metrics through their saved queries. Your allow covers their definitions as they are now: if a metric file or its saved query changes, Assay asks again.',
     }))
     const w = await mountTrust()
     expect(w.get('[data-testid="metrics-read-net_revenue"]').text()).toContain('net_revenue_base')
@@ -153,7 +153,7 @@ describe('ArtifactViewTrust, HTML page source', () => {
     expect(w.get('[data-testid="metrics-read-net_revenue"]').text()).toContain('by region')
     expect(w.get('[data-testid="metrics-read-link-net_revenue"]').attributes('href')).toContain('metric')
     expect(w.get('[data-testid="metrics-read-ghost"]').text()).toContain('no such metric yet')
-    expect(w.get('[data-testid="metrics-read-note"]').text()).toContain('Vibe asks again')
+    expect(w.get('[data-testid="metrics-read-note"]').text()).toContain('Assay asks again')
   })
 
   it('shows nothing about metrics for a page that calls none', async () => {
@@ -165,7 +165,7 @@ describe('ArtifactViewTrust, HTML page source', () => {
   it('says a metric changed, not the page, when only what it reads moved (#282)', async () => {
     makeApp(status({
       state: 'changed', deps_changed: true, metrics_used: [{ name: 'net_revenue', query: 'base' }],
-      metrics_note: 'Vibe asks again.',
+      metrics_note: 'Assay asks again.',
     }))
     const w = await mountTrust()
     const line = w.get('[data-testid="view-trust-line"]').text()

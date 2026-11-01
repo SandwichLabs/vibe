@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/lsp"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/lsp"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // dotError is a dot command's refusal: the label DuckDB's CLI prints and the
@@ -42,10 +42,10 @@ type dotCommand struct {
 var refusedCommands = map[string]string{
 	"shell":  ".shell is not available: the console runs SQL on the workspace hub, never a shell.",
 	"system": ".system is not available: the console runs SQL on the workspace hub, never a shell.",
-	"open":   ".open is not available: the console is bound to this workspace's hub; connections are defined in vibe.yaml.",
-	"load":   ".load is not available: Vibe loads the DuckDB extensions a connection needs itself.",
+	"open":   ".open is not available: the console is bound to this workspace's hub; connections are defined in assay.yaml.",
+	"load":   ".load is not available: Assay loads the DuckDB extensions a connection needs itself.",
 	"cd":     ".cd is not available: the console has no working directory.",
-	"import": ".import is not available here: use Import (vibe import, or Studio's Import) instead.",
+	"import": ".import is not available here: use Import (assay import, or Studio's Import) instead.",
 	"output": ".output is not available: the console does not write files; use .export (Query Explorer) instead.",
 	"once":   ".once is not available: the console does not write files; use .export (Query Explorer) instead.",
 	"log":    ".log is not available here.",
@@ -229,7 +229,7 @@ func (s *Session) dotTables(_ []string, rest string) error {
 	return nil
 }
 
-// schemaSQL is Vibe's own fixed query, not the person's: it takes no gate, no
+// schemaSQL is Assay's own fixed query, not the person's: it takes no gate, no
 // hook and no history.
 const schemaSQL = `SELECT sql FROM duckdb_tables() WHERE database_name = current_database() AND NOT internal AND table_name LIKE $pattern
 UNION ALL

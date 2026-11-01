@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ func TestIsIntegerType(t *testing.T) {
 }
 
 func TestAutoNumberSequence(t *testing.T) {
-	require.Equal(t, "_vibe_seq_customers_id", AutoNumberSequence("customers", "id"))
+	require.Equal(t, "_assay_seq_customers_id", AutoNumberSequence("customers", "id"))
 }
 
 func openTestDuckDB(t *testing.T) *sql.DB {
@@ -36,9 +36,9 @@ func TestBumpAutoNumber(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDuckDB(t)
 
-	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _assay_seq_t_id START 1")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_t_id'), name VARCHAR)")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (5, 'x'), (99, 'y')")
 	require.NoError(t, err)
@@ -65,9 +65,9 @@ func TestBumpAutoNumber_FKReferenced(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDuckDB(t)
 
-	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_parent_id START 1")
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _assay_seq_parent_id START 1")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "CREATE TABLE parent (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_parent_id'), name VARCHAR)")
+	_, err = db.ExecContext(ctx, "CREATE TABLE parent (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_parent_id'), name VARCHAR)")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO parent (id, name) VALUES (1,'a'),(50,'b')")
 	require.NoError(t, err)
@@ -85,9 +85,9 @@ func TestBumpAutoNumber_CapsHugeGap(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDuckDB(t)
 
-	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _assay_seq_t_id START 1")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_t_id'), name VARCHAR)")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (50000000000, 'x')")
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestBumpAutoNumber_CapsHugeGap(t *testing.T) {
 	// is still completely untouched.
 	var lastValue sql.NullInt64
 	require.NoError(t, db.QueryRow(
-		"SELECT last_value FROM duckdb_sequences() WHERE lower(sequence_name) = lower('_vibe_seq_t_id')").Scan(&lastValue))
+		"SELECT last_value FROM duckdb_sequences() WHERE lower(sequence_name) = lower('_assay_seq_t_id')").Scan(&lastValue))
 	require.False(t, lastValue.Valid, "a refused bump must not advance the sequence at all")
 }
 
@@ -116,9 +116,9 @@ func TestAutoNumberGap_CaseInsensitive(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDuckDB(t)
 
-	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_Customers_id START 1")
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _assay_seq_Customers_id START 1")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `CREATE TABLE "Customers" (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_Customers_id'), name VARCHAR)`)
+	_, err = db.ExecContext(ctx, `CREATE TABLE "Customers" (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_Customers_id'), name VARCHAR)`)
 	require.NoError(t, err)
 
 	gap, ok, err := AutoNumberGap(ctx, db, session.TableRef{Name: "customers"}, "id", 50)
@@ -141,9 +141,9 @@ func TestAutoNumberGap_AfterReopen(t *testing.T) {
 	}
 
 	db := open()
-	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _assay_seq_t_id START 1")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_t_id'), name VARCHAR)")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO t (name) VALUES ('a'), ('b'), ('c')") // ids 1..3
 	require.NoError(t, err)
@@ -195,4 +195,29 @@ func TestSequencePosition_UsesIncrement(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, int64(10), pos) // next is 15; last dispensed 10
+}
+
+// A table created before the Vibe to Assay rename keeps its _vibe_seq_
+// sequence inside the person's own database; it must still be bumped.
+func TestBumpAutoNumber_LegacyVibeSequence(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDuckDB(t)
+
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (5, 'x'), (99, 'y')")
+	require.NoError(t, err)
+
+	gap, ok, err := AutoNumberGap(ctx, db, session.TableRef{Name: "t"}, "id", 99)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, int64(99), gap)
+
+	require.NoError(t, BumpAutoNumber(ctx, db, session.TableRef{Name: "t"}, "id"))
+
+	var next int64
+	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO t (name) VALUES ('z') RETURNING id").Scan(&next))
+	require.Greater(t, next, int64(99))
 }

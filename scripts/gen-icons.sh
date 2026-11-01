@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Regenerate every raster icon from the master SVG (studio/build/icon/vibe.svg).
+# Regenerate every raster icon from the master SVG (studio/build/icon/assay.svg).
 #
 #   scripts/gen-icons.sh
 #
 # Needs ImageMagick (`magick`) with its SVG renderer. Writes:
 #   studio/build/appicon.png                    1024x1024; Wails builds iconfile.icns (macOS) from it at `wails build`
-#   studio/build/linux/icons/hicolor/<N>x<N>/apps/vibe-studio.png   N = 16 32 48 64 128 256 512
-#   studio/build/linux/icons/hicolor/scalable/apps/vibe-studio.svg
-# The icon name is "vibe-studio" (matches Icon= in studio/build/linux/vibe-studio.desktop).
+#   studio/build/linux/icons/hicolor/<N>x<N>/apps/assay.png   N = 16 32 48 64 128 256 512
+#   studio/build/linux/icons/hicolor/scalable/apps/assay.svg
+# The icon name is "assay" (matches Icon= in studio/build/linux/assay.desktop).
 # Commit the output; the build never runs this.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-svg="$root/studio/build/icon/vibe.svg"
+svg="$root/studio/build/icon/assay.svg"
 hicolor="$root/studio/build/linux/icons/hicolor"
 
 command -v magick >/dev/null || { echo "gen-icons: ImageMagick (magick) is required" >&2; exit 1; }
@@ -29,8 +29,8 @@ render() { # $1 = size, $2 = output png (downscaled from the 1024 master)
 render 1024 "$root/studio/build/appicon.png"
 for n in 16 32 48 64 128 256 512; do
 	mkdir -p "$hicolor/${n}x${n}/apps"
-	render "$n" "$hicolor/${n}x${n}/apps/vibe-studio.png"
+	render "$n" "$hicolor/${n}x${n}/apps/assay.png"
 done
 mkdir -p "$hicolor/scalable/apps"
-cp "$svg" "$hicolor/scalable/apps/vibe-studio.svg"
+cp "$svg" "$hicolor/scalable/apps/assay.svg"
 echo "icons regenerated from $svg"

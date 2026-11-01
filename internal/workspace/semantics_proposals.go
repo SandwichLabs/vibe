@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
+	"github.com/SandwichLabs/assay/internal/semantics/proposals"
 )
 
 // The proposals inbox as a person's surfaces use it: Studio's bindings and the
-// `vibe semantics` commands call these, and nothing an agent holds can. The
+// `assay semantics` commands call these, and nothing an agent holds can. The
 // rules (validation, compare-and-write against the revision proposed against)
 // live in internal/semantics/proposals.
 

@@ -15,7 +15,7 @@ import (
 )
 
 func mdDSN(extra string) string {
-	extDir := filepath.Join(os.TempDir(), "vibe-spike-ext")
+	extDir := filepath.Join(os.TempDir(), "assay-spike-ext")
 	_ = os.MkdirAll(extDir, 0o755)
 	d := "?allow_persistent_secrets=false&extension_directory=" + url.QueryEscape(extDir)
 	if extra != "" {

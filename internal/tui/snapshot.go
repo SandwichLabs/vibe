@@ -3,11 +3,11 @@ package tui
 import (
 	"sync/atomic"
 
-	"github.com/SandwichLabs/vibe/internal/lsp"
+	"github.com/SandwichLabs/assay/internal/lsp"
 )
 
-// WithCatalogSnapshot keeps the catalog snapshot `vibe lsp` completes from
-// (.vibe-local/catalog.json under the workspace root) current while the TUI owns the workspace: once on
+// WithCatalogSnapshot keeps the catalog snapshot `assay lsp` completes from
+// (.assay-local/catalog.json under the workspace root) current while the TUI owns the workspace: once on
 // open and again after each REPL statement, which may have connected a
 // connection or changed what exists.
 func WithCatalogSnapshot(root string) Option {

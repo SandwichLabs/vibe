@@ -10,7 +10,7 @@ import { injectFrameCsp, studioOrigins } from './scripts/frame-csp.mjs'
 function frameCsp(): Plugin {
   let command: 'serve' | 'build' = 'build'
   return {
-    name: 'vibe-frame-csp',
+    name: 'assay-frame-csp',
     configResolved(c) { command = c.command },
     transformIndexHtml: { order: 'pre', handler: (html) => injectFrameCsp(html, studioOrigins(command, process.env, process.platform)) },
   }

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 var (
@@ -41,10 +41,10 @@ func requireField(s session.Spec, field, v string) error {
 // secretName is the temporary secret that belongs to a connection. It is a
 // function of the connection name only, so re-connecting replaces it.
 func secretName(conn string) string {
-	n := "vibe_" + conn
+	n := "assay_" + conn
 	if len(n) > 63 {
 		sum := sha256.Sum256([]byte(conn))
-		n = "vibe_" + hex.EncodeToString(sum[:])[:20]
+		n = "assay_" + hex.EncodeToString(sum[:])[:20]
 	}
 	return n
 }

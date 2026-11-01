@@ -11,7 +11,7 @@ import { resetUpdates } from '../composables/useUpdates'
 import { resolveConfirmChoice } from '../composables/useConfirm'
 
 const STATE: UpdateState = { check: 'off', lastChecked: '', skippedVersion: '', version: 'v0.1.1', isDev: false, needsConsent: false, managed: 'installer', updatable: true, managedNote: '', appliedVersion: '', canRestart: false }
-const RESULT: UpdateResult = { current: 'v0.1.1', latest: 'v0.1.2', updateAvailable: true, skipped: false, releaseUrl: 'https://github.com/SandwichLabs/vibe/releases/tag/v0.1.2', notes: '## Fixes\n<img src=x onerror=alert(1)>', managed: 'installer', updatable: true, managedNote: '', checkedAt: '2026-10-13T00:00:00Z' }
+const RESULT: UpdateResult = { current: 'v0.1.1', latest: 'v0.1.2', updateAvailable: true, skipped: false, releaseUrl: 'https://github.com/SandwichLabs/assay/releases/tag/v0.1.2', notes: '## Fixes\n<img src=x onerror=alert(1)>', managed: 'installer', updatable: true, managedNote: '', checkedAt: '2026-10-13T00:00:00Z' }
 
 function makeApp(result: Partial<UpdateResult> = {}) {
   let state = { ...STATE }
@@ -20,7 +20,7 @@ function makeApp(result: Partial<UpdateResult> = {}) {
     SetUpdateCheck: vi.fn(async (m: string) => { state = { ...state, check: m as UpdateState['check'] } }),
     CheckForUpdate: vi.fn(async () => { state = { ...state, lastChecked: '2026-10-13T00:00:00Z' }; return { ...RESULT, ...result } }),
     SkipUpdate: vi.fn(async () => {}),
-    ApplyUpdate: vi.fn(async () => { state = { ...state, appliedVersion: '0.1.2', canRestart: true }; return { from: '0.1.1', to: '0.1.2', output: '0.1.1 -> 0.1.2', studio: true, restart: '/x/vibe-studio' } }),
+    ApplyUpdate: vi.fn(async () => { state = { ...state, appliedVersion: '0.1.2', canRestart: true }; return { from: '0.1.1', to: '0.1.2', output: '0.1.1 -> 0.1.2', studio: true, restart: '/x/assay-studio' } }),
     RestartAfterUpdate: vi.fn(async () => {}),
   }
   ;(window as any).go = { main: { App: app } }
@@ -72,7 +72,7 @@ describe('UpdatesSettings', () => {
   })
 
   it('an external install is notify-only: no Update button, the explanation instead', async () => {
-    makeApp({ updatable: false, managed: 'external', managedNote: 'Installed outside the Vibe installer; update it the way you installed it.' })
+    makeApp({ updatable: false, managed: 'external', managedNote: 'Installed outside the Assay installer; update it the way you installed it.' })
     const w = await mountBlock()
     await tid(w, 'updates-check').trigger('click')
     await flushPromises()

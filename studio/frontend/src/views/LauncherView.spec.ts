@@ -33,7 +33,7 @@ const mountView = () => mount(LauncherView, { attachTo: document.body, global: {
 describe('LauncherView', () => {
   beforeEach(() => { _resetForTests(); document.body.innerHTML = '' })
 
-  it('first run: the empty state offers New workspace, Open folder and Import .vibe (a bundle, not a legacy container)', async () => {
+  it('first run: the empty state offers New workspace, Open folder and Import .assay (a bundle, not a legacy container)', async () => {
     makeApp([])
     const w = mountView()
     await flushPromises()
@@ -113,18 +113,18 @@ describe('LauncherView', () => {
   })
 
   it('shows the plain reason when opening fails', async () => {
-    makeApp([R()], { OpenWorkspace: vi.fn(async () => { throw new Error('Couldn\'t open this workspace: vibe.yaml is not valid') }) })
+    makeApp([R()], { OpenWorkspace: vi.fn(async () => { throw new Error('Couldn\'t open this workspace: assay.yaml is not valid') }) })
     const w = mountView()
     await flushPromises()
     await w.find('[data-testid="recent-row"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="launcher-error"]').text()).toContain('vibe.yaml is not valid')
+    expect(w.find('[data-testid="launcher-error"]').text()).toContain('assay.yaml is not valid')
     w.unmount()
   })
 
   it('shows a notice when another program took the workspace', async () => {
     makeApp([])
-    launcherNotice.value = 'Another program asked Vibe to let go.'
+    launcherNotice.value = 'Another program asked Assay to let go.'
     const w = mountView()
     await flushPromises()
     expect(w.find('[data-testid="launcher-notice"]').text()).toContain('let go')

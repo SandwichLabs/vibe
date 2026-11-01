@@ -10,7 +10,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/engine"
 )
 
 // renderLine prints one "name = value" line per column, a blank line between

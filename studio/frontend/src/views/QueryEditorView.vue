@@ -76,7 +76,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
         @click="exportResults('parquet')"
       ><Icon name="download" :size="14" /> Parquet</button>
       <button class="btn btn-ghost btn-sm" data-testid="ask-agent" @click="askAgent">
-        <Icon name="sparkle" :size="14" /> Ask agent
+        <Icon name="sparkle" :size="14" /> Ask assistant
       </button>
       <button v-if="running" type="button" class="btn btn-sm" data-testid="stop-query" aria-label="Stop the running query" @click="onStop">
         <Icon name="x" :size="14" /> Stop
@@ -258,7 +258,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
   align-items: center;
 }
 .rail-divider {
-  border-top: 1.5px dashed var(--vibe-border-subtle);
+  border-top: 1.5px dashed var(--assay-border-subtle);
   margin: 10px 0 4px;
 }
 .saved-row {
@@ -271,7 +271,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
 .saved-row:hover { background: var(--sh-hover); }
 .saved-row.on {
   background: var(--sh-surface);
-  border: 1.5px solid var(--vibe-border);
+  border: 1.5px solid var(--assay-border);
   box-shadow: var(--sh-shadow-xs);
 }
 .output-tabs {
@@ -299,7 +299,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
 .output-tab:hover { background: var(--sh-hover); }
 .output-tab.on {
   background: var(--sh-surface);
-  border-color: var(--vibe-border);
+  border-color: var(--assay-border);
   color: inherit;
 }
 .sql-error {

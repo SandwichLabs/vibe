@@ -42,7 +42,7 @@ const { state, unavailable, error, open, close } = usePageWindow(() => props.nam
       </div>
       <div v-else-if="state === 'idle' || state === 'closed'" class="note info" role="status" data-testid="scripted-page-about">
         <Icon name="info" :size="16" />
-        <span>This page has script, so it opens in its own window. The window cannot reach your files or other pages, and can only run this artifact's queries. Vibe never asks you for a password or a key in a page window; if a page does, close it.</span>
+        <span>This page has script, so it opens in its own window. The window cannot reach your files or other pages, and can only run this artifact's queries. Assay never asks you for a password or a key in a page window; if a page does, close it.</span>
       </div>
       <div v-if="state === 'idle' || state === 'closed'" class="note" :class="onMac() ? 'warn' : 'info'" role="status" data-testid="scripted-page-network">
         <Icon :name="onMac() ? 'alert' : 'info'" :size="16" />

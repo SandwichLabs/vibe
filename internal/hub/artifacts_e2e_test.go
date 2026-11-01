@@ -14,18 +14,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/bundle"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/bundle"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // Data artifacts end to end (epic #162, step 10): hub.Open, the agent tool
 // surface, the UI run path (Handler.RunArtifactQuery), files edited by hand,
-// a .vibe bundle round trip, and the credential audit.
+// a .assay bundle round trip, and the credential audit.
 
 const e2eView = `{"title":"E2E","components":[{"id":"t","type":"table","query":"rows"}]}`
 
@@ -392,7 +392,7 @@ const (
 // password was saved, so using it fails before anything is dialled.
 func TestArtifactsEndToEnd_NoCredentialEverAppears(t *testing.T) {
 	cfg := t.TempDir()
-	t.Setenv("VIBE_CONFIG_DIR", cfg)
+	t.Setenv("ASSAY_CONFIG_DIR", cfg)
 	red := secrets.NewRedactor()
 	r := secrets.NewResolver(secrets.WithKeychain(secrets.NewMemoryStore()), secrets.WithRedactor(red), secrets.WithEnv(func(string) string { return "" }))
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "acme"), workspace.WithInitLogger(quietLogger()))

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/assay/internal/session/sessiontest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

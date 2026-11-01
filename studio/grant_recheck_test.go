@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 const metricPageManifest = "version: 1\ntitle: P\nview: html\nqueries:\n  - name: big\n    sql: SELECT * FROM metric('net_revenue')\n"

@@ -207,7 +207,7 @@ describe('ConnectionRail', () => {
     const w = mountRail()
     await flushPromises()
     expect(w.find('[data-testid="rail-empty"]').text()).toContain('Your data somewhere else?')
-    expect(w.text()).toContain('No tables yet. Import a CSV, or ask the agent to build one.')
+    expect(w.text()).toContain('No tables yet. Import a CSV, or ask the assistant to build one.')
   })
 
   it('filters tables and columns of the open connections', async () => {

@@ -1,6 +1,6 @@
-// Package vibe is the repository root. Its only job is to embed the licence files so the
+// Package assay is the repository root. Its only job is to embed the licence files so the
 // binaries can show them (Studio's Settings > About) without reading from disk.
-package vibe
+package assay
 
 import _ "embed"
 

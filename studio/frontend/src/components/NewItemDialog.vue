@@ -40,7 +40,7 @@ watch(m.step, async (s) => {
         <h3 class="card-title" style="margin: 0 0 var(--sh-space-3);">New</h3>
         <TypePicker ref="picker" v-model="m.type.value" v-model:with-script="m.withScript.value" v-model:advanced="m.advanced.value" @next="m.next" />
         <button type="button" class="nd-row" data-testid="describe-row" @click="m.describe">
-          <Icon name="sparkle" :size="14" /> <span>Or describe it and let the agent build it</span> <Icon name="arrowRight" :size="14" />
+          <Icon name="sparkle" :size="14" /> <span>Or describe it and let the assistant build it</span> <Icon name="arrowRight" :size="14" />
         </button>
         <p class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin: var(--sh-space-3) 0 0; text-align: right;">←/→ choose · Enter next</p>
         <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-3);">
@@ -62,12 +62,12 @@ watch(m.step, async (s) => {
         <textarea id="describe-box" ref="box" v-model="m.description.value" class="field-input" :maxlength="MAX_DESCRIPTION" style="min-height: 110px; resize: vertical;" data-testid="describe-box"
           placeholder="e.g. weekly sales by region, with a date range" @input="m.error.value = ''"></textarea>
         <p class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite); margin: var(--sh-space-1) 0 0;" data-testid="describe-note">
-          {{ m.isNotebook.value ? 'Creates the notebook and opens its AI cell dialog with this filled in. Nothing runs until you press Generate.' : 'Opens the agent panel with this request filled in. Nothing is sent until you press Send.' }}
+          {{ m.isNotebook.value ? 'Creates the notebook and opens its AI cell dialog with this filled in. Nothing runs until you press Generate.' : 'Opens the assistant panel with this request filled in. Nothing is sent until you press Send.' }}
         </p>
         <p v-if="m.error.value" role="alert" data-testid="describe-error" style="font-size: var(--sh-fs-xs); margin-top: var(--sh-space-2); font-weight: 600; color: var(--sh-error);">{{ m.error.value }}</p>
         <div class="row" style="gap: var(--sh-space-3); justify-content: flex-end; margin-top: var(--sh-space-4);">
           <button type="button" class="btn btn-ghost" :disabled="m.busy.value" @click="close">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="m.busy.value || !m.description.value.trim()" data-testid="describe-submit">{{ m.busy.value ? 'Creating…' : 'Ask the agent' }}</button>
+          <button type="submit" class="btn btn-primary" :disabled="m.busy.value || !m.description.value.trim()" data-testid="describe-submit">{{ m.busy.value ? 'Creating…' : 'Ask the assistant' }}</button>
         </div>
       </form>
       <form v-else style="max-width: 440px;" data-testid="new-item-form" @submit.prevent="m.submit">
@@ -93,7 +93,7 @@ watch(m.step, async (s) => {
 </template>
 
 <style scoped>
-.nd-row { display: flex; align-items: center; gap: var(--sh-space-2); width: 100%; margin-top: var(--sh-space-3); padding: var(--sh-space-3) 0 0; font: inherit; color: var(--sh-ink); background: none; border: 0; border-top: 2px solid var(--vibe-border); cursor: pointer; text-align: left; }
+.nd-row { display: flex; align-items: center; gap: var(--sh-space-2); width: 100%; margin-top: var(--sh-space-3); padding: var(--sh-space-3) 0 0; font: inherit; color: var(--sh-ink); background: none; border: 0; border-top: 2px solid var(--assay-border); cursor: pointer; text-align: left; }
 .nd-row span { flex: 1; }
 .nd-link { font: inherit; background: none; border: 0; padding: 0; color: var(--sh-teal); text-decoration: underline; cursor: pointer; }
 </style>

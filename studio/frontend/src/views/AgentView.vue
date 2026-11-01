@@ -45,8 +45,8 @@ function onKeydown(e: KeyboardEvent) {
   <div class="agent-view" data-testid="agent-view">
     <div class="agent-view__head">
       <div>
-        <div class="crumb"><span>Studio</span><span class="sep">/</span><span>Agent</span></div>
-        <h1 class="agent-view__title"><Icon name="bot" :size="22" /> Agent wizard</h1>
+        <div class="crumb"><span>Studio</span><span class="sep">/</span><span>Assistant</span></div>
+        <h1 class="agent-view__title"><Icon name="bot" :size="22" /> Assistant</h1>
       </div>
       <button class="btn btn-inverted" :disabled="messages.length === 0 || sending" @click="reset">
         <Icon name="refresh" :size="14" /> New chat
@@ -67,7 +67,7 @@ function onKeydown(e: KeyboardEvent) {
         v-model="draft"
         class="box agent-textarea"
         data-testid="agent-input"
-        placeholder="Ask the agent to inspect data or build something…"
+        placeholder="Ask the assistant to inspect data or build something…"
         @keydown="onKeydown"
       ></textarea>
       <div class="agent-view__inputrow">

@@ -18,11 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 func memWS(t *testing.T) workspace.Workspace {
@@ -60,7 +60,7 @@ func (a *stubApprover) count() int {
 	return len(a.asked)
 }
 
-// agentOn builds the agent surface exactly as Studio and `vibe mcp serve` do:
+// agentOn builds the agent surface exactly as Studio and `assay mcp serve` do:
 // a workspace-backed handler over its session, at a tier, with the person's
 // "Ask before changes" setting.
 func agentOn(t *testing.T, ws workspace.Workspace, sess session.Session, mode agents.SandboxMode, ask bool) *agents.Handler {
@@ -339,7 +339,7 @@ func TestStorageScopeThroughTheAgent(t *testing.T) {
 	assert.EqualValues(t, 2, rowsOf(t, resp)[0][0])
 	resp = sqlCall(h, "SELECT count(*) FROM 's3://lake/raw/a.parquet'")
 	require.Nil(t, resp.Error, errText(resp))
-	// A wildcard inside the scope is expanded by Vibe (#138): the pattern is
+	// A wildcard inside the scope is expanded by Assay (#138): the pattern is
 	// vetted against the scope, listed with the connection's own secret, and
 	// the statement that is vetted and run holds the keys.
 	resp = sqlCall(h, "SELECT count(*) FROM read_parquet('s3://lake/raw/*.parquet')")

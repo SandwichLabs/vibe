@@ -59,7 +59,7 @@ const shown = computed(() => {
     <div ref="root" class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="notices-h" data-testid="notices-dialog">
       <div class="d-head">
         <h2 id="notices-h">Third-party notices</h2>
-        <p>The software Vibe includes, and the licences it comes under.</p>
+        <p>The software Assay includes, and the licences it comes under.</p>
       </div>
       <div class="d-body">
         <div class="field">
@@ -81,7 +81,7 @@ const shown = computed(() => {
 </template>
 
 <style scoped>
-.notices-text { margin: 0; padding: var(--sh-space-3); height: min(50vh, 460px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--sh-font-mono); font-size: 12px; line-height: 1.5; background: var(--vibe-code-bg); color: var(--vibe-code-fg); border-radius: var(--sh-radius-sm); }
+.notices-text { margin: 0; padding: var(--sh-space-3); height: min(50vh, 460px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--sh-font-mono); font-size: 12px; line-height: 1.5; background: var(--assay-code-bg); color: var(--assay-code-fg); border-radius: var(--sh-radius-sm); }
 .d-body { overflow: hidden; }
 .count-line { min-height: 1.5em; }
 </style>

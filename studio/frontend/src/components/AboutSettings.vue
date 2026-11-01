@@ -14,13 +14,13 @@ onMounted(about.load)
 <template>
   <section id="settings-panel-about" role="tabpanel" aria-labelledby="settings-tab-about" class="col" style="max-width: 52rem; gap: var(--sh-space-6);" data-testid="about-settings">
     <div class="sec-title">
-      <h2 style="font-size: 22px;">About Vibe</h2>
+      <h2 style="font-size: 22px;">About Assay</h2>
       <span class="label">This build</span>
     </div>
 
     <div class="card card-pad col" style="gap: var(--sh-space-4);">
       <div>
-        <div style="font-weight: 600;">Vibe</div>
+        <div style="font-weight: 600;">Assay</div>
         <div class="sh-meta">An agentic workspace for working with data where it already lives.</div>
       </div>
       <dl class="build" data-testid="about-build">
@@ -47,7 +47,7 @@ onMounted(about.load)
     <div class="card card-pad col" style="gap: var(--sh-space-3);">
       <div style="font-weight: 600;">Licence and privacy</div>
       <p class="sh-meta" style="margin: 0;">
-        Vibe is open source under the Apache License 2.0. It sends no telemetry: it only talks to the services you connect it to, plus an opt-in check for new releases on github.com.
+        Assay is open source under the Apache License 2.0. It sends no telemetry: it only talks to the services you connect it to, plus an opt-in check for new releases on github.com.
       </p>
       <div class="row" style="gap: var(--sh-space-2); flex-wrap: wrap;">
         <button type="button" class="btn btn-sm" data-testid="about-license" @click="about.openLicense">

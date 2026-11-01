@@ -64,7 +64,7 @@ defineExpose({
     <ConflictBanner
       v-if="conflict"
       kind="notebook"
-      :path="`notebooks/${loadedNotebookIdForView}.vnb`"
+      :path="`notebooks/${loadedNotebookIdForView}.asnb`"
       :deleted="conflict.deleted"
       :busy="conflictBusy"
       @reload="save.resolveConflict('reload')"
@@ -108,7 +108,7 @@ defineExpose({
             class="btn btn-ghost btn-sm"
             disabled
             style="opacity: 0.4; cursor: not-allowed;"
-            title="Agent cell authoring lands in a later step (#66 part B)"
+            title="Assistant cell authoring lands in a later step (#66 part B)"
           ><Icon name="sparkle" :size="14" /> Generate with AI</button>
         </div>
       </div>

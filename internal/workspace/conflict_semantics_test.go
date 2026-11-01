@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 func TestResolveConflict_Semantics(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 
 	duckdb "github.com/duckdb/duckdb-go/v2"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/usersql"
 )
 
 // fetchCap is how many rows a statement keeps; the true total is still

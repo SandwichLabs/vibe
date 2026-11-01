@@ -14,7 +14,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // Folder and file names. An artifact is artifacts/<name>/artifact.yaml plus

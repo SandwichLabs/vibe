@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/semantics"
 )
 
 // --- preview_query (#66 part B, task mode) ---
@@ -17,7 +17,7 @@ import (
 // previewCharBudget bounds the JSON size of a preview_query result — a
 // character-budgeted sample, not the full result — mirroring
 // schoolwork-workspace's TASK_ROW_BUDGET_CHARS via boundEnvelope. Simpler
-// than the JS original (no separate columns-trim step): Vibe's engine
+// than the JS original (no separate columns-trim step): Assay's engine
 // already carries real column types (no DESCRIBE round trip needed), so a
 // preview's "columns" list is one name+type pair per column rather than the
 // JS version's per-view-fit-explanation duplication of the whole column

@@ -29,7 +29,7 @@ func containerBin() string {
 
 // extDir is the extension cache shared by integration runs (never ~/.duckdb).
 func extDir(t testing.TB) string {
-	d := filepath.Join(os.TempDir(), "vibe-conn-it-ext")
+	d := filepath.Join(os.TempDir(), "assay-conn-it-ext")
 	require.NoError(t, os.MkdirAll(d, 0o755))
 	return d
 }

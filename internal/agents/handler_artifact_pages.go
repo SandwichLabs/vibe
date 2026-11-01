@@ -7,7 +7,7 @@ import (
 	"sort"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 // --- HTML pages through write_artifact / get_artifact (H7) -------------------

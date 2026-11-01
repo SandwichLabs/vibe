@@ -6,8 +6,8 @@ package main
 import (
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // conflictPrefix starts the message of a save refused because the file changed

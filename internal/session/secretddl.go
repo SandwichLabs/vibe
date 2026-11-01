@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 	"regexp"
 	"strconv"
 	"strings"

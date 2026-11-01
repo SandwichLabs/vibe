@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // connDeps is what one connection was registered as requiring. Unresolved is

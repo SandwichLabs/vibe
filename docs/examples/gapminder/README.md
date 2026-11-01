@@ -17,26 +17,26 @@ Run every command below from this folder (`cd docs/examples/gapminder`).
 An entity's `table` is a SQL name, not a file path, so the first step loads the CSVs into the workspace's local DuckDB (`data/local.duckdb`, git-ignored). The excerpt has no id column (a country and a year together identify a row, but an entity needs one `id_column`), so we ask for a generated one. The codes are keyed by their ISO alpha code:
 
 ```console
-$ vibe import data/gapminder.csv --key auto
+$ assay import data/gapminder.csv --key auto
 Imported 1704 row(s) into local.main.gapminder
 ```
 
 ```console
-$ vibe import data/country_codes.csv --key iso_alpha
+$ assay import data/country_codes.csv --key iso_alpha
 Imported 187 row(s) into local.main.country_codes
 ```
 
 ```console
-$ vibe query "DESCRIBE gapminder"
-column_name  column_type  null  key   default                            extra
------------  -----------  ----  ----  ---------------------------------  -----
-id           BIGINT       NO    PRI   nextval('_vibe_seq_gapminder_id')  NULL
-country      VARCHAR      YES   NULL  NULL                               NULL
-continent    VARCHAR      YES   NULL  NULL                               NULL
-year         BIGINT       YES   NULL  NULL                               NULL
-life_exp     DOUBLE       YES   NULL  NULL                               NULL
-pop          BIGINT       YES   NULL  NULL                               NULL
-gdp_percap   DOUBLE       YES   NULL  NULL                               NULL
+$ assay query "DESCRIBE gapminder"
+column_name  column_type  null  key   default                             extra
+-----------  -----------  ----  ----  ----------------------------------  -----
+id           BIGINT       NO    PRI   nextval('_assay_seq_gapminder_id')  NULL
+country      VARCHAR      YES   NULL  NULL                                NULL
+continent    VARCHAR      YES   NULL  NULL                                NULL
+year         BIGINT       YES   NULL  NULL                                NULL
+life_exp     DOUBLE       YES   NULL  NULL                                NULL
+pop          BIGINT       YES   NULL  NULL                                NULL
+gdp_percap   DOUBLE       YES   NULL  NULL                                NULL
 (7 rows)
 ```
 
@@ -51,11 +51,11 @@ semantics/entities/                   country_year, country_code
 semantics/metrics/                    population, life_expectancy, life_expectancy_by_country, gdp_total
 semantics/joins/country_year_code.yaml
 semantics/glossary.md
-notebooks/world-metrics.vnb
+notebooks/world-metrics.asnb
 ```
 
 ```console
-$ vibe semantics list
+$ assay semantics list
 KIND      NAME                        SUMMARY                                                                ERROR
 entity    country_code                one row per country                                                    -
 entity    country_year                one row per country per year                                           -
@@ -73,7 +73,7 @@ glossary  glossary.md                 5 terms                                   
 Life expectancy for a continent is not the mean of its countries' figures: a country of a billion people should count for more than an island of a hundred thousand. The metric is a **population-weighted** mean, a ratio of two sums:
 
 ```console
-$ vibe semantics show metric life_expectancy
+$ assay semantics show metric life_expectancy
 version: 1
 name: life_expectancy
 title: Life expectancy (population-weighted)
@@ -95,7 +95,7 @@ It is one expression, `sum(life_exp * pop) / nullif(sum(pop), 0)`, so each group
 The two side by side, 2007 (the second metric is the plain mean `avg(life_exp)`, kept to show the difference):
 
 ```console
-$ vibe query "SELECT w.continent, w.life_expectancy AS weighted, p.life_expectancy_by_country AS plain_mean FROM metric('life_expectancy', by => ['continent', 'year']) AS w JOIN metric('life_expectancy_by_country', by => ['continent', 'year']) AS p ON p.continent = w.continent AND p.year = w.year WHERE w.year = 2007 ORDER BY 1"
+$ assay query "SELECT w.continent, w.life_expectancy AS weighted, p.life_expectancy_by_country AS plain_mean FROM metric('life_expectancy', by => ['continent', 'year']) AS w JOIN metric('life_expectancy_by_country', by => ['continent', 'year']) AS p ON p.continent = w.continent AND p.year = w.year WHERE w.year = 2007 ORDER BY 1"
 continent  weighted           plain_mean
 ---------  -----------------  -----------------
 Africa     54.56441057558195  54.80603846153845
@@ -110,7 +110,7 @@ expanded 2 metrics: life_expectancy, life_expectancy_by_country
 ## Check
 
 ```console
-$ vibe semantics check
+$ assay semantics check
 STATUS  SUBJECT                            CHECK                      DETAIL
 pass    entity country_code                compile                    compiles
 pass    entity country_code                unique iso_alpha           
@@ -147,7 +147,7 @@ Three more kinds are here. `country_year` declares `row_count` (at least 1,704 r
 ## Ask the metrics
 
 ```console
-$ vibe query "SELECT * FROM metric('population', by => 'year') ORDER BY 1"
+$ assay query "SELECT * FROM metric('population', by => 'year') ORDER BY 1"
 year  population
 ----  ----------
 1952  2406957150
@@ -167,7 +167,7 @@ expanded 1 metric: population
 ```
 
 ```console
-$ vibe query "SELECT p.continent, p.population, l.life_expectancy FROM metric('population', by => ['continent', 'year']) AS p JOIN metric('life_expectancy', by => ['continent', 'year']) AS l ON l.continent = p.continent AND l.year = p.year WHERE p.year = 2007 ORDER BY 2 DESC"
+$ assay query "SELECT p.continent, p.population, l.life_expectancy FROM metric('population', by => ['continent', 'year']) AS p JOIN metric('life_expectancy', by => ['continent', 'year']) AS l ON l.continent = p.continent AND l.year = p.year WHERE p.year = 2007 ORDER BY 2 DESC"
 continent  population  life_expectancy
 ---------  ----------  -----------------
 Asia       3811953827  69.44386304205017
@@ -182,7 +182,7 @@ expanded 2 metrics: population, life_expectancy
 A population is a snapshot, so ask for it by `year` or by `continent` and `year`. Leave `year` out and you get a sum of twelve snapshots, which is not a number of people; the metric's description says so, and nothing stops you. Total GDP is the same kind of figure (per-capita GDP times population, summed):
 
 ```console
-$ vibe query "SELECT year, gdp_total / 1e12 AS gdp_trillion FROM metric('gdp_total', by => 'year') ORDER BY year"
+$ assay query "SELECT year, gdp_total / 1e12 AS gdp_trillion FROM metric('gdp_total', by => 'year') ORDER BY year"
 year  gdp_trillion
 ----  ------------------
 1952  7.03768910830791
@@ -204,7 +204,7 @@ expanded 1 metric: gdp_total
 And a weighted metric over time:
 
 ```console
-$ vibe query "SELECT year, life_expectancy FROM metric('life_expectancy', by => ['continent', 'year']) WHERE continent = 'Asia' ORDER BY year"
+$ assay query "SELECT year, life_expectancy FROM metric('life_expectancy', by => ['continent', 'year']) WHERE continent = 'Asia' ORDER BY year"
 year  life_expectancy
 ----  -----------------
 1952  42.9411433815645
@@ -228,7 +228,7 @@ expanded 1 metric: life_expectancy
 `country_year_code` joins each country-year to its country's ISO code, `many_to_one`:
 
 ```console
-$ vibe semantics profile country_year_code
+$ assay semantics profile country_year_code
 join country_year_code (declared many_to_one)
   left rows            1704
   right rows           187
@@ -245,7 +245,7 @@ How to read it:
 - **`right orphans 45`**: 45 of the 187 codes belong to countries that never appear in the excerpt:
 
 ```console
-$ vibe query "SELECT country FROM country_codes WHERE country NOT IN (SELECT country FROM gapminder) ORDER BY 1 LIMIT 6"
+$ assay query "SELECT country FROM country_codes WHERE country NOT IN (SELECT country FROM gapminder) ORDER BY 1 LIMIT 6"
 country
 ----------
 Armenia
@@ -267,11 +267,11 @@ The result is written to the `measured:` block of `semantics/joins/country_year_
 
 ```console
 $ head -n 1 queries/life-expectancy-ranking.sql
--- vibe: {"title":"Life expectancy ranking","description":"Countries of one continent in one year, longest-lived first","parameters":[{"name":"year","type":"integer","required":false,"default":"2007"},{"name":"continent","type":"text","required":false,"default":"Asia"}]}
+-- assay: {"title":"Life expectancy ranking","description":"Countries of one continent in one year, longest-lived first","parameters":[{"name":"year","type":"integer","required":false,"default":"2007"},{"name":"continent","type":"text","required":false,"default":"Asia"}]}
 ```
 
 ```console
-$ vibe query --saved life-expectancy-ranking --limit 4
+$ assay query --saved life-expectancy-ranking --limit 4
 country           life_exp  pop        gdp_percap
 ----------------  --------  ---------  ----------
 Japan             82.603    127467972  31656
@@ -283,7 +283,7 @@ showing the first 4 of 33 rows (--limit 0 for all)
 ```
 
 ```console
-$ vibe query --saved life-expectancy-ranking -p year=1952 -p continent=Europe --limit 4
+$ assay query --saved life-expectancy-ranking -p year=1952 -p continent=Europe --limit 4
 country      life_exp  pop       gdp_percap
 -----------  --------  --------  ----------
 Norway       72.67     3327728   10095
@@ -296,14 +296,14 @@ showing the first 4 of 30 rows (--limit 0 for all)
 
 ## The notebook
 
-`notebooks/world-metrics.vnb` has four SQL cells calling `metric()` (continents, Asia over time, weighted against plain mean, world GDP). Open it from Studio's Library.
+`notebooks/world-metrics.asnb` has four SQL cells calling `metric()` (continents, Asia over time, weighted against plain mean, world GDP). Open it from Studio's Library.
 
 ## Open it in Studio
 
-Close Studio before running `vibe import`, `vibe semantics check` or `vibe semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
+Close Studio before running `assay import`, `assay semantics check` or `assay semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
 
 ```
-vibe studio --gui
+assay studio --gui
 ```
 
 Choose **Open folder** and pick `docs/examples/gapminder` (after the import step). **Semantics** in the sidebar:
@@ -315,4 +315,4 @@ Choose **Open folder** and pick `docs/examples/gapminder` (after the import step
 
 ## The agent
 
-An agent can use these metrics (`metric()` in `run_query`, `list_definitions`, `get_definition`) but cannot change them. Ask it, for instance, "propose a metric for GDP per capita of a continent". The right answer is `sum(gdp_percap * pop) / nullif(sum(pop), 0)` (a population-weighted mean of per-capita GDP, which equals total GDP over total population), and **not** `avg(gdp_percap)`. Whatever it files, `vibe semantics proposals`, `show-proposal <id>` and `accept <id>` are yours to run; the [Chinook example](../chinook/README.md#proposing-a-metric) shows the commands.
+An agent can use these metrics (`metric()` in `run_query`, `list_definitions`, `get_definition`) but cannot change them. Ask it, for instance, "propose a metric for GDP per capita of a continent". The right answer is `sum(gdp_percap * pop) / nullif(sum(pop), 0)` (a population-weighted mean of per-capita GDP, which equals total GDP over total population), and **not** `avg(gdp_percap)`. Whatever it files, `assay semantics proposals`, `show-proposal <id>` and `accept <id>` are yours to run; the [Chinook example](../chinook/README.md#proposing-a-metric) shows the commands.

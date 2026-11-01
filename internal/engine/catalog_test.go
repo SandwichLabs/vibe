@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 func hubWithOther(t *testing.T) session.Session {
@@ -25,8 +25,8 @@ func hubWithOther(t *testing.T) session.Session {
 	path := filepath.Join(dir, "other.duckdb")
 	f, err := sql.Open("duckdb", path)
 	require.NoError(t, err)
-	_, err = f.Exec(`CREATE SEQUENCE _vibe_seq_t_id START 1;
-		CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), v VARCHAR);
+	_, err = f.Exec(`CREATE SEQUENCE _assay_seq_t_id START 1;
+		CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_assay_seq_t_id'), v VARCHAR);
 		CREATE TABLE parent (id INTEGER PRIMARY KEY);
 		CREATE TABLE child (pid INTEGER REFERENCES parent(id));
 		INSERT INTO t (v) VALUES ('a'), ('b');`)
@@ -67,7 +67,7 @@ func TestAutoNumber_SecondCatalog(t *testing.T) {
 	// Dispense once in this session so the sequence reports a live position
 	// (a sequence reloaded from a file reports its next value instead).
 	var seen int64
-	require.NoError(t, s.DB().QueryRow("SELECT nextval('other.main._vibe_seq_t_id')").Scan(&seen))
+	require.NoError(t, s.DB().QueryRow("SELECT nextval('other.main._assay_seq_t_id')").Scan(&seen))
 	_, err := s.DB().Exec("INSERT INTO other.main.t (id, v) VALUES (50, 'far')")
 	require.NoError(t, err)
 	gap, ok, err := AutoNumberGap(ctx, s.DB(), ref, "id", 50)
@@ -102,7 +102,7 @@ func TestResolveTable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "other", ref.Catalog)
 
-	for _, bad := range []string{"", "a.b.c.d", "_vibe_x", "other.main._vibe_x", "t; DROP", `t"`, "1t", "bad catalog.main.t"} {
+	for _, bad := range []string{"", "a.b.c.d", "_assay_x", "other.main._assay_x", "t; DROP", `t"`, "1t", "bad catalog.main.t"} {
 		_, err := ResolveTable(ctx, s, bad)
 		assert.Error(t, err, bad)
 	}
@@ -136,10 +136,10 @@ func TestManager_ExecuteCappedIn(t *testing.T) {
 }
 
 func TestDefaultUsesSequence_WholeName(t *testing.T) {
-	assert.True(t, defaultUsesSequence(`nextval('_vibe_seq_t_id')`, "_vibe_seq_t_id"))
-	assert.True(t, defaultUsesSequence(`nextval('"other"."main"."_vibe_seq_t_id"')`, "_vibe_seq_t_id"))
-	assert.True(t, defaultUsesSequence(`NEXTVAL('_VIBE_SEQ_T_ID')`, "_vibe_seq_t_id"))
-	assert.False(t, defaultUsesSequence(`nextval('_vibe_seq_t_id2')`, "_vibe_seq_t_id"), "seq must not match seq2")
-	assert.False(t, defaultUsesSequence(`nextval('x__vibe_seq_t_id')`, "_vibe_seq_t_id"))
-	assert.False(t, defaultUsesSequence(`'_vibe_seq_t_id'`, "_vibe_seq_t_id"))
+	assert.True(t, defaultUsesSequence(`nextval('_assay_seq_t_id')`, "_assay_seq_t_id"))
+	assert.True(t, defaultUsesSequence(`nextval('"other"."main"."_assay_seq_t_id"')`, "_assay_seq_t_id"))
+	assert.True(t, defaultUsesSequence(`NEXTVAL('_ASSAY_SEQ_T_ID')`, "_assay_seq_t_id"))
+	assert.False(t, defaultUsesSequence(`nextval('_assay_seq_t_id2')`, "_assay_seq_t_id"), "seq must not match seq2")
+	assert.False(t, defaultUsesSequence(`nextval('x__assay_seq_t_id')`, "_assay_seq_t_id"))
+	assert.False(t, defaultUsesSequence(`'_assay_seq_t_id'`, "_assay_seq_t_id"))
 }

@@ -36,5 +36,5 @@ const statusText = computed(() => (props.need.match ? STATUS_META[statusKey(prop
 </template>
 
 <style scoped>
-.storage-need { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--vibe-fg); }
+.storage-need { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--assay-fg); }
 </style>

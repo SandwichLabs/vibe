@@ -7,7 +7,7 @@ import (
 
 // UpdatesKey is where the update-check settings live in the preferences
 // document (Preferences.Extra), beside the recent-workspaces list. They are
-// per person and never part of a workspace or vibe.yaml.
+// per person and never part of a workspace or assay.yaml.
 const UpdatesKey = "updates"
 
 // Update-check modes for UpdateSettings.Check. Unset ("") means never asked.

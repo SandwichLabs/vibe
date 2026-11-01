@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/sandbox"
+	"github.com/SandwichLabs/assay/internal/sandbox"
 )
 
 // SandboxMode defines the permission level for agent operations. The tiers,

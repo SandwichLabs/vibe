@@ -8,7 +8,7 @@ import (
 )
 
 // isolateHome points HOME at an empty temp dir so Load() doesn't pick up a real
-// ~/.vibe.yaml on the developer's machine.
+// ~/.assay.yaml on the developer's machine.
 func isolateHome(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
@@ -24,8 +24,8 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_EnvOverridesProviderAndModel(t *testing.T) {
 	isolateHome(t)
-	t.Setenv("VIBE_LLM_PROVIDER", "gemini")
-	t.Setenv("VIBE_LLM_MODEL", "gemini-2.5-pro")
+	t.Setenv("ASSAY_LLM_PROVIDER", "gemini")
+	t.Setenv("ASSAY_LLM_MODEL", "gemini-2.5-pro")
 	cfg := Load()
 	assert.Equal(t, LLMProviderGemini, cfg.LLM.Provider)
 	assert.Equal(t, "gemini-2.5-pro", cfg.LLM.Model)
@@ -34,7 +34,7 @@ func TestLoad_EnvOverridesProviderAndModel(t *testing.T) {
 func TestLoad_APIKeyFallsBackToStandardEnv(t *testing.T) {
 	t.Run("anthropic", func(t *testing.T) {
 		isolateHome(t)
-		t.Setenv("VIBE_LLM_PROVIDER", "anthropic")
+		t.Setenv("ASSAY_LLM_PROVIDER", "anthropic")
 		t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
 		cfg := Load()
 		assert.Equal(t, "sk-ant-test", cfg.LLM.APIKey)
@@ -42,8 +42,8 @@ func TestLoad_APIKeyFallsBackToStandardEnv(t *testing.T) {
 
 	t.Run("openai", func(t *testing.T) {
 		isolateHome(t)
-		t.Setenv("VIBE_LLM_PROVIDER", "openai")
-		t.Setenv("VIBE_LLM_API_KEY", "")
+		t.Setenv("ASSAY_LLM_PROVIDER", "openai")
+		t.Setenv("ASSAY_LLM_API_KEY", "")
 		t.Setenv("OPENAI_API_KEY", "sk-oai-test")
 		cfg := Load()
 		assert.Equal(t, LLMProviderOpenAI, cfg.LLM.Provider)
@@ -52,7 +52,7 @@ func TestLoad_APIKeyFallsBackToStandardEnv(t *testing.T) {
 
 	t.Run("gemini", func(t *testing.T) {
 		isolateHome(t)
-		t.Setenv("VIBE_LLM_PROVIDER", "gemini")
+		t.Setenv("ASSAY_LLM_PROVIDER", "gemini")
 		t.Setenv("GEMINI_API_KEY", "g-test")
 		cfg := Load()
 		assert.Equal(t, "g-test", cfg.LLM.APIKey)
@@ -60,8 +60,8 @@ func TestLoad_APIKeyFallsBackToStandardEnv(t *testing.T) {
 
 	t.Run("explicit llm.api_key wins over standard env", func(t *testing.T) {
 		isolateHome(t)
-		t.Setenv("VIBE_LLM_PROVIDER", "anthropic")
-		t.Setenv("VIBE_LLM_API_KEY", "explicit")
+		t.Setenv("ASSAY_LLM_PROVIDER", "anthropic")
+		t.Setenv("ASSAY_LLM_API_KEY", "explicit")
 		t.Setenv("ANTHROPIC_API_KEY", "from-env")
 		cfg := Load()
 		assert.Equal(t, "explicit", cfg.LLM.APIKey)

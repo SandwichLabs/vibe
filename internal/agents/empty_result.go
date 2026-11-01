@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // explainEmptyResult is ported from schoolwork-workspace's

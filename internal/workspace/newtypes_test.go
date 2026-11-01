@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 func resolveOne(t *testing.T, ws Workspace, name string) (ResolvedConnection, error) {
@@ -41,7 +41,7 @@ func TestMetadataTrustingTypesAreOwnScopeOnly(t *testing.T) {
 		// Moving one into the team's file is refused too.
 		require.Error(t, ws.MoveConnection(context.Background(), d.Name, ScopeLocal, ScopeShared), d.Type)
 	}
-	// A hand-edited vibe.yaml (a pull) is refused when resolved.
+	// A hand-edited assay.yaml (a pull) is refused when resolved.
 	_, err := ResolveConnection(ws, Connection{ConnectionDef: ConnectionDef{Name: "planted", Type: "delta", Path: "data/planted"}, Scope: ScopeShared}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only you can add them")
@@ -175,7 +175,7 @@ func TestFingerprintCoversTheNewTypesFields(t *testing.T) {
 	assert.Equal(t, "l.ducklake", ServerDescription(base["ducklake"]))
 }
 
-// A pull can put anything in vibe.yaml. A definition the person may not have
+// A pull can put anything in assay.yaml. A definition the person may not have
 // (a source that trusts its metadata, or one with fields its type does not use,
 // such as a smuggled scope) is skipped with a visible issue; the workspace still
 // opens and the other connections work.
@@ -188,7 +188,7 @@ func TestPlantedSharedDefinitionsAreSkippedWithAnIssue(t *testing.T) {
 		ConnectionDef{Name: "stray_sqlite", Type: "sqlite", Path: "data/x.sqlite", Scope: "file:///"},
 		ConnectionDef{Name: "fine", Type: "duckdb", Path: "data/fine.duckdb", ReadOnly: Bool(false)},
 	)
-	require.NoError(t, ws.SaveConfig(cfg), "vibe.yaml itself stays readable")
+	require.NoError(t, ws.SaveConfig(cfg), "assay.yaml itself stays readable")
 
 	sess, issues, err := OpenSession(context.Background(), ws, nil, WithSessionOptions(session.WithExtensionDirectory(t.TempDir())))
 	require.NoError(t, err)

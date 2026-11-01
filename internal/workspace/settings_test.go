@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 func baseSettings(ws Workspace) Settings {
@@ -122,7 +122,7 @@ func TestApplySettings_AStaleTeamFormIsAConflict(t *testing.T) {
 	require.NoError(t, ApplySettings(ws, s))
 }
 
-func TestApplySettings_VibeYamlChangedOnDiskIsAConflictAndNothingIsWritten(t *testing.T) {
+func TestApplySettings_AssayYamlChangedOnDiskIsAConflictAndNothingIsWritten(t *testing.T) {
 	ws, _ := newWorkspace(t)
 	path := filepath.Join(ws.Root(), ConfigFile)
 	b, err := os.ReadFile(path)
@@ -133,7 +133,7 @@ func TestApplySettings_VibeYamlChangedOnDiskIsAConflictAndNothingIsWritten(t *te
 	err = ApplySettings(ws, s)
 	var sc *SettingsConflictError
 	require.ErrorAs(t, err, &sc)
-	assert.Contains(t, sc.Msg, "vibe.yaml changed on disk")
+	assert.Contains(t, sc.Msg, "assay.yaml changed on disk")
 	assert.Contains(t, readConfigFile(t, ws), "edited elsewhere")
 	assert.NotContains(t, readConfigFile(t, ws), "Mine")
 }
@@ -141,7 +141,7 @@ func TestApplySettings_VibeYamlChangedOnDiskIsAConflictAndNothingIsWritten(t *te
 func TestApplySettings_RefusesWhenLocalSettingsAreUntrusted(t *testing.T) {
 	ws, _ := newWorkspace(t)
 	require.NoError(t, ws.SaveLocal(ws.Local()))
-	require.NoError(t, os.Remove(filepath.Join(ws.Root(), ".vibe-local", "nonce")))
+	require.NoError(t, os.Remove(filepath.Join(ws.Root(), ".assay-local", "nonce")))
 	require.NoError(t, ws.Reload())
 	require.False(t, ws.LocalTrusted())
 	before := readConfigFile(t, ws)
@@ -161,7 +161,7 @@ func TestSetLocalAgent_TierAndGateAgainstTheCommittedLimit(t *testing.T) {
 
 	err := SetLocalAgent(ws, SandboxFull, true)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "team limit in vibe.yaml is read-write")
+	assert.Contains(t, err.Error(), "team limit in assay.yaml is read-write")
 	err = SetLocalAgent(ws, SandboxReadWrite, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires the agent to ask")

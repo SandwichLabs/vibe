@@ -5,7 +5,7 @@ description: DuckDB SQL dialect tips — FROM-first, GROUP BY ALL, date_trunc, Q
 
 # DuckDB SQL dialect notes
 
-Vibe's query engine is DuckDB. It is broadly Postgres-compatible but has
+Assay's query engine is DuckDB. It is broadly Postgres-compatible but has
 several conveniences (and a few sharp edges) worth knowing before you write
 a query by hand rather than by habit from another engine.
 
@@ -67,7 +67,7 @@ SELECT * FROM customers WHERE LOWER(state) = LOWER($state);
   month (also `'week'`, `'quarter'`, `'year'`, `'day'`).
 - `strftime(order_date, '%Y-%m')` formats a date as a string when you need a
   label, not a truncated date value — don't reach for string slicing.
-- DuckDB's CSV auto-detection (used by Vibe's importer) is good but not
+- DuckDB's CSV auto-detection (used by Assay's importer) is good but not
   perfect: a date column typed as VARCHAR after import usually means mixed
   formats in the source file. Check with `SUMMARIZE` (see `data-profiling`)
   before assuming a column parses as a date.

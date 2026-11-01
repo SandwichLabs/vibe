@@ -4,7 +4,7 @@ import { resolveConfirmChoice, confirmVisible } from '../composables/useConfirm'
 import ConflictBanner from './ConflictBanner.vue'
 
 const mountBanner = (props: Record<string, any> = {}) =>
-  mount(ConflictBanner, { props: { kind: 'notebook', path: 'notebooks/weekly-revenue.vnb', ...props }, global: { stubs: { Icon: true } } })
+  mount(ConflictBanner, { props: { kind: 'notebook', path: 'notebooks/weekly-revenue.asnb', ...props }, global: { stubs: { Icon: true } } })
 
 describe('ConflictBanner', () => {
   it('is a role=alert with the plain-language copy and the file path', () => {
@@ -12,7 +12,7 @@ describe('ConflictBanner', () => {
     const el = w.find('[role="alert"]')
     expect(el.exists()).toBe(true)
     expect(el.text()).toContain('This notebook changed on disk.')
-    expect(el.text()).toContain('notebooks/weekly-revenue.vnb')
+    expect(el.text()).toContain('notebooks/weekly-revenue.asnb')
     expect(el.text()).toContain('Nothing happens until you do.')
   })
 

@@ -1,5 +1,5 @@
-# Vibe workspace. Committed: shared settings and connection definitions only.
-# Never put a password, token or key in this file; Vibe keeps those in your keychain.
+# Assay workspace. Committed: shared settings and connection definitions only.
+# Never put a password, token or key in this file; Assay keeps those in your keychain.
 version: 1
 id: 7f3c2a10-5b1e-4c52-9d0e-2a6f1b8c4d90
 name: Acme Analytics

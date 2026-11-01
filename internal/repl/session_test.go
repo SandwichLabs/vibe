@@ -57,7 +57,7 @@ func TestSessionGolden(t *testing.T) {
 func TestBannerAndPrompt(t *testing.T) {
 	f := newSession(t, nil)
 	f.waitFor(prompt)
-	assert.Contains(t, f.out.String(), "Vibe console on ws. Statements end with ';'. Enter .help for commands.")
+	assert.Contains(t, f.out.String(), "Assay console on ws. Statements end with ';'. Enter .help for commands.")
 	assert.True(t, strings.HasPrefix(f.out.String(), "\x1b[?2004h"), "bracketed paste is switched on first: %q", f.out.String())
 }
 

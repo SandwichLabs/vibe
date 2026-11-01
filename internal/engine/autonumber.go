@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // IsIntegerType reports whether a DuckDB type name is in the integer family
@@ -29,7 +29,17 @@ func IsIntegerType(t string) bool {
 // auto-number primary key column. Both identifiers must be validated by the
 // caller before this is interpolated into DDL.
 func AutoNumberSequence(table, column string) string {
-	return fmt.Sprintf("_vibe_seq_%s_%s", table, column)
+	return fmt.Sprintf("_assay_seq_%s_%s", table, column)
+}
+
+// legacySeqPrefix is the prefix tables created before the Vibe to Assay rename
+// carry in their own DuckDB files. That is user data in the connection, not app
+// state, so it is still recognised and bumped; new sequences use _assay_seq_.
+const legacySeqPrefix = "_vibe_seq_"
+
+// legacyAutoNumberSequence is AutoNumberSequence under the pre-rename prefix.
+func legacyAutoNumberSequence(table, column string) string {
+	return fmt.Sprintf("%s%s_%s", legacySeqPrefix, table, column)
 }
 
 // MaxAutoNumberGap caps how far BumpAutoNumber will advance a sequence in
@@ -61,6 +71,13 @@ type Querier interface {
 // plain information_schema string compare is not — see Import's own comment
 // on canonicalizing the table name after a case-different match).
 func AutoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column string, maxVal int64) (gap int64, ok bool, err error) {
+	gap, _, ok, err = autoNumberGap(ctx, q, ref, column, maxVal)
+	return gap, ok, err
+}
+
+// autoNumberGap is AutoNumberGap plus the name of the sequence the column's
+// default uses (current or legacy prefix).
+func autoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column string, maxVal int64) (gap int64, seq string, ok bool, err error) {
 	table := ref.Name
 	var hasDefault bool
 	var def sql.NullString
@@ -72,31 +89,34 @@ func AutoNumberGap(ctx context.Context, q Querier, ref session.TableRef, column 
 		append(args, column)...,
 	).Scan(&hasDefault, &def)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to inspect column %q.%q: %w", table, column, err)
+		return 0, "", false, fmt.Errorf("failed to inspect column %q.%q: %w", table, column, err)
 	}
 	if !hasDefault || !def.Valid {
-		return 0, false, nil
+		return 0, "", false, nil
 	}
-	seq := AutoNumberSequence(table, column)
+	seq = AutoNumberSequence(table, column)
+	if !defaultUsesSequence(def.String, seq) {
+		seq = legacyAutoNumberSequence(table, column)
+	}
 	// The default text is nextval('seq') for a table in the default catalog
 	// and nextval('"catalog"."schema"."seq"') for one created qualified: take
 	// the literal and compare its last name part whole (seq must not match seq2).
 	if !defaultUsesSequence(def.String, seq) {
 		// Default isn't our auto-number sequence (e.g. user-authored default).
-		return 0, false, nil
+		return 0, "", false, nil
 	}
 
 	cur, found, err := sequencePosition(ctx, q, ref, seq)
 	if err != nil {
-		return 0, false, err
+		return 0, "", false, err
 	}
 	if !found {
-		return 0, false, nil
+		return 0, "", false, nil
 	}
 	if maxVal <= cur {
-		return 0, true, nil
+		return 0, seq, true, nil
 	}
-	return maxVal - cur, true, nil
+	return maxVal - cur, seq, true, nil
 }
 
 // sequencePosition reads a sequence's last dispensed value (a
@@ -177,7 +197,7 @@ func BumpAutoNumber(ctx context.Context, q Querier, ref session.TableRef, column
 		return nil
 	}
 
-	gap, ok, err := AutoNumberGap(ctx, q, ref, column, maxVal.Int64)
+	gap, seq, ok, err := autoNumberGap(ctx, q, ref, column, maxVal.Int64)
 	if err != nil {
 		return err
 	}
@@ -190,7 +210,6 @@ func BumpAutoNumber(ctx context.Context, q Querier, ref session.TableRef, column
 			table, column, gap)
 	}
 
-	seq := AutoNumberSequence(table, column)
 	seqRef := session.TableRef{Catalog: ref.Catalog, Schema: ref.Schema, Name: seq}
 	var cur int64
 	if err := q.QueryRowContext(ctx,

@@ -232,7 +232,7 @@ describe('ConnectionEditorView', () => {
     await flushPromises()
     await chooseType(w, 'postgres')
     expect(w.find('[data-testid="f-readonly"]').attributes('aria-checked')).toBe('true')
-    expect(w.text()).toContain('a safety belt inside Vibe, not a lock on the database')
+    expect(w.text()).toContain('a safety belt inside Assay, not a lock on the database')
     expect(w.text()).toContain('For production data, also use a read-only database user.')
     const w2 = mountView()
     await flushPromises()

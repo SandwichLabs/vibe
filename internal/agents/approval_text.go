@@ -12,7 +12,7 @@ import (
 const (
 	// SettingsAgentPath is the Studio section that holds the agent's tier and
 	// the ask-before-changes switch.
-	SettingsAgentPath = "Vibe Studio → Settings → Workspace → The agent"
+	SettingsAgentPath = "Assay → Settings → Workspace → The agent"
 	// SettingsTierPath is the tier picker, in the "On this computer" half.
 	SettingsTierPath = SettingsAgentPath + " → On this computer"
 	// SettingsAskPath names the ask-before-changes gate and where its switch is.
@@ -61,7 +61,7 @@ func categoryWhat(category string) string {
 
 // tierFix is the sentence that says how to raise the tier to need.
 func tierFix(need SandboxMode) string {
-	return fmt.Sprintf(`To allow it, set the agent to "%s" (%s) or higher in %s, or restart the MCP server without a tighter --sandbox. A team limit saved in vibe.yaml can cap the tier too.`,
+	return fmt.Sprintf(`To allow it, set the agent to "%s" (%s) or higher in %s, or restart the MCP server without a tighter --sandbox. A team limit saved in assay.yaml can cap the tier too.`,
 		TierLabel(need), need, SettingsTierPath)
 }
 
@@ -82,7 +82,7 @@ func contentTarget(req *Request) string {
 	case "save_query", "build_query":
 		return "a saved query in queries/ in the workspace folder"
 	case "propose_definition":
-		return "a proposal in .vibe-local/proposals/ in the workspace folder (nothing in semantics/ changes until the person accepts it)"
+		return "a proposal in .assay-local/proposals/ in the workspace folder (nothing in semantics/ changes until the person accepts it)"
 	default:
 		return "a notebook in the workspace folder"
 	}
@@ -106,7 +106,7 @@ func approvalNeededData() map[string]any {
 func contentNeedsApproval(req *Request, sb *SandboxConfig) *Response {
 	resp := NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
 		"%s: your request is valid and ready, but it was NOT saved yet. It writes %s, and this workspace asks before the agent changes anything (sandbox: %s), with no one here to approve over MCP. "+
-			"Nothing was written. Ask the person to approve it: they can make the same change from Vibe Studio's agent chat, or with Studio's MCP server on (`vibe mcp serve` passes through to it) it shows them an approval card; or they can turn off %s; that applies when the MCP server restarts (reconnect the client, or restart `vibe mcp serve`), so send the same call again after that.",
+			"Nothing was written. Ask the person to approve it: they can make the same change from Assay's agent chat, or with Studio's MCP server on (`assay mcp serve` passes through to it) it shows them an approval card; or they can turn off %s; that applies when the MCP server restarts (reconnect the client, or restart `assay mcp serve`), so send the same call again after that.",
 		req.Method, contentTarget(req), sb.Mode, SettingsAskPath))
 	resp.Error.Data = approvalNeededData()
 	return resp
@@ -117,7 +117,7 @@ func contentNeedsApproval(req *Request, sb *SandboxConfig) *Response {
 func dataNeedsApproval(req *Request, sb *SandboxConfig) *Response {
 	return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
 		"%s needs your OK before it runs: it changes data in the workspace's local database, and this workspace asks before the agent changes anything (sandbox: %s), with no one here to approve over MCP. "+
-			"Nothing was changed. Changes to any connection other than the workspace's local database always need Vibe Studio: open the workspace there and approve the change. "+
-			"To let MCP clients change the local database without asking, turn off %s; it applies when the MCP server restarts (reconnect the client, or restart `vibe mcp serve`).",
+			"Nothing was changed. Changes to any connection other than the workspace's local database always need Assay: open the workspace there and approve the change. "+
+			"To let MCP clients change the local database without asking, turn off %s; it applies when the MCP server restarts (reconnect the client, or restart `assay mcp serve`).",
 		req.Method, sb.Mode, SettingsAskPath))
 }

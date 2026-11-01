@@ -349,7 +349,7 @@ describe('useAgentChat approvals (#79)', () => {
     let chat = useAgentChat()
     chat.resetAll()
     await chat.send('hi')
-    expect(chat.messages.value[1].text).toBe('Agent error: connection refused. Is the model server at http://localhost:11434/v1 running?')
+    expect(chat.messages.value[1].text).toBe('Assistant error: connection refused. Is the model server at http://localhost:11434/v1 running?')
     expect(chat.messages.value[1].text).not.toContain('LLM server reachable')
 
     llmSettings = { provider: 'cloudflare', endpoint: '' }
@@ -357,7 +357,7 @@ describe('useAgentChat approvals (#79)', () => {
     chat = useAgentChat()
     chat.resetAll()
     await chat.send('hi')
-    expect(chat.messages.value[1].text).toBe('Agent error: 401 unauthorized. Check the API key and model in Settings \u2192 App.')
+    expect(chat.messages.value[1].text).toBe('Assistant error: 401 unauthorized. Check the API key and model in Settings \u2192 App.')
     llmSettings = { provider: 'local', endpoint: 'http://localhost:8080/v1' }
   })
 
@@ -501,7 +501,7 @@ describe('useAgentChat cancel edge cases (review #42b)', () => {
   it('"already running" gets no model-server hint and offers Stop for whatever is running', async () => {
     const cancelBinding = vi.fn(async () => {})
     ;(window as any).go = { main: { App: {
-      AgentChatStream: vi.fn(async () => { throw new Error('an agent turn is already running; cancel it or wait for it to finish') }),
+      AgentChatStream: vi.fn(async () => { throw new Error('an assistant turn is already running; cancel it or wait for it to finish') }),
       GetLLMSettings: vi.fn(async () => ({ provider: 'local', endpoint: 'http://x' })),
       CancelAgentQuery: cancelBinding,
     } } }

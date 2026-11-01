@@ -13,8 +13,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/vibe/internal/prefs"
-	"github.com/SandwichLabs/vibe/internal/selfupdate"
+	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/assay/internal/selfupdate"
 )
 
 // newUpdateService builds the update service for this binary. A seam so tests use a fake GitHub and
@@ -35,20 +35,20 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Check for a newer Vibe release and, if you confirm, install it",
-	Long: `Looks up the latest stable Vibe release on GitHub (a plain request to github.com; running this
+	Short: "Check for a newer Assay release and, if you confirm, install it",
+	Long: `Looks up the latest stable Assay release on GitHub (a plain request to github.com; running this
 command is your consent for it) and says whether it is newer than this one.
 
-When this Vibe was put in place by the Vibe installer, it offers to upgrade by running that release's
+When this Assay was put in place by the Assay installer, it offers to upgrade by running that release's
 own install.sh after verifying it against the release's checksums.txt. Nothing is installed without
 your answer: "Install vX? [y/N]" on a terminal, or --yes. Without a terminal and without --yes it only
-checks. A Vibe installed any other way (go install, a package manager, a dev build) is told to update
+checks. An Assay installed any other way (go install, a package manager, a dev build) is told to update
 the way it was installed.
 
 Exit status: 0 when the check worked (up to date or not) and any requested install succeeded; 1 on an
 error (no network, a failed or unverified install).
 
-Weekly checks from Studio are a separate, opt-in setting: vibe config updates [off|weekly].`,
+Weekly checks from Studio are a separate, opt-in setting: assay config updates [off|weekly].`,
 	Args: cobra.NoArgs,
 	RunE: runUpdate,
 }
@@ -72,7 +72,7 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if !updateYes {
 		ok, asked := confirmInstall(cmd.InOrStdin(), cmd.ErrOrStderr(), res.Latest)
 		if !asked {
-			fmt.Fprintf(out, "\nRun `vibe update --yes` to install %s.\n", res.Latest)
+			fmt.Fprintf(out, "\nRun `assay update --yes` to install %s.\n", res.Latest)
 			return nil
 		}
 		if !ok {
@@ -89,7 +89,7 @@ func printCheck(out io.Writer, res selfupdate.Result) {
 	case !res.UpdateAvailable && res.Current == "dev":
 		fmt.Fprintln(out, "This is a development build; it does not compare itself with releases.")
 	case !res.UpdateAvailable:
-		fmt.Fprintln(out, "Vibe is up to date.")
+		fmt.Fprintln(out, "Assay is up to date.")
 	default:
 		fmt.Fprintf(out, "A newer release is available: %s\n", res.ReleaseURL)
 		if res.Skipped {
@@ -142,7 +142,7 @@ func applyUpdate(cmd *cobra.Command, svc *selfupdate.Service, tag string) error 
 		}
 		return err
 	}
-	fmt.Fprintf(out, "\nUpdated %s -> %s.\nA running Vibe Studio or `vibe mcp serve` keeps the old version until you restart it.\n", res.From, res.To)
+	fmt.Fprintf(out, "\nUpdated %s -> %s.\nA running Assay or `assay mcp serve` keeps the old version until you restart it.\n", res.From, res.To)
 	return nil
 }
 
@@ -151,7 +151,7 @@ var configUpdatesCmd = &cobra.Command{
 	Short: "Show or set whether Studio checks GitHub for new releases weekly",
 	Long: `Mirrors Settings > About > Updates in Studio. Off by default until you answer (Studio asks once).
 "weekly" lets Studio make one plain request to github.com at startup when the last check is over
-a week old. "vibe update" and Studio's "Check now" always work, whatever this says. Nothing is ever
+a week old. "assay update" and Studio's "Check now" always work, whatever this says. Nothing is ever
 installed without your confirmation.`,
 	Args:      cobra.MaximumNArgs(1),
 	ValidArgs: []string{prefs.UpdateCheckOff, prefs.UpdateCheckWeekly},
@@ -171,7 +171,7 @@ installed without your confirmation.`,
 		st := svc.State()
 		switch st.Check {
 		case "":
-			fmt.Fprintln(out, "Update checks: not set (Studio asks once; set it with `vibe config updates off|weekly`)")
+			fmt.Fprintln(out, "Update checks: not set (Studio asks once; set it with `assay config updates off|weekly`)")
 		default:
 			fmt.Fprintf(out, "Update checks: %s\n", st.Check)
 		}

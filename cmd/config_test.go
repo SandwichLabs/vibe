@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/config"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/config"
+	"github.com/SandwichLabs/assay/internal/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ func mockKeychain(t *testing.T) *secrets.Mock {
 	old := newLLMKeyStore
 	newLLMKeyStore = func() secrets.Store { return m }
 	t.Cleanup(func() { newLLMKeyStore = old })
-	for _, k := range []string{"VIBE_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OLLAMA_API_KEY", "CLOUDFLARE_API_TOKEN"} {
+	for _, k := range []string{"ASSAY_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OLLAMA_API_KEY", "CLOUDFLARE_API_TOKEN"} {
 		t.Setenv(k, "")
 	}
 	return m
@@ -55,9 +55,9 @@ func mockKeychain(t *testing.T) *secrets.Mock {
 
 func TestConfigLLMSet_RefusesToRouteFileKeyToAnotherProvider(t *testing.T) {
 	m := mockKeychain(t)
-	path := t.TempDir() + "/vibe.yaml"
-	t.Setenv("VIBE_CONFIG_FILE", path)
-	for _, k := range []string{"VIBE_LLM_PROVIDER", "VIBE_LLM_MODEL", "VIBE_LLM_ENDPOINT", "VIBE_LLM_ACCOUNT_ID", "VIBE_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
+	path := t.TempDir() + "/assay.yaml"
+	t.Setenv("ASSAY_CONFIG_FILE", path)
+	for _, k := range []string{"ASSAY_LLM_PROVIDER", "ASSAY_LLM_MODEL", "ASSAY_LLM_ENDPOINT", "ASSAY_LLM_ACCOUNT_ID", "ASSAY_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
 		t.Setenv(k, "")
 	}
 	require.NoError(t, os.WriteFile(path, []byte("llm:\n  provider: openai\n  api_key: sk-legacy-NEEDLE\n"), 0o600))
@@ -86,9 +86,9 @@ func TestConfigLLMSet_RefusesToRouteFileKeyToAnotherProvider(t *testing.T) {
 
 func TestConfigLLMShowSetModels(t *testing.T) {
 	mockKeychain(t)
-	path := t.TempDir() + "/vibe.yaml"
-	t.Setenv("VIBE_CONFIG_FILE", path)
-	for _, k := range []string{"VIBE_LLM_PROVIDER", "VIBE_LLM_MODEL", "VIBE_LLM_ENDPOINT", "VIBE_LLM_ACCOUNT_ID", "VIBE_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
+	path := t.TempDir() + "/assay.yaml"
+	t.Setenv("ASSAY_CONFIG_FILE", path)
+	for _, k := range []string{"ASSAY_LLM_PROVIDER", "ASSAY_LLM_MODEL", "ASSAY_LLM_ENDPOINT", "ASSAY_LLM_ACCOUNT_ID", "ASSAY_LLM_GATEWAY", "CLOUDFLARE_ACCOUNT_ID"} {
 		t.Setenv(k, "")
 	}
 	run := func(c *cobra.Command, args ...string) string {

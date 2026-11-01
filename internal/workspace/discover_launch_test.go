@@ -33,7 +33,7 @@ func TestDiscoverForLaunch(t *testing.T) {
 		assert.Equal(t, ws, got)
 	})
 
-	t.Run("stray vibe.yaml in home itself is ignored", func(t *testing.T) {
+	t.Run("stray assay.yaml in home itself is ignored", func(t *testing.T) {
 		home := filepath.Join(base, "h2")
 		mkWS(t, home)
 		sub := filepath.Join(home, "code")
@@ -44,7 +44,7 @@ func TestDiscoverForLaunch(t *testing.T) {
 		}
 	})
 
-	t.Run("vibe.yaml above home is ignored", func(t *testing.T) {
+	t.Run("assay.yaml above home is ignored", func(t *testing.T) {
 		top := filepath.Join(base, "h3top")
 		mkWS(t, top)
 		home := filepath.Join(top, "users", "me")

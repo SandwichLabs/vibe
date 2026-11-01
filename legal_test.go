@@ -1,4 +1,4 @@
-package vibe
+package assay
 
 import (
 	"testing"

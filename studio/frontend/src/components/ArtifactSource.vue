@@ -8,7 +8,7 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
 import ConflictBanner from './ConflictBanner.vue'
-import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
+import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
 import { useArtifactSource } from '../composables/useArtifactSource'
 import { shortcutLabel } from '../composables/useModal'
 
@@ -22,12 +22,12 @@ type FileTab = 'manifest' | 'view'
 const tab = ref<FileTab>('manifest')
 const manifestEl = ref<HTMLElement | null>(null)
 const viewEl = ref<HTMLElement | null>(null)
-const editors: Partial<Record<FileTab, VibeEditorInstance>> = {}
+const editors: Partial<Record<FileTab, AssayEditorInstance>> = {}
 
 function mount(which: FileTab, el: HTMLElement | null, lang: 'yaml' | 'json' | 'javascript') {
   if (!el || editors[which]) return
   const text = which === 'manifest' ? manifest : view
-  editors[which] = createVibeEditor(el, {
+  editors[which] = createAssayEditor(el, {
     value: text.value,
     lang,
     onChange: (v) => { text.value = v },
@@ -79,7 +79,7 @@ watch(() => props.active, (a) => { if (a) void src.checkOnce() }, { immediate: t
     <div v-if="saveError" class="artifact-src__err" role="alert" data-testid="source-error"><pre class="artifact-src__msg">{{ saveError }}</pre></div>
     <div v-if="notice" class="sh-mono artifact-src__notice" role="status" data-testid="source-notice">{{ notice }}</div>
     <div v-if="warnings.length" class="card card-pad col artifact-src__warn" role="status" data-testid="source-warnings">
-      <strong>The agent's read policy refuses {{ warnings.length === 1 ? 'a query' : 'some queries' }}.</strong>
+      <strong>The read-only SQL policy refuses {{ warnings.length === 1 ? 'a query' : 'some queries' }}.</strong>
       <span class="sh-mono artifact-src__hint">The view will show the policy's refusal when it runs. Fix the query and save again.</span>
       <ul class="artifact-src__list"><li v-for="w in warnings" :key="w"><pre class="artifact-src__msg">{{ w }}</pre></li></ul>
     </div>

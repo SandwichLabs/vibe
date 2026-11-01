@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/pagestate"
+	"github.com/SandwichLabs/assay/internal/pagestate"
 )
 
 // stateStoreForTest is a second store over the same file, as another window

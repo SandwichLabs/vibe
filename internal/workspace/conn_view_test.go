@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 func TestViewDefinition_WinnerShadowAndErrors(t *testing.T) {
@@ -127,9 +127,9 @@ func TestExtensionNeedsFollowsTheLakeSpec(t *testing.T) {
 }
 
 func TestExtensionNeedsExpandsEnvReferences(t *testing.T) {
-	t.Setenv("VIBE_TEST_LAKE_URL", "s3://bucket/lake/c.db")
+	t.Setenv("ASSAY_TEST_LAKE_URL", "s3://bucket/lake/c.db")
 	ws, _, _ := memWorkspace(t, nil)
-	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "elake", Type: "ducklake", Path: "${VIBE_TEST_LAKE_URL}", ReadOnly: boolPtr(true), Options: map[string]string{"data_path": "data/f"}}))
+	require.NoError(t, ws.AddConnection(ScopeLocal, ConnectionDef{Name: "elake", Type: "ducklake", Path: "${ASSAY_TEST_LAKE_URL}", ReadOnly: boolPtr(true), Options: map[string]string{"data_path": "data/f"}}))
 	needed := map[string][]string{}
 	for _, n := range ExtensionNeeds(ws) {
 		needed[n.Name] = n.NeededBy

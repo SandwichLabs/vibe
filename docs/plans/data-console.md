@@ -1,10 +1,10 @@
 # Data console and SQL autocomplete
 
-Status: **Part A built (#256, 2026-10-28); Part B (the console) is in progress: R1, the engine, is built (#258, `internal/repl`, `vibe repl`); R0 done 2026-10-28: the owner chose xterm.js, and go-libghostty is not used; the Linux human checks (dead keys, IME, physical input) move into R2's acceptance (#259), see [`spike-console-r0-findings.md`](spike-console-r0-findings.md).** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a terminal widget (xterm.js after R0), that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
+Status: **Part A built (#256, 2026-10-28); Part B (the console) is in progress: R1, the engine, is built (#258, `internal/repl`, `assay repl`); R0 done 2026-10-28: the owner chose xterm.js, and go-libghostty is not used; the Linux human checks (dead keys, IME, physical input) move into R2's acceptance (#259), see [`spike-console-r0-findings.md`](spike-console-r0-findings.md).** Tracking (label `data-console`): epic #255 covers autocomplete #256, the query editor follow-ups #5, and R0-R5 as #257-#262. It has two parts. **Autocomplete** (A1-A3) is small, independent and worth doing first. The **data console** (R0-R5) is a DuckDB-CLI-style REPL in Studio, drawn with a terminal widget (xterm.js after R0), that can become the script-like front of the Query Explorer. Neither part is in the 12-month plan ([`answers-you-can-check.md`](answers-you-can-check.md)), and neither blocks it. Both run through the same query path that receipts (#241) will hook.
 
 ## Feasibility in one paragraph
 
-Both are feasible with no new trust surface, provided one rule holds: **the terminal is a renderer for Vibe's own Go REPL, never a shell.** There is no PTY, no subprocess and no `duckdb` binary. The terminal sends keystrokes to Go, and Go writes VT bytes back.
+Both are feasible with no new trust surface, provided one rule holds: **the terminal is a renderer for Assay's own Go REPL, never a shell.** There is no PTY, no subprocess and no `duckdb` binary. The terminal sends keystrokes to Go, and Go writes VT bytes back.
 
 The terminal widget was the main R0 risk and it held. `ghostty-web` (Coder, MIT) is libghostty-vt compiled to WASM behind an xterm.js-style API, but it is **not** a drop-in: R0 found five behaviours that differ (paste, theme, Meta, scrollback units, write callbacks), so the owner chose xterm.js with WebGL on 2026-10-28; the macOS run agreed (ghostty-web added Cmd+A, Option and IME-placement gaps there) ([`spike-console-r0-findings.md`](spike-console-r0-findings.md)).
 
@@ -14,7 +14,7 @@ The real work is in three places:
 - a session-scoped DuckDB connection;
 - a good line editor.
 
-Autocomplete is mostly built already: the `internal/lsp` completer is a DuckDB-aware completer that knows clauses, aliases and three-part names. Today only `vibe lsp` uses it. Studio's CodeMirror has no completion extension at all.
+Autocomplete is mostly built already: the `internal/lsp` completer is a DuckDB-aware completer that knows clauses, aliases and three-part names. Today only `assay lsp` uses it. Studio's CodeMirror has no completion extension at all.
 
 Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks; console 6-8 weeks.** About half the console time is the line editor and the script mode.
 
@@ -22,10 +22,10 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 
 ### What exists
 
-- **`studio/frontend/src/composables/useVibeEditor.ts`** sets up CodeMirror with `@codemirror/lang-sql` for highlighting, plus history and keymaps. There is no `autocompletion()` extension, so nothing pops up. Only notebook SQL cells use it: the Query Explorer (`QueryEditorView.vue`) is still a plain `<textarea>`, so A2 first moves it onto `useVibeEditor` (corrected 2026-10-28; this was #5's first item).
+- **`studio/frontend/src/composables/useAssayEditor.ts`** sets up CodeMirror with `@codemirror/lang-sql` for highlighting, plus history and keymaps. There is no `autocompletion()` extension, so nothing pops up. Only notebook SQL cells use it: the Query Explorer (`QueryEditorView.vue`) is still a plain `<textarea>`, so A2 first moves it onto `useAssayEditor` (corrected 2026-10-28; this was #5's first item).
 - **`internal/lsp`** has three parts:
   - `Build(ctx, sess)` reads a catalog (connections → schemas → relations → columns, plus `duckdb_functions()` names) from the connected connections.
-  - `Snapshot` merges it into `.vibe-local/catalog.json`.
+  - `Snapshot` merges it into `.assay-local/catalog.json`.
   - `Complete(text, offset, cat)` returns ranked items. It finds the statement under the cursor, the dotted path being typed and the clause (relation vs column position), resolves aliases from the statement's table refs, and quotes names that need it. It is pure Go, with no I/O. `hover.go` gives column types.
 - **`ListCatalog`** (`studio/connections_catalog.go`) feeds the Connections rail, one level at a time.
 
@@ -33,9 +33,9 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 
 | Option | How | Verdict |
 |---|---|---|
-| A. lang-sql schema completion | Turn on `autocompletion()` and pass lang-sql a `schema` object built from `ListCatalog` | Quick, but a second completer. It is a generic SQL dialect with weak alias and clause awareness, it needs the whole catalog shipped to the page, and it would drift from `vibe lsp` |
-| **B. Go completer behind a binding** | A CodeMirror completion source calls `CompleteSQL(text, offset, connection)`, which runs the `internal/lsp` completer over a live catalog cache | **Recommended.** One completer for Studio, notebooks, the console and `vibe lsp` (Neovim, Helix). DuckDB-aware. The IPC round trip is local and well under a frame |
-| C. Run `vibe lsp` as an LSP server for CodeMirror | A CodeMirror LSP client talking to a child process | Not worth it. It adds a process and a JSON-RPC layer to get the same `Complete` call |
+| A. lang-sql schema completion | Turn on `autocompletion()` and pass lang-sql a `schema` object built from `ListCatalog` | Quick, but a second completer. It is a generic SQL dialect with weak alias and clause awareness, it needs the whole catalog shipped to the page, and it would drift from `assay lsp` |
+| **B. Go completer behind a binding** | A CodeMirror completion source calls `CompleteSQL(text, offset, connection)`, which runs the `internal/lsp` completer over a live catalog cache | **Recommended.** One completer for Studio, notebooks, the console and `assay lsp` (Neovim, Helix). DuckDB-aware. The IPC round trip is local and well under a frame |
+| C. Run `assay lsp` as an LSP server for CodeMirror | A CodeMirror LSP client talking to a child process | Not worth it. It adds a process and a JSON-RPC layer to get the same `Complete` call |
 
 ### Plan
 
@@ -51,11 +51,11 @@ Rough size, with one implementer and the review loop: **autocomplete 1-1.5 weeks
 - maps `lsp.ItemKind` to CodeMirror types (connection, schema, table, view, column, function, keyword) and shows `detail`, such as `prod_pg.public.orders · BIGINT`;
 - takes the connection from the editor's `ConnectionSelect`, or from the notebook cell's `connection`, so that unqualified names resolve in that catalog first.
 
-lang-sql's keyword completion stays as the fallback when no workspace is open. Tab or Enter accepts, Ctrl+Space opens the list, and the existing Cmd+Enter (run) keeps priority. The list is themed with `--vibe-*` roles.
+lang-sql's keyword completion stays as the fallback when no workspace is open. Tab or Enter accepts, Ctrl+Space opens the list, and the existing Cmd+Enter (run) keeps priority. The list is themed with `--assay-*` roles.
 
 **As built (#256, 2026-10-28).**
 
-- The Query Explorer was still a `<textarea>`; it moved onto CodeMirror first (`components/SqlEditor.vue` over `createVibeEditor`, Ctrl/Cmd+Enter through the editor keymap).
+- The Query Explorer was still a `<textarea>`; it moved onto CodeMirror first (`components/SqlEditor.vue` over `createAssayEditor`, Ctrl/Cmd+Enter through the editor keymap).
 - `lsp.Live` (`internal/lsp/live.go`) is the live catalog and `CompleteSQL` (`studio/app_complete.go`) the thin binding: one request struct in, `{from, items, stale, building}` out. Offsets cross the bridge in UTF-16 code units and Go converts to bytes.
 - The catalog feed is Studio's `App.catalogChanged` (the one place `catalog:changed` is emitted), not a session hook: `internal/session` has no connect or run event. `Live` rebuilds only connections that are connected, debounced, and never connects one.
 - Caps live in the `information_schema` query itself (2000 relations per schema, 512 columns per relation, 250k rows).
@@ -147,11 +147,11 @@ Go     internal/repl.Session ── line editor ── statement splitter ──
 
 Output goes out on `repl:out:<id>` events, coalesced, with a per-frame byte cap and backpressure (the Go writer blocks when the frontend's acknowledged offset falls too far behind). Input is capped per call.
 
-**Frontend:** `components/ReplTerminal.vue` plus `composables/useReplTerminal.ts`, within the 600/150-line view limits. The terminal theme is built in JS from `getComputedStyle` over the `--vibe-*` roles (background, foreground, cursor, selection and the 16 ANSI slots from the chart and status roles), so it follows the four built-in themes and user themes without hex in a stylesheet. Copy and paste use bracketed paste; Ctrl+Shift+C (Linux) and Cmd+C (macOS) are bound to the clipboard and Ctrl+C stays `^C`, and the theme is set through `options.theme` (xterm.js recolours live). The font is `--sh-font-mono`.
+**Frontend:** `components/ReplTerminal.vue` plus `composables/useReplTerminal.ts`, within the 600/150-line view limits. The terminal theme is built in JS from `getComputedStyle` over the `--assay-*` roles (background, foreground, cursor, selection and the 16 ANSI slots from the chart and status roles), so it follows the four built-in themes and user themes without hex in a stylesheet. Copy and paste use bracketed paste; Ctrl+Shift+C (Linux) and Cmd+C (macOS) are bound to the clipboard and Ctrl+C stays `^C`, and the theme is set through `options.theme` (xterm.js recolours live). The font is `--sh-font-mono`.
 
 ### Dot commands: a closed set
 
-| Kept (as in the DuckDB CLI) | Vibe-specific | Refused, with a one-line reason |
+| Kept (as in the DuckDB CLI) | Assay-specific | Refused, with a one-line reason |
 |---|---|---|
 | `.help`, `.mode <duckbox\|box\|line\|csv\|json\|markdown>`, `.timer on\|off`, `.maxrows N`, `.maxwidth N`, `.nullvalue S`, `.tables [pattern]`, `.schema [table]`, `.columns`, `.headers`, `.clear`, `.exit` (closes the tab) | `.conn [name]` (switch the default catalog, a `USE`), `.read <query>` (a saved `queries/*.sql` by name, run through the gates), `.save <name>` (save the last statement as a query through `queries.Store`), `.grid` (open the last result in the Query Explorer grid), `.export csv\|parquet` (the editor's `ExportQueryResults` with the native save dialog) | `.shell`, `.system`, `.open`, `.load`, `.cd`, `.import` (use Import), `.output` and `.once` to a path (use `.export`), `.log`, `.excel` |
 
@@ -159,7 +159,7 @@ Anything not in the table is "unknown command", never passed through.
 
 ### History and credentials
 
-History is machine-local in `.vibe-local/repl/history`. It is git-ignored and never in a bundle.
+History is machine-local in `.assay-local/repl/history`. It is git-ignored and never in a bundle.
 
 The editor's guard allows `ATTACH`, and an attach string can hold a password. So **statements that are `ATTACH`, `DETACH`, `SET` or `PRAGMA`, and anything that failed the gates, are never written to history.** The classifier is the parsed statement type, not a prefix. A test covers an `ATTACH 'postgres:...password=...'`. `CREATE SECRET` is already refused by `CheckManaged`.
 
@@ -182,7 +182,7 @@ Whether the console becomes the default output is an owner call after a week of 
 
 `internal/repl` runs over any `io.ReadWriter`, so two things come almost free:
 
-- **`vibe repl`:** the same console on a real TTY through `golang.org/x/term` raw mode. It mirrors the Studio console, which keeps the "CLI mirrors the UI" rule. The REPL is not an agent command.
+- **`assay repl`:** the same console on a real TTY through `golang.org/x/term` raw mode. It mirrors the Studio console, which keeps the "CLI mirrors the UI" rule. The REPL is not an agent command.
 - **The TUI's REPL mode** (`internal/tui/repl.go`) can adopt the same renderers, so there is one duckbox formatter instead of two.
 
 ### Phases
@@ -190,11 +190,11 @@ Whether the console becomes the default output is an owner call after a week of 
 | Phase | Work | Exit criteria |
 |---|---|---|
 | **R0 spike** (3-5 days) **Done 2026-10-28: xterm.js** ([`spike-console-r0-findings.md`](spike-console-r0-findings.md)); the Linux human checks (dead keys, IME, physical input) move to R2 | `ghostty-web` (and xterm.js) in a throwaway Studio route, run against WebKitGTK (Linux) and WKWebView (macOS), with the same harness on xterm.js | Renders and themes. Dead keys, IME composition, Cmd/Ctrl shortcuts, copy, bracketed paste and resize all work. 10k lines of output scroll smoothly. WASM loads under Studio's CSP. Bundle size recorded. Decision recorded: ghostty-web or xterm.js, and go-libghostty for tests or not |
-| **R1 engine** (1-1.5 wk) **Built 2026-10-28 (#258).** As built: Ctrl+C is intercepted before `x/term` (cancel when running, clear the line when idle); history and `.save` refuse any text the secret redactor would change, gate-refused text and unsafe text, and history refuses symlinks; `duckdb_extract_statements` is not reachable from the driver, so `lsp.Split` is checked against DuckDB by test; the hidden `vibe repl` is the first caller | `internal/repl` (session, splitter, dot commands, renderers, history filter, cancel) and `engine.ExecuteOn`. The line editor is `x/term`'s `Terminal` (it works over any `io.ReadWriter`: history, a completion callback, single line, with multi-line made by accumulating) | Golden byte tests per renderer. A fuzz test that no cell value emits ESC/OSC/CSI. History filter tests. Cancel interrupts a long `range()` query. Run-path parity test: the same statement via `RunQuery` and via the console takes the same gates and status updates |
-| **R2 Studio console** (1 wk) **Built 2026-10-29 (#259).** As built: five bindings (`ReplOpen`, `ReplInput`, `ReplResize`, `ReplAck`, `ReplClose`) over `repl:out:<id>` frames; `ReplAck(id, 0)` attaches, so the banner is never emitted before the terminal subscribed; output is coalesced (16 ms, 64 KiB frames cut at rune boundaries) and flow-controlled by acknowledgements (1 MiB window, never dropping bytes; a window that stops acknowledging for 30 s ends the console); at most 4 consoles; closing or switching the workspace ends them all; the `Completer` now receives the statement so far plus the connection (R1 change); the Console tab follows the "Run on" picker through `Session.Use` / `ReplUse`, which refuses mid-statement, while running, or with text typed; #275 (nested block comments in both gate lexers) and #276 (no statement text in logs, a wider redactor) landed with it. Not in R2: releasing idle sessions' connections, un-hiding `vibe repl` (R5), the Web Inspector or context menu. A console whose window was reloaded (webview reload) and which had acknowledged everything stays open, orphaned, until the workspace closes or the 4-console limit is hit; not fixed in R2. The human checks below are still open | Bindings, events and backpressure. `ReplTerminal.vue`. A **Console** tab in the Query Explorer. Tab completion through `lsp.Live` (A1) | Rodney: open the console, `.tables`, a federated join, Ctrl+C, a theme switch, closing the workspace mid-query. Thin-binding, Vue-size and ast-grep checks green. The R0 human checks pass on the real console (findings section 8.1): dead keys, IME, the row-6 keys on a physical keyboard (Ctrl+C, Ctrl+Shift+C/V, Shift+Insert, middle-click, Alt+B), trackpad and mouse-wheel scrolling during 10k lines (Linux and macOS), 200 % scaling, right-click behaviour, and a window-resize refit |
+| **R1 engine** (1-1.5 wk) **Built 2026-10-28 (#258).** As built: Ctrl+C is intercepted before `x/term` (cancel when running, clear the line when idle); history and `.save` refuse any text the secret redactor would change, gate-refused text and unsafe text, and history refuses symlinks; `duckdb_extract_statements` is not reachable from the driver, so `lsp.Split` is checked against DuckDB by test; the hidden `assay repl` is the first caller | `internal/repl` (session, splitter, dot commands, renderers, history filter, cancel) and `engine.ExecuteOn`. The line editor is `x/term`'s `Terminal` (it works over any `io.ReadWriter`: history, a completion callback, single line, with multi-line made by accumulating) | Golden byte tests per renderer. A fuzz test that no cell value emits ESC/OSC/CSI. History filter tests. Cancel interrupts a long `range()` query. Run-path parity test: the same statement via `RunQuery` and via the console takes the same gates and status updates |
+| **R2 Studio console** (1 wk) **Built 2026-10-29 (#259).** As built: five bindings (`ReplOpen`, `ReplInput`, `ReplResize`, `ReplAck`, `ReplClose`) over `repl:out:<id>` frames; `ReplAck(id, 0)` attaches, so the banner is never emitted before the terminal subscribed; output is coalesced (16 ms, 64 KiB frames cut at rune boundaries) and flow-controlled by acknowledgements (1 MiB window, never dropping bytes; a window that stops acknowledging for 30 s ends the console); at most 4 consoles; closing or switching the workspace ends them all; the `Completer` now receives the statement so far plus the connection (R1 change); the Console tab follows the "Run on" picker through `Session.Use` / `ReplUse`, which refuses mid-statement, while running, or with text typed; #275 (nested block comments in both gate lexers) and #276 (no statement text in logs, a wider redactor) landed with it. Not in R2: releasing idle sessions' connections, un-hiding `assay repl` (R5), the Web Inspector or context menu. A console whose window was reloaded (webview reload) and which had acknowledged everything stays open, orphaned, until the workspace closes or the 4-console limit is hit; not fixed in R2. The human checks below are still open | Bindings, events and backpressure. `ReplTerminal.vue`. A **Console** tab in the Query Explorer. Tab completion through `lsp.Live` (A1) | Rodney: open the console, `.tables`, a federated join, Ctrl+C, a theme switch, closing the workspace mid-query. Thin-binding, Vue-size and ast-grep checks green. The R0 human checks pass on the real console (findings section 8.1): dead keys, IME, the row-6 keys on a physical keyboard (Ctrl+C, Ctrl+Shift+C/V, Shift+Insert, middle-click, Alt+B), trackpad and mouse-wheel scrolling during 10k lines (Linux and macOS), 200 % scaling, right-click behaviour, and a window-resize refit |
 | **R3 script mode** (1 wk) | Editor-to-console run (statement, selection, all), `.grid`, `.save`, "Show as grid" | Rodney: a three-statement script with a temp table runs top to bottom, and the grid opens on the last result |
-| **R4 line editor** (1-2 wk) | Replace `x/term` with Vibe's own editor: multi-line editing, syntax colouring from the `lsp` lexer, a completion popup drawn in the terminal, Ctrl+R history search | Behaviour tests for each key binding, plus a Rodney pass |
-| **R5 parity and hooks** (1 wk) **Part 1 built (#262).** As built: `vibe repl` is un-hidden; the TUI REPL draws results with `repl.RenderDuckbox` (its own formatter is gone; a capped fetch reads "1000+ rows"); the TUI threads `tui.WithContext` through its table, notebook and snapshot reads; `metric()` already expands in `vibe repl` through `hub.PersonExpander`. Still open: receipts (#241) and `.asof` (#246) | `vibe repl`, the TUI adopting the renderers, `docs/reference/console.md` and the architecture tree. Later, as the epics land: receipts for console runs (#241), `.asof` (#246), `metric()` (#244, free through the shared pre-pass) | `internal/docsref` and the docs updated |
+| **R4 line editor** (1-2 wk) | Replace `x/term` with Assay's own editor: multi-line editing, syntax colouring from the `lsp` lexer, a completion popup drawn in the terminal, Ctrl+R history search | Behaviour tests for each key binding, plus a Rodney pass |
+| **R5 parity and hooks** (1 wk) **Part 1 built (#262).** As built: `assay repl` is un-hidden; the TUI REPL draws results with `repl.RenderDuckbox` (its own formatter is gone; a capped fetch reads "1000+ rows"); the TUI threads `tui.WithContext` through its table, notebook and snapshot reads; `metric()` already expands in `assay repl` through `hub.PersonExpander`. Still open: receipts (#241) and `.asof` (#246) | `assay repl`, the TUI adopting the renderers, `docs/reference/console.md` and the architecture tree. Later, as the epics land: receipts for console runs (#241), `.asof` (#246), `metric()` (#244, free through the shared pre-pass) | `internal/docsref` and the docs updated |
 
 The order is **A1-A2 first** (it pays off in the editor, the notebooks and later the console), then R0, and stop if R0 fails on both widgets.
 
@@ -225,7 +225,7 @@ The order is **A1-A2 first** (it pays off in the editor, the notebooks and later
 2. **ghostty-web or xterm.js.** *Decided 2026-10-28 (owner): xterm.js 6.0.0 + fit + webgl, DOM renderer as the fallback.* By the plan's rule ghostty-web is FAIL on row 8 (real paste) and PARTIAL on rows 3 (theme) and 6 (keys); row 10 is a marginal miss and does not decide. xterm.js is PARTIAL on row 6 (two app key bindings) and passed the rest that could be run. On WKWebView ghostty-web also fails row 8 and is PARTIAL on 3, 5 and 6, and xterm.js passes every row run. See [`spike-console-r0-findings.md`](spike-console-r0-findings.md).
 3. **go-libghostty in CI** (adds Zig). *Decided: no; byte-level golden tests.* It builds and works (2 minutes, Zig 0.17.0) but is not worth a Ghostty source build in CI.
 4. **History persistence.** *Default: on, machine-local, filtered as above.*
-5. **`vibe repl` as a CLI command.** *Default: yes in R5; it mirrors the UI.*
+5. **`assay repl` as a CLI command.** *Default: yes in R5; it mirrors the UI.*
 
 ## Sources
 

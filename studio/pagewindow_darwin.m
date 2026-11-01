@@ -1,7 +1,7 @@
 //go:build darwin
 
 // The macOS page window (docs/plans/html-artifacts.md, H4, Spike P1): a WKWebView
-// Vibe owns, in the helper process only. NOT COMPILED OR RUN where it was written
+// Assay owns, in the helper process only. NOT COMPILED OR RUN where it was written
 // (a Linux machine): it follows the P1 spike's working helper
 // (spike/pagehost/mac/followup/pagehost_rules.m), and P4-MAC-QA.md lists what a Mac
 // must check.
@@ -11,7 +11,7 @@
 // layers, all set up before the first load:
 //   1. the strict CSP on every response of the page's scheme;
 //   2. a navigation policy that lets through the first page and same-page links;
-//   3. a WKContentRuleList that blocks every URL except vibe-page:, compiled
+//   3. a WKContentRuleList that blocks every URL except assay-page:, compiled
 //      first, with the first load waiting for the compile callback;
 //   4. a non-persistent data store whose proxyConfigurations point at a dead
 //      loopback port (macOS 14+), so host names are not resolved locally.
@@ -50,7 +50,7 @@ static NSString *gRulesDir = nil;
 // directory), so it can remove the folder after it reaps the helper; the helper's
 // environment holds nothing else. Without it the helper uses its own temporary directory.
 static NSString *rulesParent(void) {
-  const char *p = getenv("VIBE_RULES_PARENT");
+  const char *p = getenv("ASSAY_RULES_PARENT");
   if (p && p[0] == '/') return @(p);
   return NSTemporaryDirectory();
 }
@@ -94,12 +94,12 @@ static int deadProxyPort(void) {
 // What the rule list blocks: every load, then the page's own scheme is let back in.
 static NSString *const kBlockRules =
     @"[{\"trigger\":{\"url-filter\":\".*\"},\"action\":{\"type\":\"block\"}},"
-     "{\"trigger\":{\"url-filter\":\"^vibe-page:\"},\"action\":{\"type\":\"ignore-previous-rules\"}}]";
+     "{\"trigger\":{\"url-filter\":\"^assay-page:\"},\"action\":{\"type\":\"ignore-previous-rules\"}}]";
 
 // A WKWebView with no context menu: nothing in it is the page's to offer.
-@interface VibeWebView : WKWebView
+@interface AssayWebView : WKWebView
 @end
-@implementation VibeWebView
+@implementation AssayWebView
 - (void)willOpenMenu:(NSMenu *)menu withEvent:(NSEvent *)event {
   [menu removeAllItems];
 }
@@ -122,8 +122,8 @@ static NSString *const kBlockRules =
 }
 @end
 
-@interface VibeHost : NSObject <WKURLSchemeHandler, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate>
-@property(strong) VibeWebView *view;
+@interface AssayHost : NSObject <WKURLSchemeHandler, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate>
+@property(strong) AssayWebView *view;
 @property(strong) NSWindow *window;
 @property(copy) NSString *prefix;
 @property(copy) NSURL *startURL;
@@ -132,9 +132,9 @@ static NSString *const kBlockRules =
 @property(assign) BOOL loaded;
 @end
 
-static VibeHost *gHost = nil;
+static AssayHost *gHost = nil;
 
-@implementation VibeHost
+@implementation AssayHost
 
 - (BOOL)isPageURL:(NSString *)u {
   if (![u hasPrefix:self.prefix]) return NO;
@@ -147,7 +147,7 @@ static VibeHost *gHost = nil;
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id<WKURLSchemeTask>)task {
   unsigned long ident = ++self.nextID;
   self.pending[@(ident)] = task;
-  vibePageServe((char *)[task.request.URL.absoluteString UTF8String], ident);
+  assayPageServe((char *)[task.request.URL.absoluteString UTF8String], ident);
 }
 
 - (void)webView:(WKWebView *)webView stopURLSchemeTask:(id<WKURLSchemeTask>)task {
@@ -194,18 +194,18 @@ static VibeHost *gHost = nil;
 }
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {
-  if (!self.loaded) NSLog(@"vibe page: first navigation started");
+  if (!self.loaded) NSLog(@"assay page: first navigation started");
 }
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
   if (!self.loaded) {
     self.loaded = YES;
-    vibePageEvent(EV_LOADED);
+    assayPageEvent(EV_LOADED);
   }
 }
 
 - (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView {
-  vibePageEvent(EV_WEBGONE);
+  assayPageEvent(EV_WEBGONE);
   [NSApp terminate:nil];
 }
 
@@ -231,13 +231,13 @@ static VibeHost *gHost = nil;
 - (void)userContentController:(WKUserContentController *)ucc didReceiveScriptMessage:(WKScriptMessage *)msg {
   if (!msg.frameInfo.isMainFrame) return;
   if (![msg.body isKindOfClass:[NSString class]]) return;
-  vibePageMessage((char *)[(NSString *)msg.body UTF8String]);
+  assayPageMessage((char *)[(NSString *)msg.body UTF8String]);
 }
 
 #pragma mark NSWindowDelegate
 
 - (BOOL)windowShouldClose:(NSWindow *)sender {
-  vibePageEvent(EV_CLOSED);
+  assayPageEvent(EV_CLOSED);
   [NSApp terminate:nil];
   return YES;
 }
@@ -258,7 +258,7 @@ static void installCloseMenu(void) {
   [NSApp setMainMenu:bar];
 }
 
-static WKWebViewConfiguration *makeConfiguration(VibeHost *host, NSString *apiScript) {
+static WKWebViewConfiguration *makeConfiguration(AssayHost *host, NSString *apiScript) {
   WKWebViewConfiguration *cfg = [WKWebViewConfiguration new];
   // Nothing survives the window: no localStorage, IndexedDB or cookie.
   cfg.websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
@@ -278,9 +278,9 @@ static WKWebViewConfiguration *makeConfiguration(VibeHost *host, NSString *apiSc
   } else {
     exit(EXIT_NO_PROXY_API);
   }
-  [cfg setURLSchemeHandler:host forURLScheme:@"vibe-page"];
+  [cfg setURLSchemeHandler:host forURLScheme:@"assay-page"];
   WKUserContentController *ucc = [WKUserContentController new];
-  [ucc addScriptMessageHandler:host name:@"vibe"];
+  [ucc addScriptMessageHandler:host name:@"assay"];
   [ucc addUserScript:[[WKUserScript alloc] initWithSource:apiScript injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES]];
   cfg.userContentController = ucc;
   cfg.preferences.javaScriptCanOpenWindowsAutomatically = NO;
@@ -292,7 +292,7 @@ static WKWebViewConfiguration *makeConfiguration(VibeHost *host, NSString *apiSc
   return cfg;
 }
 
-static NSWindow *makeWindow(VibeHost *host, NSString *title, int width, int height) {
+static NSWindow *makeWindow(AssayHost *host, NSString *title, int width, int height) {
   NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable;
   NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(200, 200, width, height) styleMask:style backing:NSBackingStoreBuffered defer:NO];
   // The native title is fixed. Nothing observes the document's title.
@@ -319,12 +319,12 @@ static void installInputMonitor(void) {
   }];
 }
 
-int vibe_host_take_input(void) {
+int assay_host_take_input(void) {
   uint64_t t = atomic_exchange(&gInputNS, 0);
   return t != 0 && clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - t <= INPUT_WINDOW_NS;
 }
 
-int vibe_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script) {
+int assay_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script) {
   @autoreleasepool {
     [NSApplication sharedApplication];
     // No second Dock icon (P1: ApplicationType=UIElement).
@@ -333,9 +333,9 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
     installInputMonitor();
     // A page that sits behind other windows must keep posting its heartbeat: without
     // this App Nap can slow the helper until the watchdog kills a healthy page.
-    gActivity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Vibe page window"];
+    gActivity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Assay page window"];
 
-    VibeHost *host = [VibeHost new];
+    AssayHost *host = [AssayHost new];
     gHost = host;
     host.prefix = @(prefix);
     host.startURL = [NSURL URLWithString:@(start_uri)];
@@ -343,7 +343,7 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
 
     WKWebViewConfiguration *cfg = makeConfiguration(host, @(api_script));
     host.window = makeWindow(host, @(title), width, height);
-    host.view = [[VibeWebView alloc] initWithFrame:host.window.contentView.bounds configuration:cfg];
+    host.view = [[AssayWebView alloc] initWithFrame:host.window.contentView.bounds configuration:cfg];
     host.view.navigationDelegate = host;
     host.view.UIDelegate = host;
     host.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -359,16 +359,16 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
     // The rule list is compiled into a throwaway store, added before the first
     // load, and the first load waits for it. A list that does not compile is no
     // page window: the helper exits.
-    gRulesDir = [rulesParent() stringByAppendingPathComponent:[NSString stringWithFormat:@"vibe-rules-%d", getpid()]];
+    gRulesDir = [rulesParent() stringByAppendingPathComponent:[NSString stringWithFormat:@"assay-rules-%d", getpid()]];
     atexit(removeRulesDir);
     NSURL *dir = [NSURL fileURLWithPath:gRulesDir];
     WKContentRuleListStore *store = [WKContentRuleListStore storeWithURL:dir];
-    [store compileContentRuleListForIdentifier:@"vibe-page-block" encodedContentRuleList:kBlockRules completionHandler:^(WKContentRuleList *list, NSError *err) {
+    [store compileContentRuleListForIdentifier:@"assay-page-block" encodedContentRuleList:kBlockRules completionHandler:^(WKContentRuleList *list, NSError *err) {
       if (!list) exit(EXIT_RULES_FAILED);
       [host.view.configuration.userContentController addContentRuleList:list];
       // These two lines, in this order, are how a Mac run shows the rule list was in
       // place before the first load (they carry no page data).
-      NSLog(@"vibe page: rule list added, first load next");
+      NSLog(@"assay page: rule list added, first load next");
       [host.view loadRequest:[NSURLRequest requestWithURL:host.startURL]];
     }];
     [NSApp run];
@@ -376,7 +376,7 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
   return 0;
 }
 
-void vibe_host_respond(unsigned long ident, int ok, const char *ctype, const char *csp, const char *body, int len) {
+void assay_host_respond(unsigned long ident, int ok, const char *ctype, const char *csp, const char *body, int len) {
   NSString *ct = @(ctype ? ctype : "application/octet-stream");
   NSString *policy = @(csp ? csp : "");
   NSData *data = ok ? [NSData dataWithBytes:body length:(NSUInteger)(len > 0 ? len : 0)] : [NSData data];
@@ -385,14 +385,14 @@ void vibe_host_respond(unsigned long ident, int ok, const char *ctype, const cha
   });
 }
 
-void vibe_host_eval(const char *js) {
+void assay_host_eval(const char *js) {
   NSString *script = @(js);
   dispatch_async(dispatch_get_main_queue(), ^{
     [gHost.view evaluateJavaScript:script completionHandler:nil];
   });
 }
 
-void vibe_host_quit(void) {
+void assay_host_quit(void) {
   dispatch_async(dispatch_get_main_queue(), ^{
     [NSApp terminate:nil];
   });

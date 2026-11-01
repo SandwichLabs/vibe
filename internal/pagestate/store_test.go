@@ -21,7 +21,7 @@ func open(t *testing.T, root string) *Store {
 	return s
 }
 
-func TestStore_RoundTripAndFileLandsInVibeLocal(t *testing.T) {
+func TestStore_RoundTripAndFileLandsInAssayLocal(t *testing.T) {
 	root := t.TempDir()
 	s := open(t, root)
 	require.NoError(t, s.Set("a", raw(` {"x": [1, 2]} `), nil))
@@ -31,7 +31,7 @@ func TestStore_RoundTripAndFileLandsInVibeLocal(t *testing.T) {
 	assert.True(t, ok)
 	assert.JSONEq(t, `{"x":[1,2]}`, string(v))
 	require.NoError(t, s.Flush())
-	_, err = os.Stat(filepath.Join(root, ".vibe-local", "artifacts", "pg", "state.json"))
+	_, err = os.Stat(filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"))
 	require.NoError(t, err)
 	assert.NoDirExists(t, filepath.Join(root, "artifacts"))
 	// A new store (a reopened window) reads it back.
@@ -89,9 +89,9 @@ func TestStore_WritesAreDebounced(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		require.NoError(t, s.Set("k", raw(`1`), nil))
 	}
-	assert.NoFileExists(t, filepath.Join(root, ".vibe-local", "artifacts", "pg", "state.json"), "nothing written yet")
+	assert.NoFileExists(t, filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"), "nothing written yet")
 	require.Eventually(t, func() bool {
-		_, err := os.Stat(filepath.Join(root, ".vibe-local", "artifacts", "pg", "state.json"))
+		_, err := os.Stat(filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"))
 		return err == nil
 	}, 2*time.Second, 10*time.Millisecond)
 }
@@ -113,7 +113,7 @@ func TestStore_SubscribersHearOtherOriginsOnly(t *testing.T) {
 
 func TestStore_ACorruptOrForeignFileIsRefusedNotReplaced(t *testing.T) {
 	root := t.TempDir()
-	p := filepath.Join(root, ".vibe-local", "artifacts", "pg")
+	p := filepath.Join(root, ".assay-local", "artifacts", "pg")
 	require.NoError(t, os.MkdirAll(p, 0o755))
 	for _, body := range []string{`not json`, `{"version":2,"values":{}}`, `{"version":1,"values":{},"extra":1}`, `{"version":1,"values":{"":1}}`} {
 		require.NoError(t, os.WriteFile(filepath.Join(p, "state.json"), []byte(body), 0o644))
@@ -144,7 +144,7 @@ func TestStore_HTMLCharactersStayOneByteOnDisk(t *testing.T) {
 		require.NoError(t, s.Set("k"+string(rune('a'+i)), raw(val), nil))
 	}
 	require.NoError(t, s.Flush())
-	b, err := os.ReadFile(filepath.Join(root, ".vibe-local", "artifacts", "pg", "state.json"))
+	b, err := os.ReadFile(filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), `\u003c`, "no escaping")
 	assert.Less(t, len(b), MaxTotalBytes+(4<<10), "the file is the size the caps measured")
@@ -167,10 +167,10 @@ func TestStore_ASymlinkedStateFolderIsRefused(t *testing.T) {
 	root := t.TempDir()
 	notes := filepath.Join(root, "notes")
 	require.NoError(t, os.MkdirAll(notes, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".vibe-local", "artifacts"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".assay-local", "artifacts"), 0o755))
 	for name, link := range map[string]string{
-		"artifact folder": filepath.Join(root, ".vibe-local", "artifacts", "pg"),
-		"artifacts":       filepath.Join(root, ".vibe-local", "artifacts"),
+		"artifact folder": filepath.Join(root, ".assay-local", "artifacts", "pg"),
+		"artifacts":       filepath.Join(root, ".assay-local", "artifacts"),
 	} {
 		_ = os.RemoveAll(link)
 		require.NoError(t, os.Symlink(map[string]string{"artifact folder": "../../notes", "artifacts": "../notes"}[name], link), name)
@@ -185,7 +185,7 @@ func TestStore_ASymlinkedStateFolderIsRefused(t *testing.T) {
 		}
 	}
 	// A link as the file itself.
-	dir := filepath.Join(root, ".vibe-local", "artifacts", "pg")
+	dir := filepath.Join(root, ".assay-local", "artifacts", "pg")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.Symlink("../../../notes/state.json", filepath.Join(dir, "state.json")))
 	assert.ErrorIs(t, open(t, root).Set("k", raw(`1`), nil), ErrUnsafe)
@@ -229,7 +229,7 @@ func TestStore_LineSeparatorsAreMeasuredInTheFormThatIsWritten(t *testing.T) {
 		_ = s.Set("m"+string(rune('a'+i)), raw(under), nil)
 	}
 	require.NoError(t, s.Flush())
-	b, err := os.ReadFile(filepath.Join(root, ".vibe-local", "artifacts", "pg", "state.json"))
+	b, err := os.ReadFile(filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"))
 	require.NoError(t, err)
 	assert.Less(t, len(b), MaxTotalBytes+(4<<10))
 	again := open(t, root)

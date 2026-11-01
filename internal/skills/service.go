@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // SkillEntry is one skill as the merged built-in + stored view sees it:
@@ -138,7 +138,7 @@ func loadStoredSkills(ctx context.Context, store Store, logger *slog.Logger) ([]
 }
 
 // LoadSkills merges built-in skills with the stored skills (the workspace's
-// skills/<name>/SKILL.md files, or a legacy .vibe's _vibe_skills), applying
+// skills/<name>/SKILL.md files, or a legacy .assay's _vibe_skills), applying
 // table gating through the session: an entry with a non-empty
 // TableName is dropped unless that table exists in the live DuckDB catalog
 // and has at least one row (the import wizard's workspace-<table> skills,
@@ -147,7 +147,7 @@ func loadStoredSkills(ctx context.Context, store Store, logger *slog.Logger) ([]
 // ChatVisibleSkills for that.
 //
 // Stored skills are NOT trusted just because they're in the store: a shared
-// workspace or .vibe can carry a skill a stranger authored (or one restored from an
+// workspace or .assay can carry a skill a stranger authored (or one restored from an
 // old/corrupted export), so every stored row is re-validated against the
 // exact same name rule SaveUserSkillAt enforces on write — a name that fails
 // NamePattern, or one that collides with a built-in name, is dropped
@@ -532,7 +532,7 @@ func importSkillName(store Store, table string) string {
 
 // WriteImportSkill writes/refreshes a `workspace-<table>` skill (source =
 // 'import' on first creation) describing a just-imported table, called by
-// the Studio ImportFile binding and `vibe import`/`init --import` after a
+// the Studio ImportFile binding and `assay import`/`init --import` after a
 // successful import — no LLM call involved, purely facts derived from the
 // live schema. Only the generated block (row count + "## Columns as
 // stored", between importSkillGenBegin/End) is replaced on a re-import;

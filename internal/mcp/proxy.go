@@ -20,7 +20,7 @@ import (
 // ErrUpstreamLost is returned by ProxyStdio when the server it was bridging to
 // went away (Studio quit, MCP turned off, the token stopped working). Callers
 // exit non-zero on it.
-var ErrUpstreamLost = errors.New("the Vibe workspace owner stopped serving MCP")
+var ErrUpstreamLost = errors.New("the Assay workspace owner stopped serving MCP")
 
 // jsonRPCUpstreamLost is the JSON-RPC error code ProxyStdio answers requests
 // with once the upstream is gone (-32000..-32099 is the implementation range).
@@ -42,7 +42,7 @@ type ProxyConfig struct {
 }
 
 // ProxyStdio bridges a stdio MCP client (in/out: one JSON-RPC message per
-// line) to a Vibe MCP server over SSE. It is a transparent byte pipe, not an
+// line) to an Assay MCP server over SSE. It is a transparent byte pipe, not an
 // MCP client: every `message` event on the SSE stream is copied verbatim to
 // out (responses, notifications and server-to-client requests alike), and every
 // line from in is POSTed verbatim to the server's message endpoint (requests,
@@ -181,7 +181,7 @@ func scanLines(ctx context.Context, in io.Reader) (<-chan inLine, <-chan error) 
 	return lines, scanErr
 }
 
-const upstreamLostMessage = "Vibe stopped serving this workspace over MCP (Studio quit or turned MCP off). Reconnect to continue."
+const upstreamLostMessage = "Assay stopped serving this workspace over MCP (Studio quit or turned MCP off). Reconnect to continue."
 
 // serve forwards the client's lines until stdin ends, ctx is cancelled or the
 // upstream is lost.
@@ -378,7 +378,7 @@ func (p *proxy) forward(ctx context.Context, line []byte) error {
 		if isConnRefused(err) {
 			return ErrUpstreamLost
 		}
-		p.answerError(e, "Vibe could not pass this message to the workspace's MCP server.")
+		p.answerError(e, "Assay could not pass this message to the workspace's MCP server.")
 		return nil
 	}
 	defer resp.Body.Close() //nolint:errcheck

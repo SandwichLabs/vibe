@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // PersonGuard is the courtesy gate a surface holds SQL a person typed to
@@ -88,7 +88,7 @@ func PersonExpander(ws workspace.Workspace, sess session.Session, logger *slog.L
 // PrepareExport is PrepareForPerson for text that goes inside COPY (...): the
 // expanded statement must also be exactly one SELECT by DuckDB's own parser, so
 // nothing can be smuggled in after a closing parenthesis. Both exports (Studio's
-// dialog and `vibe export --sql`) call it.
+// dialog and `assay export --sql`) call it.
 func PrepareExport(ctx context.Context, ws workspace.Workspace, sess session.Session, logger *slog.Logger, run PersonRun) (*workspace.PersonExpansion, error) {
 	exp, err := PrepareForPerson(ctx, ws, sess, logger, run)
 	if err != nil {

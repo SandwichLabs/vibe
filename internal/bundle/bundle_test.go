@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // newWS opens a fresh workspace whose credentials live in memory and whose
@@ -51,7 +51,7 @@ func seed(t *testing.T, ws workspace.Workspace) map[string][]byte {
 	require.NoError(t, ws.Queries().Create(ctx, q))
 	require.NoError(t, ws.Skills().Put(ctx, &skills.Stored{Name: "revenue-notes", Description: "How revenue is counted", Instructions: "# Revenue\n\nNet of refunds.", Source: skills.SourceUser}))
 	out := map[string][]byte{}
-	for _, rel := range []string{"notebooks/" + nb.ID + ".vnb", "queries/" + q.ID + ".sql", "skills/revenue-notes/SKILL.md"} {
+	for _, rel := range []string{"notebooks/" + nb.ID + ".asnb", "queries/" + q.ID + ".sql", "skills/revenue-notes/SKILL.md"} {
 		b, err := os.ReadFile(filepath.Join(ws.Root(), filepath.FromSlash(rel)))
 		require.NoError(t, err)
 		out[rel] = b
@@ -186,7 +186,7 @@ func goodNotebook(t *testing.T) []byte {
 	ws, _ := newWS(t)
 	nb, err := ws.Notebooks().Create(context.Background(), "N")
 	require.NoError(t, err)
-	b, err := os.ReadFile(filepath.Join(ws.Root(), "notebooks", nb.ID+".vnb"))
+	b, err := os.ReadFile(filepath.Join(ws.Root(), "notebooks", nb.ID+".asnb"))
 	require.NoError(t, err)
 	return b
 }
@@ -225,13 +225,13 @@ func TestUnsafeAndUnknownEntriesAreRefused(t *testing.T) {
 	cases := map[string]string{
 		"zip-slip":         "notebooks/../../etc/passwd",
 		"absolute":         "/etc/passwd",
-		"windows drive":    "C:/evil.vnb",
-		"backslash":        `notebooks\evil.vnb`,
+		"windows drive":    "C:/evil.asnb",
+		"backslash":        `notebooks\evil.asnb`,
 		"unknown top dir":  "data/local.duckdb",
 		"unknown in dir":   "notebooks/readme.txt",
-		"nested":           "notebooks/sub/a.vnb",
-		"bad id":           "notebooks/Bad Name.vnb",
-		"dot segment":      "notebooks/./a.vnb",
+		"nested":           "notebooks/sub/a.asnb",
+		"bad id":           "notebooks/Bad Name.asnb",
+		"dot segment":      "notebooks/./a.asnb",
 		"extra root file":  "evil.sh",
 		"duckdb":           "queries/a.duckdb",
 		"skill extra file": "skills/foo/run.sh",
@@ -239,7 +239,7 @@ func TestUnsafeAndUnknownEntriesAreRefused(t *testing.T) {
 	}
 	for name, entry := range cases {
 		t.Run(name, func(t *testing.T) {
-			data := build(t, map[string][]byte{"notebooks/ok.vnb": nb, entry: []byte("x")}, nil)
+			data := build(t, map[string][]byte{"notebooks/ok.asnb": nb, entry: []byte("x")}, nil)
 			_, err := Open(data, "")
 			require.ErrorIs(t, err, ErrCorrupt)
 		})
@@ -251,11 +251,11 @@ func TestSymlinkEntryIsRefused(t *testing.T) {
 	zw := zip.NewWriter(&buf)
 	nb := goodNotebook(t)
 	sum := sha256.Sum256([]byte("/etc/passwd"))
-	man := Manifest{Kind: Kind, FormatVersion: 2, Contents: []Entry{{Path: "notebooks/link.vnb", Kind: KindNotebook, ID: "link", SHA256: hex.EncodeToString(sum[:]), Size: 11}}}
+	man := Manifest{Kind: Kind, FormatVersion: 2, Contents: []Entry{{Path: "notebooks/link.asnb", Kind: KindNotebook, ID: "link", SHA256: hex.EncodeToString(sum[:]), Size: 11}}}
 	mb, _ := json.Marshal(man)
 	w, _ := zw.Create(ManifestName)
 	_, _ = w.Write(mb)
-	h := &zip.FileHeader{Name: "notebooks/link.vnb", Method: zip.Store}
+	h := &zip.FileHeader{Name: "notebooks/link.asnb", Method: zip.Store}
 	h.SetMode(os.ModeSymlink | 0o777)
 	lw, err := zw.CreateHeader(h)
 	require.NoError(t, err)
@@ -270,19 +270,19 @@ func TestSymlinkEntryIsRefused(t *testing.T) {
 func TestManifestMustMatchArchive(t *testing.T) {
 	nb := goodNotebook(t)
 	t.Run("entry not listed", func(t *testing.T) {
-		data := build(t, map[string][]byte{"notebooks/a.vnb": nb, "notebooks/b.vnb": nb}, func(m *Manifest) { m.Contents = m.Contents[:1] })
+		data := build(t, map[string][]byte{"notebooks/a.asnb": nb, "notebooks/b.asnb": nb}, func(m *Manifest) { m.Contents = m.Contents[:1] })
 		_, err := Open(data, "")
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 	t.Run("listed but absent", func(t *testing.T) {
-		data := build(t, map[string][]byte{"notebooks/a.vnb": nb}, func(m *Manifest) {
-			m.Contents = append(m.Contents, Entry{Path: "notebooks/zz.vnb", Kind: KindNotebook, ID: "zz", SHA256: strings.Repeat("0", 64)})
+		data := build(t, map[string][]byte{"notebooks/a.asnb": nb}, func(m *Manifest) {
+			m.Contents = append(m.Contents, Entry{Path: "notebooks/zz.asnb", Kind: KindNotebook, ID: "zz", SHA256: strings.Repeat("0", 64)})
 		})
 		_, err := Open(data, "")
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 	t.Run("unknown manifest field", func(t *testing.T) {
-		raw := []byte(`{"kind":"vibe/bundle","formatVersion":2,"contents":[],"extra":1}`)
+		raw := []byte(`{"kind":"assay/bundle","formatVersion":2,"contents":[],"extra":1}`)
 		_, err := Open(build(t, map[string][]byte{ManifestName: raw}, nil), "")
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
@@ -292,7 +292,7 @@ func TestManifestMustMatchArchive(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotBundle)
 	})
 	t.Run("newer format", func(t *testing.T) {
-		raw := []byte(`{"kind":"vibe/bundle","formatVersion":3}`)
+		raw := []byte(`{"kind":"assay/bundle","formatVersion":3}`)
 		_, err := Open(build(t, map[string][]byte{ManifestName: raw}, nil), "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "newer version")
@@ -302,7 +302,7 @@ func TestManifestMustMatchArchive(t *testing.T) {
 func TestZipBombIsCapped(t *testing.T) {
 	t.Run("one entry over the per-entry cap", func(t *testing.T) {
 		big := bytes.Repeat([]byte{' '}, MaxEntryBytes+1)
-		data := build(t, map[string][]byte{"notebooks/big.vnb": big}, nil)
+		data := build(t, map[string][]byte{"notebooks/big.asnb": big}, nil)
 		assert.Less(t, len(data), 1<<20, "the archive itself is tiny")
 		_, err := Open(data, "")
 		require.ErrorIs(t, err, ErrTooLarge)
@@ -313,7 +313,7 @@ func TestZipBombIsCapped(t *testing.T) {
 		nb := goodNotebook(t)
 		body := append(append([]byte{}, nb[:len(nb)-1]...), pad...)
 		for i := 0; i < 6; i++ {
-			entries[fmt.Sprintf("notebooks/n%d.vnb", i)] = body
+			entries[fmt.Sprintf("notebooks/n%d.asnb", i)] = body
 		}
 		_, err := Open(build(t, entries, nil), "")
 		require.ErrorIs(t, err, ErrTooLarge)
@@ -327,7 +327,7 @@ func TestZipBombIsCapped(t *testing.T) {
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 	t.Run("file read from disk over the cap", func(t *testing.T) {
-		p := filepath.Join(t.TempDir(), "huge.vibe")
+		p := filepath.Join(t.TempDir(), "huge.assay")
 		f, err := os.Create(p)
 		require.NoError(t, err)
 		require.NoError(t, f.Truncate(MaxFileBytes+1))
@@ -338,7 +338,7 @@ func TestZipBombIsCapped(t *testing.T) {
 }
 
 func TestLegacyFilesGetAPlainError(t *testing.T) {
-	const msg = "This is an older .vibe file that holds data. Vibe no longer opens these."
+	const msg = "This is an older Vibe file that holds data. Assay doesn't open these."
 	t.Run("sqlite header", func(t *testing.T) {
 		_, err := Open(append([]byte("SQLite format 3\x00"), make([]byte, 100)...), "")
 		require.ErrorIs(t, err, ErrLegacy)
@@ -354,7 +354,7 @@ func TestLegacyFilesGetAPlainError(t *testing.T) {
 		assert.NotErrorIs(t, err, ErrLegacy)
 	})
 	t.Run("zip manifest formatVersion 1", func(t *testing.T) {
-		raw := []byte(`{"kind":"vibe/bundle","formatVersion":1}`)
+		raw := []byte(`{"kind":"assay/bundle","formatVersion":1}`)
 		_, err := Open(build(t, map[string][]byte{ManifestName: raw}, nil), "")
 		require.ErrorIs(t, err, ErrLegacy)
 	})
@@ -432,9 +432,9 @@ func TestConnectionsAreStrippedAndImportedLocalWithoutCredentials(t *testing.T) 
 	}
 	assert.ElementsMatch(t, []string{"warehouse", "lake"}, names)
 	for _, c := range dst.Config().Connections {
-		assert.NotContains(t, []string{"warehouse", "lake", "scratch"}, c.Name, "never written to the committed vibe.yaml")
+		assert.NotContains(t, []string{"warehouse", "lake", "scratch"}, c.Name, "never written to the committed assay.yaml")
 	}
-	y, err := os.ReadFile(filepath.Join(dst.Root(), "vibe.yaml"))
+	y, err := os.ReadFile(filepath.Join(dst.Root(), "assay.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(y), "warehouse")
 	st, err := dst.CredentialStatus(ctx, "warehouse")
@@ -517,11 +517,11 @@ func TestBuiltinSkillNamesCannotBeShadowed(t *testing.T) {
 
 func TestInvalidContentRefusesTheBundle(t *testing.T) {
 	t.Run("notebook", func(t *testing.T) {
-		_, err := Open(build(t, map[string][]byte{"notebooks/a.vnb": []byte("not json")}, nil), "")
+		_, err := Open(build(t, map[string][]byte{"notebooks/a.asnb": []byte("not json")}, nil), "")
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 	t.Run("query header", func(t *testing.T) {
-		_, err := Open(build(t, map[string][]byte{"queries/a.sql": []byte("-- vibe: {broken\nSELECT 1\n")}, nil), "")
+		_, err := Open(build(t, map[string][]byte{"queries/a.sql": []byte("-- assay: {broken\nSELECT 1\n")}, nil), "")
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 	t.Run("skill name mismatch", func(t *testing.T) {
@@ -573,7 +573,7 @@ func TestConflictModes(t *testing.T) {
 		return err == nil
 	}
 	qRel := "queries/" + strings.TrimPrefix(qKey, "query/") + ".sql"
-	nbRel := "notebooks/" + nbID + ".vnb"
+	nbRel := "notebooks/" + nbID + ".asnb"
 
 	t.Run("preview marks conflicts", func(t *testing.T) {
 		pv := pkg.Preview(context.Background(), setup(t))
@@ -589,7 +589,7 @@ func TestConflictModes(t *testing.T) {
 		require.Zero(t, out.Failed(), "%+v", out.Outcomes)
 		assert.Equal(t, before, read(dst, "skills/revenue-notes/SKILL.md"), "the existing skill is untouched")
 		assert.Equal(t, strings.Replace(string(files["skills/revenue-notes/SKILL.md"]), "name: revenue-notes", "name: revenue-notes-2", 1), norm(read(dst, "skills/revenue-notes-2/SKILL.md")))
-		assert.True(t, exists(dst, strings.TrimSuffix(nbRel, ".vnb")+"-2.vnb"))
+		assert.True(t, exists(dst, strings.TrimSuffix(nbRel, ".asnb")+"-2.asnb"))
 		assert.True(t, exists(dst, strings.TrimSuffix(qRel, ".sql")+"-2.sql"))
 		// A second import renames again, to -3.
 		_, err = pkg.Import(ctx, dst, ImportOptions{})
@@ -713,7 +713,7 @@ func TestExportSelection(t *testing.T) {
 			nbRel = rel
 		}
 	}
-	id := strings.TrimSuffix(strings.TrimPrefix(nbRel, "notebooks/"), ".vnb")
+	id := strings.TrimSuffix(strings.TrimPrefix(nbRel, "notebooks/"), ".asnb")
 	res, err := Export(ctx, ws, ExportOptions{Selection: Selection{Notebooks: []string{id}}})
 	require.NoError(t, err)
 	require.Len(t, res.Manifest.Contents, 1)

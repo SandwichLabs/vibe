@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // Mock is an in-memory Store for tests of packages that depend on one. It

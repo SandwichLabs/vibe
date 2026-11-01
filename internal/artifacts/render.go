@@ -27,7 +27,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
 )
 
 // Render limits.

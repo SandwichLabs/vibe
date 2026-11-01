@@ -12,7 +12,7 @@ package main
 import (
 	"context"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // openGrant is a grant or window held for an artifact, with the hash it is for.

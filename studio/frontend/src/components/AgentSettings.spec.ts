@@ -34,7 +34,7 @@ function makeApp(returns: Partial<WorkspaceInfo> = {}) {
 describe('AgentSettings (two layers)', () => {
   beforeEach(() => { _resetForTests(); workspaceInfo.value = info() })
 
-  it('shows this person\'s tier and gate, and what the agent can change', () => {
+  it('shows this person\'s tier and gate, and what the assistant can change', () => {
     makeApp()
     const w = mount(AgentSettings, { global: { stubs: { Icon: true } } })
     expect(w.find('[data-testid="agent-sandbox-read-write"]').attributes('aria-pressed')).toBe('true')
@@ -44,7 +44,7 @@ describe('AgentSettings (two layers)', () => {
     expect(table.text()).toContain('prod_pg')
     expect(table.text()).toContain('always asks first')
     expect(table.text()).not.toContain('ro ')
-    expect(table.text()).toContain('Read-only. The agent can look but not change.')
+    expect(table.text()).toContain('Read-only. The assistant can look but not change.')
   })
 
   it('this-computer changes save through SetWorkspaceSettings keeping the committed fields', async () => {
@@ -130,14 +130,14 @@ describe('AgentSettings (two layers)', () => {
 describe('AgentSettings stale form', () => {
   beforeEach(() => { _resetForTests(); workspaceInfo.value = info() })
 
-  it('a refusal because vibe.yaml changed shows plain words and a Reload settings button', async () => {
-    const app = { SetWorkspaceSettings: vi.fn(async () => { throw new Error("conflict: the team's agent limit in vibe.yaml changed since Settings was opened.") }), GetWorkspaceInfo: vi.fn(async () => info({ teamSandboxSet: true, team: { sandbox: 'read-only', askBeforeWrites: false } })) }
+  it('a refusal because assay.yaml changed shows plain words and a Reload settings button', async () => {
+    const app = { SetWorkspaceSettings: vi.fn(async () => { throw new Error("conflict: the team's agent limit in assay.yaml changed since Settings was opened.") }), GetWorkspaceInfo: vi.fn(async () => info({ teamSandboxSet: true, team: { sandbox: 'read-only', askBeforeWrites: false } })) }
     ;(globalThis as any).window = (globalThis as any).window || {}
     ;(window as any).go = { main: { App: app } }
     const w = mount(AgentSettings, { global: { stubs: { Icon: true } } })
     await w.find('[data-testid="agent-sandbox-full"]').trigger('click')
     await flushPromises()
-    expect(w.text()).toContain("Error: the team's agent limit in vibe.yaml changed")
+    expect(w.text()).toContain("Error: the team's agent limit in assay.yaml changed")
     expect(w.text()).not.toContain('conflict:')
     await w.find('[data-testid="reload-settings"]').trigger('click')
     await flushPromises()

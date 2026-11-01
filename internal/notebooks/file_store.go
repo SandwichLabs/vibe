@@ -10,15 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
-// FileStore keeps notebooks as notebooks/<id>.vnb under a workspace root.
+// FileStore keeps notebooks as notebooks/<id>.asnb under a workspace root.
 //
 // # Identity
 //
 // A notebook's id is its file stem ("weekly-revenue" for
-// notebooks/weekly-revenue.vnb). The file carries no id of its own, so a
+// notebooks/weekly-revenue.asnb). The file carries no id of its own, so a
 // rename in an editor or `git mv` is simply a new id, and nothing inside a
 // file can disagree with where it lives. Create derives the stem from the
 // title and picks the first free "-2", "-3", ... when it is taken. Rename

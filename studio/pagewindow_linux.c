@@ -1,11 +1,11 @@
 //go:build linux && webkit2_41
 
 /* The Linux page window (docs/plans/html-artifacts.md, H4): a WebKitGTK view
- * Vibe owns, in the helper process only. The helper runs under the network
+ * Assay owns, in the helper process only. The helper runs under the network
  * gate (pagehost_gate_linux.go), so the view has no network of its own; what
  * is here is the rest of the confinement:
  *   - an ephemeral data manager and the web-process sandbox switched on;
- *   - the page served from memory under vibe-page://<name>/, every response
+ *   - the page served from memory under assay-page://<name>/, every response
  *     carrying the page CSP;
  *   - a navigation policy that lets through the first page and same-page
  *     links only, and refuses new windows, downloads and every permission;
@@ -33,7 +33,7 @@ static int g_loaded = 0;
 /* The person's input, seen by the native widget before the page can see it. A
  * page that posts straight to the message handler cannot make one of these: the
  * gesture the `download` capability needs is checked here, outside the web
- * process (vibe_host_take_input). One physical input is one unit; a held key's
+ * process (assay_host_take_input). One physical input is one unit; a held key's
  * repeats are not new inputs, and Escape is not one. */
 static gint64 g_input_us = 0;
 static guint8 g_keys_down[256 / 8]; /* hardware keycodes now held, to tell a fresh press from an auto-repeat */
@@ -41,7 +41,7 @@ static guint8 g_keys_down[256 / 8]; /* hardware keycodes now held, to tell a fre
 
 static void note_input(void) { __atomic_store_n(&g_input_us, g_get_monotonic_time(), __ATOMIC_SEQ_CST); }
 
-int vibe_host_take_input(void) {
+int assay_host_take_input(void) {
   gint64 t = __atomic_exchange_n(&g_input_us, 0, __ATOMIC_SEQ_CST);
   return t != 0 && g_get_monotonic_time() - t <= INPUT_WINDOW_US;
 }
@@ -72,7 +72,7 @@ static void on_message(WebKitUserContentManager *m, WebKitJavascriptResult *r, g
   JSCValue *v = webkit_javascript_result_get_js_value(r);
   if (!jsc_value_is_string(v)) return;
   char *s = jsc_value_to_string(v);
-  vibePageMessage(s);
+  assayPageMessage(s);
   g_free(s);
 }
 
@@ -80,7 +80,7 @@ static void on_scheme(WebKitURISchemeRequest *req, gpointer ud) {
   static unsigned long next_id = 0;
   unsigned long id = ++next_id;
   g_hash_table_insert(g_pending, GSIZE_TO_POINTER(id), g_object_ref(req));
-  vibePageServe((char *)webkit_uri_scheme_request_get_uri(req), id);
+  assayPageServe((char *)webkit_uri_scheme_request_get_uri(req), id);
 }
 
 typedef struct {
@@ -127,7 +127,7 @@ static gboolean do_respond(gpointer p) {
   return G_SOURCE_REMOVE;
 }
 
-void vibe_host_respond(unsigned long id, int ok, const char *ctype, const char *csp, const char *body, int len) {
+void assay_host_respond(unsigned long id, int ok, const char *ctype, const char *csp, const char *body, int len) {
   RespJob *j = g_new0(RespJob, 1);
   j->id = id;
   j->ok = ok;
@@ -197,17 +197,17 @@ static gboolean on_file_chooser(WebKitWebView *v, WebKitFileChooserRequest *r, g
 }
 static void on_download(WebKitWebContext *c, WebKitDownload *d, gpointer ud) { webkit_download_cancel(d); }
 static void on_crash(WebKitWebView *v, WebKitWebProcessTerminationReason r, gpointer ud) {
-  vibePageEvent(EV_WEBGONE);
+  assayPageEvent(EV_WEBGONE);
   gtk_main_quit();
 }
 static void on_load(WebKitWebView *v, WebKitLoadEvent e, gpointer ud) {
   if (e == WEBKIT_LOAD_FINISHED && !g_loaded) {
     g_loaded = 1;
-    vibePageEvent(EV_LOADED);
+    assayPageEvent(EV_LOADED);
   }
 }
 static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer ud) {
-  vibePageEvent(EV_CLOSED);
+  assayPageEvent(EV_CLOSED);
   gtk_main_quit();
   return FALSE;
 }
@@ -228,14 +228,14 @@ static gboolean do_eval(gpointer p) {
   g_free(j);
   return G_SOURCE_REMOVE;
 }
-void vibe_host_eval(const char *js) {
+void assay_host_eval(const char *js) {
   EvalJob *j = g_new0(EvalJob, 1);
   j->js = g_strdup(js);
   g_idle_add(do_eval, j);
 }
 
 static gboolean do_quit(gpointer p) { gtk_main_quit(); return G_SOURCE_REMOVE; }
-void vibe_host_quit(void) { g_idle_add(do_quit, NULL); }
+void assay_host_quit(void) { g_idle_add(do_quit, NULL); }
 
 static WebKitSettings *make_settings(void) {
   WebKitSettings *st = webkit_settings_new();
@@ -265,7 +265,7 @@ static WebKitSettings *make_settings(void) {
   return st;
 }
 
-int vibe_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script) {
+int assay_host_run(const char *start_uri, const char *prefix, const char *title, int width, int height, const char *api_script) {
   g_prefix = g_strdup(prefix);
   g_pending = g_hash_table_new(g_direct_hash, g_direct_equal);
   if (!gtk_init_check(NULL, NULL)) return 2;
@@ -278,14 +278,14 @@ int vibe_host_run(const char *start_uri, const char *prefix, const char *title, 
   if (!webkit_web_context_get_sandbox_enabled(ctx)) return 3;
 
   WebKitSecurityManager *sm = webkit_web_context_get_security_manager(ctx);
-  webkit_security_manager_register_uri_scheme_as_secure(sm, "vibe-page");
-  webkit_security_manager_register_uri_scheme_as_cors_enabled(sm, "vibe-page");
-  webkit_web_context_register_uri_scheme(ctx, "vibe-page", on_scheme, NULL, NULL);
+  webkit_security_manager_register_uri_scheme_as_secure(sm, "assay-page");
+  webkit_security_manager_register_uri_scheme_as_cors_enabled(sm, "assay-page");
+  webkit_web_context_register_uri_scheme(ctx, "assay-page", on_scheme, NULL, NULL);
   g_signal_connect(ctx, "download-started", G_CALLBACK(on_download), NULL);
 
   WebKitUserContentManager *ucm = webkit_user_content_manager_new();
-  webkit_user_content_manager_register_script_message_handler(ucm, "vibe");
-  g_signal_connect(ucm, "script-message-received::vibe", G_CALLBACK(on_message), NULL);
+  webkit_user_content_manager_register_script_message_handler(ucm, "assay");
+  g_signal_connect(ucm, "script-message-received::assay", G_CALLBACK(on_message), NULL);
   WebKitUserScript *us = webkit_user_script_new(api_script, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,
                                                 WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, NULL, NULL);
   webkit_user_content_manager_add_script(ucm, us);

@@ -281,8 +281,8 @@ func TestVetPage_URLAttributeAllowList(t *testing.T) {
 		`<style>p { background: url(assets/bg.png) } /* url(http://x) */</style>`,
 		`<style>p { width: {{ param "top" }}px }</style>`,
 		`<meta charset="utf-8"><meta name="viewport" content="width=device-width">`,
-		`<script src="vibe-lib/d3-scale.js"></script>`,
-		`<script src="vibe-lib/vega-lite.js"></script>`,
+		`<script src="assay-lib/d3-scale.js"></script>`,
+		`<script src="assay-lib/vega-lite.js"></script>`,
 	}
 	for _, h := range ok {
 		_, err := vetIndex(t, h)
@@ -323,14 +323,14 @@ func TestVetPage_URLAttributeAllowList(t *testing.T) {
 		`<a href="assets/a.svg" ping="https://x.test/">x</a>`,
 		`<a href="assets/a.svg" download>x</a>`,
 		`<a href="assets/a.svg" TARGET=_blank>x</a>`,
-		`<script src="vibe-lib/x.css"></script>`,
-		`<script src="vibe-lib/../x.js"></script>`,
-		`<script src="vibe-lib/a/b.js"></script>`,
-		`<script src="/vibe-lib/d3.js"></script>`,
-		`<script src="vibe-lib/d3.js?x=1"></script>`,
-		`<script src="vibe-lib/{{ param "top" }}.js"></script>`,
-		`<img src="vibe-lib/d3.js">`,
-		`<link rel="stylesheet" href="vibe-lib/d3.js">`,
+		`<script src="assay-lib/x.css"></script>`,
+		`<script src="assay-lib/../x.js"></script>`,
+		`<script src="assay-lib/a/b.js"></script>`,
+		`<script src="/assay-lib/d3.js"></script>`,
+		`<script src="assay-lib/d3.js?x=1"></script>`,
+		`<script src="assay-lib/{{ param "top" }}.js"></script>`,
+		`<img src="assay-lib/d3.js">`,
+		`<link rel="stylesheet" href="assay-lib/d3.js">`,
 		`<link rel="preconnect" href="https://x.test">`,
 		`<link rel="dns-prefetch" href="//x.test">`,
 		`<link rel="stylesheet" href="https://x.test/a.css">`,
@@ -403,9 +403,9 @@ func TestVetPage_FileSetRules(t *testing.T) {
 		"template in assets":    func(f map[string]string) { f["assets/p.tmpl"] = "x" },
 		"folder outside assets": func(f map[string]string) { f["js/app.js"] = "1" },
 		"too deep":              func(f map[string]string) { f["assets/a/b/c.json"] = "{}" },
-		"reserved _vibe":        func(f map[string]string) { f["_vibe/theme.css"] = "x" },
-		"reserved vibe-lib":     func(f map[string]string) { f["vibe-lib/d3.js"] = "x" },
-		"reserved file name":    func(f map[string]string) { f["vibe-lib"] = "x" },
+		"reserved _assay":       func(f map[string]string) { f["_assay/theme.css"] = "x" },
+		"reserved assay-lib":    func(f map[string]string) { f["assay-lib/d3.js"] = "x" },
+		"reserved file name":    func(f map[string]string) { f["assay-lib"] = "x" },
 		"dot dot":               func(f map[string]string) { f["assets/../x.json"] = "{}" },
 		"absolute":              func(f map[string]string) { f["/x.json"] = "{}" },
 		"backslash":             func(f map[string]string) { f["assets\\x.json"] = "{}" },
@@ -517,10 +517,10 @@ func TestPageHash_ChangesWithEveryPartOfTheFileSet(t *testing.T) {
 }
 
 // TestViewHash_Golden pins ViewHash: the hashes of view: script artifacts
-// people already allowed must never change.
+// people already allowed must never change (they reset once, with the domain tag, in the Vibe to Assay rename).
 func TestViewHash_Golden(t *testing.T) {
 	got := mustHash(t, []byte("version: 1\n"), []ViewPart{{Path: ScriptFile, Data: []byte("draw()")}})
-	assert.Equal(t, "c3d338e599c10549a2d5c14ccbfd3f6c3e491086c57ff7d815df8442b40dd8b7", got)
+	assert.Equal(t, "3e6d35498da5f7e6870df04f2ad2d2354e18ac8f388aa786f965833351bbb92f", got)
 }
 
 // mustNotBeStatic runs an index (and partials) through the vet: it must be

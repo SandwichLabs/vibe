@@ -1,23 +1,23 @@
-// Package workspace is the folder-shaped unit of a Vibe project (plan §4.1):
-// a directory with a committed vibe.yaml marker, notebooks, queries and skills
+// Package workspace is the folder-shaped unit of an Assay project (plan §4.1):
+// a directory with a committed assay.yaml marker, notebooks, queries and skills
 // as plain files, and connection definitions merged from three scopes.
 //
 //	acme-analytics/
-//	├── vibe.yaml            committed: id, name, default_connection, agent ceiling,
+//	├── assay.yaml            committed: id, name, default_connection, agent ceiling,
 //	│                        shared connection definitions (no secrets)
-//	├── notebooks/*.vnb      one notebook per file
-//	├── queries/*.sql        SQL with a `-- vibe:` header
+//	├── notebooks/*.asnb      one notebook per file
+//	├── queries/*.sql        SQL with a `-- assay:` header
 //	├── skills/<name>/SKILL.md
 //	├── data/                local files and local .duckdb files
 //	├── .gitignore, .gitattributes
-//	└── .vibe-local/         never committed: connections.yaml (this machine's
+//	└── .assay-local/         never committed: connections.yaml (this machine's
 //	                         connections and per-person settings), state.json
 //
 // # Scopes
 //
 // Connection definitions come from three files, merged most-specific-wins:
-// local (.vibe-local/connections.yaml) beats shared (vibe.yaml) beats user
-// (<config dir>/vibe/connections.yaml, honouring VIBE_CONFIG_DIR). The
+// local (.assay-local/connections.yaml) beats shared (assay.yaml) beats user
+// (<config dir>/assay/connections.yaml, honouring ASSAY_CONFIG_DIR). The
 // winner replaces the whole entry; Merged reports the scope it came from and
 // which lower scopes it shadows. A user-scope entry never overrides a
 // workspace one.
@@ -25,7 +25,7 @@
 // # Ceiling, not a switch
 //
 // The committed sandbox and ask_before_writes can only tighten what the agent
-// may do. Loosening is stored per person under .vibe-local/, and
+// may do. Loosening is stored per person under .assay-local/, and
 // EffectivePolicy clamps it to the committed ceiling, so a pulled commit can
 // never disable anyone's safeguards.
 //

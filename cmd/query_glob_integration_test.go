@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
 )
 
-// A wildcard on an s3, gcs or r2 URL in `vibe query` (#138 follow-up): the CLI
-// reads every such URL as a literal key, so Vibe expands the pattern itself.
+// A wildcard on an s3, gcs or r2 URL in `assay query` (#138 follow-up): the CLI
+// reads every such URL as a literal key, so Assay expands the pattern itself.
 func TestQueryExpandsAnS3WildcardThroughTheCLI(t *testing.T) {
 	ep := miniotest.Start(t)
 	miniotest.UseExtensionCache(t)
@@ -24,7 +24,7 @@ func TestQueryExpandsAnS3WildcardThroughTheCLI(t *testing.T) {
 	var all string
 	run := func(args ...string) string {
 		t.Helper()
-		out, stderr, err := runVibe(append(args, "--workspace", root)...)
+		out, stderr, err := runAssay(append(args, "--workspace", root)...)
 		all += out + stderr
 		require.NoError(t, err, stderr)
 		return out
@@ -43,10 +43,10 @@ func TestQueryExpandsAnS3WildcardThroughTheCLI(t *testing.T) {
 	assert.Contains(t, out, "2")
 
 	// A pattern no connection covers is refused, and says so.
-	_, stderr, err := runVibe("query", "SELECT * FROM read_parquet('s3://elsewhere/*.parquet')", "--workspace", root)
+	_, stderr, err := runAssay("query", "SELECT * FROM read_parquet('s3://elsewhere/*.parquet')", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error()+stderr, "no storage connection")
-	_, stderr, err = runVibe("query", "SELECT * FROM read_parquet('"+b+"none-*.parquet')", "--workspace", root)
+	_, stderr, err = runAssay("query", "SELECT * FROM read_parquet('"+b+"none-*.parquet')", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error()+stderr, "no files found")
 

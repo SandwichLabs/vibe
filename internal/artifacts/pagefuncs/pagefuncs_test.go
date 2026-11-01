@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
 )
 
 var trustedTypes = []reflect.Type{

@@ -10,7 +10,7 @@ import "os"
 // sign-in link to stdout, spike #107 finding I), not a panic.
 //
 // Call it before anything else touches the workspace, and only once, in a
-// process whose stdout is the protocol channel (`vibe mcp serve` over stdio).
+// process whose stdout is the protocol channel (`assay mcp serve` over stdio).
 func ProtectStdout() (*os.File, error) {
 	proto, err := redirectStdout()
 	if err != nil {

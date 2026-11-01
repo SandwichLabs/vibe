@@ -41,10 +41,10 @@ describe('usePageFrame', () => {
     const { frame, values, open } = setup()
     await frame.reload()
     expect(open).toHaveBeenCalledWith('pg', 'wails://wails')
-    expect(frame.src.value).toBe(`/vibe-view/${'t'.repeat(64)}/page`)
+    expect(frame.src.value).toBe(`/assay-view/${'t'.repeat(64)}/page`)
     values.region = 'US'
     await nextTick()
-    expect(frame.src.value).toBe(`/vibe-view/${'t'.repeat(64)}/page?region=US`)
+    expect(frame.src.value).toBe(`/assay-view/${'t'.repeat(64)}/page?region=US`)
     expect(open).toHaveBeenCalledTimes(1)
   })
 

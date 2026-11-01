@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/storageglob"
+	"github.com/SandwichLabs/assay/internal/storageglob"
 )
 
 // expandWildcards rewrites the s3, gcs and r2 wildcard patterns in a bound
 // statement into explicit lists of the objects they match (#138 follow-up; see
 // internal/storageglob). The hub reads those URLs as literal keys, so this is
-// the one place a person's SQL (the Studio editor, `vibe query`, the TUI, a
+// the one place a person's SQL (the Studio editor, `assay query`, the TUI, a
 // notebook cell, an A2UI binding, MCP) gets its wildcards.
 //
 // SQL that already went through the agent policy arrives with its rewrite

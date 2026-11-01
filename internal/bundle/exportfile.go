@@ -5,14 +5,14 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // Ext is the file extension of a bundle.
-const Ext = ".vibe"
+const Ext = ".assay"
 
-// WithExt returns path with ".vibe" appended when it has no extension at all
+// WithExt returns path with ".assay" appended when it has no extension at all
 // (a typed-in name); a path that already has one, whatever it is, is the
 // person's own choice and is kept.
 func WithExt(path string) string {

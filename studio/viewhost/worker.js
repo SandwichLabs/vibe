@@ -1,14 +1,14 @@
 // The host-owned bootstrap of a custom artifact view's Worker (#160). It is
-// embedded in Studio's binary and served as /vibe-view/<token>/worker.js; the
-// artifact's own code is /vibe-view/<token>/view.js, loaded below with
+// embedded in Studio's binary and served as /assay-view/<token>/worker.js; the
+// artifact's own code is /assay-view/<token>/view.js, loaded below with
 // importScripts. The response CSP of this file (no network, no nested workers,
-// no eval, scripts only from that view.js and /vibe-view/lib/) is what confines
+// no eval, scripts only from that view.js and /assay-view/lib/) is what confines
 // the view; see studio/viewserver.go and docs/reference/artifacts.md.
 //
-// The view's whole world is the `vibe` object:
-//   vibe.run(queryName, params) -> Promise of {columns, rows, truncated}
-//   vibe.lib(name)              -> the pinned library, loaded by name
-//   vibe.theme                  -> chart.1..chart.6 and the text/background roles
+// The view's whole world is the `assay` object:
+//   assay.run(queryName, params) -> Promise of {columns, rows, truncated}
+//   assay.lib(name)              -> the pinned library, loaded by name
+//   assay.theme                  -> chart.1..chart.6 and the text/background roles
 // and a global function the view defines:
 //   draw({params, theme, width, height}) -> Promise of {svg: string} or {a2ui: page}
 //
@@ -26,9 +26,9 @@
     return t
   }
 
-  var LIB_DIR = '/vibe-view/lib/'
-  // The closed list of libraries vibe.lib() loads, with each one's files in
-  // dependency order (each file is /vibe-view/lib/<file>.js) and the global it
+  var LIB_DIR = '/assay-view/lib/'
+  // The closed list of libraries assay.lib() loads, with each one's files in
+  // dependency order (each file is /assay-view/lib/<file>.js) and the global it
   // leaves behind. Nothing else can be named.
   var LIBS = mk({
     'd3-array': { files: ['d3-array'], global: 'd3' },
@@ -63,7 +63,7 @@
 
   function lib(name) {
     if (typeof name !== 'string' || !hasOwn.call(LIBS, name)) {
-      throw new Error('vibe.lib: unknown library')
+      throw new Error('assay.lib: unknown library')
     }
     var spec = LIBS[name]
     var fresh = []
@@ -167,12 +167,12 @@
     setIv(function () { send({ t: 'hb' }) }, 250)
     send({ t: 'hb' })
 
-    var vibe = {
+    var assay = {
       run: run,
       lib: lib,
       get theme() { return theme }
     }
-    Object.defineProperty(scope, 'vibe', { value: Object.freeze(vibe), writable: false, configurable: false })
+    Object.defineProperty(scope, 'assay', { value: Object.freeze(assay), writable: false, configurable: false })
 
     stripStorage()
     try {

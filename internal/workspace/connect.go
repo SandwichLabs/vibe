@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/storageurl"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/storageurl"
 )
 
 // SnapshotEnv returns an environment lookup over a copy of the process
@@ -148,7 +148,7 @@ func ResolveConnection(ws Workspace, c Connection, lookup LookupFunc) (ResolvedC
 	if c.Scope == ScopeShared && OwnScopeOnlyType(c.Type) {
 		// Skipped, not fatal: the rest of the workspace opens and this one is
 		// reported as an issue.
-		return ResolvedConnection{}, fmt.Errorf("connection %q: %s. This one is in the team's vibe.yaml: ask the person who committed it to move it to their own connections", c.Name, OwnScopeOnlyMessage(c.Type))
+		return ResolvedConnection{}, fmt.Errorf("connection %q: %s. This one is in the team's assay.yaml: ask the person who committed it to move it to their own connections", c.Name, OwnScopeOnlyMessage(c.Type))
 	}
 	resolved, err := c.ConnectionDef.Resolve(lookup, c.Scope)
 	if err != nil {

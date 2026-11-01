@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // artifactConflicts resolves a conflict on a data artifact. The item is two

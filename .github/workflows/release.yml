@@ -103,10 +103,10 @@ jobs:
         shell: bash
         run: |
           go build -ldflags "-s -w \
-            -X github.com/SandwichLabs/vibe/cmd.version=$VER \
-            -X github.com/SandwichLabs/vibe/cmd.commit=$COMMIT \
-            -X github.com/SandwichLabs/vibe/cmd.date=$DATE" \
-            -o vibe ./cmd/vibe
+            -X github.com/SandwichLabs/assay/cmd.version=$VER \
+            -X github.com/SandwichLabs/assay/cmd.commit=$COMMIT \
+            -X github.com/SandwichLabs/assay/cmd.date=$DATE" \
+            -o assay ./cmd/assay
 
       - name: Frontend install
         working-directory: studio/frontend
@@ -131,8 +131,8 @@ jobs:
       - name: Check the Studio binary has no ssofake tag
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/vibe-studio.app/Contents/MacOS/vibe-studio; else studio=studio/build/bin/vibe-studio; fi
-          scripts/check-binary-tags.sh vibe "$studio"
+          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/assay-studio.app/Contents/MacOS/assay-studio; else studio=studio/build/bin/assay-studio; fi
+          scripts/check-binary-tags.sh assay "$studio"
 
       - name: Package (and ad-hoc sign on macOS)
         shell: bash
@@ -144,28 +144,28 @@ jobs:
         shell: bash
         run: |
           d="$(mktemp -d)"
-          tar -xzf "dist/vibe-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
-          scripts/check-macos-minos.sh "$d/Vibe Studio.app/Contents/Info.plist" \
-            "$d/vibe" "$d/Vibe Studio.app/Contents/MacOS/vibe-studio"
+          tar -xzf "dist/assay-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          scripts/check-macos-minos.sh "$d/Assay.app/Contents/Info.plist" \
+            "$d/assay" "$d/Assay.app/Contents/MacOS/assay-studio"
 
       - name: Smoke test the packaged binaries
         shell: bash
         run: |
           set -euo pipefail
           d="$(mktemp -d)"
-          tar -xzf "dist/vibe-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
+          tar -xzf "dist/assay-studio_${VER}_${OS_NAME}_${ARCH}.tar.gz" -C "$d"
           if [ "$RUNNER_OS" = Linux ]; then
-            vibe="$d/bin/vibe"; studio="$d/bin/vibe-studio"
+            assay="$d/bin/assay"; studio="$d/bin/assay-studio"
           else
-            vibe="$d/vibe"; studio="$d/Vibe Studio.app/Contents/MacOS/vibe-studio"
-            codesign --verify --deep --strict "$d/Vibe Studio.app"
+            assay="$d/assay"; studio="$d/Assay.app/Contents/MacOS/assay-studio"
+            codesign --verify --deep --strict "$d/Assay.app"
           fi
           # Capture first: grep -q closing a pipe early gives the writer SIGPIPE (exit 141) under pipefail.
-          out="$("$vibe" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
+          out="$("$assay" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
           out="$("$studio" --version)"; echo "$out"; grep -qF "$VER" <<<"$out"
           cd "$(mktemp -d)"
-          "$vibe" workspace init . --name smoke </dev/null
-          out="$("$vibe" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
+          "$assay" workspace init . --name smoke </dev/null
+          out="$("$assay" query "select 42 as answer" </dev/null)"; echo "$out"; grep -q 42 <<<"$out"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -215,7 +215,7 @@ jobs:
       # Artifact attestations on a private repo need GitHub Enterprise Cloud; this org is on the free
       # plan, so the step would fail. It is skipped while the repo is private and turns itself on the
       # moment the repo is made public (github.event.repository.private becomes false). Verify with
-      #   gh attestation verify <archive> --repo SandwichLabs/vibe
+      #   gh attestation verify <archive> --repo SandwichLabs/assay
       - name: Attest build provenance
         if: ${{ github.event.repository.private == false }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

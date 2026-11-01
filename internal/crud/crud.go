@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // tableRef parses a table argument: a bare name, or "schema.table" /

@@ -9,17 +9,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/SandwichLabs/vibe/internal/bundle"
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/bundle"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
-// .vibe bundles (#118). A bundle is something the person exports and imports;
+// .assay bundles (#118). A bundle is something the person exports and imports;
 // no agent tool and no MCP method reaches any of this (see
 // internal/bundle/isolation_test.go). The passphrase crosses the Wails bridge
 // one way only (into Go), is never stored on the App, and is never logged.
 
 // bundleCreatedBy is recorded in a bundle's manifest.
-const bundleCreatedBy = "Vibe Studio"
+const bundleCreatedBy = "Assay"
 
 // maxOpenBundles bounds how many previewed bundles are held in memory at once
 // (each is at most 50 MB unpacked); the oldest is dropped past that.
@@ -179,8 +179,8 @@ func (a *App) chooseBundleSaveFile(defaultName string) (string, error) {
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "Export workspace content",
-		DefaultFilename: filestore.Slug(defaultName) + ".vibe",
-		Filters:         []runtime.FileFilter{{DisplayName: "Vibe bundle (*.vibe)", Pattern: "*.vibe"}},
+		DefaultFilename: filestore.Slug(defaultName) + ".assay",
+		Filters:         []runtime.FileFilter{{DisplayName: "Assay bundle (*.assay)", Pattern: "*.assay"}},
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to open the save dialog: %w", err)
@@ -191,8 +191,8 @@ func (a *App) chooseBundleSaveFile(defaultName string) (string, error) {
 // SelectBundleFile asks which bundle to import.
 func (a *App) SelectBundleFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:   "Import a .vibe bundle",
-		Filters: []runtime.FileFilter{{DisplayName: "Vibe bundle (*.vibe)", Pattern: "*.vibe"}},
+		Title:   "Import a .assay bundle",
+		Filters: []runtime.FileFilter{{DisplayName: "Assay bundle (*.assay)", Pattern: "*.assay"}},
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to open the file dialog: %w", err)
@@ -200,7 +200,7 @@ func (a *App) SelectBundleFile() (string, error) {
 	return path, nil
 }
 
-// ExportBundle writes the selected content of the open workspace to a .vibe
+// ExportBundle writes the selected content of the open workspace to a .assay
 // bundle. It never reads credentials or data.
 func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error) {
 	a.mu.RLock()
@@ -295,9 +295,9 @@ func (a *App) PreviewBundleImport(path, passphrase string) (*BundlePreview, erro
 func bundleError(err error) error {
 	switch {
 	case errors.Is(err, bundle.ErrLegacy):
-		return errors.New("This is an older .vibe file that holds data. Vibe no longer opens these.")
+		return errors.New("This is an older Vibe file that holds data. Assay doesn't open these.")
 	case errors.Is(err, bundle.ErrNotBundle):
-		return errors.New("That file isn't a Vibe bundle.")
+		return errors.New("That file isn't an Assay bundle.")
 	case errors.Is(err, bundle.ErrTooLarge):
 		return errors.New("That bundle is too large to import.")
 	case errors.Is(err, bundle.ErrCorrupt):

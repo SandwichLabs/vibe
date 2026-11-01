@@ -8,22 +8,22 @@ import (
 	"sort"
 	"text/template/parse"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
 )
 
 // The render budget. See the package comment in render.go: the parsed trees
 // are rewritten so that every range and every template call is charged to one
 // budget before it runs.
 //
-//	{{ range X }}      becomes   {{ range X | vibeRange__ }}
-//	{{ template "t" }} is preceded by {{ $vibeStep__ := vibeStep__ }}
-//	every other action, if, with and range is preceded by {{ $vibeStep__ := vibeTick__ }}
+//	{{ range X }}      becomes   {{ range X | assayRange__ }}
+//	{{ template "t" }} is preceded by {{ $assayStep__ := assayStep__ }}
+//	every other action, if, with and range is preceded by {{ $assayStep__ := assayTick__ }}
 //
-// vibeRange__ returns its argument unchanged after charging what the range
+// assayRange__ returns its argument unchanged after charging what the range
 // will iterate (the length of a slice or map, the value of an integer), so a
 // range over three billion numbers is refused before its first iteration, and
-// nested loops are charged once per time the inner one starts. vibeStep__
-// charges one step and checks the render's context; vibeTick__ only checks the
+// nested loops are charged once per time the inner one starts. assayStep__
+// charges one step and checks the render's context; assayTick__ only checks the
 // context (the deadline, a cancel), and runs before every action in every
 // list, so inside a loop body the worst overrun after a deadline or a cancel
 // is one action, not the rest of the loop. A declaration prints
@@ -32,10 +32,10 @@ import (
 // the author's text is parsed, so a template cannot call them.
 
 const (
-	rangeGuardName = "vibeRange__"
-	stepGuardName  = "vibeStep__"
-	tickGuardName  = "vibeTick__"
-	stepVarName    = "$vibeStep__"
+	rangeGuardName = "assayRange__"
+	stepGuardName  = "assayStep__"
+	tickGuardName  = "assayTick__"
+	stepVarName    = "$assayStep__"
 )
 
 type workBudget struct {
@@ -158,13 +158,13 @@ func guardList(l *parse.ListNode, refs *[]string) *parse.ListNode {
 	return l
 }
 
-// guardRangePipe appends the guard to a range's pipeline: "X | vibeRange__".
+// guardRangePipe appends the guard to a range's pipeline: "X | assayRange__".
 func guardRangePipe(p *parse.PipeNode) {
 	id := parse.NewIdentifier(rangeGuardName).SetPos(p.Pos)
 	p.Cmds = append(p.Cmds, &parse.CommandNode{NodeType: parse.NodeCommand, Pos: p.Pos, Args: []parse.Node{id}})
 }
 
-// stepDecl is {{ $vibeStep__ := <guard> }}, placed at pos.
+// stepDecl is {{ $assayStep__ := <guard> }}, placed at pos.
 func stepDecl(pos parse.Pos, line int, guard string) parse.Node {
 	id := parse.NewIdentifier(guard).SetPos(pos)
 	return &parse.ActionNode{

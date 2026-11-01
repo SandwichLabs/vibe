@@ -69,7 +69,7 @@ describe('useWorkspace', () => {
     expect(workspaceInfo.value?.root).toBe('/w/a')
   })
 
-  it('a folder with no vibe.yaml asks "Make this folder a workspace?" and creates it in place', async () => {
+  it('a folder with no assay.yaml asks "Make this folder a workspace?" and creates it in place', async () => {
     const app = makeApp({ OpenWorkspace: vi.fn(async (path: string) => ({ status: 'not-workspace', path })) })
     const p = openWorkspacePath('/plain')
     await vi.waitFor(() => expect(confirmVisible.value).toBe(true))

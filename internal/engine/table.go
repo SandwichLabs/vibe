@@ -3,11 +3,11 @@ package engine
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // validPart reports whether a catalog or schema name is a safe identifier
-// (same alphabet as ValidIdentifier, without its "_vibe_" reservation, which
+// (same alphabet as ValidIdentifier, without its "_assay_" reservation, which
 // protects table names only).
 func validPart(name string) bool {
 	if name == "" {
@@ -29,7 +29,7 @@ func validPart(name string) bool {
 // ParseTable parses and validates a table identifier arriving from the
 // frontend, the agent or a CLI flag: "t", "schema.t" or "catalog.schema.t".
 // Each part must satisfy the identifier rules (the table part additionally
-// ValidIdentifier's "_vibe_" reservation). It does not touch the database;
+// ValidIdentifier's "_assay_" reservation). It does not touch the database;
 // parts left empty resolve later against the session default.
 func ParseTable(name string) (session.TableRef, error) {
 	ref, err := session.ParseTableRef(name)

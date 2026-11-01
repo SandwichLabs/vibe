@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // CredentialInput is what the editor and the sign-in prompt send. Password,
@@ -75,7 +75,7 @@ func (a *App) applyCredentials(ws workspace.Workspace, req SetCredentialsRequest
 		}
 	}
 	if kind, _, _ := secrets.ParseMethod(method); secrets.StoresNoSecret(kind) {
-		return nil // environment variables are set outside Vibe; an AWS SSO profile has no secret to store
+		return nil // environment variables are set outside Assay; an AWS SSO profile has no secret to store
 	}
 	cred := req.toCredential()
 	if cred == (secrets.Credential{}) {

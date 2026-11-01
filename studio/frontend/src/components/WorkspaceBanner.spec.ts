@@ -9,7 +9,7 @@ import TakeOverDialog from './TakeOverDialog.vue'
 import { workspaceInfo, takeOverOpen, _resetForTests } from '../composables/useWorkspace'
 
 const base = { root: '/w/a', name: 'Acme Analytics', sessionId: 's', duplicateIds: [], localUntrusted: false } as unknown as WorkspaceInfo
-const held = { ...base, readOnly: true, holder: { app: 'vibe mcp serve', pid: 4182, servesMcp: false, text: 'vibe mcp serve (pid 4182)' } } as WorkspaceInfo
+const held = { ...base, readOnly: true, holder: { app: 'assay mcp serve', pid: 4182, servesMcp: false, text: 'assay mcp serve (pid 4182)' } } as WorkspaceInfo
 
 function makeApp(over: MockApp = {}) {
   const app: MockApp = {
@@ -32,7 +32,7 @@ describe('WorkspaceBanner (read-only)', () => {
     const w = mount(WorkspaceBanner, { global: { stubs: { Icon: true } } })
     const b = w.find('[data-testid="readonly-banner"]')
     expect(b.text()).toContain('Opened read-only.')
-    expect(b.text()).toContain('vibe mcp serve (pid 4182) is already running this workspace')
+    expect(b.text()).toContain('assay mcp serve (pid 4182) is already running this workspace')
     expect(b.text()).toContain('Notebooks, queries and skills are plain files and stay editable')
     await b.findAll('button').find((x) => x.text() === 'Keep read-only')!.trigger('click')
     expect(w.find('[data-testid="readonly-banner"]').exists()).toBe(false)
@@ -54,9 +54,9 @@ describe('WorkspaceBanner (read-only)', () => {
     expect(takeOverOpen.value).toBe(true)
     const d = dlg.find('[role="alertdialog"]')
     expect(d.text()).toContain('Take over Acme Analytics?')
-    expect(d.text()).toContain('vibe mcp serve (pid 4182)')
-    expect(d.text()).toContain('will need to reconnect, and will then go through Vibe Studio')
-    expect(d.text()).toContain('any change Claude makes needs your approval in Vibe Studio')
+    expect(d.text()).toContain('assay mcp serve (pid 4182)')
+    expect(d.text()).toContain('will need to reconnect, and will then go through Assay')
+    expect(d.text()).toContain('any change Claude makes needs your approval in Assay')
     await dlg.find('[data-testid="takeover-confirm"]').trigger('click')
     await flushPromises()
     expect(app.TakeOverWorkspace).toHaveBeenCalled()

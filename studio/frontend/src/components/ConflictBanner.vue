@@ -9,7 +9,7 @@ import { askConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
   kind: 'notebook' | 'query' | 'skill' | 'artifact'
-  // Workspace-relative file, e.g. notebooks/weekly-revenue.vnb.
+  // Workspace-relative file, e.g. notebooks/weekly-revenue.asnb.
   path: string
   // The file was deleted on disk rather than changed.
   deleted?: boolean
@@ -47,10 +47,10 @@ async function overwrite() {
     <Icon name="alert" :size="20" class="lead-ico" />
     <div class="bt">
       <template v-if="deleted">
-        <b>This {{ thing }} was deleted on disk.</b> <code>{{ path }}</code> was removed while you had it open: a git checkout, another editor, or the agent.
+        <b>This {{ thing }} was deleted on disk.</b> <code>{{ path }}</code> was removed while you had it open: a git checkout, another editor or another program.
       </template>
       <template v-else>
-        <b>This {{ thing }} changed on disk.</b> <code>{{ path }}</code> was saved by something else while you had it open: a git pull, another editor, or the agent.
+        <b>This {{ thing }} changed on disk.</b> <code>{{ path }}</code> was saved by something else while you had it open: a git pull, another editor or another program.
       </template>
       <span class="sub">Your unsaved edit and the new version differ. Pick one. Nothing happens until you do.</span>
     </div>
