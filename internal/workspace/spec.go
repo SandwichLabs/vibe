@@ -41,7 +41,7 @@ func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec
 	cdef := rc.Def(readOnly)
 	spec := cdef.Spec()
 	spec.Requires = rc.Requires
-	if resolved.Type == "motherduck" && o.readOnly {
+	if resolved.Type == "motherduck" && o.readOnly && !o.policyGated {
 		spec.Params["forced_read_only"] = "true"
 	}
 	if resolved.Type == "duckdb" {
