@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // The catalog vetting (#118 step 3).
@@ -284,7 +284,7 @@ func vetDuckDBCatalog(ctx context.Context, q session.QueryExecer, path string) (
 	if _, err := rand.Read(b[:]); err != nil {
 		return vetUnreadable(err)
 	}
-	alias := "__assay_vet_" + hex.EncodeToString(b[:])
+	alias := "__slaw_vet_" + hex.EncodeToString(b[:])
 	if _, err := q.ExecContext(ctx, "ATTACH "+session.QuoteLiteral(path)+" AS "+session.QuoteIdent(alias)+" (READ_ONLY)"); err != nil {
 		return vetUnreadable(fmt.Errorf("the file is not a readable DuckDB database: %w", err))
 	}

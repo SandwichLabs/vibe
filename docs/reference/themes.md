@@ -1,6 +1,6 @@
 # Themes
 
-Assay's look is a **theme**: a JSON file that assigns colours to a
+Slaw's look is a **theme**: a JSON file that assigns colours to a
 fixed set of semantic roles, VS Code style. Four themes ship built in, and
 you can add your own by dropping a file in the themes folder.
 
@@ -28,10 +28,10 @@ Settings → **Appearance**.
 
 | | Linux | macOS |
 |---|---|---|
-| Preferences | `~/.config/assay/settings.json` | `~/Library/Application Support/assay/settings.json` |
-| Custom themes | `~/.config/assay/themes/*.json` | `~/Library/Application Support/assay/themes/*.json` |
+| Preferences | `~/.config/slaw/settings.json` | `~/Library/Application Support/slaw/settings.json` |
+| Custom themes | `~/.config/slaw/themes/*.json` | `~/Library/Application Support/slaw/themes/*.json` |
 
-Set `ASSAY_CONFIG_DIR` to move both somewhere else (portable installs, tests).
+Set `SLAW_CONFIG_DIR` to move both somewhere else (portable installs, tests).
 "Open folder" in Settings creates the themes folder, drops a short README in
 it, and opens it in your file manager. "Reload themes" re-reads the folder
 without restarting.
@@ -155,14 +155,14 @@ theme: `fg` on `bg`/`surface`/`bg.alt`, `fg.muted` on `bg`, `accent.fg` on
   `extends` (`resolveTheme`) and flattens to CSS custom properties
   (`themeToCssVars`). Built-ins live in `theme/builtin.ts` and must be
   complete, so anything can extend them.
-- `theme/apply.ts` writes `--assay-<role>` (dots become dashes:
-  `sidebar.active.fg` → `--assay-sidebar-active-fg`) onto `<html>`, plus
+- `theme/apply.ts` writes `--slaw-<role>` (dots become dashes:
+  `sidebar.active.fg` → `--slaw-sidebar-active-fg`) onto `<html>`, plus
   `data-theme`, `data-theme-type` and `color-scheme`.
 - `theme/bridge.css` maps the SchoolHouse `--sh-*` tokens the stylesheets use
   onto those roles, derives translucent tints with `color-mix()`, and owns the
-  app-wide `:focus-visible` ring. New CSS should reference `--assay-*` directly.
-- The CodeMirror theme (`composables/useAssayEditor.ts`) uses `var(--assay-editor-*)`
-  and `var(--assay-syntax-*)`, so it follows a theme switch with no re-render.
+  app-wide `:focus-visible` ring. New CSS should reference `--slaw-*` directly.
+- The CodeMirror theme (`composables/useSlawEditor.ts`) uses `var(--slaw-editor-*)`
+  and `var(--slaw-syntax-*)`, so it follows a theme switch with no re-render.
 - Persistence is Go-side in `internal/prefs` (atomic writes, 0600, unknown
   keys round-trip). Studio exposes `GetPreferences`, `SetPreferences`,
   `ListUserThemes` and `OpenThemesDir`. Without the Wails runtime (vitest,

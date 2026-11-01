@@ -112,15 +112,15 @@ const unsubs: Array<() => void> = []
 
 onMounted(() => {
   unsubs.push(startProposalBadge())
-  window.addEventListener('assay:open-agent', openAgentFromEvent)
+  window.addEventListener('slaw:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('assay:open-agent', openAgentFromEvent)
+  window.removeEventListener('slaw:open-agent', openAgentFromEvent)
   window.removeEventListener('keydown', onGlobalKeydown)
   unsubs.splice(0).forEach((u) => u())
-  if (hasWailsRuntime()) WindowSetTitle('Assay')
+  if (hasWailsRuntime()) WindowSetTitle('Slaw')
 })
 
 watch(() => info.value?.sessionId, () => { void refreshProposalBadge() })
@@ -131,7 +131,7 @@ watch(errorMessage, (msg) => {
 
 watch(() => info.value?.name, (name) => {
   if (!hasWailsRuntime()) return
-  WindowSetTitle(name ? `${name} — Assay` : 'Assay')
+  WindowSetTitle(name ? `${name} — Slaw` : 'Slaw')
 }, { immediate: true })
 </script>
 
@@ -217,20 +217,20 @@ watch(() => info.value?.name, (name) => {
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
-  color: var(--assay-chrome-fg);
-  border: 1.5px solid var(--assay-chrome-fg);
+  color: var(--slaw-chrome-fg);
+  border: 1.5px solid var(--slaw-chrome-fg);
   border-radius: var(--sh-radius-sm);
   cursor: pointer;
 }
-.theme-toggle:hover { background: color-mix(in srgb, var(--assay-chrome-fg) 12%, transparent); }
+.theme-toggle:hover { background: color-mix(in srgb, var(--slaw-chrome-fg) 12%, transparent); }
 /* Open-proposals count on the Semantics entry. */
 .nav-badge {
   margin-left: auto;
   min-width: 18px; padding: 0 6px;
   border-radius: 9px;
   font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
-  background: var(--assay-accent);
-  color: var(--assay-accent-fg);
+  background: var(--slaw-accent);
+  color: var(--slaw-accent-fg);
 }
 /* In-flight agent turn marker: a dot, not text, so it survives the collapsed sidebar. */
 .agent-busy {
@@ -238,8 +238,8 @@ watch(() => info.value?.name, (name) => {
   width: 8px; height: 8px;
   margin-left: 6px;
   border-radius: 50%;
-  background: var(--assay-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--assay-accent) 30%, transparent);
+  background: var(--slaw-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--slaw-accent) 30%, transparent);
   animation: agent-busy-pulse 1.4s ease-in-out infinite;
 }
 @keyframes agent-busy-pulse { 50% { opacity: 0.35; } }

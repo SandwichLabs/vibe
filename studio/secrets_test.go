@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 const studioNeedle = "sk-ant-NEEDLE-studio-test"
@@ -21,9 +21,9 @@ func secretsApp(t *testing.T, cfgYAML string) (*App, *secrets.Mock, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	cfgPath := filepath.Join(home, "assay-test.yaml")
-	t.Setenv("ASSAY_CONFIG_FILE", cfgPath)
-	for _, k := range []string{"ASSAY_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} {
+	cfgPath := filepath.Join(home, "slaw-test.yaml")
+	t.Setenv("SLAW_CONFIG_FILE", cfgPath)
+	for _, k := range []string{"SLAW_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} {
 		t.Setenv(k, "")
 	}
 	if cfgYAML != "" {

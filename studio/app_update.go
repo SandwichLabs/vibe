@@ -6,7 +6,7 @@ import (
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/SandwichLabs/assay/internal/selfupdate"
+	"github.com/SandwichLabs/slaw/internal/selfupdate"
 )
 
 // --- Updates (Settings > About > Updates, the first-run prompt) ---

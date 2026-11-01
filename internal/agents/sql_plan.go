@@ -9,7 +9,7 @@ import (
 
 	_ "github.com/duckdb/duckdb-go/v2" // DuckDB driver, for the dedicated parser connection below
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // --- the plan check (second layer) ------------------------------------------

@@ -5,22 +5,22 @@ From nothing to a query, a notebook and Claude Code working on your data. It nee
 ## 1. Install
 
 ```sh
-curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
-assay --version
+curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh
+slaw --version
 ```
 
 Other platforms, options and what the installer does: [Install](install.md).
 
 ## 2. Create a workspace
 
-A workspace is a folder. Assay keeps your notebooks, saved queries and skills in it as plain files, and your data stays wherever it already is.
+A workspace is a folder. Slaw keeps your notebooks, saved queries and skills in it as plain files, and your data stays wherever it already is.
 
 ```sh
-assay workspace init sales-demo
+slaw workspace init sales-demo
 cd sales-demo
 ```
 
-This creates `assay.yaml`, `notebooks/`, `queries/`, `skills/` and `data/`, and one connection called `local` (a DuckDB file at `data/local.duckdb`). Add `--git` to also run `git init`. Details: [workspaces reference](reference/workspaces.md).
+This creates `slaw.yaml`, `notebooks/`, `queries/`, `skills/` and `data/`, and one connection called `local` (a DuckDB file at `data/local.duckdb`). Add `--git` to also run `git init`. Details: [workspaces reference](reference/workspaces.md).
 
 ## 3. Add some data and query it
 
@@ -40,7 +40,7 @@ EOF
 Query the file where it sits (DuckDB reads CSV and Parquet directly):
 
 ```sh
-assay query "SELECT region, count(*) AS orders, sum(amount) AS revenue
+slaw query "SELECT region, count(*) AS orders, sum(amount) AS revenue
             FROM read_csv('data/orders.csv') GROUP BY region ORDER BY revenue DESC"
 ```
 
@@ -56,23 +56,23 @@ West    2       165.75
 Or load it into the workspace's own database as a table and query that:
 
 ```sh
-assay import data/orders.csv --into orders
-assay query "SELECT customer, sum(amount) AS total FROM orders GROUP BY 1 ORDER BY 2 DESC"
+slaw import data/orders.csv --into orders
+slaw query "SELECT customer, sum(amount) AS total FROM orders GROUP BY 1 ORDER BY 2 DESC"
 ```
 
-Other handy commands: `assay workspace info` (connections, counts, who owns the database), `assay export orders -o data/orders.parquet`, `--format csv|json` on `assay query`. More in the [workspaces reference](reference/workspaces.md#command-line).
+Other handy commands: `slaw workspace info` (connections, counts, who owns the database), `slaw export orders -o data/orders.parquet`, `--format csv|json` on `slaw query`. More in the [workspaces reference](reference/workspaces.md#command-line).
 
-> Run these before you open Studio. One process owns a workspace's database at a time; if Studio has it open, `assay query` tells you so and stops.
+> Run these before you open Studio. One process owns a workspace's database at a time; if Studio has it open, `slaw query` tells you so and stops.
 
 ## 4. Open Studio
 
 ```sh
-assay studio --gui
+slaw studio --gui
 ```
 
-Run from inside the workspace, this opens the desktop app on it. You can also start **Assay** from your application menu or `~/Applications` and use **Open folder...**. (`assay studio` without `--gui` is a terminal UI with a SQL prompt, a table browser and a notebook list.)
+Run from inside the workspace, this opens the desktop app on it. You can also start **Slaw** from your application menu or `~/Applications` and use **Open folder...**. (`slaw studio` without `--gui` is a terminal UI with a SQL prompt, a table browser and a notebook list.)
 
-![Assay Home with a workspace open (the screenshots use a richer demo workspace, "Coffee Shop Analytics", so your screen will differ): counts, tables and the connections list](assets/quickstart-studio-home.png)
+![Slaw Home with a workspace open (the screenshots use a richer demo workspace, "Coffee Shop Analytics", so your screen will differ): counts, tables and the connections list](assets/quickstart-studio-home.png)
 
 ### Run a query
 
@@ -103,27 +103,27 @@ An artifact can be an HTML page, written by a teammate (it arrives with `git pul
 - **What it asks to be allowed to do** (scripted pages): keep small notes on this computer, offer you a file through a save dialog, or send text to your model provider (the prompt names the provider; the text may include query results). On macOS the prompt also says that a scripted page can use a link to open a network connection to an address it chooses, though it cannot read a reply.
 - Every file, to read.
 
-**Studio never asks you for a password, key or token inside a page.** A page that asks for one is trying to steal it: close it and deny it. Edit the page, or let an agent edit it, and Studio asks again. Change your mind in **Settings > Workspace > Pages**, or with `assay artifact view revoke NAME`.
+**Studio never asks you for a password, key or token inside a page.** A page that asks for one is trying to steal it: close it and deny it. Edit the page, or let an agent edit it, and Studio asks again. Change your mind in **Settings > Workspace > Pages**, or with `slaw artifact view revoke NAME`.
 
 ## 5. Connect Claude Code (MCP)
 
-`assay mcp serve` exposes the workspace's tools to any MCP client, with the same limits as Studio's own assistant. For Claude Code, from the workspace folder:
+`slaw mcp serve` exposes the workspace's tools to any MCP client, with the same limits as Studio's own assistant. For Claude Code, from the workspace folder:
 
 ```sh
-claude mcp add --scope user assay-sales-demo -- "$(command -v assay)" mcp serve --workspace "$PWD"
+claude mcp add --scope user slaw-sales-demo -- "$(command -v slaw)" mcp serve --workspace "$PWD"
 ```
 
-(`--scope user` makes it available in every project; without it Claude Code registers the server for the current directory only.) Studio does not start its MCP server by itself. While Studio has the workspace open, `assay mcp serve` stops with "Studio (pid N) has this workspace open but its MCP server is off". So either quit Studio first, or open **Settings, Workspace, Claude and other tools** in Studio and press **Start**; Claude Code then works through Studio, and any change it proposes shows an approval card in the Studio window.
+(`--scope user` makes it available in every project; without it Claude Code registers the server for the current directory only.) Studio does not start its MCP server by itself. While Studio has the workspace open, `slaw mcp serve` stops with "Studio (pid N) has this workspace open but its MCP server is off". So either quit Studio first, or open **Settings, Workspace, Claude and other tools** in Studio and press **Start**; Claude Code then works through Studio, and any change it proposes shows an approval card in the Studio window.
 
-In Claude Code, run `/mcp` to see it connected, then ask something like *"List the tables in my Assay workspace and tell me revenue by region."*
+In Claude Code, run `/mcp` to see it connected, then ask something like *"List the tables in my Slaw workspace and tell me revenue by region."*
 
-The default is safe: the client can read, and any write is refused until you decide otherwise. Why, and how to allow writes, is in [Use Assay from Claude and other MCP clients](mcp-clients.md). Claude Desktop, Cursor and others: same page.
+The default is safe: the client can read, and any write is refused until you decide otherwise. Why, and how to allow writes, is in [Use Slaw from Claude and other MCP clients](mcp-clients.md). Claude Desktop, Cursor and others: same page.
 
 Studio can also copy the config to your clipboard for you: **Settings, Workspace, Claude and other tools** has **Copy Claude Code config** and **Copy Claude Desktop config** buttons. You paste the result yourself. Studio's Claude Code command has no `--scope`, so it registers the server for the current directory only; add `--scope user` for every project.
 
 ## 6. Optional: Studio's own assistant
 
-Studio has a chat assistant too. It needs a model: a local server (the default points at `http://localhost:8080/v1`), Ollama, or an API key for OpenAI, Anthropic, Gemini or Cloudflare. Set it in **Settings, App**, or with `assay config llm`; keys go into your keychain with `assay config llm-key`. See [LLM configuration](reference/llm-config.md). Everything else in Assay works without a model.
+Studio has a chat assistant too. It needs a model: a local server (the default points at `http://localhost:8080/v1`), Ollama, or an API key for OpenAI, Anthropic, Gemini or Cloudflare. Set it in **Settings, App**, or with `slaw config llm`; keys go into your keychain with `slaw config llm-key`. See [LLM configuration](reference/llm-config.md). Everything else in Slaw works without a model.
 
 ## Where next
 

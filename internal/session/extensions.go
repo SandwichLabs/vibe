@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/connname"
 )
 
 // Execer is the write surface shared by *sql.DB, *sql.Conn and *sql.Tx.

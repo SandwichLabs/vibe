@@ -6,7 +6,7 @@ package main
 // is started by launchd, not by the helper, so no namespace applies and there is
 // no sandbox-exec (it is deprecated and does not ship). What gates the network
 // here is inside the helper's web view: the strict CSP, the navigation policy, a
-// WKContentRuleList that blocks every URL but assay-page:, and a dead-loopback
+// WKContentRuleList that blocks every URL but slaw-page:, and a dead-loopback
 // proxy (pagewindow_darwin.m). One leak is accepted and disclosed: a link to an
 // IP address that page script clicks opens an empty TCP connection (#189).
 //

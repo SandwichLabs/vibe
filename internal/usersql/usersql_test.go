@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/session/sessiontest"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session/sessiontest"
 )
 
 func TestCheck_Refuses(t *testing.T) {
@@ -94,7 +94,7 @@ func TestCheckAllowsReadPragmasAndRefusesAssignments(t *testing.T) {
 
 func TestCheckManagedRefusesOnlyLoadAndSecretDDL(t *testing.T) {
 	for _, bad := range []string{
-		"LOAD httpfs", "install httpfs", "DROP TEMPORARY SECRET \"assay-deny-s3\"",
+		"LOAD httpfs", "install httpfs", "DROP TEMPORARY SECRET \"slaw-deny-s3\"",
 		"select 1; drop secret if exists x", "CREATE OR REPLACE SECRET s (TYPE s3)", "-- c\nLOAD aws", "FORCE INSTALL httpfs", "force install httpfs FROM core", "UPDATE EXTENSIONS", "update extensions (httpfs)",
 		"SET s3_url_compatibility_mode = false", "set global S3_URL_COMPATIBILITY_MODE=false", "RESET s3_url_compatibility_mode",
 		`SET "s3_url_compatibility_mode" = false`, "select 1; set session s3_url_compatibility_mode to false",

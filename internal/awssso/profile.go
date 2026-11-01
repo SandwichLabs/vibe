@@ -92,7 +92,7 @@ func tokenPath(home, key string) string {
 // Only SSO profiles are accepted.
 func (p *Provider) LoadProfile(ctx context.Context, name string) (Profile, error) {
 	if !ValidProfileName(name) {
-		return Profile{}, &ProfileError{Profile: "(invalid name)", Problem: "has a name Assay does not accept"}
+		return Profile{}, &ProfileError{Profile: "(invalid name)", Problem: "has a name Slaw does not accept"}
 	}
 	cfgFiles, credFiles, err := p.configFiles()
 	if err != nil {
@@ -164,7 +164,7 @@ func profileFrom(name string, cfg config.SharedConfig) (Profile, error) {
 		return bad("is not an AWS IAM Identity Center (SSO) profile")
 	}
 	if other := otherSources(cfg); len(other) > 0 {
-		return bad("mixes SSO with " + strings.Join(other, ", ") + "; Assay accepts SSO-only profiles")
+		return bad("mixes SSO with " + strings.Join(other, ", ") + "; Slaw accepts SSO-only profiles")
 	}
 	prof := Profile{Name: name, Kind: KindLegacy, StartURL: cfg.SSOStartURL, Region: cfg.SSORegion,
 		AccountID: cfg.SSOAccountID, RoleName: cfg.SSORoleName}

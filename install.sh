@@ -1,34 +1,34 @@
 #!/bin/sh
 # shellcheck disable=SC2015 # "A && B || C" is deliberate in the two status prints
-# Assay installer for macOS and Linux (amd64, arm64). POSIX sh; never uses sudo; no telemetry.
+# Slaw installer for macOS and Linux (amd64, arm64). POSIX sh; never uses sudo; no telemetry.
 #
-#   curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
-#   curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh -s -- --cli-only
-#   curl -fsSL https://sandwichlabs.dev/assay/install.sh | ASSAY_VERSION=v0.1.0 sh
-#   curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh -s -- --uninstall
+#   curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh
+#   curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh -s -- --cli-only
+#   curl -fsSL https://sandwichlabs.dev/slaw/install.sh | SLAW_VERSION=v0.1.0 sh
+#   curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh -s -- --uninstall
 #
 # Options:
-#   --version vX.Y.Z    install this release (same as ASSAY_VERSION); default: the latest release
-#   --cli-only          install only the `assay` CLI (no Studio desktop app)
-#   --install-dir DIR   where the binaries go (default $HOME/.local/bin; env ASSAY_INSTALL_DIR or INSTALL_DIR)
-#   --force             replace an `assay` that this installer did not put there; skip the OS version check
+#   --version vX.Y.Z    install this release (same as SLAW_VERSION); default: the latest release
+#   --cli-only          install only the `slaw` CLI (no Studio desktop app)
+#   --install-dir DIR   where the binaries go (default $HOME/.local/bin; env SLAW_INSTALL_DIR or INSTALL_DIR)
+#   --force             replace a `slaw` that this installer did not put there; skip the OS version check
 #   --uninstall         remove exactly the files listed in the install manifest
 #   --dry-run           print what would happen; download and change nothing
 #   -h, --help          show this help
 #
-# Environment: ASSAY_VERSION, ASSAY_INSTALL_DIR / INSTALL_DIR, ASSAY_APP_DIR (macOS, default ~/Applications),
-# ASSAY_DOWNLOAD_BASE (mirror or test server; <base>/<asset> must resolve), ASSAY_LATEST_URL (override of
+# Environment: SLAW_VERSION, SLAW_INSTALL_DIR / INSTALL_DIR, SLAW_APP_DIR (macOS, default ~/Applications),
+# SLAW_DOWNLOAD_BASE (mirror or test server; <base>/<asset> must resolve), SLAW_LATEST_URL (override of
 # the releases/latest URL whose redirect names the newest tag), NO_COLOR.
 #
 # Upgrading is re-running this script. Every file written is recorded in
-# ${XDG_DATA_HOME:-~/.local/share}/assay/install-manifest (macOS: ~/Library/Application Support/assay/install-manifest);
+# ${XDG_DATA_HOME:-~/.local/share}/slaw/install-manifest (macOS: ~/Library/Application Support/slaw/install-manifest);
 # --uninstall removes those files and nothing else. Config, credentials, caches and workspaces are never touched.
 #
 # The whole script is wrapped in main() so a truncated download executes nothing.
 
 set -eu
 
-REPO="SandwichLabs/assay"
+REPO="SandwichLabs/slaw"
 GH="https://github.com/$REPO"
 
 # ---------------------------------------------------------------- output
@@ -48,31 +48,31 @@ die() {
 
 usage() {
 	cat <<'EOF'
-Assay installer (macOS and Linux, amd64 and arm64)
+Slaw installer (macOS and Linux, amd64 and arm64)
 
-  curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
-  curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh -s -- [options]
+  curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh
+  curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh -s -- [options]
 
 Options:
-  --version vX.Y.Z    install this release (or ASSAY_VERSION); default: the latest release
-  --cli-only          install only the `assay` CLI (no Studio desktop app)
-  --install-dir DIR   where the binaries go (default $HOME/.local/bin; or ASSAY_INSTALL_DIR)
-  --force             replace an `assay` that this installer did not put there; skip OS version checks
+  --version vX.Y.Z    install this release (or SLAW_VERSION); default: the latest release
+  --cli-only          install only the `slaw` CLI (no Studio desktop app)
+  --install-dir DIR   where the binaries go (default $HOME/.local/bin; or SLAW_INSTALL_DIR)
+  --force             replace a `slaw` that this installer did not put there; skip OS version checks
   --uninstall         remove exactly the files recorded in the install manifest
   --dry-run           print what would happen; download and change nothing
   -h, --help          show this help
 
-Environment: ASSAY_VERSION, ASSAY_INSTALL_DIR (or INSTALL_DIR), ASSAY_APP_DIR (macOS, default ~/Applications),
-ASSAY_DOWNLOAD_BASE (mirror), ASSAY_LATEST_URL (test override), NO_COLOR.
+Environment: SLAW_VERSION, SLAW_INSTALL_DIR (or INSTALL_DIR), SLAW_APP_DIR (macOS, default ~/Applications),
+SLAW_DOWNLOAD_BASE (mirror), SLAW_LATEST_URL (test override), NO_COLOR.
 EOF
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------- state
-VERSION="${ASSAY_VERSION:-latest}"
-INSTALL_DIR="${ASSAY_INSTALL_DIR:-${INSTALL_DIR:-$HOME/.local/bin}}"
-APP_DIR="${ASSAY_APP_DIR:-$HOME/Applications}"
+VERSION="${SLAW_VERSION:-latest}"
+INSTALL_DIR="${SLAW_INSTALL_DIR:-${INSTALL_DIR:-$HOME/.local/bin}}"
+APP_DIR="${SLAW_APP_DIR:-$HOME/Applications}"
 CLI_ONLY=0 FORCE=0 UNINSTALL=0 DRY=0
 OS='' ARCH='' TMP=''
 MANIFEST='' DATA_HOME=''
@@ -129,12 +129,12 @@ in_manifest() { # path
 }
 
 # Is this file one of ours? Yes when it still has the hash we recorded, or (first install over an
-# older copy) when it carries Assay's Go module path. Foreign programs are never executed to find out.
+# older copy) when it carries Slaw's Go module path. Foreign programs are never executed to find out.
 is_ours() { # path
 	[ -f "$1" ] || return 1
 	_h=$(manifest_hash_of "$1")
 	if [ -n "$_h" ] && [ "$_h" = "$(sha256_of "$1")" ]; then return 0; fi
-	[ -z "$_h" ] && grep -aqF 'github.com/SandwichLabs/assay' "$1" 2>/dev/null
+	[ -z "$_h" ] && grep -aqF 'github.com/SandwichLabs/slaw' "$1" 2>/dev/null
 }
 
 manifest_version() {
@@ -147,12 +147,12 @@ detect_platform() {
 	case "$(uname -s)" in
 	Linux) OS=linux ;;
 	Darwin) OS=darwin ;;
-	*) die "unsupported OS '$(uname -s)'. Assay ships for macOS and Linux; build from source: $GH" ;;
+	*) die "unsupported OS '$(uname -s)'. Slaw ships for macOS and Linux; build from source: $GH" ;;
 	esac
 	case "$(uname -m)" in
 	x86_64 | amd64) ARCH=amd64 ;;
 	aarch64 | arm64) ARCH=arm64 ;;
-	*) die "unsupported architecture '$(uname -m)'. Assay ships for amd64 and arm64; build from source: $GH" ;;
+	*) die "unsupported architecture '$(uname -m)'. Slaw ships for amd64 and arm64; build from source: $GH" ;;
 	esac
 	if [ "$OS" = darwin ] && [ "$ARCH" = amd64 ] && [ "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
 		ARCH=arm64 # a shell running under Rosetta on Apple silicon
@@ -160,7 +160,7 @@ detect_platform() {
 
 	if [ "$OS" = linux ]; then
 		if (ldd --version 2>&1 || true) | head -n 1 | grep -qi musl || ls /lib/ld-musl-* >/dev/null 2>&1; then
-			die "this looks like a musl system (Alpine). Assay's Linux binaries need glibc 2.35 or newer; build from source: $GH"
+			die "this looks like a musl system (Alpine). Slaw's Linux binaries need glibc 2.35 or newer; build from source: $GH"
 		fi
 		_glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}') || _glibc=''
 		if [ -n "$_glibc" ]; then
@@ -171,7 +171,7 @@ detect_platform() {
 			*[!0-9]*) ;;
 			*)
 				if [ "$_maj" -lt 2 ] || { [ "$_maj" -eq 2 ] && [ "$_min" -lt 35 ]; }; then
-					[ "$FORCE" -eq 1 ] || die "glibc $_glibc is too old: Assay needs 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 or later). Use --force to try anyway."
+					[ "$FORCE" -eq 1 ] || die "glibc $_glibc is too old: Slaw needs 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 or later). Use --force to try anyway."
 				fi
 				;;
 			esac
@@ -185,7 +185,7 @@ detect_platform() {
 		*[!0-9]* | '') ;;
 		*)
 			if [ "$_macmaj" -lt "$_need" ]; then
-				[ "$FORCE" -eq 1 ] || die "macOS $_mac is too old: Assay needs macOS $_need or later on $ARCH. Use --force to try anyway."
+				[ "$FORCE" -eq 1 ] || die "macOS $_mac is too old: Slaw needs macOS $_need or later on $ARCH. Use --force to try anyway."
 			fi
 			;;
 		esac
@@ -196,13 +196,13 @@ detect_platform() {
 	else
 		DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 	fi
-	MANIFEST="$DATA_HOME/assay/install-manifest"
+	MANIFEST="$DATA_HOME/slaw/install-manifest"
 }
 
 resolve_version() {
 	case "$VERSION" in
 	latest | '')
-		_url="${ASSAY_LATEST_URL:-$GH/releases/latest}"
+		_url="${SLAW_LATEST_URL:-$GH/releases/latest}"
 		_loc=$(redirect_of "$_url") || _loc=''
 		_tag=${_loc##*/}
 		[ -n "$_tag" ] && [ "$_tag" != latest ] || die "could not find the latest release at $_url (is there a published release yet? try --version vX.Y.Z)"
@@ -221,15 +221,15 @@ resolve_version() {
 # ---------------------------------------------------------------- collision guard
 guard_collision() {
 	[ "$FORCE" -eq 1 ] && return 0
-	for _name in assay assay-studio; do
-		[ "$_name" = assay-studio ] && { [ "$CLI_ONLY" -eq 1 ] || [ "$OS" = darwin ]; } && continue
+	for _name in slaw slaw-studio; do
+		[ "$_name" = slaw-studio ] && { [ "$CLI_ONLY" -eq 1 ] || [ "$OS" = darwin ]; } && continue
 		_p="$INSTALL_DIR/$_name"
 		{ [ -e "$_p" ] || [ -L "$_p" ]; } || continue
 		is_ours "$_p" && continue
-		die "$_p already exists and is not Assay (this installer did not write it, or it changed since).
-Another program named '$_name' is installed there, quite possibly Assay from Sand Software Solutions (a different tool that hashes a folder).
+		die "$_p already exists and is not Slaw (this installer did not write it, or it changed since).
+Another program named '$_name' is installed there.
 Nothing was changed. Either:
-  - install Assay somewhere else:  --install-dir DIR   (or ASSAY_INSTALL_DIR=DIR), then put DIR first on your PATH
+  - install Slaw somewhere else:  --install-dir DIR   (or SLAW_INSTALL_DIR=DIR), then put DIR first on your PATH
   - or replace that program:      --force"
 	done
 }
@@ -251,14 +251,14 @@ remove_entry() { # manifest line
 	_base=${_path##*/}
 	case "$_k" in
 	D)
-		[ "$_base" = "Assay.app" ] && [ -d "$_path" ] && [ ! -L "$_path" ] || return 0
+		[ "$_base" = "Slaw.app" ] && [ -d "$_path" ] && [ ! -L "$_path" ] || return 0
 		if rm -rf -- "$_path"; then info "removed $_path"; else warn "could not remove $_path"; fi
 		;;
 	F)
 		case "$_path" in
-		*/assay | */assay-studio) ;;
-		*/applications/assay.desktop | */mime/packages/assay-bundle.xml) ;;
-		*/icons/hicolor/*/apps/assay*.png | */icons/hicolor/*/apps/assay*.svg) ;;
+		*/slaw | */slaw-studio) ;;
+		*/applications/slaw.desktop | */mime/packages/slaw-bundle.xml) ;;
+		*/icons/hicolor/*/apps/slaw*.png | */icons/hicolor/*/apps/slaw*.svg) ;;
 		*) return 0 ;;
 		esac
 		[ -e "$_path" ] || [ -L "$_path" ] || return 0
@@ -293,23 +293,23 @@ refresh_linux_dbs() {
 install_linux() { # stage dir
 	_s=$1
 	if [ "$CLI_ONLY" -eq 1 ]; then
-		put_file "$_s/assay" "$INSTALL_DIR/assay" 755
+		put_file "$_s/slaw" "$INSTALL_DIR/slaw" 755
 		return 0
 	fi
-	put_file "$_s/bin/assay" "$INSTALL_DIR/assay" 755
-	put_file "$_s/bin/assay-studio" "$INSTALL_DIR/assay-studio" 755
+	put_file "$_s/bin/slaw" "$INSTALL_DIR/slaw" 755
+	put_file "$_s/bin/slaw-studio" "$INSTALL_DIR/slaw-studio" 755
 
 	# The desktop entry gets an absolute, quoted Exec (desktop sessions often lack ~/.local/bin on PATH).
 	# Desktop Entry spec: inside quotes escape " ` $ \ with a backslash, and the string layer doubles
 	# the backslash; a literal % is %%.
-	if [ -f "$_s/share/applications/assay.desktop" ]; then
-		_q=$(printf '%s' "$INSTALL_DIR/assay-studio" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')
-		_EXECLINE="Exec=\"$_q\" %U" awk '/^Exec=assay-studio/ { print ENVIRON["_EXECLINE"]; next } { print }' \
-			"$_s/share/applications/assay.desktop" >"$TMP/assay.desktop"
-		put_file "$TMP/assay.desktop" "$DATA_HOME/applications/assay.desktop" 644
+	if [ -f "$_s/share/applications/slaw.desktop" ]; then
+		_q=$(printf '%s' "$INSTALL_DIR/slaw-studio" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')
+		_EXECLINE="Exec=\"$_q\" %U" awk '/^Exec=slaw-studio/ { print ENVIRON["_EXECLINE"]; next } { print }' \
+			"$_s/share/applications/slaw.desktop" >"$TMP/slaw.desktop"
+		put_file "$TMP/slaw.desktop" "$DATA_HOME/applications/slaw.desktop" 644
 	fi
-	if [ -f "$_s/share/mime/packages/assay-bundle.xml" ]; then
-		put_file "$_s/share/mime/packages/assay-bundle.xml" "$DATA_HOME/mime/packages/assay-bundle.xml" 644
+	if [ -f "$_s/share/mime/packages/slaw-bundle.xml" ]; then
+		put_file "$_s/share/mime/packages/slaw-bundle.xml" "$DATA_HOME/mime/packages/slaw-bundle.xml" 644
 	fi
 	# Icons are optional: older archives ship none.
 	if [ -d "$_s/share/icons" ]; then
@@ -324,10 +324,10 @@ check_linux_runtime() {
 	[ "$CLI_ONLY" -eq 1 ] && return 0
 	_missing=''
 	if have ldd; then
-		_missing=$(ldd "$INSTALL_DIR/assay-studio" 2>/dev/null | grep 'not found' || true)
+		_missing=$(ldd "$INSTALL_DIR/slaw-studio" 2>/dev/null | grep 'not found' || true)
 	fi
 	if [ -n "$_missing" ]; then
-		warn "Assay is installed but cannot start yet; missing libraries:"
+		warn "Slaw is installed but cannot start yet; missing libraries:"
 		printf '%s\n' "$_missing" | sed 's/^[[:space:]]*/    /' >&2
 		_id='' _like=''
 		if [ -r /etc/os-release ]; then
@@ -339,9 +339,9 @@ check_linux_runtime() {
 		*" fedora "* | *" rhel "* | *" centos "*) info "  Install them with:  sudo dnf install webkit2gtk4.1 gtk3" ;;
 		*" arch "*) info "  Install them with:  sudo pacman -S webkit2gtk-4.1 gtk3" ;;
 		*" suse "* | *" opensuse "*) info "  Install them with:  sudo zypper install libwebkit2gtk-4_1-0 gtk3" ;;
-		*) info "  Assay needs WebKitGTK 4.1 (webkit2gtk-4.1) and GTK 3." ;;
+		*) info "  Slaw needs WebKitGTK 4.1 (webkit2gtk-4.1) and GTK 3." ;;
 		esac
-		info "  The 'assay' CLI works without them."
+		info "  The 'slaw' CLI works without them."
 	fi
 	# Secret Service holds credentials for connections.
 	if have busctl; then
@@ -355,38 +355,38 @@ check_linux_runtime() {
 # ---------------------------------------------------------------- macOS
 install_darwin() { # stage dir
 	_s=$1
-	put_file "$_s/assay" "$INSTALL_DIR/assay" 755
+	put_file "$_s/slaw" "$INSTALL_DIR/slaw" 755
 	[ "$CLI_ONLY" -eq 1 ] && return 0
-	[ -d "$_s/Assay.app" ] || die "the archive has no 'Assay.app'"
-	case "$APP_DIR" in *\'*) die "ASSAY_APP_DIR must not contain a single quote" ;; esac
+	[ -d "$_s/Slaw.app" ] || die "the archive has no 'Slaw.app'"
+	case "$APP_DIR" in *\'*) die "SLAW_APP_DIR must not contain a single quote" ;; esac
 	mkdir -p "$APP_DIR"
-	_app="$APP_DIR/Assay.app"
+	_app="$APP_DIR/Slaw.app"
 	if [ -e "$_app" ] && [ "$FORCE" -ne 1 ] && ! in_manifest "$_app"; then
-		grep -q 'dev.sandwichlabs.assay' "$_app/Contents/Info.plist" 2>/dev/null ||
-			die "$_app exists and is not Assay. Nothing was changed. Use --force to replace it, or set ASSAY_APP_DIR."
+		grep -q 'dev.sandwichlabs.slaw' "$_app/Contents/Info.plist" 2>/dev/null ||
+			die "$_app exists and is not Slaw. Nothing was changed. Use --force to replace it, or set SLAW_APP_DIR."
 	fi
 	# ditto preserves the signature; the bundle is never modified after this copy.
 	rm -rf "$_app.new"
-	ditto "$_s/Assay.app" "$_app.new"
+	ditto "$_s/Slaw.app" "$_app.new"
 	if have codesign; then
 		codesign --verify --deep --strict "$_app.new" || {
 			rm -rf "$_app.new"
-			die "the code signature of Assay.app does not verify; not installing it"
+			die "the code signature of Slaw.app does not verify; not installing it"
 		}
 	fi
 	rm -rf "$_app"
 	mv "$_app.new" "$_app"
 	record D "$_app"
-	# No assay-studio wrapper: `assay studio --gui` finds the app itself (open -a) in ~/Applications or /Applications.
+	# No slaw-studio wrapper: `slaw studio --gui` finds the app itself (open -a) in ~/Applications or /Applications.
 	case "$APP_DIR" in
 	"$HOME/Applications" | /Applications) ;;
-	*) warn "$APP_DIR is not searched by 'assay studio --gui'; open the app from there directly." ;;
+	*) warn "$APP_DIR is not searched by 'slaw studio --gui'; open the app from there directly." ;;
 	esac
 }
 
 # ---------------------------------------------------------------- uninstall
 do_uninstall() {
-	[ -f "$MANIFEST" ] || die "no install manifest at $MANIFEST; nothing to uninstall (this installer did not put Assay on this machine)"
+	[ -f "$MANIFEST" ] || die "no install manifest at $MANIFEST; nothing to uninstall (this installer did not put Slaw on this machine)"
 	[ "$DRY" -eq 1 ] && info "dry run: would remove"
 	while IFS= read -r _line; do
 		case "$_line" in "F "* | "D "*) ;; *) continue ;; esac
@@ -398,17 +398,17 @@ do_uninstall() {
 		CLI_ONLY=0
 		refresh_linux_dbs
 	fi
-	ok "Assay uninstalled."
+	ok "Slaw uninstalled."
 	info "Kept on purpose (delete them yourself if you want them gone):"
 	if [ "$OS" = darwin ]; then
-		info "  settings:     ~/Library/Application Support/assay (and ~/Library/Preferences)"
-		info "  extensions:   ~/Library/Caches/assay"
+		info "  settings:     ~/Library/Application Support/slaw (and ~/Library/Preferences)"
+		info "  extensions:   ~/Library/Caches/slaw"
 	else
-		info "  settings:     ~/.config/assay"
-		info "  extensions:   ~/.cache/assay (DuckDB extension cache)"
+		info "  settings:     ~/.config/slaw"
+		info "  extensions:   ~/.cache/slaw (DuckDB extension cache)"
 	fi
-	info "  credentials:  your OS keychain / Secret Service (see: assay conn credentials clear, run before uninstalling)"
-	info "  workspaces:   your own folders, including any .assay-local/ inside them"
+	info "  credentials:  your OS keychain / Secret Service (see: slaw conn credentials clear, run before uninstalling)"
+	info "  workspaces:   your own folders, including any .slaw-local/ inside them"
 }
 
 # ---------------------------------------------------------------- main
@@ -454,22 +454,22 @@ main() {
 	guard_collision
 	resolve_version
 	_suffix="${VER}_${OS}_${ARCH}.tar.gz"
-	if [ "$CLI_ONLY" -eq 1 ]; then ASSET="assay_$_suffix"; else ASSET="assay-studio_$_suffix"; fi
-	BASE="${ASSAY_DOWNLOAD_BASE:-$GH/releases/download/$TAG}"
+	if [ "$CLI_ONLY" -eq 1 ]; then ASSET="slaw_$_suffix"; else ASSET="slaw-studio_$_suffix"; fi
+	BASE="${SLAW_DOWNLOAD_BASE:-$GH/releases/download/$TAG}"
 	BASE=${BASE%/}
 
 	_old=$(manifest_version)
-	info "Assay $VER for $OS/$ARCH ($([ "$CLI_ONLY" -eq 1 ] && echo 'CLI only' || echo 'CLI + Studio'))"
+	info "Slaw $VER for $OS/$ARCH ($([ "$CLI_ONLY" -eq 1 ] && echo 'CLI only' || echo 'CLI + Studio'))"
 	info "  from:       $BASE/$ASSET"
 	info "  binaries:   $INSTALL_DIR"
-	[ "$CLI_ONLY" -eq 1 ] || { [ "$OS" = darwin ] && info "  app:        $APP_DIR/Assay.app" || info "  desktop:    $DATA_HOME (applications, mime, icons)"; }
+	[ "$CLI_ONLY" -eq 1 ] || { [ "$OS" = darwin ] && info "  app:        $APP_DIR/Slaw.app" || info "  desktop:    $DATA_HOME (applications, mime, icons)"; }
 	[ -z "$_old" ] || info "  upgrading:  $_old -> $VER"
 	if [ "$DRY" -eq 1 ]; then
 		info "dry run: nothing downloaded or changed."
 		return 0
 	fi
 
-	TMP=$(mktemp -d "${TMPDIR:-/tmp}/assay-install.XXXXXX")
+	TMP=$(mktemp -d "${TMPDIR:-/tmp}/slaw-install.XXXXXX")
 	trap cleanup EXIT
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
@@ -505,7 +505,7 @@ main() {
 	if [ -f "$MANIFEST" ]; then _prev="$TMP/manifest.old"; cp "$MANIFEST" "$_prev"; fi
 	mkdir -p "$(dirname "$MANIFEST")"
 	{
-		printf '# assay install manifest; written by install.sh\n'
+		printf '# slaw install manifest; written by install.sh\n'
 		printf 'version=%s\n' "$VER"
 		cat "$NEW_MANIFEST"
 	} >"$MANIFEST.new.$$"
@@ -524,9 +524,9 @@ main() {
 
 	[ "$OS" = linux ] && refresh_linux_dbs
 
-	ok "Installed Assay $VER."
-	"$INSTALL_DIR/assay" --version </dev/null 2>&1 | sed 's/^/  /' >&2 || true
-	[ "$CLI_ONLY" -eq 1 ] || "$INSTALL_DIR/assay-studio" --version </dev/null 2>&1 | sed 's/^/  /' >&2 || true
+	ok "Installed Slaw $VER."
+	"$INSTALL_DIR/slaw" --version </dev/null 2>&1 | sed 's/^/  /' >&2 || true
+	[ "$CLI_ONLY" -eq 1 ] || "$INSTALL_DIR/slaw-studio" --version </dev/null 2>&1 | sed 's/^/  /' >&2 || true
 
 	[ "$OS" = linux ] && check_linux_runtime
 
@@ -543,20 +543,20 @@ main() {
 		esac
 		;;
 	esac
-	_other=$(command -v assay 2>/dev/null || true)
-	if [ -n "$_other" ] && [ "$_other" != "$INSTALL_DIR/assay" ]; then
-		warn "another 'assay' comes first on your PATH: $_other"
-		info "  Running 'assay' will start that program, not Assay. Put $INSTALL_DIR earlier on PATH, or use $INSTALL_DIR/assay."
+	_other=$(command -v slaw 2>/dev/null || true)
+	if [ -n "$_other" ] && [ "$_other" != "$INSTALL_DIR/slaw" ]; then
+		warn "another 'slaw' comes first on your PATH: $_other"
+		info "  Running 'slaw' will start that program, not Slaw. Put $INSTALL_DIR earlier on PATH, or use $INSTALL_DIR/slaw."
 	fi
 
-	if have pgrep && pgrep -x assay-studio >/dev/null 2>&1; then
-		info "Assay is running; restart it to use the new version."
+	if have pgrep && pgrep -x slaw-studio >/dev/null 2>&1; then
+		info "Slaw is running; restart it to use the new version."
 	fi
 
 	say ""
 	say "Next:"
-	say "  assay workspace init demo      # make a workspace folder"
-	say "  assay studio --gui demo        # open it in Studio"
+	say "  slaw workspace init demo      # make a workspace folder"
+	say "  slaw studio --gui demo        # open it in Studio"
 	say "  Docs: $GH"
 	say "Uninstall: re-run this script with --uninstall"
 }

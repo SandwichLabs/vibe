@@ -93,7 +93,7 @@ watch(m.step, async (s) => {
 </template>
 
 <style scoped>
-.nd-row { display: flex; align-items: center; gap: var(--sh-space-2); width: 100%; margin-top: var(--sh-space-3); padding: var(--sh-space-3) 0 0; font: inherit; color: var(--sh-ink); background: none; border: 0; border-top: 2px solid var(--assay-border); cursor: pointer; text-align: left; }
+.nd-row { display: flex; align-items: center; gap: var(--sh-space-2); width: 100%; margin-top: var(--sh-space-3); padding: var(--sh-space-3) 0 0; font: inherit; color: var(--sh-ink); background: none; border: 0; border-top: 2px solid var(--slaw-border); cursor: pointer; text-align: left; }
 .nd-row span { flex: 1; }
 .nd-link { font: inherit; background: none; border: 0; padding: 0; color: var(--sh-teal); text-decoration: underline; cursor: pointer; }
 </style>

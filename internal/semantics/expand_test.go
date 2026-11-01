@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/queries"
 )
 
 type fakeSource struct {
@@ -67,11 +67,11 @@ func TestExpand_Shapes(t *testing.T) {
 	f := newFake(t)
 	cases := []struct{ in, want string }{
 		{"SELECT * FROM metric('net_revenue', by => 'region')",
-			"SELECT * FROM (SELECT \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS assay_metric_net_revenue GROUP BY \"region\")"},
+			"SELECT * FROM (SELECT \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS slaw_metric_net_revenue GROUP BY \"region\")"},
 		{"select * from METRIC ( 'net_revenue' , BY=>['Month', 'region'] )",
-			"select * from (SELECT \"month\", \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS assay_metric_net_revenue GROUP BY \"month\", \"region\")"},
+			"select * from (SELECT \"month\", \"region\", sum(amount) AS \"net_revenue\" FROM (\nSELECT region, month, amount FROM sales\n) AS slaw_metric_net_revenue GROUP BY \"month\", \"region\")"},
 		{"SELECT metric('orders') AS n",
-			"SELECT (SELECT count(*) AS \"orders\" FROM (\nSELECT * FROM orders\n) AS assay_metric_orders) AS n"},
+			"SELECT (SELECT count(*) AS \"orders\" FROM (\nSELECT * FROM orders\n) AS slaw_metric_orders) AS n"},
 		{"SELECT 'metric(''x'')' AS s -- metric('y')\n, \"metric\" FROM t", "SELECT 'metric(''x'')' AS s -- metric('y')\n, \"metric\" FROM t"},
 		{"SELECT * FROM s.metric('x')", "SELECT * FROM s.metric('x')"},
 		{"SELECT metric FROM metrics", "SELECT metric FROM metrics"},
@@ -183,7 +183,7 @@ func TestExpand_Refusals(t *testing.T) {
 	// an unclosed trailing comment is cut off with the semicolon, not left to swallow the closing paren.
 	r, err := expand(t, f, "SELECT * FROM metric('open')")
 	require.NoError(t, err)
-	assert.Contains(t, r.SQL, "SELECT 1\n) AS assay_metric_open")
+	assert.Contains(t, r.SQL, "SELECT 1\n) AS slaw_metric_open")
 	// 20 calls is fine.
 	_, err = expand(t, f, "SELECT "+strings.Repeat("metric('orders'),", MaxMetricCalls)+" 1")
 	assert.NoError(t, err)
@@ -345,7 +345,7 @@ func TestExpandGrain_ShapeAndRefusals(t *testing.T) {
 	f := newFake(t)
 	r, err := ExpandGrain(context.Background(), f.metrics["net_revenue"], f, Options{})
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT count(*) FROM (SELECT 1 FROM (\nSELECT region, month, amount FROM sales\n) AS assay_grain_net_revenue GROUP BY \"region\", \"month\" HAVING count(*) > 1) AS assay_grain_dups", r.SQL)
+	assert.Equal(t, "SELECT count(*) FROM (SELECT 1 FROM (\nSELECT region, month, amount FROM sales\n) AS slaw_grain_net_revenue GROUP BY \"region\", \"month\" HAVING count(*) > 1) AS slaw_grain_dups", r.SQL)
 	require.Len(t, r.Bodies, 1)
 
 	// No dimension, no grain.

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 const profileOrders = "version: 1\nname: orders\ngrain: one row per order\ntable: prod_pg.public.orders\nconnection: prod_pg\nid_column: order_id\n"
@@ -59,7 +59,7 @@ func answers(left, right, lo, ro, fan, dup int64, seen *[]string) QueryFunc {
 			n = left
 		case sql == `SELECT count(*) FROM "customers"`:
 			n = right
-		case strings.Contains(sql, "WHERE NOT EXISTS") && strings.Contains(sql, `FROM "prod_pg"."public"."orders" AS assay_l WHERE NOT`):
+		case strings.Contains(sql, "WHERE NOT EXISTS") && strings.Contains(sql, `FROM "prod_pg"."public"."orders" AS slaw_l WHERE NOT`):
 			n = lo
 		case strings.Contains(sql, "WHERE NOT EXISTS"):
 			n = ro
@@ -83,9 +83,9 @@ func TestPlanProfile_Shapes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."orders"`, p.LeftRows.SQL)
 	assert.Equal(t, `SELECT count(*) FROM "customers"`, p.RightRows.SQL)
-	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."orders" AS assay_l WHERE NOT EXISTS (SELECT 1 FROM "customers" AS assay_r WHERE assay_r."customer_id" = assay_l."customer_id" AND assay_r."region" = assay_l."region")`, p.LeftOrphans.SQL)
-	assert.Equal(t, `SELECT count(*) FROM "customers" AS assay_r WHERE NOT EXISTS (SELECT 1 FROM "prod_pg"."public"."orders" AS assay_l WHERE assay_r."customer_id" = assay_l."customer_id" AND assay_r."region" = assay_l."region")`, p.RightOrphans.SQL)
-	assert.Equal(t, `SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM "customers" AS assay_r WHERE assay_r."customer_id" IS NOT NULL AND assay_r."region" IS NOT NULL AND EXISTS (SELECT 1 FROM "prod_pg"."public"."orders" AS assay_l WHERE assay_r."customer_id" = assay_l."customer_id" AND assay_r."region" = assay_l."region") GROUP BY assay_r."customer_id", assay_r."region") AS assay_g`, p.MaxFanout.SQL)
+	assert.Equal(t, `SELECT count(*) FROM "prod_pg"."public"."orders" AS slaw_l WHERE NOT EXISTS (SELECT 1 FROM "customers" AS slaw_r WHERE slaw_r."customer_id" = slaw_l."customer_id" AND slaw_r."region" = slaw_l."region")`, p.LeftOrphans.SQL)
+	assert.Equal(t, `SELECT count(*) FROM "customers" AS slaw_r WHERE NOT EXISTS (SELECT 1 FROM "prod_pg"."public"."orders" AS slaw_l WHERE slaw_r."customer_id" = slaw_l."customer_id" AND slaw_r."region" = slaw_l."region")`, p.RightOrphans.SQL)
+	assert.Equal(t, `SELECT coalesce(max(c), 0) FROM (SELECT count(*) AS c FROM "customers" AS slaw_r WHERE slaw_r."customer_id" IS NOT NULL AND slaw_r."region" IS NOT NULL AND EXISTS (SELECT 1 FROM "prod_pg"."public"."orders" AS slaw_l WHERE slaw_r."customer_id" = slaw_l."customer_id" AND slaw_r."region" = slaw_l."region") GROUP BY slaw_r."customer_id", slaw_r."region") AS slaw_g`, p.MaxFanout.SQL)
 	assert.Equal(t, "prod_pg", p.LeftOrphans.Connection)
 
 	// Two unqualified tables on different connections cannot share a statement.

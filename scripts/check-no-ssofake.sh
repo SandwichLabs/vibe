@@ -9,7 +9,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 fail=0
-allowed='^[0-9]+:[[:space:]]*(#|- name:|run: scripts/(check-(no-ssofake|binary-tags)|test-check-binary-tags)\.sh|run: go vet -tags ssofake,webkit2_41,duckdb_arrow \./studio/$|out="\$\(deadcode -tags webkit2_41,duckdb_arrow \./cmd/assay \./studio \./tools/ssofake\)"$|desc: Studio dev with AWS sign-in|- wails dev -tags webkit2_41,duckdb_arrow,ssofake$|studio:dev:ssofake:$)'
+allowed='^[0-9]+:[[:space:]]*(#|- name:|run: scripts/(check-(no-ssofake|binary-tags)|test-check-binary-tags)\.sh|run: go vet -tags ssofake,webkit2_41,duckdb_arrow \./studio/$|out="\$\(deadcode -tags webkit2_41,duckdb_arrow \./cmd/slaw \./studio \./tools/ssofake\)"$|desc: Studio dev with AWS sign-in|- wails dev -tags webkit2_41,duckdb_arrow,ssofake$|studio:dev:ssofake:$)'
 files=(.github/workflows/*.yml Taskfile.yml studio/wails.json scripts/*.sh)
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue

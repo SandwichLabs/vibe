@@ -13,8 +13,8 @@ import (
 
 	duckdb "github.com/duckdb/duckdb-go/v2"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/usersql"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/usersql"
 )
 
 const (
@@ -23,12 +23,12 @@ const (
 	historyReadMax   = 16 << 20
 	historyDirMode   = 0o700
 	historyFileMode  = 0o600
-	historyDirParts  = ".assay-local"
+	historyDirParts  = ".slaw-local"
 	historyDirParts2 = "repl"
 	historyFileName  = "history"
 )
 
-// history is the console's recall list, kept in .assay-local/repl/history: one
+// history is the console's recall list, kept in .slaw-local/repl/history: one
 // entry per line, machine-local, never in the workspace's tracked files. It
 // only ever holds what recordable and eligible allow. The file is a cache the
 // repository does not control: a symbolic link anywhere on its path, or a file

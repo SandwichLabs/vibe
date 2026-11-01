@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const leakNeedle = "pw-R117-NEEDLE"
@@ -155,7 +155,7 @@ func TestLeak_TestEnvCredAfterServerChange(t *testing.T) {
 	_, err := app.SaveConnection(SaveConnectionRequest{Scope: "shared", Def: workspace.ConnectionDef{Name: "prod_pg", Type: "postgres", Host: "db.internal", Port: 5432, Database: "app"}, IsNew: true, SignIn: "env:PGPROD"})
 	require.NoError(t, err)
 	// A pull points prod_pg at another server.
-	yml := filepath.Join(app.ws.Root(), "assay.yaml")
+	yml := filepath.Join(app.ws.Root(), "slaw.yaml")
 	b, err := os.ReadFile(yml)
 	require.NoError(t, err)
 	nb := strings.ReplaceAll(string(b), "db.internal", "127.0.0.1")
@@ -206,7 +206,7 @@ func leakPulledApp(t *testing.T, method string) (*App, *fakePG) {
 		_, err = app.SetConnectionCredentials(SetCredentialsRequest{Name: "prod_pg", CredentialInput: CredentialInput{Username: "rosa", Password: leakNeedle}})
 		require.NoError(t, err)
 	}
-	yml := filepath.Join(app.ws.Root(), "assay.yaml")
+	yml := filepath.Join(app.ws.Root(), "slaw.yaml")
 	b, err := os.ReadFile(yml)
 	require.NoError(t, err)
 	nb := strings.ReplaceAll(string(b), "db.internal", "127.0.0.1")

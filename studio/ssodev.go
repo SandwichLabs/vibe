@@ -2,7 +2,7 @@
 
 package main
 
-import "github.com/SandwichLabs/assay/internal/workspace"
+import "github.com/SandwichLabs/slaw/internal/workspace"
 
 // ssoDevOptions is nothing in every real build: AWS sign-in talks to AWS only.
 // The `ssofake` build tag (task studio:dev:ssofake, ssofake.go) is the one

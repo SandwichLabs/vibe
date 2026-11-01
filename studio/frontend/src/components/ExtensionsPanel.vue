@@ -3,7 +3,7 @@ import { App } from '../lib/bindings'
 // ExtensionsPanel — App settings > Extensions (SPEC 09): one row per DuckDB
 // extension a connection type needs: what it is for, which connections here use
 // it, whether it is installed, and an Install button (the consent for the
-// download is the click). Stored in Assay's own folder.
+// download is the click). Stored in Slaw's own folder.
 import { ref, onMounted, onUnmounted } from 'vue'
 import Icon from './Icon.vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
@@ -55,7 +55,7 @@ onUnmounted(() => unsubs.splice(0).forEach((u) => u()))
       <span class="label">Downloaded once, with your OK</span>
     </div>
     <div class="card card-pad col" style="gap: var(--sh-space-3);">
-      <p class="help" style="margin: 0;">Some connection types need a small add-on for Assay's database engine. Assay never downloads one without asking: install it here, or when a connection asks for it.</p>
+      <p class="help" style="margin: 0;">Some connection types need a small add-on for Slaw's database engine. Slaw never downloads one without asking: install it here, or when a connection asks for it.</p>
       <table class="brutal-table">
         <caption class="sr">DuckDB extensions</caption>
         <thead><tr><th scope="col">Extension</th><th scope="col">What it is for</th><th scope="col">Used by</th><th scope="col">Status</th><th scope="col"><span class="sr">Action</span></th></tr></thead>
@@ -76,7 +76,7 @@ onUnmounted(() => unsubs.splice(0).forEach((u) => u()))
           <tr v-if="loaded && !rows.length"><td colspan="5">No extensions are needed.</td></tr>
         </tbody>
       </table>
-      <p class="help" style="margin: 0;">Stored in Assay's own folder, separate from any DuckDB you installed yourself. DuckDB cannot uninstall an extension, so there is no Remove button here yet; deleting Assay's extensions folder removes them all.</p>
+      <p class="help" style="margin: 0;">Stored in Slaw's own folder, separate from any DuckDB you installed yourself. DuckDB cannot uninstall an extension, so there is no Remove button here yet; deleting Slaw's extensions folder removes them all.</p>
       <div v-if="error" class="note attn" role="alert"><Icon name="alert" :size="16" /><span>{{ error }}</span></div>
     </div>
   </section>

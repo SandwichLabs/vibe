@@ -1,4 +1,4 @@
-// useNewWorkspaceFields — the fields shared by New workspace and Import .assay
+// useNewWorkspaceFields — the fields shared by New workspace and Import .slaw
 // into a new workspace (F6).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
@@ -23,7 +23,7 @@ describe('useNewWorkspaceFields', () => {
 
   it('reset restores the last location and turns git on only when git exists', async () => {
     setApp({ CheckGitAvailable: vi.fn(async () => true) })
-    localStorage.setItem('assay.newWorkspace.parentDir', '/home/me/work')
+    localStorage.setItem('slaw.newWorkspace.parentDir', '/home/me/work')
     const f = useNewWorkspaceFields(ref(''))
     await f.reset()
     expect(f.parentDir.value).toBe('/home/me/work')
@@ -40,7 +40,7 @@ describe('useNewWorkspaceFields', () => {
     const f = useNewWorkspaceFields(ref('x'))
     f.parentDir.value = ' /srv/ws '
     f.remember()
-    expect(localStorage.getItem('assay.newWorkspace.parentDir')).toBe('/srv/ws')
+    expect(localStorage.getItem('slaw.newWorkspace.parentDir')).toBe('/srv/ws')
   })
 
   it('choose sets the picked folder, ignores a cancel, and reports a failure', async () => {

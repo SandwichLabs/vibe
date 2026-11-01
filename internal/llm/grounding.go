@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/agents"
 )
 
 // toolCategory looks up a tool's registered category (e.g. "data", "content",

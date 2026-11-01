@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/skills"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // ContentItem is one notebook, query, skill, data artifact or semantic
@@ -42,7 +42,7 @@ type Contents struct {
 }
 
 // ContentsOf lists what t could export: its readable notebooks, queries and
-// user skills (built-ins ship with Assay), and its shared and own connection
+// user skills (built-ins ship with Slaw), and its shared and own connection
 // definitions, each marked portable or not. The workspace's own default
 // database is left out: a bundle has no data to go with it.
 func ContentsOf(ctx context.Context, t Target) (*Contents, error) {

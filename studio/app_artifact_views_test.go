@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 const studioScriptManifest = "version: 1\ntitle: Chart\nview: script\nqueries:\n  - name: big\n    sql: SELECT 1 AS x\n"

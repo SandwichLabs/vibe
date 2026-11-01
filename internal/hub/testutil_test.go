@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,11 +19,11 @@ func quietLogger() *slog.Logger {
 // (so the host's settings never leak in) and returns it, open.
 func newWorkspace(t *testing.T) workspace.Workspace {
 	t.Helper()
-	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	t.Setenv("SLAW_CONFIG_DIR", t.TempDir())
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "acme"), workspace.WithInitLogger(quietLogger()))
 	require.NoError(t, err)
 	require.NoError(t, res.Workspace.Close())
-	ws, err := workspace.Open(res.Workspace.Root(), workspace.WithLogger(quietLogger()), workspace.WithConfigDir(os.Getenv("ASSAY_CONFIG_DIR")))
+	ws, err := workspace.Open(res.Workspace.Root(), workspace.WithLogger(quietLogger()), workspace.WithConfigDir(os.Getenv("SLAW_CONFIG_DIR")))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	return ws

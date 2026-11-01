@@ -18,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	slawmcp "github.com/SandwichLabs/slaw/internal/mcp"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -156,7 +156,7 @@ func TestServeOwnerOverStdio(t *testing.T) {
 	text, isErr = run.tool("run_query", map[string]any{"sql": "INSERT INTO orders VALUES (9, 'Refused')"})
 	assert.True(t, isErr)
 	assert.Contains(t, text, "needs your OK")
-	assert.Contains(t, text, "other than the workspace's local database always need Assay")
+	assert.Contains(t, text, "other than the workspace's local database always need Slaw")
 	text, isErr = run.tool("run_query", map[string]any{"sql": "SELECT count(*) FROM orders WHERE status = 'Refused'"})
 	require.False(t, isErr, text)
 	assert.Contains(t, text, "0", "the refused write did not run")
@@ -238,7 +238,7 @@ func TestServeProxiesToStudioWhenStudioOwnsTheHub(t *testing.T) {
 	require.NoError(t, studio.Stop())
 	select {
 	case err := <-run.done:
-		assert.ErrorIs(t, err, assaymcp.ErrUpstreamLost)
+		assert.ErrorIs(t, err, slawmcp.ErrUpstreamLost)
 		assert.NotContains(t, errString(err), studio.Token())
 	case <-time.After(20 * time.Second):
 		t.Fatal("the proxy did not exit after Studio stopped MCP")
@@ -300,15 +300,15 @@ func TestServeSSERefusedWhenAnotherProcessOwns(t *testing.T) {
 }
 
 func TestServeRefusesLegacyFilesAndNonWorkspaces(t *testing.T) {
-	_, err := ResolveRoot("notes.assay", "")
+	_, err := ResolveRoot("notes.slaw", "")
 	assert.ErrorIs(t, err, ErrLegacyFile)
 	assert.Contains(t, err.Error(), "bundles, not workspaces")
-	_, err = ResolveRoot("/somewhere/NOTES.ASSAY", "")
+	_, err = ResolveRoot("/somewhere/NOTES.SLAW", "")
 	assert.ErrorIs(t, err, ErrLegacyFile)
 
 	_, err = ResolveRoot("", t.TempDir())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no Assay workspace found")
+	assert.Contains(t, err.Error(), "no Slaw workspace found")
 }
 
 func TestResolveRootWalksUp(t *testing.T) {
@@ -492,7 +492,7 @@ func TestHubLockSymlinksAreNeverFollowed(t *testing.T) {
 		_, err = ReadHolder(ws.Root())
 		assert.ErrorIs(t, err, ErrUntrusted)
 	})
-	t.Run(".assay-local is a symlink", func(t *testing.T) {
+	t.Run(".slaw-local is a symlink", func(t *testing.T) {
 		ws := newWorkspace(t)
 		elsewhere := t.TempDir()
 		local := filepath.Join(ws.Root(), workspace.LocalDir)
@@ -557,7 +557,7 @@ func TestAcquireSurvivesConcurrentProbes(t *testing.T) {
 		}
 	}()
 	for i := 0; i < 200; i++ {
-		hold, err := AcquireHub(ws, "Assay")
+		hold, err := AcquireHub(ws, "Slaw")
 		require.NoError(t, err, "attempt %d", i)
 		require.NoError(t, hold.Release())
 	}

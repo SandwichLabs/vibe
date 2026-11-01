@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
-// TestWithRequirements is the one Test of a connection, for Studio and `assay
+// TestWithRequirements is the one Test of a connection, for Studio and `slaw
 // conn test`: it finds rc's credential (TestCredential) and, for a lake or table
 // read with storage connections (rc.Requires), each storage connection's own
 // saved credential by its own sign-in, with the same server-changed guard, and

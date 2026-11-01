@@ -19,9 +19,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // minioLake builds a lake whose catalog ("duckdb" or "sqlite") is copied to
@@ -118,7 +118,7 @@ func countPeople(t *testing.T, sess session.Session) int {
 func leftovers(t *testing.T, sess session.Session) int {
 	t.Helper()
 	var n int
-	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__assay_vet_%'").Scan(&n))
+	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__slaw_vet_%'").Scan(&n))
 	return n
 }
 

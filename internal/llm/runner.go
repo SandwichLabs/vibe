@@ -1,4 +1,4 @@
-// Package llm wires Assay's in-app conversational agent to an OpenAI-compatible
+// Package llm wires Slaw's in-app conversational agent to an OpenAI-compatible
 // LLM endpoint (e.g. a local llama-server at http://localhost:8080/v1) using the
 // charmbracelet/fantasy agent framework.
 //
@@ -26,10 +26,10 @@ import (
 
 	"charm.land/fantasy"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/config"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/config"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 // Sandbox modes mirror internal/agents' SandboxMode values exactly (they are
@@ -133,7 +133,7 @@ func NewRunner(handler Handler, logger *slog.Logger) *Runner {
 	return &Runner{handler: handler, logger: logger}
 }
 
-const baseSystemPrompt = `You are the Assay wizard — the agent layer of Assay, an agentic data workspace. A workspace is a folder holding notebooks, saved queries and skills as plain files, plus the list of connections (local DuckDB files, MotherDuck, Postgres, SQLite, object storage…) where the user's data actually lives; Assay queries that data in place through one DuckDB hub. You help the user explore and query their data and build notebooks and dashboards from it.
+const baseSystemPrompt = `You are the Slaw wizard — the agent layer of Slaw, an agentic data workspace. A workspace is a folder holding notebooks, saved queries and skills as plain files, plus the list of connections (local DuckDB files, MotherDuck, Postgres, SQLite, object storage…) where the user's data actually lives; Slaw queries that data in place through one DuckDB hub. You help the user explore and query their data and build notebooks and dashboards from it.
 
 Prefer reading the schema (introspect_schema, describe_table) before writing SQL or making changes. Keep answers concise and practical. When you create or change schema, briefly confirm what you did.`
 
@@ -175,7 +175,7 @@ func systemPromptFor(sandbox string, ask bool, skillsBlock, dataDir string) stri
 	if ask && sc.Mode != agents.ModeReadOnly {
 		b.WriteString("\nEvery change you make (rows, tables, saved queries, notebooks, skills) is shown to the user for approval before it runs. Call the tool normally. If it comes back declined, nothing changed: say so, and don't retry unless the user asks again.\n")
 	}
-	b.WriteString("\nCONNECTIONS AND FILES — data lives in connections (call list_connections: name, type, status, read_only, local or remote). Name tables as connection.schema.table (introspect_schema takes a connection). You may ATTACH, SET, INSTALL, LOAD, run postgres_query/postgres_execute or read secrets or settings in NO sandbox; do not try. Read a file only with a literal absolute path inside the workspace data/ folder (" + dataDirSentence(dataDir) + "), e.g. read_csv('" + dataDirExample(dataDir) + "/sales.csv'); a path built with ||, a variable or an expression is refused, as is any other folder or URL (a URL is allowed only inside a storage connection's scope; on s3/gcs/r2 a * or ** wildcard works, e.g. read_parquet('s3://bucket/dir/*.parquet'), FROM 's3://bucket/dir/**/*.csv' or glob('s3://bucket/dir/**'): Assay lists the matching objects when the query runs, at most 10000, a snapshot of that moment, and only * and ** are wildcards). A write needs the sandbox to allow it, the connection to be writable (not read_only), and the user's approval, which is always asked for a connection that is not a local file. A refusal tells you why: read it and change the query instead of retrying it.\n")
+	b.WriteString("\nCONNECTIONS AND FILES — data lives in connections (call list_connections: name, type, status, read_only, local or remote). Name tables as connection.schema.table (introspect_schema takes a connection). You may ATTACH, SET, INSTALL, LOAD, run postgres_query/postgres_execute or read secrets or settings in NO sandbox; do not try. Read a file only with a literal absolute path inside the workspace data/ folder (" + dataDirSentence(dataDir) + "), e.g. read_csv('" + dataDirExample(dataDir) + "/sales.csv'); a path built with ||, a variable or an expression is refused, as is any other folder or URL (a URL is allowed only inside a storage connection's scope; on s3/gcs/r2 a * or ** wildcard works, e.g. read_parquet('s3://bucket/dir/*.parquet'), FROM 's3://bucket/dir/**/*.csv' or glob('s3://bucket/dir/**'): Slaw lists the matching objects when the query runs, at most 10000, a snapshot of that moment, and only * and ** are wildcards). A write needs the sandbox to allow it, the connection to be writable (not read_only), and the user's approval, which is always asked for a connection that is not a local file. A refusal tells you why: read it and change the query instead of retrying it.\n")
 	b.WriteString(sqlStyleBlock)
 	b.WriteString("\nSCHEMA DESIGN — when the user describes their business or asks you to design or sketch a database, call propose_schema with the COMPLETE draft: every table with its columns, plus the relationships linking them. Use the friendly field types: ID (the primary key — start every table with one), Text, Long text, Number, Whole number, Money, Date, Time, Yes/No, Link (a reference to another table's ID — pair it with an entry in relationships), Pick (one of a small set of choices). propose_schema renders the draft inline in chat as a readable table-by-table summary (there is no diagram screen) — after it returns, briefly describe what you proposed and ask the user to confirm (\"Want me to build this?\"). When the user asks for changes, re-call propose_schema with the full updated draft; ask at most one short clarifying question after proposing. Only once the user clearly confirms (\"yes\", \"build it\", \"looks good\", ...) do you create it: call create_table once per table, PARENTS BEFORE CHILDREN (a table referenced by a Link must be created before the table that links to it), with every Link declared as an inline foreign key in the child column's type string, e.g. a Link column becomes {\"name\": \"customer_id\", \"type\": \"INTEGER REFERENCES customers(id)\"}. Do not call create_table before the user confirms, and do not silently skip confirmation even if the request sounded like an instruction to build immediately — always show the draft first.\n")
 

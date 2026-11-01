@@ -34,7 +34,7 @@ describe('normalizeIdentifier', () => {
       ['ǅemal', 'emal'],
       ['a-b-c', 'a_b_c'],
       ['A__B', 'A__B'],
-      ['_assay_x', '_assay_x'],
+      ['_slaw_x', '_slaw_x'],
       ['select', 'select'],
       ['   ', 'column'],
       ['日本', 'column'],

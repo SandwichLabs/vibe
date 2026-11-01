@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const connNeedle = "pw-NEEDLE-117-do-not-leak"
@@ -151,14 +151,14 @@ func TestConnectionCRUD_ScopesMoveAndDelete(t *testing.T) {
 	_, err = app.SaveConnection(SaveConnectionRequest{Scope: "shared", IsNew: true, Def: workspace.ConnectionDef{Name: "bad", Type: "duckdb", Path: "/etc/x.duckdb"}})
 	require.Error(t, err)
 
-	// Update, then move to Team: the definition is in assay.yaml and no longer in local.
+	// Update, then move to Team: the definition is in slaw.yaml and no longer in local.
 	_, err = app.SaveConnection(SaveConnectionRequest{Scope: "local", Def: pgDef("db2.internal")})
 	require.NoError(t, err)
 	d, err = app.MoveConnection(MoveConnectionRequest{Name: "prod_pg", To: "shared"})
 	require.NoError(t, err)
 	assert.Equal(t, "shared", d.Scope)
 	assert.Equal(t, "db2.internal", d.Def.Host)
-	yml, err := os.ReadFile(filepath.Join(app.ws.Root(), "assay.yaml"))
+	yml, err := os.ReadFile(filepath.Join(app.ws.Root(), "slaw.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(yml), "db2.internal")
 
@@ -260,8 +260,8 @@ func TestServerChanged_CredentialsAreNotSentToANewServer(t *testing.T) {
 	_, err = app.SetConnectionCredentials(SetCredentialsRequest{Name: "prod_pg", CredentialInput: CredentialInput{Username: "rosa", Password: connNeedle}})
 	require.NoError(t, err)
 
-	// A git pull changes the host in assay.yaml.
-	yml := filepath.Join(app.ws.Root(), "assay.yaml")
+	// A git pull changes the host in slaw.yaml.
+	yml := filepath.Join(app.ws.Root(), "slaw.yaml")
 	b, err := os.ReadFile(yml)
 	require.NoError(t, err)
 	require.Contains(t, string(b), "db.internal")

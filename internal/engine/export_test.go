@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // ResolveTable is ParseTable plus defaulting against the session: an

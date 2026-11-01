@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
 )
 
 // This file is the data artifact view schema (docs/plans/data-artifacts.md,

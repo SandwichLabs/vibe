@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // Session is the DuckDB hub: one DuckDB instance whose attached catalogs are
@@ -179,9 +179,9 @@ var _ Session = (*hub)(nil)
 func DefaultDirs() (extensionDir, secretDir string) {
 	base, err := os.UserCacheDir()
 	if err != nil || base == "" {
-		base = filepath.Join(os.TempDir(), fmt.Sprintf("assay-cache-%d", os.Getuid()))
+		base = filepath.Join(os.TempDir(), fmt.Sprintf("slaw-cache-%d", os.Getuid()))
 	}
-	root := filepath.Join(base, "assay", "duckdb")
+	root := filepath.Join(base, "slaw", "duckdb")
 	return filepath.Join(root, "extensions"), filepath.Join(root, "secrets")
 }
 
@@ -192,7 +192,7 @@ func New(opts ...Option) (Session, error) {
 	c := newConfig(opts)
 	ownTemp := false
 	if c.tempDir == "" {
-		d, err := os.MkdirTemp("", fmt.Sprintf("assay-duckdb-%d-hub-*", os.Getpid()))
+		d, err := os.MkdirTemp("", fmt.Sprintf("slaw-duckdb-%d-hub-*", os.Getpid()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create hub temp directory: %w", err)
 		}

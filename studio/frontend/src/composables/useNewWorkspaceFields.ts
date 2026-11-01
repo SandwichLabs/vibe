@@ -3,14 +3,14 @@
  * (F6): where to put it (remembered from the last time), whether to start a git
  * repository (only when git exists), the folder name the workspace name becomes
  * (slugify, mirroring the Go side), and the folder picker. Used by the New
- * workspace dialog and by Import .assay into a new workspace.
+ * workspace dialog and by Import .slaw into a new workspace.
  */
 import { ref, computed, type Ref } from 'vue'
 import { App } from '../lib/bindings'
 import { slugify } from './useWorkspace'
 import { errorText } from '../lib/errors'
 
-const LAST_PARENT_KEY = 'assay.newWorkspace.parentDir'
+const LAST_PARENT_KEY = 'slaw.newWorkspace.parentDir'
 
 export function useNewWorkspaceFields(name: Ref<string>) {
   const parentDir = ref('')

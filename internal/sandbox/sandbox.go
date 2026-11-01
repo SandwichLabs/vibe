@@ -1,6 +1,6 @@
 // Package sandbox is the one definition of the agent's three sandbox tiers:
 // their names, the strict parser for a tier string and the restrictiveness
-// order. It is a leaf (imports nothing of Assay) so the workspace policy and the
+// order. It is a leaf (imports nothing of Slaw) so the workspace policy and the
 // agent's enforcement share a single parser and cannot drift apart: this is
 // security policy, and a tier that one side accepts and the other rejects (or
 // ranks differently) is a hole.

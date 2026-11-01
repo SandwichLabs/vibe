@@ -191,7 +191,7 @@ func TestListDirAndSubdirs(t *testing.T) {
 	root := t.TempDir()
 	assert.Empty(t, mustList(t, root, "nope", ".x"))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "d", "sub"), 0o755))
-	for _, n := range []string{"b.x", "a.x", ".hidden.x", "c.y", "edit.x~", ".assay-tmp-z.x.123"} {
+	for _, n := range []string{"b.x", "a.x", ".hidden.x", "c.y", "edit.x~", ".slaw-tmp-z.x.123"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "d", n), []byte("1"), 0o644))
 	}
 	require.NoError(t, os.Symlink(filepath.Join(root, "d", "a.x"), filepath.Join(root, "d", "link.x")))
@@ -262,9 +262,9 @@ func TestRead_SizeCapAndPlainErrors(t *testing.T) {
 func TestSweepStaleTemps(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notebooks"), 0o755))
-	old := filepath.Join(root, "notebooks", TempPrefix+"a.asnb.123")
-	fresh := filepath.Join(root, "notebooks", TempPrefix+"b.asnb.456")
-	keep := filepath.Join(root, "notebooks", "real.asnb")
+	old := filepath.Join(root, "notebooks", TempPrefix+"a.slnb.123")
+	fresh := filepath.Join(root, "notebooks", TempPrefix+"b.slnb.456")
+	keep := filepath.Join(root, "notebooks", "real.slnb")
 	for _, p := range []string{old, fresh, keep} {
 		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
 	}

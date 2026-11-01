@@ -1,6 +1,6 @@
 // Copies the pinned libraries a custom artifact view may load (#160) from
-// node_modules into dist/assay-view/lib/, where Studio's Go binary embeds them and
-// serves them under /assay-view/lib/. Run after `vite build` (npm run build).
+// node_modules into dist/slaw-view/lib/, where Studio's Go binary embeds them and
+// serves them under /slaw-view/lib/. Run after `vite build` (npm run build).
 //
 // The versions are the exact ones in package.json (no ranges), so the bytes are
 // reproducible from package-lock.json. vega-interpreter ships only as an ES
@@ -12,9 +12,9 @@ import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } 
 import { join } from 'node:path'
 import { build } from 'vite'
 
-const OUT = join('dist', 'assay-view', 'lib')
+const OUT = join('dist', 'slaw-view', 'lib')
 
-// [package, file inside it, name served as /assay-view/lib/<name>.js]
+// [package, file inside it, name served as /slaw-view/lib/<name>.js]
 const COPY = [
   ['d3-array', 'dist/d3-array.min.js'],
   ['d3-color', 'dist/d3-color.min.js'],
@@ -38,7 +38,7 @@ for (const [pkg, file] of COPY) {
 }
 
 // The interpreter, bundled into one classic script.
-const tmp = join('dist', '.assay-view-interpreter')
+const tmp = join('dist', '.slaw-view-interpreter')
 await build({
   configFile: false,
   logLevel: 'warn',

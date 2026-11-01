@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // A semantics item's id is "<folder>/<name>" ("metrics/net_revenue") or

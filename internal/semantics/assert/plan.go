@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Status of one check.
@@ -205,10 +205,10 @@ func planMetricAssertion(ctx context.Context, m *semantics.Metric, a semantics.A
 // Parameter names the planner binds itself; a saved query may not declare them
 // for a metric's range assertion.
 const (
-	paramMin       = "assay_min"
-	paramMax       = "assay_max"
-	paramThreshold = "assay_threshold"
-	paramMinRows   = "assay_min_rows"
+	paramMin       = "slaw_min"
+	paramMax       = "slaw_max"
+	paramThreshold = "slaw_threshold"
+	paramMinRows   = "slaw_min_rows"
 )
 
 // rangePredicate is the WHERE predicate a range assertion counts rows for (a
@@ -259,14 +259,14 @@ func freshnessSQL(table, col string, a semantics.Assertion, now time.Time) (stri
 	}
 	sql := fmt.Sprintf("SELECT CASE WHEN m IS NULL OR m < $%s THEN 1 ELSE 0 END, "+
 		"CASE WHEN m IS NULL THEN 'no values' ELSE 'latest ' || CAST(m AS VARCHAR) END "+
-		"FROM (SELECT max(%s) AS m FROM %s) AS assay_fresh", paramThreshold, col, table)
+		"FROM (SELECT max(%s) AS m FROM %s) AS slaw_fresh", paramThreshold, col, table)
 	return sql, map[string]any{paramThreshold: now.UTC().Add(-age).Truncate(time.Microsecond)}, nil
 }
 
 // rowCountSQL is 1 when the table has fewer than min_rows rows, else 0; the
 // second column says how many it has.
 func rowCountSQL(table string, a semantics.Assertion) (string, map[string]any) {
-	sql := fmt.Sprintf("SELECT CASE WHEN n < $%s THEN 1 ELSE 0 END, CAST(n AS VARCHAR) || ' rows' FROM (SELECT count(*) AS n FROM %s) AS assay_rows", paramMinRows, table)
+	sql := fmt.Sprintf("SELECT CASE WHEN n < $%s THEN 1 ELSE 0 END, CAST(n AS VARCHAR) || ' rows' FROM (SELECT count(*) AS n FROM %s) AS slaw_rows", paramMinRows, table)
 	return sql, map[string]any{paramMinRows: int64(*a.MinRows)}
 }
 

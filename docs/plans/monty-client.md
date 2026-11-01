@@ -1,19 +1,19 @@
-# Monty in Assay: our own Go client and worker build
+# Monty in Slaw: our own Go client and worker build
 
-Status: **proposal**, not built. It belongs to [code-mode.md](code-mode.md). It says what Assay must build and maintain to run Monty without a dependency on the community Go binding `monty-go`. Research date: 2026-10-16.
+Status: **proposal**, not built. It belongs to [code-mode.md](code-mode.md). It says what Slaw must build and maintain to run Monty without a dependency on the community Go binding `monty-go`. Research date: 2026-10-16.
 
 This document uses ASD-STE100 Simplified Technical English. Descriptive sentences have a maximum of 25 words. Instructions have a maximum of 20 words. Function names, file names and code are in `code` font and are technical names.
 
-Labels: **[source]** means that we read the Monty or `monty-go` source at the commit named in §11. **[measured]** means that we ran it in this research. **[assay]** means a fact about this repository.
+Labels: **[source]** means that we read the Monty or `monty-go` source at the commit named in §11. **[measured]** means that we ran it in this research. **[slaw]** means a fact about this repository.
 
 ## 1. Decision
 
-Assay owns two parts:
+Slaw owns two parts:
 
 1. **The Go client** (the "parent"). It starts the worker, speaks the wire protocol, converts values, answers host calls and enforces the limits that the parent owns. This replaces `monty-go`.
-2. **The worker binary** (`monty`). Assay builds it from a pinned Monty source tag in its own release workflow.
+2. **The worker binary** (`monty`). Slaw builds it from a pinned Monty source tag in its own release workflow.
 
-Assay does not depend on `CamdenClark/monty-go`. Assay also does not fork it. §3 gives the reasons.
+Slaw does not depend on `CamdenClark/monty-go`. Slaw also does not fork it. §3 gives the reasons.
 
 ## 2. What the protocol is
 
@@ -28,15 +28,15 @@ Pydantic designed the worker protocol for parents in any language. [source: `cra
 | Versions | The parent declares `Configure.protocol_version`. On the Monty `main` branch, the child serves versions 5 to 6. Version 6 added the `import` and `import_stubs` OS calls. There is no negotiation. A child that rejects a version sends `FatalError` and stops. |
 | Trust | The parent must treat each child frame as untrusted. Monty's Rust parent uses a decode budget of 1 GiB for each frame and validates each arena index. |
 
-`monty-go` v0.7.0 speaks protocol 5. [source] Thus a program cannot use `import assay` through `monty-go`, because protocol 5 has no `import` call. Code mode needs `import assay` ([code-mode.md](code-mode.md) §4.3). This is the first reason for our own client.
+`monty-go` v0.7.0 speaks protocol 5. [source] Thus a program cannot use `import slaw` through `monty-go`, because protocol 5 has no `import` call. Code mode needs `import slaw` ([code-mode.md](code-mode.md) §4.3). This is the first reason for our own client.
 
 ## 3. Why not fork `monty-go`
 
-| Fact about `monty-go` | Effect for Assay |
+| Fact about `monty-go` | Effect for Slaw |
 |---|---|
 | It encodes each protobuf field by hand with a literal tag number (`protowire.AppendTag(nil, 5, ...)` in `wire.go` and `arena.go`). It does not generate code from `monty.proto`. [source] | A schema change upstream does not fail at compile time. It fails at run time, or it gives incorrect values. |
-| It speaks protocol 5. [source] | No `import assay`. We must add protocol 6 in any case. |
-| Approximately 4,300 lines of library code, with an installer (393 lines), reflection adapters for Go functions (`host.go`, 445 lines), class values and complex numbers. [source] | Assay needs none of these. Assay sends `map[string]any` to `Handler.Handle` and gets JSON-shaped values back. |
+| It speaks protocol 5. [source] | No `import slaw`. We must add protocol 6 in any case. |
+| Approximately 4,300 lines of library code, with an installer (393 lines), reflection adapters for Go functions (`host.go`, 445 lines), class values and complex numbers. [source] | Slaw needs none of these. Slaw sends `map[string]any` to `Handler.Handle` and gets JSON-shaped values back. |
 | The installer downloads the worker from npm at run time. [source] | This is against `docs/privacy.md` and reproducible installs. We delete it. |
 | One maintainer, 17 commits, first release 2026-08-24. [source] | A fork does not give us a community. It gives us a copy to maintain. |
 
@@ -48,7 +48,7 @@ We use `monty-go` as a reference. It is MIT. If we copy code from it (for exampl
 
 ### 4.1 Package
 
-Make a new leaf package, `internal/montyclient`. It imports only the standard library, `google.golang.org/protobuf` (already an indirect dependency of Assay, v1.36.12 [assay]) and `log/slog`. It does not import `internal/agents`. `internal/codemode` uses it. Add it to the `CLAUDE.md` architecture tree.
+Make a new leaf package, `internal/montyclient`. It imports only the standard library, `google.golang.org/protobuf` (already an indirect dependency of Slaw, v1.36.12 [slaw]) and `log/slog`. It does not import `internal/agents`. `internal/codemode` uses it. Add it to the `CLAUDE.md` architecture tree.
 
 ### 4.2 Parts and size
 
@@ -67,7 +67,7 @@ Make a new leaf package, `internal/montyclient`. It imports only the standard li
 
 ### 4.3 Values
 
-Assay tool results are JSON-shaped. [assay] Thus the client supports only these arena node kinds as input: `none`, `bool`, `int`, `float`, `str`, `list`, `dict`. It also sends one `module` node with `function` nodes for `import assay` (§4.4). Before a host function result goes into the arena, pass it through `encoding/json` (with `internal/jsonenc`). This changes `time.Time`, `big.Int` and DuckDB types into strings and numbers that Assay already uses for the model.
+Slaw tool results are JSON-shaped. [slaw] Thus the client supports only these arena node kinds as input: `none`, `bool`, `int`, `float`, `str`, `list`, `dict`. It also sends one `module` node with `function` nodes for `import slaw` (§4.4). Before a host function result goes into the arena, pass it through `encoding/json` (with `internal/jsonenc`). This changes `time.Time`, `big.Int` and DuckDB types into strings and numbers that Slaw already uses for the model.
 
 As output, the client also accepts `tuple`, `set`, `frozenset`, `bytes`, `date`, `datetime`, `big_int`, `repr` and `cycle`. It converts each one to a JSON-compatible value (a tuple becomes a list, a date becomes an ISO 8601 string, and a `cycle` becomes the string `"<cycle>"`). Any other node kind is a protocol error.
 
@@ -82,8 +82,8 @@ The program can try to read files, environment variables or the clock. The worke
 | `urandom` | `not_handled` | `RuntimeError` |
 | `date_today`, `date_time_now`, `time` | Not sent. Set `OsPolicy` to the child clock in UTC. | The real time |
 | `sleep`, `async_sleep`, `system_sleep`, `async_system_sleep` | Not sent for `time.sleep` with `sleep` set to `zero`. | Returns at once |
-| `import` | For the name `assay`: a `ModuleNode` with one `Function` node for each tool, named `assay.<tool>`. A call then arrives as a `FunctionCall` with that name. For all other names: `not_found`. | `import assay` works. Other imports raise `ModuleNotFoundError`. |
-| `import_stubs` | The `.pyi` stub of the `assay` module. | Type checking knows the `assay` functions. |
+| `import` | For the name `slaw`: a `ModuleNode` with one `Function` node for each tool, named `slaw.<tool>`. A call then arrives as a `FunctionCall` with that name. For all other names: `not_found`. | `import slaw` works. Other imports raise `ModuleNotFoundError`. |
+| `import_stubs` | The `.pyi` stub of the `slaw` module. | Type checking knows the `slaw` functions. |
 | `scan` | `not_handled` | `PermissionError` |
 | An arm that a newer protocol adds | `not_handled` | An error in the program. Log the arm name. |
 
@@ -123,11 +123,11 @@ Use way B for the P0 spike only. Use way A for releases.
 - The type checker (`monty-type-checking`, based on `ty`) is not optional. It is a large part of the binary.
 - Pydantic's 1.1.0 binaries: 31.7 MB (Linux x86_64), 27.5 MB (macOS arm64), 29.9 MB (Windows x86_64), uncompressed. The wheels are 12 to 14 MB. [measured]
 - Our worker-only build (`--no-default-features`) on Linux x86_64, Rust 1.97: 27.5 MB uncompressed, 11.8 MB with gzip. A cold build took 17 min 42 s on 4 cores. Pydantic's build for the same target is 31.7 MB. [measured]
-- The release workflow has a 60-minute job timeout. [assay] Cache the Cargo build by Monty tag and toolchain, so that only a Monty upgrade pays the cold build time. The P0 spike records the size and time on all four runners.
+- The release workflow has a 60-minute job timeout. [slaw] Cache the Cargo build by Monty tag and toolchain, so that only a Monty upgrade pays the cold build time. The P0 spike records the size and time on all four runners.
 
 ### 5.3 Platform rules
 
-The worker must obey the same rules as the `assay` binary. [assay]
+The worker must obey the same rules as the `slaw` binary. [slaw]
 
 | Target | Runner | Rule |
 |---|---|---|
@@ -138,16 +138,16 @@ The worker must obey the same rules as the `assay` binary. [assay]
 
 ### 5.4 Packaging
 
-1. Name the binary `assay-monty`. A plain `monty` name can conflict with a `monty` on the person's `PATH`.
-2. Put it next to `assay` in each release tarball. In the macOS app, put it in `Contents/MacOS/`.
+1. Name the binary `slaw-monty`. A plain `monty` name can conflict with a `monty` on the person's `PATH`.
+2. Put it next to `slaw` in each release tarball. In the macOS app, put it in `Contents/MacOS/`.
 3. Install it with `install.sh`. Remove it with the uninstall steps in `docs/install.md`.
-4. Stamp its SHA-256 into `assay` with `ldflags`. Verify the digest before the first worker starts.
-5. Find it only next to the running `assay` executable. Do not search `PATH`, and do not read an environment variable for the path.
+4. Stamp its SHA-256 into `slaw` with `ldflags`. Verify the digest before the first worker starts.
+5. Find it only next to the running `slaw` executable. Do not search `PATH`, and do not read an environment variable for the path.
 6. Sign and notarize it with the app when the signed release comes (epic #4).
 
 ### 5.5 Licence notices
 
-`scripts/gen-notices.mjs` covers Go modules and npm packages only. [assay] The worker links many Rust crates. Add a Rust step:
+`scripts/gen-notices.mjs` covers Go modules and npm packages only. [slaw] The worker links many Rust crates. Add a Rust step:
 
 1. Run `cargo about generate` (or `cargo-deny`) on the pinned Monty tag.
 2. Append the result to `THIRD_PARTY_NOTICES.md`.
@@ -169,9 +169,9 @@ The worker must obey the same rules as the `assay` binary. [assay]
 | Codec round trip | Each message that the client sends decodes to the same message. | Every PR |
 | Arena fuzz | Random bytes from a "child" never panic, never allocate over the budget, and never make an index out of range. | Every PR (short), weekly (long) |
 | Frame cap | A frame length over the cap stops the worker before allocation. | Every PR |
-| Worker integration | A real `assay-monty` runs feeds, host calls, `import assay`, errors, limits, `AbortFeed` and a stopped process. | Every PR on Linux. macOS on push to `main`, as for the rest of CI. |
+| Worker integration | A real `slaw-monty` runs feeds, host calls, `import slaw`, errors, limits, `AbortFeed` and a stopped process. | Every PR on Linux. macOS on push to `main`, as for the rest of CI. |
 | No ambient access | Each `OsCall` arm in §4.4 gives the expected exception. The worker environment is empty (`os.environ` fails). | Every PR |
-| Version mismatch | A worker that rejects the protocol version gives a clear Assay error, not a hang. | Every PR |
+| Version mismatch | A worker that rejects the protocol version gives a clear Slaw error, not a hang. | Every PR |
 | Approval wait | A host function that waits 6 minutes does not trigger the timer. | Every PR, with a fake clock |
 
 CI needs the worker binary for the integration tests. Build it once for each runner and cache it by Monty tag and Rust toolchain version.
@@ -223,4 +223,4 @@ Monty 1.0 (September 2026) uses protocol 5. Version 1.1 (October 2026) is on `ma
   - `crates/monty-runtime/Cargo.toml`, root `Cargo.toml`, `.github/workflows/ci.yml`
 - `monty-go` v0.7.0 (commit `bd1b9d1`): https://github.com/CamdenClark/monty-go
 - `pydantic-monty-runtime` 1.1.0 wheels on PyPI (binary sizes).
-- Assay: `.github/workflows/release.yml`, `scripts/macos-target.sh`, `scripts/gen-notices.mjs`, `go.mod`.
+- Slaw: `.github/workflows/release.yml`, `scripts/macos-target.sh`, `scripts/gen-notices.mjs`, `go.mod`.

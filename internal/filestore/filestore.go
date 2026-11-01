@@ -388,7 +388,7 @@ func syncDir(dir string) {
 }
 
 // TempPrefix starts every temp file WriteAtomic creates; watchers ignore it.
-const TempPrefix = ".assay-tmp-"
+const TempPrefix = ".slaw-tmp-"
 
 // IsTemp reports whether a base name is one of WriteAtomic's temp files or an
 // editor's hidden/backup file (dotfiles, "~" and ".swp" suffixes).

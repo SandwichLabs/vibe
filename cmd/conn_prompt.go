@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 	"golang.org/x/term"
 )
 

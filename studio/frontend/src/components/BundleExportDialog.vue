@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { App } from '../lib/bindings'
 // BundleExportDialog — "Export workspace content…" (#118). Pick what goes in a
-// .assay bundle, optionally lock it with a passphrase, and save. A bundle holds
+// .slaw bundle, optionally lock it with a passphrase, and save. A bundle holds
 // no data and no credentials; the dialog says so where the person is deciding.
 import { ref, computed, watch } from 'vue'
 import Icon from './Icon.vue'
@@ -103,7 +103,7 @@ async function submit() {
     <div ref="root" class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="be-h" data-testid="bundle-export-dialog">
       <div class="d-head">
         <h2 id="be-h">Export workspace content</h2>
-        <p>Make a <code>.assay</code> file you can send to someone, or keep as a backup. They import it into their own workspace.</p>
+        <p>Make a <code>.slaw</code> file you can send to someone, or keep as a backup. They import it into their own workspace.</p>
       </div>
 
       <div v-if="done" class="d-body" data-testid="bundle-export-done">
@@ -192,7 +192,7 @@ async function submit() {
               <label for="be-p2">Type it again</label>
               <input id="be-p2" v-model="pass2" class="field-input" :class="{ 'field-input-error': passMismatch }" type="password" autocomplete="new-password" :disabled="busy"
                 :aria-invalid="passMismatch ? 'true' : undefined" aria-describedby="be-p2-h" data-testid="be-pass2" />
-              <div v-if="passMismatch" id="be-p2-h" class="help" style="color: var(--assay-error);" role="alert">The two don't match.</div>
+              <div v-if="passMismatch" id="be-p2-h" class="help" style="color: var(--slaw-error);" role="alert">The two don't match.</div>
             </div>
           </div>
         </template>

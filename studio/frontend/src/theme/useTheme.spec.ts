@@ -35,14 +35,14 @@ describe('installTheme', () => {
     const root = document.documentElement
     expect(root.dataset.theme).toBe('chalkboard')
     expect(root.dataset.themeType).toBe('dark')
-    expect(root.style.getPropertyValue('--assay-accent')).toBe('#F2A93B')
+    expect(root.style.getPropertyValue('--slaw-accent')).toBe('#F2A93B')
     expect(root.style.colorScheme).toBe('dark')
 
     const t = useTheme()
     await t.setTheme('signal')
     await nextTick()
     expect(root.dataset.theme).toBe('signal')
-    expect(root.style.getPropertyValue('--assay-accent-fg')).toBe('#FFD700')
+    expect(root.style.getPropertyValue('--slaw-accent-fg')).toBe('#FFD700')
     expect(App.SetPreferences).toHaveBeenCalledTimes(1)
     expect(store.prefs.theme).toBe('signal')
   })
@@ -74,7 +74,7 @@ describe('installTheme', () => {
     expect(ids.slice(0, 4)).toEqual(['schoolhouse-light', 'schoolhouse-dark', 'signal', 'chalkboard'])
     expect(ids).toContain('nord')
     expect(document.documentElement.dataset.theme).toBe('nord')
-    expect(document.documentElement.style.getPropertyValue('--assay-accent')).toBe('#88C0D0')
+    expect(document.documentElement.style.getPropertyValue('--slaw-accent')).toBe('#88C0D0')
 
     const broken = t.listings.value.find((l) => l.id === 'oops')!
     expect(broken.resolved).toBeUndefined()
@@ -90,13 +90,13 @@ describe('installTheme', () => {
 
   it('works without the Wails runtime via localStorage', async () => {
     delete (window as any).go
-    localStorage.setItem('assay.preferences', JSON.stringify({ theme: 'signal' }))
+    localStorage.setItem('slaw.preferences', JSON.stringify({ theme: 'signal' }))
     await installTheme()
     expect(document.documentElement.dataset.theme).toBe('signal')
     const t = useTheme()
     await t.setUiScale(125)
-    expect(JSON.parse(localStorage.getItem('assay.preferences')!).uiScale).toBe(125)
-    expect(document.documentElement.style.getPropertyValue('--assay-ui-scale')).toBe('1.25')
+    expect(JSON.parse(localStorage.getItem('slaw.preferences')!).uiScale).toBe(125)
+    expect(document.documentElement.style.getPropertyValue('--slaw-ui-scale')).toBe('1.25')
     await t.setReduceMotion(true)
     expect(document.documentElement.dataset.reduceMotion).toBe('true')
   })

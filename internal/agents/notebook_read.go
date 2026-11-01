@@ -7,13 +7,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 // --- list_notebooks / get_notebook (read-only, introspect category) ---
 //
 // These are the read path a chat/task/MCP client uses to see a workspace's
-// notebooks without going through Studio at all, e.g. `assay mcp serve`. Both
+// notebooks without going through Studio at all, e.g. `slaw mcp serve`. Both
 // are introspect-category (chat and MCP visible in every sandbox mode,
 // including read-only) and return DATA, never rendered output: a cell's raw
 // source, or an a2ui cell's whole page, plus the notebook's rev, which the

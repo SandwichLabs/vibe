@@ -1,4 +1,4 @@
-// The terminal's colours come from the active Assay theme: the same --assay-*
+// The terminal's colours come from the active Slaw theme: the same --slaw-*
 // roles the rest of Studio reads (docs/reference/themes.md), resolved to
 // concrete values because xterm paints a canvas and cannot use var().
 import type { ITheme } from '@xterm/xterm'
@@ -9,22 +9,22 @@ function read(style: CSSStyleDeclaration, name: string): string {
 
 export function themeFromDocument(doc: Document = document): ITheme {
   const style = getComputedStyle(doc.documentElement)
-  const bg = read(style, '--assay-editor-bg') || read(style, '--assay-bg')
-  const fg = read(style, '--assay-editor-fg') || read(style, '--assay-fg')
+  const bg = read(style, '--slaw-editor-bg') || read(style, '--slaw-bg')
+  const fg = read(style, '--slaw-editor-fg') || read(style, '--slaw-fg')
   const pick = (name: string, fallback = fg) => read(style, name) || fallback
-  const red = pick('--assay-error')
-  const green = pick('--assay-success')
-  const yellow = pick('--assay-warn')
-  const blue = pick('--assay-info')
-  const magenta = pick('--assay-chart-4')
-  const cyan = pick('--assay-chart-5')
-  const muted = pick('--assay-fg-muted')
+  const red = pick('--slaw-error')
+  const green = pick('--slaw-success')
+  const yellow = pick('--slaw-warn')
+  const blue = pick('--slaw-info')
+  const magenta = pick('--slaw-chart-4')
+  const cyan = pick('--slaw-chart-5')
+  const muted = pick('--slaw-fg-muted')
   return {
     background: bg,
     foreground: fg,
-    cursor: pick('--assay-editor-cursor'),
+    cursor: pick('--slaw-editor-cursor'),
     cursorAccent: bg,
-    selectionBackground: pick('--assay-editor-selection', muted),
+    selectionBackground: pick('--slaw-editor-selection', muted),
     black: bg,
     red,
     green,
@@ -45,5 +45,5 @@ export function themeFromDocument(doc: Document = document): ITheme {
 }
 
 export function fontFromDocument(doc: Document = document): string {
-  return read(getComputedStyle(doc.documentElement), '--assay-font-mono') || 'monospace'
+  return read(getComputedStyle(doc.documentElement), '--slaw-font-mono') || 'monospace'
 }

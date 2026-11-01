@@ -7,15 +7,15 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // This file holds the one function that opens a workspace for a process:
 // workspace.Open, then the hub lock, then the DuckDB hub (workspace.OpenSession),
-// then the query engine. The CLI, Studio and `assay mcp serve` all call Open;
+// then the query engine. The CLI, Studio and `slaw mcp serve` all call Open;
 // they differ only in OpenOptions and in how they present what comes back.
 //
 // It lives in hub (level 7) rather than workspace (level 5) because the lock
@@ -33,7 +33,7 @@ const (
 	// ModeTakeOver asks the current owner to let go (TakeOver), then takes the lock.
 	ModeTakeOver
 	// ModeRemoteOnly takes no lock and does not attach the workspace's local
-	// files: nothing this process does writes one (`assay conn connect`).
+	// files: nothing this process does writes one (`slaw conn connect`).
 	ModeRemoteOnly
 )
 
@@ -43,7 +43,7 @@ type Step string
 
 const (
 	StepOpen    Step = "open"    // workspace.Open
-	StepRepair  Step = "repair"  // EnsureID for an assay.yaml without an id
+	StepRepair  Step = "repair"  // EnsureID for a slaw.yaml without an id
 	StepHub     Step = "hub"     // the hub lock
 	StepSession Step = "session" // workspace.OpenSession
 )
@@ -60,7 +60,7 @@ func (e *OpenError) Unwrap() error { return e.Err }
 
 // OpenOptions configures Open. Every field exists because a caller needs it.
 type OpenOptions struct {
-	// App names the holder in hub.lock ("Assay", "assay query").
+	// App names the holder in hub.lock ("Slaw", "slaw query").
 	App string
 	// Mode is how the hub lock is used; the zero value is ModeReadWrite.
 	Mode Mode
@@ -73,7 +73,7 @@ type OpenOptions struct {
 	// read-only runner (ReadOnlyRunner), so a connection that cannot be
 	// attached read-only (MotherDuck) is still reachable without the hub lock.
 	PolicyGatedRuns bool
-	// RepairMissingID adds an id to an assay.yaml that has none and retries.
+	// RepairMissingID adds an id to a slaw.yaml that has none and retries.
 	RepairMissingID bool
 	// TakeOverTimeout is how long ModeTakeOver waits for the owner (default 10s).
 	TakeOverTimeout time.Duration
@@ -166,7 +166,7 @@ func defaultSteps() steps {
 	}
 }
 
-// Open opens the workspace at root (a folder with an assay.yaml; use ResolveRoot
+// Open opens the workspace at root (a folder with a slaw.yaml; use ResolveRoot
 // or workspace.Discover to find it). On any failure everything already acquired
 // is released and the error is an *OpenError.
 func Open(ctx context.Context, root string, o OpenOptions) (*Opened, error) {
@@ -194,7 +194,7 @@ func openWith(ctx context.Context, root string, o OpenOptions, st steps) (opened
 	}
 	ws, err := st.openWorkspace(root, wopts...)
 	if errors.Is(err, workspace.ErrMissingID) && o.RepairMissingID {
-		// A hand-written assay.yaml, or a template copied without an id.
+		// A hand-written slaw.yaml, or a template copied without an id.
 		if _, ierr := workspace.EnsureID(root); ierr != nil {
 			return nil, &OpenError{StepRepair, fmt.Errorf("failed to give this workspace an id: %w", ierr)}
 		}

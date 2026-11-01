@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 // ReadNotebookFile reads a notebook export file (the "kind" wrapper
@@ -16,10 +16,10 @@ import (
 // updatedAt are stripped so a fresh id is always assigned (import never
 // overwrites a notebook already in the workspace).
 //
-// The file is held to the same limits as a notebook in a .assay bundle: its size
+// The file is held to the same limits as a notebook in a .slaw bundle: its size
 // is checked with Stat BEFORE it is read (MaxEntryBytes), so a huge file, or a
 // symlink or fifo pointed at one, is never loaded into memory just to be
-// rejected; it must identify itself as an Assay notebook (an arbitrary JSON file
+// rejected; it must identify itself as a Slaw notebook (an arbitrary JSON file
 // such as package.json is refused); and it passes CheckNotebook.
 func ReadNotebookFile(path string) (map[string]any, error) {
 	info, err := os.Stat(path)
@@ -43,7 +43,7 @@ func ReadNotebookFile(path string) (map[string]any, error) {
 	// fail deep inside Coerce with a confusing error or, pathologically, import
 	// garbage.
 	if kind, _ := wrapper["kind"].(string); kind != notebooks.FileKind {
-		return nil, fmt.Errorf("not an Assay notebook file (expected \"kind\": %q, got %q)", notebooks.FileKind, kind)
+		return nil, fmt.Errorf("not a Slaw notebook file (expected \"kind\": %q, got %q)", notebooks.FileKind, kind)
 	}
 	if nested, ok := wrapper["notebook"].(map[string]any); ok {
 		delete(nested, "id")

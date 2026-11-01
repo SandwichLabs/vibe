@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -140,7 +140,7 @@ func runConnCredsStatus(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "profile:       %s\n", st.Profile)
 		fmt.Fprintf(out, "signed in:     %t\n", st.SignedIn)
 		if !st.SignedIn {
-			fmt.Fprintf(out, "sign in:       assay conn credentials sign-in %s   (or: aws sso login --profile %s)\n", args[0], st.Profile)
+			fmt.Fprintf(out, "sign in:       slaw conn credentials sign-in %s   (or: aws sso login --profile %s)\n", args[0], st.Profile)
 		}
 		if st.ExpiresAt != nil {
 			fmt.Fprintf(out, "session until: %s\n", st.ExpiresAt.Local().Format(time.RFC3339))
@@ -160,5 +160,5 @@ func runConnCredsStatus(cmd *cobra.Command, args []string) error {
 // printSSONote says what an aws-sso sign-in means: nothing is stored, and how to
 // sign in. It never names an account, role or start URL.
 func printSSONote(out io.Writer, name, profile string) {
-	fmt.Fprintf(out, "%s signs in with your AWS profile %s. Nothing is stored. If the session has ended, run: assay conn credentials sign-in %s (or: aws sso login --profile %s)\n", name, profile, name, profile)
+	fmt.Fprintf(out, "%s signs in with your AWS profile %s. Nothing is stored. If the session has ended, run: slaw conn credentials sign-in %s (or: aws sso login --profile %s)\n", name, profile, name, profile)
 }

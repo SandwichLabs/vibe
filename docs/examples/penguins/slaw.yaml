@@ -1,5 +1,5 @@
-# Assay workspace. Committed: shared settings and connection definitions only.
-# Never put a password, token or key in this file; Assay keeps those in your keychain.
+# Slaw workspace. Committed: shared settings and connection definitions only.
+# Never put a password, token or key in this file; Slaw keeps those in your keychain.
 version: 1
 id: 74978571-0abe-4ebf-aa4f-3fe0be6cdafb
 name: penguins

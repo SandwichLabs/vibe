@@ -9,7 +9,7 @@ import { askConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
   kind: 'notebook' | 'query' | 'skill' | 'artifact'
-  // Workspace-relative file, e.g. notebooks/weekly-revenue.asnb.
+  // Workspace-relative file, e.g. notebooks/weekly-revenue.slnb.
   path: string
   // The file was deleted on disk rather than changed.
   deleted?: boolean

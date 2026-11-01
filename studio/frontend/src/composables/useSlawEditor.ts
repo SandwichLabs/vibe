@@ -10,63 +10,63 @@ import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 
 /**
- * Editor theme — every value is a `var(--assay-*)` role so the editor follows
+ * Editor theme — every value is a `var(--slaw-*)` role so the editor follows
  * the active theme (Settings → Appearance) with no re-render; see
  * theme/schema.ts for the role list and theme/bridge.css for the fallbacks.
  */
-const MONO = 'var(--assay-font-mono)'
-const assayTheme = EditorView.theme({
+const MONO = 'var(--slaw-font-mono)'
+const slawTheme = EditorView.theme({
   '&': {
-    backgroundColor: 'var(--assay-editor-bg)',
-    color: 'var(--assay-editor-fg)',
+    backgroundColor: 'var(--slaw-editor-bg)',
+    color: 'var(--slaw-editor-fg)',
     fontFamily: MONO,
     fontSize: 'var(--sh-fs-sm)',
     height: '100%',
   },
   '.cm-content': {
-    caretColor: 'var(--assay-editor-cursor)',
+    caretColor: 'var(--slaw-editor-cursor)',
     padding: '16px',
     minHeight: '100%',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--assay-editor-cursor)',
+    borderLeftColor: 'var(--slaw-editor-cursor)',
     borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-    backgroundColor: 'var(--assay-editor-selection) !important',
+    backgroundColor: 'var(--slaw-editor-selection) !important',
   },
   '.cm-activeLine': {
-    backgroundColor: 'var(--assay-editor-line)',
+    backgroundColor: 'var(--slaw-editor-line)',
   },
   '.cm-gutters': {
-    backgroundColor: 'var(--assay-editor-gutter-bg)',
-    color: 'var(--assay-editor-gutter-fg)',
-    borderRight: '2px solid var(--assay-border)',
+    backgroundColor: 'var(--slaw-editor-gutter-bg)',
+    color: 'var(--slaw-editor-gutter-fg)',
+    borderRight: '2px solid var(--slaw-border)',
     fontFamily: MONO,
     fontSize: 'var(--sh-fs-xs)',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: 'var(--assay-editor-line)',
-    color: 'var(--assay-editor-fg)',
+    backgroundColor: 'var(--slaw-editor-line)',
+    color: 'var(--slaw-editor-fg)',
   },
   '.cm-scroller': {
     overflow: 'auto',
   },
-  // The SQL completion list (lib/sqlComplete.ts), all `--assay-*` roles.
+  // The SQL completion list (lib/sqlComplete.ts), all `--slaw-*` roles.
   '.cm-tooltip.cm-tooltip-autocomplete': {
-    backgroundColor: 'var(--assay-surface)',
-    color: 'var(--assay-fg)',
-    border: '2px solid var(--assay-border)',
-    boxShadow: 'var(--assay-shadow)',
+    backgroundColor: 'var(--slaw-surface)',
+    color: 'var(--slaw-fg)',
+    border: '2px solid var(--slaw-border)',
+    boxShadow: 'var(--slaw-shadow)',
     fontFamily: MONO,
     fontSize: 'var(--sh-fs-sm)',
   },
   '.cm-tooltip-autocomplete ul li[aria-selected]': {
-    backgroundColor: 'var(--assay-selection)',
-    color: 'var(--assay-selection-fg)',
+    backgroundColor: 'var(--slaw-selection)',
+    color: 'var(--slaw-selection-fg)',
   },
   '.cm-completionDetail': {
-    color: 'var(--assay-fg-muted)',
+    color: 'var(--slaw-fg-muted)',
     fontStyle: 'normal',
     marginLeft: '1em',
   },
@@ -74,7 +74,7 @@ const assayTheme = EditorView.theme({
     color: 'inherit',
   },
   '.cm-completionMatchedText': {
-    color: 'var(--assay-accent)',
+    color: 'var(--slaw-accent)',
     textDecoration: 'none',
     fontWeight: '700',
   },
@@ -86,25 +86,25 @@ const assayTheme = EditorView.theme({
 })
 
 /** Syntax highlighting — colours come from the theme's `syntax.*` roles. */
-const assayHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: '700', color: 'var(--assay-syntax-heading)' },
-  { tag: tags.emphasis, fontStyle: 'italic', color: 'var(--assay-syntax-meta)' },
-  { tag: tags.strong, fontWeight: '700', color: 'var(--assay-syntax-heading)' },
-  { tag: tags.keyword, color: 'var(--assay-syntax-keyword)' },
-  { tag: tags.atom, color: 'var(--assay-syntax-keyword)' },
-  { tag: tags.bool, color: 'var(--assay-syntax-keyword)' },
-  { tag: tags.propertyName, color: 'var(--assay-syntax-heading)' },
-  { tag: tags.number, color: 'var(--assay-syntax-number)' },
-  { tag: tags.string, color: 'var(--assay-syntax-string)' },
-  { tag: tags.comment, color: 'var(--assay-syntax-comment)', fontStyle: 'italic' },
-  { tag: tags.link, color: 'var(--assay-syntax-link)', textDecoration: 'underline' },
-  { tag: tags.url, color: 'var(--assay-syntax-link)' },
+const slawHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, fontWeight: '700', color: 'var(--slaw-syntax-heading)' },
+  { tag: tags.emphasis, fontStyle: 'italic', color: 'var(--slaw-syntax-meta)' },
+  { tag: tags.strong, fontWeight: '700', color: 'var(--slaw-syntax-heading)' },
+  { tag: tags.keyword, color: 'var(--slaw-syntax-keyword)' },
+  { tag: tags.atom, color: 'var(--slaw-syntax-keyword)' },
+  { tag: tags.bool, color: 'var(--slaw-syntax-keyword)' },
+  { tag: tags.propertyName, color: 'var(--slaw-syntax-heading)' },
+  { tag: tags.number, color: 'var(--slaw-syntax-number)' },
+  { tag: tags.string, color: 'var(--slaw-syntax-string)' },
+  { tag: tags.comment, color: 'var(--slaw-syntax-comment)', fontStyle: 'italic' },
+  { tag: tags.link, color: 'var(--slaw-syntax-link)', textDecoration: 'underline' },
+  { tag: tags.url, color: 'var(--slaw-syntax-link)' },
   { tag: tags.monospace, fontFamily: MONO },
-  { tag: tags.processingInstruction, color: 'var(--assay-syntax-keyword)', fontWeight: '700' },
-  { tag: tags.meta, color: 'var(--assay-syntax-meta)' },
+  { tag: tags.processingInstruction, color: 'var(--slaw-syntax-keyword)', fontWeight: '700' },
+  { tag: tags.meta, color: 'var(--slaw-syntax-meta)' },
 ])
 
-interface AssayEditorOptions {
+interface SlawEditorOptions {
   /** Initial document content. */
   value?: string
   /** Called whenever the document changes. */
@@ -121,7 +121,7 @@ interface AssayEditorOptions {
   placeholder?: string
 }
 
-export interface AssayEditorInstance {
+export interface SlawEditorInstance {
   /** Get the current document text. */
   getValue: () => string
   /**
@@ -141,10 +141,10 @@ export interface AssayEditorInstance {
  * Initialise a CodeMirror 6 markdown editor inside `el`.
  * Returns helpers to read/write content and clean up.
  */
-export function createAssayEditor(
+export function createSlawEditor(
   el: HTMLElement,
-  options: AssayEditorOptions = {},
-): AssayEditorInstance {
+  options: SlawEditorOptions = {},
+): SlawEditorInstance {
   const onChange = options.onChange
 
   const updateListener = EditorView.updateListener.of((update) => {
@@ -158,8 +158,8 @@ export function createAssayEditor(
   const extraKeymap = options.extraKeymap ?? []
 
   const extensions: Extension[] = [
-      assayTheme,
-      syntaxHighlighting(assayHighlightStyle),
+      slawTheme,
+      syntaxHighlighting(slawHighlightStyle),
       languageExtension,
       history(),
       // extraKeymap first so a caller's binding (e.g. Ctrl/Cmd+Enter to run

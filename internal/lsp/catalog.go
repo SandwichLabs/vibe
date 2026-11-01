@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Catalog is the schema snapshot completion reads: connections, their schemas,
@@ -94,10 +94,10 @@ type Column struct {
 const catalogVersion = 1
 
 // SnapshotPath is where a workspace's catalog snapshot lives. It is machine
-// local (.assay-local is git-ignored): it reflects which connections this
+// local (.slaw-local is git-ignored): it reflects which connections this
 // person has connected, and table names are not for the repository.
 func SnapshotPath(root string) string {
-	return filepath.Join(root, ".assay-local", "catalog.json")
+	return filepath.Join(root, ".slaw-local", "catalog.json")
 }
 
 // Conn returns the connection called name (case-insensitive), or nil.
@@ -174,10 +174,10 @@ func (c *Catalog) Save(path string) error {
 }
 
 // resolveSnapshot is SnapshotPath for writing: the folder is created 0700, and
-// a .assay-local (or catalog.json) that is a symbolic link out of the workspace,
+// a .slaw-local (or catalog.json) that is a symbolic link out of the workspace,
 // as a cloned repository could ship, is refused.
 func resolveSnapshot(root string) (string, error) {
-	path, err := filestore.Resolve(root, filepath.ToSlash(filepath.Join(".assay-local", "catalog.json")))
+	path, err := filestore.Resolve(root, filepath.ToSlash(filepath.Join(".slaw-local", "catalog.json")))
 	if err != nil {
 		return "", fmt.Errorf("refusing to write the catalog snapshot: %w", err)
 	}
@@ -437,7 +437,7 @@ func writeMerged(root string, fresh *Catalog) error {
 }
 
 // Source hands the server the current snapshot, reloading the file when it
-// changes (the TUI, `assay lsp snapshot` or Studio rewrote it).
+// changes (the TUI, `slaw lsp snapshot` or Studio rewrote it).
 type Source struct {
 	path string
 

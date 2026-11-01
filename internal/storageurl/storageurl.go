@@ -81,8 +81,8 @@ func validateGlob(u string, glob bool) error {
 	return nil
 }
 
-// S3Like are the schemes httpfs reads: Assay reads them as literal keys (#138),
-// so a wildcard in one is expanded by Assay itself (internal/storageglob).
+// S3Like are the schemes httpfs reads: Slaw reads them as literal keys (#138),
+// so a wildcard in one is expanded by Slaw itself (internal/storageglob).
 var S3Like = []string{"s3://", "s3a://", "s3n://", "gcs://", "gs://", "r2://"}
 
 // IsS3Like reports whether u starts with an S3-like scheme (not Azure).

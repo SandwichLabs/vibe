@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // connTimeout bounds one connect, install or refresh. Test has its own 10 s.

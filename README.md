@@ -1,11 +1,11 @@
 <div align="center">
 
-# Assay
+# Slaw
 
-[![CI](https://github.com/SandwichLabs/assay/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/assay/actions/workflows/ci.yml)
+[![CI](https://github.com/SandwichLabs/slaw/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/slaw/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**An agentic data workspace**
+**The SandwichLabs analysis workspace: an agentic data workspace**
 
 *by [Sandwich Labs](https://github.com/SandwichLabs)*
 
@@ -13,11 +13,11 @@
 
 ---
 
-Assay is a desktop data tool in the DataGrip / DBeaver mould, with an AI assistant built in. Point it at the data where it already lives (local DuckDB, CSV and Parquet files, MotherDuck, Postgres, MySQL, SQLite, S3, GCS, R2, Azure, DuckLake, Iceberg, Delta), query and join across all of it with one embedded DuckDB, and keep your notebooks, saved queries and skills as plain files in a folder you can share through git. The assistant reads freely and asks before it writes; the same tools are available to Claude Code, Claude Desktop and other agents over MCP. Credentials stay in your OS keychain. Everything works without AI, and nothing is sent to Sandwich Labs.
+Slaw is a desktop data tool in the DataGrip / DBeaver mould, with an AI assistant built in. Point it at the data where it already lives (local DuckDB, CSV and Parquet files, MotherDuck, Postgres, MySQL, SQLite, S3, GCS, R2, Azure, DuckLake, Iceberg, Delta), query and join across all of it with one embedded DuckDB, and keep your notebooks, saved queries and skills as plain files in a folder you can share through git. The assistant reads freely and asks before it writes; the same tools are available to Claude Code, Claude Desktop and other agents over MCP. Credentials stay in your OS keychain. Everything works without AI, and nothing is sent to Sandwich Labs.
 
 <p align="center">
   <a href="docs/assets/hero.mp4">
-    <img src="docs/assets/hero.gif" alt="Assay opening a notebook: stat cards and a bar chart render from live SQL, then a monthly revenue line chart and a result table as the notebook scrolls" width="880">
+    <img src="docs/assets/hero.gif" alt="Slaw opening a notebook: stat cards and a bar chart render from live SQL, then a monthly revenue line chart and a result table as the notebook scrolls" width="880">
   </a>
 </p>
 
@@ -26,7 +26,7 @@ Assay is a desktop data tool in the DataGrip / DBeaver mould, with an AI assista
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-notebook-dark.png">
-  <img src="docs/assets/hero-notebook.png" alt="An Assay notebook with revenue stat cards, a bar chart of revenue by shop and a monthly revenue line chart" width="880">
+  <img src="docs/assets/hero-notebook.png" alt="A Slaw notebook with revenue stat cards, a bar chart of revenue by shop and a monthly revenue line chart" width="880">
 </picture>
 
 </details>
@@ -34,20 +34,20 @@ Assay is a desktop data tool in the DataGrip / DBeaver mould, with an AI assista
 ## Install
 
 ```sh
-curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
+curl -fsSL https://sandwichlabs.dev/slaw/install.sh | sh
 ```
 
-macOS (Apple silicon 14+, Intel 13+) and Linux (x86-64, arm64). Installs `assay` and Assay into your home folder, no `sudo`. Options, manual download, macOS notes and uninstall: [docs/install.md](docs/install.md).
+macOS (Apple silicon 14+, Intel 13+) and Linux (x86-64, arm64). Installs `slaw` and Slaw into your home folder, no `sudo`. Options, manual download, macOS notes and uninstall: [docs/install.md](docs/install.md).
 
 ## 60-second quickstart
 
 ```sh
-assay workspace init sales-demo && cd sales-demo        # a folder with assay.yaml, notebooks/, data/ ...
+slaw workspace init sales-demo && cd sales-demo        # a folder with slaw.yaml, notebooks/, data/ ...
 printf 'customer,amount\nAcme,120.5\nBirch,80\nAcme,45.25\n' > data/orders.csv
-assay import data/orders.csv --into orders                # load it into the workspace's DuckDB
-assay query "SELECT customer, sum(amount) AS total FROM orders GROUP BY 1 ORDER BY 2 DESC"
-claude mcp add --scope user assay-sales-demo -- "$(command -v assay)" mcp serve --workspace "$PWD"   # Claude Code over MCP
-assay studio --gui                                        # open the desktop app on this workspace
+slaw import data/orders.csv --into orders                # load it into the workspace's DuckDB
+slaw query "SELECT customer, sum(amount) AS total FROM orders GROUP BY 1 ORDER BY 2 DESC"
+claude mcp add --scope user slaw-sales-demo -- "$(command -v slaw)" mcp serve --workspace "$PWD"   # Claude Code over MCP
+slaw studio --gui                                        # open the desktop app on this workspace
 ```
 
 Studio holds a workspace's database while it is open, and its MCP server is off until you press **Start** in Settings, Workspace, Claude and other tools. If you want Claude Code and Studio at the same time, press Start (writes then show approval cards in Studio); otherwise quit Studio before Claude Code connects.
@@ -56,17 +56,17 @@ No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is
 
 ## What you get
 
-- **Workspaces.** A folder you open like a vault: `assay.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`. Plain files, git-friendly, shareable with a team.
+- **Workspaces.** A folder you open like a vault: `slaw.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`. Plain files, git-friendly, shareable with a team.
 - **Connections.** Data stays where it lives, attached on first use into one DuckDB hub. Read-only by default. [Recipes](docs/connections.md) for each type.
 - **Live notebooks.** SQL, Markdown and dashboard cells. Notebooks store questions, not answers: every cell re-runs when you open it.
 - **Data artifacts.** Parameterised, live views kept as files in `artifacts/`: typed parameters, named queries, controls and drill-down. They store questions, not answers. [Reference](docs/reference/artifacts.md).
 - **A semantic layer.** Entities, metrics, joins and a glossary as reviewed files in `semantics/`, checked and profiled against the data, callable as `metric('revenue', by => 'country')` in any SQL. The assistant can only propose a definition; you accept it. [Reference](docs/reference/semantics.md), [examples](docs/examples/README.md).
 - **Skills.** Markdown documents that teach the assistant what your metrics mean and which joins are canonical, loaded on demand.
 - **An assistant with guardrails.** Sandbox tiers, an SQL allow-list, and an approval for every write that matters. Works with a local model, Ollama, OpenAI, Anthropic, Gemini or Cloudflare AI Gateway.
-- **MCP for your own agent.** `assay mcp serve` gives Claude Code, Claude Desktop, Cursor and others the same tools with the same limits. [Setup](docs/mcp-clients.md).
+- **MCP for your own agent.** `slaw mcp serve` gives Claude Code, Claude Desktop, Cursor and others the same tools with the same limits. [Setup](docs/mcp-clients.md).
 - **Credentials done properly.** OS keychain or environment variables, write-only across every boundary, never in the folder, a bundle or a log.
-- **Import, export and sharing.** CSV, TSV and Excel in; CSV, Parquet, JSON and Excel out; `.assay` bundles of notebooks, queries and skills (no data, no credentials, optional passphrase).
-- **Three ways in.** The Studio desktop app, the `assay` command line, and a terminal UI (`assay studio`).
+- **Import, export and sharing.** CSV, TSV and Excel in; CSV, Parquet, JSON and Excel out; `.slaw` bundles of notebooks, queries and skills (no data, no credentials, optional passphrase).
+- **Three ways in.** The Studio desktop app, the `slaw` command line, and a terminal UI (`slaw studio`).
 
 ## Supported platforms
 
@@ -79,7 +79,7 @@ No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is
 
 ## Status
 
-Assay is **pre-1.0**. Studio, the command line and MCP all work on workspace folders with connections and keychain credentials. Known limits for 0.1.0:
+Slaw is **pre-1.0**. Studio, the command line and MCP all work on workspace folders with connections and keychain credentials. Known limits for 0.1.0:
 
 - **macOS builds are unsigned** (ad-hoc signed, not notarised). The install script avoids the Gatekeeper prompt; a browser download needs **Open Anyway**. See [docs/install.md](docs/install.md#macos-and-gatekeeper).
 - No Windows build. Single-user: sharing is through shared backends and git.
@@ -89,11 +89,11 @@ See the [CHANGELOG](CHANGELOG.md) and [docs/direction.md](docs/direction.md) for
 
 ## The name
 
-Assay was called Vibe until v0.6.0.
+Slaw was called Vibe Studio until v0.6.0.
 
 ## Privacy
 
-Assay sends nothing to Sandwich Labs: no telemetry, no analytics, no update checks. Network traffic goes only to the data sources you connect, to the LLM provider you configure (which sees the prompts, schemas and query results the assistant uses), and to `extensions.duckdb.org` when you ask for a feature that needs a DuckDB extension (Install, `--install`, or an Excel import or export). Details: [docs/privacy.md](docs/privacy.md).
+Slaw sends nothing to Sandwich Labs: no telemetry, no analytics, no update checks. Network traffic goes only to the data sources you connect, to the LLM provider you configure (which sees the prompts, schemas and query results the assistant uses), and to `extensions.duckdb.org` when you ask for a feature that needs a DuckDB extension (Install, `--install`, or an Excel import or export). Details: [docs/privacy.md](docs/privacy.md).
 
 ## Documentation
 

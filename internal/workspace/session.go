@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // SessionIssue is a connection that could not be registered or attached. The
@@ -37,14 +37,14 @@ type sessionOpts struct {
 }
 
 // WithForceReadOnly attaches every connection read-only whatever its
-// definition says, for a process that does not own the hub (`assay query
-// --read-only`, `assay workspace info`). A local DuckDB file that does not
+// definition says, for a process that does not own the hub (`slaw query
+// --read-only`, `slaw workspace info`). A local DuckDB file that does not
 // exist yet is reported as an issue instead of being created, and no folder
 // is created for it.
 func WithForceReadOnly() SessionOption { return func(o *sessionOpts) { o.readOnly = true } }
 
 // WithPolicyGatedRuns goes with WithForceReadOnly, for a process whose every
-// statement runs through the agent policy's read-only path (`assay semantics
+// statement runs through the agent policy's read-only path (`slaw semantics
 // check` and `profile`, through hub.ReadOnlyRunner). A connection type that
 // cannot be attached read-only at all (MotherDuck) is then attached as it is
 // defined, the way Studio attaches it for the same runs, instead of staying
@@ -55,7 +55,7 @@ func WithPolicyGatedRuns() SessionOption { return func(o *sessionOpts) { o.polic
 
 // WithSkipLocalFiles registers local duckdb and sqlite connections without
 // attaching them (nor creating their files), for a command that only needs the
-// remote ones and does not own the hub (`assay conn connect`).
+// remote ones and does not own the hub (`slaw conn connect`).
 func WithSkipLocalFiles() SessionOption { return func(o *sessionOpts) { o.skipLocal = true } }
 
 // WithSessionEnv replaces the environment lookup for ${ENV} interpolation.
@@ -76,7 +76,7 @@ func WithSessionOptions(opts ...session.Option) SessionOption {
 //     resolved here and handed to session.New, before the configuration locks.
 //   - Relative paths resolve against the workspace root and may not leave it,
 //     lexically or through a symlink. An absolute path is accepted only from
-//     your own scopes (local, user), never from the shared assay.yaml, and a
+//     your own scopes (local, user), never from the shared slaw.yaml, and a
 //     folder is only ever created inside the workspace. A relative path in a
 //     user-scope connection (which belongs to no workspace) is refused.
 //   - ${ENV} references are expanded here, and only in your own scopes; a
@@ -308,7 +308,7 @@ func insideRoot(root, p string) bool {
 // ResolveLocalPath turns a duckdb connection's path into the file to attach.
 // A relative path is resolved against root and must stay inside it, including
 // through symlinks. An absolute path is accepted only from the scopes that
-// belong to one person (local and user): the shared assay.yaml is written by
+// belong to one person (local and user): the shared slaw.yaml is written by
 // someone else, so an absolute path there is refused (review #109, D-C).
 // scope is the scope the definition came from.
 func ResolveLocalPath(root, p string, scope Scope) (string, error) {
@@ -317,7 +317,7 @@ func ResolveLocalPath(root, p string, scope Scope) (string, error) {
 	}
 	if isAbsLike(p) {
 		if scope == ScopeShared {
-			return "", fmt.Errorf("path %q is absolute, which is not allowed in assay.yaml; use a path inside the workspace", p)
+			return "", fmt.Errorf("path %q is absolute, which is not allowed in slaw.yaml; use a path inside the workspace", p)
 		}
 		if !filepath.IsAbs(p) {
 			return "", fmt.Errorf("path %q is not a usable absolute path on this system", p)

@@ -98,7 +98,7 @@ func (p *Provider) register(ctx context.Context, oidc *ssooidc.Client, prof Prof
 	if len(scopes) == 0 {
 		scopes = []string{defaultScope}
 	}
-	in := &ssooidc.RegisterClientInput{ClientName: aws.String("assay"), ClientType: aws.String("public"), Scopes: scopes}
+	in := &ssooidc.RegisterClientInput{ClientName: aws.String("slaw"), ClientType: aws.String("public"), Scopes: scopes}
 	if prof.Kind == KindSession {
 		in.GrantTypes = []string{deviceGrant, "refresh_token"}
 		in.IssuerUrl = aws.String(prof.StartURL)

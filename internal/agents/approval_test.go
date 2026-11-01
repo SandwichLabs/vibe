@@ -3,7 +3,7 @@ package agents
 import (
 	"context"
 	"database/sql"
-	"github.com/SandwichLabs/assay/internal/session/sessiontest"
+	"github.com/SandwichLabs/slaw/internal/session/sessiontest"
 	"log/slog"
 	"os"
 	"sync"
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // --- ParseSandboxMode ---

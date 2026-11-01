@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="application/x-assay-bundle">
-    <comment>Assay bundle</comment>
-    <glob pattern="*.assay"/>
-    <icon name="assay"/>
+  <mime-type type="application/x-slaw-bundle">
+    <comment>Slaw bundle</comment>
+    <glob pattern="*.slaw"/>
+    <icon name="slaw"/>
   </mime-type>
 </mime-info>

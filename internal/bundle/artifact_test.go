@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const artManifest = `# kept as written, comment and all
@@ -471,7 +471,7 @@ func TestArtifact_HTMLPageOpenRefusesWholeBundle(t *testing.T) {
 		"a folder in html/":    func(e map[string][]byte) { e["artifacts/page/html/sub/a.tmpl"] = []byte("x") },
 		"a deep folder":        func(e map[string][]byte) { e["artifacts/page/html/assets/a/b/c.css"] = []byte("x") },
 		"a dotfile":            func(e map[string][]byte) { e["artifacts/page/html/assets/.env"] = []byte("x") },
-		"a reserved folder":    func(e map[string][]byte) { e["artifacts/page/html/assay-lib/x.js"] = []byte("x") },
+		"a reserved folder":    func(e map[string][]byte) { e["artifacts/page/html/slaw-lib/x.js"] = []byte("x") },
 		"an unknown extension": func(e map[string][]byte) { e["artifacts/page/html/assets/a.exe"] = []byte("x") },
 		"a stylesheet at top":  func(e map[string][]byte) { e["artifacts/page/html/style.css"] = []byte("x") },
 		"a template in assets": func(e map[string][]byte) { e["artifacts/page/html/assets/a.tmpl"] = []byte("x") },
@@ -562,7 +562,7 @@ func TestArtifact_HTMLPageConflictsAndOverwrite(t *testing.T) {
 func TestArtifact_PageStateIsNeverBundled(t *testing.T) {
 	ws, _ := newWS(t)
 	putArtifact(t, ws, "sales", artManifest, artView)
-	dir := filepath.Join(ws.Root(), ".assay-local", "artifacts", "sales")
+	dir := filepath.Join(ws.Root(), ".slaw-local", "artifacts", "sales")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"version":1,"values":{"leak":"QUERYRESULT"}}`), 0o644))
 
@@ -570,7 +570,7 @@ func TestArtifact_PageStateIsNeverBundled(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range res.Manifest.Contents {
 		assert.NotContains(t, e.Path, "state", e.Path)
-		assert.NotContains(t, e.Path, ".assay-local", e.Path)
+		assert.NotContains(t, e.Path, ".slaw-local", e.Path)
 	}
 	assert.NotContains(t, string(res.Data), "QUERYRESULT")
 }

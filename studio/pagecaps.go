@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/pagehost"
-	"github.com/SandwichLabs/assay/internal/pagestate"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/pagestate"
 )
 
 // askPerMinute is the `ask` rate for one artifact.

@@ -1,13 +1,13 @@
 /* ============================================================
    Theme bridge — maps the SchoolHouse `--sh-*` tokens every stylesheet
-   already uses onto the semantic `--assay-*` roles a theme file sets.
+   already uses onto the semantic `--slaw-*` roles a theme file sets.
 
-   theme/apply.ts writes `--assay-*` on <html>. This file is imported AFTER
+   theme/apply.ts writes `--slaw-*` on <html>. This file is imported AFTER
    schoolhouse/colors_and_type.css so these declarations win, and the raw
    palette there becomes documentation plus a no-JS fallback.
 
    Rules:
-   - A stylesheet may use either `--sh-*` (legacy name) or `--assay-*` (role).
+   - A stylesheet may use either `--sh-*` (legacy name) or `--slaw-*` (role).
      New code should use the role.
    - Translucent variants are derived with color-mix() from the role, never
      written as rgba literals, so they follow the theme.
@@ -15,115 +15,115 @@
 
 :root {
   /* ---- Core ---- */
-  --sh-ink:        var(--assay-fg);
-  --sh-paper:      var(--assay-bg);
-  --sh-paper-2:    var(--assay-bg-alt);
-  --sh-surface:    var(--assay-surface);
-  --sh-graphite:   var(--assay-fg-muted);
-  --sh-chalk:      var(--assay-fg-disabled);
-  --sh-ember:      var(--assay-splash);
+  --sh-ink:        var(--slaw-fg);
+  --sh-paper:      var(--slaw-bg);
+  --sh-paper-2:    var(--slaw-bg-alt);
+  --sh-surface:    var(--slaw-surface);
+  --sh-graphite:   var(--slaw-fg-muted);
+  --sh-chalk:      var(--slaw-fg-disabled);
+  --sh-ember:      var(--slaw-splash);
 
   /* ---- Accents ---- */
-  --sh-teal:       var(--assay-accent);
-  --sh-teal-hi:    var(--assay-accent-hover);
-  --sh-teal-lo:    var(--assay-accent-active);
-  --sh-marigold:   var(--assay-highlight);
-  --sh-coral:      var(--assay-attention);
+  --sh-teal:       var(--slaw-accent);
+  --sh-teal-hi:    var(--slaw-accent-hover);
+  --sh-teal-lo:    var(--slaw-accent-active);
+  --sh-marigold:   var(--slaw-highlight);
+  --sh-coral:      var(--slaw-attention);
 
   /* ---- Status ---- */
-  --sh-success:    var(--assay-success);
-  --sh-warn:       var(--assay-warn);
-  --sh-error:      var(--assay-error);
-  --sh-info:       var(--assay-info);
+  --sh-success:    var(--slaw-success);
+  --sh-warn:       var(--slaw-warn);
+  --sh-error:      var(--slaw-error);
+  --sh-info:       var(--slaw-info);
 
   /* ---- Subject stripes (SchoolHouse leftovers) → chart palette ---- */
-  --sh-subj-math:    var(--assay-chart-4);
-  --sh-subj-ela:     var(--assay-chart-5);
-  --sh-subj-science: var(--assay-chart-1);
-  --sh-subj-history: var(--assay-chart-6);
-  --sh-subj-art:     var(--assay-chart-3);
-  --sh-subj-music:   var(--assay-chart-4);
-  --sh-subj-pe:      var(--assay-success);
-  --sh-subj-world:   var(--assay-warn);
+  --sh-subj-math:    var(--slaw-chart-4);
+  --sh-subj-ela:     var(--slaw-chart-5);
+  --sh-subj-science: var(--slaw-chart-1);
+  --sh-subj-history: var(--slaw-chart-6);
+  --sh-subj-art:     var(--slaw-chart-3);
+  --sh-subj-music:   var(--slaw-chart-4);
+  --sh-subj-pe:      var(--slaw-success);
+  --sh-subj-world:   var(--slaw-warn);
 
   /* ---- Tints (derived) ---- */
-  --sh-teal-8:      color-mix(in srgb, var(--assay-accent) 10%, transparent);
-  --sh-marigold-8:  color-mix(in srgb, var(--assay-highlight) 12%, transparent);
-  --sh-coral-8:     color-mix(in srgb, var(--assay-attention) 12%, transparent);
-  --sh-error-8:     color-mix(in srgb, var(--assay-error) 10%, transparent);
-  --sh-ink-8:       color-mix(in srgb, var(--assay-fg) 8%, transparent);
-  --sh-graphite-8:  color-mix(in srgb, var(--assay-fg-muted) 10%, transparent);
-  --sh-scrim:       var(--assay-scrim);
+  --sh-teal-8:      color-mix(in srgb, var(--slaw-accent) 10%, transparent);
+  --sh-marigold-8:  color-mix(in srgb, var(--slaw-highlight) 12%, transparent);
+  --sh-coral-8:     color-mix(in srgb, var(--slaw-attention) 12%, transparent);
+  --sh-error-8:     color-mix(in srgb, var(--slaw-error) 10%, transparent);
+  --sh-ink-8:       color-mix(in srgb, var(--slaw-fg) 8%, transparent);
+  --sh-graphite-8:  color-mix(in srgb, var(--slaw-fg-muted) 10%, transparent);
+  --sh-scrim:       var(--slaw-scrim);
 
   /* ---- Roles the legacy palette never had (audit: undefined tokens) ---- */
-  --sh-line:        var(--assay-border-subtle);   /* hairline dividers */
-  --sh-border-color: var(--assay-border);          /* load-bearing 2px lines */
-  --sh-hover:       color-mix(in srgb, var(--assay-fg) 5%, transparent);
-  --sh-focus:       var(--assay-focus);
-  --sh-focus-ring:  0 0 0 2px var(--assay-bg), 0 0 0 4px var(--assay-focus);
-  --sh-halo-success: 0 0 0 2px color-mix(in srgb, var(--assay-success) 25%, transparent);
-  --sh-halo-warn:    0 0 0 2px color-mix(in srgb, var(--assay-highlight) 28%, transparent);
-  --sh-halo-attn:    0 0 0 2px color-mix(in srgb, var(--assay-attention) 28%, transparent);
+  --sh-line:        var(--slaw-border-subtle);   /* hairline dividers */
+  --sh-border-color: var(--slaw-border);          /* load-bearing 2px lines */
+  --sh-hover:       color-mix(in srgb, var(--slaw-fg) 5%, transparent);
+  --sh-focus:       var(--slaw-focus);
+  --sh-focus-ring:  0 0 0 2px var(--slaw-bg), 0 0 0 4px var(--slaw-focus);
+  --sh-halo-success: 0 0 0 2px color-mix(in srgb, var(--slaw-success) 25%, transparent);
+  --sh-halo-warn:    0 0 0 2px color-mix(in srgb, var(--slaw-highlight) 28%, transparent);
+  --sh-halo-attn:    0 0 0 2px color-mix(in srgb, var(--slaw-attention) 28%, transparent);
 
   /* Chrome (top bar) / sidebar / code / editor — no legacy names existed;
-     stylesheets reference these --assay-* roles directly. */
-  --sh-on-accent:   var(--assay-accent-fg);
-  --sh-on-highlight: var(--assay-highlight-fg);
-  --sh-on-dark:     var(--assay-code-fg);   /* text on an ink-coloured fill */
-  --sh-dark:        var(--assay-code-bg);   /* the ink-coloured fill itself */
+     stylesheets reference these --slaw-* roles directly. */
+  --sh-on-accent:   var(--slaw-accent-fg);
+  --sh-on-highlight: var(--slaw-highlight-fg);
+  --sh-on-dark:     var(--slaw-code-fg);   /* text on an ink-coloured fill */
+  --sh-dark:        var(--slaw-code-bg);   /* the ink-coloured fill itself */
 
   /* ---- Type families ---- */
-  --sh-font-display: var(--assay-font-display);
-  --sh-font-body:    var(--assay-font-body);
-  --sh-font-mono:    var(--assay-font-mono);
-  --sh-font-rounded: var(--assay-font-body);
+  --sh-font-display: var(--slaw-font-display);
+  --sh-font-body:    var(--slaw-font-body);
+  --sh-font-mono:    var(--slaw-font-mono);
+  --sh-font-rounded: var(--slaw-font-body);
 
   /* ---- Borders: colour follows the theme's border role, not the text ---- */
-  --sh-border-thin:  1.5px solid var(--assay-border);
-  --sh-border:       2px solid var(--assay-border);
-  --sh-border-thick: 3px solid var(--assay-border);
+  --sh-border-thin:  1.5px solid var(--slaw-border);
+  --sh-border:       2px solid var(--slaw-border);
+  --sh-border-thick: 3px solid var(--slaw-border);
 
   /* ---- Shadows: hard offset in the theme's shadow colour ---- */
-  --sh-shadow-color:     var(--assay-shadow);
-  --sh-shadow-xs:        1px 1px 0 0 var(--assay-shadow);
-  --sh-shadow-sm:        2px 2px 0 0 var(--assay-shadow);
-  --sh-shadow:           3px 3px 0 0 var(--assay-shadow);
-  --sh-shadow-lg:        5px 5px 0 0 var(--assay-shadow);
-  --sh-shadow-teal:      3px 3px 0 0 var(--assay-accent);
-  --sh-shadow-marigold:  3px 3px 0 0 var(--assay-highlight);
-  --sh-shadow-error:     3px 3px 0 0 var(--assay-error);
-  --sh-shadow-coral:     3px 3px 0 0 var(--assay-attention);
+  --sh-shadow-color:     var(--slaw-shadow);
+  --sh-shadow-xs:        1px 1px 0 0 var(--slaw-shadow);
+  --sh-shadow-sm:        2px 2px 0 0 var(--slaw-shadow);
+  --sh-shadow:           3px 3px 0 0 var(--slaw-shadow);
+  --sh-shadow-lg:        5px 5px 0 0 var(--slaw-shadow);
+  --sh-shadow-teal:      3px 3px 0 0 var(--slaw-accent);
+  --sh-shadow-marigold:  3px 3px 0 0 var(--slaw-highlight);
+  --sh-shadow-error:     3px 3px 0 0 var(--slaw-error);
+  --sh-shadow-coral:     3px 3px 0 0 var(--slaw-attention);
 
   /* ---- UI scale (Settings → Appearance) ---- */
-  --assay-ui-scale: 1;
+  --slaw-ui-scale: 1;
 }
 
 /* No-JS / pre-install fallback: the SchoolHouse light palette, so the very
    first paint before installTheme() resolves is never unstyled. Values mirror
    theme/builtin.ts SCHOOLHOUSE_LIGHT and colors_and_type.css. */
 :root {
-  --assay-bg: #FAF7F0; --assay-bg-alt: #F2EDDF; --assay-surface: #FFFFFF;
-  --assay-fg: #1F2330; --assay-fg-muted: #5C6275; --assay-fg-disabled: #A8A89C;
-  --assay-border: #1F2330; --assay-border-subtle: #D6D3CA; --assay-shadow: #3F4350; --assay-focus: #1F7268;
-  --assay-accent: #1F7268; --assay-accent-hover: #3FA39B; --assay-accent-active: #236962; --assay-accent-fg: #FAF7F0;
-  --assay-highlight: #F2A93B; --assay-highlight-fg: #1F2330; --assay-attention: #E27262; --assay-splash: #C25A1F;
-  --assay-success: #2F7D4A; --assay-warn: #B47800; --assay-error: #B23B2E; --assay-info: #2F6FA8;
-  --assay-selection: #F2A93B; --assay-selection-fg: #1F2330; --assay-scrim: #1F23308C;
-  --assay-chrome-bg: #1F2330; --assay-chrome-fg: #FAF7F0; --assay-chrome-border: #1F2330;
-  --assay-sidebar-bg: #F2EDDF; --assay-sidebar-fg: #1F2330; --assay-sidebar-active-bg: #FFFFFF; --assay-sidebar-active-fg: #1F7268;
-  --assay-code-bg: #1F2330; --assay-code-fg: #FAF7F0;
-  --assay-editor-bg: #FAF7F0; --assay-editor-fg: #1F2330; --assay-editor-gutter-bg: #F2EDDF; --assay-editor-gutter-fg: #5C6275;
-  --assay-editor-line: #1F72681A; --assay-editor-selection: #1F72682E; --assay-editor-cursor: #1F2330;
-  --assay-syntax-keyword: #A84815; --assay-syntax-string: #2F7D4A; --assay-syntax-number: #2F6FA8; --assay-syntax-comment: #5C6275;
-  --assay-syntax-link: #1F7268; --assay-syntax-heading: #1F2330; --assay-syntax-meta: #5C6275;
-  --assay-chart-1: #1F7268; --assay-chart-2: #F2A93B; --assay-chart-3: #E27262; --assay-chart-4: #2F6FA8; --assay-chart-5: #7A4FA0; --assay-chart-6: #A65A2C;
-  --assay-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-  --assay-font-body: 'Inter', system-ui, -apple-system, sans-serif;
-  --assay-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --slaw-bg: #FAF7F0; --slaw-bg-alt: #F2EDDF; --slaw-surface: #FFFFFF;
+  --slaw-fg: #1F2330; --slaw-fg-muted: #5C6275; --slaw-fg-disabled: #A8A89C;
+  --slaw-border: #1F2330; --slaw-border-subtle: #D6D3CA; --slaw-shadow: #3F4350; --slaw-focus: #1F7268;
+  --slaw-accent: #1F7268; --slaw-accent-hover: #3FA39B; --slaw-accent-active: #236962; --slaw-accent-fg: #FAF7F0;
+  --slaw-highlight: #F2A93B; --slaw-highlight-fg: #1F2330; --slaw-attention: #E27262; --slaw-splash: #C25A1F;
+  --slaw-success: #2F7D4A; --slaw-warn: #B47800; --slaw-error: #B23B2E; --slaw-info: #2F6FA8;
+  --slaw-selection: #F2A93B; --slaw-selection-fg: #1F2330; --slaw-scrim: #1F23308C;
+  --slaw-chrome-bg: #1F2330; --slaw-chrome-fg: #FAF7F0; --slaw-chrome-border: #1F2330;
+  --slaw-sidebar-bg: #F2EDDF; --slaw-sidebar-fg: #1F2330; --slaw-sidebar-active-bg: #FFFFFF; --slaw-sidebar-active-fg: #1F7268;
+  --slaw-code-bg: #1F2330; --slaw-code-fg: #FAF7F0;
+  --slaw-editor-bg: #FAF7F0; --slaw-editor-fg: #1F2330; --slaw-editor-gutter-bg: #F2EDDF; --slaw-editor-gutter-fg: #5C6275;
+  --slaw-editor-line: #1F72681A; --slaw-editor-selection: #1F72682E; --slaw-editor-cursor: #1F2330;
+  --slaw-syntax-keyword: #A84815; --slaw-syntax-string: #2F7D4A; --slaw-syntax-number: #2F6FA8; --slaw-syntax-comment: #5C6275;
+  --slaw-syntax-link: #1F7268; --slaw-syntax-heading: #1F2330; --slaw-syntax-meta: #5C6275;
+  --slaw-chart-1: #1F7268; --slaw-chart-2: #F2A93B; --slaw-chart-3: #E27262; --slaw-chart-4: #2F6FA8; --slaw-chart-5: #7A4FA0; --slaw-chart-6: #A65A2C;
+  --slaw-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --slaw-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --slaw-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 }
 
 /* ---- Selection + native controls follow the theme ---- */
-::selection { background: var(--assay-selection); color: var(--assay-selection-fg); }
+::selection { background: var(--slaw-selection); color: var(--slaw-selection-fg); }
 
 /* ---- Keyboard focus: one ring, everywhere, only for keyboard users ----
    Replaces the old `*:focus { outline: none }` that hid focus for every
@@ -134,7 +134,7 @@
   box-shadow: var(--sh-focus-ring);
   border-radius: var(--sh-radius-sm);
 }
-.cm-editor.cm-focused { box-shadow: inset 0 0 0 2px var(--assay-focus); }
+.cm-editor.cm-focused { box-shadow: inset 0 0 0 2px var(--slaw-focus); }
 
 /* ---- Data is shown as stored (#91, M-F29/P-F25/P-F8) ----
    Inter's contextual alternates turn 2x6x10 into 2×6×10; JetBrains Mono's
@@ -180,12 +180,12 @@ input, textarea, select, code, pre, kbd, samp, .cm-editor, .sh-mono {
 }
 
 /* ---- UI scale: the kit is px-based, so scale the whole app root ---- */
-#app { zoom: var(--assay-ui-scale); }
+#app { zoom: var(--slaw-ui-scale); }
 
 /* Nav links are app chrome, not prose links: no underline, sidebar colours.
    (`.sh a` in colors_and_type.css out-specifies `.side-link` otherwise.) */
 .sh .side-link,
-.sh .side-link:hover { text-decoration: none; color: var(--assay-sidebar-fg); }
-.sh .side-link.active { color: var(--assay-sidebar-active-fg); }
+.sh .side-link:hover { text-decoration: none; color: var(--slaw-sidebar-fg); }
+.sh .side-link.active { color: var(--slaw-sidebar-active-fg); }
 .sh .page-head .crumb a,
 .sh .headrow .crumb a { text-decoration: none; }

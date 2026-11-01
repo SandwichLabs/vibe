@@ -71,7 +71,7 @@ func TestOpenEditor_SuspendsForTheEditor(t *testing.T) {
 	app := NewApp(nil, nil, nil, WithEditorRoot(root), withEditorArgv("true"))
 	_, cmd := app.Update(replEditMsg{initial: "select 1"})
 	require.NotNil(t, cmd, "an ExecProcess command hands the terminal to the editor")
-	entries, err := os.ReadDir(root + "/.assay-local/edit")
+	entries, err := os.ReadDir(root + "/.slaw-local/edit")
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "the scratch buffer lives under the workspace")
 }

@@ -1,10 +1,10 @@
 package main
 
-// Helper mode: the Studio binary started as `assay-studio --view-host` by Studio
+// Helper mode: the Studio binary started as `slaw-studio --view-host` by Studio
 // itself (docs/plans/html-artifacts.md, H4). It never starts Wails. It reads
 // one `open`, the page's files and `go` from Studio over a dedicated pipe,
 // holds them in memory, and runs a native web view that serves them under
-// assay-page://<name>/. It is given no workspace path, connection, credential or
+// slaw-page://<name>/. It is given no workspace path, connection, credential or
 // store: a page's data requests go back over the pipe, to Studio, which owns
 // the artifact. The page and the pipe are both untrusted from here: every
 // string the page posts is shape-checked again before it is forwarded, and only
@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
 )
 
 // helperExit codes (the helper's own; Studio only looks at "it stopped").
@@ -119,7 +119,7 @@ func runPageHelper() int {
 	}
 	go h.pump()
 	cfg := nativeConfig{
-		name: h.open.Name, title: h.open.Title + " — Assay page", width: h.open.W, height: h.open.H,
+		name: h.open.Name, title: h.open.Title + " — Slaw page", width: h.open.W, height: h.open.H,
 		script: pagehost.APIScript(h.open.Params, h.open.Caps), query: h.open.Q,
 	}
 	if err := nativeRun(cfg, h); err != nil {
@@ -295,11 +295,11 @@ func (h *pageHelper) docChunk(m *pagehost.Message) {
 	}
 }
 
-// serve answers a request to assay-page://<name>/...: the entry document, or a
+// serve answers a request to slaw-page://<name>/...: the entry document, or a
 // file Studio sent. Nothing else exists.
 func (h *pageHelper) serve(id uint64, rawURL string) {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Scheme != "assay-page" || !strings.EqualFold(u.Host, h.open.Name) || u.User != nil {
+	if err != nil || u.Scheme != "slaw-page" || !strings.EqualFold(u.Host, h.open.Name) || u.User != nil {
 		h.nat.respond(id, false, "", nil)
 		return
 	}

@@ -1,6 +1,6 @@
 # Starter Templates
 
-A **template** seeds a fresh **workspace** (Studio's New workspace dialog, or `assay workspace init --template`) with a complete little relational dataset, written into the workspace's local `data/local.duckdb` connection and a `notebooks/*.asnb` file:
+A **template** seeds a fresh **workspace** (Studio's New workspace dialog, or `slaw workspace init --template`) with a complete little relational dataset, written into the workspace's local `data/local.duckdb` connection and a `notebooks/*.slnb` file:
 DuckDB user tables (with inline foreign keys so referential integrity is
 enforced), sample data, and a starter **notebook** with a cell over each table
 so the workspace is immediately explorable. (vibe-app#68: forms, the switchboard,
@@ -9,7 +9,7 @@ template along with the Access application layer — a template is now just
 tables + seed data + a notebook.)
 
 Pick a template in the New workspace dialog ("Start from"), or pass its name to
-`assay workspace init --template`. The registered starter templates are:
+`slaw workspace init --template`. The registered starter templates are:
 
 ## contacts
 A contact book: a `contacts` table plus a one-to-many `contact_notes` child.

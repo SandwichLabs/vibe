@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Print the minimum macOS version Assay supports on one architecture (spike #43, docs/packaging.md).
+# Print the minimum macOS version Slaw supports on one architecture (spike #43, docs/packaging.md).
 #
 #   scripts/macos-target.sh <arm64|amd64>
 #

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 // The starters New artifact offers (Library plan L1/L6). They are Studio's
@@ -90,15 +90,15 @@ const starterPageScriptTag = `<script src="app.js"></script>
 `
 
 // starterPageCSS uses the person's theme roles, which only the page window
-// links (_assay/theme.css); a static page shows in a sandboxed frame without
+// links (_slaw/theme.css); a static page shows in a sandboxed frame without
 // them, so each role has a system-colour fallback. No resource is loaded.
 const starterPageCSS = `:root {
   color-scheme: light dark;
 }
 body {
   margin: 0;
-  background: var(--assay-bg, Canvas);
-  color: var(--assay-fg, CanvasText);
+  background: var(--slaw-bg, Canvas);
+  color: var(--slaw-fg, CanvasText);
   font-family: system-ui, sans-serif;
 }
 main {
@@ -111,28 +111,28 @@ h1 {
   font-size: 1.5rem;
 }
 .muted {
-  color: var(--assay-fg-muted, GrayText);
+  color: var(--slaw-fg-muted, GrayText);
 }
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--assay-surface, Canvas);
+  background: var(--slaw-surface, Canvas);
 }
 th,
 td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--assay-border, GrayText);
+  border-bottom: 1px solid var(--slaw-border, GrayText);
   text-align: left;
 }
 `
 
 // starterPageJS asks for the same query again from the page. It shows how
-// assay.run reaches a named query; the page works without it.
+// slaw.run reaches a named query; the page works without it.
 const starterPageJS = `// Runs the "span" query again from the page and updates the cell.
-// assay.run only reaches the named queries in artifact.yaml.
+// slaw.run only reaches the named queries in artifact.yaml.
 async function refresh() {
-  const params = await assay.params()
-  const res = await assay.run('span', { from: params.from.value, to: params.to.value })
+  const params = await slaw.params()
+  const res = await slaw.run('span', { from: params.from.value, to: params.to.value })
   const cell = document.getElementById('days')
   if (cell && res.rows.length > 0) {
     cell.textContent = String(res.rows[0][0])
@@ -142,18 +142,18 @@ refresh().catch(() => {})
 `
 
 // starterScriptJS draws a one-bar SVG from the "span" query.
-const starterScriptJS = `// draw() is called by Assay with the current parameters and the space available.
-// It returns an SVG string. assay.run only reaches the named queries in artifact.yaml.
+const starterScriptJS = `// draw() is called by Slaw with the current parameters and the space available.
+// It returns an SVG string. slaw.run only reaches the named queries in artifact.yaml.
 function draw(ctx) {
-  return assay.run('span', { from: ctx.params.from, to: ctx.params.to }).then((res) => {
+  return slaw.run('span', { from: ctx.params.from, to: ctx.params.to }).then((res) => {
     const days = Number(res.rows.length > 0 ? res.rows[0][0] : 0)
     const w = Math.max(200, ctx.width)
     const h = 120
     const bar = Math.min(w - 40, Math.max(2, days * 4))
     return {
       svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
-        '<rect x="20" y="30" width="' + bar + '" height="30" fill="' + assay.theme['chart.1'] + '"/>' +
-        '<text x="20" y="90" font-family="sans-serif" font-size="14" fill="' + assay.theme.fg + '">' +
+        '<rect x="20" y="30" width="' + bar + '" height="30" fill="' + slaw.theme['chart.1'] + '"/>' +
+        '<text x="20" y="90" font-family="sans-serif" font-size="14" fill="' + slaw.theme.fg + '">' +
         days + ' days in range</text></svg>',
     }
   })

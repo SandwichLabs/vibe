@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/connname"
 )
 
 // backend is where a core keeps file bytes: the workspace folder (FileStore)

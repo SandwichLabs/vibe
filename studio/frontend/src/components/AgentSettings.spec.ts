@@ -130,14 +130,14 @@ describe('AgentSettings (two layers)', () => {
 describe('AgentSettings stale form', () => {
   beforeEach(() => { _resetForTests(); workspaceInfo.value = info() })
 
-  it('a refusal because assay.yaml changed shows plain words and a Reload settings button', async () => {
-    const app = { SetWorkspaceSettings: vi.fn(async () => { throw new Error("conflict: the team's agent limit in assay.yaml changed since Settings was opened.") }), GetWorkspaceInfo: vi.fn(async () => info({ teamSandboxSet: true, team: { sandbox: 'read-only', askBeforeWrites: false } })) }
+  it('a refusal because slaw.yaml changed shows plain words and a Reload settings button', async () => {
+    const app = { SetWorkspaceSettings: vi.fn(async () => { throw new Error("conflict: the team's agent limit in slaw.yaml changed since Settings was opened.") }), GetWorkspaceInfo: vi.fn(async () => info({ teamSandboxSet: true, team: { sandbox: 'read-only', askBeforeWrites: false } })) }
     ;(globalThis as any).window = (globalThis as any).window || {}
     ;(window as any).go = { main: { App: app } }
     const w = mount(AgentSettings, { global: { stubs: { Icon: true } } })
     await w.find('[data-testid="agent-sandbox-full"]').trigger('click')
     await flushPromises()
-    expect(w.text()).toContain("Error: the team's agent limit in assay.yaml changed")
+    expect(w.text()).toContain("Error: the team's agent limit in slaw.yaml changed")
     expect(w.text()).not.toContain('conflict:')
     await w.find('[data-testid="reload-settings"]').trigger('click')
     await flushPromises()

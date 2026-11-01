@@ -1,6 +1,6 @@
 package workspace
 
-import "github.com/SandwichLabs/assay/internal/sandbox"
+import "github.com/SandwichLabs/slaw/internal/sandbox"
 
 // tierRank orders sandbox tiers from most to least restrictive (internal/sandbox
 // owns the order); ok is false for an unknown tier.
@@ -18,7 +18,7 @@ type Policy struct {
 	AskBeforeWrites bool `json:"ask_before_writes"`
 }
 
-// Ceiling is the committed (assay.yaml) agent policy: a limit shared by the
+// Ceiling is the committed (slaw.yaml) agent policy: a limit shared by the
 // whole team, never a grant.
 type Ceiling struct {
 	// Sandbox is the highest tier anyone may use; "" means no limit.
@@ -28,7 +28,7 @@ type Ceiling struct {
 	AskBeforeWrites *bool
 }
 
-// LocalAgent is one person's own agent settings (.assay-local/).
+// LocalAgent is one person's own agent settings (.slaw-local/).
 type LocalAgent struct {
 	// Sandbox is the tier this person chose; "" means unset (the default).
 	Sandbox string `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`

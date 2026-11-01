@@ -5,7 +5,7 @@ package main
 // for a page they allowed; no tool, MCP method or page can open one.
 
 import (
-	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
 )
 
 // PageWindowSupport says why page windows cannot open here ("" when they can):
@@ -20,7 +20,7 @@ func (a *App) PageWindowSupport() string {
 
 // OpenArtifactPageWindow opens the named scripted page in its own window. query
 // is the raw query string of the page's parameter controls ("" for the
-// defaults) and theme the --assay-* roles of the window the person is looking at,
+// defaults) and theme the --slaw-* roles of the window the person is looking at,
 // from which the page's host stylesheet is built. The page must be allowed right
 // now, at the hash the person saw. The window's end (stopped, changed, closed) is
 // the pagewindow:state event.

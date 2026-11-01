@@ -4,7 +4,7 @@ package main
 // internal/templates; CreateWorkspace seeds the chosen one.
 
 import (
-	"github.com/SandwichLabs/assay/internal/templates"
+	"github.com/SandwichLabs/slaw/internal/templates"
 )
 
 // TemplateInfo is a bundled starter template (name + one plain sentence).

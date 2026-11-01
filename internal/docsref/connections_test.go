@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/connections"
 )
 
 // Every connection type, field and credential field the registry declares is

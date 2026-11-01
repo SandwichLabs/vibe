@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // StaticPage — an allowed static HTML page (#162, H3): the artifact's parameter
-// controls above a sandbox="" frame that loads the page from Go's /assay-view/
+// controls above a sandbox="" frame that loads the page from Go's /slaw-view/
 // route. The frame has no allow-* token: no script, no forms, no popups, no
 // navigation of Studio; Go renders the page, escaped by context, under a CSP that
 // lets it load only its own assets. The person can drag the frame's bottom edge

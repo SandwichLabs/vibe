@@ -1,10 +1,10 @@
 # Answers you can check: the 12-month plan
 
-Status: **accepted direction, not built (2026-10-26).** Umbrella epic #250; epics E1-E9 are #241-#249 (label `answers-you-can-check`). The draft was written as a no-limits moonshot, then reviewed by an independent judge against this codebase. This plan is the result after that review, and its *Review changes* section records what the review changed. Designs: the [Assay Design System](https://claude.ai/artifact/LrBzD4cQ6BYYoseLnuFP9a) and the [Answers You Can Check canvas](https://claude.ai/artifact/3rVxGVVeKW6CR14JCPCGVT) (proposed screens; each epic links its screens and open design questions); see [`../design/README.md`](../design/README.md).
+Status: **accepted direction, not built (2026-10-26).** Umbrella epic #250; epics E1-E9 are #241-#249 (label `answers-you-can-check`). The draft was written as a no-limits moonshot, then reviewed by an independent judge against this codebase. This plan is the result after that review, and its *Review changes* section records what the review changed. Designs: the [Slaw Design System](https://claude.ai/artifact/LrBzD4cQ6BYYoseLnuFP9a) and the [Answers You Can Check canvas](https://claude.ai/artifact/3rVxGVVeKW6CR14JCPCGVT) (proposed screens; each epic links its screens and open design questions); see [`../design/README.md`](../design/README.md).
 
 ## Thesis
 
-Assay already has the hard parts:
+Slaw already has the hard parts:
 
 - data stays where it lives;
 - a workspace is a folder you can diff;
@@ -14,16 +14,16 @@ Assay already has the hard parts:
 
 Producing an answer from data is now cheap. Trusting it is the hard part.
 
-The goal for the next year is **every number Assay shows comes with its evidence.** You can see the query, the connection, and the snapshot it read. An independent second derivation can check it when you ask. Its definition is a reviewed file in git. A headless run can re-check it, and it can be re-run at a past snapshot where the source keeps one. The agent stops being an oracle and becomes an analyst whose work you can audit.
+The goal for the next year is **every number Slaw shows comes with its evidence.** You can see the query, the connection, and the snapshot it read. An independent second derivation can check it when you ask. Its definition is a reviewed file in git. A headless run can re-check it, and it can be re-run at a past snapshot where the source keeps one. The agent stops being an oracle and becomes an analyst whose work you can audit.
 
 The plan has one spine and two side tracks:
 
 ```
-E1 receipts ──► E3 verifier ──► E4 semantic layer ──► E5 assay check ──► E7 watchers
+E1 receipts ──► E3 verifier ──► E4 semantic layer ──► E5 slaw check ──► E7 watchers
     │              ▲                    │                                    
     ├──► E6 as-of  │                    └──► E9 aggregate-only tier          
     │              │                                                          
-E2 AssayBench ──────┘   (measure before claiming)                              
+E2 SlawBench ──────┘   (measure before claiming)                              
 E8 compute decision spike (parallel from day one: #189, #149, Python)         
 ```
 
@@ -39,8 +39,8 @@ E1 to E5 on their own are a coherent release. If the year goes badly, shipping t
   - result hash, keyed with a per-workspace local key so a small result can't be brute-forced;
   - duration and policy verdict.
 
-  A row count is a weak answer, so receipts live in `.assay-local/receipts/`, never in the folder, a bundle or git. Numbers leave the machine only through an export the person chooses or an `assay check` report they publish. "Outputs are never persisted" still holds for the folder.
-- **Receipt ids are content addresses, not signatures.** Assay has no identity a signature could prove anything to.
+  A row count is a weak answer, so receipts live in `.slaw-local/receipts/`, never in the folder, a bundle or git. Numbers leave the machine only through an export the person chooses or a `slaw check` report they publish. "Outputs are never persisted" still holds for the folder.
+- **Receipt ids are content addresses, not signatures.** Slaw has no identity a signature could prove anything to.
 - **Receipts belong to tool results, not to Studio's renderer.** `run_query`, `run_saved_query` and `preview_query` return a `receipt_id`, so Claude Code over MCP or an ACP agent can cite one too. Chips in Studio's chat are a convenience on top. The agent can read only receipts for runs it made.
 - **No AI needed, except in E3.** E1, E2's deterministic subset, E4, E5, E6, E7 and E9 all work with no provider configured, and each epic tests that.
 - **Live stays the default.** "As of" is an explicit control that isn't persisted. A notebook can store a pinned snapshot id the person chose, never an output.
@@ -59,7 +59,7 @@ Every value rendered from a query opens to its evidence: the bound SQL and param
   |---|---|---|
   | DuckLake | `ducklake_current_snapshot()` | Yes |
   | Iceberg / Delta, where attached | table version | Yes |
-  | Postgres | `pg_current_wal_lsn()`, through Assay's own session | No: reference only |
+  | Postgres | `pg_current_wal_lsn()`, through Slaw's own session | No: reference only |
   | DuckDB file | size and mtime | No: reference only |
   | S3 | ETag, from one `HEAD` through the private lister `internal/storageglob` already uses | No: reference only |
 
@@ -73,7 +73,7 @@ Every value rendered from a query opens to its evidence: the bound SQL and param
 - **"Why this number."** For a single-level `GROUP BY` without window functions or `DISTINCT`: an AST rewrite (`json_serialize_sql`, already used by the policy) that ungroups and filters to the clicked group. Other shapes are refused with a clear message.
 - **Profile this run:** opt-in, the person's own query path only. It needs `EXPLAIN ANALYZE`, which the agent can never run.
 - **Evidence-carrying exports** (absorbs #1 and #6's export menu). Exports embed receipt ids and snapshot facts, and show "verified ✓" only when E3 ran.
-- **CLI:** `assay receipts show <id>` mirrors the drawer.
+- **CLI:** `slaw receipts show <id>` mirrors the drawer.
 
 **Exit:**
 - Every value rendered from a query in Studio opens to a receipt.
@@ -83,16 +83,16 @@ Every value rendered from a query opens to its evidence: the bound SQL and param
 
 **Depends on:** #193 (byte cap on artifact results) and #5 (result cap and cancel). **Absorbs:** #7, #30, #1, #6. **Related:** #18.
 
-### E2 (#242). AssayBench
+### E2 (#242). SlawBench
 
-A benchmark that measures agentic data work against Assay. It exists before the verifier, so the verifier's claims can be measured.
+A benchmark that measures agentic data work against Slaw. It exists before the verifier, so the verifier's claims can be measured.
 
 - **Fixture workspaces:**
   - a synthetic SaaS business in DuckLake on local files;
   - a messy Postgres with orphans and timezone traps, using the `pg_harness_integration_test.go` pattern;
   - a federated S3 + Postgres workspace on Floci (#142);
   - a trap workspace whose correct answer is a clarifying question.
-- **Two runners:** one for the in-app loop, one for an MCP client against `assay mcp serve`.
+- **Two runners:** one for the in-app loop, one for an MCP client against `slaw mcp serve`.
 - **Scores:**
   - accuracy;
   - "asked instead of guessed";
@@ -127,7 +127,7 @@ A benchmark that measures agentic data work against Assay. It exists before the 
 - **Probe skills**, shipped as built-in `SKILL.md` files: join fan-out, dropped NULLs, timezone boundaries, survivorship bias, and a bootstrap-CI skill for numbers that really are samples.
 
 **Exit:**
-- On AssayBench, confident-and-wrong answers fall below the stated threshold with the verifier on vs off, with the cost and latency difference published.
+- On SlawBench, confident-and-wrong answers fall below the stated threshold with the verifier on vs off, with the cost and latency difference published.
 - The card is QA'd with Rodney.
 - `docs/privacy.md` is updated.
 
@@ -145,30 +145,30 @@ semantics/
 
 - **Storage rules:** strict decode, byte caps, refuse rather than repair, one rev per file.
 - **Bundles** carry the files.
-- **`metric('net_revenue', by => 'region')`** is an Assay-SQL extension, like `$name`.
+- **`metric('net_revenue', by => 'region')`** is a Slaw-SQL extension, like `$name`.
   - It is expanded by a pre-pass on the policy's own lexer (`sql_lex.go`), at the same point as the storageglob pre-expansion, **before** the policy runs. The allow-list and receipts therefore see plain SQL.
-  - The same pass runs in `assay query` and the LSP.
+  - The same pass runs in `slaw query` and the LSP.
   - It never becomes a DuckDB `MACRO`.
-- **Proposals, never direct writes.** `propose_definition` / `list_definitions` / `get_definition` are content tools. A proposal goes to `.assay-local/proposals/`. The person accepts it in Studio's Semantics view or with `assay semantics accept`, the same pattern as allowing a view in `views.json`. No tool writes into `semantics/`.
+- **Proposals, never direct writes.** `propose_definition` / `list_definitions` / `get_definition` are content tools. A proposal goes to `.slaw-local/proposals/`. The person accepts it in Studio's Semantics view or with `slaw semantics accept`, the same pattern as allowing a view in `views.json`. No tool writes into `semantics/`.
 - **Assertions** (`>= 0`, uniqueness) run through a runner that E5 and E7 call.
 - A hostile metric in a cloned repo is refused at run time, like a hostile artifact query.
 
 **Exit:**
-- A metric written by hand, with no AI, runs in a notebook, an artifact and `assay query`.
+- A metric written by hand, with no AI, runs in a notebook, an artifact and `slaw query`.
 - A test shows the policy sees the expanded SQL.
 - The round trip from disagreement to proposal to acceptance to metric is QA'd.
 
 **Depends on:** E1, E3 (as input). **Absorbs:** #235.
 
-### E5 (#245). `assay check` and dependents
+### E5 (#245). `slaw check` and dependents
 
-- **The run.** `assay check` opens the workspace headless through `hub.Open` with `env:` credentials. It runs, under the read-only policy:
+- **The run.** `slaw check` opens the workspace headless through `hub.Open` with `env:` credentials. It runs, under the read-only policy:
   - every notebook data cell;
   - every artifact query;
   - every semantic assertion.
 - **The report** is JSON plus markdown, with receipts and a text/number diff against a baseline report. There are no rendered images (§7: no server-side A2UI renderer).
 - **Mirrored in Studio** by "Check workspace".
-- **Dependents index.** A map from table and column to the cells, artifacts and metrics that use them, built by walking the AST. It powers "what depends on this" in the drawer and the report (this replaces the draft's `assay blame`).
+- **Dependents index.** A map from table and column to the cells, artifacts and metrics that use them, built by walking the AST. It powers "what depends on this" in the drawer and the report (this replaces the draft's `slaw blame`).
 - **GitHub Action example** that posts the markdown report as a comment. Studio never syncs PR comments (§7: no git client).
 - **Partial failure.** One connection down degrades that connection's results, not the whole run.
 
@@ -203,7 +203,7 @@ semantics/
   - a threshold;
   - a delivery kind.
 - **Phase 1** runs inside Studio while it is open.
-- **Phase 2** is `assay watch serve`, a service mode that owns the hub, like `assay mcp serve`. It reuses `internal/hub`'s owner/proxy model and hands the hub back to Studio cleanly.
+- **Phase 2** is `slaw watch serve`, a service mode that owns the hub, like `slaw mcp serve`. It reuses `internal/hub`'s owner/proxy model and hands the hub back to Studio cleanly.
 - **Change detection.** Watchers poll and short-circuit on the snapshot id (lakes) or the keyed result hash (everything else). There is no logical replication and no incremental view maintenance.
 - **Delivery:**
   - a desktop notification;
@@ -238,11 +238,11 @@ Python cells come only on an owner decision recorded in `direction.md` §9. Unti
 
 ### E9 (#249). Aggregate-only tier
 
-A fourth tier, below `read-only`, in `internal/sandbox` (Rank/Tighter extends). A committed `assay.yaml` may set it as the ceiling.
+A fourth tier, below `read-only`, in `internal/sandbox` (Rank/Tighter extends). A committed `slaw.yaml` may set it as the ceiling.
 
 Under this tier:
 - `run_query` must be an aggregate over entities declared in E4.
-- Assay injects `HAVING count(DISTINCT <id>) >= k`, with k set per workspace.
+- Slaw injects `HAVING count(DISTINCT <id>) >= k`, with k set per workspace.
 - PII-flagged columns can't be projected.
 - Tools that return raw rows (`preview_query`, `describe_table` samples, non-aggregate saved queries) return shapes, not rows.
 
@@ -262,9 +262,9 @@ These are small and independent, and each is open on its own:
 
 | Issue | Why it comes first |
 |---|---|
-| #193 | Byte cap on artifact results: receipts and `assay check` must not materialise a huge cell. |
-| #5 | Result cap and cancel: `assay check` and the verifier need cancel. |
-| #221 | MCP surface edge cases: AssayBench runs over MCP. |
+| #193 | Byte cap on artifact results: receipts and `slaw check` must not materialise a huge cell. |
+| #5 | Result cap and cancel: `slaw check` and the verifier need cancel. |
+| #221 | MCP surface edge cases: SlawBench runs over MCP. |
 | #126 | MotherDuck offline: CI and watchers must open with a connection down. |
 | #235 | Bind saved-query params in Studio: E4 builds on it. |
 | #227, #230 | Flaky tests: fix them before E2 adds more CI. |
@@ -287,12 +287,12 @@ One developer with agents, not six squads:
 | 1 | Where do receipts live? | Machine-local, with explicit export. The result hash is keyed. |
 | 2 | How independent is the v1 verifier? | Same model in a fresh context. A second provider slot is optional. |
 | 3 | Verifier default? | "Check this answer" always; automatic checking off by default. |
-| 4 | How do metrics appear in SQL? | `metric()` as an Assay-SQL pre-pass extension, like `$name`, run in every surface including the LSP. |
+| 4 | How do metrics appear in SQL? | `metric()` as a Slaw-SQL pre-pass extension, like `$name`, run in every surface including the LSP. |
 | 5 | Is there a daemon? | Watchers run in Studio first; the daemon is phase 2 of E7. |
 | 6 | Python? | Stays out until E8 reports. |
 | 7 | What threat is the aggregate-only tier for? | The model provider (rows leaving the machine), not teammates. |
 | 8 | The canvas UI? | Cut from the plan. At most a design exploration with no quarter. |
-| 9 | AssayBench fixtures? | Public, plus a private held-out set. |
+| 9 | SlawBench fixtures? | Public, plus a private held-out set. |
 
 ## Review changes (what the independent review changed)
 
@@ -317,7 +317,7 @@ One developer with agents, not six squads:
 - Model evals don't gate PRs.
 
 **Moved:**
-- AssayBench now comes before the verifier.
+- SlawBench now comes before the verifier.
 - "If only one" is now receipts (AI-free, benefits every user), with the verifier as the first consumer.
 
 ## Missing pieces each epic must cover
@@ -332,6 +332,6 @@ One developer with agents, not six squads:
 - **Performance:**
   - keyed hashing at `MaxQueryRows`;
   - the "why" query and the verifier double the load on remote sources;
-  - `assay check` parallelises per connection within the pool's limits.
+  - `slaw check` parallelises per connection within the pool's limits.
 - **Privacy:** `docs/privacy.md` gains a line per epic that sends anything new anywhere.
 - **Threat model for receipts:** brute force over small domains (hence the key), and receipts as an oracle (the agent reads only its own).

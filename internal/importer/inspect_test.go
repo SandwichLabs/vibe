@@ -44,7 +44,7 @@ func TestInspect_PanelShapedCSV(t *testing.T) {
 	// No stage table left behind.
 	var n int
 	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM duckdb_tables() WHERE table_name = '_assay_import_stage'").Scan(&n))
+		"SELECT COUNT(*) FROM duckdb_tables() WHERE table_name = '_slaw_import_stage'").Scan(&n))
 	require.Equal(t, 0, n)
 }
 
@@ -179,7 +179,7 @@ func TestNormalizeName_SharedNameTable(t *testing.T) {
 		{"ǅemal", "emal"},
 		{"a-b-c", "a_b_c"},
 		{"A__B", "A__B"},
-		{"_assay_x", "_assay_x"},
+		{"_slaw_x", "_slaw_x"},
 		{"select", "select"},
 		{"   ", "column"},
 		{"日本", "column"},

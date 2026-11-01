@@ -9,7 +9,7 @@ import {
 import { confirmVisible, resolveConfirmChoice } from './useConfirm'
 
 const STATE: UpdateState = { check: '', lastChecked: '', skippedVersion: '', version: 'v0.1.1', isDev: false, needsConsent: true, managed: 'installer', updatable: true, managedNote: '', appliedVersion: '', canRestart: false }
-const RESULT: UpdateResult = { current: 'v0.1.1', latest: 'v0.1.2', updateAvailable: true, skipped: false, releaseUrl: 'https://github.com/SandwichLabs/assay/releases/tag/v0.1.2', notes: 'Fixes.', managed: 'installer', updatable: true, managedNote: '', checkedAt: '2026-10-13T00:00:00Z' }
+const RESULT: UpdateResult = { current: 'v0.1.1', latest: 'v0.1.2', updateAvailable: true, skipped: false, releaseUrl: 'https://github.com/SandwichLabs/slaw/releases/tag/v0.1.2', notes: 'Fixes.', managed: 'installer', updatable: true, managedNote: '', checkedAt: '2026-10-13T00:00:00Z' }
 
 function makeApp(over: Partial<Record<string, any>> = {}) {
   let state = { ...STATE }
@@ -19,7 +19,7 @@ function makeApp(over: Partial<Record<string, any>> = {}) {
     CheckForUpdate: vi.fn(async () => RESULT),
     AutoCheckForUpdate: vi.fn(async (): Promise<UpdateResult | null> => RESULT),
     SkipUpdate: vi.fn(async () => {}),
-    ApplyUpdate: vi.fn(async (): Promise<UpdateApplyResult> => ({ from: '0.1.1', to: '0.1.2', output: 'ok', studio: true, restart: '/x/assay-studio' })),
+    ApplyUpdate: vi.fn(async (): Promise<UpdateApplyResult> => ({ from: '0.1.1', to: '0.1.2', output: 'ok', studio: true, restart: '/x/slaw-studio' })),
     RestartAfterUpdate: vi.fn(async () => {}),
     ...over,
   }

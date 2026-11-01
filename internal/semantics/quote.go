@@ -3,7 +3,7 @@ package semantics
 import (
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // QuoteTable quotes each dotted part of an entity's table with the one

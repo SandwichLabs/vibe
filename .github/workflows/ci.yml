@@ -81,20 +81,20 @@ jobs:
 
       # The connection leak tests expect the DuckDB postgres extension to be installed (it is on a dev
       # machine; a fresh runner reports extension-missing instead of server-changed). Install it into the
-      # app-private extension dir the way `assay conn test --install` does for a person.
+      # app-private extension dir the way `slaw conn test --install` does for a person.
       - name: Install the DuckDB postgres extension
         env:
           CI_PG_USER: ci
           CI_PG_PASSWORD: ci
         run: |
-          go build -o "$RUNNER_TEMP/assay" ./cmd/assay
+          go build -o "$RUNNER_TEMP/slaw" ./cmd/slaw
           ws="$(mktemp -d)"
           cd "$ws"
-          "$RUNNER_TEMP/assay" workspace init . </dev/null
-          "$RUNNER_TEMP/assay" conn add pg --type postgres --host 127.0.0.1 --port 1 --database x --sign-in env:CI_PG </dev/null
+          "$RUNNER_TEMP/slaw" workspace init . </dev/null
+          "$RUNNER_TEMP/slaw" conn add pg --type postgres --host 127.0.0.1 --port 1 --database x --sign-in env:CI_PG </dev/null
           # The connect itself is expected to fail; only the download matters.
-          "$RUNNER_TEMP/assay" conn test pg --install </dev/null || true
-          find "$HOME/.cache/assay/duckdb/extensions" -name 'postgres*.duckdb_extension' | grep .
+          "$RUNNER_TEMP/slaw" conn test pg --install </dev/null || true
+          find "$HOME/.cache/slaw/duckdb/extensions" -name 'postgres*.duckdb_extension' | grep .
 
       # The host-AWS-credentials tests (#135, internal/session/storage_deny_test.go) need httpfs in the
       # app-private extension dir and fail (not skip) under CI=true without it. Same download path as above.
@@ -103,14 +103,14 @@ jobs:
           CI_S3_KEY_ID: ci
           CI_S3_SECRET: ci
         run: |
-          go build -o "$RUNNER_TEMP/assay" ./cmd/assay
+          go build -o "$RUNNER_TEMP/slaw" ./cmd/slaw
           ws="$(mktemp -d)"
           cd "$ws"
-          "$RUNNER_TEMP/assay" workspace init . </dev/null
-          "$RUNNER_TEMP/assay" conn add lake --type s3 --prefix s3://ci-nonexistent/ --region us-east-1 --option endpoint=127.0.0.1:9 --option url_style=path --option use_ssl=false --sign-in env:CI_S3 </dev/null
+          "$RUNNER_TEMP/slaw" workspace init . </dev/null
+          "$RUNNER_TEMP/slaw" conn add lake --type s3 --prefix s3://ci-nonexistent/ --region us-east-1 --option endpoint=127.0.0.1:9 --option url_style=path --option use_ssl=false --sign-in env:CI_S3 </dev/null
           # The test itself is expected to fail (nothing listens on 127.0.0.1:9, so AWS is never contacted); only the download matters.
-          "$RUNNER_TEMP/assay" conn test lake --install </dev/null || true
-          find "$HOME/.cache/assay/duckdb/extensions" -name 'httpfs*.duckdb_extension' | grep .
+          "$RUNNER_TEMP/slaw" conn test lake --install </dev/null || true
+          find "$HOME/.cache/slaw/duckdb/extensions" -name 'httpfs*.duckdb_extension' | grep .
 
       - name: shellcheck
         run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck --severity=warning
@@ -248,12 +248,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bin="$PWD/assay"
+          bin="$PWD/slaw"
           "$bin" --version
           dir="$(mktemp -d)"
           cd "$dir"
           "$bin" workspace init . --name ci-smoke </dev/null
-          test -f assay.yaml
+          test -f slaw.yaml
           out="$("$bin" query "select 42 as answer" </dev/null)"
           echo "$out"
           grep -q 42 <<<"$out"
@@ -285,5 +285,5 @@ jobs:
       - name: Check the Studio binary has no ssofake tag
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/assay-studio.app/Contents/MacOS/assay-studio; else studio=studio/build/bin/assay-studio; fi
+          if [ "$RUNNER_OS" = macOS ]; then studio=studio/build/bin/slaw-studio.app/Contents/MacOS/slaw-studio; else studio=studio/build/bin/slaw-studio; fi
           scripts/check-binary-tags.sh "$studio"

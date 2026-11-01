@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // readXLSXExpr builds a read_xlsx(...) table expression for the given path and

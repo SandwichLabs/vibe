@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 	"gopkg.in/yaml.v3"
 )
 

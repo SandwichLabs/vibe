@@ -1,4 +1,4 @@
-[?2004hAssay console on ws. Statements end with ';'. Enter .help for commands.
+[?2004hSlaw console on ws. Statements end with ';'. Enter .help for commands.
 ws ▸ D .help
 .help                                      show this list
 .mode [box|csv|duckbox|json|line|markdown] set how results are drawn

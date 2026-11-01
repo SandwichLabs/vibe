@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // #138, end to end in a session whose httpfs loads after the lock (the setting
@@ -64,7 +64,7 @@ func TestPragmaCannotReopenTheURLParameterRedirect(t *testing.T) {
 	t.Cleanup(evil.Close)
 	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
 	t.Cleanup(good.Close)
-	require.NoError(t, s.CreateTemporarySecret(ctx, "assay_lake", "s3", []session.SecretParam{
+	require.NoError(t, s.CreateTemporarySecret(ctx, "slaw_lake", "s3", []session.SecretParam{
 		{Key: "SCOPE", Value: "s3://lake/"}, {Key: "KEY_ID", Value: "OWNKEYID"}, {Key: "SECRET", Value: "OWNSECRET", Secret: true},
 		{Key: "SESSION_TOKEN", Value: "OWNTOKEN", Secret: true}, {Key: "REGION", Value: "us-east-1"},
 		{Key: "ENDPOINT", Value: strings.TrimPrefix(good.URL, "http://")}, {Key: "URL_STYLE", Value: "path"}, {Key: "USE_SSL", Value: false},

@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/storageurl"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/storageurl"
 )
 
 // storageType is an object-store connection: s3, gcs or r2. It has no catalog:
@@ -17,7 +17,7 @@ import (
 // read_parquet('<scope>...') and friends. The scope (a URL prefix) is required
 // and is the boundary the agent SQL policy (#116) allows URL reads inside.
 //
-//	CREATE OR REPLACE TEMPORARY SECRET "assay_x" (TYPE s3, SCOPE 's3://bucket/', KEY_ID '...',
+//	CREATE OR REPLACE TEMPORARY SECRET "slaw_x" (TYPE s3, SCOPE 's3://bucket/', KEY_ID '...',
 //	    SECRET '...', REGION '...')
 type storageType struct{ kind string }
 

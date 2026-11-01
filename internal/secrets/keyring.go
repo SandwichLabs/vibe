@@ -11,9 +11,9 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// DefaultKeyringService is the keychain service name; $ASSAY_KEYRING_SERVICE
+// DefaultKeyringService is the keychain service name; $SLAW_KEYRING_SERVICE
 // overrides it (tests use a throwaway name).
-const DefaultKeyringService = "assay"
+const DefaultKeyringService = "slaw"
 
 // DefaultKeyringTimeout bounds every keychain call. A locked Secret Service
 // collection with no prompter blocks forever inside the library (spike #107).
@@ -80,7 +80,7 @@ func WithKeyringBackend(b KeyringBackend) KeyringOption {
 // NewKeyringStore returns a keychain-backed store.
 func NewKeyringStore(opts ...KeyringOption) *KeyringStore {
 	k := &KeyringStore{service: DefaultKeyringService, timeout: DefaultKeyringTimeout, backend: osKeyring{}, cooldown: DefaultKeyringCooldown, inflight: map[string]*keyringCall{}}
-	if s := os.Getenv("ASSAY_KEYRING_SERVICE"); s != "" {
+	if s := os.Getenv("SLAW_KEYRING_SERVICE"); s != "" {
 		k.service = s
 	}
 	for _, o := range opts {

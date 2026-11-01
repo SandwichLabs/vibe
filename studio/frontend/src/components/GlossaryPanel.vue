@@ -17,7 +17,7 @@ const html = computed(() => renderSafeMarkdown(props.detail.glossary?.text ?? pr
     <p v-else-if="!detail.glossary?.terms.length && !detail.text" class="help" style="margin: 0;" data-testid="glossary-empty">
       There is no glossary yet. Write <code>semantics/glossary.md</code> with a <code>## Term</code> heading per term, or have the assistant propose one.
     </p>
-    <div v-else class="prose assay-content assay-md-content" data-testid="glossary-rendered" v-html="html"></div>
+    <div v-else class="prose slaw-content slaw-md-content" data-testid="glossary-rendered" v-html="html"></div>
     <SourceText v-if="detail.text" :text="detail.text" path="semantics/glossary.md" :open="!!detail.error" />
   </div>
 </template>

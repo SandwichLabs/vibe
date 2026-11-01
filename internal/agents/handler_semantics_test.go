@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
-	"github.com/SandwichLabs/assay/internal/semantics/proposals"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
 )
 
 func semanticsFixture(t *testing.T, mode SandboxMode, opts ...fixtureOpt) *policyFixture {
@@ -252,7 +252,7 @@ func TestProposeDefinition_Glossary(t *testing.T) {
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2", "replaces_rev": got["rev"], "definition": map[string]any{"term": "churn", "text": "new"}})
 	require.Nil(t, resp.Error, errMsg(resp))
 
-	// a new term replaces nothing: Assay clears replaces_rev
+	// a new term replaces nothing: Slaw clears replaces_rev
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r3", "definition": map[string]any{"term": "ARR", "text": "x"}})
 	require.Nil(t, resp.Error, errMsg(resp))
 	var arr *proposals.Proposal
@@ -435,7 +435,7 @@ func snapshotTree(t *testing.T, root, dir string) map[string]string {
 // Every tool in the registry, at every tier and in task mode, with an approver
 // that says yes: none reaches a write method of the semantics store or decides
 // a proposal, and the files on disk prove it: semantics/ is byte for byte what
-// it was, and the only change under .assay-local/proposals/ is the new open
+// it was, and the only change under .slaw-local/proposals/ is the new open
 // proposal that propose_definition filed. The handler's access is also typed
 // so it cannot (ReadStore and Proposer have no such methods).
 func TestNoToolWritesSemantics(t *testing.T) {
@@ -460,7 +460,7 @@ func TestNoToolWritesSemantics(t *testing.T) {
 			fx.h.SetMode(handlerMode)
 
 			semBefore := snapshotTree(t, root, "semantics")
-			propBefore := snapshotTree(t, root, ".assay-local/proposals")
+			propBefore := snapshotTree(t, root, ".slaw-local/proposals")
 			require.NotEmpty(t, semBefore)
 
 			for _, td := range Tools {
@@ -481,7 +481,7 @@ func TestNoToolWritesSemantics(t *testing.T) {
 			}
 
 			assert.Equal(t, semBefore, snapshotTree(t, root, "semantics"), "%s/%q: semantics/ changed", mode, handlerMode)
-			propAfter := snapshotTree(t, root, ".assay-local/proposals")
+			propAfter := snapshotTree(t, root, ".slaw-local/proposals")
 			for path, text := range propBefore {
 				assert.Equal(t, text, propAfter[path], "an existing proposal changed: %s", path)
 			}

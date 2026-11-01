@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/editor"
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/lsp"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/editor"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/lsp"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -27,14 +27,14 @@ type. Editor setup: editors/README.md.
 
 The server opens no database and writes no file: DuckDB lets one process write
 a .duckdb file or several read it, never both, and an editor's language server
-runs for hours. It reads a snapshot of the catalog in .assay-local/catalog.json
-and picks up changes to it. The TUI (assay studio) writes the snapshot when it
-opens and after each statement; "assay lsp snapshot" writes it on demand.
+runs for hours. It reads a snapshot of the catalog in .slaw-local/catalog.json
+and picks up changes to it. The TUI (slaw studio) writes the snapshot when it
+opens and after each statement; "slaw lsp snapshot" writes it on demand.
 Completion is empty until one of them has written a snapshot.
 
-The workspace is --workspace, else $ASSAY_WORKSPACE (set by the TUI and
-"assay query --edit" for the editor they open), else the editor's root folder,
-else the nearest folder above the working directory that holds an assay.yaml.`,
+The workspace is --workspace, else $SLAW_WORKSPACE (set by the TUI and
+"slaw query --edit" for the editor they open), else the editor's root folder,
+else the nearest folder above the working directory that holds a slaw.yaml.`,
 	Args:         cobra.NoArgs,
 	RunE:         runLSP,
 	SilenceUsage: true,
@@ -42,12 +42,12 @@ else the nearest folder above the working directory that holds an assay.yaml.`,
 
 var lspSnapshotCmd = &cobra.Command{
 	Use:   "snapshot",
-	Short: "Write the catalog snapshot assay lsp completes from",
+	Short: "Write the catalog snapshot slaw lsp completes from",
 	Long: `Connect the workspace's connections and write their schemas, tables, views
-and columns (names and types only) to .assay-local/catalog.json for "assay lsp".
+and columns (names and types only) to .slaw-local/catalog.json for "slaw lsp".
 -c limits it to the named connections.
 
-It takes the workspace briefly, as "assay query" does. While the TUI or Studio
+It takes the workspace briefly, as "slaw query" does. While the TUI or Studio
 owns the workspace it skips local DuckDB files (their owner keeps those current)
 and reads the other connections. A connection that cannot be connected is
 skipped with a warning and keeps what an earlier snapshot knew; the command
@@ -84,7 +84,7 @@ func runLSP(cmd *cobra.Command, _ []string) error {
 		lsp.WithRootHook(func(clientRoot string) *lsp.Source {
 			root, err := lspRoot(dir, clientRoot)
 			if err != nil {
-				fmt.Fprintln(errW, "assay lsp:", err)
+				fmt.Fprintln(errW, "slaw lsp:", err)
 				return nil
 			}
 			return lsp.NewSource(lsp.SnapshotPath(root))
@@ -92,7 +92,7 @@ func runLSP(cmd *cobra.Command, _ []string) error {
 	return srv.Run(ctx)
 }
 
-// lspRoot picks the workspace: the flag or $ASSAY_WORKSPACE, then the editor's
+// lspRoot picks the workspace: the flag or $SLAW_WORKSPACE, then the editor's
 // root folder, then the working directory.
 func lspRoot(dir, clientRoot string) (string, error) {
 	if dir != "" {
@@ -123,14 +123,14 @@ func runLSPSnapshot(cmd *cobra.Command, _ []string) error {
 	}
 	// A running owner has the local files open for writing: do not fight it,
 	// read what is reachable without them. Otherwise take the hub for the
-	// duration, as "assay query" does, so a Studio starting now meets "held".
+	// duration, as "slaw query" does, so a Studio starting now meets "held".
 	mode := hub.ModeReadWrite
 	ownerHasLocal := false
 	if _, herr := hub.ReadHolder(root); !errors.Is(herr, hub.ErrNotHeld) {
 		mode, ownerHasLocal = hub.ModeRemoteOnly, true
 		fmt.Fprintln(errW, "note: the workspace is open elsewhere; skipping local DuckDB files (their owner keeps those current)")
 	}
-	o, err := cliOpen(ctx, dir, mode, false, "assay lsp snapshot", errW)
+	o, err := cliOpen(ctx, dir, mode, false, "slaw lsp snapshot", errW)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func checkSnapshotNames(root string, names []string) error {
 			continue // the default connection
 		}
 		if _, ok := ws.Connection(n); !ok {
-			return fmt.Errorf("unknown connection %q (see `assay conn list`)", n)
+			return fmt.Errorf("unknown connection %q (see `slaw conn list`)", n)
 		}
 	}
 	return nil

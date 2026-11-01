@@ -7,8 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // ExtensionInfo is one DuckDB extension a connection type needs.

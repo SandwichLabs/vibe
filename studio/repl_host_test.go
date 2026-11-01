@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/repl"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/repl"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // consoleRig collects every console frame and every other event of an App.
@@ -89,7 +89,7 @@ func (r *consoleRig) waitText(t *testing.T, id, want string) {
 func TestConsoleRoundTrip(t *testing.T) {
 	r := newConsoleRig(t)
 	id := r.open(t, "")
-	r.waitText(t, id, "Assay console on App Test")
+	r.waitText(t, id, "Slaw console on App Test")
 	require.NoError(t, r.app.ReplInput(id, "SELECT 41+1 AS answer;\r"))
 	r.waitText(t, id, "42")
 	prev := 0

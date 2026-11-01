@@ -10,7 +10,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/engine"
 )
 
 // renderLine prints one "name = value" line per column, a blank line between

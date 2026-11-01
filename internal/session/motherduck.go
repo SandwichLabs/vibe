@@ -45,7 +45,7 @@ type mdOpen struct {
 // TokenID is a short one-way identity of a MotherDuck token, used to tell
 // whether two credentials are the same account without keeping the token.
 func TokenID(token string) string {
-	sum := sha256.Sum256([]byte("assay-md-token\x00" + token))
+	sum := sha256.Sum256([]byte("slaw-md-token\x00" + token))
 	return hex.EncodeToString(sum[:])[:16]
 }
 

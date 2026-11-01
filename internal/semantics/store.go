@@ -62,7 +62,7 @@ type ReadStore interface {
 	Join(ctx context.Context, name string) (*Join, error)
 
 	// Source returns a file's text exactly as stored, valid or not, with its
-	// revision: what an editor or `assay semantics show` displays, so a broken
+	// revision: what an editor or `slaw semantics show` displays, so a broken
 	// file can be read and fixed. name is ignored for KindGlossary. A missing
 	// file is ErrNotFound.
 	Source(ctx context.Context, kind Kind, name string) (*Source, error)

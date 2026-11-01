@@ -80,7 +80,7 @@ const emit = defineEmits<{
           <span
             v-if="isStale(cell)"
             class="badge"
-            style="background: var(--assay-highlight); color: var(--assay-highlight-fg); white-space: nowrap; flex: none;"
+            style="background: var(--slaw-highlight); color: var(--slaw-highlight-fg); white-space: nowrap; flex: none;"
             data-testid="stale-badge"
           >EDITED · RUN TO UPDATE</span>
         </template>
@@ -198,7 +198,7 @@ const emit = defineEmits<{
 
       <!-- Markdown cell -->
       <template v-else-if="cell.type === 'markdown'">
-        <div v-if="cell.mdPreview" class="prose assay-content assay-md-content" style="padding: var(--sh-space-4);" v-html="renderSafeMarkdown(cell.source)"></div>
+        <div v-if="cell.mdPreview" class="prose slaw-content slaw-md-content" style="padding: var(--sh-space-4);" v-html="renderSafeMarkdown(cell.source)"></div>
         <div v-else :ref="(el) => { cell.editorEl = el as HTMLElement }" style="min-height: 90px;"></div>
       </template>
 

@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 // HelpEntry is a single help topic.
@@ -39,7 +39,7 @@ var HelpEntries = []HelpEntry{
 		Tags:    []string{"notebook", "cell", "sql", "markdown", "a2ui", "dashboard", "view", "table", "bar", "line", "stat", "area", "columns", "rings", "radar", "sankey", "heatmap", "rev", "edit", "update", "delete", "move", "add_query_cell", "add_markdown_cell", "update_cell", "delete_cell", "move_cell", "get_notebook"},
 		Content: `# Notebooks
 
-A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.asnb`" + ` file in the workspace. There is no page markup and no inter-cell references — the connections are the only shared state.
+A notebook is a title plus an ordered list of cells, saved as a ` + "`notebooks/*.slnb`" + ` file in the workspace. There is no page markup and no inter-cell references — the connections are the only shared state.
 
 ## Cell types
 
@@ -122,11 +122,11 @@ The workspace says what its data means in reviewed files under ` + "`semantics/`
 
 - **` + "`list_definitions`" + `** lists them all, with each one's ` + "`rev`" + ` and how many proposals wait. **` + "`get_definition`" + `** returns one as data; for a metric it also returns the declared parameters of its saved query. Both work in every tier.
 - In SQL, call a metric by name: ` + "`SELECT * FROM metric('net_revenue')`" + `, ` + "`metric('net_revenue', by => 'region')`" + `, ` + "`by => ['region', 'month']`" + `. The name and dimensions are quoted literals; a dimension must be one the metric lists. The call is replaced by the metric's own query before any check runs, so it is held to the same read-only policy. Use a defined metric instead of re-deriving its measure by hand.
-- The person can check that every definition still binds against its connection with ` + "`assay semantics check --compile`" + ` (or Studio's Run assertions); no tool runs it, so a metric you cannot query may simply not compile.
+- The person can check that every definition still binds against its connection with ` + "`slaw semantics check --compile`" + ` (or Studio's Run assertions); no tool runs it, so a metric you cannot query may simply not compile.
 
 ## Proposing a change
 
-**` + "`propose_definition`" + `** (read-write and full tiers) files a proposal in the person's inbox. **Nothing in ` + "`semantics/`" + ` changes until the person accepts it** (` + "`assay semantics proposals`" + `, or Assay), and no tool can accept, reject or write a definition. The definition is checked now with the same rules as a file, so a bad measure, an unknown field or a reserved word is refused with the reason and nothing is filed.
+**` + "`propose_definition`" + `** (read-write and full tiers) files a proposal in the person's inbox. **Nothing in ` + "`semantics/`" + ` changes until the person accepts it** (` + "`slaw semantics proposals`" + `, or Slaw), and no tool can accept, reject or write a definition. The definition is checked now with the same rules as a file, so a bad measure, an unknown field or a reserved word is refused with the reason and nothing is filed.
 
 - ` + "`kind`" + ` is entity, metric, join or glossary. A metric is ` + "`{query, measure, dimensions?, title?, description?, format?, settled_by?, assertions?}`" + `; its saved query must already exist (save_query first). An entity is ` + "`{grain, table, id_column, ...}`" + `, a join ` + "`{left, right, on, cardinality}`" + `, a glossary term ` + "`{term, text}`" + `.
 - To change an existing definition, send the ` + "`rev`" + ` from get_definition as ` + "`replaces_rev`" + `; without it a name that exists is refused. Give a ` + "`rationale`" + ` the person will read and ` + "`evidence`" + ` (a saved query id, a receipt) where there is some.
@@ -158,18 +158,18 @@ Built-in skills are embedded in the binary; workspace skills live in ` + "`skill
 		Topic:   "workspace",
 		Title:   "Workspaces and Connections",
 		Summary: "Workspace folder layout, named connections, and what the agent may do.",
-		Tags:    []string{"workspace", "folder", "connection", "connections", "assay", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
+		Tags:    []string{"workspace", "folder", "connection", "connections", "slaw", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
 		Content: `# Workspaces and Connections
 
-A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`assay.yaml`" + ` that lists its connections. The data itself stays where it already lives.
+A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`slaw.yaml`" + ` that lists its connections. The data itself stays where it already lives.
 
 ## Layout
 
-- ` + "`notebooks/*.asnb`" + ` — one notebook per file
+- ` + "`notebooks/*.slnb`" + ` — one notebook per file
 - ` + "`queries/*.sql`" + ` — saved queries
 - ` + "`skills/<name>/SKILL.md`" + ` — workspace skills
 - ` + "`data/`" + ` — local files, including the default local DuckDB database
-- ` + "`assay.yaml`" + ` — workspace id, name, default connection, agent limits and shared connection definitions
+- ` + "`slaw.yaml`" + ` — workspace id, name, default connection, agent limits and shared connection definitions
 
 ## Connections
 
@@ -177,14 +177,14 @@ Data lives in named connections: a local DuckDB file, Postgres, MySQL, MotherDuc
 
 ## What you may and may not do
 
-- Reads are free within the policy: any attached catalog, plus files only by a literal **absolute** path inside the workspace data/ folder, or a URL inside a storage connection's scope (on s3/gcs/r2 a * or ** wildcard works: Assay lists the matching objects when the query runs, a point-in-time list of at most 10000; only * and ** are wildcards).
+- Reads are free within the policy: any attached catalog, plus files only by a literal **absolute** path inside the workspace data/ folder, or a URL inside a storage connection's scope (on s3/gcs/r2 a * or ** wildcard works: Slaw lists the matching objects when the query runs, a point-in-time list of at most 10000; only * and ** are wildcards).
 - ATTACH, SET, INSTALL/LOAD, secrets, settings and raw passthroughs (postgres_query, postgres_execute) are refused in every sandbox mode.
 - A write needs three things: the sandbox mode allows it, the connection is writable, and the user approves it. For local files approval applies while "Ask before changes" is on; for a connection that is not a local file it is always required, so headless MCP refuses those writes.
 - Credentials live in the OS keychain or environment variables. You can never read them; do not ask the user to paste one into a query or a notebook.
 
 ## Sharing
 
-A .assay file is an export bundle (notebooks, queries, skills and connection definitions, never data or credentials), not a place where data lives.`,
+A .slaw file is an export bundle (notebooks, queries, skills and connection definitions, never data or credentials), not a place where data lives.`,
 	},
 	buildMCPToolsEntry(),
 }
@@ -227,7 +227,7 @@ func buildMCPToolsEntry() HelpEntry {
 
 	var b strings.Builder
 	b.WriteString("# MCP Server & Tools\n\n")
-	b.WriteString("Assay exposes an MCP (Model Context Protocol) server — `assay mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n\n")
+	b.WriteString("Slaw exposes an MCP (Model Context Protocol) server — `slaw mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n\n")
 	b.WriteString("When \"Ask before changes\" is on and nobody can approve (headless), a write is refused and nothing is changed. A notebook, skill or artifact write is checked first: an invalid request returns its validation error, and a valid one says it is valid and ready, so ask the person to approve it or to turn off \"Ask before changes\" in Settings → Workspace → The agent.\n")
 
 	tags := []string{"mcp", "server", "tool", "agent", "api"}

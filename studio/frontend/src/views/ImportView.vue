@@ -103,7 +103,7 @@ const {
           <div v-if="inspection" class="sh-meta" style="align-self: flex-end;">{{ inspection.row_count }} row(s)</div>
         </div>
 
-        <div v-if="tableExists && summary" class="col" data-testid="mode-group" style="gap: var(--sh-space-3); padding: var(--sh-space-4); border: 1.5px dashed var(--assay-border-subtle); border-radius: var(--sh-radius-md);">
+        <div v-if="tableExists && summary" class="col" data-testid="mode-group" style="gap: var(--sh-space-3); padding: var(--sh-space-4); border: 1.5px dashed var(--slaw-border-subtle); border-radius: var(--sh-radius-md);">
           <div class="field-label" style="padding: 0;">
             {{ tableName }} already exists ({{ summary.existing_rows }} row{{ summary.existing_rows === 1 ? '' : 's' }})
           </div>

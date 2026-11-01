@@ -1,4 +1,4 @@
-// Package skills embeds Assay's built-in Skills (#62): SKILL.md documents
+// Package skills embeds Slaw's built-in Skills (#62): SKILL.md documents
 // bundled into the binary from internal/skills/<name>/SKILL.md, one
 // directory per skill, agentskills.io-style. This package has no dependency
 // on internal/agents or internal/llm — it just parses frontmatter and
@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
 )
 
 // NamePattern is the required shape for every skill name — built-in or

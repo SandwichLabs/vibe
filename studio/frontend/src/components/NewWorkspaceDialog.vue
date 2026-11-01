@@ -107,7 +107,7 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
       data-testid="new-workspace-dialog"
       @keydown.enter="(e: KeyboardEvent) => { if ((e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') { e.preventDefault(); submit() } }"
     >
-      <div class="d-head"><h2 id="nw-h">New workspace</h2><p>A workspace is a folder. Assay makes it for you and puts everything inside.</p></div>
+      <div class="d-head"><h2 id="nw-h">New workspace</h2><p>A workspace is a folder. Slaw makes it for you and puts everything inside.</p></div>
       <div class="d-body">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div class="field">
@@ -133,13 +133,13 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
               />
               <button class="btn" type="button" style="flex: none;" :disabled="busy" @click="choose">Choose…</button>
             </div>
-            <div v-if="!dirTaken && !error" id="nw-loc-h" class="help">Assay creates a new folder here.</div>
+            <div v-if="!dirTaken && !error" id="nw-loc-h" class="help">Slaw creates a new folder here.</div>
           </div>
         </div>
 
         <div v-if="dirTaken" id="nw-err" class="note attn" role="alert" data-testid="nw-folder-exists">
           <Icon name="alert" :size="16" />
-          <span><b>There's already a folder called {{ slug }} in {{ parentDir }}.</b> Pick another name or location. Assay won't put a workspace inside a folder that already has files in it, unless you use Open folder instead.</span>
+          <span><b>There's already a folder called {{ slug }} in {{ parentDir }}.</b> Pick another name or location. Slaw won't put a workspace inside a folder that already has files in it, unless you use Open folder instead.</span>
         </div>
         <div v-else-if="error" id="nw-err" class="note attn" role="alert" data-testid="nw-error">
           <Icon name="alert" :size="16" /><span>{{ error }}</span>
@@ -152,7 +152,7 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
           <input id="nw-git" v-model="git" type="checkbox" :disabled="!gitAvailable || busy" />
           <label for="nw-git">
             <span class="st-t">Start a git repository</span>
-            <span class="st-d">{{ gitAvailable ? 'So you can track changes and share notebooks with your team. Assay never commits or pushes for you.' : "git wasn't found on this computer." }}</span>
+            <span class="st-d">{{ gitAvailable ? 'So you can track changes and share notebooks with your team. Slaw never commits or pushes for you.' : "git wasn't found on this computer." }}</span>
           </label>
         </div>
 
@@ -181,7 +181,7 @@ const templateIds = computed(() => ['', ...templates.value.map((t) => t.name)])
 
         <div class="note info">
           <Icon name="info" :size="16" />
-          <span>This creates <code>assay.yaml</code>, <code>notebooks/</code>, <code>queries/</code>, <code>skills/</code> and <code>data/local.duckdb</code>. The database file is kept out of git unless you choose otherwise.</span>
+          <span>This creates <code>slaw.yaml</code>, <code>notebooks/</code>, <code>queries/</code>, <code>skills/</code> and <code>data/local.duckdb</code>. The database file is kept out of git unless you choose otherwise.</span>
         </div>
       </div>
       <div class="d-foot">

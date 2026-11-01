@@ -7,8 +7,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // RunFunc runs one planned statement and returns its result. In the product it

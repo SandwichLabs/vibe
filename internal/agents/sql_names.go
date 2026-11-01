@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/queries"
 )
 
 // The name lists behind the agent SQL policy (#116). Everything here is a
@@ -179,7 +179,7 @@ var deniedFuncExact = map[string]string{
 	"sql_auto_complete":           "DuckDB's internal state is not readable by the agent",
 	"sleep_ms":                    "sleeping holds a connection and a worker for as long as the query asks; it is not available to the agent",
 	"pg_sleep":                    "sleeping holds a connection and a worker for as long as the query asks; it is not available to the agent",
-	"pg_clear_cache":              "remote catalogs are refreshed by Assay, not by SQL",
+	"pg_clear_cache":              "remote catalogs are refreshed by Slaw, not by SQL",
 	"get_md_token":                "MotherDuck account functions are not available to the agent",
 	"print_md_token":              "MotherDuck account functions are not available to the agent",
 	"prompt":                      "MotherDuck AI functions send data to a remote service and are not available to the agent",
@@ -222,7 +222,7 @@ var deniedHeads = map[string]string{
 	"DETACH":     "DETACH is not allowed: connections come from the workspace's definitions, not from SQL",
 	"USE":        "USE is not allowed: name the connection in the table (connection.schema.table)",
 	"INSTALL":    "INSTALL is not allowed: extensions are installed by the person, with consent",
-	"LOAD":       "LOAD is not allowed: extensions are loaded by Assay",
+	"LOAD":       "LOAD is not allowed: extensions are loaded by Slaw",
 	"FORCE":      "INSTALL/LOAD are not allowed",
 	"SET":        "SET is not allowed: settings and variables cannot be changed by the agent",
 	"RESET":      "RESET is not allowed: settings cannot be changed by the agent",

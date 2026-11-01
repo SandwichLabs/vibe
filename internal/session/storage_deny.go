@@ -35,7 +35,7 @@ import (
 // secret's own settings, after the secret has been chosen by the URL's scope. A
 // URL inside a connection's scope that carries ?s3_endpoint=attacker is still
 // signed with that connection's key id and session token, and the request goes
-// to the attacker. Such a URL can come from data Assay cannot vet (the data-file
+// to the attacker. Such a URL can come from data Slaw cannot vet (the data-file
 // paths in an Iceberg manifest, a DuckLake catalog) or from SQL a person runs.
 //
 // The only switch in DuckDB 1.5.6 that stops it is the global setting
@@ -60,13 +60,13 @@ const urlParamSetting = "s3_url_compatibility_mode"
 const denyEndpoint = "deny.invalid"
 
 // denySecrets are the catch-all secrets. Names contain a hyphen, which a
-// connection name cannot, so no connection's own secret ("assay_<name>")
+// connection name cannot, so no connection's own secret ("slaw_<name>")
 // can share one.
 var denySecrets = []struct{ name, kind, scope, region string }{
-	{"assay-deny-s3", "s3", "s3", "us-east-1"}, // also s3a:// and s3n://
-	{"assay-deny-r2", "r2", "r2", "auto"},
-	{"assay-deny-gcs", "gcs", "gcs", "auto"},
-	{"assay-deny-gs", "gcs", "gs", "auto"},
+	{"slaw-deny-s3", "s3", "s3", "us-east-1"}, // also s3a:// and s3n://
+	{"slaw-deny-r2", "r2", "r2", "auto"},
+	{"slaw-deny-gcs", "gcs", "gcs", "auto"},
+	{"slaw-deny-gs", "gcs", "gs", "auto"},
 }
 
 // denyStatements is the DDL, a pure function so it is testable without httpfs.

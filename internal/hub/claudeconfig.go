@@ -9,17 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // ClaudeConfig is what "Copy Claude Desktop config" and "Copy Claude Code
 // config" put on the clipboard for a workspace.
 //
-// Neither snippet ever contains a token: they launch `assay mcp serve
+// Neither snippet ever contains a token: they launch `slaw mcp serve
 // --workspace DIR`, which is stdio, and when Studio owns the workspace the
 // process proxies to Studio and reads the token from hub.lock at run time.
 type ClaudeConfig struct {
-	// Name is the MCP server name used in both snippets, "assay-<folder>".
+	// Name is the MCP server name used in both snippets, "slaw-<folder>".
 	Name string `json:"name"`
 	// Desktop is JSON for claude_desktop_config.json (a "mcpServers" object).
 	Desktop string `json:"desktop"`
@@ -28,12 +28,12 @@ type ClaudeConfig struct {
 }
 
 // BuildClaudeConfig renders the snippets for the workspace folder root, to be
-// launched through the assay binary at exe (an absolute path; see LocateAssay).
+// launched through the slaw binary at exe (an absolute path; see LocateSlaw).
 func BuildClaudeConfig(root, exe string) (ClaudeConfig, error) {
 	if !filepath.IsAbs(root) || !filepath.IsAbs(exe) {
-		return ClaudeConfig{}, errors.New("the workspace folder and the assay binary need absolute paths")
+		return ClaudeConfig{}, errors.New("the workspace folder and the slaw binary need absolute paths")
 	}
-	name := "assay-" + slug(filepath.Base(root))
+	name := "slaw-" + slug(filepath.Base(root))
 	args := []string{"mcp", "serve", "--workspace", root}
 	desktop, err := json.MarshalIndent(map[string]any{
 		"mcpServers": map[string]any{
@@ -50,29 +50,29 @@ func BuildClaudeConfig(root, exe string) (ClaudeConfig, error) {
 	return ClaudeConfig{Name: name, Desktop: string(desktop), Code: strings.Join(parts, " ")}, nil
 }
 
-// LocateAssay finds the `assay` CLI an MCP client should launch: the running
-// binary when it is the CLI, else an `assay` beside it (Studio ships next to the
+// LocateSlaw finds the `slaw` CLI an MCP client should launch: the running
+// binary when it is the CLI, else a `slaw` beside it (Studio ships next to the
 // CLI), else one on PATH. The result is absolute with symlinks left alone so a
 // package-manager shim keeps working.
-func LocateAssay() (string, error) {
+func LocateSlaw() (string, error) {
 	self, err := os.Executable()
 	if err == nil {
-		if base := filepath.Base(self); base == "assay" || base == "assay.exe" {
+		if base := filepath.Base(self); base == "slaw" || base == "slaw.exe" {
 			return self, nil
 		}
-		for _, n := range []string{"assay", "assay.exe"} {
+		for _, n := range []string{"slaw", "slaw.exe"} {
 			cand := filepath.Join(filepath.Dir(self), n)
 			if fi, serr := os.Stat(cand); serr == nil && fi.Mode().IsRegular() {
 				return cand, nil
 			}
 		}
 	}
-	if p, lerr := exec.LookPath("assay"); lerr == nil {
+	if p, lerr := exec.LookPath("slaw"); lerr == nil {
 		if abs, aerr := filepath.Abs(p); aerr == nil {
 			return abs, nil
 		}
 	}
-	return "", errors.New("could not find the assay command-line tool; install it and make sure it is on your PATH")
+	return "", errors.New("could not find the slaw command-line tool; install it and make sure it is on your PATH")
 }
 
 func slug(s string) string { return filestore.SlugOr(s, "workspace", 0) }

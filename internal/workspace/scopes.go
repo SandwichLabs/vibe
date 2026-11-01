@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 )
 
 // Scope says which file a connection definition came from.
@@ -39,7 +39,7 @@ func ParseScope(s string) (Scope, bool) {
 // scopeRank: higher wins.
 var scopeRank = map[Scope]int{ScopeUser: 0, ScopeShared: 1, ScopeLocal: 2}
 
-// UserConfig is <config dir>/assay/connections.yaml: this person's connections
+// UserConfig is <config dir>/slaw/connections.yaml: this person's connections
 // across every workspace.
 type UserConfig struct {
 	Version     int               `yaml:"version"`
@@ -80,7 +80,7 @@ type LocalConfig struct {
 	// regenerated on every start.
 	MCPPort int `yaml:"mcp_port,omitempty"`
 	// Nonce ties the file to the folder it was made for (the same value is in
-	// the folder's git-ignored .assay-local/nonce). Written by SaveLocal.
+	// the folder's git-ignored .slaw-local/nonce). Written by SaveLocal.
 	Nonce string `yaml:"nonce,omitempty"`
 }
 
@@ -113,7 +113,7 @@ func validateFingerprintMap(m map[string]string) error {
 // Validate checks a user-scope document.
 func (u UserConfig) Validate() error {
 	if u.Version > ConfigVersion {
-		return fmt.Errorf("connections.yaml was written by a newer version of Assay (version %d)", u.Version)
+		return fmt.Errorf("connections.yaml was written by a newer version of Slaw (version %d)", u.Version)
 	}
 	if err := validateDefs(u.Connections, ScopeUser); err != nil {
 		return err
@@ -127,7 +127,7 @@ func (u UserConfig) Validate() error {
 // Validate checks a local-scope document.
 func (l LocalConfig) Validate() error {
 	if l.Version > ConfigVersion {
-		return fmt.Errorf("connections.yaml was written by a newer version of Assay (version %d)", l.Version)
+		return fmt.Errorf("connections.yaml was written by a newer version of Slaw (version %d)", l.Version)
 	}
 	if err := validateDefs(l.Connections, ScopeLocal); err != nil {
 		return err
@@ -160,7 +160,7 @@ func ParseUserConfig(data []byte) (UserConfig, error) {
 func ParseLocalConfig(data []byte) (LocalConfig, error) {
 	var l LocalConfig
 	if err := decodeStrict(data, &l); err != nil {
-		return LocalConfig{}, fmt.Errorf("invalid .assay-local/connections.yaml: %w", err)
+		return LocalConfig{}, fmt.Errorf("invalid .slaw-local/connections.yaml: %w", err)
 	}
 	if l.Version == 0 {
 		l.Version = ConfigVersion
@@ -173,14 +173,14 @@ func MarshalUserConfig(u UserConfig) ([]byte, error) {
 	if u.Version == 0 {
 		u.Version = ConfigVersion
 	}
-	return marshalYAML(u, "# Your connections, in every Assay workspace on this computer. No passwords here.\n")
+	return marshalYAML(u, "# Your connections, in every Slaw workspace on this computer. No passwords here.\n")
 }
 
 // LocalConfigPath is where this person's settings for the workspace with the
 // given id and root live: <config dir>/workspaces/<id>-<hash>/local.yaml. The
 // hash is of the real, symlink-resolved root path, so two clones of one
 // repository on one machine (same id) keep separate settings, and a clone can
-// never read another's. configDir is $ASSAY_CONFIG_DIR or the user config dir.
+// never read another's. configDir is $SLAW_CONFIG_DIR or the user config dir.
 func LocalConfigPath(configDir, id, root string) string {
 	real := root
 	if r, err := filepath.EvalSymlinks(root); err == nil {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // ClearCredential removes a connection's saved credential: one field of it

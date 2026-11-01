@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 func TestWithExt(t *testing.T) {
-	assert.Equal(t, "/tmp/team.assay", WithExt("/tmp/team"))
-	assert.Equal(t, "/tmp/team.assay", WithExt("/tmp/team.assay"))
+	assert.Equal(t, "/tmp/team.slaw", WithExt("/tmp/team"))
+	assert.Equal(t, "/tmp/team.slaw", WithExt("/tmp/team.slaw"))
 	assert.Equal(t, "/tmp/team.zip", WithExt("/tmp/team.zip"), "an extension the person typed is kept")
-	assert.Equal(t, "/tmp/a.b/team.assay", WithExt("/tmp/a.b/team"), "only the last element counts")
-	assert.Equal(t, ".assay", WithExt(""))
+	assert.Equal(t, "/tmp/a.b/team.slaw", WithExt("/tmp/a.b/team"), "only the last element counts")
+	assert.Equal(t, ".slaw", WithExt(""))
 }
 
 func TestManifestCounts(t *testing.T) {
@@ -32,7 +32,7 @@ func TestManifestCounts(t *testing.T) {
 
 func TestWriteFile_AtomicAndNamesThePathOnFailure(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "a.assay")
+	p := filepath.Join(dir, "a.slaw")
 	require.NoError(t, WriteFile(p, []byte("one")))
 	require.NoError(t, WriteFile(p, []byte("two")))
 	b, err := os.ReadFile(p)
@@ -41,7 +41,7 @@ func TestWriteFile_AtomicAndNamesThePathOnFailure(t *testing.T) {
 	entries, _ := os.ReadDir(dir)
 	assert.Len(t, entries, 1, "no temp file is left behind")
 
-	bad := filepath.Join(dir, "missing-dir", "a.assay")
+	bad := filepath.Join(dir, "missing-dir", "a.slaw")
 	err = WriteFile(bad, []byte("x"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to write "+bad+": ")
@@ -60,7 +60,7 @@ func TestWriteNotebookFile_EnvelopeRoundTripsThroughReadNotebookFile(t *testing.
 	b, err := os.ReadFile(p)
 	require.NoError(t, err)
 	s := string(b)
-	assert.Contains(t, s, "{\n  \"kind\": \"assay/notebook\",\n  \"schemaVersion\": 2,\n  \"exportedAt\": \"2026-10-11T11:30:00Z\",\n  \"notebook\": {")
+	assert.Contains(t, s, "{\n  \"kind\": \"slaw/notebook\",\n  \"schemaVersion\": 2,\n  \"exportedAt\": \"2026-10-11T11:30:00Z\",\n  \"notebook\": {")
 	assert.Contains(t, s, "\"title\": \"Sales\"")
 
 	doc, err := ReadNotebookFile(p)

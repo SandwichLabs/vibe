@@ -1,6 +1,6 @@
 // Package pagestate is the `state` capability of a scripted HTML page
 // (docs/plans/html-artifacts.md, H5): a small JSON document store for the
-// page's own state, kept in .assay-local/artifacts/<name>/state.json (git-ignored
+// page's own state, kept in .slaw-local/artifacts/<name>/state.json (git-ignored
 // and machine-local, never in the folder, a bundle or a commit).
 //
 // The store is keyed by the artifact's name, which the caller (Studio) supplies:
@@ -24,8 +24,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
 )
 
 // Limits (H5).
@@ -38,7 +38,7 @@ const (
 )
 
 // LocalDir is the machine-local folder the files live under (workspace.LocalDir).
-const LocalDir = ".assay-local"
+const LocalDir = ".slaw-local"
 
 // Errors. None carries a path or a value.
 var (
@@ -181,7 +181,7 @@ func (s *Store) readDisk() (map[string]json.RawMessage, string, error) {
 }
 
 // checkPath refuses a state path that goes through a symbolic link. A link
-// committed under .assay-local/ (say artifacts/a -> ../../notes) would make the
+// committed under .slaw-local/ (say artifacts/a -> ../../notes) would make the
 // state land in a tracked folder, which is the way out through git that the
 // local scope exists to close. Every component below the root is looked at.
 func (s *Store) checkPath() error {

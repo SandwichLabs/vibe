@@ -16,10 +16,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
-// Check refuses the statements Assay manages for you: ATTACH/DETACH,
+// Check refuses the statements Slaw manages for you: ATTACH/DETACH,
 // INSTALL/LOAD, SET/RESET and CREATE/DROP SECRET. With readOnly it also
 // refuses COPY ... TO and EXPORT DATABASE, which write files. It scans each
 // statement's leading words, skipping comments, quoted strings (single, double,
@@ -32,7 +32,7 @@ func Check(sqlText string, readOnly bool) error {
 		first := st.words[0]
 		switch first {
 		case "ATTACH", "DETACH":
-			return fmt.Errorf("%s is not available here: connections are defined in the workspace (assay.yaml, or your own connections file), and Assay attaches them", first)
+			return fmt.Errorf("%s is not available here: connections are defined in the workspace (slaw.yaml, or your own connections file), and Slaw attaches them", first)
 		case "INSTALL", "LOAD":
 			return fmt.Errorf("%s is not available here: the session loads the DuckDB extensions it needs itself", first)
 		case "SET", "RESET":
@@ -62,7 +62,7 @@ func Check(sqlText string, readOnly bool) error {
 
 // CheckManaged is the narrow form of Check for the Studio query editor, which
 // has always allowed ATTACH, SET and COPY. It refuses only what would undo
-// Assay's own protections: INSTALL/LOAD (a hand-loaded extension), and
+// Slaw's own protections: INSTALL/LOAD (a hand-loaded extension), and
 // FORCE INSTALL and UPDATE EXTENSIONS, SET/RESET/PRAGMA of the S3 URL-parameter setting (#138), and CREATE/DROP SECRET (dropping the catch-all deny secrets that stop an
 // uncovered storage URL being read with the host's credentials, #135).
 func CheckManaged(sqlText string) error {

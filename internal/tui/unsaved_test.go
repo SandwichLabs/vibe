@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/session/sessiontest"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/session/sessiontest"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +107,7 @@ func TestWithNotices_LandInTheREPLOutput(t *testing.T) {
 	assert.Contains(t, app.repl.OutputContent(), "connection x is not available")
 }
 
-func TestExecuteREPLQuery_RefusesWhatAssayManages(t *testing.T) {
+func TestExecuteREPLQuery_RefusesWhatSlawManages(t *testing.T) {
 	app, _ := newRealDuckDBApp(t)
 	result, ok := app.executeREPLQuery("ATTACH 'x.duckdb' AS x")().(replResultMsg)
 	require.True(t, ok)
@@ -115,7 +115,7 @@ func TestExecuteREPLQuery_RefusesWhatAssayManages(t *testing.T) {
 
 	ro, _ := newRealDuckDBApp(t)
 	ro.readOnly = true
-	result, _ = ro.executeREPLQuery("COPY t TO '/tmp/assay-should-not-exist.csv'")().(replResultMsg)
+	result, _ = ro.executeREPLQuery("COPY t TO '/tmp/slaw-should-not-exist.csv'")().(replResultMsg)
 	assert.Contains(t, result.output, "--read-only")
 }
 

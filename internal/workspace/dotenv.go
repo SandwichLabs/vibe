@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/dotenv"
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/dotenv"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // DotEnvDecisionFile is the per-person file, beside local.yaml in the user
@@ -119,11 +119,11 @@ func (w *workspace) dotenvHint(prefix string) string {
 	}
 	switch w.denv.decisions.State(f.Path, f.Hash) {
 	case dotenv.StateDenied:
-		return "This workspace's .env sets it, but you denied loading it (Workspace settings > .env file, or `assay workspace env allow`)."
+		return "This workspace's .env sets it, but you denied loading it (Workspace settings > .env file, or `slaw workspace env allow`)."
 	case dotenv.StateChanged:
 		return "This workspace's .env sets it, but the file changed since you allowed it; allow it again."
 	case dotenv.StateUndecided:
-		return "This workspace's .env sets it; allow loading it (Workspace settings > .env file, or `assay workspace env allow`)."
+		return "This workspace's .env sets it; allow loading it (Workspace settings > .env file, or `slaw workspace env allow`)."
 	}
 	return ""
 }

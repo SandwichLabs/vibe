@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/filestore"
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 func (w *workspace) Resolver() *secrets.Resolver { return w.res }
 
-// validateDefFor applies the scope's rules (the assay.yaml rules for shared:
+// validateDefFor applies the scope's rules (the slaw.yaml rules for shared:
 // no absolute path, no ${}), then the type's rules. A definition that uses
 // ${ENV} (your own scopes) is type-checked when it is resolved at open.
 func validateDefFor(scope Scope, d ConnectionDef) error {

@@ -20,9 +20,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/pagehost"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // TestMain lets the test binary be the helper too: the live test (and anything
@@ -180,7 +180,7 @@ func scriptedWindow(t *testing.T) (*App, *fakeHelper, *events) {
 
 func TestPageWindow_OpenSendsThePinnedSetupInOrder(t *testing.T) {
 	app, fh, _ := scriptedWindow(t)
-	info, err := app.OpenArtifactPageWindow("pg", "min_qty=50", map[string]string{"--assay-bg": "#ffffff", "--assay-theme-type": "light"})
+	info, err := app.OpenArtifactPageWindow("pg", "min_qty=50", map[string]string{"--slaw-bg": "#ffffff", "--slaw-theme-type": "light"})
 	require.NoError(t, err)
 	assert.Equal(t, "pg", info.Name)
 	assert.NotEmpty(t, info.Hash)
@@ -211,12 +211,12 @@ func TestPageWindow_OpenSendsThePinnedSetupInOrder(t *testing.T) {
 	assert.Equal(t, pagehost.TypeGo, order[len(order)-1])
 	assert.Equal(t, "window.x = 1", sent["app.js"])
 	assert.Equal(t, "body{margin:0}", sent["assets/style.css"])
-	assert.Contains(t, sent[themePath], "--assay-bg:#ffffff;")
+	assert.Contains(t, sent[themePath], "--slaw-bg:#ffffff;")
 	assert.Contains(t, sent[themePath], "color-scheme:light;")
 	for p := range sent {
 		assert.False(t, strings.HasSuffix(p, ".tmpl"), "a template is never sent: %s", p)
 	}
-	assert.Contains(t, doc.String(), `<link rel="stylesheet" href="_assay/theme.css">`)
+	assert.Contains(t, doc.String(), `<link rel="stylesheet" href="_slaw/theme.css">`)
 	assert.Contains(t, doc.String(), "<h1>min 50</h1>")
 	assert.Contains(t, doc.String(), `href="page?min_qty=50"`)
 }
@@ -401,7 +401,7 @@ func TestPageWindow_DocRendersANavigationAndRefusesABadValue(t *testing.T) {
 	status, doc := collect(5)
 	assert.Equal(t, 200, status)
 	assert.Contains(t, doc, "<h1>min 500</h1>")
-	assert.Contains(t, doc, "_assay/theme.css")
+	assert.Contains(t, doc, "_slaw/theme.css")
 
 	fh.send(`{"t":"doc","id":6,"q":"min_qty=abc"}`)
 	status, doc = collect(6)
@@ -549,14 +549,14 @@ func TestWindowTitleIsOneLineOfText(t *testing.T) {
 
 func TestThemeStylesheetAcceptsRolesOnly(t *testing.T) {
 	css := themeStylesheet(map[string]string{
-		"--assay-bg": "#fff", "--assay-font-body": `"Fraunces", serif`, "--assay-theme-type": "dark",
-		"color": "red", "--other": "1", "--assay-x": "red;} body{background:url(http://x)}", "--assay-y": "url(http://x)",
-		"--assay-z": `"unbalanced`, "--assay-w": "expression(1)", "--assay-v": "red /* c */",
+		"--slaw-bg": "#fff", "--slaw-font-body": `"Fraunces", serif`, "--slaw-theme-type": "dark",
+		"color": "red", "--other": "1", "--slaw-x": "red;} body{background:url(http://x)}", "--slaw-y": "url(http://x)",
+		"--slaw-z": `"unbalanced`, "--slaw-w": "expression(1)", "--slaw-v": "red /* c */",
 	})
-	assert.Contains(t, css, "--assay-bg:#fff;")
-	assert.Contains(t, css, `--assay-font-body:"Fraunces", serif;`)
+	assert.Contains(t, css, "--slaw-bg:#fff;")
+	assert.Contains(t, css, `--slaw-font-body:"Fraunces", serif;`)
 	assert.Contains(t, css, "color-scheme:dark;")
-	for _, bad := range []string{"color:red", "--other", "url(", "--assay-x", "--assay-z", "--assay-w", "--assay-v", "}"} {
+	for _, bad := range []string{"color:red", "--other", "url(", "--slaw-x", "--slaw-z", "--slaw-w", "--slaw-v", "}"} {
 		assert.NotContains(t, strings.TrimSuffix(strings.TrimSpace(css), "}"), bad)
 	}
 	assert.True(t, strings.HasPrefix(css, ":root{"))
@@ -566,16 +566,16 @@ func TestPageFileSetSendsTheLibrariesThePageNames(t *testing.T) {
 	libs := fstest.MapFS{"d3-array.js": {Data: []byte("a")}, "vega.js": {Data: []byte("v")}, "unused.js": {Data: []byte("u")}}
 	page := &artifacts.Artifact{Files: []artifacts.PageFile{
 		{Path: "index.html.tmpl", Data: []byte("x")},
-		{Path: "app.js", Data: []byte(`loadScript("assay-lib/vega.js"); import "assay-lib/missing.js"`)},
+		{Path: "app.js", Data: []byte(`loadScript("slaw-lib/vega.js"); import "slaw-lib/missing.js"`)},
 		{Path: "assets/a.css", Data: []byte("c")},
 	}}
-	files, err := pageFileSet(page, []byte(`<script src="assay-lib/d3-array.js"></script>`), ":root{}", libs)
+	files, err := pageFileSet(page, []byte(`<script src="slaw-lib/d3-array.js"></script>`), ":root{}", libs)
 	require.NoError(t, err)
 	var paths []string
 	for _, f := range files {
 		paths = append(paths, f.path)
 	}
-	assert.ElementsMatch(t, []string{"app.js", "assets/a.css", themePath, "assay-lib/d3-array.js", "assay-lib/vega.js"}, paths)
+	assert.ElementsMatch(t, []string{"app.js", "assets/a.css", themePath, "slaw-lib/d3-array.js", "slaw-lib/vega.js"}, paths)
 }
 
 // TestNativeTitleIsNeverBoundToTheDocument guards what a Linux window and a Mac

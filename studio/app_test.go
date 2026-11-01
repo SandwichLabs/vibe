@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,14 +50,14 @@ func (e *eventLog) count(event string) int {
 // directory (recent list, per-person workspace settings).
 func newBareApp(t *testing.T) *App {
 	t.Helper()
-	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	t.Setenv("SLAW_CONFIG_DIR", t.TempDir())
 	app := NewApp(testLogger())
 	app.ctx = context.Background()
 	t.Cleanup(func() { _ = app.CloseWorkspace() })
 	return app
 }
 
-// newWorkspaceDir makes an empty workspace folder (assay.yaml, notebooks/, ...)
+// newWorkspaceDir makes an empty workspace folder (slaw.yaml, notebooks/, ...)
 // and returns its path.
 func newWorkspaceDir(t *testing.T, name string) string {
 	t.Helper()

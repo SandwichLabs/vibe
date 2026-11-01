@@ -118,11 +118,11 @@ describe('resolveTheme', () => {
 })
 
 describe('themeToCssVars', () => {
-  it('emits one --assay-* var per role plus fonts', () => {
+  it('emits one --slaw-* var per role plus fonts', () => {
     const vars = themeToCssVars(resolveTheme(SCHOOLHOUSE_LIGHT, registry))
-    expect(vars['--assay-accent-hover']).toBe('#3FA39B')
-    expect(vars['--assay-sidebar-active-fg']).toBe('#1F7268')
-    expect(vars['--assay-font-mono']).toContain('JetBrains Mono')
+    expect(vars['--slaw-accent-hover']).toBe('#3FA39B')
+    expect(vars['--slaw-sidebar-active-fg']).toBe('#1F7268')
+    expect(vars['--slaw-font-mono']).toContain('JetBrains Mono')
     expect(Object.keys(vars).length).toBe(COLOR_ROLES.length + 3)
   })
 })

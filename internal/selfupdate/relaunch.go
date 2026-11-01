@@ -8,7 +8,7 @@ import (
 )
 
 // Relaunch starts the freshly installed Studio as a separate, detached process: on Linux the
-// recorded assay-studio binary, on macOS the app via `open -n -a`. args are passed on (a
+// recorded slaw-studio binary, on macOS the app via `open -n -a`. args are passed on (a
 // workspace folder to reopen). target is the ApplyResult.Restart path; it must be absolute and exist.
 // Call it only once the old instance has committed to quitting and let go of its workspace, so the
 // new one never fights it for the hub lock.

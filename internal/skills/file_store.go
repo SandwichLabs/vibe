@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // Dir is the workspace directory skills live in; File the document name.

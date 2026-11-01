@@ -1,9 +1,9 @@
 # Add to ~/.config/helix/languages.toml (or a workspace's .helix/languages.toml).
-[language-server.assay]
-command = "assay"
+[language-server.slaw]
+command = "slaw"
 args = ["lsp"]
 
 [[language]]
 name = "sql"
-roots = ["assay.yaml"]
-language-servers = ["assay"]
+roots = ["slaw.yaml"]
+language-servers = ["slaw"]

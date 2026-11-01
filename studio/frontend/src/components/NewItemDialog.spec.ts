@@ -253,14 +253,14 @@ describe('NewItemDialog describe it (library L7)', () => {
   it('for a live view: opens the assistant panel with an unsent draft, creates nothing, and closes', async () => {
     const go = app()
     const seen = vi.fn()
-    window.addEventListener('assay:open-agent', seen)
+    window.addEventListener('slaw:open-agent', seen)
     const w = open('live')
     await toDescribe(w)
     expect(w.get('[data-testid=describe-submit]').attributes('disabled')).toBeDefined()
     await w.get('[data-testid=describe-box]').setValue('weekly sales by region')
     await w.get('[data-testid=describe-form]').trigger('submit')
     await flushPromises()
-    window.removeEventListener('assay:open-agent', seen)
+    window.removeEventListener('slaw:open-agent', seen)
     const draft = (seen.mock.calls[0][0] as CustomEvent).detail.draft as string
     expect(draft).toContain('live view')
     expect(draft).toContain('write_artifact')
@@ -274,13 +274,13 @@ describe('NewItemDialog describe it (library L7)', () => {
   it('a page with the script box ticked says so in the draft', async () => {
     app()
     const seen = vi.fn()
-    window.addEventListener('assay:open-agent', seen)
+    window.addEventListener('slaw:open-agent', seen)
     const w = open('page')
     await w.get('[data-testid=with-script]').setValue(true)
     await toDescribe(w)
     await w.get('[data-testid=describe-box]').setValue('board summary')
     await w.get('[data-testid=describe-form]').trigger('submit')
-    window.removeEventListener('assay:open-agent', seen)
+    window.removeEventListener('slaw:open-agent', seen)
     const draft = (seen.mock.calls[0][0] as CustomEvent).detail.draft as string
     expect(draft).toContain('view: html')
     expect(draft).toContain('script')

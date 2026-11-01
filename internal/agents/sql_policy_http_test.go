@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // TestPolicy_NoRequestBeforeThePrecheck is spike finding B: the classifier's own
@@ -24,7 +24,7 @@ import (
 // the temp directory); it skips when that is not available. A control request
 // proves the listener sees what httpfs sends.
 func TestPolicy_NoRequestBeforeThePrecheck(t *testing.T) {
-	extDir := filepath.Join(os.TempDir(), "assay-conn-it-ext")
+	extDir := filepath.Join(os.TempDir(), "slaw-conn-it-ext")
 	if m, _ := filepath.Glob(filepath.Join(extDir, "v*", "*", "httpfs.duckdb_extension")); len(m) == 0 {
 		t.Skip("httpfs is not in the shared extension cache; run the integration suites once to fetch it")
 	}

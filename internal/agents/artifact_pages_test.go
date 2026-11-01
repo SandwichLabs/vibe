@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 const agentPage = `<!doctype html><html><head><link rel="stylesheet" href="assets/style.css"></head><body>
@@ -227,7 +227,7 @@ func TestWriteArtifact_AScriptedPageWithCapabilitiesIsStoredNeverRun(t *testing.
 	m["html"] = map[string]any{"capabilities": map[string]any{"state": map[string]any{"scope": "local"}, "ask": map[string]any{}}}
 	resp := fx.call("write_artifact", map[string]any{"name": "app", "manifest": m, "html_files": map[string]any{
 		"index.html.tmpl": `<script src="app.js"></script><p>{{ len (query "rows").Rows }}</p>`,
-		"app.js":          "assay.run('rows').then(() => {})",
+		"app.js":          "slaw.run('rows').then(() => {})",
 	}})
 	require.Nil(t, resp.Error, errMsg(resp))
 	res := mapOf(t, resp.Result)

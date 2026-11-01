@@ -8,12 +8,12 @@ function docWith(vars: Record<string, string>): Document {
 }
 
 describe('themeFromDocument', () => {
-  it('maps the --assay-* roles onto the terminal palette', () => {
+  it('maps the --slaw-* roles onto the terminal palette', () => {
     const t = themeFromDocument(docWith({
-      '--assay-editor-bg': '#101010', '--assay-editor-fg': '#eeeeee', '--assay-editor-cursor': '#00ff00',
-      '--assay-editor-selection': '#334455', '--assay-error': '#ff0000', '--assay-success': '#00aa00',
-      '--assay-warn': '#ffaa00', '--assay-info': '#0000ff', '--assay-chart-4': '#aa00aa', '--assay-chart-5': '#00aaaa',
-      '--assay-fg-muted': '#888888',
+      '--slaw-editor-bg': '#101010', '--slaw-editor-fg': '#eeeeee', '--slaw-editor-cursor': '#00ff00',
+      '--slaw-editor-selection': '#334455', '--slaw-error': '#ff0000', '--slaw-success': '#00aa00',
+      '--slaw-warn': '#ffaa00', '--slaw-info': '#0000ff', '--slaw-chart-4': '#aa00aa', '--slaw-chart-5': '#00aaaa',
+      '--slaw-fg-muted': '#888888',
     }))
     expect(t.background).toBe('#101010')
     expect(t.foreground).toBe('#eeeeee')
@@ -31,14 +31,14 @@ describe('themeFromDocument', () => {
   })
 
   it('falls back to the foreground and background when a role is missing', () => {
-    const t = themeFromDocument(docWith({ '--assay-editor-bg': '#000000', '--assay-editor-fg': '#ffffff' }))
+    const t = themeFromDocument(docWith({ '--slaw-editor-bg': '#000000', '--slaw-editor-fg': '#ffffff' }))
     expect(t.red).toBe('#ffffff')
     expect(t.cursor).toBe('#ffffff')
     expect(t.background).toBe('#000000')
   })
 
   it('reads the mono font, with a generic fallback', () => {
-    expect(fontFromDocument(docWith({ '--assay-font-mono': 'Fira Code, monospace' }))).toBe('Fira Code, monospace')
+    expect(fontFromDocument(docWith({ '--slaw-font-mono': 'Fira Code, monospace' }))).toBe('Fira Code, monospace')
     expect(fontFromDocument(docWith({}))).toBe('monospace')
   })
 })

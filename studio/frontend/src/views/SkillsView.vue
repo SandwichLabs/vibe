@@ -90,7 +90,7 @@ function sourceBadgeClass(source: string) {
           </div>
         </div>
 
-        <div v-if="viewMode === 'rendered'" class="prose assay-content assay-md-content" data-testid="skill-rendered" v-html="renderSafeMarkdown(selected.instructions)"></div>
+        <div v-if="viewMode === 'rendered'" class="prose slaw-content slaw-md-content" data-testid="skill-rendered" v-html="renderSafeMarkdown(selected.instructions)"></div>
         <pre v-else class="sh-mono" data-testid="skill-raw" style="white-space: pre-wrap; padding: var(--sh-space-4); background: var(--sh-paper-2); border: var(--sh-border); border-radius: var(--sh-radius);">{{ selected.instructions }}</pre>
       </div>
     </div>

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/repl"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/repl"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // ReplOpenResult is a new console: its id (the suffix of its "repl:out:<id>"

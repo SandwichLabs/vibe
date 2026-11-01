@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/connname"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // StatusKind is a connection's state (plan §4.2). Lazy attach means a freshly

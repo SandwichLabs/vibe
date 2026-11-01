@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/crud"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // --- Tables ---
@@ -57,7 +57,7 @@ func (a *App) isDefaultTarget(ref session.TableRef) bool {
 	return err == nil && ref.Catalog == sess.DefaultCatalog() && ref.Schema == schema
 }
 
-// ListTables returns all user tables of the default catalog (non _assay_ tables).
+// ListTables returns all user tables of the default catalog (non _slaw_ tables).
 func (a *App) ListTables() ([]string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

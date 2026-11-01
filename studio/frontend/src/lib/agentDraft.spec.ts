@@ -15,7 +15,7 @@ describe('agentDraft', () => {
 })
 
 describe('openAgent', () => {
-  it('dispatches assay:open-agent with the draft in detail, or without detail', () => {
+  it('dispatches slaw:open-agent with the draft in detail, or without detail', () => {
     const seen = vi.fn()
     window.addEventListener(OPEN_AGENT_EVENT, seen)
     openAgent('hello')

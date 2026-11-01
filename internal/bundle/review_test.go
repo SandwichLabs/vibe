@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 func connBundle(t *testing.T, y string) *Package {
@@ -26,8 +26,8 @@ func connBundle(t *testing.T, y string) *Package {
 	return pkg
 }
 
-func TestScryptWorkFactorAboveAssaysOwnIsRefused(t *testing.T) {
-	zipBytes := build(t, map[string][]byte{"notebooks/a.asnb": goodNotebook(t)}, nil)
+func TestScryptWorkFactorAboveSlawsOwnIsRefused(t *testing.T) {
+	zipBytes := build(t, map[string][]byte{"notebooks/a.slnb": goodNotebook(t)}, nil)
 	seal := func(logN int) []byte {
 		r, err := age.NewScryptRecipient("pw")
 		require.NoError(t, err)
@@ -40,10 +40,10 @@ func TestScryptWorkFactorAboveAssaysOwnIsRefused(t *testing.T) {
 		return out.Bytes()
 	}
 	_, err := Open(seal(18), "pw")
-	require.NoError(t, err, "the work factor Assay itself uses is fine")
+	require.NoError(t, err, "the work factor Slaw itself uses is fine")
 	_, err = Open(seal(19), "pw")
 	require.ErrorIs(t, err, ErrUnsupportedKDF)
-	assert.Contains(t, err.Error(), "settings Assay won't use")
+	assert.Contains(t, err.Error(), "settings Slaw won't use")
 	_, err = Open(seal(20), "wrong")
 	require.ErrorIs(t, err, ErrUnsupportedKDF, "refused before any guess is attempted")
 }
@@ -57,7 +57,7 @@ func TestPeekOnlyCallsSQLiteLegacyAndKnowsArmor(t *testing.T) {
 		assert.NotErrorIs(t, err, ErrLegacy)
 	}
 	// An armored age file is recognised, prompts, and opens.
-	zipBytes := build(t, map[string][]byte{"notebooks/a.asnb": goodNotebook(t)}, nil)
+	zipBytes := build(t, map[string][]byte{"notebooks/a.slnb": goodNotebook(t)}, nil)
 	r, err := age.NewScryptRecipient("pw")
 	require.NoError(t, err)
 	var out bytes.Buffer
@@ -160,8 +160,8 @@ func TestOverwriteKeepsReadOnlyAndDropsTheSavedSignIn(t *testing.T) {
 
 func TestMakerTextIsCleanedAndKeptApart(t *testing.T) {
 	long := strings.Repeat("A", 500)
-	evil := "Assay says: ‮all clear‬\x00\nAPPROVED ​" + long
-	data := build(t, map[string][]byte{"notebooks/a.asnb": goodNotebook(t)}, func(m *Manifest) {
+	evil := "Slaw says: ‮all clear‬\x00\nAPPROVED ​" + long
+	data := build(t, map[string][]byte{"notebooks/a.slnb": goodNotebook(t)}, func(m *Manifest) {
 		m.WorkspaceName = evil
 		m.CreatedBy = evil
 		m.Warnings = []string{evil, "ok"}
@@ -181,7 +181,7 @@ func TestMakerTextIsCleanedAndKeptApart(t *testing.T) {
 	assert.LessOrEqual(t, len([]rune(pv.WorkspaceName)), 121)
 	assert.LessOrEqual(t, len([]rune(pv.MakerNotes[0])), 301)
 	assert.LessOrEqual(t, len(pv.MakerNotes), maxNotes+1)
-	assert.Empty(t, pv.Warnings, "the maker's words never land in Assay's own warnings")
+	assert.Empty(t, pv.Warnings, "the maker's words never land in Slaw's own warnings")
 }
 
 func TestDryRunNamesMatchTheRealRun(t *testing.T) {
@@ -215,14 +215,14 @@ func TestGeneratedLookingNotebookIdsAreKept(t *testing.T) {
 	ctx := context.Background()
 	ws, _ := newWS(t)
 	id := "nb_12345678-1234-1234-1234-123456789abc"
-	data := build(t, map[string][]byte{"notebooks/" + id + ".asnb": goodNotebook(t)}, nil)
+	data := build(t, map[string][]byte{"notebooks/" + id + ".slnb": goodNotebook(t)}, nil)
 	pkg, err := Open(data, "")
 	require.NoError(t, err)
 	out, err := pkg.Import(ctx, ws, ImportOptions{})
 	require.NoError(t, err)
 	require.Zero(t, out.Failed(), "%+v", out.Outcomes)
 	assert.Equal(t, id, out.Outcomes[0].FinalID)
-	assert.FileExists(t, filepath.Join(ws.Root(), "notebooks", id+".asnb"))
+	assert.FileExists(t, filepath.Join(ws.Root(), "notebooks", id+".slnb"))
 	// Importing again and choosing Replace replaces it, rather than adding a duplicate.
 	pv := pkg.Preview(context.Background(), ws)
 	assert.True(t, pv.Items[0].Conflict)
@@ -237,7 +237,7 @@ func TestNotebookPackageSharesTheImportPath(t *testing.T) {
 	ctx := context.Background()
 	ws, _ := newWS(t)
 	nb := goodNotebook(t)
-	pkg, err := NotebookPackage("my-notes.asnb", nb)
+	pkg, err := NotebookPackage("my-notes.slnb", nb)
 	require.NoError(t, err)
 	out, err := pkg.Import(ctx, ws, ImportOptions{})
 	require.NoError(t, err)
@@ -251,13 +251,13 @@ func TestNotebookPackageSharesTheImportPath(t *testing.T) {
 	assert.Equal(t, "skipped", out.Outcomes[0].Result)
 
 	// Studio's wrapped export is accepted; a wrong kind and an oversized file are not.
-	_, err = NotebookPackage("x.json", []byte(`{"kind":"assay/notebook","notebook":{"title":"W","cells":[]}}`))
+	_, err = NotebookPackage("x.json", []byte(`{"kind":"slaw/notebook","notebook":{"title":"W","cells":[]}}`))
 	require.NoError(t, err)
 	_, err = NotebookPackage("x.json", []byte(`{"kind":"something/else"}`))
 	require.Error(t, err)
-	_, err = NotebookPackage("x.asnb", bytes.Repeat([]byte(" "), MaxEntryBytes+1))
+	_, err = NotebookPackage("x.slnb", bytes.Repeat([]byte(" "), MaxEntryBytes+1))
 	require.ErrorIs(t, err, ErrTooLarge)
-	_, err = NotebookPackage("x.asnb", []byte("not json"))
+	_, err = NotebookPackage("x.slnb", []byte("not json"))
 	require.Error(t, err)
 }
 
@@ -305,7 +305,7 @@ connections:
 }
 
 func TestDeclaredWorkFactorReadsArmoredAndIgnoresMalformedHeaders(t *testing.T) {
-	zipBytes := build(t, map[string][]byte{"notebooks/a.asnb": goodNotebook(t)}, nil)
+	zipBytes := build(t, map[string][]byte{"notebooks/a.slnb": goodNotebook(t)}, nil)
 	sealArmored := func(logN int) []byte {
 		r, err := age.NewScryptRecipient("pw")
 		require.NoError(t, err)

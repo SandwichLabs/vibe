@@ -259,7 +259,7 @@ export function useQueryEditor() {
   // askAgent opens the W0 wizard panel (AppShell owns it; this event is the
   // cross-component trigger) so the user can ask about the query they're writing.
   function askAgent() {
-    window.dispatchEvent(new CustomEvent('assay:open-agent'))
+    window.dispatchEvent(new CustomEvent('slaw:open-agent'))
   }
 
   function deleteQuery(id: string) {

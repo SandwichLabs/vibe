@@ -258,7 +258,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
   align-items: center;
 }
 .rail-divider {
-  border-top: 1.5px dashed var(--assay-border-subtle);
+  border-top: 1.5px dashed var(--slaw-border-subtle);
   margin: 10px 0 4px;
 }
 .saved-row {
@@ -271,7 +271,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
 .saved-row:hover { background: var(--sh-hover); }
 .saved-row.on {
   background: var(--sh-surface);
-  border: 1.5px solid var(--assay-border);
+  border: 1.5px solid var(--slaw-border);
   box-shadow: var(--sh-shadow-xs);
 }
 .output-tabs {
@@ -299,7 +299,7 @@ useModalKeys(showSaveModal, () => { showSaveModal.value = false }, saveModalEl)
 .output-tab:hover { background: var(--sh-hover); }
 .output-tab.on {
   background: var(--sh-surface);
-  border-color: var(--assay-border);
+  border-color: var(--slaw-border);
   color: inherit;
 }
 .sql-error {

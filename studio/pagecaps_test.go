@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/pagehost"
 )
 
 const allCaps = "html:\n  capabilities:\n    state: {scope: local}\n    download: {}\n    ask: {}\n"
@@ -116,7 +116,7 @@ func TestCaps_AStaticPageCannotDeclareCapabilities(t *testing.T) {
 	assert.Empty(t, st.Hash, "capabilities need script")
 }
 
-func TestCaps_StateRoundTripsAndLandsInAssayLocalOnly(t *testing.T) {
+func TestCaps_StateRoundTripsAndLandsInSlawLocalOnly(t *testing.T) {
 	app := pageApp(t)
 	fh := capWindow(t, app, "pg", allCaps, nil)
 	assert.Equal(t, "true", okResult(t, fh.callWait(t, 1, "state", "set", `{"key":"filters/a","value":{"x":[1,2]}}`)))
@@ -129,7 +129,7 @@ func TestCaps_StateRoundTripsAndLandsInAssayLocalOnly(t *testing.T) {
 
 	app.pages.closeAll() // flushes
 	root := app.ws.Root()
-	b, err := os.ReadFile(filepath.Join(root, ".assay-local", "artifacts", "pg", "state.json"))
+	b, err := os.ReadFile(filepath.Join(root, ".slaw-local", "artifacts", "pg", "state.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(b), "filters/a")
 	assert.NoFileExists(t, filepath.Join(root, "artifacts", "pg", "state.json"))
@@ -298,7 +298,7 @@ func TestCaps_TwoWindowsWritingTheSameStateKeepBothChanges(t *testing.T) {
 	require.NoError(t, other.Set("theirs", json.RawMessage(`2`), nil))
 	require.NoError(t, other.Flush())
 	app.pages.closeAll()
-	b, err := os.ReadFile(filepath.Join(app.ws.Root(), ".assay-local", "artifacts", "pg", "state.json"))
+	b, err := os.ReadFile(filepath.Join(app.ws.Root(), ".slaw-local", "artifacts", "pg", "state.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"mine":1`)
 	assert.Contains(t, string(b), `"theirs":2`)
@@ -459,7 +459,7 @@ func TestCaps_AskIsOffWithoutItsToggleAndLimitedToTenAMinute(t *testing.T) {
 		s.askOn = func(string) bool { return on.Load() }
 		s.ask = func(context.Context, string, string) (string, bool, error) { return "ok", true, nil }
 	})
-	assert.NotContains(t, openMsg(t, fh).Caps, "ask", "the toggle is off: the page gets null from assay.use")
+	assert.NotContains(t, openMsg(t, fh).Caps, "ask", "the toggle is off: the page gets null from slaw.use")
 	assert.Equal(t, pagehost.CodeUnavailable, fh.callWait(t, 1, "ask", "ask", `{"prompt":"hi"}`).Code)
 
 	app.pages.closeAll()

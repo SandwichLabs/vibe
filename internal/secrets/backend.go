@@ -2,7 +2,7 @@ package secrets
 
 import "runtime"
 
-// BackendName names the OS keychain Assay talks to, for the settings screen.
+// BackendName names the OS keychain Slaw talks to, for the settings screen.
 func BackendName() string {
 	switch runtime.GOOS {
 	case "darwin":

@@ -1,23 +1,23 @@
-// Package workspace is the folder-shaped unit of an Assay project (plan §4.1):
-// a directory with a committed assay.yaml marker, notebooks, queries and skills
+// Package workspace is the folder-shaped unit of a Slaw project (plan §4.1):
+// a directory with a committed slaw.yaml marker, notebooks, queries and skills
 // as plain files, and connection definitions merged from three scopes.
 //
 //	acme-analytics/
-//	├── assay.yaml            committed: id, name, default_connection, agent ceiling,
+//	├── slaw.yaml            committed: id, name, default_connection, agent ceiling,
 //	│                        shared connection definitions (no secrets)
-//	├── notebooks/*.asnb      one notebook per file
-//	├── queries/*.sql        SQL with a `-- assay:` header
+//	├── notebooks/*.slnb      one notebook per file
+//	├── queries/*.sql        SQL with a `-- slaw:` header
 //	├── skills/<name>/SKILL.md
 //	├── data/                local files and local .duckdb files
 //	├── .gitignore, .gitattributes
-//	└── .assay-local/         never committed: connections.yaml (this machine's
+//	└── .slaw-local/         never committed: connections.yaml (this machine's
 //	                         connections and per-person settings), state.json
 //
 // # Scopes
 //
 // Connection definitions come from three files, merged most-specific-wins:
-// local (.assay-local/connections.yaml) beats shared (assay.yaml) beats user
-// (<config dir>/assay/connections.yaml, honouring ASSAY_CONFIG_DIR). The
+// local (.slaw-local/connections.yaml) beats shared (slaw.yaml) beats user
+// (<config dir>/slaw/connections.yaml, honouring SLAW_CONFIG_DIR). The
 // winner replaces the whole entry; Merged reports the scope it came from and
 // which lower scopes it shadows. A user-scope entry never overrides a
 // workspace one.
@@ -25,7 +25,7 @@
 // # Ceiling, not a switch
 //
 // The committed sandbox and ask_before_writes can only tighten what the agent
-// may do. Loosening is stored per person under .assay-local/, and
+// may do. Loosening is stored per person under .slaw-local/, and
 // EffectivePolicy clamps it to the committed ceiling, so a pulled commit can
 // never disable anyone's safeguards.
 //

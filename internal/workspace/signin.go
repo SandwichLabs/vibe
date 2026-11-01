@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/secrets"
 )
 
 // ErrNotSSOSignIn is returned for a connection that does not sign in with an
@@ -39,7 +39,7 @@ func SSOConnections(ws Workspace, profile string) []string {
 
 // DeviceSignIn signs the person in to the AWS profile the named connection uses
 // (the device flow), blocking until they approve, it fails or ctx ends. It is
-// the only way a device flow starts: Studio's StartSignIn and `assay conn
+// the only way a device flow starts: Studio's StartSignIn and `slaw conn
 // credentials sign-in` call it; nothing that merely resolves a credential does.
 // show gets the prompt once; it must not block.
 func DeviceSignIn(ctx context.Context, ws Workspace, name string, show func(secrets.DevicePrompt)) (profile string, err error) {

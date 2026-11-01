@@ -11,11 +11,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 // Draft is what a proposer supplies: which definition, the document it wants
-// written, and why. The id, time and status are Assay's, never the proposer's.
+// written, and why. The id, time and status are Slaw's, never the proposer's.
 type Draft struct {
 	Kind semantics.Kind
 	// Name is the definition's name; ignored for a glossary term, whose name

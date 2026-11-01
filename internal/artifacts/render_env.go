@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/slaw/internal/artifacts/pagefuncs"
 )
 
 // MaxQueryResultBytes caps one query result of any artifact query (level 1,

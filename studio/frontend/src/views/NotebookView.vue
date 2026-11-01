@@ -64,7 +64,7 @@ defineExpose({
     <ConflictBanner
       v-if="conflict"
       kind="notebook"
-      :path="`notebooks/${loadedNotebookIdForView}.asnb`"
+      :path="`notebooks/${loadedNotebookIdForView}.slnb`"
       :deleted="conflict.deleted"
       :busy="conflictBusy"
       @reload="save.resolveConflict('reload')"

@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/crud"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // Mode selects how Import writes into an existing (or new) table.
@@ -236,7 +236,7 @@ func importOn(ctx context.Context, conn *sql.Conn, o Options) (*Summary, error) 
 		// resolves a table actually stored as "Customers"), but nothing
 		// downstream may keep using the caller's casing once a match is
 		// found: the auto-number sequence was named from the table's
-		// ORIGINAL casing at CREATE time (_assay_seq_Customers_id), and a
+		// ORIGINAL casing at CREATE time (_slaw_seq_Customers_id), and a
 		// later reference built from "customers" wouldn't find it,
 		// silently skipping the bump. Every later step (write, Replace,
 		// Summary.Table, and the skill this Import's caller writes from

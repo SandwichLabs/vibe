@@ -1,6 +1,6 @@
-// Package assay is the repository root. Its only job is to embed the licence files so the
+// Package slaw is the repository root. Its only job is to embed the licence files so the
 // binaries can show them (Studio's Settings > About) without reading from disk.
-package assay
+package slaw
 
 import _ "embed"
 

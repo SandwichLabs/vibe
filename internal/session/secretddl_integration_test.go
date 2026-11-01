@@ -23,7 +23,7 @@ func TestSecretThenFailingAttachLeaksNothing(t *testing.T) {
 	pg := startPG(t)
 	var logs bytes.Buffer
 	lg := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	s := newTestSession(t, WithLogger(lg), WithExtensionDirectory(filepath.Join(os.TempDir(), "assay-spike-ext")))
+	s := newTestSession(t, WithLogger(lg), WithExtensionDirectory(filepath.Join(os.TempDir(), "slaw-spike-ext")))
 	ctx := context.Background()
 	_, err := s.Exec(ctx, "LOAD postgres")
 	require.NoError(t, err)

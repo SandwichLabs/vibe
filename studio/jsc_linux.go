@@ -6,7 +6,7 @@ import "os"
 
 // WebKitGTK's JavaScriptCore claims SIGUSR1 for its garbage collector
 // ("Overriding existing handler for signal 10") and replaces Go's handler for
-// it. Assay uses SIGUSR1 to ask a workspace's owner to let go (internal/hub, so
+// it. Slaw uses SIGUSR1 to ask a workspace's owner to let go (internal/hub, so
 // `Take over` works), so without this a release request would crash Studio
 // instead of closing the workspace. JSC_SIGNAL_FOR_GC moves the collector to
 // SIGUSR2, which nothing else here uses. It has to be set before WebKit starts,

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template/parse"
 
-	"github.com/SandwichLabs/assay/internal/artifacts/pagefuncs"
+	"github.com/SandwichLabs/slaw/internal/artifacts/pagefuncs"
 )
 
 // Derived page kinds.

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Assay does not work as expected
+description: Something in Slaw does not work as expected
 labels: ["bug"]
 body:
   - type: markdown
@@ -9,8 +9,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Assay version
-      description: Output of `assay --version`.
+      label: Slaw version
+      description: Output of `slaw --version`.
       placeholder: "0.1.0 (commit: abc1234, built: 2026-10-12)"
     validations:
       required: true
@@ -28,8 +28,8 @@ body:
       options:
         - Studio (desktop app)
         - CLI
-        - TUI (assay studio without --gui)
-        - MCP server (assay mcp serve)
+        - TUI (slaw studio without --gui)
+        - MCP server (slaw mcp serve)
     validations:
       required: true
   - type: input

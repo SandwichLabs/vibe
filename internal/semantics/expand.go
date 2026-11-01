@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/connname"
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/sqllex"
+	"github.com/SandwichLabs/slaw/internal/connname"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/sqllex"
 )
 
 // MaxMetricCalls is how many metric() calls one text may hold.
@@ -127,7 +127,7 @@ func HasMetricCall(text string) bool {
 //
 //	(SELECT "region", sum(amount) AS "net_revenue" FROM (
 //	<saved query SQL>
-//	) AS assay_metric_net_revenue GROUP BY "region")
+//	) AS slaw_metric_net_revenue GROUP BY "region")
 //
 // It lexes with internal/sqllex, the SQL policy's own lexer, so what it
 // rewrites is exactly what the policy would have read as a call. Only declared
@@ -319,12 +319,12 @@ func (x *expander) call(c call) (string, error) {
 
 func (x *expander) loadMetric(name, label string) (*Metric, error) {
 	if !connname.Valid(name) {
-		return nil, refuse("%s: there is no metric named %s (metrics live in semantics/metrics/; `assay semantics list` shows them)", label, quoteForMessage(name))
+		return nil, refuse("%s: there is no metric named %s (metrics live in semantics/metrics/; `slaw semantics list` shows them)", label, quoteForMessage(name))
 	}
 	m, err := x.src.Metric(x.ctx, name)
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return nil, refuse("%s: there is no metric named %s (metrics live in semantics/metrics/; `assay semantics list` shows them)", label, quoteForMessage(name))
+		return nil, refuse("%s: there is no metric named %s (metrics live in semantics/metrics/; `slaw semantics list` shows them)", label, quoteForMessage(name))
 	case err != nil:
 		return nil, refuse("%s: the metric cannot be read: %s", label, ReadableError(err))
 	case m == nil || m.Error != "":
@@ -482,7 +482,7 @@ func render(m *Metric, dims []string, body string) string {
 	b.WriteString(session.QuoteIdent(m.Name))
 	b.WriteString(" FROM (\n")
 	b.WriteString(body)
-	b.WriteString("\n) AS assay_metric_")
+	b.WriteString("\n) AS slaw_metric_")
 	b.WriteString(m.Name)
 	if len(quoted) > 0 {
 		b.WriteString(" GROUP BY ")
@@ -593,7 +593,7 @@ func (r *Result) CheckOuterParams(input string, supplied map[string]any, declare
 //
 //	SELECT count(*) FROM (SELECT 1 FROM (
 //	<saved query SQL>
-//	) AS assay_grain_<metric> GROUP BY "d1", ..., "dn" HAVING count(*) > 1) AS assay_grain_dups
+//	) AS slaw_grain_<metric> GROUP BY "d1", ..., "dn" HAVING count(*) > 1) AS slaw_grain_dups
 //
 // The metric needs at least one dimension. The Result carries the declared
 // parameters for BindParams like an expanded text.
@@ -626,8 +626,8 @@ func ExpandGrain(ctx context.Context, m *Metric, src Reader, o Options) (*Result
 	for i, d := range m.Dimensions {
 		quoted[i] = session.QuoteIdent(d)
 	}
-	res.SQL = "SELECT count(*) FROM (SELECT 1 FROM (\n" + body + "\n) AS assay_grain_" + m.Name +
-		" GROUP BY " + strings.Join(quoted, ", ") + " HAVING count(*) > 1) AS assay_grain_dups"
+	res.SQL = "SELECT count(*) FROM (SELECT 1 FROM (\n" + body + "\n) AS slaw_grain_" + m.Name +
+		" GROUP BY " + strings.Join(quoted, ", ") + " HAVING count(*) > 1) AS slaw_grain_dups"
 	res.Changed = true
 	sort.Slice(res.Params, func(i, j int) bool { return res.Params[i].Name < res.Params[j].Name })
 	return res, nil

@@ -12,9 +12,9 @@ import (
 type Known map[string]string
 
 // DuplicateIDs reports the other live paths in known that carry the same id as
-// the workspace at path. A `cp -r` of a workspace copies its assay.yaml and so
+// the workspace at path. A `cp -r` of a workspace copies its slaw.yaml and so
 // its id, which would make both copies share keychain entries; the caller offers
-// "Regenerate id" for the copy. "Live" means the folder still has an assay.yaml
+// "Regenerate id" for the copy. "Live" means the folder still has a slaw.yaml
 // (a registry entry for a deleted folder is not a duplicate). The result is
 // sorted and never includes path itself.
 func DuplicateIDs(path, id string, known Known) []string {
@@ -46,7 +46,7 @@ func canonical(p string) string {
 var idLineRE = regexp.MustCompile(`(?m)^id:[ \t]*.*$`)
 
 // RegenerateID gives the workspace at root a fresh id, editing only the id
-// line of assay.yaml so comments and formatting survive. It returns the new id.
+// line of slaw.yaml so comments and formatting survive. It returns the new id.
 // Credentials saved under the old id stay with the original workspace; the
 // copy starts without them.
 func RegenerateID(root string) (string, error) {

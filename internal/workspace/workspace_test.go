@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/agents"
-	"github.com/SandwichLabs/assay/internal/notebooks"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
 // noUser isolates a workspace from the host: no user-scope connections, and a
@@ -34,13 +34,13 @@ func noUser(t *testing.T) Option {
 func TestMain(m *testing.M) {
 	// Init opens the workspace with the default config dir; keep every test
 	// away from the developer's real one.
-	dir, err := os.MkdirTemp("", "assay-ws-test-config-*")
+	dir, err := os.MkdirTemp("", "slaw-ws-test-config-*")
 	if err != nil {
 		panic(err)
 	}
-	_ = os.Setenv("ASSAY_CONFIG_DIR", dir)
+	_ = os.Setenv("SLAW_CONFIG_DIR", dir)
 	// Never touch the real keychain item set.
-	_ = os.Setenv("ASSAY_KEYRING_SERVICE", "assay-test-workspace-pkg")
+	_ = os.Setenv("SLAW_KEYRING_SERVICE", "slaw-test-workspace-pkg")
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
@@ -60,7 +60,7 @@ func newWorkspace(t *testing.T, opts ...InitOption) (Workspace, string) {
 }
 
 func TestInit_CreatesTheLayout(t *testing.T) {
-	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	t.Setenv("SLAW_CONFIG_DIR", t.TempDir())
 	dir := filepath.Join(t.TempDir(), "My Workspace")
 	res, err := Init(dir, WithName("Acme Analytics"))
 	require.NoError(t, err)
@@ -70,8 +70,8 @@ func TestInit_CreatesTheLayout(t *testing.T) {
 	for _, d := range []string{"notebooks", "queries", "skills", "data"} {
 		assert.DirExists(t, filepath.Join(ws.Root(), d))
 	}
-	assert.FileExists(t, filepath.Join(ws.Root(), "assay.yaml"))
-	assert.FileExists(t, filepath.Join(ws.Root(), ".assay-local", "nonce"), "the first open makes the folder's mark")
+	assert.FileExists(t, filepath.Join(ws.Root(), "slaw.yaml"))
+	assert.FileExists(t, filepath.Join(ws.Root(), ".slaw-local", "nonce"), "the first open makes the folder's mark")
 
 	assert.Equal(t, "Acme Analytics", ws.Name())
 	_, err = uuidParse(ws.ID())
@@ -87,11 +87,11 @@ func TestInit_CreatesTheLayout(t *testing.T) {
 	assert.True(t, conns[0].Default)
 
 	ig, _ := os.ReadFile(filepath.Join(ws.Root(), ".gitignore"))
-	for _, l := range []string{".assay-local/", "data/*.duckdb", "data/*.duckdb.wal"} {
+	for _, l := range []string{".slaw-local/", "data/*.duckdb", "data/*.duckdb.wal"} {
 		assert.Contains(t, string(ig), l+"\n")
 	}
 	ga, _ := os.ReadFile(filepath.Join(ws.Root(), ".gitattributes"))
-	assert.Contains(t, string(ga), "*.asnb text eol=lf\n")
+	assert.Contains(t, string(ga), "*.slnb text eol=lf\n")
 
 	// The file it wrote is something Open accepts as is.
 	again, err := Open(ws.Root(), noUser(t))
@@ -108,7 +108,7 @@ func TestInit_FreshIDEachTime(t *testing.T) {
 func TestInit_MergesExistingIgnoreFilesWithoutClobbering(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("node_modules/\n*.log"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("* text=auto\n*.asnb text eol=lf\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("* text=auto\n*.slnb text eol=lf\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("keep me"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "notebooks"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notebooks", "old.txt"), []byte("x"), 0o644))
@@ -119,11 +119,11 @@ func TestInit_MergesExistingIgnoreFilesWithoutClobbering(t *testing.T) {
 
 	ig, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	assert.True(t, strings.HasPrefix(string(ig), "node_modules/\n*.log\n"), "existing lines stay first, newline repaired: %q", ig)
-	assert.Contains(t, string(ig), ".assay-local/\n")
+	assert.Contains(t, string(ig), ".slaw-local/\n")
 	assert.Equal(t, 1, strings.Count(string(ig), "data/*.duckdb\n"))
 
 	ga, _ := os.ReadFile(filepath.Join(dir, ".gitattributes"))
-	assert.Equal(t, "* text=auto\n*.asnb text eol=lf\n", string(ga), "already satisfied: untouched")
+	assert.Equal(t, "* text=auto\n*.slnb text eol=lf\n", string(ga), "already satisfied: untouched")
 
 	readme, _ := os.ReadFile(filepath.Join(dir, "README.md"))
 	assert.Equal(t, "keep me", string(readme))
@@ -142,11 +142,11 @@ func TestInit_RefusesExistingWorkspaceAndNesting(t *testing.T) {
 	assert.ErrorIs(t, err, ErrAlreadyWorkspace)
 	assert.NoDirExists(t, filepath.Join(root, "brand"), "nothing is created on refusal")
 
-	// An existing assay.yaml is never overwritten.
-	before, _ := os.ReadFile(filepath.Join(root, "assay.yaml"))
+	// An existing slaw.yaml is never overwritten.
+	before, _ := os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	_, err = Init(root, WithName("Other"))
 	require.Error(t, err)
-	after, _ := os.ReadFile(filepath.Join(root, "assay.yaml"))
+	after, _ := os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	assert.Equal(t, before, after)
 	_ = ws
 }
@@ -155,7 +155,7 @@ func TestInit_ValidatesBeforeWriting(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "x")
 	_, err := Init(dir, WithID("not-a-uuid"))
 	require.Error(t, err)
-	assert.NoFileExists(t, filepath.Join(dir, "assay.yaml"))
+	assert.NoFileExists(t, filepath.Join(dir, "slaw.yaml"))
 	assert.NoDirExists(t, filepath.Join(dir, "notebooks"), "no half-made workspace")
 }
 
@@ -210,7 +210,7 @@ func TestDiscover(t *testing.T) {
 	assert.Equal(t, root, got)
 
 	// A file path and a not-yet-created path both walk up from their folder.
-	got, err = Discover(filepath.Join(root, "assay.yaml"))
+	got, err = Discover(filepath.Join(root, "slaw.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, root, got)
 	got, err = Discover(filepath.Join(root, "does", "not", "exist"))
@@ -220,10 +220,10 @@ func TestDiscover(t *testing.T) {
 	_, err = Discover(t.TempDir())
 	assert.ErrorIs(t, err, ErrNotWorkspace)
 
-	// The nearest assay.yaml wins in a nested workspace.
+	// The nearest slaw.yaml wins in a nested workspace.
 	inner := filepath.Join(root, "inner")
 	require.NoError(t, os.MkdirAll(inner, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(inner, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(inner, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	got, err = Discover(filepath.Join(inner, "x"))
 	require.NoError(t, err)
 	assert.Equal(t, inner, got)
@@ -235,9 +235,9 @@ func TestDiscover(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, root, got)
 
-	// A directory called assay.yaml is not a marker.
+	// A directory called slaw.yaml is not a marker.
 	trap := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(trap, "assay.yaml"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(trap, "slaw.yaml"), 0o755))
 	_, err = Discover(trap)
 	assert.ErrorIs(t, err, ErrNotWorkspace)
 }
@@ -247,13 +247,13 @@ func TestOpen_Errors(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotWorkspace)
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\nmystery: 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\nmystery: 1\n"), 0o644))
 	_, err = Open(dir, noUser(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mystery")
 
 	dir = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("name: x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("name: x\n"), 0o644))
 	_, err = Open(dir, noUser(t))
 	assert.ErrorIs(t, err, ErrMissingID)
 	id, err := EnsureID(dir)
@@ -266,11 +266,11 @@ func TestOpen_Errors(t *testing.T) {
 	assert.Equal(t, id, again, "EnsureID is idempotent")
 }
 
-func TestOpen_SymlinkedAssayYamlIsRefused(t *testing.T) {
+func TestOpen_SymlinkedSlawYamlIsRefused(t *testing.T) {
 	dir := t.TempDir()
-	outside := filepath.Join(t.TempDir(), "assay.yaml")
+	outside := filepath.Join(t.TempDir(), "slaw.yaml")
 	require.NoError(t, os.WriteFile(outside, []byte("id: "+testID+"\n"), 0o644))
-	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "assay.yaml")))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "slaw.yaml")))
 	_, err := Open(dir, noUser(t))
 	assert.Error(t, err)
 }
@@ -320,7 +320,7 @@ func TestScopesMergeMostSpecificWins(t *testing.T) {
 	assert.Equal(t, ScopeUser, byName["mine"].Scope)
 	assert.Equal(t, "env:MINE", byName["mine"].SignIn, "user connection uses the user-scope sign-in")
 	assert.Equal(t, ScopeShared, byName["lake"].Scope)
-	assert.Equal(t, "env:LAKE", byName["lake"].SignIn, "per-person sign-in lives in .assay-local, whatever the scope")
+	assert.Equal(t, "env:LAKE", byName["lake"].SignIn, "per-person sign-in lives in .slaw-local, whatever the scope")
 	assert.Empty(t, byName["lake"].Shadows)
 	assert.Equal(t, ScopeLocal, byName["scratch"].Scope)
 	assert.NotEqual(t, byName["warehouse"].Fingerprint, Fingerprint(shared.Connections[0]), "fingerprint follows the winning definition")
@@ -357,7 +357,7 @@ func TestSignInDefaultsAndLocalOverride(t *testing.T) {
 
 func TestOpenReadsAllThreeScopesAndReloads(t *testing.T) {
 	cfgDir := t.TempDir()
-	t.Setenv("ASSAY_CONFIG_DIR", cfgDir)
+	t.Setenv("SLAW_CONFIG_DIR", cfgDir)
 	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "connections.yaml"), []byte("connections:\n  - {name: personal, type: sqlite, path: /tmp/p.db}\n"), 0o644))
 
 	dir := filepath.Join(t.TempDir(), "w")
@@ -375,21 +375,21 @@ func TestOpenReadsAllThreeScopesAndReloads(t *testing.T) {
 	assert.Equal(t, map[string]Scope{"local": ScopeShared, "personal": ScopeUser, "scratch": ScopeLocal}, names)
 	assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox)
 
-	// Edit assay.yaml from outside (an editor, git pull) and reload.
-	data, _ := os.ReadFile(filepath.Join(ws.Root(), "assay.yaml"))
-	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "assay.yaml"), []byte(strings.Replace(string(data), "name: "+filepath.Base(ws.Root()), "name: Renamed", 1)), 0o644))
+	// Edit slaw.yaml from outside (an editor, git pull) and reload.
+	data, _ := os.ReadFile(filepath.Join(ws.Root(), "slaw.yaml"))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "slaw.yaml"), []byte(strings.Replace(string(data), "name: "+filepath.Base(ws.Root()), "name: Renamed", 1)), 0o644))
 	require.NoError(t, ws.Reload())
 	assert.Equal(t, "Renamed", ws.Name())
 
 	// A bad edit leaves the previous configuration in force.
-	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "assay.yaml"), []byte("id: nope\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "slaw.yaml"), []byte("id: nope\n"), 0o644))
 	require.Error(t, ws.Reload())
 	assert.Equal(t, "Renamed", ws.Name())
 }
 
 func TestBrokenUserFileIsIgnoredWithWarning(t *testing.T) {
 	cfgDir := t.TempDir()
-	t.Setenv("ASSAY_CONFIG_DIR", cfgDir)
+	t.Setenv("SLAW_CONFIG_DIR", cfgDir)
 	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "connections.yaml"), []byte("connections: [oops"), 0o644))
 	res, err := Init(filepath.Join(t.TempDir(), "w"))
 	require.NoError(t, err)
@@ -401,7 +401,7 @@ func TestBrokenUserFileIsIgnoredWithWarning(t *testing.T) {
 
 func TestUnknownDefaultConnectionWarns(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\ndefault_connection: prod_pg\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\ndefault_connection: prod_pg\n"), 0o644))
 	ws, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	require.Len(t, ws.Warnings(), 1)
@@ -413,15 +413,15 @@ func TestSaveConfigAndLocalAreCompareAndWrite(t *testing.T) {
 	cfg := ws.Config()
 	cfg.Name = "Saved"
 	require.NoError(t, ws.SaveConfig(cfg))
-	disk, _ := os.ReadFile(filepath.Join(root, "assay.yaml"))
+	disk, _ := os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	assert.Contains(t, string(disk), "name: Saved")
 
 	// An outside edit makes the next save a conflict, not a clobber.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "assay.yaml"), []byte(strings.Replace(string(disk), "name: Saved", "name: Outside", 1)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "slaw.yaml"), []byte(strings.Replace(string(disk), "name: Saved", "name: Outside", 1)), 0o644))
 	cfg.Name = "Mine"
 	err := ws.SaveConfig(cfg)
 	assert.ErrorIs(t, err, ErrConflict)
-	disk, _ = os.ReadFile(filepath.Join(root, "assay.yaml"))
+	disk, _ = os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	assert.Contains(t, string(disk), "name: Outside")
 	require.NoError(t, ws.Reload())
 	cfg = ws.Config()
@@ -439,8 +439,8 @@ func TestSaveConfigAndLocalAreCompareAndWrite(t *testing.T) {
 	require.NoError(t, ws.SaveLocal(l))
 	assert.FileExists(t, ws.LocalConfigPath())
 	assert.NotContains(t, ws.LocalConfigPath(), root, "per-person settings are never written inside the folder")
-	assert.NoDirExists(t, filepath.Join(root, ".assay-local", "connections.yaml"))
-	assert.NoFileExists(t, filepath.Join(root, ".assay-local", "connections.yaml"))
+	assert.NoDirExists(t, filepath.Join(root, ".slaw-local", "connections.yaml"))
+	assert.NoFileExists(t, filepath.Join(root, ".slaw-local", "connections.yaml"))
 	assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox)
 	assert.Equal(t, "prompt", ws.Connections()[0].SignIn)
 	l.SignIn = map[string]string{"x": "plaintext:hunter2"}
@@ -452,13 +452,13 @@ func TestStateRoundTripAndGarbage(t *testing.T) {
 	assert.Equal(t, State{}, ws.State())
 	require.NoError(t, ws.SaveState(State{LastNotebook: "weekly", OpenTabs: []string{"a", "b"}}))
 	assert.Equal(t, State{LastNotebook: "weekly", OpenTabs: []string{"a", "b"}}, ws.State())
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".assay-local", "state.json"), []byte("{garbage"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slaw-local", "state.json"), []byte("{garbage"), 0o644))
 	assert.Equal(t, State{}, ws.State(), "unreadable state is empty, never an error")
 }
 
 func TestAgentPolicyThroughWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\nsandbox: read-write\nask_before_writes: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\nsandbox: read-write\nask_before_writes: true\n"), 0o644))
 	ws, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	// You loosen everything in your OWN settings: still clamped to the ceiling.
@@ -468,21 +468,21 @@ func TestAgentPolicyThroughWorkspace(t *testing.T) {
 	assert.True(t, ask, "the committed gate cannot be loosened locally")
 }
 
-// Review #109 blocker 1 (D-A): a repository that commits .assay-local/
+// Review #109 blocker 1 (D-A): a repository that commits .slaw-local/
 // connections.yaml must not loosen the agent, redefine connections, redirect
 // sign-in or add connections. That file is never read.
-func TestCommittedAssayLocalIsIgnored(t *testing.T) {
+func TestCommittedSlawLocalIsIgnored(t *testing.T) {
 	dir := t.TempDir()
 	victim := filepath.Join(t.TempDir(), "planted.duckdb")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+`
 sandbox: read-only
 ask_before_writes: true
 default_connection: warehouse
 connections:
   - {name: warehouse, type: postgres, host: db.internal, database: sales, credentials: keychain}
 `), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".assay-local"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".assay-local", "connections.yaml"), []byte(`
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".slaw-local"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".slaw-local", "connections.yaml"), []byte(`
 agent: {sandbox: full, ask_before_writes: false}
 sign_in: {warehouse: "env:ATTACKER"}
 connections:
@@ -504,7 +504,7 @@ connections:
 	assert.Equal(t, ScopeShared, conns[0].Scope)
 	assert.Equal(t, "keychain", conns[0].SignIn, "sign-in cannot be redirected")
 	require.NotEmpty(t, ws.Warnings())
-	assert.Contains(t, strings.Join(ws.Warnings(), " "), ".assay-local/connections.yaml was ignored")
+	assert.Contains(t, strings.Join(ws.Warnings(), " "), ".slaw-local/connections.yaml was ignored")
 
 	sess, _, err := OpenSession(context.Background(), ws, nil)
 	require.NoError(t, err)
@@ -512,7 +512,7 @@ connections:
 	assert.NoFileExists(t, victim)
 
 	// Even a hostile file that is not valid YAML at all cannot stop the open.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".assay-local", "connections.yaml"), []byte("{{{ not yaml"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".slaw-local", "connections.yaml"), []byte("{{{ not yaml"), 0o644))
 	ws2, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	assert.NotEmpty(t, ws2.Warnings())
@@ -522,7 +522,7 @@ func TestPerPersonSettingsAreKeyedByIDAndRootSoClonesAreIndependent(t *testing.T
 	cfg := t.TempDir()
 	a, b := t.TempDir(), t.TempDir()
 	for _, d := range []string{a, b} {
-		require.NoError(t, os.WriteFile(filepath.Join(d, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(d, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	}
 	wa, err := Open(a, WithConfigDir(cfg), WithUserConfig(UserConfig{Version: 1}))
 	require.NoError(t, err)
@@ -546,18 +546,18 @@ func TestPerPersonSettingsAreKeyedByIDAndRootSoClonesAreIndependent(t *testing.T
 
 func TestOpenSweepsStaleTempFiles(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	for _, d := range []string{"notebooks", "skills/foo", "queries"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, d), 0o755))
 	}
 	old := time.Now().Add(-time.Hour)
 	var stale, fresh []string
 	for _, d := range []string{"notebooks", "skills/foo", "queries"} {
-		p := filepath.Join(dir, d, ".assay-tmp-x.old")
+		p := filepath.Join(dir, d, ".slaw-tmp-x.old")
 		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
 		require.NoError(t, os.Chtimes(p, old, old))
 		stale = append(stale, p)
-		q := filepath.Join(dir, d, ".assay-tmp-x.new")
+		q := filepath.Join(dir, d, ".slaw-tmp-x.new")
 		require.NoError(t, os.WriteFile(q, []byte("x"), 0o644))
 		fresh = append(fresh, q)
 	}
@@ -577,14 +577,14 @@ func TestWorkspaceStoresAreFileBackedAndSurfaceConflicts(t *testing.T) {
 
 	nb, err := ws.Notebooks().Create(ctx, "Weekly revenue")
 	require.NoError(t, err)
-	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue.asnb"))
+	assert.FileExists(t, filepath.Join(root, "notebooks", "weekly-revenue.slnb"))
 
 	q := &queries.Query{Title: "Top customers", SQL: "select 1", Connection: "local"}
 	require.NoError(t, ws.Queries().Create(ctx, q))
 	assert.FileExists(t, filepath.Join(root, "queries", "top-customers.sql"))
 
 	// Edited from outside (editor, git pull), then loaded again.
-	path := filepath.Join(root, "notebooks", "weekly-revenue.asnb")
+	path := filepath.Join(root, "notebooks", "weekly-revenue.slnb")
 	disk, _ := os.ReadFile(path)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(disk), "Weekly revenue", "Edited outside", 1)), 0o644))
 	got, _, err := ws.Notebooks().Get(ctx, nb.ID)
@@ -635,9 +635,9 @@ func TestSessionOpensLocalDuckDBAsDefault(t *testing.T) {
 	assert.True(t, seen)
 }
 
-func writeAssay(t *testing.T, dir, conns string) Workspace {
+func writeSlaw(t *testing.T, dir, conns string) Workspace {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"+conns), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"+conns), 0o644))
 	ws, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	return ws
@@ -656,7 +656,7 @@ func TestSessionPathsCannotEscapeTheWorkspace(t *testing.T) {
 	outside := t.TempDir()
 	dir := t.TempDir()
 	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "linked")))
-	ws := writeAssay(t, dir, `connections:
+	ws := writeSlaw(t, dir, `connections:
   - {name: viasym, type: duckdb, path: linked/x.duckdb, read_only: false}
   - {name: fine, type: duckdb, path: data/fine.duckdb, read_only: false}
 `)
@@ -682,7 +682,7 @@ func TestSessionPathsCannotEscapeTheWorkspace(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, "data", "fine.duckdb"))
 }
 
-// Review #109 D-C: a committed assay.yaml cannot make Assay attach or create a
+// Review #109 D-C: a committed slaw.yaml cannot make Slaw attach or create a
 // file anywhere outside its own folder.
 func TestSharedScopeCannotUseAbsolutePathsOrEnv(t *testing.T) {
 	victim := filepath.Join(t.TempDir(), "victim", "deep", "planted.duckdb")
@@ -695,7 +695,7 @@ func TestSharedScopeCannotUseAbsolutePathsOrEnv(t *testing.T) {
 		"opt":      "connections:\n  - {name: x, type: postgres, host: h, options: {application_name: '${USER}'}}\n",
 	} {
 		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"+conns), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"+conns), 0o644))
 		_, err := Open(dir, noUser(t))
 		assert.Error(t, err, name)
 	}
@@ -703,7 +703,7 @@ func TestSharedScopeCannotUseAbsolutePathsOrEnv(t *testing.T) {
 }
 
 func TestOwnScopeMayUseAbsolutePathsButNeverCreatesFoldersOutside(t *testing.T) {
-	ws := writeAssay(t, t.TempDir(), "")
+	ws := writeSlaw(t, t.TempDir(), "")
 	base := t.TempDir()
 	existing := filepath.Join(base, "big.duckdb")
 	missingDir := filepath.Join(base, "not", "there", "x.duckdb")
@@ -719,7 +719,7 @@ func TestOwnScopeMayUseAbsolutePathsButNeverCreatesFoldersOutside(t *testing.T) 
 
 func TestSessionUserScopeRelativePathRefused(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	ws, err := Open(dir, WithUserConfig(UserConfig{Version: 1, Connections: []ConnectionDef{{Name: "u", Type: "duckdb", Path: "rel.duckdb"}}}))
 	require.NoError(t, err)
 	sess, issues, err := OpenSession(context.Background(), ws, nil)
@@ -731,7 +731,7 @@ func TestSessionUserScopeRelativePathRefused(t *testing.T) {
 
 func TestSessionEnvInterpolationAndMissingVariable(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "")
+	ws := writeSlaw(t, dir, "")
 	writeLocal(t, ws, `connections:
   - {name: viaenv, type: duckdb, path: 'data/${DBNAME}.duckdb', read_only: false}
   - {name: broken, type: duckdb, path: 'data/${NOT_SET_ANYWHERE}.duckdb', read_only: false}
@@ -748,7 +748,7 @@ func TestSessionEnvInterpolationAndMissingVariable(t *testing.T) {
 
 func TestSessionUnavailableTypeIsAnIssueNotAFailure(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "default_connection: ghost\nconnections:\n  - {name: ghost, type: postgres, host: db}\n  - {name: ok, type: duckdb, path: data/ok.duckdb, read_only: false}\n")
+	ws := writeSlaw(t, dir, "default_connection: ghost\nconnections:\n  - {name: ghost, type: postgres, host: db}\n  - {name: ok, type: duckdb, path: data/ok.duckdb, read_only: false}\n")
 	sess, issues, err := OpenSession(context.Background(), ws, nil)
 	require.NoError(t, err)
 	defer sess.Close()
@@ -763,7 +763,7 @@ func TestSessionUnavailableTypeIsAnIssueNotAFailure(t *testing.T) {
 
 func TestSessionReadOnlyMissingFileIsAnIssue(t *testing.T) {
 	dir := t.TempDir()
-	ws := writeAssay(t, dir, "connections:\n  - {name: ro, type: duckdb, path: data/nothere.duckdb}\n")
+	ws := writeSlaw(t, dir, "connections:\n  - {name: ro, type: duckdb, path: data/nothere.duckdb}\n")
 	sess, issues, err := OpenSession(context.Background(), ws, nil)
 	require.NoError(t, err)
 	defer sess.Close()
@@ -786,11 +786,11 @@ func TestDuplicateIDs(t *testing.T) {
 	assert.Empty(t, DuplicateIDs(rootA, a.ID(), Known{rootA: a.ID()}), "the workspace itself is not a duplicate")
 
 	// Regenerate id on the copy: new id, comments and the rest untouched.
-	before, _ := os.ReadFile(filepath.Join(rootB, "assay.yaml"))
+	before, _ := os.ReadFile(filepath.Join(rootB, "slaw.yaml"))
 	newID, err := RegenerateID(rootB)
 	require.NoError(t, err)
 	assert.NotEqual(t, a.ID(), newID)
-	after, _ := os.ReadFile(filepath.Join(rootB, "assay.yaml"))
+	after, _ := os.ReadFile(filepath.Join(rootB, "slaw.yaml"))
 	assert.Equal(t, strings.Replace(string(before), a.ID(), newID, 1), string(after))
 	b2, err := Open(rootB, noUser(t))
 	require.NoError(t, err)
@@ -901,7 +901,7 @@ func TestNotebookStaleSaveWithAndWithoutRev(t *testing.T) {
 	require.NoError(t, err)
 	got, _, err := ws.Notebooks().Get(ctx, nb.ID)
 	require.NoError(t, err)
-	p := filepath.Join(root, "notebooks", nb.ID+".asnb")
+	p := filepath.Join(root, "notebooks", nb.ID+".slnb")
 	require.NoError(t, os.WriteFile(p, []byte(`{"schemaVersion":2,"title":"External","cells":[]}`+"\n"), 0o644))
 	// The agent reads the notebook after the external change.
 	_, _, err = ws.Notebooks().Get(ctx, nb.ID)
@@ -941,12 +941,12 @@ func TestNotebookHTMLCharactersRoundTripByteIdentically(t *testing.T) {
 	}}
 	s1, _, err := ws.Notebooks().Save(ctx, raw)
 	require.NoError(t, err)
-	b1, _ := os.ReadFile(filepath.Join(root, "notebooks", s1.ID+".asnb"))
+	b1, _ := os.ReadFile(filepath.Join(root, "notebooks", s1.ID+".slnb"))
 	g, _, err := ws.Notebooks().Get(ctx, s1.ID)
 	require.NoError(t, err)
 	s2, _, err := ws.Notebooks().Save(ctx, g)
 	require.NoError(t, err)
-	b2, _ := os.ReadFile(filepath.Join(root, "notebooks", s2.ID+".asnb"))
+	b2, _ := os.ReadFile(filepath.Join(root, "notebooks", s2.ID+".slnb"))
 	assert.Equal(t, string(b1), string(b2))
 	assert.Equal(t, "a<b>&c \\u003c lit", g.Title, "a literal backslash-u sequence is data, not an escape")
 	assert.Contains(t, string(b1), "x < y && y > z")
@@ -974,7 +974,7 @@ func TestDeleteAfterExternalEditIsAConflict(t *testing.T) {
 	q := &queries.Query{Title: "Q", SQL: "select 1"}
 	require.NoError(t, ws.Queries().Create(ctx, q))
 	p := filepath.Join(root, "queries", q.ID+".sql")
-	require.NoError(t, os.WriteFile(p, []byte("-- assay: {\"title\":\"Q\"}\nselect 'teammate'\n"), 0o644))
+	require.NoError(t, os.WriteFile(p, []byte("-- slaw: {\"title\":\"Q\"}\nselect 'teammate'\n"), 0o644))
 	err := ws.Queries().Delete(ctx, q.ID)
 	assert.ErrorIs(t, err, queries.ErrConflict)
 	assert.FileExists(t, p, "a file changed since it was read is not deleted")
@@ -988,10 +988,10 @@ func TestRecloneAtSamePathDoesNotInheritLocalSettings(t *testing.T) {
 	p := filepath.Join(base, "proj")
 	mk := func(extra string) {
 		require.NoError(t, os.MkdirAll(p, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(p, "assay.yaml"), []byte("id: "+testID+"\nsandbox: full\nconnections:\n  - {name: shared, type: duckdb, path: data/s.duckdb}\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(p, "slaw.yaml"), []byte("id: "+testID+"\nsandbox: full\nconnections:\n  - {name: shared, type: duckdb, path: data/s.duckdb}\n"), 0o644))
 		if extra != "" {
-			require.NoError(t, os.MkdirAll(filepath.Join(p, ".assay-local"), 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(p, ".assay-local", "nonce"), []byte(extra+"\n"), 0o644))
+			require.NoError(t, os.MkdirAll(filepath.Join(p, ".slaw-local"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(p, ".slaw-local", "nonce"), []byte(extra+"\n"), 0o644))
 		}
 	}
 	open := func() Workspace {
@@ -1002,7 +1002,7 @@ func TestRecloneAtSamePathDoesNotInheritLocalSettings(t *testing.T) {
 
 	mk("")
 	ws := open()
-	assert.FileExists(t, filepath.Join(p, ".assay-local", "nonce"), "the first open makes the folder's mark")
+	assert.FileExists(t, filepath.Join(p, ".slaw-local", "nonce"), "the first open makes the folder's mark")
 	require.NoError(t, ws.SaveLocal(LocalConfig{
 		Agent:       LocalAgent{Sandbox: SandboxFull, AskBeforeWrites: Bool(false)},
 		SignIn:      map[string]string{"shared": "env:MINE"},
@@ -1042,17 +1042,17 @@ func TestRecloneAtSamePathDoesNotInheritLocalSettings(t *testing.T) {
 func TestHandWrittenLocalSettingsAreAdoptedAndStamped(t *testing.T) {
 	cfg := t.TempDir()
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "slaw.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	probe, err := Open(dir, WithConfigDir(cfg), WithUserConfig(UserConfig{Version: 1}))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(probe.LocalConfigPath()), 0o700))
 	require.NoError(t, os.WriteFile(probe.LocalConfigPath(), []byte("agent: {sandbox: read-only}\n"), 0o600))
-	require.NoError(t, os.RemoveAll(filepath.Join(dir, ".assay-local")))
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, ".slaw-local")))
 	ws, err := Open(dir, WithConfigDir(cfg), WithUserConfig(UserConfig{Version: 1}))
 	require.NoError(t, err)
 	assert.True(t, ws.LocalTrusted())
 	assert.Equal(t, SandboxReadOnly, ws.Policy().Sandbox)
-	assert.FileExists(t, filepath.Join(dir, ".assay-local", "nonce"))
+	assert.FileExists(t, filepath.Join(dir, ".slaw-local", "nonce"))
 	require.NoError(t, ws.SaveLocal(ws.Local()))
 	data, _ := os.ReadFile(ws.LocalConfigPath())
 	assert.Contains(t, string(data), "nonce:")
@@ -1114,7 +1114,7 @@ func TestOpenNeverRewritesTheNonce(t *testing.T) {
 		require.NoError(t, err)
 		return ws
 	}
-	nonceFile := filepath.Join(root, ".assay-local", "nonce")
+	nonceFile := filepath.Join(root, ".slaw-local", "nonce")
 
 	ws := open()
 	first, err := os.ReadFile(nonceFile)

@@ -227,8 +227,8 @@ func TestAPIScript(t *testing.T) {
 	js := APIScript(params, nil)
 	assert.NotContains(t, js, "</script", "params arrive as a string literal handed to JSON.parse")
 	assert.NotContains(t, js, "eval(")
-	assert.Contains(t, js, "window.webkit.messageHandlers.assay")
-	assert.Contains(t, js, `Object.defineProperty(window, 'assay'`)
+	assert.Contains(t, js, "window.webkit.messageHandlers.slaw")
+	assert.Contains(t, js, `Object.defineProperty(window, 'slaw'`)
 	assert.Contains(t, js, `var CAPS = parse("[]")`, "no capability is granted unless Studio names it")
 	assert.NotContains(t, APIScript(params, []string{"</script>"}), "</script", "caps arrive as a string literal too")
 	assert.NotContains(t, js, "@PARAMS@")
@@ -237,9 +237,9 @@ func TestAPIScript(t *testing.T) {
 
 func TestReplyScript(t *testing.T) {
 	ok := ReplyScript(7, true, []byte(`{"__proto__":{"x":1}}`), "")
-	assert.True(t, strings.HasPrefix(ok, "window.__assayReply(7,true,JSON.parse(\""), "the result is data handed to JSON.parse: %s", ok)
+	assert.True(t, strings.HasPrefix(ok, "window.__slawReply(7,true,JSON.parse(\""), "the result is data handed to JSON.parse: %s", ok)
 	bad := ReplyScript(7, false, nil, CodeLimit)
-	assert.Equal(t, `window.__assayReply(7,false,"limit")`, bad)
+	assert.Equal(t, `window.__slawReply(7,false,"limit")`, bad)
 }
 
 func TestPutPushAndUploadShapes(t *testing.T) {
@@ -277,7 +277,7 @@ func TestPutPushAndUploadShapes(t *testing.T) {
 
 func TestEventScriptHandsDataOverAsALiteral(t *testing.T) {
 	js := EventScript("state", []byte(`{"key":"</script>","value":{"__proto__":1}}`))
-	assert.True(t, strings.HasPrefix(js, `window.__assayEvent("state",JSON.parse("`), js)
+	assert.True(t, strings.HasPrefix(js, `window.__slawEvent("state",JSON.parse("`), js)
 	assert.NotContains(t, js, "</script")
 }
 

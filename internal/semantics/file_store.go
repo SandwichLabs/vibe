@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
 // FileStore keeps definitions under a workspace root:

@@ -3,16 +3,16 @@ package notebooks
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
 )
 
 // Extension is the notebook file extension.
-const Extension = ".asnb"
+const Extension = ".slnb"
 
 // Dir is the workspace-relative directory notebooks live in.
 const Dir = "notebooks"
 
-// fileDoc is the on-disk shape of a .asnb file. It deliberately omits id (the
+// fileDoc is the on-disk shape of a .slnb file. It deliberately omits id (the
 // file stem is the id, so a `git mv` is a rename and nothing inside the file
 // can disagree with it), updatedAt (the file's mtime; a timestamp inside the
 // file would dirty the diff on every save) and rev (derived from the bytes).
@@ -24,7 +24,7 @@ type fileDoc struct {
 	Cells         []Cell `json:"cells"`
 }
 
-// EncodeFile renders a notebook as .asnb bytes: pretty JSON, 2-space indent,
+// EncodeFile renders a notebook as .slnb bytes: pretty JSON, 2-space indent,
 // no HTML escaping (a "<" in SQL stays a "<" in the diff), keys in a fixed
 // order, cell ids preserved, a trailing newline. Outputs are never persisted.
 func EncodeFile(nb Notebook) ([]byte, error) {

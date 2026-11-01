@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/session"
 	"path/filepath"
 	"strings"
 )
@@ -32,7 +32,7 @@ func (s Source) kind() (string, error) {
 // stageTable is the fixed TEMP table name the whole import pipeline stages
 // into. It lives on a single pinned *sql.Conn (container/duckdb.go's pool is
 // unbounded, and TEMP tables are per-connection) — see stage's doc comment.
-const stageTable = "_assay_import_stage"
+const stageTable = "_slaw_import_stage"
 
 // stagedCol describes one column of the staged file: its header as written
 // in the file, the DuckDB type it actually landed as in the stage table
@@ -50,7 +50,7 @@ type stagedCol struct {
 	Promote     bool
 }
 
-// stage reads the whole file into a fresh TEMP TABLE _assay_import_stage on
+// stage reads the whole file into a fresh TEMP TABLE _slaw_import_stage on
 // conn, with an added row_number() OVER () AS __row column that preserves
 // file order for every downstream INSERT ... ORDER BY __row.
 //

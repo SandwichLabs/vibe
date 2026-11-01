@@ -94,9 +94,9 @@ export function useConnectionForm() {
   const primarySecret = computed(() => secretCreds.value[0]?.name ?? '')
   const needsSignIn = computed(() => credFields.value.length > 0)
 
-  const methodString = computed(() => (method.value === 'env' ? `env:${envPrefix.value.trim() || 'ASSAY'}` : method.value === 'aws-sso' ? `aws-sso:${ssoProfile.value}` : method.value))
+  const methodString = computed(() => (method.value === 'env' ? `env:${envPrefix.value.trim() || 'SLAW'}` : method.value === 'aws-sso' ? `aws-sso:${ssoProfile.value}` : method.value))
   const envVars = computed(() => {
-    const p = envPrefix.value.trim() || 'ASSAY'
+    const p = envPrefix.value.trim() || 'SLAW'
     const known = new Map((status.value?.env ?? []).map((e) => [e.name, e.set]))
     return credFields.value.map((c) => {
       const n = `${p}_${CRED_ENV_SUFFIX[c.name] ?? c.name.toUpperCase()}`

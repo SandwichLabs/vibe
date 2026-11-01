@@ -5,8 +5,8 @@
 // key_id, secret, fingerprint, server}); where it lives is the per-person
 // sign-in method:
 //
-//   - keychain: the OS keychain through go-keyring (service "assay", or
-//     $ASSAY_KEYRING_SERVICE). Every call has a timeout, because a locked
+//   - keychain: the OS keychain through go-keyring (service "slaw", or
+//     $SLAW_KEYRING_SERVICE). Every call has a timeout, because a locked
 //     Secret Service collection can block forever.
 //   - env:PREFIX: environment variables, read-only. PREFIX_USER,
 //     PREFIX_PASSWORD, PREFIX_TOKEN, PREFIX_KEY_ID and PREFIX_SECRET fill the

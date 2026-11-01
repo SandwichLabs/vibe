@@ -23,7 +23,7 @@ func helperHolder(t *testing.T, root string, extraEnv ...string) *exec.Cmd {
 	t.Helper()
 	ready := filepath.Join(t.TempDir(), "ready")
 	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperHoldHub$")
-	cmd.Env = append(os.Environ(), append([]string{"ASSAY_HUB_TEST_ROOT=" + root, "ASSAY_HUB_TEST_READY=" + ready}, extraEnv...)...)
+	cmd.Env = append(os.Environ(), append([]string{"SLAW_HUB_TEST_ROOT=" + root, "SLAW_HUB_TEST_READY=" + ready}, extraEnv...)...)
 	cmd.Stderr = os.Stderr
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
@@ -38,14 +38,14 @@ func helperHolder(t *testing.T, root string, extraEnv ...string) *exec.Cmd {
 // helperHolder. It takes the hub, optionally releasable (exits 0 after
 // releasing when asked to), and sleeps.
 func TestHelperHoldHub(t *testing.T) {
-	root := os.Getenv("ASSAY_HUB_TEST_ROOT")
+	root := os.Getenv("SLAW_HUB_TEST_ROOT")
 	if root == "" {
 		t.Skip("not a helper invocation")
 	}
 	released := make(chan struct{})
 	var opts []Option
 	holdCh := make(chan *Hold, 1)
-	if os.Getenv("ASSAY_HUB_TEST_RELEASABLE") != "" {
+	if os.Getenv("SLAW_HUB_TEST_RELEASABLE") != "" {
 		opts = append(opts, WithReleaseHandler(func() {
 			h := <-holdCh // the handler can fire as soon as the lock is visible
 			_ = h.Release()
@@ -55,17 +55,17 @@ func TestHelperHoldHub(t *testing.T) {
 	hold, err := acquireAt(root, "Helper App", opts...)
 	require.NoError(t, err)
 	holdCh <- hold
-	if os.Getenv("ASSAY_HUB_TEST_MCP") != "" {
+	if os.Getenv("SLAW_HUB_TEST_MCP") != "" {
 		require.NoError(t, hold.SetMCP(&MCPEndpoint{URL: "http://127.0.0.1:1/sse", Token: "helper-secret"}))
 	}
-	require.NoError(t, os.WriteFile(os.Getenv("ASSAY_HUB_TEST_READY"), nil, 0o600))
+	require.NoError(t, os.WriteFile(os.Getenv("SLAW_HUB_TEST_READY"), nil, 0o600))
 	select {
 	case <-released:
-		if os.Getenv("ASSAY_HUB_TEST_RESPAWN") != "" {
+		if os.Getenv("SLAW_HUB_TEST_RESPAWN") != "" {
 			// An auto-reconnecting client: a new releasable owner appears the
 			// moment the old one lets go.
 			child := exec.Command(os.Args[0], "-test.run", "^TestHelperHoldHub$")
-			child.Env = append(filterEnv(os.Environ(), "ASSAY_HUB_TEST_RESPAWN"), "ASSAY_HUB_TEST_READY="+os.Getenv("ASSAY_HUB_TEST_READY")+".child")
+			child.Env = append(filterEnv(os.Environ(), "SLAW_HUB_TEST_RESPAWN"), "SLAW_HUB_TEST_READY="+os.Getenv("SLAW_HUB_TEST_READY")+".child")
 			_ = child.Start()
 		}
 		os.Exit(0)
@@ -85,36 +85,36 @@ func filterEnv(env []string, drop string) []string {
 
 func TestAcquireContendRelease(t *testing.T) {
 	ws := newWorkspace(t)
-	hold, err := AcquireHub(ws, "Assay")
+	hold, err := AcquireHub(ws, "Slaw")
 	require.NoError(t, err)
 
 	fi, err := os.Stat(LockPath(ws.Root()))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm(), "the hub lock is private")
 
-	_, err = AcquireHub(ws, "assay mcp serve")
+	_, err = AcquireHub(ws, "slaw mcp serve")
 	var held *HeldError
 	require.ErrorAs(t, err, &held)
 	assert.ErrorIs(t, err, ErrHubHeld)
 	require.NotNil(t, held.Holder)
-	assert.Equal(t, "Assay", held.Holder.App)
+	assert.Equal(t, "Slaw", held.Holder.App)
 	assert.Equal(t, os.Getpid(), held.Holder.PID)
-	assert.Contains(t, err.Error(), "Assay (pid")
+	assert.Contains(t, err.Error(), "Slaw (pid")
 
 	require.NoError(t, hold.Release())
 	_, statErr := os.Stat(LockPath(ws.Root()))
 	assert.True(t, os.IsNotExist(statErr), "release removes the lock file")
 
-	again, err := AcquireHub(ws, "assay mcp serve")
+	again, err := AcquireHub(ws, "slaw mcp serve")
 	require.NoError(t, err)
 	require.NoError(t, again.Release())
 }
 
 func TestCrashedHolderLeavesNoLock(t *testing.T) {
 	ws := newWorkspace(t)
-	cmd := helperHolder(t, ws.Root(), "ASSAY_HUB_TEST_MCP=1")
+	cmd := helperHolder(t, ws.Root(), "SLAW_HUB_TEST_MCP=1")
 
-	_, err := AcquireHub(ws, "Assay")
+	_, err := AcquireHub(ws, "Slaw")
 	var held *HeldError
 	require.ErrorAs(t, err, &held)
 	require.NotNil(t, held.Holder)
@@ -131,7 +131,7 @@ func TestCrashedHolderLeavesNoLock(t *testing.T) {
 	_, err = ReadHolder(ws.Root())
 	assert.ErrorIs(t, err, ErrNotHeld)
 
-	hold, err := AcquireHub(ws, "Assay")
+	hold, err := AcquireHub(ws, "Slaw")
 	require.NoError(t, err, "the kernel lock died with the process")
 	defer hold.Release() //nolint:errcheck
 	assert.Nil(t, hold.Holder().MCP, "the new owner starts with no endpoint")
@@ -142,13 +142,13 @@ func TestReadHolder(t *testing.T) {
 	_, err := ReadHolder(ws.Root())
 	assert.ErrorIs(t, err, ErrNotHeld)
 
-	hold, err := AcquireHub(ws, "Assay")
+	hold, err := AcquireHub(ws, "Slaw")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
 	h, err := ReadHolder(ws.Root())
 	require.NoError(t, err)
-	assert.Equal(t, "Assay", h.App)
+	assert.Equal(t, "Slaw", h.App)
 	assert.Nil(t, h.MCP)
 
 	ep := &MCPEndpoint{URL: "http://127.0.0.1:4242/sse", Token: "s3cret"}
@@ -168,7 +168,7 @@ func TestReadHolder(t *testing.T) {
 
 func TestReadHolderRefusesUntrustedFiles(t *testing.T) {
 	ws := newWorkspace(t)
-	hold, err := AcquireHub(ws, "Assay")
+	hold, err := AcquireHub(ws, "Slaw")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 	require.NoError(t, hold.SetMCP(&MCPEndpoint{URL: "http://127.0.0.1:4242/sse", Token: "s3cret"}))
@@ -209,15 +209,15 @@ func TestReadHolderRefusesUntrustedFiles(t *testing.T) {
 }
 
 func TestACommittedLockFileIsNeverTrusted(t *testing.T) {
-	// A cloned repository can ship a .assay-local/hub.lock pointing anywhere.
+	// A cloned repository can ship a .slaw-local/hub.lock pointing anywhere.
 	// With nobody holding the lock it is ignored, whatever it says.
 	ws := newWorkspace(t)
 	require.NoError(t, os.MkdirAll(filepath.Dir(LockPath(ws.Root())), 0o755))
-	evil, _ := json.Marshal(Holder{App: "Assay", PID: 1, MCP: &MCPEndpoint{URL: "http://127.0.0.1:9/sse", Token: "x"}})
+	evil, _ := json.Marshal(Holder{App: "Slaw", PID: 1, MCP: &MCPEndpoint{URL: "http://127.0.0.1:9/sse", Token: "x"}})
 	require.NoError(t, os.WriteFile(LockPath(ws.Root()), evil, 0o600))
 	_, err := ReadHolder(ws.Root())
 	assert.ErrorIs(t, err, ErrNotHeld)
-	hold, err := AcquireHub(ws, "assay mcp serve")
+	hold, err := AcquireHub(ws, "slaw mcp serve")
 	require.NoError(t, err)
 	require.NoError(t, hold.Release())
 }
@@ -234,7 +234,7 @@ func TestRequestReleaseRefusals(t *testing.T) {
 
 	assert.ErrorIs(t, RequestRelease(ws), ErrNotHeld, "nothing to release")
 
-	hold, err := AcquireHub(ws, "Assay") // this process, no release handler
+	hold, err := AcquireHub(ws, "Slaw") // this process, no release handler
 	require.NoError(t, err)
 	err = RequestRelease(ws)
 	require.Error(t, err)
@@ -251,16 +251,16 @@ func TestRequestReleaseRefusals(t *testing.T) {
 
 func TestTakeOver(t *testing.T) {
 	ws := newWorkspace(t)
-	cmd := helperHolder(t, ws.Root(), "ASSAY_HUB_TEST_RELEASABLE=1")
+	cmd := helperHolder(t, ws.Root(), "SLAW_HUB_TEST_RELEASABLE=1")
 
 	h, err := ReadHolder(ws.Root())
 	require.NoError(t, err)
 	assert.Equal(t, ControlSigusr1, h.Control)
 
-	hold, err := TakeOver(t.Context(), ws, "Assay", 10*time.Second)
+	hold, err := TakeOver(t.Context(), ws, "Slaw", 10*time.Second)
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
-	assert.Equal(t, "Assay", hold.Holder().App)
+	assert.Equal(t, "Slaw", hold.Holder().App)
 	assert.Equal(t, os.Getpid(), hold.Holder().PID)
 
 	// The old owner released and exited cleanly.
@@ -277,7 +277,7 @@ func TestTakeOver(t *testing.T) {
 func TestTakeOverRefusedWhenNotReleasable(t *testing.T) {
 	ws := newWorkspace(t)
 	helperHolder(t, ws.Root()) // holds, cannot be released
-	_, err := TakeOver(t.Context(), ws, "Assay", 300*time.Millisecond)
+	_, err := TakeOver(t.Context(), ws, "Slaw", 300*time.Millisecond)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrNotReleasable)
 	assert.Contains(t, err.Error(), "Helper App")
@@ -285,21 +285,21 @@ func TestTakeOverRefusedWhenNotReleasable(t *testing.T) {
 
 func TestTakeOverWhenFree(t *testing.T) {
 	ws := newWorkspace(t)
-	hold, err := TakeOver(t.Context(), ws, "Assay", time.Second)
+	hold, err := TakeOver(t.Context(), ws, "Slaw", time.Second)
 	require.NoError(t, err)
 	require.NoError(t, hold.Release())
 }
 
 func TestTakeOverAsksTheOwnerThatAppearsNext(t *testing.T) {
 	ws := newWorkspace(t)
-	helperHolder(t, ws.Root(), "ASSAY_HUB_TEST_RELEASABLE=1", "ASSAY_HUB_TEST_RESPAWN=1")
+	helperHolder(t, ws.Root(), "SLAW_HUB_TEST_RELEASABLE=1", "SLAW_HUB_TEST_RESPAWN=1")
 	t.Cleanup(func() {
 		// Whatever the respawned owner is, do not leave it behind.
 		if h, err := ReadHolder(ws.Root()); err == nil && h.PID != os.Getpid() {
 			_ = syscall.Kill(h.PID, syscall.SIGKILL)
 		}
 	})
-	hold, err := TakeOver(t.Context(), ws, "Assay", 15*time.Second)
+	hold, err := TakeOver(t.Context(), ws, "Slaw", 15*time.Second)
 	require.NoError(t, err, "the second owner was asked to release too")
 	defer hold.Release() //nolint:errcheck
 }
@@ -307,7 +307,7 @@ func TestTakeOverAsksTheOwnerThatAppearsNext(t *testing.T) {
 func mkRoot(t *testing.T) string {
 	t.Helper()
 	r := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(r, ".assay-local"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(r, ".slaw-local"), 0o700))
 	return r
 }
 

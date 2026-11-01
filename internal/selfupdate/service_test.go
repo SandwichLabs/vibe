@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 )
 
 func newService(t *testing.T, f *fakeGH, version string, opts ...Option) (*Service, *prefs.Recents) {
@@ -87,7 +87,7 @@ func TestService_CheckNowIgnoresTheChoiceAndSkipRoundTrips(t *testing.T) {
 
 func TestService_DevHookActsLikeAReleaseBuild(t *testing.T) {
 	f := newFakeGH(t)
-	env := map[string]string{"ASSAY_UPDATE_BASE_URL": f.srv.URL, "ASSAY_UPDATE_PRETEND_VERSION": "v0.1.0"}
+	env := map[string]string{"SLAW_UPDATE_BASE_URL": f.srv.URL, "SLAW_UPDATE_PRETEND_VERSION": "v0.1.0"}
 	svc, _ := newService(t, f, "dev", WithGetenv(func(k string) string { return env[k] }))
 	assert.True(t, svc.State().NeedsConsent)
 	res, err := svc.CheckNow(context.Background())

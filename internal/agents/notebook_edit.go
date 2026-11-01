@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
-	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/notebooks"
 )
 
 // --- add_markdown_cell / update_cell / delete_cell / move_cell (#220) ---

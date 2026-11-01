@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/engine"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/storageglob"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/engine"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/storageglob"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // Wildcards on s3, gcs and r2 (#138 follow-up) against a real S3-compatible
-// store: Assay lists the matching objects in a private session and the hub reads
+// store: Slaw lists the matching objects in a private session and the hub reads
 // the list as literal keys.
 func TestS3WildcardsAreExpandedOnMinIO(t *testing.T) {
 	ep := startMinIO(t)

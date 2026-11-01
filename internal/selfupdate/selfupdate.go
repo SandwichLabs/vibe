@@ -1,14 +1,14 @@
-// Package selfupdate tells a person that a newer Assay release exists and, only
+// Package selfupdate tells a person that a newer Slaw release exists and, only
 // when they confirm, upgrades by running that release's own install.sh.
 //
 // Nothing here runs in the background on its own: the callers (Studio's startup
-// check, `assay update`, Settings > About) decide when to look, and the person
+// check, `slaw update`, Settings > About) decide when to look, and the person
 // decides whether to install. The one network surface is plain HTTPS GETs to
 // github.com (the latest-release redirect, install.sh and checksums.txt) and
 // api.github.com (release notes, best effort), with a fixed User-Agent and no
 // cookies, tokens, identifiers or workspace data (docs/privacy.md).
 //
-// Only an Assay that the installer put there is updatable: the installer's
+// Only a Slaw that the installer put there is updatable: the installer's
 // manifest (see manifest.go) must list the running executable. Anything else
 // (a dev build, `go install`, a package manager) is told to update the way it
 // was installed.
@@ -24,32 +24,32 @@ import (
 
 const (
 	// Repo is the GitHub repository releases are read from.
-	Repo = "SandwichLabs/assay"
+	Repo = "SandwichLabs/slaw"
 
 	defaultWebBase = "https://github.com"
 	defaultAPIBase = "https://api.github.com"
 
-	userAgent = "assay-update"
+	userAgent = "slaw-update"
 
 	// Dev-only QA hooks. They are read only when the binary's version is "dev"
 	// (a release build ignores both), so a release can never be pointed at a
 	// different server by its environment.
-	envBaseURL        = "ASSAY_UPDATE_BASE_URL"
-	envPretendVersion = "ASSAY_UPDATE_PRETEND_VERSION"
+	envBaseURL        = "SLAW_UPDATE_BASE_URL"
+	envPretendVersion = "SLAW_UPDATE_PRETEND_VERSION"
 )
 
-// Managed says who installed the running Assay.
+// Managed says who installed the running Slaw.
 const (
 	ManagedInstaller = "installer" // install.sh put it there: updatable
 	ManagedExternal  = "external"  // anything else: notify only
 )
 
-// ExternalNote is shown when the running Assay is not an installer-managed one.
-const ExternalNote = "Installed outside the Assay installer (dev build, `go install`, or a package manager); update it the way you installed it."
+// ExternalNote is shown when the running Slaw is not an installer-managed one.
+const ExternalNote = "Installed outside the Slaw installer (dev build, `go install`, or a package manager); update it the way you installed it."
 
 // Errors callers can match.
 var (
-	ErrExternal     = errors.New("this Assay was not installed by the Assay installer; update it the way you installed it")
+	ErrExternal     = errors.New("this Slaw was not installed by the Slaw installer; update it the way you installed it")
 	ErrApplyRunning = errors.New("an update is already running")
 	ErrBadTag       = errors.New("not a release version")
 	ErrNotNewer     = errors.New("that version is not newer than this one")
@@ -61,7 +61,7 @@ type Updater struct {
 	current  string // what to compare against (version, or the dev-hook pretend value)
 	webBase  string
 	apiBase  string
-	dlBase   string // when set, handed to install.sh as ASSAY_DOWNLOAD_BASE (tests, dev hook)
+	dlBase   string // when set, handed to install.sh as SLAW_DOWNLOAD_BASE (tests, dev hook)
 	insecure bool   // allow http:// (tests and the dev hook only)
 	hosts    map[string]bool
 	client   *http.Client
@@ -111,7 +111,7 @@ func WithHomeDir(f func() (string, error)) Option { return func(u *Updater) { u.
 // WithExecutable replaces os.Executable.
 func WithExecutable(f func() (string, error)) Option { return func(u *Updater) { u.exe = f } }
 
-// WithDownloadBase tells install.sh where release assets live (ASSAY_DOWNLOAD_BASE),
+// WithDownloadBase tells install.sh where release assets live (SLAW_DOWNLOAD_BASE),
 // as a template: "%s" is replaced by the tag. Tests and the dev hook only.
 func WithDownloadBase(tmpl string) Option { return func(u *Updater) { u.dlBase = tmpl } }
 

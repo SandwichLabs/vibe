@@ -11,8 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/repl"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/repl"
 )
 
 // replCmd is the terminal driver of the data console engine (internal/repl):
@@ -23,12 +23,12 @@ var replCmd = &cobra.Command{
 	Use:   "repl",
 	Short: "An interactive SQL console on the workspace hub (Studio's console, in the terminal)",
 	Long: `An interactive SQL console on the workspace's DuckDB session: the engine of
-Studio's Console tab (Query Explorer), driven from this terminal. It is Assay's own REPL, not a
+Studio's Console tab (Query Explorer), driven from this terminal. It is Slaw's own REPL, not a
 shell and not the duckdb binary: statements take the same checks and the same
 lazy attach as the Query Explorer, and dot commands are a closed set (.help).
 Statements end with ';'. Ctrl+C cancels the running statement, Ctrl+D exits.
 It needs a terminal on standard input. History is kept per workspace in
-.assay-local/repl/history; see ` + docRef("console"),
+.slaw-local/repl/history; see ` + docRef("console"),
 	Args:         cobra.NoArgs,
 	RunE:         runREPL,
 	SilenceUsage: true,
@@ -50,10 +50,10 @@ func runREPL(cmd *cobra.Command, _ []string) error {
 	}
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
-		return fmt.Errorf("assay repl needs a terminal")
+		return fmt.Errorf("slaw repl needs a terminal")
 	}
 
-	o, err := openWorkspace(ctx, dir, false, false, "assay repl", errW)
+	o, err := openWorkspace(ctx, dir, false, false, "slaw repl", errW)
 	if err != nil {
 		return err
 	}

@@ -22,30 +22,30 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/lsp"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/lsp"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // releaseGrace is how long a hub release request waits, after telling the
 // frontend, for it to flush open notebooks before the workspace is closed.
 const releaseGrace = 400 * time.Millisecond
 
-// legacyAssayMessage is what Studio says about a .assay file.
-const legacyAssayMessage = ".assay files are bundles: use Import .assay… to bring one into a workspace. Open a workspace folder to work in it."
+// legacySlawMessage is what Studio says about a .slaw file.
+const legacySlawMessage = ".slaw files are bundles: use Import .slaw… to bring one into a workspace. Open a workspace folder to work in it."
 
 // HolderInfo says which process owns the workspace's hub.
 type HolderInfo struct {
 	App       string `json:"app"`
 	PID       int    `json:"pid"`
 	ServesMCP bool   `json:"servesMcp"`
-	Text      string `json:"text"` // "assay mcp serve (pid 4182)"
+	Text      string `json:"text"` // "slaw mcp serve (pid 4182)"
 }
 
 // OpenWorkspaceResult is what open, create and switch return.
 type OpenWorkspaceResult struct {
-	// Status is "opened" or "not-workspace" (the folder has no assay.yaml: the
+	// Status is "opened" or "not-workspace" (the folder has no slaw.yaml: the
 	// UI asks "Make this folder a workspace?" and calls CreateWorkspace in
 	// place).
 	Status   string         `json:"status"`
@@ -65,7 +65,7 @@ const (
 // OpenWorkspace opens the workspace folder at path (or the one that contains
 // it). When another process owns the workspace's database the folder opens
 // read-only and the event "workspace:locked" says who; the UI offers Take
-// over. A folder with no assay.yaml returns Status "not-workspace": the UI asks
+// over. A folder with no slaw.yaml returns Status "not-workspace": the UI asks
 // before calling CreateWorkspace in place.
 func (a *App) OpenWorkspace(path string) (*OpenWorkspaceResult, error) {
 	return a.open(path, openAuto)
@@ -73,8 +73,8 @@ func (a *App) OpenWorkspace(path string) (*OpenWorkspaceResult, error) {
 
 func (a *App) open(path string, mode openMode) (*OpenWorkspaceResult, error) {
 	path = strings.TrimSpace(path)
-	if strings.EqualFold(filepath.Ext(path), ".assay") {
-		return nil, errors.New(legacyAssayMessage)
+	if strings.EqualFold(filepath.Ext(path), ".slaw") {
+		return nil, errors.New(legacySlawMessage)
 	}
 	if path == "" {
 		return nil, errors.New("Choose a folder to open.")
@@ -273,7 +273,7 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	a.emitEvent("workspace:closed", map[string]any{"path": root, "reason": reason})
 }
 
-// onReleaseRequested runs when another process (`assay mcp serve`) asks Studio
+// onReleaseRequested runs when another process (`slaw mcp serve`) asks Studio
 // to let go of the workspace. It tells the frontend first so open notebooks are
 // saved, then closes the workspace, which releases the hub; the window returns
 // to the launcher.
@@ -357,7 +357,7 @@ func (a *App) startWatcherLocked() {
 func (a *App) onDiskChange(ws workspace.Workspace, ch workspace.Change) {
 	if ch.Kind == workspace.KindConfig {
 		if err := ws.Reload(); err != nil {
-			a.logger.Warn("assay.yaml changed on disk but could not be reloaded", "error", err)
+			a.logger.Warn("slaw.yaml changed on disk but could not be reloaded", "error", err)
 		} else {
 			// A host changed by a git pull must not keep using the old
 			// registration (and the old credential binding).

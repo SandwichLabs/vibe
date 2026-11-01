@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/semantics"
 )
 
 var t0 = time.Date(2026, 10, 29, 15, 30, 12, 0, time.UTC)
@@ -303,7 +303,7 @@ func TestFileStore_LivesInLocalDirAndNeverUnderSemantics(t *testing.T) {
 	props := NewFileStore(root)
 	p := mustBuild(t, metricDraft())
 	require.NoError(t, props.Create(context.Background(), p))
-	_, err := os.Stat(filepath.Join(root, ".assay-local", "proposals", p.ID+".yaml"))
+	_, err := os.Stat(filepath.Join(root, ".slaw-local", "proposals", p.ID+".yaml"))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(root, "semantics"))
 	assert.True(t, os.IsNotExist(err), "proposing writes nothing under semantics/")

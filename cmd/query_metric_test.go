@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/hub"
-	"github.com/SandwichLabs/assay/internal/queries"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/hub"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // metricWorkspace is a workspace with a table, a saved query and a hand-written
@@ -22,7 +22,7 @@ import (
 func metricWorkspace(t *testing.T) string {
 	t.Helper()
 	root := newWS(t)
-	_, stderr, err := runAssay("query", "--workspace", root, "CREATE TABLE sales AS SELECT * FROM (VALUES ('east', 1, 10), ('east', 2, 20), ('west', 1, 5), ('west', 2, 1)) t(region, month, amount)")
+	_, stderr, err := runSlaw("query", "--workspace", root, "CREATE TABLE sales AS SELECT * FROM (VALUES ('east', 1, 10), ('east', 2, 20), ('west', 1, 5), ('west', 2, 1)) t(region, month, amount)")
 	require.NoError(t, err, stderr)
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
@@ -44,17 +44,17 @@ func seedMetricFile(t *testing.T, root, name, body string) {
 
 func TestQuery_HandWrittenMetricRuns(t *testing.T) {
 	root := metricWorkspace(t)
-	out, stderr, err := runAssay("query", "--workspace", root, "--format", "csv",
+	out, stderr, err := runSlaw("query", "--workspace", root, "--format", "csv",
 		"SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "region,net_revenue\neast,30\nwest,5\n", out, "the saved query's default $min = 2 applied")
 	assert.Contains(t, stderr, "expanded 1 metric: net_revenue")
 
-	out, stderr, err = runAssay("query", "--workspace", root, "--format", "csv", "SELECT metric('net_revenue') AS total")
+	out, stderr, err = runSlaw("query", "--workspace", root, "--format", "csv", "SELECT metric('net_revenue') AS total")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "total\n35\n", out)
 
-	out, _, err = runAssay("query", "--workspace", root, "--format", "csv", "SELECT * FROM metric('net_revenue', by => ['month', 'region']) WHERE net_revenue > 10")
+	out, _, err = runSlaw("query", "--workspace", root, "--format", "csv", "SELECT * FROM metric('net_revenue', by => ['month', 'region']) WHERE net_revenue > 10")
 	require.NoError(t, err)
 	assert.Equal(t, "month,region,net_revenue\n2,east,20\n", out)
 }
@@ -68,7 +68,7 @@ func TestQuery_MetricRefusalsAreReadable(t *testing.T) {
 		"SELECT * FROM metric('net_revenue', by => 'region'; DROP x)":  `metric(): the call is missing its closing parenthesis`,
 		"SELECT * FROM metric('net_revenue') WHERE net_revenue > $min": `$min belongs to metric net_revenue's saved query; it can't be used outside metric()`,
 	} {
-		_, _, err := runAssay("query", "--workspace", root, q)
+		_, _, err := runSlaw("query", "--workspace", root, q)
 		require.Error(t, err, q)
 		assert.Contains(t, err.Error(), want, q)
 	}
@@ -78,10 +78,10 @@ func TestQuery_MetricRefusalsAreReadable(t *testing.T) {
 	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "sneaky", Title: "Sneaky", SQL: "WITH x AS (SELECT 1 AS amount) INSERT INTO sales SELECT 'z', 9, amount FROM x"}))
 	require.NoError(t, ws.Close())
 	seedMetricFile(t, root, "sneaky", "version: 1\nname: sneaky\nquery: sneaky\nmeasure: count(*)\n")
-	_, _, err = runAssay("query", "--workspace", root, "SELECT * FROM metric('sneaky')")
+	_, _, err = runSlaw("query", "--workspace", root, "SELECT * FROM metric('sneaky')")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a plain read")
-	out, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM sales")
+	out, _, err := runSlaw("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM sales")
 	require.NoError(t, err)
 	assert.Equal(t, "n\n4\n", out)
 }
@@ -98,13 +98,13 @@ func TestQuery_HostileClonedMetricIsRefused(t *testing.T) {
 	require.NoError(t, ws.Close())
 	seedMetricFile(t, root, "pv", "version: 1\nname: pv\nquery: pv_base\nmeasure: sum(amount)\n")
 	for _, args := range [][]string{{"--read-only"}, {}} {
-		out, _, err := runAssay(append(append([]string{"query", "--workspace", root}, args...), "SELECT metric('pv')")...)
+		out, _, err := runSlaw(append(append([]string{"query", "--workspace", root}, args...), "SELECT metric('pv')")...)
 		require.Error(t, err, args)
 		assert.Contains(t, err.Error(), "metric 'pv' is refused")
 		assert.NotContains(t, out, "99")
 	}
 	// The person's own SQL outside a metric is not held to the policy.
-	out, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM read_csv('"+outside+"')")
+	out, _, err := runSlaw("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM read_csv('"+outside+"')")
 	require.NoError(t, err)
 	assert.Equal(t, "n\n1\n", out)
 }
@@ -112,34 +112,34 @@ func TestQuery_HostileClonedMetricIsRefused(t *testing.T) {
 func TestExport_SQLExpandsMetricAndRefusesInstall(t *testing.T) {
 	root := metricWorkspace(t)
 	dst := filepath.Join(t.TempDir(), "m.csv")
-	_, stderr, err := runAssay("export", "--workspace", root, "--sql", "SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region", "-o", dst)
+	_, stderr, err := runSlaw("export", "--workspace", root, "--sql", "SELECT * FROM metric('net_revenue', by => 'region') ORDER BY region", "-o", dst)
 	require.NoError(t, err, stderr)
 	b, err := os.ReadFile(dst)
 	require.NoError(t, err)
 	assert.Equal(t, "region,net_revenue\neast,30\nwest,5\n", string(b))
 
-	out, stderr, err := runAssay("export", "--workspace", root, "--format", "csv", "--sql", "SELECT metric('net_revenue') AS total")
+	out, stderr, err := runSlaw("export", "--workspace", root, "--format", "csv", "--sql", "SELECT metric('net_revenue') AS total")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "total\n35\n", out)
 
 	n := filepath.Join(t.TempDir(), "n.csv")
-	_, _, err = runAssay("export", "--workspace", root, "--sql", "INSTALL httpfs", "-o", n)
+	_, _, err = runSlaw("export", "--workspace", root, "--sql", "INSTALL httpfs", "-o", n)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "INSTALL is not available here")
 	assert.NoFileExists(t, n)
 
 	// A `$` in the destination path is not a placeholder.
 	dollar := filepath.Join(t.TempDir(), "a$b.csv")
-	_, stderr, err = runAssay("export", "--workspace", root, "--sql", "SELECT metric('net_revenue') AS total", "-o", dollar)
+	_, stderr, err = runSlaw("export", "--workspace", root, "--sql", "SELECT metric('net_revenue') AS total", "-o", dollar)
 	require.NoError(t, err, stderr)
 	assert.FileExists(t, dollar)
 
 	// A statement that breaks out of COPY (...) is refused.
 	evil := filepath.Join(t.TempDir(), "e.csv")
-	_, _, err = runAssay("export", "--workspace", root, "--sql", "SELECT 1) TO '"+evil+"'; DELETE FROM sales; COPY (SELECT 1", "-o", filepath.Join(t.TempDir(), "e2.csv"))
+	_, _, err = runSlaw("export", "--workspace", root, "--sql", "SELECT 1) TO '"+evil+"'; DELETE FROM sales; COPY (SELECT 1", "-o", filepath.Join(t.TempDir(), "e2.csv"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exactly one SELECT")
-	out2, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM sales")
+	out2, _, err := runSlaw("query", "--workspace", root, "--format", "csv", "SELECT count(*) AS n FROM sales")
 	require.NoError(t, err)
 	assert.Equal(t, "n\n4\n", out2)
 }
@@ -154,7 +154,7 @@ func TestExport_HostileClonedMetricIsRefused(t *testing.T) {
 	require.NoError(t, ws.Close())
 	seedMetricFile(t, root, "pv", "version: 1\nname: pv\nquery: pv_base\nmeasure: sum(amount)\n")
 	dst := filepath.Join(t.TempDir(), "pv.csv")
-	_, _, err = runAssay("export", "--workspace", root, "--sql", "SELECT metric('pv')", "-o", dst)
+	_, _, err = runSlaw("export", "--workspace", root, "--sql", "SELECT metric('pv')", "-o", dst)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "metric 'pv' is refused")
 	assert.NoFileExists(t, dst)

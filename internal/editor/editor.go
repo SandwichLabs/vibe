@@ -1,10 +1,10 @@
 // Package editor opens SQL in the person's own editor ($VISUAL, then $EDITOR)
-// for the TUI REPL and `assay query --edit`, the way git and psql's \e do.
+// for the TUI REPL and `slaw query --edit`, the way git and psql's \e do.
 //
-// A scratch buffer lives under the workspace's .assay-local/edit/ rather than
+// A scratch buffer lives under the workspace's .slaw-local/edit/ rather than
 // the system temp directory, so an editor that finds its language-server root
-// by walking up to assay.yaml (Neovim's root_markers, Helix's roots) attaches
-// `assay lsp` to it. The editor also gets ASSAY_WORKSPACE in its environment.
+// by walking up to slaw.yaml (Neovim's root_markers, Helix's roots) attaches
+// `slaw lsp` to it. The editor also gets SLAW_WORKSPACE in its environment.
 package editor
 
 import (
@@ -16,12 +16,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/slaw/internal/filestore"
 )
 
-// EnvWorkspace names the workspace root for the editor and the `assay lsp` it
+// EnvWorkspace names the workspace root for the editor and the `slaw lsp` it
 // starts.
-const EnvWorkspace = "ASSAY_WORKSPACE"
+const EnvWorkspace = "SLAW_WORKSPACE"
 
 // Fallback is the editor used when neither $VISUAL nor $EDITOR is set.
 const Fallback = "vi"
@@ -104,7 +104,7 @@ func Check(argv []string) error {
 // ignored folder) is refused: another user could otherwise swap the buffer
 // while the editor is open and have the edited query run as the person.
 func scratchDir(root string) (string, error) {
-	dir, err := filestore.Resolve(root, filepath.ToSlash(filepath.Join(".assay-local", "edit")))
+	dir, err := filestore.Resolve(root, filepath.ToSlash(filepath.Join(".slaw-local", "edit")))
 	if err != nil {
 		return "", fmt.Errorf("refusing to use the scratch directory: %w", err)
 	}
@@ -151,7 +151,7 @@ func NewScratch(root, initial string) (string, error) {
 }
 
 // Command builds the editor process for path. root, when set, is passed to the
-// editor (and so to any `assay lsp` it starts) as ASSAY_WORKSPACE.
+// editor (and so to any `slaw lsp` it starts) as SLAW_WORKSPACE.
 func Command(argv []string, path, root string) *exec.Cmd {
 	args := append(append([]string{}, argv[1:]...), path)
 	c := exec.Command(argv[0], args...) //nolint:gosec // the person's own $EDITOR

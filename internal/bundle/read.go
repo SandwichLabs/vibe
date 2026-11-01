@@ -13,8 +13,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SandwichLabs/assay/internal/artifacts"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // item is one verified, validated entry.
@@ -36,10 +36,10 @@ type Package struct {
 	Manifest  Manifest
 	Encrypted bool
 	// Warnings are what opening noticed (a truncated notebook, a connection
-	// that was dropped); Assay's own words.
+	// that was dropped); Slaw's own words.
 	Warnings []string
 	// MakerNotes are the manifest's own warnings, written by whoever made the
-	// bundle (cleaned and bounded). They are shown apart from Assay's.
+	// bundle (cleaned and bounded). They are shown apart from Slaw's.
 	MakerNotes []string
 
 	items []item
@@ -190,7 +190,7 @@ func unpack(plain []byte) (*Package, error) {
 	case head.FormatVersion == 1:
 		return nil, ErrLegacy
 	case head.FormatVersion > FormatVersion:
-		return nil, fmt.Errorf("this bundle was made by a newer version of Assay (format %d); update Assay to open it", head.FormatVersion)
+		return nil, fmt.Errorf("this bundle was made by a newer version of Slaw (format %d); update Slaw to open it", head.FormatVersion)
 	case head.FormatVersion != FormatVersion:
 		return nil, corrupt("%s has formatVersion %d", ManifestName, head.FormatVersion)
 	}

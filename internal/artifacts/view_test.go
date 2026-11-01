@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/slaw/internal/a2ui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

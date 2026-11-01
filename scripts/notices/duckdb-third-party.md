@@ -1,13 +1,13 @@
 # DuckDB bundled components
 
-Assay links DuckDB through github.com/duckdb/duckdb-go/v2 v2.10506.0 (DuckDB v1.5.6: libduckdb_static.a plus the
+Slaw links DuckDB through github.com/duckdb/duckdb-go/v2 v2.10506.0 (DuckDB v1.5.6: libduckdb_static.a plus the
 extension archives the bindings link). DuckDB itself is MIT. The texts below are the licence files of the components
 that ship inside that library, copied verbatim from https://github.com/duckdb/duckdb at tag v1.5.6. Refresh them when
 the DuckDB version changes.
 
 The bindings' link line also names the tpch and tpcds extension archives, but the linker drops their members because
 nothing references them: duckdb_extensions() reports both as not installed, and a test (internal/buildinfo) fails if
-that ever changes. Their TPC licence therefore does not apply to Assay and is not reproduced here.
+that ever changes. Their TPC licence therefore does not apply to Slaw and is not reproduced here.
 
 ### LICENSE
 

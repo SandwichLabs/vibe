@@ -2,10 +2,10 @@
 // SqlEditor — the Query Explorer's CodeMirror editor. v-model is the SQL text;
 // `run` fires on Ctrl/Cmd+Enter (which keeps priority over the completion
 // list's own keys); `connection` is the Run-on choice completion resolves
-// unqualified names against. Notebook SQL cells mount createAssayEditor
+// unqualified names against. Notebook SQL cells mount createSlawEditor
 // themselves (useNotebookCells) and share the same completion source.
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
+import { createSlawEditor, type SlawEditorInstance } from '../composables/useSlawEditor'
 import { closeCompletion } from '@codemirror/autocomplete'
 import { sqlCompletion } from '../lib/sqlComplete'
 
@@ -13,11 +13,11 @@ const props = defineProps<{ modelValue: string; connection: string; placeholder?
 const emit = defineEmits<{ 'update:modelValue': [value: string]; run: [] }>()
 
 const el = ref<HTMLElement | null>(null)
-let editor: AssayEditorInstance | null = null
+let editor: SlawEditorInstance | null = null
 
 onMounted(() => {
   if (!el.value) return
-  editor = createAssayEditor(el.value, {
+  editor = createSlawEditor(el.value, {
     value: props.modelValue,
     lang: 'sql',
     placeholder: props.placeholder,
@@ -43,7 +43,7 @@ onBeforeUnmount(() => editor?.destroy())
 <style scoped>
 .sql-editor {
   height: 180px;
-  border: 2px solid var(--assay-border);
+  border: 2px solid var(--slaw-border);
   overflow: hidden;
 }
 .sql-editor :deep(.cm-editor) { height: 100%; }

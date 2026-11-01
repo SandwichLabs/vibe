@@ -32,7 +32,7 @@ func Fingerprint(d ConnectionDef) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, 8+len(keys))
 	parts = append(parts,
-		"assay-conn-v2",
+		"slaw-conn-v2",
 		strings.ToLower(strings.TrimSpace(d.Type)),
 		strings.ToLower(strings.TrimSpace(d.Host)),
 		strconv.Itoa(d.Port),

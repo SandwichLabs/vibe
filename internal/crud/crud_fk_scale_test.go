@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/crud"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/crud"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +45,7 @@ func TestDuckDBCRUDFKScale(t *testing.T) {
 		t.Skip("skipping FK-scale spike in -short mode")
 	}
 
-	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	t.Setenv("SLAW_CONFIG_DIR", t.TempDir())
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "fk-scale"))
 	require.NoError(t, err)
 	ws := res.Workspace

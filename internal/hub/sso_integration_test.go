@@ -28,11 +28,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
-	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
-	"github.com/SandwichLabs/assay/internal/testsupport/ssofake"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
+	"github.com/SandwichLabs/slaw/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/slaw/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // These tests are the acceptance of #131 step 6: an s3 connection signed in
@@ -194,7 +194,7 @@ func TestSSOSignedInS3ReadsALakeAndAWildcardFromMinIO(t *testing.T) {
 	c, ok := o.WS.Connection("floci")
 	require.True(t, ok)
 	assert.Equal(t, "aws-sso:dev", c.SignIn)
-	b, err := os.ReadFile(filepath.Join(root, "assay.yaml"))
+	b, err := os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "aws-sso")
 
@@ -339,13 +339,13 @@ func TestSSOSignedOutNeedsSignInEverywhereAndNeverReadsAnonymously(t *testing.T)
 	auditDirs(t, needles, root, cfg)
 }
 
-// `assay mcp serve` with an expired fake session: run_query answers with the
+// `slaw mcp serve` with an expired fake session: run_query answers with the
 // sign-in hint, at once, with no browser and no sign-in flow.
 func TestSSOMCPServeReportsNeedsSignIn(t *testing.T) {
 	miniotest.UseExtensionCache(t)
 	w := newSSOWorld(t, "", false) // signed out: no token cache at all
 	cfg := t.TempDir()
-	t.Setenv("ASSAY_CONFIG_DIR", cfg)
+	t.Setenv("SLAW_CONFIG_DIR", cfg)
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "acme"), workspace.WithInitLogger(quietLogger()))
 	require.NoError(t, err)
 	require.NoError(t, res.Workspace.Close())

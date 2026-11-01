@@ -11,7 +11,7 @@ on a pinned connection (`USE <connection>`). Unset means the workspace's `defaul
 
 A v1 notebook is a valid v2 notebook with no `connection` set: it loads
 unchanged and is stamped v2 the next time it is saved. A notebook written by a
-newer Assay (`schemaVersion` above 2) is refused. A `connection` that names no
+newer Slaw (`schemaVersion` above 2) is refused. A `connection` that names no
 known connection on this machine is **kept as written** (cells are never
 dropped, queries are never silently retargeted at the default): the cell
 fails when it runs with `unknown connection "x"`. A non-string `connection`
@@ -20,7 +20,7 @@ identifier. Studio's cell header has a **Run on** selector for it (vibe-app#117)
 the agent and imported bundles can set it too.
 
 A **Notebook** is a JSON document, one file per notebook at
-`notebooks/<id>.asnb` in the workspace folder (`workspaces.md` has the file
+`notebooks/<id>.slnb` in the workspace folder (`workspaces.md` has the file
 format, atomic writes and conflict handling): a title plus an ordered list of
 **cells**. There is no page markup, no directives, and no
 inter-cell references — the database is the only shared state. Notebooks
@@ -64,7 +64,7 @@ rows are read; over it the cell fails with "the result is too large"). A sql cel
   chart's `motion` field takes ([Motion](#motion)). Unset is the default
   spring. Only chart views use it; an invalid value is cleared with a warning,
   never a reason to drop the cell. Studio edits it from the **Motion** row
-  under the SQL. An older Assay drops the field on save.
+  under the SQL. An older Slaw drops the field on save.
 
 In Studio the SQL is hidden by default behind a "Show SQL" row, and the
 result shows first. Whether it is open is view state and is never stored. A
@@ -182,16 +182,16 @@ silently hallucinate a result the model never actually ran.
 ## Export / import
 
 `ExportNotebook` writes a notebook to a `.json` file wrapped as
-`{ "kind": "assay/notebook", "notebook": {...} }`. `ImportNotebook` reads that
+`{ "kind": "slaw/notebook", "notebook": {...} }`. `ImportNotebook` reads that
 same wrapper back — a file with a different `kind` (or no `kind` at all) is
 rejected — and re-inserts the notebook through the same whitelist rebuild
 (`Coerce`) every load goes through, so a hand-edited or newer-schema file
 can't smuggle unexpected fields into the workspace's `notebooks/` folder.
 
-To move notebooks between workspaces or people, use `assay export notebook <id>`
-and `assay import notebook <file.asnb>` (one notebook, which also accepts the
-file Studio's Export writes), or a `.assay` bundle (`assay export bundle
---notebooks a,b`, `assay import <file.assay>`, or the workspace menu in Studio);
+To move notebooks between workspaces or people, use `slaw export notebook <id>`
+and `slaw import notebook <file.slnb>` (one notebook, which also accepts the
+file Studio's Export writes), or a `.slaw` bundle (`slaw export bundle
+--notebooks a,b`, `slaw import <file.slaw>`, or the workspace menu in Studio);
 see `workspaces.md`, "Sharing without git". Those replaced the CLI
 import/export once planned in #9.
 Still planned: HTML/PDF/xlsx snapshot export (vibe-app#73).

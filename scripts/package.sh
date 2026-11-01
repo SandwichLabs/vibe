@@ -3,11 +3,11 @@
 #
 #   scripts/package.sh <os> <arch> <version> <outdir>
 #
-# Expects ./assay (CLI) and studio/build/bin/assay-studio (Linux) or
-# studio/build/bin/assay-studio.app (macOS) to be built already. <version> has no leading "v".
-# macOS: the bundle is renamed to "Assay.app" and LSMinimumSystemVersion is set for <arch>.
-# Writes <outdir>/assay_<ver>_<os>_<arch>.tar.gz (CLI only) and
-# <outdir>/assay-studio_<ver>_<os>_<arch>.tar.gz (CLI plus Studio).
+# Expects ./slaw (CLI) and studio/build/bin/slaw-studio (Linux) or
+# studio/build/bin/slaw-studio.app (macOS) to be built already. <version> has no leading "v".
+# macOS: the bundle is renamed to "Slaw.app" and LSMinimumSystemVersion is set for <arch>.
+# Writes <outdir>/slaw_<ver>_<os>_<arch>.tar.gz (CLI only) and
+# <outdir>/slaw-studio_<ver>_<os>_<arch>.tar.gz (CLI plus Studio).
 set -euo pipefail
 
 os="${1:?os (linux|darwin)}" arch="${2:?arch (amd64|arm64)}" ver="${3:?version}" out="${4:?outdir}"
@@ -54,9 +54,9 @@ pack() { # $1 = stage dir, $2 = archive path
 # CLI-only archive: the binary at the root.
 cli="$stage/cli"
 mkdir -p "$cli"
-cp "$root/assay" "$cli/assay"
+cp "$root/slaw" "$cli/slaw"
 docs "$cli"
-pack "$cli" "$out/assay_${ver}_${os}_${arch}.tar.gz"
+pack "$cli" "$out/slaw_${ver}_${os}_${arch}.tar.gz"
 
 # CLI plus Studio.
 st="$stage/studio"
@@ -65,32 +65,32 @@ docs "$st"
 case "$os" in
 linux)
 	mkdir -p "$st/bin" "$st/share/applications" "$st/share/mime/packages"
-	cp "$root/assay" "$st/bin/assay"
-	cp "$root/studio/build/bin/assay-studio" "$st/bin/assay-studio"
-	cp "$root/studio/build/linux/assay.desktop" "$st/share/applications/assay.desktop"
-	cp "$root/studio/build/linux/assay-mime.xml" "$st/share/mime/packages/assay-bundle.xml"
-	# Icons: the hicolor tree from scripts/gen-icons.sh (name "assay", matching Icon= in the .desktop file).
+	cp "$root/slaw" "$st/bin/slaw"
+	cp "$root/studio/build/bin/slaw-studio" "$st/bin/slaw-studio"
+	cp "$root/studio/build/linux/slaw.desktop" "$st/share/applications/slaw.desktop"
+	cp "$root/studio/build/linux/slaw-mime.xml" "$st/share/mime/packages/slaw-bundle.xml"
+	# Icons: the hicolor tree from scripts/gen-icons.sh (name "slaw", matching Icon= in the .desktop file).
 	mkdir -p "$st/share/icons"
 	cp -R "$root/studio/build/linux/icons/hicolor" "$st/share/icons/hicolor"
-	chmod 755 "$st/bin/assay" "$st/bin/assay-studio"
+	chmod 755 "$st/bin/slaw" "$st/bin/slaw-studio"
 	;;
 darwin)
-	cp -R "$root/studio/build/bin/assay-studio.app" "$st/Assay.app"
-	cp "$root/assay" "$st/assay"
+	cp -R "$root/studio/build/bin/slaw-studio.app" "$st/Slaw.app"
+	cp "$root/slaw" "$st/slaw"
 	# The plist template says the lowest macOS we support; the archive is per arch, so stamp this arch's
 	# minimum (scripts/macos-target.sh) before signing. release.yml then checks the binaries' minos against it.
 	plutil -replace LSMinimumSystemVersion -string "$("$root/scripts/macos-target.sh" "$arch")" \
-		"$st/Assay.app/Contents/Info.plist"
+		"$st/Slaw.app/Contents/Info.plist"
 	# Ad-hoc sign once every file is in place; nothing may touch the bundle afterwards.
 	# No --options runtime: without the hardened runtime, library validation is not enforced, so
 	# DuckDB extension dylibs downloaded at run time still load.
-	codesign --force --deep -s - "$st/Assay.app"
-	codesign --verify --deep --strict --verbose=2 "$st/Assay.app"
+	codesign --force --deep -s - "$st/Slaw.app"
+	codesign --verify --deep --strict --verbose=2 "$st/Slaw.app"
 	;;
 *)
 	echo "unsupported os: $os" >&2
 	exit 1
 	;;
 esac
-pack "$st" "$out/assay-studio_${ver}_${os}_${arch}.tar.gz"
+pack "$st" "$out/slaw-studio_${ver}_${os}_${arch}.tar.gz"
 ls -l "$out"

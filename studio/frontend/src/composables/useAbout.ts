@@ -8,7 +8,7 @@ import { App } from '../lib/bindings'
 import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 import { errorText } from '../lib/errors'
 
-const REPO = 'https://github.com/SandwichLabs/assay'
+const REPO = 'https://github.com/SandwichLabs/slaw'
 const LICENSE_URL = `${REPO}/blob/main/LICENSE`
 const PRIVACY_URL = `${REPO}/blob/main/docs/privacy.md`
 const REPORT_BUG_URL = `${REPO}/issues/new/choose`
@@ -18,7 +18,7 @@ const UNKNOWN: BuildInfo = { version: 'unknown', commit: '', date: '', goVersion
 /** The text the "Copy build info" button puts on the clipboard (safe to paste into an issue). */
 export function buildInfoText(i: BuildInfo): string {
   const rows: Array<[string, string]> = [
-    ['Assay', i.version], ['Commit', i.commit], ['Built', i.date], ['Platform', i.platform], ['Go', i.goVersion], ['DuckDB', i.duckdbVersion],
+    ['Slaw', i.version], ['Commit', i.commit], ['Built', i.date], ['Platform', i.platform], ['Go', i.goVersion], ['DuckDB', i.duckdbVersion],
   ]
   return rows.filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n')
 }

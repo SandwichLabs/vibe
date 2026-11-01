@@ -41,7 +41,7 @@ interface AppApi {
   CheckWorkspaceDir(parentDir: string, name: string): Promise<WorkspaceDirCheck>
   OpenWorkspace(path: string): Promise<OpenWorkspaceResult>
   CreateWorkspace(req: CreateWorkspaceRequest): Promise<OpenWorkspaceResult>
-  // .assay bundles (#118)
+  // .slaw bundles (#118)
   GetBundleContent(): Promise<BundleContent>
   SelectBundleFile(): Promise<string>
   ExportBundle(req: BundleExportRequest): Promise<BundleExportResult>
@@ -504,14 +504,14 @@ interface PageDisclosure {
 interface ArtifactMetricUse { name: string; query?: string; measure?: string; dimensions?: string[]; missing?: boolean }
 interface ArtifactViewFile { path: string; role: string; size: number; text?: string }
 // ArtifactPageGrant mirrors studio.ArtifactPageGrant: the token a static page's frame
-// URL is made from (/assay-view/<token>/page), bound to one PageHash.
+// URL is made from (/slaw-view/<token>/page), bound to one PageHash.
 interface ArtifactPageGrant { token: string; hash: string }
 // AgentActivityEntry mirrors studio.ActivityEntry: one use of the model by a page (names and sizes, never text).
 interface AgentActivityEntry { at: string; source: string; name: string; kind: string; promptBytes: number; replyBytes: number; outcome: string }
 // PageWindowInfo mirrors studio.PageWindowInfo: a scripted page's window, opened for one PageHash.
 interface PageWindowInfo { name: string; hash: string }
 // ArtifactViewGrant mirrors studio.ArtifactViewGrant (#160): the token an allowed
-// view's Worker URL is made from (/assay-view/<token>/worker.js), bound to one hash.
+// view's Worker URL is made from (/slaw-view/<token>/worker.js), bound to one hash.
 interface ArtifactViewGrant { token: string; hash: string }
 interface ArtifactViewDecision {
   name: string
@@ -1060,7 +1060,7 @@ interface ImportSummary {
 }
 
 
-// --- .assay bundles (#118): mirrors studio/bundle.go and internal/bundle ---
+// --- .slaw bundles (#118): mirrors studio/bundle.go and internal/bundle ---
 
 interface BundleContentItem { id: string; title: string }
 interface BundleContentConnection {

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Slaw
+GenericName=Data workspace
+Comment=An agentic workspace for working with data where it lives
+Exec=slaw-studio %U
+Icon=slaw
+Terminal=false
+Categories=Development;Database;
+# Only .slaw bundles are claimed. inode/directory is deliberately not listed:
+# it would put Slaw in "Open With" (and sometimes the default-handler list) for
+# every folder on the machine. A workspace folder opens with
+# `slaw-studio <dir>` or `slaw studio --gui <dir>`; see docs/packaging.md.
+MimeType=application/x-slaw-bundle;
+StartupWMClass=slaw-studio
+Keywords=data;sql;duckdb;notebook;workspace;

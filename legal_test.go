@@ -1,4 +1,4 @@
-package assay
+package slaw
 
 import (
 	"testing"

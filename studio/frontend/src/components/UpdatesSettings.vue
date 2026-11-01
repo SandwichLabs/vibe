@@ -23,7 +23,7 @@ const openRelease = (url: string) => { if (url.startsWith('https://')) BrowserOp
   <div class="card card-pad col" style="gap: var(--sh-space-3);" data-testid="updates-block">
     <div style="font-weight: 600;">Updates</div>
     <p class="sh-meta" style="margin: 0;">
-      Assay never updates itself in the background. If you allow it, Studio makes one plain request to github.com when the last check is over a week old. Nothing is installed until you confirm.
+      Slaw never updates itself in the background. If you allow it, Studio makes one plain request to github.com when the last check is over a week old. Nothing is installed until you confirm.
     </p>
 
     <label class="row" style="gap: var(--sh-space-2); align-items: center;">
@@ -56,7 +56,7 @@ const openRelease = (url: string) => { if (url.startsWith('https://')) BrowserOp
 
     <template v-else-if="updateResult">
       <p v-if="!updateResult.updateAvailable" class="sh-meta row" style="margin: 0; gap: var(--sh-space-2); align-items: center;" data-testid="updates-uptodate">
-        <Icon name="circleCheck" :size="14" /> {{ updateResult.current === 'dev' ? `Development build. The latest release is ${updateResult.latest}.` : `Assay ${updateResult.current} is up to date.` }}
+        <Icon name="circleCheck" :size="14" /> {{ updateResult.current === 'dev' ? `Development build. The latest release is ${updateResult.latest}.` : `Slaw ${updateResult.current} is up to date.` }}
       </p>
       <div v-else class="col" style="gap: var(--sh-space-2);" data-testid="updates-available">
         <div style="font-weight: 600;">{{ updateResult.latest }} is available <span class="sh-meta">(you have {{ updateResult.current }})</span></div>
@@ -79,5 +79,5 @@ const openRelease = (url: string) => { if (url.startsWith('https://')) BrowserOp
 </template>
 
 <style scoped>
-.notes { margin: 0; padding: var(--sh-space-2) var(--sh-space-3); max-height: 14rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--sh-font-mono); font-size: 12.5px; background: var(--sh-paper-2); border: 1.5px solid var(--assay-border-subtle); border-radius: var(--sh-radius-sm); }
+.notes { margin: 0; padding: var(--sh-space-2) var(--sh-space-3); max-height: 14rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--sh-font-mono); font-size: 12.5px; background: var(--sh-paper-2); border: 1.5px solid var(--slaw-border-subtle); border-radius: var(--sh-radius-sm); }
 </style>

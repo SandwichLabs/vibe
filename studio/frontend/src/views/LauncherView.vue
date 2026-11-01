@@ -135,7 +135,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
 <template>
   <div class="launcher" data-testid="launcher">
     <div class="lw" :style="firstRun ? 'display:flex;flex-direction:column;align-items:center' : ''">
-      <div class="brandrow"><span class="markbig" aria-hidden="true">V</span><h1>Assay <span>Studio</span></h1></div>
+      <div class="brandrow"><span class="markbig" aria-hidden="true">V</span><h1>Slaw <span>Studio</span></h1></div>
 
       <div v-if="launcherNotice" class="banner warn" role="status" style="margin-bottom: 20px; width: 100%;" data-testid="launcher-notice">
         <div class="ico"><Icon name="info" :size="20" /></div>
@@ -156,7 +156,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
               <Icon name="folderOpen" :size="16" /> Open folder…
             </button>
             <button class="btn" type="button" data-testid="import-bundle" :disabled="!!opening" @click="openBundleImport('new')">
-              <Icon name="download" :size="16" /> Import .assay…
+              <Icon name="download" :size="16" /> Import .slaw…
             </button>
           </div>
         </div>
@@ -166,7 +166,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
         </div>
         <div class="hero-mini">
           <div class="card"><b>Library</b><span>Notebooks, live views and pages that re-run on open. Answers are never frozen.</span></div>
-          <div class="card"><b>Connections</b><span>Point Assay at Postgres, MotherDuck, SQLite files or cloud storage. Add them whenever you're ready.</span></div>
+          <div class="card"><b>Connections</b><span>Point Slaw at Postgres, MotherDuck, SQLite files or cloud storage. Add them whenever you're ready.</span></div>
           <div class="card"><b>The assistant</b><span>Ask in plain words. It reads freely and asks you before it changes anything.</span></div>
         </div>
       </template>
@@ -239,7 +239,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
               </button>
               <button class="card act-card" type="button" data-testid="import-bundle" :disabled="!!opening" @click="openBundleImport('new')">
                 <span class="ai"><Icon name="download" :size="20" /></span>
-                <span><span class="at">Import .assay…</span><span class="ad">Start a new workspace from a bundle someone shared with you.</span></span>
+                <span><span class="at">Import .slaw…</span><span class="ad">Start a new workspace from a bundle someone shared with you.</span></span>
               </button>
             </div>
           </section>
@@ -249,7 +249,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
       <p class="trust-line" :style="firstRun ? 'margin-top: 32px;' : ''">
         <Icon name="shieldCheck" :size="16" />
         <span v-if="firstRun">Passwords and tokens go in this computer's keychain, not in your folder.</span>
-        <span v-else>Your data stays where it already lives. Assay keeps passwords in this computer's keychain, never in the workspace folder, so a workspace is safe to put in git or share with a teammate.</span>
+        <span v-else>Your data stays where it already lives. Slaw keeps passwords in this computer's keychain, never in the workspace folder, so a workspace is safe to put in git or share with a teammate.</span>
       </p>
     </div>
 

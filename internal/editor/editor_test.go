@@ -60,7 +60,7 @@ func fakeEditor(t *testing.T, script string) []string {
 
 func TestEdit_ReturnsSavedText(t *testing.T) {
 	root := t.TempDir()
-	argv := fakeEditor(t, `test "$ASSAY_WORKSPACE" = "`+root+`" || exit 3; printf 'select 2' > "$0"`)
+	argv := fakeEditor(t, `test "$SLAW_WORKSPACE" = "`+root+`" || exit 3; printf 'select 2' > "$0"`)
 	text, ok, err := Edit(argv, root, "select 1", nil, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, ok)
@@ -111,7 +111,7 @@ func TestNewScratch_PrivateModes(t *testing.T) {
 func TestNewScratch_RefusesSymlinkedScratchDir(t *testing.T) {
 	outside := t.TempDir()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".assay-local"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slaw-local"), 0o700))
 	require.NoError(t, os.Symlink(outside, ScratchDir(root)))
 	_, err := NewScratch(root, "select 1")
 	require.Error(t, err)
@@ -119,7 +119,7 @@ func TestNewScratch_RefusesSymlinkedScratchDir(t *testing.T) {
 	assert.Empty(t, left, "nothing was created through the link")
 
 	root = t.TempDir()
-	require.NoError(t, os.Symlink(outside, filepath.Join(root, ".assay-local")))
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, ".slaw-local")))
 	_, err = NewScratch(root, "select 1")
 	require.Error(t, err)
 	left, _ = os.ReadDir(outside)

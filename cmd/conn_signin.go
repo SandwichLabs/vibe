@@ -8,21 +8,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 var connCredsSignInCmd = &cobra.Command{
 	Use:   "sign-in <name>",
 	Short: "Sign in to the AWS profile an S3 connection uses (prints a page and a code; Ctrl-C cancels)",
-	Long: `Run the AWS IAM Identity Center sign-in for the connection's profile: Assay asks
+	Long: `Run the AWS IAM Identity Center sign-in for the connection's profile: Slaw asks
 AWS for a device code, prints the page to open and the code that page must show,
 and waits (until the code expires) for you to approve it in a browser. It opens
 no browser and starts no other program. The session is saved where the AWS CLI
 keeps it (~/.aws/sso/cache), so "aws sso login --profile PROFILE" is the same
 thing and each sees the other's session. Nothing secret is printed or stored by
-Assay itself.
+Slaw itself.
 
 Only connections that sign in with aws-sso:PROFILE (see "conn credentials set
 --sign-in") have this; others use "conn credentials set".`,
@@ -49,7 +49,7 @@ func runConnCredsSignIn(cmd *cobra.Command, args []string) error {
 	defer ws.Close() //nolint:errcheck
 	profile, err := workspace.SSOProfile(ws, args[0])
 	if errors.Is(err, workspace.ErrNotSSOSignIn) {
-		return fmt.Errorf("%w; it signs in with its keychain, the environment or a prompt: use `assay conn credentials set %s`", err, args[0])
+		return fmt.Errorf("%w; it signs in with its keychain, the environment or a prompt: use `slaw conn credentials set %s`", err, args[0])
 	}
 	if err != nil {
 		return err
@@ -67,6 +67,6 @@ func runConnCredsSignIn(cmd *cobra.Command, args []string) error {
 	case err != nil:
 		return errors.New(cliRedactor.Redact(err.Error()))
 	}
-	fmt.Fprintf(out, "Signed in to AWS profile %s. %s reads with it from now on; a running Assay or `assay mcp serve` notices on its next statement.\n", profile, args[0])
+	fmt.Fprintf(out, "Signed in to AWS profile %s. %s reads with it from now on; a running Slaw or `slaw mcp serve` notices on its next statement.\n", profile, args[0])
 	return nil
 }

@@ -23,7 +23,7 @@ function makeApp(mcp: Partial<MCPStatus> = {}) {
     GetMCPStatus: vi.fn(async () => ({ running: false, url: '', canStart: true, reason: '', ...mcp })),
     StartMCP: vi.fn(async () => ({ running: true, url: 'http://127.0.0.1:5555/sse', canStart: true, reason: '' })),
     StopMCP: vi.fn(async () => {}),
-    GetClaudeConfig: vi.fn(async () => ({ name: 'assay-a', desktop: '{"mcpServers":{}}', code: 'claude mcp add assay-a -- assay mcp serve --workspace /w/a' })),
+    GetClaudeConfig: vi.fn(async () => ({ name: 'slaw-a', desktop: '{"mcpServers":{}}', code: 'claude mcp add slaw-a -- slaw mcp serve --workspace /w/a' })),
     SetWorkspaceSettings: vi.fn(async (s: WorkspaceSettings) => ({ ...INFO, name: s.name })),
     GetAgentConfig: vi.fn(async () => ({ provider: 'local', model: 'llama', endpoint: 'http://x', sandbox: 'read-write', askBeforeWrites: true })),
     GetLLMKeyStatus: vi.fn(async () => ({ provider: 'local', source: 'none', set: false, fileKey: false, canMigrate: false, keychainAvailable: true, keychainHasKey: false })),
@@ -120,7 +120,7 @@ describe('SettingsView', () => {
 
     await w.find('[data-testid="copy-claude-code"]').trigger('click')
     await flushPromises()
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('claude mcp add assay-a'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('claude mcp add slaw-a'))
     await w.find('[data-testid="copy-claude-desktop"]').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenLastCalledWith('{"mcpServers":{}}')

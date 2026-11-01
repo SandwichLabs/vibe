@@ -61,7 +61,7 @@ function onKey(e: KeyboardEvent) {
          in internal/agents/approval.go) — the <pre> only adds anything new
          for run_query, where sql is the full statement, not a paraphrase. -->
     <pre v-if="props.approval.sql" class="approval-card__detail">{{ props.approval.sql }}</pre>
-    <p v-if="target" class="approval-card__hint" data-testid="approval-undo-note">This is outside your workspace's local data, so Assay can't undo it for you.<template v-if="rowNote"> {{ rowNote }}</template></p>
+    <p v-if="target" class="approval-card__hint" data-testid="approval-undo-note">This is outside your workspace's local data, so Slaw can't undo it for you.<template v-if="rowNote"> {{ rowNote }}</template></p>
 
     <div class="approval-card__actions">
       <button
@@ -115,7 +115,7 @@ function onKey(e: KeyboardEvent) {
 }
 .ap-conn {
   display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 4px 10px;
-  border: 1.5px solid var(--assay-border); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); font-weight: 600;
+  border: 1.5px solid var(--slaw-border); border-radius: var(--sh-radius-sm); background: var(--sh-paper-2); font-weight: 600;
 }
 .ap-conn .small { font-weight: 400; color: var(--sh-graphite); font-size: 12px; }
 .approval-card__summary {

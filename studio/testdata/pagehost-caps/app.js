@@ -1,12 +1,12 @@
 // The P5 capability page: state across a reopen, download without a gesture (and
 // with one, when a person presses the button), ask, and onChange. It reports to
-// Studio through assay.run("report", {msg}).
+// Studio through slaw.run("report", {msg}).
 (async () => {
   const log = []
   const show = (s) => { log.push(s); document.getElementById('log').textContent = log.join('\n') }
   let sent = 0
-  const report = async () => { try { await assay.run('report', { msg: log.slice(sent).join(' | ').slice(0, 990) }); sent = log.length } catch (e) {} }
-  const st = await assay.use('state'), dl = await assay.use('download'), ask = await assay.use('ask'), nope = await assay.use('db')
+  const report = async () => { try { await slaw.run('report', { msg: log.slice(sent).join(' | ').slice(0, 990) }); sent = log.length } catch (e) {} }
+  const st = await slaw.use('state'), dl = await slaw.use('download'), ask = await slaw.use('ask'), nope = await slaw.use('db')
   show('caps state=' + !!st + ' download=' + !!dl + ' ask=' + !!ask + ' db=' + !!nope)
   show('userActivation.type=' + typeof navigator.userActivation)
   const n = ((await st.get('count')) || 0) + 1
@@ -18,7 +18,7 @@
   try { await dl.save({ filename: 'live', type: 'csv', data: 'a,b\n1,2\n' }); show('save resolved') } catch (e) { show('save rejected: ' + e.message) }
   // A page that skips the injected API and posts a save straight to the handler.
   // The helper's own record of the person's input refuses it, so Studio is never asked.
-  window.webkit.messageHandlers.assay.postMessage(JSON.stringify({ t: 'call', id: 987654, cap: 'download', op: 'save', arg: { filename: 'raw', type: 'csv', enc: 'text', data: 'x' } }))
+  window.webkit.messageHandlers.slaw.postMessage(JSON.stringify({ t: 'call', id: 987654, cap: 'download', op: 'save', arg: { filename: 'raw', type: 'csv', enc: 'text', data: 'x' } }))
   show('raw save posted')
   const a = await ask.ask('say hi', { system: 'be brief' })
   show('ask=' + JSON.stringify(a))

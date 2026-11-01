@@ -44,7 +44,7 @@ describe('UpdatePrompt', () => {
     const app = makeApp()
     updateState.value = { ...STATE }
     const w = mountPrompt()
-    expect(tid(w, 'update-consent').text()).toContain('Check GitHub for new Assay releases?')
+    expect(tid(w, 'update-consent').text()).toContain('Check GitHub for new Slaw releases?')
     expect(tid(w, 'update-consent').text()).toContain('nothing but a plain request to github.com')
     await tid(w, 'update-no').trigger('click')
     await flushPromises()

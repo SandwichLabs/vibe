@@ -1,6 +1,6 @@
-# Contributing to Assay
+# Contributing to Slaw
 
-Thanks for helping. Assay is an agentic desktop workspace for working with data where it already lives. Read [`docs/direction.md`](docs/direction.md) (the north star) and [`docs/README.md`](docs/README.md) (index of every doc) before a larger change. [`CLAUDE.md`](CLAUDE.md) is a compact map of the code and conventions and is useful for humans too.
+Thanks for helping. Slaw is an agentic desktop workspace for working with data where it already lives. Read [`docs/direction.md`](docs/direction.md) (the north star) and [`docs/README.md`](docs/README.md) (index of every doc) before a larger change. [`CLAUDE.md`](CLAUDE.md) is a compact map of the code and conventions and is useful for humans too.
 
 By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems go through [SECURITY.md](SECURITY.md), not a public issue.
 
@@ -17,7 +17,7 @@ Prerequisites:
   - macOS: Xcode Command Line Tools.
 
 ```bash
-task build           # build the assay CLI binary
+task build           # build the slaw CLI binary
 task test            # Go tests plus the Studio Vitest suite (task test:frontend is Vitest only)
 task lint            # golangci-lint (task lint:fix auto-fixes)
 task studio:dev      # Studio dev server with hot reload
@@ -43,7 +43,7 @@ Notes:
 - Code lives in `internal/` packages. Wrap errors with context (`fmt.Errorf("...: %w", err)`), pass `log/slog` loggers by injection, and avoid globals.
 - One tool surface: new agent capabilities are `ToolDef`s in `internal/agents`, never bespoke tools in `internal/llm`.
 - Trust rules: never put a credential in a config file, bundle, log line, or an error shown to the UI or agent. The agent SQL policy can only get stricter.
-- Stylesheets use `--assay-*` roles, never hex colors. Keep the `:focus-visible` ring; do not write `outline: none` without it.
+- Stylesheets use `--slaw-*` roles, never hex colors. Keep the `:focus-visible` ring; do not write `outline: none` without it.
 - Never build SQL from user input without the quoting helpers.
 
 ## Commit messages
@@ -51,7 +51,7 @@ Notes:
 Commits follow conventional-commit style with the issue number in the scope:
 
 ```
-feat(#164): open the launch workspace from assay studio --gui
+feat(#164): open the launch workspace from slaw studio --gui
 fix(#163): MotherDuck attach, database picker, token hints
 docs(#54): architecture review final
 refactor(#54): slice 5 - shared connection state
@@ -61,7 +61,7 @@ Types in use: `feat`, `fix`, `docs`, `refactor`, `chore`, `ci`, `test`. Keep the
 
 ## Sign your work (DCO)
 
-Assay uses the [Developer Certificate of Origin](https://developercertificate.org/) instead of a CLA. There is no agreement to sign and you keep your copyright. By adding a sign-off you certify that you wrote the change or have the right to submit it under the project license (Apache-2.0).
+Slaw uses the [Developer Certificate of Origin](https://developercertificate.org/) instead of a CLA. There is no agreement to sign and you keep your copyright. By adding a sign-off you certify that you wrote the change or have the right to submit it under the project license (Apache-2.0).
 
 Sign every commit with `-s`:
 

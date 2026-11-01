@@ -5,7 +5,7 @@
 // is exactly what the hash covers; the parent replaces `files` whenever it
 // re-reads them. Every string is text.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
+import { createSlawEditor, type SlawEditorInstance } from '../composables/useSlawEditor'
 
 const props = defineProps<{ manifest: string; files: ArtifactViewFile[] }>()
 
@@ -16,7 +16,7 @@ const all = computed<ArtifactViewFile[]>(() => [
 const selected = ref('artifact.yaml')
 const current = computed(() => all.value.find((f) => f.path === selected.value) ?? all.value[0])
 const el = ref<HTMLElement | null>(null)
-let editor: AssayEditorInstance | undefined
+let editor: SlawEditorInstance | undefined
 
 function langOf(path: string): 'yaml' | 'javascript' | 'json' | 'markdown' {
   if (path.endsWith('.yaml')) return 'yaml'
@@ -37,7 +37,7 @@ function show(f: ArtifactViewFile) {
     return
   }
   editor?.destroy()
-  editor = createAssayEditor(el.value, { value: f.text, lang, readOnly: true })
+  editor = createSlawEditor(el.value, { value: f.text, lang, readOnly: true })
   editorLang = lang
 }
 onMounted(() => show(current.value))

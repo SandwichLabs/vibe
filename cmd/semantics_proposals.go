@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/assay/internal/semantics/proposals"
-	"github.com/SandwichLabs/assay/internal/strictyaml"
-	"github.com/SandwichLabs/assay/internal/workspace"
+	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
+	"github.com/SandwichLabs/slaw/internal/strictyaml"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 // The inbox of proposed definitions. An agent files a proposal with
@@ -23,11 +23,11 @@ var semanticsProposalsCmd = &cobra.Command{
 	Use:   "proposals",
 	Short: "List the proposed definitions waiting for you",
 	Long: `List the semantic definitions an agent has proposed (propose_definition).
-They wait in .assay-local/proposals/ on this machine; nothing in semantics/
+They wait in .slaw-local/proposals/ on this machine; nothing in semantics/
 changes until you accept one. By default only open proposals are listed;
 --all adds the accepted and rejected ones.
 
-Review one with "assay semantics show-proposal <id>", then "accept" or "reject"
+Review one with "slaw semantics show-proposal <id>", then "accept" or "reject"
 it.`,
 	Args:         cobra.NoArgs,
 	RunE:         runSemanticsProposals,
@@ -149,7 +149,7 @@ func printPreview(w io.Writer, pv *proposals.Preview) {
 	}
 	switch {
 	case pv.Stale:
-		fmt.Fprintf(w, "\nWARNING: %s. To accept it anyway: assay semantics accept %s --overwrite --rev %s\n", proposals.StaleSentence(pv.Target, pv.StaleReason), p.ID, pv.ShownRev)
+		fmt.Fprintf(w, "\nWARNING: %s. To accept it anyway: slaw semantics accept %s --overwrite --rev %s\n", proposals.StaleSentence(pv.Target, pv.StaleReason), p.ID, pv.ShownRev)
 	case !pv.Exists:
 		fmt.Fprintf(w, "\n%s is new.\n", pv.Target)
 	}
@@ -184,7 +184,7 @@ func runSemanticsAccept(cmd *cobra.Command, args []string) error {
 		var stale *proposals.StaleError
 		if errors.As(err, &stale) && pv != nil {
 			printPreview(cmd.ErrOrStderr(), pv)
-			return fmt.Errorf("not accepted: %w (to accept it anyway: assay semantics accept %s --overwrite --rev %s)", err, pv.Proposal.ID, pv.ShownRev)
+			return fmt.Errorf("not accepted: %w (to accept it anyway: slaw semantics accept %s --overwrite --rev %s)", err, pv.Proposal.ID, pv.ShownRev)
 		}
 		if overwrite && rev == "" && pv != nil {
 			printPreview(cmd.ErrOrStderr(), pv)

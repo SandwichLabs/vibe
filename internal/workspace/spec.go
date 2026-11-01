@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/assay/internal/connections"
-	"github.com/SandwichLabs/assay/internal/secrets"
-	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/slaw/internal/connections"
+	"github.com/SandwichLabs/slaw/internal/secrets"
+	"github.com/SandwichLabs/slaw/internal/session"
 )
 
 // SessionSpec builds the session.Spec for one connection of ws, exactly as
 // OpenSession would register it: ${ENV} expanded, paths resolved, the
 // credential closure bound to the connection's fingerprint and sign-in method.
 // Studio uses it to re-register a connection after the person edits it, or
-// after assay.yaml changes on disk, so a stale credential binding never outlives
+// after slaw.yaml changes on disk, so a stale credential binding never outlives
 // the definition it was made for. It dials nothing. MotherDuck's hub-wide token
 // is not handled here: a change of it is reported by Session.RelaunchRequired.
 func SessionSpec(ws Workspace, name string, opts ...SessionOption) (session.Spec, error) {
