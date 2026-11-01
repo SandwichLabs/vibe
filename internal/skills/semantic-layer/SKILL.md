@@ -80,6 +80,11 @@ the saved query's grain or a value range, so keep running the section 1 query
 yourself. `check` exits 1 when any check fails, otherwise 2 when some could not
 run: a run where every row errors verified nothing.
 
+Each entity and metric gets a `compile` row first: its table and columns, or
+its measure and dimensions against the saved query, are bound on the real
+connection without scanning rows. `vibe semantics check --compile` runs only
+those, fast enough after every edit; run it before the full `check`.
+
 ## 4. Using `metric()`
 
 ```sql

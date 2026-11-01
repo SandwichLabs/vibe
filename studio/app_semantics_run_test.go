@@ -40,18 +40,21 @@ func TestRunAssertions_Binding(t *testing.T) {
 	app := appWithDefinitions(t)
 	rows, err := app.RunAssertions("", "")
 	require.NoError(t, err)
-	require.Len(t, rows, 4)
+	require.Len(t, rows, 7, "a compile row per entity and metric, then its assertions")
 	for _, r := range rows {
 		assert.Equal(t, "pass", r.Status, "%+v", r)
 	}
+	assert.Equal(t, "compile", rows[0].Assertion)
 	_, err = app.sess.DB().Exec(`INSERT INTO customers VALUES (2, 'paused')`)
 	require.NoError(t, err)
 	rows, err = app.RunAssertions("entity", "customer")
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	assert.Equal(t, "fail", rows[0].Status)
-	assert.EqualValues(t, 1, rows[0].Violations)
+	require.Len(t, rows, 3)
+	assert.Equal(t, "compile", rows[0].Assertion)
+	assert.Equal(t, "pass", rows[0].Status)
 	assert.Equal(t, "fail", rows[1].Status)
+	assert.EqualValues(t, 1, rows[1].Violations)
+	assert.Equal(t, "fail", rows[2].Status)
 
 	_, err = app.RunAssertions("metric", "nope")
 	require.Error(t, err)
@@ -109,10 +112,12 @@ func TestRunMetric_HostileMetricIsRefused(t *testing.T) {
 	assert.ErrorContains(t, err, agents.ErrReadOnlyBindingDenied.Error(), "the policy refused it")
 	rows, err := app.RunAssertions("metric", "pv")
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "error", rows[0].Status)
-	assert.Contains(t, rows[0].Error, "live bindings are read-only queries", "the policy refused it")
-	assert.False(t, strings.Contains(rows[0].Error, "99"))
+	require.Len(t, rows, 2)
+	assert.Equal(t, "compile", rows[0].Assertion)
+	assert.Equal(t, "fail", rows[0].Status, "a definition the policy refuses does not compile")
+	assert.Contains(t, rows[0].Error, "outside the workspace", "the policy refused it")
+	assert.Equal(t, "error", rows[1].Status, "its assertion was not run")
+	assert.False(t, strings.Contains(rows[0].Error+rows[1].Error, "99"))
 }
 
 // Try it stops at the grid's cap and says so, without inventing a total.

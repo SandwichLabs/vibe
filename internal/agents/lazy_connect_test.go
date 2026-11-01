@@ -90,5 +90,45 @@ func TestRunReadOnlySQLIn_ReportsTheConnectFailureNotNotAttached(t *testing.T) {
 
 	err = h.VetReadOnlySQLIn(ctx, "broken", "SELECT 1", nil)
 	require.Error(t, err)
+	var ce interface{ ConnectFailure() bool }
+	assert.ErrorAs(t, err, &ce, "a connection that cannot connect is told apart from a binder error")
 	assert.Contains(t, err.Error(), "the remote service refused the token")
+}
+
+// A connection named inside the statement (not as the run's catalog) that
+// cannot connect is the connection's problem, in the vet and in the run: the
+// error says why and is told apart from a binder error.
+func TestQualifiedBrokenConnectionIsAConnectFailure(t *testing.T) {
+	h, _ := newLazyHandler(t)
+	ctx := context.Background()
+	const q = "SELECT * FROM broken.main.t"
+
+	err := h.VetReadOnlySQLIn(ctx, "", q, nil)
+	require.Error(t, err)
+	var cf interface{ ConnectFailure() bool }
+	require.ErrorAs(t, err, &cf)
+	assert.True(t, cf.ConnectFailure())
+	assert.Contains(t, err.Error(), "the remote service refused the token")
+	var def interface{ DefinitionProblem() bool }
+	assert.False(t, errors.As(err, &def), "not a definition problem")
+
+	_, _, err = h.RunReadOnlySQLIn(ctx, "", q, nil, 10)
+	require.ErrorAs(t, err, &cf)
+	assert.Contains(t, err.Error(), "the remote service refused the token")
+
+	// A missing table on a connection that connects is the definition's.
+	err = h.VetReadOnlySQLIn(ctx, "remote", "SELECT nope FROM no_such_table", nil)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &def)
+	assert.True(t, def.DefinitionProblem())
+	assert.False(t, errors.As(err, &cf))
+}
+
+func TestDefinitionReason(t *testing.T) {
+	assert.True(t, definitionReason("could not validate query: Binder Error: Referenced column \"x\" not found"))
+	assert.True(t, definitionReason("could not validate query: Catalog Error: Table with name t does not exist"))
+	assert.True(t, definitionReason("could not validate query: Parser Error: syntax error"))
+	assert.True(t, definitionReason(secretsDeniedMsg))
+	assert.False(t, definitionReason("could not validate query: IO Error: Connection reset by peer"))
+	assert.False(t, definitionReason("could not validate query: no database connection available"))
 }

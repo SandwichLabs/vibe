@@ -2,6 +2,7 @@ package assert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -31,13 +32,44 @@ type Result struct {
 	Receipt string `json:"receipt,omitempty"`
 }
 
-// Run executes the checks in order through run. One check failing to run (an
+// VetFunc vets one planned statement without running it: nil means it binds
+// and the read-only policy lets it through. In the product it is the agent
+// policy's agents.Handler.VetReadOnlySQLIn (see workspace.ReadOnlyVetFunc). An
+// error that reports DefinitionProblem() true is the statement or the policy
+// refusing it; ConnectFailure() true is a connection that could not be reached;
+// any other is a failure of the check itself.
+type VetFunc func(ctx context.Context, connection, sql string, params map[string]any) error
+
+// Runner is what Run executes checks with: Run for a counting check, Vet for a
+// compile check.
+type Runner struct {
+	Run RunFunc
+	Vet VetFunc
+}
+
+// notRunCompile is the Error of a check skipped because its subject's compile
+// check failed: one binder message, not one per assertion.
+const notRunCompile = "not run: the definition does not compile"
+
+// Run executes the checks in order through r. One check failing to run (an
 // error) never stops the others; a canceled context marks the remaining
-// checks as errors. The result list has one entry per check.
-func Run(ctx context.Context, checks []Check, run RunFunc) []Result {
+// checks as errors. The result list has one entry per check. When a subject's
+// compile check fails, its later checks are errors that say so instead of
+// repeating the binder's message.
+func Run(ctx context.Context, checks []Check, r Runner) []Result {
 	out := make([]Result, 0, len(checks))
+	broken := map[[2]string]bool{}
 	for _, c := range checks {
-		out = append(out, runOne(ctx, c, run))
+		key := [2]string{c.SubjectKind, c.Subject}
+		if broken[key] && !c.VetOnly {
+			out = append(out, Result{Check: c, Status: StatusError, Error: notRunCompile})
+			continue
+		}
+		res := runOne(ctx, c, r)
+		if c.VetOnly && c.Kind == KindCompile && res.Status == StatusFail {
+			broken[key] = true
+		}
+		out = append(out, res)
 	}
 	return out
 }
@@ -48,7 +80,7 @@ func Failure(subjectKind, subject string, err error) Result {
 	return Result{Check: Check{SubjectKind: subjectKind, Subject: subject, Kind: "plan"}, Status: StatusError, Error: err.Error()}
 }
 
-func runOne(ctx context.Context, c Check, run RunFunc) Result {
+func runOne(ctx context.Context, c Check, rn Runner) Result {
 	r := Result{Check: c}
 	if c.PlanError != "" {
 		r.Status, r.Error = StatusError, c.PlanError
@@ -58,8 +90,11 @@ func runOne(ctx context.Context, c Check, run RunFunc) Result {
 		r.Status, r.Error = StatusError, err.Error()
 		return r
 	}
+	if c.VetOnly {
+		return vetOne(ctx, c, rn.Vet)
+	}
 	start := time.Now()
-	rs, err := run(ctx, c.Connection, c.SQL, c.Params)
+	rs, err := rn.Run(ctx, c.Connection, c.SQL, c.Params)
 	r.Duration = time.Since(start)
 	if err != nil {
 		r.Status, r.Error = StatusError, err.Error()
@@ -74,6 +109,36 @@ func runOne(ctx context.Context, c Check, run RunFunc) Result {
 	r.Status = StatusPass
 	if n > 0 {
 		r.Status = StatusFail
+	}
+	return r
+}
+
+// vetOne runs a compile check. Only a statement the binder or the policy
+// refuses (an error reporting DefinitionProblem() true) is a fail: fix the
+// definition. Everything else is an error, which says nothing about the files:
+// a connection that cannot be reached, a canceled or timed-out vet, an I/O
+// failure while binding.
+func vetOne(ctx context.Context, c Check, vet VetFunc) Result {
+	r := Result{Check: c}
+	if vet == nil {
+		r.Status, r.Error = StatusError, "no vet is available to check that the definition compiles"
+		return r
+	}
+	start := time.Now()
+	err := vet(ctx, c.Connection, c.SQL, c.Params)
+	r.Duration = time.Since(start)
+	var def interface{ DefinitionProblem() bool }
+	var cf interface{ ConnectFailure() bool }
+	switch {
+	case err == nil:
+		r.Status = StatusPass
+	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
+		(errors.As(err, &cf) && cf.ConnectFailure()):
+		r.Status, r.Error = StatusError, err.Error()
+	case errors.As(err, &def) && def.DefinitionProblem():
+		r.Status, r.Error = StatusFail, err.Error()
+	default:
+		r.Status, r.Error = StatusError, err.Error()
 	}
 	return r
 }

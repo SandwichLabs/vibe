@@ -259,10 +259,21 @@ func (h *Handler) connectReferenced(ctx context.Context, catalog, sqlText string
 // that it caused.
 func withConnectError(denial, connectErr error) error {
 	if connectErr != nil {
-		return connectErr
+		return &ConnectError{Err: connectErr}
 	}
 	return denial
 }
+
+// ConnectError is a connection's own failure to connect, as opposed to a
+// refusal or a binder error about the statement. It prints as the wrapped
+// error; ConnectFailure lets a caller that cannot import agents (the
+// assertion runner) tell "the connection is down" from "the definition is
+// wrong" with errors.As.
+type ConnectError struct{ Err error }
+
+func (e *ConnectError) Error() string        { return e.Err.Error() }
+func (e *ConnectError) Unwrap() error        { return e.Err }
+func (e *ConnectError) ConnectFailure() bool { return true }
 
 func NewHandler(access WorkspaceAccess, engine EngineAccess, sandbox *SandboxConfig, logger *slog.Logger) *Handler {
 	h := &Handler{
@@ -646,4 +657,38 @@ func dropDuckLakeInternalRows(rows [][]any) [][]any {
 		return rows
 	}
 	return out
+}
+
+// DefinitionError is a statement the policy or the database's binder refused:
+// the text is wrong (a missing column, a table that does not exist, a path the
+// policy forbids), as opposed to a connection or I/O failure while checking
+// it. It prints as the wrapped error; DefinitionProblem lets a caller that
+// cannot import agents (the assertion runner) report it as a failed check
+// rather than one that could not run.
+type DefinitionError struct{ Err error }
+
+func (e *DefinitionError) Error() string           { return e.Err.Error() }
+func (e *DefinitionError) Unwrap() error           { return e.Err }
+func (e *DefinitionError) DefinitionProblem() bool { return true }
+
+// binderErrorPrefixes are DuckDB's stable error-class names for a statement
+// that is wrong. This is the one place the vet looks at the database's message
+// text: EXPLAIN's failure reaches the policy as a string.
+var binderErrorPrefixes = []string{"Binder Error", "Catalog Error", "Parser Error"}
+
+// definitionReason reports whether a read-only denial reason is about the
+// statement. A policy denial always is; "could not validate query: ..." is
+// only when the database says Binder, Catalog or Parser Error (an I/O error
+// from a dropped remote, or no database at all, is not).
+func definitionReason(reason string) bool {
+	rest, ok := strings.CutPrefix(reason, "could not validate query:")
+	if !ok {
+		return true
+	}
+	for _, p := range binderErrorPrefixes {
+		if strings.Contains(rest, p) {
+			return true
+		}
+	}
+	return false
 }

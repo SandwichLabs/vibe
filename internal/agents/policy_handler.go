@@ -116,6 +116,9 @@ func scrubbedError(err error) error { return &scrubbedErr{err: err} }
 func (h *Handler) VetReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any) error {
 	_, _, _, reason, err := h.readOnlyVerdict(ctx, connection, sqlStr, params)
 	if errors.Is(err, ErrReadOnlyBindingDenied) && reason != "" {
+		if definitionReason(reason) {
+			return &DefinitionError{Err: errors.New(reason)}
+		}
 		return errors.New(reason)
 	}
 	return err

@@ -465,6 +465,20 @@ func (h *agentToolHandler) RunReadOnlySQLIn(ctx context.Context, connection, sql
 	return h.inner.RunReadOnlySQLIn(ctx, connection, sqlStr, params, maxRows)
 }
 
+// VetReadOnlySQLIn is RunReadOnlySQLIn without the run: the same lock, identity
+// check and policy verdict, for a compile check of a definition.
+func (h *agentToolHandler) VetReadOnlySQLIn(ctx context.Context, connection, sqlStr string, params map[string]any) error {
+	h.app.mu.RLock()
+	defer h.app.mu.RUnlock()
+
+	if h.app.ws != h.ws || h.app.sess != h.sess {
+		return fmt.Errorf("the workspace was closed or replaced during this agent turn; reopen it and try again")
+	}
+	policy := h.app.agentPolicy()
+	h.inner.SetFilePolicy(agents.Tighter(h.ceiling, policy.Mode), policy.AskBeforeWrites)
+	return h.inner.VetReadOnlySQLIn(ctx, connection, sqlStr, params)
+}
+
 // enableApprovals installs an approver on h that surfaces each pending write
 // as an "agent:approval" event tagged with turnID, and blocks until the
 // frontend answers via ResolveAgentApproval (or the request times out/is

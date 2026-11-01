@@ -16,7 +16,11 @@ func TestErrorResponsesHideTheConnectionUserName(t *testing.T) {
 
 func TestWithConnectErrorPrefersTheConnectionsOwnProblem(t *testing.T) {
 	denial, cerr := assertErr("denied"), assertErr(`failed to connect "pg": no credentials`)
-	assert.Equal(t, cerr, withConnectError(denial, cerr))
+	got := withConnectError(denial, cerr)
+	assert.Equal(t, cerr.Error(), got.Error())
+	var ce *ConnectError
+	assert.ErrorAs(t, got, &ce)
+	assert.ErrorIs(t, got, cerr)
 	assert.Equal(t, denial, withConnectError(denial, nil))
 }
 
