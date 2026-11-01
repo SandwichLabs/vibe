@@ -588,7 +588,7 @@ func (a *App) notifyAgentToolChange(method string, result any) {
 		go a.recheckGrants()
 	}
 	// add_query_cell/create_dashboard (#67 deferred part) write a new cell to
-	// _assay_notebooks, not the live DuckDB data/schema "data:changed" covers
+	// _vibe_notebooks, not the live DuckDB data/schema "data:changed" covers
 	// — an open NotebookView only reloads/merges on "notebooks:changed" (the
 	// same event CreateNotebook/SaveNotebook/DeleteNotebook/
 	// ImportNotebook already emit), so without this an agent-appended cell

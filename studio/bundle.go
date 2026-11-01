@@ -295,7 +295,7 @@ func (a *App) PreviewBundleImport(path, passphrase string) (*BundlePreview, erro
 func bundleError(err error) error {
 	switch {
 	case errors.Is(err, bundle.ErrLegacy):
-		return errors.New("This is an older .assay file that holds data. Assay no longer opens these.")
+		return errors.New("This is an older Vibe file that holds data. Assay doesn't open these.")
 	case errors.Is(err, bundle.ErrNotBundle):
 		return errors.New("That file isn't an Assay bundle.")
 	case errors.Is(err, bundle.ErrTooLarge):

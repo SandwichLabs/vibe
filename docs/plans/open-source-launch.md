@@ -1,15 +1,15 @@
-# Assay: open-source and first public release plan
+# Vibe: open-source and first public release plan
 
 **Audit date:** 2026-10-11 · **Audited:** `vibe-app` `main` @ `5d6f3c0` · **Baseline:** [`../packaging.md`](../packaging.md) (2026-09-23) and the packaging epic (`vibe-app#77`).
 
 ## Status
 
-**Tracking:** epic [#51](https://github.com/SandwichLabs/assay/issues/51), children #36 to #50. The audit below records what was found on 2026-10-11 and why each step exists; it is not rewritten as work lands. Findings that are already fixed are marked **(done)** or covered by the status list here.
+**Tracking:** epic [#51](https://github.com/SandwichLabs/vibe/issues/51), children #36 to #50. The audit below records what was found on 2026-10-11 and why each step exists; it is not rewritten as work lands. Findings that are already fixed are marked **(done)** or covered by the status list here.
 
 Decisions made (2026-10-11), recorded one per line in [`../direction.md`](../direction.md) §9:
 
-- **Name:** keep **Assay**; the CLI stays `assay`. The installer will ship a collision guard (§4, #47) and the README says so. Revisit before 1.0.
-- **Repo and module:** `SandwichLabs/assay`, module `github.com/SandwichLabs/assay` (#37, done). Private until #50.
+- **Name:** keep **Vibe**; the CLI stays `vibe`. The installer will ship a collision guard (§4, #47) and the README says so. Revisit before 1.0.
+- **Repo and module:** `SandwichLabs/vibe`, module `github.com/SandwichLabs/vibe` (#37, done). Private until #50.
 - **Licence:** Apache-2.0 (#38).
 - **History:** a filtered copy of `vibe-app` `main`, done. `landing/`, `docs/reviews/ux-panel-2026-09-26/` and `docs/archive/*.txt` are gone from all history, the 88 MB binary was never on `main`, and a work-email author was mailmapped. gitleaks on the result found only known test fixtures.
 - **Reporting and contact:** GitHub only. Vulnerabilities go through GitHub private vulnerability reporting, everything else through Issues. There is no email address.
@@ -57,9 +57,9 @@ What is in good shape:
 
 What has to be built: CI (none exists), a release workflow (`.goreleaser.yaml` still fails `goreleaser check`), an app icon (none exists anywhere, and `studio/build/appicon.png` is gitignored), an About screen, `install.sh`, newcomer docs, community files and a third-party notices file.
 
-**Recommended shape for v0.1.0:** unsigned, ad-hoc-signed tarballs for macOS (arm64, x86_64) and Linux (amd64, arm64) from a plain GitHub Actions native-runner matrix, plus `checksums.txt` and build-provenance attestations. One POSIX `install.sh` installs into `~/.local/bin` (plus `~/Applications/Assay.app` on macOS). **Drop GoReleaser for v0.1.0.** Defer Homebrew, deb/rpm, dmg and notarisation to #4 once the Apple account exists.
+**Recommended shape for v0.1.0:** unsigned, ad-hoc-signed tarballs for macOS (arm64, x86_64) and Linux (amd64, arm64) from a plain GitHub Actions native-runner matrix, plus `checksums.txt` and build-provenance attestations. One POSIX `install.sh` installs into `~/.local/bin` (plus `~/Applications/Vibe Studio.app` on macOS). **Drop GoReleaser for v0.1.0.** Defer Homebrew, deb/rpm, dmg and notarisation to #4 once the Apple account exists.
 
-**History:** keep it, but publish a **filtered copy into a new public repo** **(done: `SandwichLabs/assay`)**. Strip the 88 MB `vibe-app` binary committed in 72f220e/0e2718b/146d82e, and decide about one commit authored with a former-work email address. Rewriting the *existing* repo is a trap: GitHub keeps old objects reachable through `refs/pull/*`. The full option comparison is in §2.
+**History:** keep it, but publish a **filtered copy into a new public repo** **(done: `SandwichLabs/vibe`)**. Strip the 88 MB `vibe-app` binary committed in 72f220e/0e2718b/146d82e, and decide about one commit authored with a former-work email address. Rewriting the *existing* repo is a trap: GitHub keeps old objects reachable through `refs/pull/*`. The full option comparison is in §2.
 
 **Rough total (audit estimate):** about 2–3 focused weeks for one person. Most of it is CI, release, install and docs; the bug and dependency work runs alongside.
 
@@ -76,8 +76,8 @@ Outcomes are in the Status section above; the table keeps the audit's recommenda
 | D5 | One commit authored with a former-work email address (March 2026, Taskfile/go.mod dependency bumps) | Confirm there's no employer IP claim on the project as a whole, then rewrite the author with a mailmap during the filter. *Outcome: mailmapped.* |
 | D6 | Contribution model | DCO sign-off (no CLA), PRs welcome; or "issues only" for the first month. *Outcome: DCO.* |
 | D7 | Bundle DuckDB extensions offline? | **No** for v0.1.0. Keep consent-then-download. Note the `motherduck` extension is proprietary, so it could not be redistributed anyway. |
-| D8 | Install location default | `~/.local/bin` (no sudo), with `ASSAY_INSTALL_DIR=/usr/local/bin` as an option. |
-| D9 | Install script URL | `https://sandwichlabs.dev/assay/install.sh`, a redirect to the latest release's `install.sh` asset. |
+| D8 | Install location default | `~/.local/bin` (no sudo), with `VIBE_INSTALL_DIR=/usr/local/bin` as an option. |
+| D9 | Install script URL | `https://sandwichlabs.dev/vibe/install.sh`, a redirect to the latest release's `install.sh` asset. |
 | D10 | Which open bugs block v0.1.0 | Block on #2 and #19. Fix #33 (cheap) and #34/#35 (they gate contributor CI; since fixed). Triage #21 (§8). |
 | D11 | Public scope of `docs/` | Prune `docs/reviews/ux-panel-*`, `landing/` and the AI research dumps in `docs/archive/`; keep plans and reference (§6). |
 | D12 | Security contact and support channel | GitHub private vulnerability reporting plus an email address; GitHub Discussions for questions. *Outcome: GitHub only, no email.* |
@@ -91,16 +91,16 @@ Outcomes are in the Status section above; the table keeps the audit's recommenda
 ### The module path problem
 
 - `module github.com/sandwich-labs/vibe-app`. GitHub resolves `sandwich-labs` to the **`Sandwich-Labs`** organisation, which is not `SandwichLabs` and has no visible repos. The import path is wrong, not merely mis-cased.
-- After the fix, `go install github.com/SandwichLabs/assay@latest` would work only if:
+- After the fix, `go install github.com/SandwichLabs/vibe@latest` would work only if:
   - the module path matches the repo exactly (mixed case is fine; the proxy escapes it as `!sandwich!labs`);
   - the user has CGO and a C++ toolchain (DuckDB static libraries are fetched as Go modules, so no system DuckDB is needed; the CLI built in about 12 s here);
-  - they accept that the binary is named **`vibe-app`**, because `main` is at the module root. To get `assay`, move `main.go` to `cmd/assay/` and update the Taskfile and ldflags paths.
+  - they accept that the binary is named **`vibe-app`**, because `main` is at the module root. To get `vibe`, move `main.go` to `cmd/vibe/` and update the Taskfile and ldflags paths.
 - Studio can't be `go install`ed: it embeds the gitignored `frontend/dist` and needs `wails build`. Document `go install` as CLI only.
 
 ### Checklist
 
 - [ ] **D1 (Apache-2.0)** Add `LICENSE`. Add an SPDX line to `wails.json` `info.copyright`, Info.plist (via wails.json) and the README badge. Optionally add SPDX headers to source files (not required). **S**
-- [ ] **DECISION D2/D4** Rename the module path to the real org (or a vanity path), and move `main` to `cmd/assay` for `go install …/cmd/assay@latest`. Update `Taskfile.yml` `CLI_LDFLAGS`, `.goreleaser.yaml` (or delete it), docs and `CLAUDE.md`. Run `go mod edit -module`, a sed over imports, then `go build ./... && go test ./...`. **M**
+- [ ] **DECISION D2/D4** Rename the module path to the real org (or a vanity path), and move `main` to `cmd/vibe` for `go install …/cmd/vibe@latest`. Update `Taskfile.yml` `CLI_LDFLAGS`, `.goreleaser.yaml` (or delete it), docs and `CLAUDE.md`. Run `go mod edit -module`, a sed over imports, then `go build ./... && go test ./...`. **M**
 - [ ] Rewrite `README.md` for outsiders:
   - a one-paragraph pitch and screenshot or GIF;
   - **Install** (the curl one-liner, a manual download, and building from source);
@@ -116,7 +116,7 @@ Outcomes are in the Status section above; the table keeps the audit's recommenda
   - tests, commit style (`feat(#n): …`) and DCO (**DECISION D6**). **M**
 - [ ] `SECURITY.md`: supported versions (latest minor only), private reporting through GitHub Security Advisories only, no email address (**D12**), scope (credential handling, agent sandbox and SQL allow-list, MCP token, bundle encryption), and the response SLA. **S**
 - [ ] `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), with GitHub's reporting tools as the contact route (no email address). **S**
-- [ ] `.github/ISSUE_TEMPLATE/` with `bug.yml` (asks for the `assay --version` / `assay-studio --version` output, OS and arch, webkit version, install method), `feature.yml`, and `config.yml` pointing questions to Discussions and security reports to the advisory form. Add `.github/pull_request_template.md` (what, why, tests, docs, screenshots for UI). **S**
+- [ ] `.github/ISSUE_TEMPLATE/` with `bug.yml` (asks for the `vibe --version` / `vibe-studio --version` output, OS and arch, webkit version, install method), `feature.yml`, and `config.yml` pointing questions to Discussions and security reports to the advisory form. Add `.github/pull_request_template.md` (what, why, tests, docs, screenshots for UI). **S**
 - [ ] `CLAUDE.md` stays (useful to AI-assisted contributors), but move the architecture section into `docs/architecture.md` and have `CLAUDE.md` link to it. Personal memory files aren't tracked, which is good. **S**
 - [ ] Repo settings once public: branch protection on `main` (required CI checks, linear history), private vulnerability reporting **on**, Dependabot security updates **on**, Discussions **on**, a description, topics, and the social preview (§7). The new repo starts with only `main`; the stale branches stayed behind in the archived repo. **S**
 
@@ -138,7 +138,7 @@ Outcomes are in the Status section above; the table keeps the audit's recommenda
 - **Custom diff-addition scan** over all refs: MotherDuck/JWT `eyJ…`, `sk-`/`sk-ant-`, `ANTHROPIC_API_KEY=`, `OPENAI_API_KEY=`, `MOTHERDUCK_TOKEN=`, AWS `AKIA/ASIA`, PEM private keys, `ghp_`/`github_pat_`, `xox?-`, `AIza…`, `hf_…`, and Postgres URLs with passwords. Hits:
   - `sk-test-N…`, `sk-ant-NE…` in `internal/llm/openai_test.go` (d3aaab8f), `studio/secrets_test.go` and `AgentModelSettings.spec.ts` (6de46cef): obvious fixtures;
   - `ANTHROPIC_API_KEY=sk-ant-...` in `docs/llm-config.md` (9d816e44): a literal `...` placeholder.
-- **Paths ever committed:** no `.env*`, `.pem/.p12/.p8/.key`, `id_rsa`, `.assay`, `.duckdb` or `.db` files. `.claude/plan.md` and four `.claude/worktrees/agent-*` gitlinks exist in early history (removed by 4c4b98b); they're empty submodule pointers, so harmless.
+- **Paths ever committed:** no `.env*`, `.pem/.p12/.p8/.key`, `id_rsa`, `.vibe`, `.duckdb` or `.db` files. `.claude/plan.md` and four `.claude/worktrees/agent-*` gitlinks exist in early history (removed by 4c4b98b); they're empty submodule pointers, so harmless.
 - **Issue and PR bodies** (124 issues, 46 PRs) were scanned for tokens, personal paths and the work email: none.
 
 ### Internal or unwanted material
@@ -200,7 +200,7 @@ Effort: **M**. **Done** (see Status).
 
 - **Fonts** (`studio/frontend/src/assets/fonts/`): Fraunces, Inter and JetBrains Mono, all **SIL OFL 1.1**. `LICENSES.md` names the licence and the sources, but **OFL requires the copyright notice and the full licence text to accompany redistributed fonts**. Add `OFL-Fraunces.txt`, `OFL-Inter.txt` and `OFL-JetBrainsMono.txt` with each project's copyright line. **S**
 - **Icons** (`studio/frontend/src/icons.ts`): described as "Lucide-style", and the paths are copied from **Lucide (ISC)**, some of which derive from Feather (MIT). Add the Lucide ISC notice to NOTICE and a header comment. **S**
-- **DuckDB extensions** downloaded at runtime (excel, httpfs, postgres, mysql, sqlite, azure, ducklake, iceberg, delta, motherduck) are fetched by the user from `extensions.duckdb.org` after consent, so Assay doesn't redistribute them. Most are MIT or Apache. The **`motherduck` extension is proprietary** (MotherDuck terms). Mention this in the privacy/third-party section, and it's another reason **not to bundle** the full set (D7).
+- **DuckDB extensions** downloaded at runtime (excel, httpfs, postgres, mysql, sqlite, azure, ducklake, iceberg, delta, motherduck) are fetched by the user from `extensions.duckdb.org` after consent, so Vibe doesn't redistribute them. Most are MIT or Apache. The **`motherduck` extension is proprietary** (MotherDuck terms). Mention this in the privacy/third-party section, and it's another reason **not to bundle** the full set (D7).
 
 ### Checklist
 
@@ -227,9 +227,9 @@ Asset names carry **no version**, so `releases/latest/download/<name>` works wit
 
 | Asset | Contents |
 |---|---|
-| `assay-darwin-arm64.tar.gz`, `assay-darwin-x86_64.tar.gz` | `Assay.app/` (ad-hoc signed, `assay-studio` inside), `assay` (CLI), `LICENSE`, `THIRD_PARTY_NOTICES.md`, `VERSION` |
-| `assay-linux-amd64.tar.gz`, `assay-linux-arm64.tar.gz` | `bin/assay`, `bin/assay-studio`, `share/applications/assay.desktop`, `share/icons/hicolor/*/apps/assay.png` (+ scalable SVG), `share/mime/packages/assay-bundle.xml`, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `VERSION` |
-| `assay-cli-linux-amd64.tar.gz`, `assay-cli-linux-arm64.tar.gz` | `assay` only, for servers, CI and MCP-only use; no WebKit needed |
+| `vibe-darwin-arm64.tar.gz`, `vibe-darwin-x86_64.tar.gz` | `Vibe Studio.app/` (ad-hoc signed, `vibe-studio` inside), `vibe` (CLI), `LICENSE`, `THIRD_PARTY_NOTICES.md`, `VERSION` |
+| `vibe-linux-amd64.tar.gz`, `vibe-linux-arm64.tar.gz` | `bin/vibe`, `bin/vibe-studio`, `share/applications/vibe-studio.desktop`, `share/icons/hicolor/*/apps/vibe-studio.png` (+ scalable SVG), `share/mime/packages/vibe-bundle.xml`, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `VERSION` |
+| `vibe-cli-linux-amd64.tar.gz`, `vibe-cli-linux-arm64.tar.gz` | `vibe` only, for servers, CI and MCP-only use; no WebKit needed |
 | `checksums.txt` | sha256 of every asset |
 | `install.sh` | The script, versioned with the release |
 | Attestations | `actions/attest-build-provenance` on every asset (verify with `gh attestation verify`) |
@@ -239,9 +239,9 @@ Asset names carry **no version**, so `releases/latest/download/<name>` works wit
 ### Behaviour
 
 ```
-curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
+curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh
 curl -fsSL …/install.sh | sh -s -- --cli-only          # Linux servers, MCP-only
-curl -fsSL …/install.sh | ASSAY_VERSION=v0.1.0 sh       # pin
+curl -fsSL …/install.sh | VIBE_VERSION=v0.1.0 sh       # pin
 curl -fsSL …/install.sh | sh -s -- --uninstall
 ```
 
@@ -253,23 +253,23 @@ curl -fsSL …/install.sh | sh -s -- --uninstall
    - Parse the glibc version from `ldd --version`, or `getconf GNU_LIBC_VERSION`, and require ≥ 2.35. (A local build on Fedora 44 needs `GLIBC_2.43`, which is why CI must build on Ubuntu 22.04.)
    - On macOS, check `sw_vers -productVersion` against the minimum (§8: **14.0 for arm64, 13.0 for Intel** per the DuckDB static libraries' `LC_BUILD_VERSION`).
 3. **Download and verify:**
-   - Base URL: `https://github.com/SandwichLabs/<repo>/releases/latest/download` or `/releases/download/$ASSAY_VERSION`.
+   - Base URL: `https://github.com/SandwichLabs/<repo>/releases/latest/download` or `/releases/download/$VIBE_VERSION`.
    - Download the asset and `checksums.txt`, and verify with `sha256sum` (Linux) or `shasum -a 256` (macOS) by matching the asset's line exactly. Abort on a mismatch.
-   - Optional stronger check: if `gh` is installed and `ASSAY_VERIFY=attestation`, run `gh attestation verify <file> --repo SandwichLabs/<repo>`. (A cosign keyless signature on `checksums.txt` is the alternative; defer it.)
+   - Optional stronger check: if `gh` is installed and `VIBE_VERIFY=attestation`, run `gh attestation verify <file> --repo SandwichLabs/<repo>`. (A cosign keyless signature on `checksums.txt` is the alternative; defer it.)
 4. **Collision guard (D2):** if `command -v vibe` resolves outside the install directory, or `$PREFIX/vibe --version` doesn't start with `vibe version`, stop. Print "Another program named `vibe` is installed at … (for example Mistral Vibe). Re-run with `--force` to replace it, or set `VIBE_INSTALL_DIR`." Never silently overwrite.
 5. **Install, macOS:**
-   - `PREFIX=${ASSAY_INSTALL_DIR:-$HOME/.local/bin}` and `APPDIR=${ASSAY_APP_DIR:-$HOME/Applications}`.
-   - Copy the app to `"$APPDIR/Assay.app.new"` with `ditto` (preserves signatures and xattrs), `rm -rf` the old one, then `mv`. That gives an atomic swap.
-   - `xattr -dr com.apple.quarantine "$APPDIR/Assay.app"`. This is defensive; curl doesn't set it.
-   - Install `assay` to `$PREFIX/assay` (temp file plus `mv`).
-   - Write `$PREFIX/assay-studio` as a two-line wrapper: `exec "$APPDIR/Assay.app/Contents/MacOS/assay-studio" "$@"`. That makes `assay studio --gui` work **without code changes**, because `launchGUI` finds `assay-studio` beside `assay` and `exec`s it. (#4's EvalSymlinks / `open -a` change is still worth doing later; see §5.)
+   - `PREFIX=${VIBE_INSTALL_DIR:-$HOME/.local/bin}` and `APPDIR=${VIBE_APP_DIR:-$HOME/Applications}`.
+   - Copy the app to `"$APPDIR/Vibe Studio.app.new"` with `ditto` (preserves signatures and xattrs), `rm -rf` the old one, then `mv`. That gives an atomic swap.
+   - `xattr -dr com.apple.quarantine "$APPDIR/Vibe Studio.app"`. This is defensive; curl doesn't set it.
+   - Install `vibe` to `$PREFIX/vibe` (temp file plus `mv`).
+   - Write `$PREFIX/vibe-studio` as a two-line wrapper: `exec "$APPDIR/Vibe Studio.app/Contents/MacOS/vibe-studio" "$@"`. That makes `vibe studio --gui` work **without code changes**, because `launchGUI` finds `vibe-studio` beside `vibe` and `exec`s it. (#4's EvalSymlinks / `open -a` change is still worth doing later; see §5.)
 6. **Install, Linux:**
-   - Install `assay` and `assay-studio` to `$PREFIX`.
-   - Write `~/.local/share/applications/assay.desktop` with `Exec=$PREFIX/assay-studio %U`. Use an absolute path: desktop sessions often don't have `~/.local/bin` on `PATH`.
-   - Install icons to `~/.local/share/icons/hicolor/{16..512}/apps/` and the MIME file to `~/.local/share/mime/packages/assay-bundle.xml`.
+   - Install `vibe` and `vibe-studio` to `$PREFIX`.
+   - Write `~/.local/share/applications/vibe-studio.desktop` with `Exec=$PREFIX/vibe-studio %U`. Use an absolute path: desktop sessions often don't have `~/.local/bin` on `PATH`.
+   - Install icons to `~/.local/share/icons/hicolor/{16..512}/apps/` and the MIME file to `~/.local/share/mime/packages/vibe-bundle.xml`.
    - Run `update-mime-database ~/.local/share/mime`, `update-desktop-database ~/.local/share/applications` and `gtk-update-icon-cache` **only if present**.
-   - `--cli-only` skips everything except `assay`.
-7. **Runtime dependency check (Linux GUI):** run `ldd "$PREFIX/assay-studio" | grep 'not found'`, which is more reliable than `ldconfig -p`. If anything is missing, keep the install (the CLI works) and print a distro-specific line from `/etc/os-release` `ID`/`ID_LIKE`:
+   - `--cli-only` skips everything except `vibe`.
+7. **Runtime dependency check (Linux GUI):** run `ldd "$PREFIX/vibe-studio" | grep 'not found'`, which is more reliable than `ldconfig -p`. If anything is missing, keep the install (the CLI works) and print a distro-specific line from `/etc/os-release` `ID`/`ID_LIKE`:
    - Debian/Ubuntu: `sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0`
    - Fedora/RHEL 9+: `sudo dnf install webkit2gtk4.1 gtk3`
    - Arch: `sudo pacman -S webkit2gtk-4.1`
@@ -278,39 +278,39 @@ curl -fsSL …/install.sh | sh -s -- --uninstall
 
    Also warn when no Secret Service is reachable (`busctl --user status org.freedesktop.secrets` fails): "credentials need a keyring or `env:` references".
 8. **PATH:** if `$PREFIX` isn't on `PATH`, print the exact line for the user's `$SHELL` (zsh, bash or fish). Don't edit rc files unless `--modify-path` is given.
-9. **Manifest:** write `${XDG_DATA_HOME:-~/.local/share}/assay/install-manifest` (macOS: `~/Library/Application Support/assay/install-manifest`) listing every installed path and the version.
-10. **Upgrade** is re-running the script. It's idempotent, swaps atomically, and prints `old → new`. If `pgrep -x assay-studio` finds Studio running, say "restart Assay to use the new version". No in-app update check for v0.1.0: it would contradict "doesn't phone home". An opt-in check can come later.
+9. **Manifest:** write `${XDG_DATA_HOME:-~/.local/share}/vibe/install-manifest` (macOS: `~/Library/Application Support/vibe/install-manifest`) listing every installed path and the version.
+10. **Upgrade** is re-running the script. It's idempotent, swaps atomically, and prints `old → new`. If `pgrep -x vibe-studio` finds Studio running, say "restart Vibe Studio to use the new version". No in-app update check for v0.1.0: it would contradict "doesn't phone home". An opt-in check can come later.
 11. **Uninstall** (`--uninstall`): remove the paths in the manifest, refresh the MIME and desktop databases, and print what is **left on purpose**:
-    - config (`~/.config/assay` or `~/Library/Application Support/assay`);
-    - the extension cache (`<user cache>/assay/duckdb/extensions`);
-    - keychain items (`assay conn credentials clear …`);
+    - config (`~/.config/vibe` or `~/Library/Application Support/vibe`);
+    - the extension cache (`<user cache>/vibe/duckdb/extensions`);
+    - keychain items (`vibe conn credentials clear …`);
     - workspaces, which are the user's own folders.
-12. **Exit:** print the installed version (`assay --version`, `assay-studio --version`) and next steps: `assay workspace init demo --template …`, `assay studio --gui demo`, and the docs URL.
+12. **Exit:** print the installed version (`vibe --version`, `vibe-studio --version`) and next steps: `vibe workspace init demo --template …`, `vibe studio --gui demo`, and the docs URL.
 
 ### Gatekeeper for unsigned builds
 
 - **curl doesn't set `com.apple.quarantine`.** Only LSQuarantine-aware apps (browsers, Mail, Messages, AirDrop) do, and `tar` and `ditto` run from a shell don't add it. Gatekeeper's first-launch check happens only for quarantined files, so a curl-installed app **launches with no "unidentified developer" dialog** and no App Translocation.
-- **Apple silicon requires every arm64 executable to be signed**, ad-hoc is enough. The Go linker ad-hoc signs darwin/arm64 binaries automatically. CI should still run `codesign --force --deep --sign - "Assay.app"` **after** placing all files in the bundle, then `codesign --verify --deep --strict`. That seals Info.plist and resources and keeps the signature consistent. The installer must not modify anything inside the bundle afterwards, or the signature breaks and the kernel kills the process.
+- **Apple silicon requires every arm64 executable to be signed**, ad-hoc is enough. The Go linker ad-hoc signs darwin/arm64 binaries automatically. CI should still run `codesign --force --deep --sign - "Vibe Studio.app"` **after** placing all files in the bundle, then `codesign --verify --deep --strict`. That seals Info.plist and resources and keeps the signature consistent. The installer must not modify anything inside the bundle afterwards, or the signature breaks and the kernel kills the process.
 - **Don't enable the hardened runtime** (`--options runtime`) for ad-hoc builds. Without it, **library validation isn't enforced**, so DuckDB extension dylibs that DuckDB downloads into the cache (over its own HTTP client, so not quarantined) load fine. `com.apple.security.cs.disable-library-validation` matters only once you notarise, which requires the hardened runtime. That's #4's spike. Verify that the `osx_arm64` extension binaries carry an (ad-hoc) signature; arm64 macOS refuses to map unsigned code. DuckDB's own CLI loads them on Apple silicon, so this is expected to work. Check it in the Mac smoke job (`LOAD excel`).
-- **A browser-downloaded tarball is quarantined.** On macOS 15 the old right-click ▸ Open bypass is gone, so the user must go to System Settings ▸ Privacy & Security ▸ **Open Anyway**, or run `xattr -dr com.apple.quarantine "~/Applications/Assay.app"`. Put this in the troubleshooting doc and on the release page.
-- **Keychain.** go-keyring calls `/usr/bin/security`, so keychain item ACLs trust Apple's signed `security` tool, not Assay's code hash. Re-signed upgrades *should not* re-prompt. **Verify:** save a credential, upgrade to a rebuilt version, and test it.
+- **A browser-downloaded tarball is quarantined.** On macOS 15 the old right-click ▸ Open bypass is gone, so the user must go to System Settings ▸ Privacy & Security ▸ **Open Anyway**, or run `xattr -dr com.apple.quarantine "~/Applications/Vibe Studio.app"`. Put this in the troubleshooting doc and on the release page.
+- **Keychain.** go-keyring calls `/usr/bin/security`, so keychain item ACLs trust Apple's signed `security` tool, not Vibe's code hash. Re-signed upgrades *should not* re-prompt. **Verify:** save a credential, upgrade to a rebuilt version, and test it.
 - **TCC (privacy prompts).** An ad-hoc identity changes with every build, so grants for folders in Documents/Desktop may re-prompt after each upgrade. That's acceptable for v0.1; note it in the docs.
 
 ### Hosting (**D9**)
 
-- Canonical URL: `https://sandwichlabs.dev/assay/install.sh`. Serve it as a 302 to `https://github.com/SandwichLabs/<repo>/releases/latest/download/install.sh` (a Cloudflare redirect rule or an Astro redirect in the website repo). The script is then versioned and checksummed with each release, and the short URL never changes.
+- Canonical URL: `https://sandwichlabs.dev/vibe/install.sh`. Serve it as a 302 to `https://github.com/SandwichLabs/<repo>/releases/latest/download/install.sh` (a Cloudflare redirect rule or an Astro redirect in the website repo). The script is then versioned and checksummed with each release, and the short URL never changes.
 - Document the GitHub URL as a fallback. Don't point at `raw.githubusercontent.com/.../main/install.sh`: an unreviewed `main` would become the install path.
 
 ### Checklist
 
 - [ ] `scripts/install.sh` as specified, with `shellcheck` in CI. **M**
 - [ ] Installer tests in CI after the release build:
-  - `ubuntu:22.04`, `ubuntu:24.04`, `debian:12`, `fedora:latest` containers: `--cli-only`, then `assay --version` and a `workspace init`/`query` round trip;
-  - Ubuntu 22.04 runner: the full install, `assay-studio --version` under `xvfb-run`, and an uninstall;
-  - `macos-15`: the full install, `assay-studio --version`, `codesign --verify`, `LOAD excel`, and an uninstall.
+  - `ubuntu:22.04`, `ubuntu:24.04`, `debian:12`, `fedora:latest` containers: `--cli-only`, then `vibe --version` and a `workspace init`/`query` round trip;
+  - Ubuntu 22.04 runner: the full install, `vibe-studio --version` under `xvfb-run`, and an uninstall;
+  - `macos-15`: the full install, `vibe-studio --version`, `codesign --verify`, `LOAD excel`, and an uninstall.
 
-  Run against a local file server (`ASSAY_BASE_URL` override) so the release candidate is tested before publishing. **M**
-- [ ] The `sandwichlabs.dev/assay/install.sh` redirect. **S**
+  Run against a local file server (`VIBE_BASE_URL` override) so the release candidate is tested before publishing. **M**
+- [ ] The `sandwichlabs.dev/vibe/install.sh` redirect. **S**
 
 ---
 
@@ -321,10 +321,10 @@ curl -fsSL …/install.sh | sh -s -- --uninstall
 | `.github/workflows/` | **None.** (The only Actions runs ever were Dependabot graph updates.) |
 | `.goreleaser.yaml` | **Still broken.** `goreleaser check` (local v2) fails on `before.hooks` with `dir:` (Pro syntax). It still cross-compiles CGO for darwin from one runner and builds Studio as a plain `go build` without Wails' `desktop,production` tags. `archives.format` is deprecated. |
 | `task release:*` | Tags and runs `goreleaser release` locally. Unusable. |
-| CLI version | ldflags `cmd.version/commit/date` work (Taskfile `install:cli`). `assay --version` prints them. |
-| Studio version | `main.version/commit/date` exist with `assay-studio --version` (prints before the GUI starts, which is good for CI). Stamped only by `task install:studio`. **Not exposed to the UI.** `wails.json` `info.productVersion` is hard-coded `0.1.0`, and that is what Info.plist's `CFBundleShortVersionString` gets. |
+| CLI version | ldflags `cmd.version/commit/date` work (Taskfile `install:cli`). `vibe --version` prints them. |
+| Studio version | `main.version/commit/date` exist with `vibe-studio --version` (prints before the GUI starts, which is good for CI). Stamped only by `task install:studio`. **Not exposed to the UI.** `wails.json` `info.productVersion` is hard-coded `0.1.0`, and that is what Info.plist's `CFBundleShortVersionString` gets. |
 | `appicon.png` | **Missing**, and `studio/build/appicon.png` is listed in `.gitignore`. No logo SVG exists anywhere in the repo. |
-| `wails.json` | `info` filled in. `name`/`outputfilename` is `assay-studio`, so the macOS bundle is `assay-studio.app`, not `Assay.app`. `frontend:install` is `npm install` (use `npm ci` for reproducible releases). |
+| `wails.json` | `info` filled in. `name`/`outputfilename` is `vibe-studio`, so the macOS bundle is `vibe-studio.app`, not `Vibe Studio.app`. `frontend:install` is `npm install` (use `npm ci` for reproducible releases). |
 | Info.plist | `LSMinimumSystemVersion` **10.13.0**. The DuckDB static libraries are built for **macOS 14.0 (arm64) / 13.0 (x86_64)**, so the real floor is higher and the plist is wrong. |
 | `launchGUI` | No `EvalSymlinks` and no `open -a` fallback. That's fine with the install.sh wrapper (§4); needed later for Homebrew symlinks. |
 | Linux tags | `build:studio:linux` uses `-tags webkit2_41` **without `duckdb_arrow`**, but `install:studio` and `studio:dev` include it. Make them consistent. |
@@ -340,7 +340,7 @@ curl -fsSL …/install.sh | sh -s -- --uninstall
   - `go test ./...`;
   - `npm ci && npm run test && npm run build && npx vue-tsc --noEmit` (after #34/#35);
   - golangci-lint, `govulncheck ./...`, `go-licenses check`, `shellcheck scripts/*.sh`.
-- `build-smoke` matrix on `ubuntu-22.04`, `ubuntu-22.04-arm` and `macos-15`: `wails build` with the release tags, `assay --version`, and a `workspace init` → `import` → `query` round trip.
+- `build-smoke` matrix on `ubuntu-22.04`, `ubuntu-22.04-arm` and `macos-15`: `wails build` with the release tags, `vibe --version`, and a `workspace init` → `import` → `query` round trip.
 - Public repos get standard, arm64 and macOS runners free, so #4's billing concern goes away.
 
 **`release.yml`** (on `v*` tags; `-rc` tags become prereleases):
@@ -356,16 +356,16 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
 - **build-linux:**
   - stamp `wails.json` `info.productVersion` from the tag (`jq`);
   - `wails build -tags webkit2_41,duckdb_arrow -ldflags "$STUDIO_LDFLAGS"`;
-  - `go build -ldflags "$CLI_LDFLAGS" -o assay .`;
+  - `go build -ldflags "$CLI_LDFLAGS" -o vibe .`;
   - stage the tarball layout in §4, plus the CLI-only tarball;
   - smoke test.
 - **build-macos:**
   - `wails build -platform darwin/arm64` and `darwin/amd64` (CGO with `-arch`; the DuckDB bindings ship both archs);
-  - `go build` `assay` for each arch;
-  - rename the bundle to `Assay.app` (or set `outputfilename` and `productName`);
+  - `go build` `vibe` for each arch;
+  - rename the bundle to `Vibe Studio.app` (or set `outputfilename` and `productName`);
   - `codesign --force --deep -s -` and `codesign --verify --deep --strict`;
   - tar;
-  - smoke test the arm64 build (`assay-studio --version`, `LOAD excel`). Optionally smoke x86_64 on `macos-15-intel` (available until August 2027).
+  - smoke test the arm64 build (`vibe-studio --version`, `LOAD excel`). Optionally smoke x86_64 on `macos-15-intel` (available until August 2027).
 - **publish:** download the artifacts, `sha256sum * > checksums.txt`, attest, create a **draft** release, upload. Release notes come from `CHANGELOG.md`.
 
 **Reuse from #4's plan:**
@@ -398,13 +398,13 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
   - `npm ci`;
   - consistent `duckdb_arrow` tag;
   - version stamping of `wails.json`;
-  - the bundle name `Assay`. **S–M**
-- [ ] `launchGUI`: `EvalSymlinks(os.Executable())` plus a darwin `open -a "Assay" <path>` fallback (#4; not required for v0.1 thanks to the wrapper). **S**
+  - the bundle name `Vibe Studio`. **S–M**
+- [ ] `launchGUI`: `EvalSymlinks(os.Executable())` plus a darwin `open -a "Vibe Studio" <path>` fallback (#4; not required for v0.1 thanks to the wrapper). **S**
 - [ ] Mac spike on a `macos-15` runner (no Apple account needed):
   - an ad-hoc signed, non-hardened app launches;
   - `LOAD excel`/`postgres`/`httpfs` work;
   - a keychain round trip survives a re-signed upgrade;
-  - `OnFileOpen` fires from Finder for a folder and for a `.assay` file. **M**
+  - `OnFileOpen` fires from Finder for a folder and for a `.vibe` file. **M**
 
 ---
 
@@ -417,9 +417,9 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
 | Install (script, manual, from source, uninstall, upgrade) | Missing | `docs/install.md` **S** |
 | Quickstart: first workspace, a connection, a query, a notebook, the agent with a key or a local model | Missing (the README has a CLI cheat sheet) | `docs/quickstart.md`, using a template and a public dataset (for example a Parquet URL over httpfs) so it works with no accounts **M** |
 | Connections | `reference/connections.md` is good | Add a "common recipes" page (MotherDuck token, Postgres read-only user, S3 with env credentials) **S** |
-| MCP setup | `reference/mcp.md` covers serve, SSE and the Claude config. BYO docs are #27 (open) | Add a short "Use Assay from Claude Code / Claude Desktop / Cursor" page; fold in #27 if it lands **S** |
+| MCP setup | `reference/mcp.md` covers serve, SSE and the Claude config. BYO docs are #27 (open) | Add a short "Use Vibe from Claude Code / Claude Desktop / Cursor" page; fold in #27 if it lands **S** |
 | LLM provider setup | `reference/llm-config.md` | Make sure it says what the default provider is and that nothing is sent anywhere without a configured provider **S** |
-| Troubleshooting | Missing | `docs/troubleshooting.md` **M**. Cover: Gatekeeper/quarantine; missing WebKitGTK; glibc too old; no Secret Service on headless Linux (use `env:`); "workspace owned by another process" (hub lock); extension download blocked by a proxy or air gap; MotherDuck can't be read-only; TCC re-prompts after an upgrade; Wayland/X11 (`GDK_BACKEND`); collision with another `assay` on `PATH`. |
+| Troubleshooting | Missing | `docs/troubleshooting.md` **M**. Cover: Gatekeeper/quarantine; missing WebKitGTK; glibc too old; no Secret Service on headless Linux (use `env:`); "workspace owned by another process" (hub lock); extension download blocked by a proxy or air gap; MotherDuck can't be read-only; TCC re-prompts after an upgrade; Wayland/X11 (`GDK_BACKEND`); collision with another `vibe` on `PATH`. |
 | Privacy / what leaves your machine | Missing | `docs/privacy.md` plus a README section (§8) **S** |
 | Building from source | Scattered across `CLAUDE.md`, the README and the Taskfile | `CONTRIBUTING.md` (§1) **M** |
 | Architecture for contributors | In `CLAUDE.md` and the README | `docs/architecture.md`, with the package map and data flow: hub, sessions, tool registry, MCP **S** |
@@ -437,7 +437,7 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
   - `docs/reviews/cleanup-2026-10/`: move `rules/*.yml` and `sgconfig.yml` to `tools/ast-grep/`, wire them into CI if useful, and drop `FINDINGS.md` or keep it as history.
   - `docs/design/`: keep the HTML and SPEC; drop the 24 PNGs if size matters.
 - **Rewrite `docs/packaging.md`:** a "v0.1 unsigned" section on top that describes install.sh and the workflows; keep the signed/Homebrew plan below it as "next".
-- Update `docs/README.md` with a "Using Assay" section first and "Contributing / design records" after. `internal/docsref` must stay green.
+- Update `docs/README.md` with a "Using Vibe" section first and "Contributing / design records" after. `internal/docsref` must stay green.
 
 ---
 
@@ -445,20 +445,20 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
 
 - [ ] **App icon.** There is none: no `appicon.png`, no SVG mark, no favicon; the website has its own `favicon.svg`. Design the SchoolHouse "V" mark as a master SVG, then export:
   - a 1024² `studio/build/appicon.png`, from which Wails generates `iconfile.icns` (un-ignore it in `.gitignore`);
-  - Linux hicolor PNGs at 16, 32, 48, 64, 128, 256 and 512 plus `scalable/apps/assay.svg`;
-  - optionally a `.assay` document icon.
+  - Linux hicolor PNGs at 16, 32, 48, 64, 128, 256 and 512 plus `scalable/apps/vibe-studio.svg`;
+  - optionally a `.vibe` document icon.
 
   Check that it reads at 16 px and in dark docks. **M**
 - [ ] **Screenshots.** None are usable: `landing/public/screenshots` are from the Access/SQLCipher era, and `docs/design/.../shots` are mockups. Capture 4–6 real shots with Rodney against `:34115`: launcher, notebook with a live chart, connections rail, agent approval card, query editor, plus one dark-theme shot. Store them in `docs/images/`. **S**
 - [ ] **Demo video/GIF.** The 56 s launch film already exists in the website repo. Reuse it on the release page and the README (GitHub renders an uploaded mp4). Make a ≤15 s GIF of "query → chart → ask the agent" for the README hero. **S**
 - [ ] **Social preview** at 1280×640 (logo, tagline, one screenshot), uploaded in repo settings. **S**
-- [ ] **Website.** The project page in the website repo is **already published** (no `draft` flag). It has "Watch the trailer" and "Try it early ↗" (mailto) CTAs, and a comment saying to add Source CTAs when the repo goes public. Work: replace the mailto with the install one-liner, add the GitHub link, add the `/assay/install.sh` redirect, and add a docs link. **S**
+- [ ] **Website.** The project page in the website repo is **already published** (no `draft` flag). It has "Watch the trailer" and "Try it early ↗" (mailto) CTAs, and a comment saying to add Source CTAs when the repo goes public. Work: replace the mailto with the install one-liner, add the GitHub link, add the `/vibe/install.sh` redirect, and add a docs link. **S**
 - [ ] **DECISION D2: name and trademark.**
   - **Mistral Vibe**: an open-source CLI, `vibe` and `vibe-acp` binaries, installed into `~/.local/bin` via `uv tool` or `curl … | bash`. A direct PATH collision with a well-known AI developer tool; users of both overlap heavily, especially with the planned ACP support (`vibe-app#153`).
   - **"Vibe Studio"**: an AI Flutter app builder (listed on Capterra and SoftwareAdvice), and vibe.co's "Vibe Studio" (ad creative).
   - "vibe" is also the generic word in "vibe coding".
 
-  Search USPTO (classes 9 and 42) before launch. If you keep the brand, ship a **distinct CLI binary name** and keep "Assay" as the product name; otherwise rebrand once, together with the module and repo rename. A later rename also touches the `.assay` extension, the `assay.yaml` name, `application/x-assay-bundle`, `dev.sandwichlabs.assay-*` and the keychain service names. Decide what is brand and what is file format.
+  Search USPTO (classes 9 and 42) before launch. If you keep the brand, ship a **distinct CLI binary name** and keep "Vibe" as the product name; otherwise rebrand once, together with the module and repo rename. A later rename also touches the `.vibe` extension, the `vibe.yaml` name, `application/x-vibe-bundle`, `dev.sandwichlabs.vibe-*` and the keychain service names. Decide what is brand and what is file format.
 
 ---
 
@@ -486,7 +486,7 @@ installer-test (needs build-*, before publish) ┘     upload install.sh; a huma
   - DuckDB extension installs from `extensions.duckdb.org`, after consent; autoinstall and autoload are off;
   - the connections you define (MotherDuck, Postgres, S3, …);
   - the LLM provider you configure. The agent sends schema, query results and skills to it, which is the one data-egress point worth stating plainly.
-- [ ] Write `docs/privacy.md` and a README section: "Assay sends nothing to Sandwich Labs. Network traffic goes only to the data sources you connect, to the LLM provider you configure (which sees the prompts, schemas and query results the agent uses), and to extensions.duckdb.org when you approve an extension download." **S**
+- [ ] Write `docs/privacy.md` and a README section: "Vibe sends nothing to Sandwich Labs. Network traffic goes only to the data sources you connect, to the LLM provider you configure (which sees the prompts, schemas and query results the agent uses), and to extensions.duckdb.org when you approve an extension download." **S**
 
 ### Supported-platform statement (draft)
 
@@ -524,7 +524,7 @@ By ecosystem: npm 28, Go 6. **What matters:**
 ## Proposed issue breakdown
 
 **Epic: Open-source launch and v0.1.0 (unsigned, install script).** Make the repo public under a clear licence and name, and ship v0.1.0 for macOS (arm64, x86_64) and Linux (amd64, arm64) as ad-hoc-signed tarballs installed by `curl … | sh`, with checksums and provenance. This supersedes #4 for v0.1.0. #4 keeps signing, notarisation, Homebrew and deb/rpm for v0.2.
-*Done when* v0.1.0 is published from CI, `curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh` installs a working CLI and Studio on a clean macOS 14+ Mac and an Ubuntu 22.04+ machine, and the public repo passes the hygiene checklist.
+*Done when* v0.1.0 is published from CI, `curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh` installs a working CLI and Studio on a clean macOS 14+ Mac and an Ubuntu 22.04+ machine, and the public repo passes the hygiene checklist.
 
 Children, in order:
 
@@ -540,8 +540,8 @@ Children, in order:
 
 2. **Rename the module path (and binary, if decided) and fix `go install`.**
    - `go mod edit -module` to the real org or vanity path; update imports (206 files), Taskfile ldflags and docs;
-   - optionally move `main` to `cmd/assay`;
-   - if the CLI is renamed, update cobra `Use`, `launchGUI`, `hub.LocateAssay`, docs and MCP config snippets.
+   - optionally move `main` to `cmd/vibe`;
+   - if the CLI is renamed, update cobra `Use`, `launchGUI`, `hub.LocateVibe`, docs and MCP config snippets.
 
    *Done when* `go build ./...` and `go test ./...` pass, and `GOFLAGS=-mod=mod go install <path>@<branch>` builds the CLI from a clean GOPATH.
 
@@ -584,14 +584,14 @@ Children, in order:
    - a curl-style (non-quarantined) launch;
    - `LOAD excel`/`postgres`/`httpfs`;
    - a keychain credential survives a re-signed upgrade;
-   - `OnFileOpen` from Finder for a folder and a `.assay` file;
+   - `OnFileOpen` from Finder for a folder and a `.vibe` file;
    - confirm the minimum macOS from the binary's `LC_BUILD_VERSION`.
 
    *Done when* findings are written into `docs/packaging.md` and any blocker has an issue.
 
 9. **Studio build hygiene and app icon.**
    - The master SVG and the icon set: `appicon.png` (un-ignored), hicolor PNGs and SVG;
-   - bundle name `Assay.app`;
+   - bundle name `Vibe Studio.app`;
    - `LSMinimumSystemVersion` per the spike;
    - `npm ci` in `wails.json`;
    - consistent `duckdb_arrow` tags;
@@ -612,7 +612,7 @@ Children, in order:
 
     *Done when* pushing `v0.1.0-rc1` produces a complete draft release with eight archives, the checksums, the attestations and the script.
 
-12. **`install.sh`, plus uninstall, upgrade and installer tests.** The script per §4: detection, checksum verification, the collision guard, macOS app and wrapper, Linux desktop/icon/MIME, the WebKit and Secret Service checks, the manifest, `--uninstall`, `--cli-only` and pinning. A CI job installs from the draft's artifacts into Ubuntu 22.04/24.04, Debian 12 and Fedora containers and onto a macOS runner, then uninstalls. Add the `sandwichlabs.dev/assay/install.sh` redirect. *Done when* the installer tests pass against rc1 and a fresh Mac and Linux machine run Studio after the one-liner.
+12. **`install.sh`, plus uninstall, upgrade and installer tests.** The script per §4: detection, checksum verification, the collision guard, macOS app and wrapper, Linux desktop/icon/MIME, the WebKit and Secret Service checks, the manifest, `--uninstall`, `--cli-only` and pinning. A CI job installs from the draft's artifacts into Ubuntu 22.04/24.04, Debian 12 and Fedora containers and onto a macOS runner, then uninstalls. Add the `sandwichlabs.dev/vibe/install.sh` redirect. *Done when* the installer tests pass against rc1 and a fresh Mac and Linux machine run Studio after the one-liner.
 
 13. **Newcomer docs and changelog.**
     - `docs/install.md`, `docs/quickstart.md` (works with no accounts), `docs/troubleshooting.md`, `docs/privacy.md`, `docs/architecture.md`;

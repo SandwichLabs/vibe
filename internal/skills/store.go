@@ -42,7 +42,7 @@ type Stored struct {
 
 // Store is where a workspace keeps its skills. The file store keeps each as
 // skills/<name>/SKILL.md (the same frontmatter the built-ins use, so Claude
-// Code can read them); the SQLite store wraps the legacy _assay_skills table.
+// Code can read them); the SQLite store wraps the legacy _vibe_skills table.
 type Store interface {
 	// List returns every stored skill ordered by name; never nil-erroring on
 	// an empty or missing store.

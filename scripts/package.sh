@@ -69,7 +69,7 @@ linux)
 	cp "$root/studio/build/bin/assay-studio" "$st/bin/assay-studio"
 	cp "$root/studio/build/linux/assay.desktop" "$st/share/applications/assay.desktop"
 	cp "$root/studio/build/linux/assay-mime.xml" "$st/share/mime/packages/assay-bundle.xml"
-	# Icons: the hicolor tree from scripts/gen-icons.sh (name "assay-studio", matching Icon= in the .desktop file).
+	# Icons: the hicolor tree from scripts/gen-icons.sh (name "assay", matching Icon= in the .desktop file).
 	mkdir -p "$st/share/icons"
 	cp -R "$root/studio/build/linux/icons/hicolor" "$st/share/icons/hicolor"
 	chmod 755 "$st/bin/assay" "$st/bin/assay-studio"

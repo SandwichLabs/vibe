@@ -723,7 +723,7 @@ interface ColumnInfo {
   pk: boolean
   // fk is read-only output from DescribeTable (a real DuckDB FOREIGN KEY
   // constraint, read from duckdb_constraints() — #68 dropped the
-  // _assay_relationships metadata table); CreateTable/AddColumn ignore it.
+  // _vibe_relationships metadata table); CreateTable/AddColumn ignore it.
   fk?: boolean
 }
 

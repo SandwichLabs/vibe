@@ -462,7 +462,7 @@ func TestDeleteSkill_RejectsBuiltin(t *testing.T) {
 // --- LoadSkills: untrusted stored rows ---
 
 // TestLoadSkills_SkipsInvalidNameAndShadowingRows: a shared .assay file can
-// carry a _assay_skills row nobody's SaveUserSkill call ever validated
+// carry a _vibe_skills row nobody's SaveUserSkill call ever validated
 // (written by an older version, a different tool, or by hand). LoadSkills
 // must not trust it blindly: an invalid name is dropped, and a name that
 // collides with a built-in is dropped too (a stored "duckdb-sql" could

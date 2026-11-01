@@ -32,7 +32,7 @@ type SkillEntry struct {
 
 // MaxDescriptionLen / MaxInstructionsLen bound what
 // create_or_update_skill will accept — generous enough for real content,
-// small enough that one bad tool call can't bloat _assay_skills or blow the
+// small enough that one bad tool call can't bloat _vibe_skills or blow the
 // system prompt's <skills> block (which only ever carries descriptions, so
 // the instructions cap matters for read_skill's payload size, not the
 // prompt).
@@ -138,7 +138,7 @@ func loadStoredSkills(ctx context.Context, store Store, logger *slog.Logger) ([]
 }
 
 // LoadSkills merges built-in skills with the stored skills (the workspace's
-// skills/<name>/SKILL.md files, or a legacy .assay's _assay_skills), applying
+// skills/<name>/SKILL.md files, or a legacy .assay's _vibe_skills), applying
 // table gating through the session: an entry with a non-empty
 // TableName is dropped unless that table exists in the live DuckDB catalog
 // and has at least one row (the import wizard's workspace-<table> skills,
@@ -153,7 +153,7 @@ func loadStoredSkills(ctx context.Context, store Store, logger *slog.Logger) ([]
 // NamePattern, or one that collides with a built-in name, is dropped
 // with a warning logged rather than trusted. This closes the gap where
 // SaveUserSkillAt's validation could be bypassed entirely by writing directly
-// to _assay_skills (a different session, a hand-edited file, a future import
+// to _vibe_skills (a different session, a hand-edited file, a future import
 // path) and having the bad row load anyway. logger may be nil (defaults to
 // slog.Default()).
 func LoadSkills(store Store, sess session.Session, logger *slog.Logger) ([]SkillEntry, error) {

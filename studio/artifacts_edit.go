@@ -123,7 +123,7 @@ func vetWarnings(ctx context.Context, env artifactEnv, m *artifacts.Manifest) []
 		}
 		return out
 	}
-	return []string{"The queries could not be checked against the assistant's read policy just now. They are checked again when the artifact runs."}
+	return []string{"The queries could not be checked against the read-only SQL policy just now. They are checked again when the artifact runs."}
 }
 
 // checkArtifact vets the stored artifact (what a run would be held to) and

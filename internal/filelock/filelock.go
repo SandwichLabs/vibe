@@ -1,6 +1,6 @@
 // Package filelock is the crash-safe, non-blocking, exclusive advisory file
 // lock behind a workspace's hub lock (#112, internal/hub). (It also served the
-// .assay container's writer lock, #80, until the container was removed.)
+// .vibe container's writer lock, #80, until the container was removed.)
 //
 // The kernel flock, not the file's content, is the lock: it dies with the
 // process (even on SIGKILL), so it is never stale. The file's content is

@@ -113,7 +113,7 @@ func TestMCPServe_RejectsAssayFiles(t *testing.T) {
 		_, err := executeCommand(args...)
 		require.Error(t, err, "%v", args)
 		assert.ErrorIs(t, err, hub.ErrLegacyFile, "%v", args)
-		assert.Contains(t, err.Error(), "no longer opened directly", "%v", args)
+		assert.Contains(t, err.Error(), "bundles, not workspaces", "%v", args)
 		assert.Contains(t, err.Error(), "workspace folder", "%v", args)
 	}
 }

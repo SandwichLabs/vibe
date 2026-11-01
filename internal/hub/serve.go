@@ -23,7 +23,7 @@ const (
 )
 
 // ErrLegacyFile is returned when `assay mcp serve` is pointed at a .assay file.
-var ErrLegacyFile = errors.New(".assay files are no longer opened directly; open or create a workspace folder, then run `assay mcp serve --workspace <folder>`")
+var ErrLegacyFile = errors.New(".assay files are bundles, not workspaces; open or create a workspace folder, then run `assay mcp serve --workspace <folder>`")
 
 // ServeOptions configures Serve.
 type ServeOptions struct {

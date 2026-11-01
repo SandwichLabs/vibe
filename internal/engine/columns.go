@@ -30,7 +30,7 @@ type ColumnInfo struct {
 	NotNull bool
 	PK      bool
 	// FK is true when the column participates in a FOREIGN KEY constraint
-	// (a plain-SQL inline REFERENCES — #68 dropped the _assay_relationships
+	// (a plain-SQL inline REFERENCES — #68 dropped the _vibe_relationships
 	// metadata table this used to be read from). Read straight from
 	// DuckDB's own duckdb_constraints() catalog, so it reflects reality
 	// regardless of how the FK was declared.
@@ -125,14 +125,14 @@ func constraintColumns(db RowQuerier, ref session.TableRef, constraintType strin
 // around it, not a second implementation) used to gate identifiers that are
 // interpolated into DDL/DML.
 //
-// The "_assay_" prefix is always rejected: those names are reserved for this
-// app's own internal tables (_assay_meta, _assay_skills, _assay_import_stage,
+// The "_assay_" prefix (and the pre-rename "_vibe_") is always rejected: reserved for this
+// app's own internal tables (_vibe_meta, _vibe_skills, _assay_import_stage,
 // ...), and a caller validating a target for its own read/write must never
 // be allowed to touch one, whether by a crafted table name in a shared file
 // or an import/create-table request that happens to collide with the
 // prefix.
 func ValidIdentifier(name string) bool {
-	if name == "" || strings.HasPrefix(name, "_assay_") {
+	if name == "" || strings.HasPrefix(name, "_assay_") || strings.HasPrefix(name, "_vibe_") {
 		return false
 	}
 	for i, r := range name {

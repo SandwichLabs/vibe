@@ -21,7 +21,7 @@ Flags:
                            workspace's own policy, never loosen it
 ```
 
-The workspace is found the way git finds `.git`: `--workspace` (or the current directory) and then each parent until an `assay.yaml` turns up. A `.assay` path, as an argument or as `--workspace`, is refused with "`.assay` files are no longer opened directly; open or create a workspace folder". The old `<file.assay>` argument, `--read-only-file` and `ASSAY_PASSPHRASE` are gone.
+The workspace is found the way git finds `.git`: `--workspace` (or the current directory) and then each parent until an `assay.yaml` turns up. A `.assay` path, as an argument or as `--workspace`, is refused with "`.assay` files are bundles, not workspaces; open or create a workspace folder" (import a bundle with `assay import <file.assay>`). The old `<file.vibe>` argument, `--read-only-file` and `VIBE_PASSPHRASE` are gone.
 
 ### One owner per workspace: owner mode and proxy mode
 
@@ -218,7 +218,7 @@ for its one `GET`.
 
 ## Claude Desktop configuration
 
-See "Copy Claude config" above: no passphrase and no token are needed. The older `ASSAY_PASSPHRASE` setup applied to `.assay` files and is gone.
+See "Copy Claude config" above: no passphrase and no token are needed. The older `VIBE_PASSPHRASE` setup applied to `.vibe` files and is gone.
 
 ## Tool list
 

@@ -130,10 +130,10 @@ describe('BundleImportDialog', () => {
     w.unmount()
   })
 
-  it('shows the plain error for an older .assay file', async () => {
-    makeApp({ PreviewBundleImport: vi.fn(async () => { throw new Error('This is an older .assay file that holds data. Assay no longer opens these.') }) })
+  it('shows the plain error for an older Vibe file', async () => {
+    makeApp({ PreviewBundleImport: vi.fn(async () => { throw new Error("This is an older Vibe file that holds data. Assay doesn't open these.") }) })
     const w = await mountDialog('here', '/x/old.assay')
-    expect(w.find('[data-testid="bi-error"]').text()).toContain('older .assay file that holds data')
+    expect(w.find('[data-testid="bi-error"]').text()).toContain('older Vibe file that holds data')
     expect(w.find('[data-testid="bi-import"]').exists()).toBe(false)
     w.unmount()
   })

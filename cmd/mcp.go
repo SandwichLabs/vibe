@@ -30,7 +30,7 @@ var mcpServeCmd = &cobra.Command{
 tool registry (internal/agents) and sandbox gating Studio's chat uses.
 
 The workspace is --workspace DIR, or the nearest folder above the current
-directory that holds an assay.yaml. .assay files are no longer opened directly.
+directory that holds an assay.yaml. A .assay file is a bundle, not a workspace.
 
 One process owns a workspace's DuckDB hub at a time (.assay-local/hub.lock):
 

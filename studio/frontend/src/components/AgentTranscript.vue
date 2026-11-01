@@ -21,7 +21,7 @@ const emit = defineEmits<{ resolve: [step: ToolStep, ok: boolean]; openNotebook:
     </div>
     <div class="body">
       <div class="who">
-        {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Assistant · error' : m.cancelled ? 'Assistant · cancelled' : (m.verifying ? 'Assistant · verifying' : m.streaming ? 'Assistant · streaming' : 'Agent') }}
+        {{ m.role === 'user' ? 'You' : m.role === 'error' ? 'Assistant · error' : m.cancelled ? 'Assistant · cancelled' : (m.verifying ? 'Assistant · verifying' : m.streaming ? 'Assistant · streaming' : 'Assistant') }}
       </div>
       <div v-if="m.role === 'user'" class="user-bubble">{{ m.text }}</div>
       <p v-else-if="m.role === 'error'" class="agent-text agent-error">{{ m.text }}</p>

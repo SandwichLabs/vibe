@@ -17,12 +17,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// errLegacyFileArg is what every command that used to take a .assay file says
-// when it is handed one. `assay mcp serve` keeps hub.ErrLegacyFile.
-var errLegacyFileArg = errors.New(".assay files are no longer opened; create a workspace with `assay workspace init`")
+// errLegacyFileArg is what a command that wants a workspace folder says when it
+// is handed a .assay path, which is a bundle. `assay mcp serve` keeps hub.ErrLegacyFile.
+var errLegacyFileArg = errors.New(".assay files are bundles, not workspaces; import one with `assay import <file>` or create a workspace with `assay workspace init`")
 
 // isAssayFile reports whether a path argument (a folder, --workspace, a file to
-// import) names a legacy .assay container. It is only for arguments that are
+// import) names a .assay bundle. It is only for arguments that are
 // paths: never SQL, and never a table name (see isAssayTableArg).
 func isAssayFile(arg string) bool {
 	return strings.EqualFold(filepath.Ext(strings.TrimSpace(arg)), ".assay")

@@ -75,7 +75,7 @@ func TestImportFile_QuoteInColumnName_ImportsCleanly(t *testing.T) {
 }
 
 // TestTableHasRows_MaliciousStoredTableName is the gating-path regression:
-// a shared .assay file can carry an attacker-authored _assay_skills row whose
+// a shared .assay file can carry an attacker-authored _vibe_skills row whose
 // table_name is itself a crafted identifier (not something the importer
 // wrote — the attacker just inserted the row directly, as anyone with write
 // access to the SQLite envelope can). LoadSkills (called on every chat turn

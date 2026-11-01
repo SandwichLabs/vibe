@@ -11,7 +11,7 @@ import (
 
 // Store is where a workspace keeps its named queries. Two implementations
 // exist: the file store (queries/<id>.sql with a `-- assay:` header) and the
-// legacy container's Registry over _assay_queries.
+// legacy container's Registry over _vibe_queries.
 type Store interface {
 	// List returns every query ordered by title; never nil.
 	List(ctx context.Context) ([]Query, error)

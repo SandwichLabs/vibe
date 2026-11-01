@@ -59,7 +59,7 @@ func TestHelpEntries_NoRetiredPageSystemTopics(t *testing.T) {
 	}
 	for _, e := range HelpEntries {
 		assert.False(t, retired[e.Topic], "topic %q documents the retired page system and must not exist", e.Topic)
-		assert.NotContains(t, e.Content, "_assay_pages", "topic %q must not document the retired _assay_pages table", e.Topic)
+		assert.NotContains(t, e.Content, "_vibe_pages", "topic %q must not document the retired _vibe_pages table", e.Topic)
 	}
 }
 

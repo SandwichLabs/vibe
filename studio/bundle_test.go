@@ -114,7 +114,7 @@ func TestBundle_RefusesOlderAndForeignFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, append([]byte("SQLite format 3\x00"), make([]byte, 64)...), 0o600))
 	_, err := app.PreviewBundleImport(old, "")
 	require.Error(t, err)
-	assert.Equal(t, "This is an older .assay file that holds data. Assay no longer opens these.", err.Error())
+	assert.Equal(t, "This is an older Vibe file that holds data. Assay doesn't open these.", err.Error())
 
 	txt := filepath.Join(t.TempDir(), "x.assay")
 	require.NoError(t, os.WriteFile(txt, []byte("hello"), 0o600))

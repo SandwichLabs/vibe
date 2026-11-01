@@ -196,3 +196,28 @@ func TestSequencePosition_UsesIncrement(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, int64(10), pos) // next is 15; last dispensed 10
 }
+
+// A table created before the Vibe to Assay rename keeps its _vibe_seq_
+// sequence inside the person's own database; it must still be bumped.
+func TestBumpAutoNumber_LegacyVibeSequence(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDuckDB(t)
+
+	_, err := db.ExecContext(ctx, "CREATE SEQUENCE _vibe_seq_t_id START 1")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "CREATE TABLE t (id BIGINT PRIMARY KEY DEFAULT nextval('_vibe_seq_t_id'), name VARCHAR)")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "INSERT INTO t (id, name) VALUES (5, 'x'), (99, 'y')")
+	require.NoError(t, err)
+
+	gap, ok, err := AutoNumberGap(ctx, db, session.TableRef{Name: "t"}, "id", 99)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, int64(99), gap)
+
+	require.NoError(t, BumpAutoNumber(ctx, db, session.TableRef{Name: "t"}, "id"))
+
+	var next int64
+	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO t (name) VALUES ('z') RETURNING id").Scan(&next))
+	require.Greater(t, next, int64(99))
+}

@@ -188,7 +188,7 @@ func TestWorkspaceInit_RefusesExistingWorkspaceAndAssayFiles(t *testing.T) {
 	for _, args := range [][]string{{"workspace", "init", "old.assay"}, {"init", "old.assay"}} {
 		_, _, err = runAssay(args...)
 		require.Error(t, err, "%v", args)
-		assert.Contains(t, err.Error(), "no longer opened")
+		assert.Contains(t, err.Error(), "bundles, not workspaces")
 		assert.Contains(t, err.Error(), "assay workspace init")
 	}
 }
@@ -335,7 +335,7 @@ func TestQuery_RefusesWhatAssayManagesForYou(t *testing.T) {
 	// A SQL string that merely mentions a .assay file is just SQL.
 	_, _, err := runAssay("query", "--workspace", root, "SELECT * FROM s.assay")
 	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "no longer opened")
+	assert.NotContains(t, err.Error(), "bundles, not workspaces")
 }
 
 func TestQuery_ReadOnlyRefusesCopyTo(t *testing.T) {
@@ -423,7 +423,7 @@ func TestQuery_RefusesAssayFilesAndBadFlags(t *testing.T) {
 	root := newWS(t)
 	_, _, err := runAssay("query", "--workspace", "old.assay", "SELECT 1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no longer opened")
+	assert.Contains(t, err.Error(), "bundles, not workspaces")
 
 	_, _, err = runAssay("query", "--workspace", root, "--format", "xml", "SELECT 1")
 	require.Error(t, err)
@@ -594,7 +594,7 @@ func TestImport_UnsupportedFileTypeAndAssayFile(t *testing.T) {
 	old := writeFile(t, t.TempDir(), "old.assay", "SQLite format 3\x00 and then some data")
 	_, _, err = runAssay("import", old, "--workspace", root)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "older .assay file that holds data")
+	assert.Contains(t, err.Error(), "older Vibe file that holds data")
 }
 
 func TestImport_WhenAnotherProcessOwnsTheHub(t *testing.T) {
@@ -707,7 +707,7 @@ func TestRemovedContainerCommandsPointToWorkspaces(t *testing.T) {
 	for _, name := range []string{"info", "verify", "compact", "rekey", "dump", "passphrase"} {
 		_, _, err := runAssay(name, "old.assay")
 		require.Error(t, err, name)
-		assert.Contains(t, err.Error(), "no longer opened", name)
+		assert.Contains(t, err.Error(), "old .vibe container files", name)
 		assert.Contains(t, err.Error(), "assay workspace init", name)
 	}
 }
@@ -730,7 +730,7 @@ func slowKeys(keys ...string) io.Reader {
 func TestStudio_RefusesAssayFiles(t *testing.T) {
 	_, _, err := runAssay("studio", "old.assay")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no longer opened")
+	assert.Contains(t, err.Error(), "bundles, not workspaces")
 }
 
 // TestStudioTUI_RunsOnTheWorkspace drives the real TUI program on a temp
@@ -826,7 +826,7 @@ func TestExport_TableNamedLikeAAssayFileIsATable(t *testing.T) {
 	root := newWS(t)
 	_, _, err := runAssay("export", "s.assay", "--workspace", root)
 	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "no longer opened")
+	assert.NotContains(t, err.Error(), "bundles, not workspaces")
 }
 
 func TestExport_SQLMustBeOneSelect(t *testing.T) {

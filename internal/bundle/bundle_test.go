@@ -338,7 +338,7 @@ func TestZipBombIsCapped(t *testing.T) {
 }
 
 func TestLegacyFilesGetAPlainError(t *testing.T) {
-	const msg = "This is an older .assay file that holds data. Assay no longer opens these."
+	const msg = "This is an older Vibe file that holds data. Assay doesn't open these."
 	t.Run("sqlite header", func(t *testing.T) {
 		_, err := Open(append([]byte("SQLite format 3\x00"), make([]byte, 100)...), "")
 		require.ErrorIs(t, err, ErrLegacy)

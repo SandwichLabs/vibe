@@ -302,7 +302,7 @@ func TestServeSSERefusedWhenAnotherProcessOwns(t *testing.T) {
 func TestServeRefusesLegacyFilesAndNonWorkspaces(t *testing.T) {
 	_, err := ResolveRoot("notes.assay", "")
 	assert.ErrorIs(t, err, ErrLegacyFile)
-	assert.Contains(t, err.Error(), "no longer opened directly")
+	assert.Contains(t, err.Error(), "bundles, not workspaces")
 	_, err = ResolveRoot("/somewhere/NOTES.ASSAY", "")
 	assert.ErrorIs(t, err, ErrLegacyFile)
 

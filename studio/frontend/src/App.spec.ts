@@ -92,10 +92,10 @@ describe('App.vue', () => {
     expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/from-cli')
 
     _resetForTests()
-    makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '.assay files are no longer opened directly.' })) })
+    makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '.assay files are bundles: use Import .assay… to bring one into a workspace.' })) })
     mountApp()
     await flushPromises()
-    expect(launcherNotice.value).toContain('.assay files are no longer opened')
+    expect(launcherNotice.value).toContain('.assay files are bundles')
   })
 
   it('consumes the launch target only after the open is handled (#33)', async () => {

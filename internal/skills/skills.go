@@ -3,7 +3,7 @@
 // directory per skill, agentskills.io-style. This package has no dependency
 // on internal/agents or internal/llm — it just parses frontmatter and
 // exposes a Skill list — so internal/agents can import it (to merge built-ins
-// with the user skills stored in _assay_skills) without creating an import
+// with the user skills stored in _vibe_skills) without creating an import
 // cycle (internal/llm already imports internal/agents).
 //
 // A sibling ADDENDUM.md next to a SKILL.md, if present, is a human's

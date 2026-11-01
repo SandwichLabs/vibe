@@ -9,7 +9,7 @@ import (
 // Store is where a workspace keeps its notebooks (plan §4.1). Two
 // implementations exist: the file store (notebooks/<id>.asnb in a workspace
 // folder, with compare-and-write) and the SQLite store that wraps the legacy
-// container's _assay_notebooks table so `.assay` files keep working.
+// container's _vibe_notebooks table so `.vibe` files keep working.
 //
 // Every method goes through Coerce on load and save, so a notebook is always
 // rebuilt field by field from a whitelist no matter who wrote the bytes.

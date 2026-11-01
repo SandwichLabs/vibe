@@ -44,11 +44,11 @@ const (
 
 // Errors a caller can test with errors.Is.
 var (
-	// ErrLegacy is a formatVersion 1 or SQLCipher .assay file: one that holds
-	// data. Assay no longer opens these.
-	ErrLegacy = errors.New("This is an older .assay file that holds data. Assay no longer opens these.")
+	// ErrLegacy is a formatVersion 1 or SQLCipher file (a Vibe .vibe container):
+	// one that holds data. Assay doesn't open these.
+	ErrLegacy = errors.New("This is an older Vibe file that holds data. Assay doesn't open these.")
 	// ErrNotBundle is a file that is not an Assay bundle at all.
-	ErrNotBundle = errors.New("this is not an Assay bundle (an older .assay file that held data is not opened either)")
+	ErrNotBundle = errors.New("this is not an Assay bundle (an older Vibe file that held data is not opened either)")
 	// ErrPassphraseRequired means the bundle is encrypted and no passphrase was given.
 	ErrPassphraseRequired = errors.New("this bundle is encrypted: a passphrase is required")
 	// ErrWrongPassphrase means the passphrase did not open the bundle.

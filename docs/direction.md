@@ -3,7 +3,7 @@
 **Date:** 2026-10-06 (delivered 2026-10-06; see §9)
 **Status:** **Delivered.** Epic vibe-app#105 (issues vibe-app#106–vibe-app#119) is merged: the code matches this document, apart from the departures listed in §9. This remains the product north star.
 - **Next:** [`plans/answers-you-can-check.md`](plans/answers-you-can-check.md) (epic #250, 2026-10-26) builds on this direction: every number Assay shows comes with its evidence. See §10.
-- **Supersedes** the 2026-09-22 direction (Assay as a "single-file" data workspace), whose primitives mostly carry forward. That version is in git history.
+- **Supersedes** the 2026-09-22 direction (Vibe as a "single-file" data workspace), whose primitives mostly carry forward. That version is in git history.
 - **Plan:** [`plans/workspaces-and-connections.md`](plans/workspaces-and-connections.md) (implemented; its "as built" summary lists the amendments and open follow-ups).
 - **Tracking:** epic vibe-app#105, issues vibe-app#106–vibe-app#119. What is left (packaging and signing in #4, and the follow-ups named in §9) is listed there.
 - **Earlier work this builds on:** vibe-app#62–vibe-app#70 (shipped in PR vibe-app#71) and vibe-app#93 part 1 (PR vibe-app#104).
@@ -17,7 +17,7 @@ Assay is an **agentic desktop workspace for working with data where it already l
 - **Connections:** data stays resident in its connections: local DuckDB files, MotherDuck, Postgres, SQLite, S3/GCS/R2, and the files and formats DuckDB's extensions can read. Each connection is attached into one DuckDB hub, so any source can be joined with any other.
 - **Workspace:** a folder you open like an Obsidian vault and can switch at any time. Its notebooks, saved queries, skills and connection definitions are plain files, so a workspace can be a **git repository shared with a team**.
 - **Credentials:** they live in the **OS keychain** or environment variables, never in the folder.
-- **`.assay` file:** it is an **exchange format** (a bundle) for notebooks, queries, skills and connection definitions. It no longer holds data, and the older data-holding `.assay` container is not opened or imported at all (§9).
+- **`.assay` file:** it is an **exchange format** (a bundle) for notebooks, queries, skills and connection definitions. It no longer holds data, and the older data-holding `.vibe` container is not opened or imported at all (§9).
 
 ## 2. Why
 
@@ -86,7 +86,7 @@ Unchanged: `{ title, components[] }`, a closed color enum, unknown fields reject
 
 ### Import / Export — vibe-app#118
 - **`.assay` bundle (v2):** a zip of notebooks, queries, skills and connection definitions (never credentials). It is unencrypted by default, with optional passphrase encryption ([age](https://age-encryption.org)). `assay export bundle`, `assay import <file.assay>`, and the workspace menu in Studio; opening a `.assay` file with Assay starts the import.
-- **Legacy `.assay` files (v1, SQLCipher + data):** **not supported** (vibe-app#110 was dropped). They get a plain "not supported" message.
+- **Legacy `.vibe` files (v1, SQLCipher + data):** **not supported** (vibe-app#110 was dropped). They get a plain "not supported" message.
 - **Notebook export** to HTML/PDF/xlsx is still vibe-app#73.
 
 ## 4. What stays, what goes, what changes
@@ -94,8 +94,8 @@ Unchanged: `{ title, components[] }`, a closed color enum, unknown fields reject
 | | |
 |---|---|
 | **Stays** | DuckDB as the single engine; notebooks, skills, A2UI, task mode; one tool surface; MCP; guardrails; the vibe-app#79 approval gate; the vibe-app#80 holder-naming lock (reused for hub ownership); import wizard (vibe-app#82); datasheet editing; SchoolHouse theming; TUI as a SQL REPL |
-| **Goes** (gone) | The SQLCipher container and `internal/container`; the plaintext temp DuckDB copy; Save / Don't save / Revert for table data (vibe-app#81, vibe-app#98); per-file passphrases; `verify`, `compact`, `rekey`, `dump`, `passphrase`; `.assay` as the thing Studio opens |
-| **Changes** | Container → workspace folder. One DuckDB → a hub of connections. `_assay_*` rows → files. Plaintext LLM key → keychain. Agent `full` deny-list → allow-list. `Unlock` → launcher + switcher. `assay mcp serve <file>` → `assay mcp serve [--workspace]`. `.assay` → exchange bundle. |
+| **Goes** (gone) | The SQLCipher container and `internal/container`; the plaintext temp DuckDB copy; Save / Don't save / Revert for table data (vibe-app#81, vibe-app#98); per-file passphrases; `verify`, `compact`, `rekey`, `dump`, `passphrase`; `.vibe` as the thing Studio opens |
+| **Changes** | Container → workspace folder. One DuckDB → a hub of connections. `_vibe_*` rows → files. Plaintext LLM key → keychain. Agent `full` deny-list → allow-list. `Unlock` → launcher + switcher. `vibe mcp serve <file>` → `assay mcp serve [--workspace]`. `.vibe` → `.assay` exchange bundle. |
 
 ## 5. Sequencing
 
@@ -145,7 +145,7 @@ Slice 3 ─ #118 .assay bundle   #119 more types   file-open wiring (done)   #4 
 
 Everything above shipped. These are the places where the result differs from what was first written, in the order they matter.
 
-- **No legacy import (scope change, vibe-app#110 closed).** The plan made the legacy `.assay` importer permanent. It was dropped by an owner decision recorded on the epic (2026-10-06), which also let the container code go. Studio, the CLI and MCP never open a v1 file, `internal/container` and the container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are gone (the names stay registered as hidden stubs that point to `assay workspace init`), and a v1 or SQLCipher `.assay` is told "not supported". `MigratePages` went with it, so old pages are not migrated.
+- **No legacy import (scope change, vibe-app#110 closed).** The plan made the legacy `.vibe` importer permanent. It was dropped by an owner decision recorded on the epic (2026-10-06), which also let the container code go. Studio, the CLI and MCP never open a v1 file, `internal/container` and the container commands (`info`, `verify`, `compact`, `rekey`, `dump`, `passphrase`) are gone (the names stay registered as hidden stubs that point to `assay workspace init`), and a v1 or SQLCipher `.vibe` is told "not supported". `MigratePages` went with it, so old pages are not migrated.
 - **The agent's SQL policy is an allow-list, parsed first (vibe-app#116).** The syntactic check happens before any `EXPLAIN` binds the statement. Reads are the readers the policy names, over `data/` and the scope of a ready storage connection; writes need three gates (tier, writable connection, person's approval), and the approval is always required for anything that is not a local file, so headless MCP refuses those writes. See [`reference/agent-policy.md`](reference/agent-policy.md).
 - **Metadata-driven formats are own-scope only (vibe-app#119).** DuckLake, Iceberg and Delta read whatever files their own metadata names, so a crafted table in a cloned repository could read any file on the machine. They can be defined only in your own scopes (`local.yaml`, the user `connections.yaml`), never in a committed `assay.yaml`, and `iceberg_scan`, `iceberg_metadata`, `iceberg_snapshots` and `delta_scan` are not agent readers in any tier. Giving the agent a safe path is vibe-app#134 (a separate agent hub with external access off, plan D13).
 - **Trust moved out of the folder.** A workspace arrives with whatever its authors committed, so a committed `assay.yaml` can only *tighten* the agent's limits, its `credentials:` line is only a UI hint, `${VAR}` interpolation and absolute paths are refused in it, and per-person settings (looser agent policy, sign-in method) live outside the folder, keyed by workspace id and the folder's real path.
@@ -164,7 +164,7 @@ Everything above shipped. These are the places where the result differs from wha
 Recorded under #36 and #39; the audit and the plan are in [`plans/open-source-launch.md`](plans/open-source-launch.md).
 
 - **Name:** kept **Vibe** and `vibe` at the time. Because Mistral Vibe also installs a `vibe` command, `install.sh` carried a collision guard (#47) (it refuses to overwrite another vendor's binary). The product was renamed **Assay** in v0.6.0 ([`plans/rename-to-assay.md`](plans/rename-to-assay.md)); the guard stays, now for Sand Software Solutions' `assay`.
-- **Repo and module:** `SandwichLabs/assay`, Go module `github.com/SandwichLabs/assay`. Public since v0.1.0 (the go-public step, #50).
+- **Repo and module:** `SandwichLabs/assay`, Go module `github.com/SandwichLabs/assay` (until v0.6.0: `SandwichLabs/vibe`). Public since v0.1.0 (the go-public step, #50).
 - **Licence:** Apache-2.0.
 - **History:** the public repo is a filtered copy of `vibe-app` `main`. `landing/`, `docs/reviews/ux-panel-2026-09-26/` and `docs/archive/*.txt` were dropped from all history, the 88 MB binary was never on `main`, and a work-email author was mailmapped.
 - **Reporting:** GitHub only, no email address. Vulnerabilities go through GitHub private vulnerability reporting; everything else through Issues.

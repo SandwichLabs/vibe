@@ -125,7 +125,7 @@ inner() {
 	check "now ours" bash -c "'$BIN/assay' --version | grep -F 'assay version 0.1.0'"
 	# A second foreign 'assay' earlier on PATH is a warning, not a refusal.
 	mkdir -p "$HOME/shadow"
-	printf '#!/bin/sh\necho mistral\n' >"$HOME/shadow/assay"
+	printf '#!/bin/sh\necho sand-assay\n' >"$HOME/shadow/assay"
 	chmod 755 "$HOME/shadow/assay"
 	set +e
 	out="$(PATH="$HOME/shadow:$BIN:$PATH" ASSAY_DOWNLOAD_BASE="$srv/download/v0.1.0" sh "$installer" --version v0.1.0 2>&1 </dev/null)"
@@ -246,13 +246,13 @@ inner() {
 	echo "== 13. a foreign assay that replaced ours is never overwritten or removed"
 	fresh
 	inst --version v0.1.0
-	printf '#!/bin/sh\necho mistral\n' >"$BIN/assay"
+	printf '#!/bin/sh\necho sand-assay\n' >"$BIN/assay"
 	BASE="$srv/download/v0.2.0" inst --version v0.2.0
 	BASE=''
 	[ "$rc" -ne 0 ] && ok "upgrade refused" || bad "upgrade refused"
-	check "foreign assay untouched" bash -c "'$BIN/assay' | grep -F mistral"
+	check "foreign assay untouched" bash -c "'$BIN/assay' | grep -F sand-assay"
 	inst --uninstall
-	check "uninstall keeps the foreign assay" bash -c "'$BIN/assay' | grep -F mistral"
+	check "uninstall keeps the foreign assay" bash -c "'$BIN/assay' | grep -F sand-assay"
 	has "kept .*assay .*changed" && ok "uninstall says it kept it" || bad "uninstall says it kept it"
 	check "ours was removed" test ! -e "$BIN/assay-studio"
 

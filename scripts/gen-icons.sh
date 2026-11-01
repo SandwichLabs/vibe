@@ -7,7 +7,7 @@
 #   studio/build/appicon.png                    1024x1024; Wails builds iconfile.icns (macOS) from it at `wails build`
 #   studio/build/linux/icons/hicolor/<N>x<N>/apps/assay.png   N = 16 32 48 64 128 256 512
 #   studio/build/linux/icons/hicolor/scalable/apps/assay.svg
-# The icon name is "assay-studio" (matches Icon= in studio/build/linux/assay.desktop).
+# The icon name is "assay" (matches Icon= in studio/build/linux/assay.desktop).
 # Commit the output; the build never runs this.
 set -euo pipefail
 

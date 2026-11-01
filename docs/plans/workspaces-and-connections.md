@@ -13,7 +13,7 @@ The plan below was written before the work and is kept as the record of the reas
 **Shipped.** A workspace is a folder (`assay.yaml`, `notebooks/*.asnb`, `queries/*.sql`, `skills/<name>/SKILL.md`, `data/`), opened from a launcher in Studio and by the CLI. `internal/session` is the DuckDB hub; connections attach into it lazily. Credentials live in the OS keychain or env vars (`internal/secrets`). The agent's SQL is an allow-list; `assay mcp serve` and Studio share one owner per workspace; `.assay` is a bundle. Reference docs: [workspaces](../reference/workspaces.md), [connections](../reference/connections.md), [agent policy](../reference/agent-policy.md), [notebooks](../reference/notebooks.md). North star: [`../direction.md`](../direction.md) (§9 lists the departures).
 
 **Amendments to the plan** (the sections they replace are annotated "(as built)" or "(impl #N)" inline):
-- **No legacy `.assay` import (§4.6, D6, #110).** Dropped by owner decision on the epic. `internal/container` and `verify/compact/rekey/dump/passphrase` are gone, not retired later. A v1 or SQLCipher file gets a plain "not supported".
+- **No legacy `.vibe` import (§4.6, D6, #110).** Dropped by owner decision on the epic. `internal/container` and `verify/compact/rekey/dump/passphrase` are gone, not retired later. A v1 or SQLCipher file gets a plain "not supported".
 - **Agent policy (§4.5, D13, #116).** Parse-first, allow-listed readers, three-gate writes, always-approve for non-local connections, `list_connections` instead of `duckdb_databases()`, `SET VARIABLE` refused, relative paths refused. The "separate agent hub with external access off" in D13 was not built (#134).
 - **Metadata-driven formats are own-scope only (#119).** `ducklake`, `iceberg` and `delta` definitions are refused in a committed `assay.yaml`. Iceberg and Delta readers are not agent readers in any tier. Related rule, **parse before EXPLAIN**: the agent's statement is checked syntactically first, and nothing is sent to `EXPLAIN` (which binds the statement, and for some readers fetches URLs while binding) until that check has passed.
 - **Trust boundary of the folder.** A committed `assay.yaml` can only tighten the agent, its `credentials:` line is a hint only, `${VAR}` and absolute paths are refused in it, per-person settings live outside the folder keyed by id and real path, and every `sign_in` is bound to the definition's fingerprint so a pulled commit cannot redirect a saved password.
@@ -27,7 +27,7 @@ The plan below was written before the work and is kept as the record of the reas
 - MotherDuck verified against a real token (so far only the spike, fakes and the hidden child process).
 - Iceberg REST catalogs. DuckLake with a Postgres or SQLite metadata catalog.
 - Removing a downloaded extension (Studio only installs).
-- Dead code sweep: done in #137 (the SQLite stores and the `_assay_*` helpers are deleted).
+- Dead code sweep: done in #137 (the SQLite stores and the `_vibe_*` helpers are deleted).
 - #77: signing and notarisation, CI and release pipeline, bundled-extension decision (D12), the keychain check on signed builds.
 - #73: notebook export to HTML, PDF and xlsx.
 
@@ -35,7 +35,7 @@ The plan below was written before the work and is kept as the record of the reas
 
 ## 1. The shift in one paragraph
 
-Assay stops being *a file that holds your data* and becomes *a desktop workspace that points at your data* — the DataGrip / DBeaver shape, plus the agent, notebooks, skills and A2UI artifacts we already have. Data stays resident in **connections** (local DuckDB files, MotherDuck, Postgres, SQLite, object storage, files on disk — anything DuckDB can `ATTACH` or read through an extension). A **workspace** is a folder you open like an Obsidian vault; its notebooks, saved queries, skills and secret-free connection definitions are plain files, so the folder can be a git repo shared with a team. **Credentials live in the OS keychain**, never in the folder. The `.assay` file survives as an **exchange format** for notebooks/queries/skills and as the legacy format we import from — not as a data container.
+Vibe stops being *a file that holds your data* and becomes *a desktop workspace that points at your data* — the DataGrip / DBeaver shape, plus the agent, notebooks, skills and A2UI artifacts we already have. Data stays resident in **connections** (local DuckDB files, MotherDuck, Postgres, SQLite, object storage, files on disk — anything DuckDB can `ATTACH` or read through an extension). A **workspace** is a folder you open like an Obsidian vault; its notebooks, saved queries, skills and secret-free connection definitions are plain files, so the folder can be a git repo shared with a team. **Credentials live in the OS keychain**, never in the folder. The `.vibe` file survives as an **exchange format** for notebooks/queries/skills and as the legacy format we import from — not as a data container.
 
 Unchanged: one agent tool surface (`internal/agents` ToolDefs → `internal/llm` + `internal/mcp`), notebooks / A2UI / skills, task-mode authoring, guardrails, SchoolHouse theming, DuckDB as the single engine.
 
@@ -45,15 +45,15 @@ Everything hangs off one `container.Container` (`internal/container/container.go
 
 | Concern | Today | Coupling |
 |---|---|---|
-| Data | `_assay_duckdb` blob → temp file → `sql.Open("duckdb")` (`container/duckdb.go:51`) | `engine.NewManager(c.DuckDBDB())`, single DB |
-| Notebooks | `_assay_notebooks` | `notebooks.DB` (SQL-shaped interface) |
-| Queries | `_assay_queries` | `queries.DB` (SQL-shaped interface) |
-| Skills | `_assay_skills` | `agents.LoadSkills(sqliteDB, duckDB)` raw handles |
-| Sandbox | `_assay_meta.agent_sandbox` (default `read-write`, `agents.DefaultSandboxMode`) + `agent_ask_before_writes` approval gate, on by default (#79) | per file |
+| Data | `_vibe_duckdb` blob → temp file → `sql.Open("duckdb")` (`container/duckdb.go:51`) | `engine.NewManager(c.DuckDBDB())`, single DB |
+| Notebooks | `_vibe_notebooks` | `notebooks.DB` (SQL-shaped interface) |
+| Queries | `_vibe_queries` | `queries.DB` (SQL-shaped interface) |
+| Skills | `_vibe_skills` | `agents.LoadSkills(sqliteDB, duckDB)` raw handles |
+| Sandbox | `_vibe_meta.agent_sandbox` (default `read-write`, `agents.DefaultSandboxMode`) + `agent_ask_before_writes` approval gate, on by default (#79) | per file |
 | LLM key | `~/.assay.yaml` / `ASSAY_LLM_*` — **plaintext** | `internal/config` |
 | Agent | `agents.Handler{container ContainerAccess, engine}` | `.DuckDBDB()` / `.SQLiteDB()` |
 | Studio | `App.container`, ~50 `a.container == nil` gates, `sessionID`; dirty flag / Save / Revert (#81, #98) | `OpenFile`/`CreateFile`, `UnlockView` |
-| Locking | one writer per `.assay` via `flock` on `<file>.lock`, holder named (`internal/container/lock*.go`, #80) | per file |
+| Locking | one writer per `.vibe` via `flock` on `<file>.lock`, holder named (`internal/container/lock*.go`, #80) | per file |
 | MCP | `assay mcp serve <file.assay>` | one file |
 | CLI | `init/info/import/export/dump/verify/compact/rekey` all take `<file>` | |
 
@@ -245,7 +245,7 @@ Cells (`sql`, `a2ui` `sql` bindings — `internal/a2ui/schema.go:92-96`) gain an
 | `assay conn credentials set\|clear <name>` | |
 | `assay query "<sql>" [-c conn]` | duck-tape parity |
 | `assay import <file> --into <conn>.<table>` | through the session — fixes #72 by construction |
-| `assay export bundle\|notebook …`, `assay import bundle\|legacy <file.assay>` | subsumes #9 |
+| `assay export bundle\|notebook …`, `vibe import bundle\|legacy <file.vibe>` | subsumes #9 |
 | `assay mcp serve [--workspace DIR]` | walk-up + Studio proxy |
 | `assay studio [dir]` | TUI REPL on the session |
 
@@ -264,11 +264,11 @@ Owner decision D14: **workspaces first**. Each slice is user-visible and lands t
 The workspace and the hub arrive with exactly one kind of connection: local `duckdb` files (the default `data/local.duckdb`, D3, plus any legacy imports). No keychain needed yet.
 - #108 **Session hub + catalog-aware engine** — `internal/session` (in-memory hub, open-time hardening, lazy attach, status, schema cache); replaces `engine.Manager`'s single-DB use; all 22 `'main'` sites; `crud`/`importer` on `catalog.schema.table`; notebook format v2 (`connection` per cell / A2UI binding).
 - #109 **Workspace core + file-backed stores** — `internal/workspace` (`assay.yaml`, walk-up, id + duplicate detection, `.gitignore`/`.gitattributes` seeding, `.assay-local/`); `notebooks.Store` / `queries.Store` / `skills.Store` with file impls, compare-and-write, `fsnotify` watcher, git-stable serialisers + golden tests; sandbox + ask-before-writes move to `assay.yaml`.
-- #110 **Legacy `.assay` importer** — SQLCipher → files + `data/<stem>.duckdb` connection; `MigratePages` runs here; `internal/container` becomes a read-only legacy reader.
+- #110 **Legacy `.vibe` importer** — SQLCipher → files + `data/<stem>.duckdb` connection; `MigratePages` runs here; `internal/container` becomes a read-only legacy reader.
 - #111 **Studio: launcher, switcher, workspace shell** — replaces `UnlockView` (absorbs #56, #89's Unlock items); recent workspaces; Obsidian-style switcher; `requireWorkspace()` replaces the `a.container == nil` gates; on-disk conflict banner; Workspace vs App settings. Save/Revert/dirty (#81/#98) retire for connection data.
 - #112 **Hub ownership + MCP** — `.assay-local/hub.lock` (reusing #80's `flock`), `assay mcp serve [--workspace]` walk-up and proxy-to-Studio, Studio *open read-only / take over* (replaces #97).
 - #113 **CLI on workspaces** — `assay workspace init|info`, `assay query`, `assay import <file> --into <conn>.<table>` (closes #72), `assay import legacy`, TUI REPL on the session.
-- **Ships:** open a folder, git-share notebooks/queries/skills, old `.assay` files migrate in, agent + MCP work against the workspace.
+- **Ships:** open a folder, git-share notebooks/queries/skills, old `.vibe` files migrate in, agent + MCP work against the workspace.
 
 ### Slice 2 — Connections & credentials
 - #114 **`internal/secrets`** — keychain (go-keyring), `env:` first-class, `prompt`, chain resolver, redactor, non-logging secret-DDL path; LLM API key → keychain with one-time migration.

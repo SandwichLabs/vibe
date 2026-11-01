@@ -79,7 +79,7 @@ watch(() => props.active, (a) => { if (a) void src.checkOnce() }, { immediate: t
     <div v-if="saveError" class="artifact-src__err" role="alert" data-testid="source-error"><pre class="artifact-src__msg">{{ saveError }}</pre></div>
     <div v-if="notice" class="sh-mono artifact-src__notice" role="status" data-testid="source-notice">{{ notice }}</div>
     <div v-if="warnings.length" class="card card-pad col artifact-src__warn" role="status" data-testid="source-warnings">
-      <strong>The assistant's read policy refuses {{ warnings.length === 1 ? 'a query' : 'some queries' }}.</strong>
+      <strong>The read-only SQL policy refuses {{ warnings.length === 1 ? 'a query' : 'some queries' }}.</strong>
       <span class="sh-mono artifact-src__hint">The view will show the policy's refusal when it runs. Fix the query and save again.</span>
       <ul class="artifact-src__list"><li v-for="w in warnings" :key="w"><pre class="artifact-src__msg">{{ w }}</pre></li></ul>
     </div>
