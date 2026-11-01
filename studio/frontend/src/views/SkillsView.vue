@@ -90,7 +90,7 @@ function sourceBadgeClass(source: string) {
           </div>
         </div>
 
-        <div v-if="viewMode === 'rendered'" class="prose vibe-content vibe-md-content" data-testid="skill-rendered" v-html="renderSafeMarkdown(selected.instructions)"></div>
+        <div v-if="viewMode === 'rendered'" class="prose assay-content assay-md-content" data-testid="skill-rendered" v-html="renderSafeMarkdown(selected.instructions)"></div>
         <pre v-else class="sh-mono" data-testid="skill-raw" style="white-space: pre-wrap; padding: var(--sh-space-4); background: var(--sh-paper-2); border: var(--sh-border); border-radius: var(--sh-radius);">{{ selected.instructions }}</pre>
       </div>
     </div>
@@ -116,11 +116,11 @@ function sourceBadgeClass(source: string) {
         </div>
         <div class="col" style="gap: 4px; margin-top: var(--sh-space-3);">
           <label class="sh-label" style="margin: 0;">Description</label>
-          <input v-model="formDescription" placeholder="One line — advertised to the agent up front" class="field-input" style="width: 100%;" data-testid="skill-description-input" />
+          <input v-model="formDescription" placeholder="One line — advertised to the assistant up front" class="field-input" style="width: 100%;" data-testid="skill-description-input" />
         </div>
         <div class="col" style="gap: 4px; margin-top: var(--sh-space-3);">
           <label class="sh-label" style="margin: 0;">Instructions (markdown)</label>
-          <textarea v-model="formInstructions" rows="10" class="field-input" style="width: 100%; min-height: 220px;" data-testid="skill-instructions-input" placeholder="Full instructions the agent reads via read_skill…"></textarea>
+          <textarea v-model="formInstructions" rows="10" class="field-input" style="width: 100%; min-height: 220px;" data-testid="skill-instructions-input" placeholder="Full instructions the assistant reads via read_skill…"></textarea>
         </div>
         <div class="col" style="gap: 4px; margin-top: var(--sh-space-3);">
           <label class="sh-label" style="margin: 0;">Bound table (optional)</label>

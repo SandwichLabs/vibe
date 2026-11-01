@@ -6,9 +6,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
-	"github.com/SandwichLabs/vibe/internal/pagehost"
-	"github.com/SandwichLabs/vibe/internal/pagestate"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagestate"
 )
 
 func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }

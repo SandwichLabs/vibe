@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/config"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/config"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 // keychainTimeout bounds the work behind one binding. The keychain store has
@@ -37,7 +37,7 @@ func (c *llmKeyCache) invalidate() {
 	c.mu.Unlock()
 }
 
-// llmAPIKey resolves the model client's key: VIBE_LLM_API_KEY, the provider's
+// llmAPIKey resolves the model client's key: ASSAY_LLM_API_KEY, the provider's
 // standard env var, the keychain, then the legacy plaintext file value. The
 // key is handed to the model client only; no binding returns it.
 func (a *App) llmAPIKey() string {
@@ -97,7 +97,7 @@ type LLMKeyStatus struct {
 	// Source is env, keychain, file or none.
 	Source string `json:"source"`
 	Set    bool   `json:"set"`
-	// FileKey is true when ~/.vibe.yaml still holds a plaintext key.
+	// FileKey is true when ~/.assay.yaml still holds a plaintext key.
 	FileKey bool `json:"fileKey"`
 	// CanMigrate is FileKey with a working keychain: show the migration banner.
 	CanMigrate bool `json:"canMigrate"`
@@ -194,7 +194,7 @@ func (a *App) ClearLLMKey(provider string) error {
 	return config.ClearLLMKey(ctx, a.secretStore(), p)
 }
 
-// MigrateLLMKeyToKeychain moves the plaintext llm.api_key from ~/.vibe.yaml
+// MigrateLLMKeyToKeychain moves the plaintext llm.api_key from ~/.assay.yaml
 // into the keychain and blanks it in the file, keeping the rest of the file
 // (and a backup with the key removed). If the keychain already holds a
 // different key it refuses unless overwrite is true (the UI asks first).

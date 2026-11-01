@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // MaxCompleteBytes is the longest SQL text Live.Complete looks at; a longer
@@ -39,7 +39,7 @@ type CompleteResult struct {
 type Live struct {
 	sess     session.Session
 	root     string // workspace root; "" = no snapshot
-	write    bool   // write .vibe-local/catalog.json after a rebuild (this process owns the hub)
+	write    bool   // write .assay-local/catalog.json after a rebuild (this process owns the hub)
 	caps     Caps
 	logger   *slog.Logger
 	debounce time.Duration

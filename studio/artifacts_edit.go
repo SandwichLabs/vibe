@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // The editing side of data artifacts (#162, step 6a): what the Source tab reads
@@ -123,7 +123,7 @@ func vetWarnings(ctx context.Context, env artifactEnv, m *artifacts.Manifest) []
 		}
 		return out
 	}
-	return []string{"The queries could not be checked against the agent's read policy just now. They are checked again when the artifact runs."}
+	return []string{"The queries could not be checked against the assistant's read policy just now. They are checked again when the artifact runs."}
 }
 
 // checkArtifact vets the stored artifact (what a run would be held to) and

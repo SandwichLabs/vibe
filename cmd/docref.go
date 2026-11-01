@@ -23,5 +23,5 @@ func docRefAt(ver, page string) string {
 	if m := releaseTag.FindStringSubmatch(ver); m != nil {
 		ref = "v" + m[1]
 	}
-	return "https://github.com/SandwichLabs/vibe/blob/" + ref + "/docs/reference/" + page + ".md"
+	return "https://github.com/SandwichLabs/assay/blob/" + ref + "/docs/reference/" + page + ".md"
 }

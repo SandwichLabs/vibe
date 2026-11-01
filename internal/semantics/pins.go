@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
+	"github.com/SandwichLabs/assay/internal/queries"
 )
 
 // Pins let a caller say which revisions of the metric files and saved queries an

@@ -5,7 +5,7 @@
 //
 // # Transition choice (#108): wrap, don't move
 //
-// The legacy .vibe container materialises its DuckDB blob into a temp file and
+// The legacy .assay container materialises its DuckDB blob into a temp file and
 // opens it with its own *sql.DB, and a second DuckDB instance in the same
 // process cannot ATTACH a file the first instance holds. Rather than reroute
 // Save / Dirty / Revert (#81, #98) through the session now, the container

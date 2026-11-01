@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,7 +59,7 @@ func TestHelpEntries_NoRetiredPageSystemTopics(t *testing.T) {
 	}
 	for _, e := range HelpEntries {
 		assert.False(t, retired[e.Topic], "topic %q documents the retired page system and must not exist", e.Topic)
-		assert.NotContains(t, e.Content, "_vibe_pages", "topic %q must not document the retired _vibe_pages table", e.Topic)
+		assert.NotContains(t, e.Content, "_assay_pages", "topic %q must not document the retired _assay_pages table", e.Topic)
 	}
 }
 

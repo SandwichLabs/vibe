@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // IsIntegerType reports whether a DuckDB type name is in the integer family
@@ -29,7 +29,7 @@ func IsIntegerType(t string) bool {
 // auto-number primary key column. Both identifiers must be validated by the
 // caller before this is interpolated into DDL.
 func AutoNumberSequence(table, column string) string {
-	return fmt.Sprintf("_vibe_seq_%s_%s", table, column)
+	return fmt.Sprintf("_assay_seq_%s_%s", table, column)
 }
 
 // MaxAutoNumberGap caps how far BumpAutoNumber will advance a sequence in

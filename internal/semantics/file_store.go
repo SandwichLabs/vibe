@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // FileStore keeps definitions under a workspace root:

@@ -1,5 +1,5 @@
 /**
- * Theme state for Vibe Studio — one shared instance across the app.
+ * Theme state for Assay — one shared instance across the app.
  *
  * Preferences (which theme, follow-system pairing, motion, scale) are owned by
  * the Go side (internal/prefs) so they persist per user, not per file. In
@@ -50,7 +50,7 @@ const DEFAULT_PREFS: ThemePreferences = {
   uiScale: 100,
 }
 
-const LS_KEY = 'vibe.preferences'
+const LS_KEY = 'assay.preferences'
 
 type Bindings = Pick<AppApi, 'GetPreferences' | 'SetPreferences' | 'ListUserThemes'>
 

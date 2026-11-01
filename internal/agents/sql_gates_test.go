@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/skills"
 )
 
 func sqlOpenDuck(path string) (*sql.DB, error) { return sql.Open("duckdb", path) }
@@ -204,7 +204,7 @@ func TestGates_ApprovalForcedForNonLocal(t *testing.T) {
 		require.NotNil(t, resp.Error)
 		assert.Equal(t, ErrApprovalNeeded, resp.Error.Code)
 		assert.Contains(t, resp.Error.Message, "not a local file")
-		assert.Contains(t, resp.Error.Message, "always needs your OK in Vibe Studio")
+		assert.Contains(t, resp.Error.Message, "always needs your OK in Assay")
 		assert.Contains(t, resp.Error.Message, "Nothing was changed")
 		assert.Equal(t, 2, fx.count("SELECT count(*) FROM other.orders"))
 		// The same call to a local catalog still runs headless with the gate off.
@@ -327,7 +327,7 @@ func TestGates_CopyToWritesOnlyInsideData(t *testing.T) {
 	for _, q := range []string{
 		"COPY (SELECT 1 AS a) TO '%OUT%/leak.csv'",
 		"COPY (SELECT 1 AS a) TO '%DATA%/../leak.csv'",
-		"COPY (SELECT 1 AS a) TO '/tmp/vibe-leak-probe.csv'",
+		"COPY (SELECT 1 AS a) TO '/tmp/assay-leak-probe.csv'",
 		"COPY (SELECT 1 AS a) TO 'rel.csv'",
 		"COPY (SELECT 1 AS a) TO '%DATA%/link.csv'",
 	} {
@@ -336,7 +336,7 @@ func TestGates_CopyToWritesOnlyInsideData(t *testing.T) {
 	}
 	_, err = os.Stat(filepath.Join(fx.outside, "leak.csv"))
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat("/tmp/vibe-leak-probe.csv")
+	_, err = os.Stat("/tmp/assay-leak-probe.csv")
 	assert.True(t, os.IsNotExist(err))
 	b, _ = os.ReadFile(filepath.Join(fx.outside, "secret.csv"))
 	assert.Equal(t, "a,b\n99,99\n", string(b), "the symlink target was not overwritten")

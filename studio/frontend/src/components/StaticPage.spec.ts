@@ -28,7 +28,7 @@ function mountPage(isDefault = true) {
 
 describe('StaticPage', () => {
   it('hosts the page in an iframe with an empty sandbox: no allow-* token of any kind', async () => {
-    src.value = '/vibe-view/' + 'a'.repeat(64) + '/page'
+    src.value = '/assay-view/' + 'a'.repeat(64) + '/page'
     failure.value = ''
     const { w } = mountPage()
     await flushPromises()
@@ -43,7 +43,7 @@ describe('StaticPage', () => {
   })
 
   it('has the level-1 controls around the frame, with Reset', async () => {
-    src.value = '/vibe-view/x/page'
+    src.value = '/assay-view/x/page'
     const { w, reset } = mountPage(false)
     expect(w.findAll('[data-testid="a2ui-control-numberInput"]').length).toBe(1)
     await w.get('[data-testid="static-page-reset"]').trigger('click')
@@ -59,7 +59,7 @@ describe('StaticPage', () => {
   })
 
   it('shows a failure as text and no frame', () => {
-    src.value = '/vibe-view/x/page'
+    src.value = '/assay-view/x/page'
     failure.value = '<img src=x onerror=alert(1)>'
     const { w } = mountPage()
     expect(w.find('[data-testid="static-page-frame"]').exists()).toBe(false)

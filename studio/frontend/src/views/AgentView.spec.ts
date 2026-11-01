@@ -1,4 +1,4 @@
-// Regression for SandwichLabs/vibe#2: leaving the Agent view mid-turn used to
+// Regression for SandwichLabs/assay#2: leaving the Agent view mid-turn used to
 // drop the conversation (the chat state lived in the view's setup) while the
 // Go-side turn kept running. The chat is now a module singleton that keeps
 // listening to the agent events while no view is mounted.

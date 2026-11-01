@@ -9,11 +9,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/SandwichLabs/vibe/internal/connname"
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/sqllex"
-	"github.com/SandwichLabs/vibe/internal/strictyaml"
+	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/sqllex"
+	"github.com/SandwichLabs/assay/internal/strictyaml"
 )
 
 // tablePartRE is one dotted part of an entity's table: an identifier DuckDB

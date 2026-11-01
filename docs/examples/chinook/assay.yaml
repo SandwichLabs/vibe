@@ -1,5 +1,5 @@
-# Vibe workspace. Committed: shared settings and connection definitions only.
-# Never put a password, token or key in this file; Vibe keeps those in your keychain.
+# Assay workspace. Committed: shared settings and connection definitions only.
+# Never put a password, token or key in this file; Assay keeps those in your keychain.
 version: 1
 id: a1e9f308-50b6-4529-a852-9a1c0987b8fd
 name: chinook

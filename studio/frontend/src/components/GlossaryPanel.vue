@@ -15,9 +15,9 @@ const html = computed(() => renderSafeMarkdown(props.detail.glossary?.text ?? pr
     <h2 class="card-title" style="margin: 0; font-size: 28px;">Glossary</h2>
     <div v-if="detail.error" class="note attn" role="alert" data-testid="glossary-error"><span>The glossary cannot be read: {{ detail.error }}</span></div>
     <p v-else-if="!detail.glossary?.terms.length && !detail.text" class="help" style="margin: 0;" data-testid="glossary-empty">
-      There is no glossary yet. Write <code>semantics/glossary.md</code> with a <code>## Term</code> heading per term, or have the agent propose one.
+      There is no glossary yet. Write <code>semantics/glossary.md</code> with a <code>## Term</code> heading per term, or have the assistant propose one.
     </p>
-    <div v-else class="prose vibe-content vibe-md-content" data-testid="glossary-rendered" v-html="html"></div>
+    <div v-else class="prose assay-content assay-md-content" data-testid="glossary-rendered" v-html="html"></div>
     <SourceText v-if="detail.text" :text="detail.text" path="semantics/glossary.md" :open="!!detail.error" />
   </div>
 </template>

@@ -5,18 +5,18 @@ type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-// createVibeEditor is hoisted so tests can inspect/reset its own mock.fn call
+// createAssayEditor is hoisted so tests can inspect/reset its own mock.fn call
 // count for lazy-mount assertions (#95: the SQL editor only mounts once its
 // drawer is opened).
-const { createVibeEditor } = vi.hoisted(() => ({
-  createVibeEditor: vi.fn((el: HTMLElement, opts: any) => ({
+const { createAssayEditor } = vi.hoisted(() => ({
+  createAssayEditor: vi.fn((el: HTMLElement, opts: any) => ({
     view: { focus: vi.fn() },
     setValue: (v: string) => { opts.onChange?.(v) },
     destroy: vi.fn(),
     getValue: () => opts.value ?? '',
   })),
 }))
-vi.mock('../composables/useVibeEditor', () => ({ createVibeEditor }))
+vi.mock('../composables/useAssayEditor', () => ({ createAssayEditor }))
 
 // The mocked route must be genuinely Vue-reactive — NotebookView's
 // `watch(() => route.params.id, ...)` (the fix for #66 part A review item
@@ -91,7 +91,7 @@ describe('NotebookView', () => {
   beforeEach(() => {
     vi.useRealTimers()
     ;(globalThis as any).__mockRoute.params.id = 'nb1'
-    createVibeEditor.mockClear()
+    createAssayEditor.mockClear()
   })
 
   // Every mounted NotebookView keeps a live watch() on the shared mocked
@@ -459,7 +459,7 @@ describe('NotebookView', () => {
         calls++
         const nb = JSON.parse(JSON.stringify(base))
         if (calls > 1) {
-          nb.cells = [{ id: 'agent-edit', type: 'markdown', collapsed: false, source: 'edited by the agent' }]
+          nb.cells = [{ id: 'agent-edit', type: 'markdown', collapsed: false, source: 'edited by the assistant' }]
           nb.rev = 'r2'
         }
         return nb
@@ -559,7 +559,7 @@ describe('NotebookView', () => {
 
     const vm = wrapper.vm as any
     // c1 (non-empty source) never got an editor; c2 (empty source) did.
-    const c1Calls = createVibeEditor.mock.calls.filter((c: any) => c[1]?.value === vm.cells[0].source)
+    const c1Calls = createAssayEditor.mock.calls.filter((c: any) => c[1]?.value === vm.cells[0].source)
     expect(c1Calls).toHaveLength(0)
   })
 
@@ -569,17 +569,17 @@ describe('NotebookView', () => {
     await flushPromises()
     await flushPromises()
     const vm = wrapper.vm as any
-    const before = createVibeEditor.mock.calls.length
+    const before = createAssayEditor.mock.calls.length
 
     await vm.toggleSource(vm.cells[0])
     await flushPromises()
-    expect(createVibeEditor.mock.calls.length).toBe(before + 1)
+    expect(createAssayEditor.mock.calls.length).toBe(before + 1)
     const editor = vm.cells[0].editor
 
     await vm.toggleSource(vm.cells[0]) // close
     await vm.toggleSource(vm.cells[0]) // open again
     await flushPromises()
-    expect(createVibeEditor.mock.calls.length).toBe(before + 1) // still just once
+    expect(createAssayEditor.mock.calls.length).toBe(before + 1) // still just once
     expect(editor.destroy).not.toHaveBeenCalled()
   })
 
@@ -634,13 +634,13 @@ describe('NotebookView', () => {
     await flushPromises()
     await flushPromises()
     const vm = wrapper.vm as any
-    const before = createVibeEditor.mock.calls.length
+    const before = createAssayEditor.mock.calls.length
 
     vm.insertCellFromEnvelope({ type: 'sql', sql: 'SELECT 1', label: 'x' })
     await flushPromises()
     const newCell = vm.cells[vm.cells.length - 1]
     expect(newCell.sourceOpen).toBe(false)
-    expect(createVibeEditor.mock.calls.length).toBe(before)
+    expect(createAssayEditor.mock.calls.length).toBe(before)
   })
 
   it('replacing a cell whose drawer is open keeps it open, with a fresh editor for the new source', async () => {
@@ -654,7 +654,7 @@ describe('NotebookView', () => {
     await flushPromises()
     expect(vm.cells[0].sourceOpen).toBe(true)
     const oldEditor = vm.cells[0].editor
-    const before = createVibeEditor.mock.calls.length
+    const before = createAssayEditor.mock.calls.length
 
     vm.replaceCellFromEnvelope('c1', { type: 'sql', sql: 'SELECT 2', label: 'y' })
     await flushPromises()
@@ -665,7 +665,7 @@ describe('NotebookView', () => {
     expect(oldEditor.destroy).toHaveBeenCalled()
     expect(replaced.editor).toBeTruthy()
     expect(replaced.editor).not.toBe(oldEditor) // recreated with the new value
-    expect(createVibeEditor.mock.calls.length).toBe(before + 1)
+    expect(createAssayEditor.mock.calls.length).toBe(before + 1)
   })
 
   it('toggling the drawer never schedules a save; minimizing does', async () => {
@@ -861,7 +861,7 @@ describe('NotebookView', () => {
     await flushPromises()
     const vm = wrapper.vm as any
 
-    app.SaveNotebook.mockRejectedValueOnce(new Error('conflict: notebooks/nb1.vnb changed on disk since it was loaded'))
+    app.SaveNotebook.mockRejectedValueOnce(new Error('conflict: notebooks/nb1.asnb changed on disk since it was loaded'))
     vm.title = 'Edited'
     await flushPromises()
     await expect(vm.flushSave()).resolves.toBeUndefined()
@@ -926,7 +926,7 @@ describe('NotebookView', () => {
     let n = 0
     const app = makeApp({
       GetNotebook: vi.fn(async () => ({ ...JSON.parse(JSON.stringify(BAR_NOTEBOOK)), rev: n++ === 0 ? 'r1' : 'r2' })),
-      ResolveConflict: vi.fn(async () => { throw new Error('conflict: notebooks/nb1.vnb changed on disk since it was loaded') }),
+      ResolveConflict: vi.fn(async () => { throw new Error('conflict: notebooks/nb1.asnb changed on disk since it was loaded') }),
     })
     const wrapper = mountView()
     await flushPromises()
@@ -950,7 +950,7 @@ describe('NotebookView connections (#117)', () => {
   beforeEach(() => {
     vi.useRealTimers()
     ;(globalThis as any).__mockRoute.params.id = 'nb1'
-    createVibeEditor.mockClear()
+    createAssayEditor.mockClear()
   })
 
   it('an AI proposal that names a connection keeps it when inserted', async () => {

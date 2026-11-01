@@ -9,8 +9,8 @@ package main
 import (
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // ArtifactViewState says where an artifact's custom view stands (none,
@@ -96,7 +96,7 @@ func (a *App) decideArtifactView(name string, f func(workspace.Workspace) error)
 }
 
 // OpenArtifactView issues the token a custom view's Worker is loaded by
-// (/vibe-view/<token>/worker.js), only for a view that is allowed right now; it
+// (/assay-view/<token>/worker.js), only for a view that is allowed right now; it
 // holds the bytes that were hashed, and those are what the token serves. origin
 // is the page's own origin, which the view's CSP names. A view that is not
 // allowed, or changed since, is refused.
@@ -109,7 +109,7 @@ func (a *App) OpenArtifactView(name, origin string) (*ArtifactViewGrant, error) 
 }
 
 // OpenArtifactPage issues the token a static HTML page's frame is loaded by
-// (/vibe-view/<token>/page), only for a page that is allowed right now and has
+// (/assay-view/<token>/page), only for a page that is allowed right now and has
 // no script; it holds the files that were hashed, and those are what the token
 // renders and serves. origin is the window's own origin, which the page's CSP
 // names. A page that is not allowed, or changed since, is refused.

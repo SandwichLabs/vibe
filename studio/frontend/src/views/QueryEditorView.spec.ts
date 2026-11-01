@@ -13,11 +13,11 @@ import { _resetConnectionsForTests } from '../composables/useConnections'
 // The SQL editor is CodeMirror, which jsdom cannot drive: mock it the way
 // NotebookView.spec.ts does, keep the latest instance, and "type" through its
 // onChange. The completion source needs no Go in these specs.
-const { createVibeEditor, editors } = vi.hoisted(() => {
+const { createAssayEditor, editors } = vi.hoisted(() => {
   const editors: Array<{ opts: any; doc: string }> = []
   return {
     editors,
-    createVibeEditor: vi.fn((_el: HTMLElement, opts: any) => {
+    createAssayEditor: vi.fn((_el: HTMLElement, opts: any) => {
       const ed = { opts, doc: opts.value ?? '' }
       editors.push(ed)
       return {
@@ -29,7 +29,7 @@ const { createVibeEditor, editors } = vi.hoisted(() => {
     }),
   }
 })
-vi.mock('../composables/useVibeEditor', () => ({ createVibeEditor }))
+vi.mock('../composables/useAssayEditor', () => ({ createAssayEditor }))
 vi.mock('../lib/sqlComplete', () => ({ sqlCompletion: () => [] }))
 
 async function typeSql(sql: string) {
@@ -261,14 +261,14 @@ describe('QueryEditorView (W5 Query Explorer)', () => {
     expect(wrapper.find('[data-testid="query-status"]').text()).toContain('/tmp/out.parquet')
   })
 
-  it('Ask agent dispatches the vibe:open-agent window event', async () => {
+  it('Ask assistant dispatches the assay:open-agent window event', async () => {
     makeApp()
     const wrapper = await mountView()
     const seen = vi.fn()
-    window.addEventListener('vibe:open-agent', seen)
+    window.addEventListener('assay:open-agent', seen)
     await wrapper.find('[data-testid="ask-agent"]').trigger('click')
     expect(seen).toHaveBeenCalledTimes(1)
-    window.removeEventListener('vibe:open-agent', seen)
+    window.removeEventListener('assay:open-agent', seen)
   })
 
   it('the Unsaved badge tracks divergence from the loaded saved query', async () => {

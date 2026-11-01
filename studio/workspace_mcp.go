@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/hub"
-	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/hub"
+	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
 )
 
 // MCPStatus is Studio's own MCP switch. It never carries the bearer token.
@@ -22,7 +22,7 @@ type MCPStatus struct {
 }
 
 // StartMCP serves this workspace's agent tools over MCP on a loopback port and
-// publishes the endpoint in hub.lock, so `vibe mcp serve` (what Claude Desktop
+// publishes the endpoint in hub.lock, so `assay mcp serve` (what Claude Desktop
 // and Claude Code launch) proxies to Studio. A write that needs approval shows
 // the same approval card the chat agent uses.
 func (a *App) StartMCP() (*MCPStatus, error) {
@@ -43,7 +43,7 @@ func (a *App) StartMCP() (*MCPStatus, error) {
 			hub.WithMCPVersion(version),
 			hub.WithMCPPolicyRefresh(h.refreshPolicy),
 			hub.WithMCPHandler(h.inner),
-			hub.WithMCPHandlerWrap(func(vibemcp.Handler) vibemcp.Handler { return h }),
+			hub.WithMCPHandlerWrap(func(assaymcp.Handler) assaymcp.Handler { return h }),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to start the MCP server: %w", err)
@@ -92,7 +92,7 @@ func (a *App) mcpStatusLocked() *MCPStatus {
 
 // GetClaudeConfig returns the two snippets "Copy Claude Desktop config" and
 // "Copy Claude Code config" put on the clipboard. Neither contains a token: they
-// launch `vibe mcp serve --workspace DIR`, which reads the endpoint from
+// launch `assay mcp serve --workspace DIR`, which reads the endpoint from
 // hub.lock when Studio owns the workspace.
 func (a *App) GetClaudeConfig() (*hub.ClaudeConfig, error) {
 	a.mu.RLock()
@@ -104,13 +104,13 @@ func (a *App) GetClaudeConfig() (*hub.ClaudeConfig, error) {
 	if root == "" {
 		return nil, errNoWorkspace
 	}
-	locate := a.locateVibe
+	locate := a.locateAssay
 	if locate == nil {
-		locate = hub.LocateVibe
+		locate = hub.LocateAssay
 	}
 	exe, err := locate()
 	if err != nil {
-		return nil, errors.New("Couldn't find the `vibe` command-line program. Install it, or put it on your PATH, then try again.")
+		return nil, errors.New("Couldn't find the `assay` command-line program. Install it, or put it on your PATH, then try again.")
 	}
 	cfg, err := hub.BuildClaudeConfig(root, exe)
 	if err != nil {

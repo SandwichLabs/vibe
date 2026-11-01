@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // Limits of ask (H5).

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 const needle = "sk-ant-NEEDLE-123456"
@@ -19,13 +19,13 @@ func cfgFile(t *testing.T, body string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("VIBE_CONFIG_FILE", "")
-	t.Setenv("VIBE_LLM_API_KEY", "")
+	t.Setenv("ASSAY_CONFIG_FILE", "")
+	t.Setenv("ASSAY_LLM_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
-	p := filepath.Join(home, ".vibe.yaml")
+	p := filepath.Join(home, ".assay.yaml")
 	if body != "" {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o640))
 	}
@@ -35,9 +35,9 @@ func cfgFile(t *testing.T, body string) string {
 func TestLLMConfigPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("VIBE_CONFIG_FILE", "")
-	assert.Equal(t, filepath.Join(home, ".vibe.yaml"), LLMConfigPath())
-	t.Setenv("VIBE_CONFIG_FILE", "/x/y.yaml")
+	t.Setenv("ASSAY_CONFIG_FILE", "")
+	assert.Equal(t, filepath.Join(home, ".assay.yaml"), LLMConfigPath())
+	t.Setenv("ASSAY_CONFIG_FILE", "/x/y.yaml")
 	assert.Equal(t, "/x/y.yaml", LLMConfigPath())
 }
 
@@ -51,7 +51,7 @@ func TestResolveLLMKeyOrder(t *testing.T) {
 	store := &secrets.Mock{}
 	require.NoError(t, SetLLMKey(ctx, store, "anthropic", needle+"-keychain"))
 
-	// 4 file < 3 keychain < 2 provider env < 1 VIBE_LLM_API_KEY
+	// 4 file < 3 keychain < 2 provider env < 1 ASSAY_LLM_API_KEY
 	k, src := ResolveLLMKey(ctx, store, cfg.LLM)
 	assert.Equal(t, KeySourceKeychain, src)
 	assert.Equal(t, needle+"-keychain", k)
@@ -61,12 +61,12 @@ func TestResolveLLMKeyOrder(t *testing.T) {
 	assert.Equal(t, KeySourceEnv, src)
 	assert.Equal(t, needle+"-provider-env", k)
 
-	t.Setenv("VIBE_LLM_API_KEY", needle+"-vibe-env")
+	t.Setenv("ASSAY_LLM_API_KEY", needle+"-assay-env")
 	k, src = ResolveLLMKey(ctx, store, cfg.LLM)
 	assert.Equal(t, KeySourceEnv, src)
-	assert.Equal(t, needle+"-vibe-env", k)
+	assert.Equal(t, needle+"-assay-env", k)
 
-	t.Setenv("VIBE_LLM_API_KEY", "")
+	t.Setenv("ASSAY_LLM_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
 	require.NoError(t, ClearLLMKey(ctx, store, "anthropic"))
@@ -113,7 +113,7 @@ func TestKeychainKeysPerProvider(t *testing.T) {
 	assert.Error(t, SetLLMKey(ctx, store, "anthropic", "   "))
 }
 
-const commented = `# my vibe config
+const commented = `# my assay config
 verbose: false   # keep quiet
 
 llm:
@@ -135,7 +135,7 @@ func TestMigrateFileKeyPreservesTheRestOfTheFile(t *testing.T) {
 	require.NoError(t, MigrateFileKey(ctx, store, p, "anthropic", false))
 
 	got, _ := os.ReadFile(p)
-	want := `# my vibe config
+	want := `# my assay config
 verbose: false   # keep quiet
 
 llm:
@@ -236,10 +236,10 @@ func TestMigrateFileKeyFollowsSymlink(t *testing.T) {
 	ctx := context.Background()
 	p := cfgFile(t, "")
 	dir := t.TempDir()
-	target := filepath.Join(dir, "dotfiles-vibe.yaml")
+	target := filepath.Join(dir, "dotfiles-assay.yaml")
 	require.NoError(t, os.WriteFile(target, []byte(commented), 0o600))
 	require.NoError(t, os.Symlink(target, p))
-	t.Setenv("VIBE_CONFIG_FILE", p)
+	t.Setenv("ASSAY_CONFIG_FILE", p)
 
 	store := &secrets.Mock{}
 	require.True(t, HasFileKey(p))
@@ -328,10 +328,10 @@ func TestResolveLLMKey_OpenAIPrecedence(t *testing.T) {
 	assert.Equal(t, "std-env-key", k)
 	assert.Equal(t, KeySourceEnv, src)
 
-	// 1. VIBE_LLM_API_KEY beats everything.
-	t.Setenv("VIBE_LLM_API_KEY", "vibe-env-key")
+	// 1. ASSAY_LLM_API_KEY beats everything.
+	t.Setenv("ASSAY_LLM_API_KEY", "assay-env-key")
 	k, src = ResolveLLMKey(ctx, store, cfg)
-	assert.Equal(t, "vibe-env-key", k)
+	assert.Equal(t, "assay-env-key", k)
 	assert.Equal(t, KeySourceEnv, src)
 }
 

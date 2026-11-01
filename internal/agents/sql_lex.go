@@ -1,6 +1,6 @@
 package agents
 
-import "github.com/SandwichLabs/vibe/internal/sqllex"
+import "github.com/SandwichLabs/assay/internal/sqllex"
 
 // The policy's lexer lives in internal/sqllex (a leaf, so the saved-query
 // binder can share it); these are the names the policy code uses.

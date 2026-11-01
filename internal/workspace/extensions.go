@@ -3,7 +3,7 @@ package workspace
 import (
 	"sort"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
+	"github.com/SandwichLabs/assay/internal/connections"
 )
 
 // ExtensionNeed is one DuckDB extension some connection type needs, and which

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/session/sessiontest"
 
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"
@@ -461,8 +461,8 @@ func TestDeleteSkill_RejectsBuiltin(t *testing.T) {
 
 // --- LoadSkills: untrusted stored rows ---
 
-// TestLoadSkills_SkipsInvalidNameAndShadowingRows: a shared .vibe file can
-// carry a _vibe_skills row nobody's SaveUserSkill call ever validated
+// TestLoadSkills_SkipsInvalidNameAndShadowingRows: a shared .assay file can
+// carry a _assay_skills row nobody's SaveUserSkill call ever validated
 // (written by an older version, a different tool, or by hand). LoadSkills
 // must not trust it blindly: an invalid name is dropped, and a name that
 // collides with a built-in is dropped too (a stored "duckdb-sql" could

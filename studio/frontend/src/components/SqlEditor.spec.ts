@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { createVibeEditor, editors } = vi.hoisted(() => {
+const { createAssayEditor, editors } = vi.hoisted(() => {
   const editors: Array<{ opts: any; doc: string; setValue: any; destroy: any }> = []
   return {
     editors,
-    createVibeEditor: vi.fn((_el: HTMLElement, opts: any) => {
+    createAssayEditor: vi.fn((_el: HTMLElement, opts: any) => {
       const ed: any = { opts, doc: opts.value ?? '', destroy: vi.fn() }
       ed.setValue = vi.fn((v: string) => { ed.doc = v })
       editors.push(ed)
@@ -14,7 +14,7 @@ const { createVibeEditor, editors } = vi.hoisted(() => {
     }),
   }
 })
-vi.mock('../composables/useVibeEditor', () => ({ createVibeEditor }))
+vi.mock('../composables/useAssayEditor', () => ({ createAssayEditor }))
 const sqlCompletion = vi.hoisted(() => vi.fn(() => ['ext']))
 vi.mock('../lib/sqlComplete', () => ({ sqlCompletion }))
 
@@ -68,11 +68,11 @@ describe('SqlEditor', () => {
 // leave nothing to undo, even when the user edited before it.
 describe('SqlEditor undo history (real editor)', () => {
   it('Ctrl+Z after a loaded replacement leaves exactly the loaded text', async () => {
-    const actual = await vi.importActual<typeof import('../composables/useVibeEditor')>('../composables/useVibeEditor')
+    const actual = await vi.importActual<typeof import('../composables/useAssayEditor')>('../composables/useAssayEditor')
     const { undo, undoDepth } = await import('@codemirror/commands')
     const el = document.createElement('div')
     document.body.appendChild(el)
-    const ed = actual.createVibeEditor(el, { lang: 'sql', value: 'SELECT foo FROM a' })
+    const ed = actual.createAssayEditor(el, { lang: 'sql', value: 'SELECT foo FROM a' })
     ed.view.dispatch({ changes: { from: 7, to: 11, insert: '' }, userEvent: 'delete' }) // user deletes "foo "
     expect(undoDepth(ed.view.state)).toBeGreaterThan(0)
     ed.setValue('SELECT 1', { history: false })

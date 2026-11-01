@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 // A data artifact travels as two entries, artifacts/<name>/artifact.yaml and
@@ -20,7 +20,7 @@ import (
 // checked while the bundle opens, before any store is written. A bundle never
 // carries an allow: a script view or a page arriving by bundle is undecided on
 // the receiving machine and shows as source until allowed. Its state
-// (.vibe-local) never travels either: it is not a store a bundle reads.
+// (.assay-local) never travels either: it is not a store a bundle reads.
 
 // artifactPair collects the two entries of one artifact while a bundle opens.
 type artifactPair struct {

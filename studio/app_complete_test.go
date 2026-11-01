@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/lsp"
+	"github.com/SandwichLabs/assay/internal/lsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

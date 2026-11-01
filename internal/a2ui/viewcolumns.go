@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
 )
 
 // This file checks a validated data artifact view against the result columns

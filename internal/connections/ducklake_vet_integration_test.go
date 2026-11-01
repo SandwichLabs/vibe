@@ -17,12 +17,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // rawLake builds an honest DuckLake catalog ("duckdb" or "sqlite") with a plain
@@ -279,7 +279,7 @@ func TestDuckLakeRefusesViewsAndExtraObjectsInTheCatalog(t *testing.T) {
 				assert.NotContains(t, err.Error(), "TOP-SECRET")
 				assert.Contains(t, err.Error(), "refusing")
 				var n int
-				require.NoError(t, conn2.QueryRowContext(ctx, "SELECT count(*) FROM duckdb_databases() WHERE database_name LIKE '__vibe_vet_%'").Scan(&n))
+				require.NoError(t, conn2.QueryRowContext(ctx, "SELECT count(*) FROM duckdb_databases() WHERE database_name LIKE '__assay_vet_%'").Scan(&n))
 				assert.Zero(t, n, "the scratch attachment is always detached")
 			})
 		}
@@ -418,7 +418,7 @@ func craftedLake(t *testing.T, ctx context.Context, kind, caseKey, secretFile st
 	assert.Contains(t, st.Message, "refusing to read it")
 	assert.NotContains(t, st.Message, "TOP-SECRET")
 	var n int
-	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__vibe_vet_%'").Scan(&n))
+	require.NoError(t, sess.DB().QueryRow("SELECT count(*) FROM duckdb_databases() WHERE database_name IN ('lake', '__ducklake_metadata_lake') OR database_name LIKE '__assay_vet_%'").Scan(&n))
 	assert.Zero(t, n)
 
 	res := connections.Test(ctx, connections.Def{Name: "lake", Type: "ducklake", Path: catFile,

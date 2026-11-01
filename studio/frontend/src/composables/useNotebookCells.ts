@@ -9,7 +9,7 @@
 import { ref, nextTick, type Ref } from 'vue'
 import { App } from '../lib/bindings'
 import { runLiveQuery } from '../a2ui/query'
-import { createVibeEditor } from './useVibeEditor'
+import { createAssayEditor } from './useAssayEditor'
 import { useAiCellDialog, type EnvelopeCell } from './useAiCellDialog'
 import { bestView, describeShape } from '../lib/notebookViews'
 import { cellTitle } from '../lib/cellSummary'
@@ -91,7 +91,7 @@ export function useNotebookCells(opts: { onDelete: (id: string) => void }) {
       if (cell.collapsed) continue
       if (cell.type === 'sql' && !cell.sourceOpen) continue
       if (!cell.editorEl || cell.editor) continue
-      cell.editor = createVibeEditor(cell.editorEl, {
+      cell.editor = createAssayEditor(cell.editorEl, {
         value: cell.source,
         lang: cell.type === 'sql' ? 'sql' : 'markdown',
         onChange: (v) => { cell.source = v },

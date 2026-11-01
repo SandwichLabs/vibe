@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
-// TestWithRequirements is the one Test of a connection, for Studio and `vibe
+// TestWithRequirements is the one Test of a connection, for Studio and `assay
 // conn test`: it finds rc's credential (TestCredential) and, for a lake or table
 // read with storage connections (rc.Requires), each storage connection's own
 // saved credential by its own sign-in, with the same server-changed guard, and

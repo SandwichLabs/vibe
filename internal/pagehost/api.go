@@ -10,9 +10,9 @@ import (
 // APIScript is the page-side API the helper injects as a user script in the
 // main world, before the page runs (docs/plans/html-artifacts.md, H4):
 //
-//	vibe.run(query, values)   Promise of {columns, rows, truncated}
-//	vibe.params()             the declared parameters, defaults and options
-//	vibe.use(name)            Promise of a capability object, or null
+//	assay.run(query, values)   Promise of {columns, rows, truncated}
+//	assay.params()             the declared parameters, defaults and options
+//	assay.use(name)            Promise of a capability object, or null
 //
 // A capability object exists only for a name in caps (what the manifest
 // declared and Studio granted): state, download and ask (H5). Each method maps
@@ -57,7 +57,7 @@ func EventScript(capName string, arg []byte) string {
 	if len(arg) == 0 {
 		arg = []byte("null")
 	}
-	return fmt.Sprintf("window.__vibeEvent(%s,JSON.parse(%s))", jsLiteral([]byte(capName)), jsLiteral(arg))
+	return fmt.Sprintf("window.__assayEvent(%s,JSON.parse(%s))", jsLiteral([]byte(capName)), jsLiteral(arg))
 }
 
 // ReplyScript is the script the helper evaluates to answer a pending request
@@ -65,14 +65,14 @@ func EventScript(capName string, arg []byte) string {
 // literal so a key such as "__proto__" stays data) or an error code.
 func ReplyScript(id int64, ok bool, result []byte, code string) string {
 	if ok {
-		return fmt.Sprintf("window.__vibeReply(%d,true,JSON.parse(%s))", id, jsLiteral(result))
+		return fmt.Sprintf("window.__assayReply(%d,true,JSON.parse(%s))", id, jsLiteral(result))
 	}
-	return fmt.Sprintf("window.__vibeReply(%d,false,%s)", id, jsLiteral([]byte(code)))
+	return fmt.Sprintf("window.__assayReply(%d,false,%s)", id, jsLiteral([]byte(code)))
 }
 
 const apiTemplate = `(function () {
   'use strict';
-  var handler = window.webkit.messageHandlers.vibe;
+  var handler = window.webkit.messageHandlers.assay;
   var post = handler.postMessage.bind(handler);
   var stringify = JSON.stringify.bind(JSON);
   var parse = JSON.parse.bind(JSON);
@@ -119,7 +119,7 @@ const apiTemplate = `(function () {
       try { post(stringify(m)); } catch (e) { pending.delete(id); reject(new E(ERR.refused)); }
     });
   }
-  Object.defineProperty(window, '__vibeReply', {
+  Object.defineProperty(window, '__assayReply', {
     value: function (id, ok, v) {
       var p = pending.get(id);
       if (!p) return;
@@ -127,7 +127,7 @@ const apiTemplate = `(function () {
       if (ok) p.resolve(v); else p.reject(new E(ERR[v] || ERR.refused));
     }
   });
-  Object.defineProperty(window, '__vibeEvent', {
+  Object.defineProperty(window, '__assayEvent', {
     value: function (name, arg) {
       if (name !== 'state') return;
       for (var i = 0; i < listeners.length; i++) {
@@ -251,7 +251,7 @@ const apiTemplate = `(function () {
       return P.resolve(granted[name]);
     }
   });
-  Object.defineProperty(window, 'vibe', { value: api });
+  Object.defineProperty(window, 'assay', { value: api });
   var beat = window.setInterval.bind(window);
   beat(function () { try { post('{"t":"hb"}'); } catch (e) {} }, 500);
 })();`

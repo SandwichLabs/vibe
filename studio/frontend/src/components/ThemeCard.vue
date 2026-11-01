@@ -87,7 +87,7 @@ const disabled = computed(() => !props.listing.resolved)
   text-align: left;
   background: var(--sh-surface);
   color: var(--sh-ink);
-  border: 2px solid var(--vibe-border);
+  border: 2px solid var(--assay-border);
   border-radius: var(--sh-radius-sm);
   box-shadow: var(--sh-shadow-sm);
   cursor: pointer;
@@ -95,14 +95,14 @@ const disabled = computed(() => !props.listing.resolved)
   font: inherit;
 }
 .theme-card:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: var(--sh-shadow); }
-.theme-card.is-selected { border-color: var(--vibe-accent); box-shadow: var(--sh-shadow-teal); }
+.theme-card.is-selected { border-color: var(--assay-accent); box-shadow: var(--sh-shadow-teal); }
 .theme-card.is-broken { cursor: not-allowed; opacity: 0.75; border-style: dashed; }
 
 .theme-card__preview {
   position: relative; display: block;
   width: 100%; height: 96px; overflow: hidden;
   align-self: stretch;
-  border: 1.5px solid var(--vibe-border);
+  border: 1.5px solid var(--assay-border);
   border-radius: var(--sh-radius-sm);
 }
 .theme-card__preview span { display: block; }
@@ -125,13 +125,13 @@ const disabled = computed(() => !props.listing.resolved)
 .theme-card__meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 100%; }
 .theme-card__name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
 .theme-card__name svg { color: var(--sh-graphite); flex: none; }
-.theme-card__check { margin-left: auto; color: var(--vibe-accent); display: inline-flex; }
+.theme-card__check { margin-left: auto; color: var(--assay-accent); display: inline-flex; }
 .theme-card__desc { display: block; max-width: 100%; font-size: 12px; color: var(--sh-graphite); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .is-broken .theme-card__desc { color: var(--sh-error); white-space: normal; }
 .theme-card__tags { display: flex; gap: 6px; margin-top: 2px; }
 .theme-card__tag {
   font-family: var(--sh-font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--sh-graphite); border: 1px solid var(--vibe-border-subtle); border-radius: 999px; padding: 1px 6px;
+  color: var(--sh-graphite); border: 1px solid var(--assay-border-subtle); border-radius: 999px; padding: 1px 6px;
 }
-.theme-card__tag--live { color: var(--vibe-accent); border-color: var(--vibe-accent); }
+.theme-card__tag--live { color: var(--assay-accent); border-color: var(--assay-accent); }
 </style>

@@ -54,7 +54,7 @@ describe('ScriptedPage', () => {
   })
 
   it('opens the window with the controls\' query string and the theme, then follows its events', async () => {
-    document.documentElement.style.setProperty('--vibe-bg', '#112233')
+    document.documentElement.style.setProperty('--assay-bg', '#112233')
     document.documentElement.dataset.themeType = 'dark'
     const w = await mountPage({ n: 7 })
     await w.get('[data-testid="scripted-page-open"]').trigger('click')
@@ -63,8 +63,8 @@ describe('ScriptedPage', () => {
     const [name, query, theme] = app.OpenArtifactPageWindow.mock.calls[0] as unknown as [string, string, Record<string, string>]
     expect(name).toBe('pg')
     expect(query).toBe('n=7')
-    expect(theme['--vibe-bg']).toBe('#112233')
-    expect(theme['--vibe-theme-type']).toBe('dark')
+    expect(theme['--assay-bg']).toBe('#112233')
+    expect(theme['--assay-theme-type']).toBe('dark')
     expect(w.find('[data-testid="scripted-page-opening"]').exists()).toBe(true)
 
     handlers['pagewindow:state']({ name: 'pg', state: 'open', hash: 'h1' })

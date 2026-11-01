@@ -14,11 +14,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/testsupport/miniotest"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/testsupport/miniotest"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +48,7 @@ func (l *lockedBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l
 func flociWorkspace(t *testing.T, ep, signIn string, r *secrets.Resolver) (root, cfg string) {
 	t.Helper()
 	cfg = t.TempDir()
-	t.Setenv("VIBE_CONFIG_DIR", cfg)
+	t.Setenv("ASSAY_CONFIG_DIR", cfg)
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "acme"), workspace.WithInitLogger(quietLogger()))
 	require.NoError(t, err)
 	require.NoError(t, res.Workspace.Close())
@@ -211,7 +211,7 @@ func TestFlociLakeEndToEnd(t *testing.T) {
 	noNeedle(t, root, cfg)
 }
 
-// `vibe mcp serve` over stdio: floci signs in from the environment (nothing is
+// `assay mcp serve` over stdio: floci signs in from the environment (nothing is
 // stored), and a client reads the lake through run_query, read-only.
 func TestFlociLakeOverMCPServe(t *testing.T) {
 	ep := miniotest.Start(t)

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // FileStore keeps artifacts as artifacts/<name>/artifact.yaml and one view

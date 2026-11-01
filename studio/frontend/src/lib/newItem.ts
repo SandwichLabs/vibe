@@ -14,7 +14,7 @@ export const RUNS_AFTER_ALLOW = 'Runs after you allow it'
 
 export const CARD_LINE: Record<LibraryType, string> = {
   notebook: 'SQL, notes and charts in cells you run top to bottom.',
-  live: 'A view with controls (dates, filters) over named queries. Built from Vibe’s components.',
+  live: 'A view with controls (dates, filters) over named queries. Built from Assay’s components.',
   page: 'Your own HTML bound to named queries. Starts static; for interactivity in its own window, tick the script box below.',
   script: 'A view.js that draws an SVG or a component page from query rows.',
 }

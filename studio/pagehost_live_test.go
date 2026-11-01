@@ -4,13 +4,13 @@ package main
 
 // Live tests of the Linux page window (step P4): the real helper, under the real
 // bubblewrap gate, with a real WebKitGTK view on the person's Wayland session.
-// They are skipped unless VIBE_PAGEHOST_LIVE=1, because they open windows.
+// They are skipped unless ASSAY_PAGEHOST_LIVE=1, because they open windows.
 //
-//	VIBE_PAGEHOST_LIVE=1 go test -tags webkit2_41,duckdb_arrow ./studio -run TestLive -v
+//	ASSAY_PAGEHOST_LIVE=1 go test -tags webkit2_41,duckdb_arrow ./studio -run TestLive -v
 //
 // Ground truth is a loopback listener on the host (TCP and UDP) that logs every
 // accept and packet, and /proc for what the helper and its children hold. The
-// test binary is the helper (TestMain), mounted into the gate at /vibe-view-host.
+// test binary is the helper (TestMain), mounted into the gate at /assay-view-host.
 
 import (
 	"bufio"
@@ -35,21 +35,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 func init() {
 	// The control run starts the helper without the network namespace, so the
 	// helper's own "I am in the gate" check must be off for it (only in the test binary).
-	if os.Getenv("VIBE_LIVE_CONTROL") == "1" {
+	if os.Getenv("ASSAY_LIVE_CONTROL") == "1" {
 		helperPreflight = func() error { return nil }
 	}
 }
 
 func needLive(t *testing.T) {
 	t.Helper()
-	if os.Getenv("VIBE_PAGEHOST_LIVE") != "1" {
-		t.Skip("set VIBE_PAGEHOST_LIVE=1 to open real page windows")
+	if os.Getenv("ASSAY_PAGEHOST_LIVE") != "1" {
+		t.Skip("set ASSAY_PAGEHOST_LIVE=1 to open real page windows")
 	}
 }
 
@@ -295,7 +295,7 @@ func TestLive_TheHostilePageReachesNothing(t *testing.T) {
 
 	main := logs["main"].log()
 	assert.Contains(t, main, `"handler":"object"`)
-	assert.Contains(t, main, `"vibe":"object"`)
+	assert.Contains(t, main, `"assay":"object"`)
 	assert.Contains(t, main, `"use":"null"`)
 	assert.Contains(t, main, "fetch=rejected")
 	assert.Contains(t, main, "xhr=rejected")
@@ -313,7 +313,7 @@ func TestLive_TheHostilePageReachesNothing(t *testing.T) {
 	assert.Contains(t, logs["open"].log(), "open=done")
 	sn := logs["selfnav"].log()
 	assert.NotContains(t, sn, "js=1", "a javascript: link ran nothing")
-	for _, href := range []string{"other?x=1", "about:blank", "javascript:window.__js=1", "blob:vibe-page://probe/x", "data:text/html,<p>x", "file:///etc/passwd"} {
+	for _, href := range []string{"other?x=1", "about:blank", "javascript:window.__js=1", "blob:assay-page://probe/x", "data:text/html,<p>x", "file:///etc/passwd"} {
 		assert.Contains(t, sn, "nav "+href[:min(len(href), 20)]+"=still here", "a link to %s went nowhere", href)
 	}
 	assert.Contains(t, sn, "samepage=arrived", "a same-page link with a query string loads")
@@ -553,7 +553,7 @@ func TestLive_TheViewIsAnAllowListNotADenyList(t *testing.T) {
 	assert.Contains(t, text, "interfaces: lo\n")
 	assert.Contains(t, text, "ls /run/user/1000: wayland-0", "the Wayland socket is the one thing in the runtime dir")
 	assert.Contains(t, text, "ls /run: user\n")
-	assert.Contains(t, text, "ls /: bin,dev,etc,lib,lib64,proc,run,sbin,sys,tmp,usr,vibe-view-host\n")
+	assert.Contains(t, text, "ls /: bin,dev,etc,lib,lib64,proc,run,sbin,sys,tmp,usr,assay-view-host\n")
 	assert.Empty(t, h.all())
 }
 
@@ -586,7 +586,7 @@ func TestLive_ControlWithoutTheNamespaceTheSameVectorsFire(t *testing.T) {
 				shared = append(shared, a)
 				if a == "--clearenv" {
 					// Keep the network, and tell the test binary (it is the helper) not to check for the namespace.
-					shared = append(shared, "--setenv", "VIBE_LIVE_CONTROL", "1")
+					shared = append(shared, "--setenv", "ASSAY_LIVE_CONTROL", "1")
 				}
 			}
 			cmd := exec.Command(bwrapPath, shared...)
@@ -726,7 +726,7 @@ func TestLive_CapabilitiesInTheRealWindow(t *testing.T) {
 	open() // the state survived the window
 	waitFor("count=2")
 	app.pages.closeAll()
-	b, err := os.ReadFile(filepath.Join(app.ws.Root(), ".vibe-local", "artifacts", "caps", "state.json"))
+	b, err := os.ReadFile(filepath.Join(app.ws.Root(), ".assay-local", "artifacts", "caps", "state.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"count":2`)
 	assert.Contains(t, string(b), `"fromOther"`)

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 const artifactManifest = "version: 1\ntitle: T\nqueries:\n  - name: q\n    sql: SELECT 1\n"
@@ -89,7 +89,7 @@ func TestWatcher_ArtifactsAreReportedAndOwnWritesAreNot(t *testing.T) {
 
 func TestWatcher_ArtifactsFolderCreatedLaterIsWatched(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "vibe.yaml"), []byte("id: "+testID+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "assay.yaml"), []byte("id: "+testID+"\n"), 0o644))
 	ws, err := Open(dir, noUser(t))
 	require.NoError(t, err)
 	defer ws.Close()

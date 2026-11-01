@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 func ssoDevOptions() []workspace.ResolverOption {
@@ -24,7 +24,7 @@ func ssoDevOptions() []workspace.ResolverOption {
 		return nil
 	}
 	env := workspace.SnapshotEnv()
-	oidc, portal := env("VIBE_SSOFAKE_OIDC"), env("VIBE_SSOFAKE_PORTAL")
+	oidc, portal := env("ASSAY_SSOFAKE_OIDC"), env("ASSAY_SSOFAKE_PORTAL")
 	if oidc == "" || portal == "" {
 		return nil
 	}

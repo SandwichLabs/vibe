@@ -48,7 +48,7 @@ func TestViewHash_IsVersionTaggedAndDeterministic(t *testing.T) {
 
 	// The tag is part of the stream: the same canonical bytes under another tag
 	// hash differently, so a later encoding can never collide with this one.
-	assert.NotEqual(t, h, mustHashTag(t, "vibe-view-hash/2", m, files))
+	assert.NotEqual(t, h, mustHashTag(t, "assay-view-hash/2", m, files))
 	assert.Equal(t, h, mustHashTag(t, hashTag, m, files))
 }
 

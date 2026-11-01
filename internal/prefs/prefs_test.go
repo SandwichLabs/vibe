@@ -19,7 +19,7 @@ func TestLoad_MissingFileYieldsDefaults(t *testing.T) {
 }
 
 func TestSaveThenLoad_RoundTrips(t *testing.T) {
-	s := NewStore(filepath.Join(t.TempDir(), "nested", "vibe"))
+	s := NewStore(filepath.Join(t.TempDir(), "nested", "assay"))
 	want := Preferences{Theme: ThemeSystem, SystemLight: "signal", SystemDark: "chalkboard", ReduceMotion: true, UIScale: 110}
 	require.NoError(t, s.Save(want))
 
@@ -112,29 +112,29 @@ func TestListUserThemes(t *testing.T) {
 }
 
 func TestDefaultDir_EnvOverride(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", "/tmp/vibe-test-cfg")
+	t.Setenv("ASSAY_CONFIG_DIR", "/tmp/assay-test-cfg")
 	d, err := DefaultDir(nil)
 	require.NoError(t, err)
-	assert.Equal(t, "/tmp/vibe-test-cfg", d)
+	assert.Equal(t, "/tmp/assay-test-cfg", d)
 
-	t.Setenv("VIBE_CONFIG_DIR", "")
+	t.Setenv("ASSAY_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
 	d, err = DefaultDir(nil)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join("/tmp/xdg", "vibe"), d)
+	assert.Equal(t, filepath.Join("/tmp/xdg", "assay"), d)
 }
 
 func TestDefaultDir_RelativeEnvIsIgnored(t *testing.T) {
 	abs := t.TempDir()
-	t.Setenv("VIBE_CONFIG_DIR", abs)
+	t.Setenv("ASSAY_CONFIG_DIR", abs)
 	got, err := DefaultDir(nil)
 	require.NoError(t, err)
 	assert.Equal(t, abs, got)
 
-	t.Setenv("VIBE_CONFIG_DIR", "relative/dir")
+	t.Setenv("ASSAY_CONFIG_DIR", "relative/dir")
 	got, err = DefaultDir(nil)
 	require.NoError(t, err)
-	assert.NotContains(t, got, "relative/dir", "a relative VIBE_CONFIG_DIR falls back to the user config dir")
+	assert.NotContains(t, got, "relative/dir", "a relative ASSAY_CONFIG_DIR falls back to the user config dir")
 	assert.True(t, filepath.IsAbs(got))
 }
 

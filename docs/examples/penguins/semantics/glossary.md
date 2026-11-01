@@ -2,7 +2,7 @@
 
 ## Penguin
 
-One individual bird measured at Palmer Station, one row in `penguins`. The data has no bird id, so Vibe generated one on import (`vibe import --key auto`). It identifies a row, not a bird.
+One individual bird measured at Palmer Station, one row in `penguins`. The data has no bird id, so Assay generated one on import (`assay import --key auto`). It identifies a row, not a bird.
 
 ## Body mass
 

@@ -91,14 +91,14 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
 </script>
 
 <template>
-  <div id="agent-panel" class="agent-drawer" :class="{ open }" data-testid="agent-panel" role="complementary" aria-label="Agent" :aria-hidden="!open">
+  <div id="agent-panel" class="agent-drawer" :class="{ open }" data-testid="agent-panel" role="complementary" aria-label="Assistant" :aria-hidden="!open">
     <div class="agent-side">
       <div class="head">
-        <div class="title"><Icon name="bot" :size="18" /> Agent</div>
+        <div class="title"><Icon name="bot" :size="18" /> Assistant</div>
         <span v-if="pinnedContext" class="meta" data-testid="agent-pin">
           <Icon name="pin" :size="11" /> {{ pinnedContext }}
         </span>
-        <button class="agent-close" @click="emit('close')" aria-label="Close agent panel">
+        <button class="agent-close" @click="emit('close')" aria-label="Close assistant panel">
           <Icon name="x" :size="16" />
         </button>
       </div>
@@ -131,7 +131,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
           v-model="draft"
           class="box agent-textarea"
           data-testid="agent-input"
-          placeholder="Ask the agent to inspect data or build something…"
+          placeholder="Ask the assistant to inspect data or build something…"
           @keydown="onKeydown"
         ></textarea>
         <div class="row" style="display: flex; justify-content: space-between; align-items: center;">
@@ -181,7 +181,7 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   margin-left: 8px;
   background: transparent;
   border: none;
-  color: var(--vibe-chrome-fg);
+  color: var(--assay-chrome-fg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -215,9 +215,9 @@ watch(() => props.open, (o) => { if (o) scrollToBottom() })
   letter-spacing: 0.06em;
 }
 .agent-pinbtn.active {
-  background: var(--vibe-accent);
-  color: var(--vibe-accent-fg);
-  border-color: var(--vibe-accent);
+  background: var(--assay-accent);
+  color: var(--assay-accent-fg);
+  border-color: var(--assay-accent);
 }
 .agent-hint {
   font-family: var(--sh-font-mono);

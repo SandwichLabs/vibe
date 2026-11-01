@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics/proposals"
 )
 
 // TestSemanticsDocNamesEveryClosedValue keeps docs/reference/semantics.md
@@ -89,7 +89,7 @@ func TestSemanticsDocNamesTheProposalSurface(t *testing.T) {
 	for _, v := range []string{proposals.Dir, "200", "64 KiB", "accept or reject some first"} {
 		assert.True(t, strings.Contains(doc, v), "semantics.md does not state %q", v)
 	}
-	for _, cmd := range []string{"vibe semantics check", "vibe semantics profile", "vibe semantics proposals", "vibe semantics show-proposal", "vibe semantics accept", "vibe semantics reject", "--overwrite"} {
+	for _, cmd := range []string{"assay semantics check", "assay semantics profile", "assay semantics proposals", "assay semantics show-proposal", "assay semantics accept", "assay semantics reject", "--overwrite"} {
 		assert.True(t, strings.Contains(doc, cmd), "semantics.md does not document %q", cmd)
 	}
 	mcp := read("docs", "reference", "mcp.md")
@@ -99,5 +99,5 @@ func TestSemanticsDocNamesTheProposalSurface(t *testing.T) {
 		assert.True(t, strings.Contains(mcp, "`"+tool+"`"), "mcp.md does not name %s", tool)
 		assert.True(t, strings.Contains(policy, "`"+tool+"`"), "agent-policy.md does not name %s", tool)
 	}
-	assert.True(t, strings.Contains(read("docs", "privacy.md"), ".vibe-local/proposals/"), "privacy.md does not say proposals stay on this machine")
+	assert.True(t, strings.Contains(read("docs", "privacy.md"), ".assay-local/proposals/"), "privacy.md does not say proposals stay on this machine")
 }

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // output is what the console printed since the prompt that preceded cmd.
@@ -50,10 +50,10 @@ func TestDotCommands(t *testing.T) {
 		{".export", "Error: .export is not available in this console yet; use the Query Explorer's export.\n"},
 		{".shell ls", "Error: .shell is not available: the console runs SQL on the workspace hub, never a shell.\n"},
 		{".system ls", "Error: .system is not available: the console runs SQL on the workspace hub, never a shell.\n"},
-		{".open x.db", "Error: .open is not available: the console is bound to this workspace's hub; connections are defined in vibe.yaml.\n"},
-		{".load x", "Error: .load is not available: Vibe loads the DuckDB extensions a connection needs itself.\n"},
+		{".open x.db", "Error: .open is not available: the console is bound to this workspace's hub; connections are defined in assay.yaml.\n"},
+		{".load x", "Error: .load is not available: Assay loads the DuckDB extensions a connection needs itself.\n"},
 		{".cd /", "Error: .cd is not available: the console has no working directory.\n"},
-		{".import a b", "Error: .import is not available here: use Import (vibe import, or Studio's Import) instead.\n"},
+		{".import a b", "Error: .import is not available here: use Import (assay import, or Studio's Import) instead.\n"},
 		{".output f", "Error: .output is not available: the console does not write files; use .export (Query Explorer) instead.\n"},
 		{".once f", "Error: .once is not available: the console does not write files; use .export (Query Explorer) instead.\n"},
 		{".log f", "Error: .log is not available here.\n"},

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/assay/internal/skills"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

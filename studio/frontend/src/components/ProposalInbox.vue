@@ -78,7 +78,7 @@ const mark = (op: string) => (op === '+' ? '+' : op === '-' ? '-' : ' ')
 
     <template v-else>
       <p v-if="!proposals.length" class="help" style="margin: 0;" data-testid="proposal-empty">
-        No proposals are waiting. When the agent suggests a definition (it can, in the chat, once you ask it to model your data), it lands here for you to read and accept. Nothing changes until you do.
+        No proposals are waiting. When the assistant suggests a definition (it can, in the chat, once you ask it to model your data), it lands here for you to read and accept. Nothing changes until you do.
       </p>
       <ul v-else class="proposal-inbox__cards">
         <li v-for="p in proposals" :key="p.id">

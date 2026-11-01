@@ -9,7 +9,7 @@ import (
 // subquery that returns at most limit rows, so a huge table is never fully
 // materialised by a caller that only displays a page of it.
 func CapRows(sql string, limit int) string {
-	return fmt.Sprintf("SELECT * FROM (%s) AS _vibe_repl_cap LIMIT %d", sql, limit)
+	return fmt.Sprintf("SELECT * FROM (%s) AS _assay_repl_cap LIMIT %d", sql, limit)
 }
 
 // CapRowsIfSafe applies CapRows when it is safe to: readOnly (decided by the

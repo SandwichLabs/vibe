@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/awssso"
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/awssso"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 // awsEndpointRE is the only custom endpoint an AWS SSO identity may be sent to:
@@ -191,7 +191,7 @@ func targetOf(d ConnectionDef) secrets.Target {
 // CheckSignIn is every static check of choosing method for the (environment
 // resolved) definition d: the method is well formed, the type takes it
 // (TypeInfo.SignInMethods), and the method's identity may go to d's endpoint.
-// SetSignIn runs it, and so does `vibe conn add` before it saves anything.
+// SetSignIn runs it, and so does `assay conn add` before it saves anything.
 func CheckSignIn(res *secrets.Resolver, d ConnectionDef, method string) error {
 	if err := ValidateSignIn(method); err != nil {
 		return err

@@ -1,4 +1,4 @@
-// Package strictyaml is the one strict YAML decoder behind every document Vibe
+// Package strictyaml is the one strict YAML decoder behind every document Assay
 // reads from a folder somebody else may have written: artifact.yaml and the
 // semantics/ files. A leaf (yaml.v3 and the standard library only), so no store
 // has a decoder of its own to drift from.

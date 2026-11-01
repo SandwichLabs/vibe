@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/bundle"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/bundle"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -188,7 +188,7 @@ func (a *App) ExportNotebook(id, dst string) (string, error) {
 			Title:           "Export Notebook",
 			DefaultFilename: nb.Title + ".json",
 			Filters: []runtime.FileFilter{
-				{DisplayName: "Vibe Notebook (*.json)", Pattern: "*.json"},
+				{DisplayName: "Assay Notebook (*.json)", Pattern: "*.json"},
 			},
 		})
 		if err != nil {
@@ -211,7 +211,7 @@ func (a *App) SelectNotebookFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Import Notebook",
 		Filters: []runtime.FileFilter{
-			{DisplayName: "Vibe Notebook (*.json)", Pattern: "*.json"},
+			{DisplayName: "Assay Notebook (*.json)", Pattern: "*.json"},
 		},
 	})
 	if err != nil {

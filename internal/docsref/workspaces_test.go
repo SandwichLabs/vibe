@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // yamlKeys lists the yaml keys of a struct type (the schema's source of truth).
@@ -48,14 +48,14 @@ func docKeys(t *testing.T, doc, name string) []string {
 }
 
 // TestWorkspacesDocMatchesSchema keeps docs/reference/workspaces.md honest: the
-// keys it documents for vibe.yaml, a connection definition, the local file and
+// keys it documents for assay.yaml, a connection definition, the local file and
 // the user file are exactly the keys the strict schema accepts.
 func TestWorkspacesDocMatchesSchema(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "reference", "workspaces.md"))
 	require.NoError(t, err)
 	doc := string(data)
 
-	assert.Equal(t, yamlKeys(reflect.TypeOf(workspace.Config{})), docKeys(t, doc, "vibe.yaml"), "vibe.yaml keys")
+	assert.Equal(t, yamlKeys(reflect.TypeOf(workspace.Config{})), docKeys(t, doc, "assay.yaml"), "assay.yaml keys")
 	assert.Equal(t, yamlKeys(reflect.TypeOf(workspace.ConnectionDef{})), docKeys(t, doc, "connection"), "connection definition keys")
 	assert.Equal(t, yamlKeys(reflect.TypeOf(workspace.LocalConfig{})), docKeys(t, doc, "local"), "local connections.yaml keys")
 	assert.Equal(t, yamlKeys(reflect.TypeOf(workspace.UserConfig{})), docKeys(t, doc, "user"), "user connections.yaml keys")

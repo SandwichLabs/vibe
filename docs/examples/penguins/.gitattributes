@@ -1,2 +1,2 @@
-# Vibe: notebooks are LF text so diffs stay clean
-*.vnb text eol=lf
+# Assay: notebooks are LF text so diffs stay clean
+*.asnb text eol=lf

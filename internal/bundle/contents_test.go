@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 func TestContentsOf_ListsWhatCanGoInABundle(t *testing.T) {
@@ -27,7 +27,7 @@ func TestContentsOf_ListsWhatCanGoInABundle(t *testing.T) {
 	assert.Equal(t, "Quarterly review", got.Notebooks[0].Title)
 	require.Len(t, got.Queries, 1)
 	assert.Equal(t, "Top customers", got.Queries[0].Title)
-	require.Len(t, got.Skills, 1, "built-in skills ship with Vibe and are not exported")
+	require.Len(t, got.Skills, 1, "built-in skills ship with Assay and are not exported")
 	assert.Equal(t, "revenue-notes", got.Skills[0].ID)
 
 	// Sorted by name; the workspace's own default database is left out.
@@ -55,7 +55,7 @@ func TestContentsOf_EmptyWorkspaceHasEmptyListsNotNil(t *testing.T) {
 func TestContentsOf_SkipsItemsThatDoNotParse(t *testing.T) {
 	ws, _ := newWS(t)
 	seed(t, ws)
-	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "notebooks", "broken.vnb"), []byte("{not json"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root(), "notebooks", "broken.asnb"), []byte("{not json"), 0o600))
 	got, err := ContentsOf(context.Background(), ws)
 	require.NoError(t, err)
 	assert.Len(t, got.Notebooks, 1, "a notebook with an error is not offered")
@@ -82,7 +82,7 @@ func TestReadNotebookFile(t *testing.T) {
 	_, err = ReadNotebookFile(write("bad.json", "{"))
 	assert.ErrorContains(t, err, "invalid notebook file")
 	_, err = ReadNotebookFile(write("pkg.json", `{"name":"x","version":"1"}`))
-	assert.ErrorContains(t, err, "not a Vibe notebook file")
+	assert.ErrorContains(t, err, "not an Assay notebook file")
 	_, err = ReadNotebookFile(write("wrongkind.json", `{"kind":"other"}`))
 	assert.ErrorContains(t, err, `got "other"`)
 

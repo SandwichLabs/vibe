@@ -4,7 +4,7 @@ package main
 // Wails-bound write path (InsertRow/UpdateRow/DeleteRow) against a real
 // workspace and its DuckDB hub. No mocks.
 //
-// Field metadata (required, validation rules) was an Access-era _vibe_ table
+// Field metadata (required, validation rules) was an Access-era _assay_ table
 // that workspaces do not have; only type coercion and the database's own
 // constraints apply.
 //
@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/crud"
+	"github.com/SandwichLabs/assay/internal/crud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +49,7 @@ func asWriteError(t *testing.T, err error) *crud.WriteError {
 }
 
 // TestCRUDCoercion verifies a NEW file (no
-// _vibe_field_meta table at all — #68 stopped creating it) still coerces
+// _assay_field_meta table at all — #68 stopped creating it) still coerces
 // types correctly; required/validation_rule enforcement is simply absent
 // since there is no metadata to enforce.
 func TestCRUDCoercion(t *testing.T) {

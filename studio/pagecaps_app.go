@@ -13,9 +13,9 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/SandwichLabs/vibe/internal/llm"
-	"github.com/SandwichLabs/vibe/internal/pagestate"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/llm"
+	"github.com/SandwichLabs/assay/internal/pagestate"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 var errSaveBusy = errors.New("a save dialog is already open")
@@ -84,7 +84,7 @@ func (a *App) savePageFile(ctx context.Context, title, filename, ext string) (st
 	return path, ctx.Err()
 }
 
-const askPreamble = "You are answering one request from a page the person opened in Vibe. You have no tools and no access to files, data or the web. Answer in plain text."
+const askPreamble = "You are answering one request from a page the person opened in Assay. You have no tools and no access to files, data or the web. Answer in plain text."
 
 // askForPage is a single completion on the configured provider: no tools, no
 // history, at most 4,000 tokens. configured is false when no provider is set.

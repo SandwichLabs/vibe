@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/templates"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/templates"
 )
 
 func TestNewDir(t *testing.T) {
@@ -46,7 +46,7 @@ func TestCheckNewDir(t *testing.T) {
 }
 
 func TestCreateNew(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	parent := t.TempDir()
 
 	_, err := CreateNew(NewRequest{ParentDir: parent}, nil)

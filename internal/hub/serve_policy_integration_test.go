@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,19 +73,19 @@ func hubPSQL(t *testing.T, id, q string) string {
 
 // TestServeProxyApprovesRemoteWritesThroughStudio is the in-Studio MCP approval
 // path (#116): Studio owns the workspace and serves MCP with its approver, a
-// headless `vibe mcp serve` proxies to it, and a write to a Postgres connection
+// headless `assay mcp serve` proxies to it, and a write to a Postgres connection
 // is asked about even though this person turned "Ask before changes" off.
 func TestServeProxyApprovesRemoteWritesThroughStudio(t *testing.T) {
 	id, portStr := startHubPG(t)
 	hubPSQL(t, id, "create table people(id int primary key, name text); insert into people values (1,'ada'),(2,'bob')")
 	port, _ := strconv.Atoi(portStr)
 
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	res, err := workspace.Init(filepath.Join(t.TempDir(), "acme"), workspace.WithInitLogger(quietLogger()))
 	require.NoError(t, err)
 	require.NoError(t, res.Workspace.Close())
 	r := secrets.NewResolver(secrets.WithKeychain(secrets.NewMemoryStore()), secrets.WithRedactor(secrets.NewRedactor()))
-	ws, err := workspace.Open(res.Workspace.Root(), workspace.WithLogger(quietLogger()), workspace.WithConfigDir(os.Getenv("VIBE_CONFIG_DIR")),
+	ws, err := workspace.Open(res.Workspace.Root(), workspace.WithLogger(quietLogger()), workspace.WithConfigDir(os.Getenv("ASSAY_CONFIG_DIR")),
 		workspace.WithUserConfig(workspace.UserConfig{Version: workspace.ConfigVersion}), workspace.WithResolver(r))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
@@ -102,7 +102,7 @@ func TestServeProxyApprovesRemoteWritesThroughStudio(t *testing.T) {
 	hold, err := AcquireHub(ws, AppStudio)
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
-	ext := filepath.Join(os.TempDir(), "vibe-conn-it-ext")
+	ext := filepath.Join(os.TempDir(), "assay-conn-it-ext")
 	sess, issues, err := workspace.OpenSession(t.Context(), ws, quietLogger(), workspace.WithSessionOptions(session.WithExtensionDirectory(ext)))
 	require.NoError(t, err)
 	require.Empty(t, issues)

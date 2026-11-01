@@ -7,19 +7,19 @@ import (
 	"path"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/connname"
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // Manifest identity.
 const (
-	Kind          = "vibe/bundle"
+	Kind          = "assay/bundle"
 	FormatVersion = 2
 
 	// ManifestName and ConnectionsName are the two fixed entries.
@@ -44,18 +44,18 @@ const (
 
 // Errors a caller can test with errors.Is.
 var (
-	// ErrLegacy is a formatVersion 1 or SQLCipher .vibe file: one that holds
-	// data. Vibe no longer opens these.
-	ErrLegacy = errors.New("This is an older .vibe file that holds data. Vibe no longer opens these.")
-	// ErrNotBundle is a file that is not a Vibe bundle at all.
-	ErrNotBundle = errors.New("this is not a Vibe bundle (an older .vibe file that held data is not opened either)")
+	// ErrLegacy is a formatVersion 1 or SQLCipher .assay file: one that holds
+	// data. Assay no longer opens these.
+	ErrLegacy = errors.New("This is an older .assay file that holds data. Assay no longer opens these.")
+	// ErrNotBundle is a file that is not an Assay bundle at all.
+	ErrNotBundle = errors.New("this is not an Assay bundle (an older .assay file that held data is not opened either)")
 	// ErrPassphraseRequired means the bundle is encrypted and no passphrase was given.
 	ErrPassphraseRequired = errors.New("this bundle is encrypted: a passphrase is required")
 	// ErrWrongPassphrase means the passphrase did not open the bundle.
 	ErrWrongPassphrase = errors.New("wrong passphrase: that passphrase does not open this bundle")
 	// ErrUnsupportedKDF means the envelope asks for more passphrase-hashing
-	// work than Vibe will do.
-	ErrUnsupportedKDF = errors.New("this bundle was made with settings Vibe won't use")
+	// work than Assay will do.
+	ErrUnsupportedKDF = errors.New("this bundle was made with settings Assay won't use")
 	// ErrTooLarge means a size cap was exceeded.
 	ErrTooLarge = errors.New("bundle is too large")
 	// ErrCorrupt means the bundle failed verification: a checksum, an unknown
@@ -134,7 +134,7 @@ type Selection struct {
 	Skills    []string `json:"skills"`
 	Artifacts []string `json:"artifacts"`
 	Semantics []string `json:"semantics"`
-	// SharedConnections adds every committed (team) vibe.yaml definition;
+	// SharedConnections adds every committed (team) assay.yaml definition;
 	// TeamConnections names just some of them.
 	SharedConnections bool     `json:"sharedConnections"`
 	TeamConnections   []string `json:"teamConnections"`

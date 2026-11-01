@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 func addStore(t *testing.T, app *App, name, scope string) {
@@ -44,9 +44,9 @@ func TestFindStorageFor_MatchSuggestAndProblem(t *testing.T) {
 
 func TestFindStorageFor_TemplatedIsNeverExpanded(t *testing.T) {
 	app, _ := connApp(t)
-	t.Setenv("VIBE_SECRET_BUCKET", "needle-bucket-R130")
+	t.Setenv("ASSAY_SECRET_BUCKET", "needle-bucket-R130")
 	addStore(t, app, "store", "s3://needle-bucket-R130/")
-	got, err := app.FindStorageFor(FindStorageRequest{URLs: []string{"s3://${VIBE_SECRET_BUCKET}/c.sqlite"}})
+	got, err := app.FindStorageFor(FindStorageRequest{URLs: []string{"s3://${ASSAY_SECRET_BUCKET}/c.sqlite"}})
 	require.NoError(t, err)
 	assert.True(t, got.Needs[0].Templated)
 	assert.Nil(t, got.Needs[0].Match)
@@ -116,8 +116,8 @@ func TestListConnectionTypes_S3CarriesPresets(t *testing.T) {
 // This pins the documented behaviour.
 func TestFindStorageFor_TemplatedStorageScopeIsExpandedAsAtOpen(t *testing.T) {
 	app, _ := connApp(t)
-	t.Setenv("VIBE_LAKE_BUCKET", "hidden-acme")
-	addStore(t, app, "tmpl", "s3://${VIBE_LAKE_BUCKET}/")
+	t.Setenv("ASSAY_LAKE_BUCKET", "hidden-acme")
+	addStore(t, app, "tmpl", "s3://${ASSAY_LAKE_BUCKET}/")
 	got, err := app.FindStorageFor(FindStorageRequest{URLs: []string{"s3://hidden-acme/x", "s3://guess/x"}})
 	require.NoError(t, err)
 	require.NotNil(t, got.Needs[0].Match)

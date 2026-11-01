@@ -10,7 +10,7 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openaicompat"
 
-	"github.com/SandwichLabs/vibe/internal/config"
+	"github.com/SandwichLabs/assay/internal/config"
 )
 
 // newProvider builds the fantasy provider for the named LLM provider.

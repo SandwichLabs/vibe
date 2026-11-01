@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/SandwichLabs/vibe/internal/config"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/config"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 var configCmd = &cobra.Command{
@@ -30,18 +30,18 @@ var (
 
 var llmKeyCmd = &cobra.Command{
 	Use:   "llm-key",
-	Short: "Manage the agent's API key in the OS keychain",
-	Long: `The agent's model API key lives in your OS keychain, never in a config file.
+	Short: "Manage the assistant's API key in the OS keychain",
+	Long: `The assistant's model API key lives in your OS keychain, never in a config file.
 Where a key is read from, first match wins:
 
-  1. VIBE_LLM_API_KEY
+  1. ASSAY_LLM_API_KEY
   2. the provider's standard variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
      OLLAMA_API_KEY, CLOUDFLARE_API_TOKEN)
   3. the keychain (item "llm-<provider>")
-  4. llm.api_key in ~/.vibe.yaml (legacy, used for whichever provider is configured;
-     "vibe config llm-key migrate" moves it)
+  4. llm.api_key in ~/.assay.yaml (legacy, used for whichever provider is configured;
+     "assay config llm-key migrate" moves it)
 
-Vibe never prints a key back.`,
+Assay never prints a key back.`,
 	PersistentPreRunE: checkLLMKeyProvider,
 }
 
@@ -122,7 +122,7 @@ var llmKeyStatusCmd = &cobra.Command{
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "provider: %s\nsource:   %s\n", cfg.LLM.Provider, src)
 		if config.HasFileKey(config.LLMConfigPath()) {
-			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LLMConfigPath()+"; run \"vibe config llm-key migrate\"")
+			fmt.Fprintln(out, "note:     a plaintext key is still in "+config.LLMConfigPath()+"; run \"assay config llm-key migrate\"")
 		}
 		return nil
 	},
@@ -130,7 +130,7 @@ var llmKeyStatusCmd = &cobra.Command{
 
 var llmKeyMigrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Move llm.api_key from ~/.vibe.yaml into the keychain and blank it in the file",
+	Short: "Move llm.api_key from ~/.assay.yaml into the keychain and blank it in the file",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		provider := resolveLLMKeyProvider()

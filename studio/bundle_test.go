@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/bundle"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/bundle"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 func seedStudioBundle(t *testing.T, app *App) {
@@ -40,7 +40,7 @@ func TestBundle_ExportPreviewCommitRoundTrip(t *testing.T) {
 	require.Len(t, content.Notebooks, 1)
 	require.Len(t, content.Queries, 1)
 
-	path := filepath.Join(t.TempDir(), "out.vibe")
+	path := filepath.Join(t.TempDir(), "out.assay")
 	res, err := src.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{All: true}, Passphrase: "pw one"})
 	require.NoError(t, err)
 	assert.True(t, res.Encrypted)
@@ -78,7 +78,7 @@ func TestBundle_ExportPreviewCommitRoundTrip(t *testing.T) {
 	out, err := dst.CommitBundleImport(pv.Handle, BundleDecisions{OnConflict: "rename"})
 	require.NoError(t, err)
 	assert.Zero(t, out.Failed())
-	assert.FileExists(t, filepath.Join(dst.ws.Root(), "notebooks", "quarterly-review-2.vnb"))
+	assert.FileExists(t, filepath.Join(dst.ws.Root(), "notebooks", "quarterly-review-2.asnb"))
 	assert.Positive(t, ev.count("notebooks:changed"))
 
 	// A handle is single use.
@@ -89,7 +89,7 @@ func TestBundle_ExportPreviewCommitRoundTrip(t *testing.T) {
 func TestBundle_ImportIntoNewWorkspaceFromTheLauncher(t *testing.T) {
 	src := newOpenApp(t)
 	seedStudioBundle(t, src)
-	path := filepath.Join(t.TempDir(), "out.vibe")
+	path := filepath.Join(t.TempDir(), "out.assay")
 	_, err := src.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{All: true}})
 	require.NoError(t, err)
 
@@ -105,22 +105,22 @@ func TestBundle_ImportIntoNewWorkspaceFromTheLauncher(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res.Opened)
 	assert.Zero(t, res.Result.Failed())
-	assert.FileExists(t, filepath.Join(app.ws.Root(), "notebooks", "quarterly-review.vnb"))
+	assert.FileExists(t, filepath.Join(app.ws.Root(), "notebooks", "quarterly-review.asnb"))
 }
 
 func TestBundle_RefusesOlderAndForeignFiles(t *testing.T) {
 	app := newOpenApp(t)
-	old := filepath.Join(t.TempDir(), "old.vibe")
+	old := filepath.Join(t.TempDir(), "old.assay")
 	require.NoError(t, os.WriteFile(old, append([]byte("SQLite format 3\x00"), make([]byte, 64)...), 0o600))
 	_, err := app.PreviewBundleImport(old, "")
 	require.Error(t, err)
-	assert.Equal(t, "This is an older .vibe file that holds data. Vibe no longer opens these.", err.Error())
+	assert.Equal(t, "This is an older .assay file that holds data. Assay no longer opens these.", err.Error())
 
-	txt := filepath.Join(t.TempDir(), "x.vibe")
+	txt := filepath.Join(t.TempDir(), "x.assay")
 	require.NoError(t, os.WriteFile(txt, []byte("hello"), 0o600))
 	_, err = app.PreviewBundleImport(txt, "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "isn't a Vibe bundle")
+	assert.Contains(t, err.Error(), "isn't an Assay bundle")
 }
 
 func TestBundle_ConnectionsImportToThisComputerOnly(t *testing.T) {
@@ -137,7 +137,7 @@ func TestBundle_ConnectionsImportToThisComputerOnly(t *testing.T) {
 	assert.True(t, portable["wh"])
 	assert.False(t, portable["mine"], "an absolute path cannot leave this computer")
 
-	path := filepath.Join(t.TempDir(), "c.vibe")
+	path := filepath.Join(t.TempDir(), "c.assay")
 	_, err = src.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{All: true, SharedConnections: true}})
 	require.NoError(t, err)
 
@@ -154,7 +154,7 @@ func TestBundle_ConnectionsImportToThisComputerOnly(t *testing.T) {
 	}
 	assert.Equal(t, []string{"wh"}, local)
 	for _, c := range dst.ws.Config().Connections {
-		assert.NotEqual(t, "wh", c.Name, "never the committed vibe.yaml")
+		assert.NotEqual(t, "wh", c.Name, "never the committed assay.yaml")
 	}
 }
 
@@ -175,7 +175,7 @@ func TestBundle_HandlesAreBounded(t *testing.T) {
 func TestBundle_HandleLifecycle(t *testing.T) {
 	app := newOpenApp(t)
 	seedStudioBundle(t, app)
-	path := filepath.Join(t.TempDir(), "out.vibe")
+	path := filepath.Join(t.TempDir(), "out.assay")
 	_, err := app.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{All: true}})
 	require.NoError(t, err)
 
@@ -246,7 +246,7 @@ func TestBundle_ImportEmitsArtifactChangedOnDisk(t *testing.T) {
 	view := []byte(`{"title":"T","components":[{"id":"t","type":"table","query":"rows"}]}`)
 	manifest := []byte("version: 1\ntitle: Sales\nqueries:\n  - name: rows\n    sql: SELECT 1 AS id\n")
 	require.NoError(t, src.ws.Artifacts().Put(src.ctxOrBackground(), &artifacts.Artifact{Name: "sales", ManifestText: manifest, View: view}, artifacts.WithRev("")))
-	path := filepath.Join(t.TempDir(), "out.vibe")
+	path := filepath.Join(t.TempDir(), "out.assay")
 	_, err := src.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{Artifacts: []string{"sales"}}})
 	require.NoError(t, err)
 

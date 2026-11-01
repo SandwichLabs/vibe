@@ -4,10 +4,10 @@ package main
 // A static HTML artifact renders inside Studio's window in a sandbox="" frame
 // with no script, so everything that keeps it harmless is in the response:
 //
-//	/vibe-view/<token>/page?<params>   the page, rendered in Go from the files
+//	/assay-view/<token>/page?<params>   the page, rendered in Go from the files
 //	                                   that were hashed, values from the query
 //	                                   string only, always through Bind
-//	/vibe-view/<token>/assets/<path>   a file under html/assets/ (never a query)
+//	/assay-view/<token>/assets/<path>   a file under html/assets/ (never a query)
 //
 // The artifact comes from the token, never the path. Every response, errors
 // included, carries the page CSP (a page's own or the sandboxed deny policy),
@@ -22,14 +22,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/engine"
 	"net/http"
 	"net/url"
 	"path"
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 // Limits of the page route.

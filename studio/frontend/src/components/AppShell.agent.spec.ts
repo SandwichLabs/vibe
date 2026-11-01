@@ -30,13 +30,13 @@ describe('AppShell agent panel wiring', () => {
     }
   })
 
-  it('shows the Agent toggle and the panel mounts (closed)', async () => {
+  it('shows the Assistant toggle and the panel mounts (closed)', async () => {
     makeApp()
     const wrapper = mountShell()
     await flushPromises()
 
     const toggle = wrapper.find('[data-testid="agent-toggle"]')
-    expect(toggle.exists(), 'expected the Agent toggle').toBe(true)
+    expect(toggle.exists(), 'expected the Assistant toggle').toBe(true)
 
     // Panel is mounted but closed (no `open` class) until toggled.
     const drawer = wrapper.find('[data-testid="agent-panel"]')
@@ -56,7 +56,7 @@ describe('AppShell agent panel wiring', () => {
     expect(drawer.classes(), 'panel should be open after toggle').toContain('open')
   })
 
-  it('marks the Agent nav entry and toggle while a turn is in flight (#2)', async () => {
+  it('marks the Assistant nav entry and toggle while a turn is in flight (#2)', async () => {
     makeApp()
     useAgentChat().resetAll()
     const wrapper = mountShell()
@@ -67,7 +67,7 @@ describe('AppShell agent panel wiring', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="agent-busy-nav"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agent-busy-toggle"]').exists()).toBe(true)
-    expect(wrapper.find('a[aria-label^="Agent,"]').attributes('aria-label')).toBe('Agent, a turn is running')
+    expect(wrapper.find('a[aria-label^="Assistant,"]').attributes('aria-label')).toBe('Assistant, a turn is running')
 
     useAgentChat().resetAll()
     await flushPromises()

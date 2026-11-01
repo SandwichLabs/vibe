@@ -115,7 +115,7 @@ func (f *Fake) Expire() {
 }
 
 // IssueToken returns an access token the portal accepts, as if the person had
-// run `aws sso login` outside Vibe: the test writes it into the token cache.
+// run `aws sso login` outside Assay: the test writes it into the token cache.
 func (f *Fake) IssueToken() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

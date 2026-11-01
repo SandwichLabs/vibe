@@ -122,7 +122,7 @@ describe('AgentModelSettings API key', () => {
     setup(status({ keychainAvailable: false }))
     const w = await mountIt()
     expect(w.find('[data-testid="llm-key-nokeychain"]').exists()).toBe(true)
-    expect(w.text()).toContain('VIBE_LLM_API_KEY')
+    expect(w.text()).toContain('ASSAY_LLM_API_KEY')
     expect(w.find('[data-testid="llm-key-input"]').exists()).toBe(false)
   })
 
@@ -205,12 +205,12 @@ describe('AgentModelSettings provider picker', () => {
   })
 
   it('an env-overridden field is disabled and names its variable', async () => {
-    setup(status(), undefined, settingsView({ envOverrides: { model: 'VIBE_LLM_MODEL' } }))
+    setup(status(), undefined, settingsView({ envOverrides: { model: 'ASSAY_LLM_MODEL' } }))
     const w = await mountIt()
-    expect(w.text()).toContain('set by VIBE_LLM_MODEL')
+    expect(w.text()).toContain('set by ASSAY_LLM_MODEL')
     await w.get('[data-testid="llm-change"]').trigger('click')
     expect(w.get('[data-testid="llm-model"]').attributes('disabled')).toBeDefined()
-    expect(w.text()).toContain('VIBE_LLM_MODEL')
+    expect(w.text()).toContain('ASSAY_LLM_MODEL')
   })
 
   it('warns before the plaintext file key would go to another provider, and asks on save', async () => {

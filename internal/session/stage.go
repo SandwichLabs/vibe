@@ -33,7 +33,7 @@ func (h *hub) stageDir(name string) (string, error) {
 	h.stageMu.Lock()
 	defer h.stageMu.Unlock()
 	if h.stageRoot == "" {
-		root, err := os.MkdirTemp(h.tempDir, "vibe-catalogs-*")
+		root, err := os.MkdirTemp(h.tempDir, "assay-catalogs-*")
 		if err != nil {
 			return "", fmt.Errorf("could not make a private folder for the catalog: %w", err)
 		}

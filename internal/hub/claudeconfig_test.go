@@ -13,10 +13,10 @@ import (
 
 func TestBuildClaudeConfig(t *testing.T) {
 	root := filepath.Join(string(filepath.Separator), "work", "Acme Analytics")
-	exe := filepath.Join(string(filepath.Separator), "usr", "local", "bin", "vibe")
+	exe := filepath.Join(string(filepath.Separator), "usr", "local", "bin", "assay")
 	cfg, err := BuildClaudeConfig(root, exe)
 	require.NoError(t, err)
-	assert.Equal(t, "vibe-acme-analytics", cfg.Name)
+	assert.Equal(t, "assay-acme-analytics", cfg.Name)
 
 	var desktop struct {
 		MCPServers map[string]struct {
@@ -33,13 +33,13 @@ func TestBuildClaudeConfig(t *testing.T) {
 	assert.Nil(t, srv.Env, "no environment, so no token")
 
 	if runtime.GOOS != "windows" {
-		assert.Equal(t, "claude mcp add vibe-acme-analytics -- /usr/local/bin/vibe mcp serve --workspace '/work/Acme Analytics'", cfg.Code)
+		assert.Equal(t, "claude mcp add assay-acme-analytics -- /usr/local/bin/assay mcp serve --workspace '/work/Acme Analytics'", cfg.Code)
 	}
 }
 
 func TestBuildClaudeConfigNeverCarriesATokenOrALoosenedPolicy(t *testing.T) {
 	ws := newWorkspace(t)
-	hold, err := AcquireHub(ws, "Vibe Studio")
+	hold, err := AcquireHub(ws, "Assay")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 	require.NoError(t, hold.SetMCP(&MCPEndpoint{URL: "http://127.0.0.1:4242/sse", Token: "tok-from-the-lockfile"}))
@@ -57,9 +57,9 @@ func TestBuildClaudeConfigNeverCarriesATokenOrALoosenedPolicy(t *testing.T) {
 }
 
 func TestBuildClaudeConfigNeedsAbsolutePaths(t *testing.T) {
-	_, err := BuildClaudeConfig("relative/dir", "/usr/bin/vibe")
+	_, err := BuildClaudeConfig("relative/dir", "/usr/bin/assay")
 	assert.Error(t, err)
-	_, err = BuildClaudeConfig("/abs", "vibe")
+	_, err = BuildClaudeConfig("/abs", "assay")
 	assert.Error(t, err)
 }
 

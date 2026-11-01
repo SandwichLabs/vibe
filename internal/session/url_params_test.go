@@ -96,12 +96,12 @@ func assertRedirectClosed(t *testing.T, s Session) {
 	}
 	for i, c := range cases {
 		scope := fmt.Sprintf("%s://bucket%d/", c.scheme, i)
-		connectionSecret(t, s, fmt.Sprintf("vibe_c%d", i), c.kind, scope, good)
+		connectionSecret(t, s, fmt.Sprintf("assay_c%d", i), c.kind, scope, good)
 		for _, u := range []string{
 			scope + "x.parquet" + redirect,
 			scope + "*.parquet" + redirect,
 		} {
-			require.Equal(t, fmt.Sprintf("vibe_c%d", i), whichSecret(t, s, u, c.kind), "%s is matched by the connection's secret", u)
+			require.Equal(t, fmt.Sprintf("assay_c%d", i), whichSecret(t, s, u, c.kind), "%s is matched by the connection's secret", u)
 			_, err := s.DB().ExecContext(ctx, "SELECT count(*) FROM read_parquet("+QuoteLiteral(u)+")")
 			require.Error(t, err, u)
 			_, err = s.DB().ExecContext(ctx, "SELECT count(*) FROM glob("+QuoteLiteral(u)+")")
@@ -200,7 +200,7 @@ func TestListObjectsGlobsInAPrivateSession(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	lister, ok := s.(ObjectLister)
 	require.True(t, ok)
-	step := SecretStep{Name: "vibe_lake", Type: "s3", Params: []SecretParam{
+	step := SecretStep{Name: "assay_lake", Type: "s3", Params: []SecretParam{
 		{Key: "SCOPE", Value: "s3://lake/raw/"}, {Key: "KEY_ID", Value: "OWNKEYID"}, {Key: "SECRET", Value: "OWNSECRET", Secret: true},
 		{Key: "SESSION_TOKEN", Value: "", Secret: true}, {Key: "REGION", Value: "us-east-1"},
 		{Key: "ENDPOINT", Value: good}, {Key: "URL_STYLE", Value: "path"}, {Key: "USE_SSL", Value: false},

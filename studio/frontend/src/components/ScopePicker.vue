@@ -12,8 +12,8 @@ const emit = defineEmits<{ 'update:modelValue': [v: ConnScope] }>()
 const isGit = computed(() => !!workspaceInfo.value?.isGit)
 const allOptions: { value: ConnScope; title: string; desc: string; file: string }[] = [
   { value: 'local', title: 'This computer', desc: 'Only you, on this computer, for this workspace. Never committed.', file: 'outside the folder' },
-  { value: 'shared', title: 'Team', desc: 'Everyone on this workspace. Saved in vibe.yaml and shared through git.', file: 'vibe.yaml' },
-  { value: 'user', title: 'All my workspaces', desc: 'Only you, in every workspace on this computer.', file: '~/.config/vibe/' },
+  { value: 'shared', title: 'Team', desc: 'Everyone on this workspace. Saved in assay.yaml and shared through git.', file: 'assay.yaml' },
+  { value: 'user', title: 'All my workspaces', desc: 'Only you, in every workspace on this computer.', file: '~/.config/assay/' },
 ]
 
 // A source that trusts its own metadata is never shared with the team.
@@ -56,7 +56,7 @@ function onKey(e: KeyboardEvent) {
     </div>
     <div v-if="modelValue === 'shared'" class="note warn" style="margin-top: 12px;" data-testid="scope-team-note">
       <Icon name="gitBranch" :size="16" />
-      <span><b>This file is committed to git.</b> The name, host, port and database are saved in <code>vibe.yaml</code>, so anyone who can see the repository can see them. Passwords and tokens are not saved there: they stay in each person's own keychain, and teammates enter their own. Your username is saved on this computer only.</span>
+      <span><b>This file is committed to git.</b> The name, host, port and database are saved in <code>assay.yaml</code>, so anyone who can see the repository can see them. Passwords and tokens are not saved there: they stay in each person's own keychain, and teammates enter their own. Your username is saved on this computer only.</span>
     </div>
     <div v-else-if="modelValue === 'local'" class="note" style="margin-top: 12px;">
       <Icon name="lock" :size="16" />
@@ -64,7 +64,7 @@ function onKey(e: KeyboardEvent) {
     </div>
     <div v-else class="note" style="margin-top: 12px;">
       <Icon name="user" :size="16" />
-      <span>Saved for you in every workspace on this computer, in <code>~/.config/vibe/connections.yaml</code>. Not committed.</span>
+      <span>Saved for you in every workspace on this computer, in <code>~/.config/assay/connections.yaml</code>. Not committed.</span>
     </div>
   </div>
 </template>

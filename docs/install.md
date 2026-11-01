@@ -1,61 +1,61 @@
-# Install Vibe
+# Install Assay
 
-Vibe is two programs: `vibe` (the command line, the terminal UI and `vibe mcp serve`) and `vibe-studio` (the desktop app). The installer puts both on your machine without `sudo`.
+Assay is two programs: `assay` (the command line, the terminal UI and `assay mcp serve`) and `assay-studio` (the desktop app). The installer puts both on your machine without `sudo`.
 
 ## Install with the script
 
 ```sh
-curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh
+curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh
 ```
 
 That address redirects to the script attached to the latest GitHub release. If you prefer to skip the redirect, use the release URL directly:
 
 ```sh
-curl -fsSL https://github.com/SandwichLabs/vibe/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/SandwichLabs/assay/releases/latest/download/install.sh | sh
 ```
 
 Then check it:
 
 ```sh
-vibe --version
+assay --version
 ```
 
-The script is plain POSIX `sh`, runs nothing until the whole file has downloaded, never uses `sudo`, and sends no telemetry. Read it first if you like: it is [`install.sh`](https://github.com/SandwichLabs/vibe/blob/main/install.sh) in the repository.
+The script is plain POSIX `sh`, runs nothing until the whole file has downloaded, never uses `sudo`, and sends no telemetry. Read it first if you like: it is [`install.sh`](https://github.com/SandwichLabs/assay/blob/main/install.sh) in the repository.
 
 ### Options
 
 Pass options after `sh -s --`:
 
 ```sh
-curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh -s -- --cli-only
+curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh -s -- --cli-only
 ```
 
 | Flag | Environment | What it does |
 |---|---|---|
-| `--version vX.Y.Z` | `VIBE_VERSION` | Install this release instead of the latest. |
-| `--cli-only` | | Install only `vibe`: no desktop app. Right for servers and MCP-only use. |
-| `--install-dir DIR` | `VIBE_INSTALL_DIR` (or `INSTALL_DIR`) | Where the binaries go. Default `~/.local/bin`. |
-| `--force` | | Replace a `vibe` this installer did not put there, and skip the OS version check. |
+| `--version vX.Y.Z` | `ASSAY_VERSION` | Install this release instead of the latest. |
+| `--cli-only` | | Install only `assay`: no desktop app. Right for servers and MCP-only use. |
+| `--install-dir DIR` | `ASSAY_INSTALL_DIR` (or `INSTALL_DIR`) | Where the binaries go. Default `~/.local/bin`. |
+| `--force` | | Replace an `assay` this installer did not put there, and skip the OS version check. |
 | `--uninstall` | | Remove exactly the files the installer recorded. See [Uninstall](#uninstall). |
 | `--dry-run` | | Print what would happen. Downloads and changes nothing. |
 | `--help` | | Show the script's help. |
 
-Other environment variables: `VIBE_APP_DIR` (macOS app folder, default `~/Applications`), `VIBE_DOWNLOAD_BASE` (a mirror), `NO_COLOR`.
+Other environment variables: `ASSAY_APP_DIR` (macOS app folder, default `~/Applications`), `ASSAY_DOWNLOAD_BASE` (a mirror), `NO_COLOR`.
 
 ### What gets installed where
 
 | | CLI only | With Studio |
 |---|---|---|
-| Linux | `~/.local/bin/vibe` | also `~/.local/bin/vibe-studio`, a `.desktop` entry (`~/.local/share/applications`), the `.vibe` MIME type (`~/.local/share/mime/packages`) and icons (`~/.local/share/icons/hicolor`) |
-| macOS | `~/.local/bin/vibe` | also `~/Applications/Vibe Studio.app`, (`vibe studio --gui` finds the app itself) |
+| Linux | `~/.local/bin/assay` | also `~/.local/bin/assay-studio`, a `.desktop` entry (`~/.local/share/applications`), the `.assay` MIME type (`~/.local/share/mime/packages`) and icons (`~/.local/share/icons/hicolor`) |
+| macOS | `~/.local/bin/assay` | also `~/Applications/Assay.app`, (`assay studio --gui` finds the app itself) |
 
-The installer downloads the archive and `checksums.txt`, verifies the SHA-256 against the archive's exact name, and stops before touching anything if it does not match or the entry is missing. Looking up the latest release needs `curl` (with `--version vX.Y.Z`, `wget` also works). Every file it writes is listed, with its SHA-256, in an install manifest (Linux `~/.local/share/vibe/install-manifest`; macOS `~/Library/Application Support/vibe/install-manifest`).
+The installer downloads the archive and `checksums.txt`, verifies the SHA-256 against the archive's exact name, and stops before touching anything if it does not match or the entry is missing. Looking up the latest release needs `curl` (with `--version vX.Y.Z`, `wget` also works). Every file it writes is listed, with its SHA-256, in an install manifest (Linux `~/.local/share/assay/install-manifest`; macOS `~/Library/Application Support/assay/install-manifest`).
 
 If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to your shell startup file.
 
-### Name collision with Mistral Vibe
+### Name collision with another `assay`
 
-Mistral Vibe, an unrelated coding agent, also installs a command called `vibe`. The installer will not overwrite a `vibe` it did not put there (it recognises its own by the hash it recorded, and never runs an unknown program to find out): it stops and tells you. Either install Vibe somewhere else (`--install-dir DIR`, then put `DIR` first on your `PATH`) or pass `--force` to replace the other program. If another `vibe` comes earlier on your `PATH`, the installer warns; `vibe --version` should print `vibe version ...`. See [Troubleshooting](troubleshooting.md#vibe-starts-a-different-program).
+Sand Software Solutions' [Assay](https://sandsoftwaresolutions.com/en/assay), an unrelated tool that hashes a folder and reports changes, also installs a command called `assay`. The installer will not overwrite an `assay` it did not put there (it recognises its own by the hash it recorded, and never runs an unknown program to find out): it stops and tells you. Either install Assay somewhere else (`--install-dir DIR`, then put `DIR` first on your `PATH`) or pass `--force` to replace the other program. If another `assay` comes earlier on your `PATH`, the installer warns; `assay --version` should print `assay version ...`. See [Troubleshooting](troubleshooting.md#assay-starts-a-different-program).
 
 ## Supported platforms
 
@@ -66,7 +66,7 @@ Mistral Vibe, an unrelated coding agent, also installs a command called `vibe`. 
 | macOS on Intel | Yes | macOS 13 (Ventura) or newer. |
 | Windows | No | Not supported yet. WSL2 with the Linux CLI should work but is untested. |
 
-The macOS minimums come from the DuckDB libraries Vibe links. The builds have been run on macOS 15 only; macOS 13 and 14 are the stated minimum, not something we have tested on a machine.
+The macOS minimums come from the DuckDB libraries Assay links. The builds have been run on macOS 15 only; macOS 13 and 14 are the stated minimum, not something we have tested on a machine.
 
 ### Linux libraries for Studio
 
@@ -85,10 +85,10 @@ To keep database passwords and tokens in your keychain, you also need a Secret S
 
 The v0.1 builds are **not notarised** (they are ad-hoc signed, which Apple silicon requires). What that means for you:
 
-- **Installed with the script (curl):** no Gatekeeper prompt. `curl` does not mark files as downloaded from the internet, so Vibe Studio opens normally.
-- **Downloaded in a browser** (from the releases page): macOS marks the file, and Studio will not open. You see "Vibe Studio" Not Opened / "Apple could not verify...". Fix it one of two ways:
-  - System Settings, Privacy & Security, scroll to the message about Vibe Studio, and click **Open Anyway**.
-  - Or clear the mark in Terminal: `xattr -dr com.apple.quarantine "$HOME/Applications/Vibe Studio.app"`.
+- **Installed with the script (curl):** no Gatekeeper prompt. `curl` does not mark files as downloaded from the internet, so Assay opens normally.
+- **Downloaded in a browser** (from the releases page): macOS marks the file, and Studio will not open. You see "Assay" Not Opened / "Apple could not verify...". Fix it one of two ways:
+  - System Settings, Privacy & Security, scroll to the message about Assay, and click **Open Anyway**.
+  - Or clear the mark in Terminal: `xattr -dr com.apple.quarantine "$HOME/Applications/Assay.app"`.
 - After an upgrade, macOS may ask again for access to Documents or Desktop, because each unsigned build has a new identity. That is expected.
 
 Why unsigned: see [Packaging](packaging.md#macos-unsigned-path-spike-43). Signing and notarisation are planned.
@@ -97,30 +97,30 @@ Why unsigned: see [Packaging](packaging.md#macos-unsigned-path-spike-43). Signin
 
 Run the installer again. It replaces the files, removes any file the new version no longer ships, and prints the old and new version. Quit Studio first (or restart it afterwards).
 
-Or let Vibe do exactly that for you, after you confirm:
+Or let Assay do exactly that for you, after you confirm:
 
-- **`vibe update`** looks up the latest stable release on GitHub, prints the notes link and, on a terminal, asks `Install vX? [y/N]`. `--check` only checks; `--yes` installs without asking (no terminal and no `--yes` means check only). It exits 0 when the check worked (up to date or not) and any requested install succeeded, 1 on an error.
-- **Studio, Settings, About, Updates** has **Check now** and, when a newer release exists, **Update to vX** (with a confirmation), then **Restart now** (the old Studio keeps running until you use it). Restart now quits through the usual path (pending saves are flushed and the unsaved-work question is asked) and starts the new Studio, reopening your workspace, once the old one has let go. A running Studio or `vibe mcp serve` keeps its old version until restarted.
-- **Weekly checks are opt-in.** Studio asks once; `vibe config updates [off|weekly]` is the same switch. Vibe never checks or installs in the background without it. What is sent is in [Privacy](privacy.md).
+- **`assay update`** looks up the latest stable release on GitHub, prints the notes link and, on a terminal, asks `Install vX? [y/N]`. `--check` only checks; `--yes` installs without asking (no terminal and no `--yes` means check only). It exits 0 when the check worked (up to date or not) and any requested install succeeded, 1 on an error.
+- **Studio, Settings, About, Updates** has **Check now** and, when a newer release exists, **Update to vX** (with a confirmation), then **Restart now** (the old Studio keeps running until you use it). Restart now quits through the usual path (pending saves are flushed and the unsaved-work question is asked) and starts the new Studio, reopening your workspace, once the old one has let go. A running Studio or `assay mcp serve` keeps its old version until restarted.
+- **Weekly checks are opt-in.** Studio asks once; `assay config updates [off|weekly]` is the same switch. Assay never checks or installs in the background without it. What is sent is in [Privacy](privacy.md).
 
-Applying an update runs the target release's own `install.sh` (downloaded from the release, verified against that release's `checksums.txt`, never with `--force`), so it behaves exactly like re-running the installer. It only works for a Vibe that the installer put there (the running program must be listed in the install manifest); a build from source, `go install` or a package manager is told to update the way you installed it. A prerelease channel and signed checksums are not part of this yet.
+Applying an update runs the target release's own `install.sh` (downloaded from the release, verified against that release's `checksums.txt`, never with `--force`), so it behaves exactly like re-running the installer. It only works for an Assay that the installer put there (the running program must be listed in the install manifest); a build from source, `go install` or a package manager is told to update the way you installed it. A prerelease channel and signed checksums are not part of this yet.
 
-To pin a version: `curl -fsSL https://sandwichlabs.dev/vibe/install.sh | VIBE_VERSION=v0.1.0 sh`.
+To pin a version: `curl -fsSL https://sandwichlabs.dev/assay/install.sh | ASSAY_VERSION=v0.1.0 sh`.
 
 ## Uninstall
 
 ```sh
-curl -fsSL https://sandwichlabs.dev/vibe/install.sh | sh -s -- --uninstall
+curl -fsSL https://sandwichlabs.dev/assay/install.sh | sh -s -- --uninstall
 ```
 
-This removes exactly the files listed in the install manifest, and leaves any that you changed since (their hash differs), saying which. It keeps your configuration, the downloaded DuckDB extension cache, keychain items and your workspaces (those are your folders). To clear saved credentials first, run `vibe conn credentials clear <name>` for each connection.
+This removes exactly the files listed in the install manifest, and leaves any that you changed since (their hash differs), saying which. It keeps your configuration, the downloaded DuckDB extension cache, keychain items and your workspaces (those are your folders). To clear saved credentials first, run `assay conn credentials clear <name>` for each connection.
 
 ## Manual install
 
 Every release has archives you can unpack yourself:
 
-- `vibe_<version>_<os>_<arch>.tar.gz`: the CLI.
-- `vibe-studio_<version>_<os>_<arch>.tar.gz`: Studio and the CLI (`bin/` and `share/` on Linux; `Vibe Studio.app` on macOS).
+- `assay_<version>_<os>_<arch>.tar.gz`: the CLI.
+- `assay-studio_<version>_<os>_<arch>.tar.gz`: Studio and the CLI (`bin/` and `share/` on Linux; `Assay.app` on macOS).
 - `checksums.txt`: SHA-256 for each archive. Verify before you unpack (`sha256sum -c`, or `shasum -a 256 -c` on macOS).
 
 `<os>` is `linux` or `darwin`; `<arch>` is `amd64` or `arm64`. On macOS, unpack with `tar` from a shell, not by double-clicking in a browser-downloaded folder, so the app is not marked (see above).

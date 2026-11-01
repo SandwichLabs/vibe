@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 // fakeClock is the wall clock the hub compares deadlines with. Moving it models
@@ -550,7 +550,7 @@ func TestRotateRefusedSignOutKeepsTheInterval(t *testing.T) {
 
 // A sign-in made elsewhere (`aws sso login`) revives a signed-out storage
 // connection on the next statement, at most once per interval, so a long-lived
-// `vibe mcp serve` needs no restart (#131 step 7 review F2).
+// `assay mcp serve` needs no restart (#131 step 7 review F2).
 func TestSignedOutConnectionIsRevivedWhenTheSessionReturns(t *testing.T) {
 	e := newRotEnv(t)
 	e.sso.set(func(f *fakeSSO) { f.err = signInNeeded() })

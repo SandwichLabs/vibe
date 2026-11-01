@@ -1,6 +1,6 @@
 package hub
 
-import "github.com/SandwichLabs/vibe/internal/workspace"
+import "github.com/SandwichLabs/assay/internal/workspace"
 
 // Test-only helpers: kept out of the production build.
 

@@ -10,9 +10,9 @@ import (
 	"errors"
 	"io/fs"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // errViewNotAllowed is the fixed refusal to open a view that is not allowed (or
@@ -20,7 +20,7 @@ import (
 var errViewNotAllowed = errors.New("this view is not allowed to run")
 
 // ArtifactViewGrant is what OpenArtifactView returns: the token that the view's
-// Worker URLs are made from (/vibe-view/<token>/worker.js).
+// Worker URLs are made from (/assay-view/<token>/worker.js).
 type ArtifactViewGrant struct {
 	Token string `json:"token"`
 	// Hash is the ViewHash the token is bound to, so the host can tell a later
@@ -30,7 +30,7 @@ type ArtifactViewGrant struct {
 
 // viewLibs is the pinned libraries the frontend build copied into dist.
 func viewLibs() fs.FS {
-	sub, err := fs.Sub(assets, "frontend/dist/vibe-view/lib")
+	sub, err := fs.Sub(assets, "frontend/dist/assay-view/lib")
 	if err != nil {
 		return nil
 	}

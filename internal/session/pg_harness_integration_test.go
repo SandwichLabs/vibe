@@ -89,7 +89,7 @@ func openWithPostgres(t *testing.T, extra string) *sql.DB {
 // openWithPostgresOpts: harden=false leaves allow_persistent_secrets at its default.
 func openWithPostgresOpts(t *testing.T, extra string, harden bool) *sql.DB {
 	t.Helper()
-	extDir := filepath.Join(os.TempDir(), "vibe-spike-ext")
+	extDir := filepath.Join(os.TempDir(), "assay-spike-ext")
 	require.NoError(t, os.MkdirAll(extDir, 0o755))
 	q := url.Values{}
 	if harden {

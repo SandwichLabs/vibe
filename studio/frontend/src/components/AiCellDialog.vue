@@ -202,7 +202,7 @@ watch(
       <!-- unresolved -->
       <div v-else-if="dialog.state.dialogState === 'unresolved'" class="col" style="gap: var(--sh-space-3);" data-testid="ai-cell-unresolved">
         <div class="sh-mono" style="color: var(--sh-error); font-weight: 700;">Couldn't finish this one</div>
-        <p class="sh-body" style="color: var(--sh-graphite);">{{ dialog.state.envelope?.notes || dialog.state.error || 'The agent stopped without producing a cell.' }}</p>
+        <p class="sh-body" style="color: var(--sh-graphite);">{{ dialog.state.envelope?.notes || dialog.state.error || 'The assistant stopped without producing a cell.' }}</p>
         <div v-if="dialog.state.checked.length" class="sh-mono" style="font-size: var(--sh-fs-xs); color: var(--sh-graphite);">
           Checked: {{ dialog.state.checked.join(', ') }}
         </div>

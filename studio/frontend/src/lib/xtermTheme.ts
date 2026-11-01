@@ -1,4 +1,4 @@
-// The terminal's colours come from the active Vibe theme: the same --vibe-*
+// The terminal's colours come from the active Assay theme: the same --assay-*
 // roles the rest of Studio reads (docs/reference/themes.md), resolved to
 // concrete values because xterm paints a canvas and cannot use var().
 import type { ITheme } from '@xterm/xterm'
@@ -9,22 +9,22 @@ function read(style: CSSStyleDeclaration, name: string): string {
 
 export function themeFromDocument(doc: Document = document): ITheme {
   const style = getComputedStyle(doc.documentElement)
-  const bg = read(style, '--vibe-editor-bg') || read(style, '--vibe-bg')
-  const fg = read(style, '--vibe-editor-fg') || read(style, '--vibe-fg')
+  const bg = read(style, '--assay-editor-bg') || read(style, '--assay-bg')
+  const fg = read(style, '--assay-editor-fg') || read(style, '--assay-fg')
   const pick = (name: string, fallback = fg) => read(style, name) || fallback
-  const red = pick('--vibe-error')
-  const green = pick('--vibe-success')
-  const yellow = pick('--vibe-warn')
-  const blue = pick('--vibe-info')
-  const magenta = pick('--vibe-chart-4')
-  const cyan = pick('--vibe-chart-5')
-  const muted = pick('--vibe-fg-muted')
+  const red = pick('--assay-error')
+  const green = pick('--assay-success')
+  const yellow = pick('--assay-warn')
+  const blue = pick('--assay-info')
+  const magenta = pick('--assay-chart-4')
+  const cyan = pick('--assay-chart-5')
+  const muted = pick('--assay-fg-muted')
   return {
     background: bg,
     foreground: fg,
-    cursor: pick('--vibe-editor-cursor'),
+    cursor: pick('--assay-editor-cursor'),
     cursorAccent: bg,
-    selectionBackground: pick('--vibe-editor-selection', muted),
+    selectionBackground: pick('--assay-editor-selection', muted),
     black: bg,
     red,
     green,
@@ -45,5 +45,5 @@ export function themeFromDocument(doc: Document = document): ITheme {
 }
 
 export function fontFromDocument(doc: Document = document): string {
-  return read(getComputedStyle(doc.documentElement), '--vibe-font-mono') || 'monospace'
+  return read(getComputedStyle(doc.documentElement), '--assay-font-mono') || 'monospace'
 }

@@ -1,4 +1,4 @@
-module github.com/SandwichLabs/vibe
+module github.com/SandwichLabs/assay
 
 go 1.27.3
 

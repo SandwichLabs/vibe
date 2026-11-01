@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // postgresType attaches a PostgreSQL database through a temporary secret:
 //
-//	CREATE OR REPLACE TEMPORARY SECRET "vibe_x" (TYPE postgres, HOST '...', PORT 5432,
+//	CREATE OR REPLACE TEMPORARY SECRET "assay_x" (TYPE postgres, HOST '...', PORT 5432,
 //	    DATABASE '...', USER '...', PASSWORD '...')
-//	ATTACH '' AS "x" (TYPE postgres, SECRET "vibe_x" [, READ_ONLY])
+//	ATTACH '' AS "x" (TYPE postgres, SECRET "assay_x" [, READ_ONLY])
 //
 // An inline DSN would put the password into duckdb_databases().path and is
 // rejected by the hardened hub anyway (spike #107).

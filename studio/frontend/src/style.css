@@ -10,7 +10,7 @@
 @import "./schoolhouse/colors_and_type.css" layer(components);
 @import "./schoolhouse/kit.css" layer(components);
 @import "./schoolhouse/hifi.css" layer(components);
-/* Theme bridge: --sh-* → --vibe-* roles set by theme/apply.ts. Must follow
+/* Theme bridge: --sh-* → --assay-* roles set by theme/apply.ts. Must follow
    colors_and_type.css so its :root declarations win. */
 @import "./theme/bridge.css" layer(components);
 /* Workspace shell: launcher, switcher, menus, dialogs, banners (#111). */
@@ -20,43 +20,43 @@
 /* === Tailwind @theme — utility classes wired to the theme roles === */
 @theme {
   /* Core */
-  --color-ink:        var(--vibe-fg);
-  --color-black:      var(--vibe-fg);   /* remap: never pure #000 unless the theme says so */
-  --color-paper:      var(--vibe-bg);
-  --color-paper-2:    var(--vibe-bg-alt);
-  --color-surface:    var(--vibe-surface);
-  --color-graphite:   var(--vibe-fg-muted);
-  --color-chalk:      var(--vibe-fg-disabled);
-  --color-ember:      var(--vibe-splash);
-  --color-line:       var(--vibe-border-subtle);
-  --color-border:     var(--vibe-border);
+  --color-ink:        var(--assay-fg);
+  --color-black:      var(--assay-fg);   /* remap: never pure #000 unless the theme says so */
+  --color-paper:      var(--assay-bg);
+  --color-paper-2:    var(--assay-bg-alt);
+  --color-surface:    var(--assay-surface);
+  --color-graphite:   var(--assay-fg-muted);
+  --color-chalk:      var(--assay-fg-disabled);
+  --color-ember:      var(--assay-splash);
+  --color-line:       var(--assay-border-subtle);
+  --color-border:     var(--assay-border);
 
   /* Accents */
-  --color-teal:       var(--vibe-accent);
-  --color-teal-hi:    var(--vibe-accent-hover);
-  --color-teal-lo:    var(--vibe-accent-active);
-  --color-accent:     var(--vibe-accent);
-  --color-marigold:   var(--vibe-highlight);
-  --color-coral:      var(--vibe-attention);
+  --color-teal:       var(--assay-accent);
+  --color-teal-hi:    var(--assay-accent-hover);
+  --color-teal-lo:    var(--assay-accent-active);
+  --color-accent:     var(--assay-accent);
+  --color-marigold:   var(--assay-highlight);
+  --color-coral:      var(--assay-attention);
 
   /* Status */
-  --color-success:    var(--vibe-success);
-  --color-warn:       var(--vibe-warn);
-  --color-error:      var(--vibe-error);
-  --color-info:       var(--vibe-info);
+  --color-success:    var(--assay-success);
+  --color-warn:       var(--assay-warn);
+  --color-error:      var(--assay-error);
+  --color-info:       var(--assay-info);
 
   /* Typography families */
-  --font-sans:    var(--vibe-font-body);
-  --font-display: var(--vibe-font-display);
-  --font-mono:    var(--vibe-font-mono);
-  --font-label:   var(--vibe-font-mono);
+  --font-sans:    var(--assay-font-body);
+  --font-display: var(--assay-font-display);
+  --font-mono:    var(--assay-font-mono);
+  --font-label:   var(--assay-font-mono);
 
   /* Shadows — hard offset in the theme's shadow colour */
-  --shadow-brutal-xs: 1px 1px 0 0 var(--vibe-shadow);
-  --shadow-brutal-sm: 2px 2px 0 0 var(--vibe-shadow);
-  --shadow-brutal:    3px 3px 0 0 var(--vibe-shadow);
-  --shadow-brutal-lg: 5px 5px 0 0 var(--vibe-shadow);
-  --shadow-brutal-teal: 3px 3px 0 0 var(--vibe-accent);
+  --shadow-brutal-xs: 1px 1px 0 0 var(--assay-shadow);
+  --shadow-brutal-sm: 2px 2px 0 0 var(--assay-shadow);
+  --shadow-brutal:    3px 3px 0 0 var(--assay-shadow);
+  --shadow-brutal-lg: 5px 5px 0 0 var(--assay-shadow);
+  --shadow-brutal-teal: 3px 3px 0 0 var(--assay-accent);
 
   /* Border widths */
   --border-width-2: 2px;
@@ -92,9 +92,9 @@
     background: var(--sh-surface);
   }
   .btn-inverted {
-    background: var(--vibe-code-bg);
-    color: var(--vibe-code-fg);
-    border-color: var(--vibe-border);
+    background: var(--assay-code-bg);
+    color: var(--assay-code-fg);
+    border-color: var(--assay-border);
   }
   .btn-inverted:hover { box-shadow: var(--sh-shadow-lg); }
 
@@ -110,14 +110,14 @@
     font-family: var(--sh-font-mono); font-size: var(--sh-fs-xs); font-weight: 600;
     text-transform: uppercase; letter-spacing: var(--sh-track-mono-caps);
     text-align: left; padding: 10px 12px;
-    border-bottom: 2px solid var(--vibe-border);
+    border-bottom: 2px solid var(--assay-border);
     cursor: pointer;
     position: sticky; top: 0;
   }
   .brutal-table th:hover { background: var(--sh-paper); }
   .brutal-table td {
     padding: 8px 12px;
-    border-bottom: 1.5px solid var(--vibe-border-subtle);
+    border-bottom: 1.5px solid var(--assay-border-subtle);
     font-size: var(--sh-fs-sm);
   }
   .brutal-table tbody tr:hover td { background: var(--sh-teal-8); }
@@ -131,7 +131,7 @@
   .hover-reveal.is-on { opacity: 1; }
 
   /* Selected choice card (template picker, theme picker) */
-  .card.is-selected { border-color: var(--vibe-accent); box-shadow: var(--sh-shadow-teal); }
+  .card.is-selected { border-color: var(--assay-accent); box-shadow: var(--sh-shadow-teal); }
 
   /* Selected list-row state (replaces legacy bg-yellow selection) */
   .row-selected {
@@ -145,20 +145,20 @@
     position: fixed; bottom: 24px; right: 24px; z-index: 1100;
     display: flex; align-items: center; gap: 8px;
     padding: 12px 16px;
-    background: var(--vibe-accent); color: var(--vibe-accent-fg);
-    border: 2px solid var(--vibe-border);
+    background: var(--assay-accent); color: var(--assay-accent-fg);
+    border: 2px solid var(--assay-border);
     border-radius: var(--sh-radius-sm);
     box-shadow: var(--sh-shadow);
     font-size: var(--sh-fs-sm); font-weight: 600;
   }
 }
 
-/* === Vibe Content (rendered pages) — aligned to SchoolHouse === */
-.vibe-content {
+/* === Assay Content (rendered pages) — aligned to SchoolHouse === */
+.assay-content {
   font-family: var(--sh-font-body);
   color: var(--sh-ink);
 }
-.vibe-content h1 {
+.assay-content h1 {
   font-family: var(--sh-font-display);
   font-size: var(--sh-fs-3xl);
   font-weight: 600;
@@ -166,7 +166,7 @@
   line-height: var(--sh-lh-tight);
   margin: 0 0 var(--sh-space-5);
 }
-.vibe-content h2 {
+.assay-content h2 {
   font-family: var(--sh-font-display);
   font-size: var(--sh-fs-2xl);
   font-weight: 600;
@@ -174,14 +174,14 @@
   letter-spacing: var(--sh-track-display);
   margin: var(--sh-space-6) 0 var(--sh-space-3);
 }
-.vibe-content h3 {
+.assay-content h3 {
   font-family: var(--sh-font-display);
   font-size: var(--sh-fs-xl);
   font-weight: 600;
   line-height: var(--sh-lh-tight);
   margin: var(--sh-space-5) 0 var(--sh-space-3);
 }
-.vibe-content p {
+.assay-content p {
   font-size: var(--sh-fs-base);
   line-height: var(--sh-lh-read);
   margin: 0 0 var(--sh-space-4);
@@ -190,39 +190,39 @@
    silently stripped bullets/numbers from every rendered-markdown surface
    (Pages, Skills, agent chat) — restore them scoped to rendered content so
    plain app chrome (nav lists, etc.) is unaffected. */
-.vibe-content ul,
-.vibe-content ol {
+.assay-content ul,
+.assay-content ol {
   margin: 0 0 var(--sh-space-4);
   padding-left: 1.5em;
 }
-.vibe-content ul { list-style: disc; }
-.vibe-content ol { list-style: decimal; }
-.vibe-content ul ul, .vibe-content ol ul { list-style: circle; }
-.vibe-content li {
+.assay-content ul { list-style: disc; }
+.assay-content ol { list-style: decimal; }
+.assay-content ul ul, .assay-content ol ul { list-style: circle; }
+.assay-content li {
   font-size: var(--sh-fs-base);
   line-height: var(--sh-lh-read);
   margin: 0 0 var(--sh-space-1);
 }
-.vibe-content code {
+.assay-content code {
   font-family: var(--sh-font-mono);
   font-size: 0.92em;
   background: var(--sh-paper-2);
   padding: 1px 6px;
   border-radius: var(--sh-radius-sm);
-  border: 1.5px solid var(--vibe-border);
+  border: 1.5px solid var(--assay-border);
 }
-.vibe-content pre {
+.assay-content pre {
   font-family: var(--sh-font-mono);
   font-size: var(--sh-fs-sm);
-  background: var(--vibe-code-bg);
-  color: var(--vibe-code-fg);
-  border: 2px solid var(--vibe-border);
+  background: var(--assay-code-bg);
+  color: var(--assay-code-fg);
+  border: 2px solid var(--assay-border);
   border-radius: var(--sh-radius-sm);
   padding: var(--sh-space-4);
   overflow-x: auto;
   margin: var(--sh-space-4) 0;
 }
-.vibe-content pre code {
+.assay-content pre code {
   background: transparent;
   border: none;
   padding: 0;
@@ -230,23 +230,23 @@
 }
 
 /* Plain markdown output (renderSafeMarkdown/goldmark): a raw <table> from a
-   GFM pipe table, and <blockquote>. Distinct from .vibe-table above (the
+   GFM pipe table, and <blockquote>. Distinct from .assay-table above (the
    {table:} page directive's own markup) — without this, a markdown table's
    header cells ran together with no border/spacing ("RegionOwner"), and a
    blockquote had no visual treatment at all. */
-.vibe-content table {
+.assay-content table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--sh-fs-sm);
   margin: 0 0 var(--sh-space-4);
 }
-.vibe-content th,
-.vibe-content td {
+.assay-content th,
+.assay-content td {
   padding: 8px 12px;
-  border: 1.5px solid var(--vibe-border);
+  border: 1.5px solid var(--assay-border);
   text-align: left;
 }
-.vibe-content thead th {
+.assay-content thead th {
   background: var(--sh-paper-2);
   font-weight: 600;
   font-family: var(--sh-font-mono);
@@ -254,9 +254,9 @@
   font-size: var(--sh-fs-xs);
   letter-spacing: var(--sh-track-mono-caps);
 }
-.vibe-content tbody tr:nth-child(even) { background: var(--sh-paper-2); }
+.assay-content tbody tr:nth-child(even) { background: var(--sh-paper-2); }
 
-.vibe-content blockquote {
+.assay-content blockquote {
   margin: 0 0 var(--sh-space-4);
   padding: var(--sh-space-2) var(--sh-space-4);
   border-left: 3px solid var(--sh-teal);

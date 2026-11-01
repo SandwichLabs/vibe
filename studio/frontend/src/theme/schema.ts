@@ -1,9 +1,9 @@
 /**
- * Vibe Studio theme schema — the contract between a theme file and the UI.
+ * Assay theme schema — the contract between a theme file and the UI.
  *
  * A theme is a JSON document (VS Code style) that assigns hex colours to a
  * fixed set of semantic ROLES. The UI never references a hue ("teal") — it
- * references a role ("accent") through a `--vibe-*` CSS custom property, and
+ * references a role ("accent") through a `--assay-*` CSS custom property, and
  * the SchoolHouse `--sh-*` tokens the existing stylesheets use are bridged
  * onto those roles in theme/bridge.css. Swap the theme, every surface follows.
  *
@@ -304,9 +304,9 @@ export function resolveTheme(spec: ThemeSpec, registry: ReadonlyMap<string, Them
   }
 }
 
-/** CSS custom-property name for a role: "accent.hover" → "--vibe-accent-hover". */
+/** CSS custom-property name for a role: "accent.hover" → "--assay-accent-hover". */
 export function cssVarName(role: ColorRole | `font.${FontRole}`): string {
-  return '--vibe-' + role.replace(/\./g, '-')
+  return '--assay-' + role.replace(/\./g, '-')
 }
 
 /** Flatten a resolved theme to the custom properties the UI reads. */

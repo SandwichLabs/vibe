@@ -11,19 +11,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // Holder app names, as written into hub.lock.
 const (
-	AppStudio = "Vibe Studio"
-	AppServe  = "vibe mcp serve"
+	AppStudio = "Assay"
+	AppServe  = "assay mcp serve"
 )
 
-// ErrLegacyFile is returned when `vibe mcp serve` is pointed at a .vibe file.
-var ErrLegacyFile = errors.New(".vibe files are no longer opened directly; open or create a workspace folder, then run `vibe mcp serve --workspace <folder>`")
+// ErrLegacyFile is returned when `assay mcp serve` is pointed at a .assay file.
+var ErrLegacyFile = errors.New(".assay files are no longer opened directly; open or create a workspace folder, then run `assay mcp serve --workspace <folder>`")
 
 // ServeOptions configures Serve.
 type ServeOptions struct {
@@ -53,9 +53,9 @@ type ServeOptions struct {
 }
 
 // ResolveRoot turns a --workspace value (or "" for the working directory) into
-// a workspace root, refusing .vibe files with ErrLegacyFile.
+// a workspace root, refusing .assay files with ErrLegacyFile.
 func ResolveRoot(dir, cwd string) (string, error) {
-	if dir != "" && strings.EqualFold(filepath.Ext(dir), ".vibe") {
+	if dir != "" && strings.EqualFold(filepath.Ext(dir), ".assay") {
 		return "", ErrLegacyFile
 	}
 	start := dir
@@ -75,20 +75,20 @@ func ResolveRoot(dir, cwd string) (string, error) {
 	root, err := workspace.Discover(start)
 	if err != nil {
 		if errors.Is(err, workspace.ErrNotWorkspace) {
-			return "", fmt.Errorf("no Vibe workspace found at or above %s (a workspace is a folder with a vibe.yaml); pass --workspace <folder>", start)
+			return "", fmt.Errorf("no Assay workspace found at or above %s (a workspace is a folder with an assay.yaml); pass --workspace <folder>", start)
 		}
 		return "", err
 	}
 	return root, nil
 }
 
-// Serve runs `vibe mcp serve` for one workspace until in reaches EOF, ctx is
+// Serve runs `assay mcp serve` for one workspace until in reaches EOF, ctx is
 // cancelled, or (owner mode) another process asks it to release the hub.
 //
 //   - Owner mode: the hub lock is free, so this process takes it, opens the
 //     workspace and its DuckDB hub, and serves the agent tools over opts.Transport.
 //     Over stdio it also serves loopback SSE and publishes the endpoint in
-//     hub.lock, so a second `vibe mcp serve` (another Claude client) proxies to
+//     hub.lock, so a second `assay mcp serve` (another Claude client) proxies to
 //     this process instead of failing.
 //   - Proxy mode: a live holder (Studio, or another owner) advertises MCP, so
 //     stdio is bridged to it.
@@ -202,10 +202,10 @@ func holderDecision(root string, holder *Holder, rerr error) (proxy bool, err er
 	case errors.Is(rerr, ErrNotHeld):
 		return false, nil
 	case rerr != nil:
-		return false, fmt.Errorf("%w: another process has workspace %s open but its hub lock cannot be read safely (%v); close it, or remove %s if no Vibe process is running",
+		return false, fmt.Errorf("%w: another process has workspace %s open but its hub lock cannot be read safely (%v); close it, or remove %s if no Assay process is running",
 			ErrHubHeld, filepath.Base(root), rerr, LockPath(root))
 	case holder.MCP != nil && holder.MCP.Pending, holder.MCP == nil && holder.App == AppServe:
-		// Another `vibe mcp serve` is still opening the workspace.
+		// Another `assay mcp serve` is still opening the workspace.
 		return false, nil
 	}
 	return true, nil
@@ -222,7 +222,7 @@ func startupTimeout(lastErr error, holder *Holder, rerr error) error {
 	return lastErr
 }
 
-// startupWait is how long a second `vibe mcp serve` waits for the first to
+// startupWait is how long a second `assay mcp serve` waits for the first to
 // finish opening the workspace and publish its endpoint.
 const startupWait = 15 * time.Second
 
@@ -234,13 +234,13 @@ func serveProxy(ctx context.Context, root string, holder *Holder, opts ServeOpti
 		return fmt.Errorf("%w: %s", ErrHubHeld, noMCPMessage(holder))
 	}
 	if opts.Sandbox != "" && !holder.MCP.Has(CapSandboxHeader) {
-		return fmt.Errorf("%w: %s cannot apply --sandbox to a proxied session (it is an older Vibe); update it, or start without --sandbox", ErrHubHeld, holder)
+		return fmt.Errorf("%w: %s cannot apply --sandbox to a proxied session (it is an older Assay); update it, or start without --sandbox", ErrHubHeld, holder)
 	}
 	fmt.Fprintf(opts.Err, "Workspace %s is open in %s; passing MCP through to it.\n", filepath.Base(root), holder)
-	err := vibemcp.ProxyStdio(ctx, vibemcp.ProxyConfig{
+	err := assaymcp.ProxyStdio(ctx, assaymcp.ProxyConfig{
 		Endpoint: holder.MCP.URL, Token: holder.MCP.Token, Sandbox: opts.Sandbox, Logger: opts.Logger,
 	}, opts.In, opts.Out)
-	if errors.Is(err, vibemcp.ErrUpstreamLost) {
+	if errors.Is(err, assaymcp.ErrUpstreamLost) {
 		return fmt.Errorf("%w (%s); reconnect your MCP client to continue", err, holder)
 	}
 	return err
@@ -261,7 +261,7 @@ func serveNotices(ws workspace.Workspace, opts ServeOptions) {
 	}
 	if st := ws.DotEnv(); st.State != "none" && st.State != "allowed" {
 		// Headless: never prompt, use only a saved allow. Names only.
-		opts.Logger.Info("mcp serve: this workspace has a .env that is not allowed, so it is not loaded; run `vibe workspace env allow` to use it",
+		opts.Logger.Info("mcp serve: this workspace has a .env that is not allowed, so it is not loaded; run `assay workspace env allow` to use it",
 			"state", st.State, "variables", st.Names)
 	}
 }
@@ -284,7 +284,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 		fmt.Fprintln(opts.Err, askNotice)
 	}
 
-	// Publish an SSE endpoint so a second `vibe mcp serve` can proxy to us.
+	// Publish an SSE endpoint so a second `assay mcp serve` can proxy to us.
 	addr := opts.Addr
 	if opts.Transport == "stdio" {
 		addr = "127.0.0.1:0"
@@ -306,7 +306,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 	switch opts.Transport {
 	case "stdio":
 		opts.Logger.Info("mcp serve: stdio transport ready")
-		err = vibemcp.New(handler, opts.Logger, mcpServerOptions(ws, sess, handler, opts.App, opts.Version, nil)...).ServeStdio(ctx, opts.In, opts.Out)
+		err = assaymcp.New(handler, opts.Logger, mcpServerOptions(ws, sess, handler, opts.App, opts.Version, nil)...).ServeStdio(ctx, opts.In, opts.Out)
 	case "sse":
 		fmt.Fprintf(opts.Err, "MCP SSE server listening on %s\n", share.URL())
 		fmt.Fprintf(opts.Err, "Auth token (send as `Authorization: Bearer <token>`, see docs/reference/mcp.md): %s\n", share.Token())
@@ -314,7 +314,7 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 	}
 	select {
 	case <-releasing:
-		fmt.Fprintln(opts.Err, "Another Vibe process asked for this workspace; releasing it and exiting. Reconnect your MCP client to continue through that process.")
+		fmt.Fprintln(opts.Err, "Another Assay process asked for this workspace; releasing it and exiting. Reconnect your MCP client to continue through that process.")
 	default:
 	}
 	if errors.Is(err, context.Canceled) {
@@ -326,4 +326,4 @@ func serveOwner(ctx context.Context, opened *Opened, opts ServeOptions, releasin
 // askNotice goes to stderr only (an MCP client never shows it to the model);
 // the same state reaches the model in the server instructions and in each
 // refusal.
-const askNotice = `Ask before changes is on for this workspace: MCP clients can read, but changes will be refused (no one is here to approve them). A valid notebook, skill or artifact write says it is valid and ready, so the client can ask you to approve it. Changes to a connection other than this workspace's local files always need Vibe Studio. To let MCP clients change local files without asking, turn off ` + agents.SettingsAskPath + `, then restart this server: the policy is read when it starts.`
+const askNotice = `Ask before changes is on for this workspace: MCP clients can read, but changes will be refused (no one is here to approve them). A valid notebook, skill or artifact write says it is valid and ready, so the client can ask you to approve it. Changes to a connection other than this workspace's local files always need Assay. To let MCP clients change local files without asking, turn off ` + agents.SettingsAskPath + `, then restart this server: the policy is read when it starts.`

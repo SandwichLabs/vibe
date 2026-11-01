@@ -107,7 +107,7 @@ func (u *Updater) latestTag(ctx context.Context) (string, error) {
 	return u.tagFromLocation(loc)
 }
 
-// tagFromLocation extracts the tag from .../SandwichLabs/vibe/releases/tag/<tag>.
+// tagFromLocation extracts the tag from .../SandwichLabs/assay/releases/tag/<tag>.
 func (u *Updater) tagFromLocation(loc *url.URL) (string, error) {
 	web, err := url.Parse(u.webBase)
 	if err != nil || loc.Host != web.Host {

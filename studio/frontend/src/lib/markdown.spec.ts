@@ -7,7 +7,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   BrowserOpenURL: (url: string) => openURL(url),
 }))
 
-import { renderSafeMarkdown, installSafeLinkHandling, vibeMdContentClass } from './markdown'
+import { renderSafeMarkdown, installSafeLinkHandling, assayMdContentClass } from './markdown'
 import { confirmVisible, resolveConfirm } from '../composables/useConfirm'
 
 describe('renderSafeMarkdown (allow-list)', () => {
@@ -181,7 +181,7 @@ describe('installSafeLinkHandling', () => {
   it('shows the shared SchoolHouse ConfirmDialog (not window.confirm) for an http(s) link, and opens it via BrowserOpenURL once confirmed', async () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    container.className = vibeMdContentClass
+    container.className = assayMdContentClass
     document.body.appendChild(container)
 
     const evt = activate(container, 'https://example.com/page')
@@ -203,7 +203,7 @@ describe('installSafeLinkHandling', () => {
   it('does not open the link if the user declines the dialog', async () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    container.className = vibeMdContentClass
+    container.className = assayMdContentClass
     document.body.appendChild(container)
 
     activate(container, 'https://example.com/page')
@@ -220,7 +220,7 @@ describe('installSafeLinkHandling', () => {
   it('drops a non-http(s) scheme silently (never shows the dialog, never calls BrowserOpenURL)', async () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    container.className = vibeMdContentClass
+    container.className = assayMdContentClass
     document.body.appendChild(container)
 
     const evt = activate(container, 'file:///etc/passwd')
@@ -233,7 +233,7 @@ describe('installSafeLinkHandling', () => {
   it('intercepts an <area> element too, not just <a> (closest("a") alone never matches it)', async () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    container.className = vibeMdContentClass
+    container.className = assayMdContentClass
     document.body.appendChild(container)
 
     const evt = activate(container, 'https://example.com/area', { tag: 'area' })
@@ -250,7 +250,7 @@ describe('installSafeLinkHandling', () => {
   it('intercepts a middle-click (auxclick), not just a primary click', async () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    container.className = vibeMdContentClass
+    container.className = assayMdContentClass
     document.body.appendChild(container)
 
     const evt = activate(container, 'https://example.com/mid', { type: 'auxclick' })
@@ -260,10 +260,10 @@ describe('installSafeLinkHandling', () => {
     expect(confirmVisible.value).toBe(true)
   })
 
-  it('does not intercept a link outside a .vibe-md-content container (normal app navigation)', () => {
+  it('does not intercept a link outside a .assay-md-content container (normal app navigation)', () => {
     installSafeLinkHandling()
     const container = document.createElement('div')
-    // No vibe-md-content class — ordinary app chrome.
+    // No assay-md-content class — ordinary app chrome.
     document.body.appendChild(container)
 
     const evt = activate(container, 'https://example.com/page')

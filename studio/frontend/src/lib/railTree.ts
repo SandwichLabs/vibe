@@ -49,7 +49,7 @@ function pushTables(out: Row[], c: ConnectionInfo, l: CatalogListing, level: num
     return !!cols && cols.nodes.some((x) => x.name.toLowerCase().includes(f))
   })
   if (l.nodes.length === 0) {
-    out.push(note(parent, c, level, 'No tables yet. Import a CSV, or ask the agent to build one.'))
+    out.push(note(parent, c, level, 'No tables yet. Import a CSV, or ask the assistant to build one.'))
     return
   }
   nodes.forEach((n, i) => {

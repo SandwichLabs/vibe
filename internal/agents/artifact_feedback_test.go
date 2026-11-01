@@ -175,7 +175,7 @@ func TestArtifacts_ParameterDefaultsKeepTheirTypes(t *testing.T) {
 
 func TestWriteArtifact_ScriptSyntax(t *testing.T) {
 	cases := []struct{ name, src, want string }{
-		{"valid", "function draw(ctx) { return vibe.run('rows', {}).then((r) => ({ svg: `<svg>${r.rows.length}</svg>` })) }", ""},
+		{"valid", "function draw(ctx) { return assay.run('rows', {}).then((r) => ({ svg: `<svg>${r.rows.length}</svg>` })) }", ""},
 		{"unclosed paren", "function draw( {", "view.js line 1"},
 		{"unbalanced brace", "function draw(c) {\n  return 1\n", `"{" is never closed`},
 		{"mismatch", "function draw(c) { return (1] }", "closes the"},

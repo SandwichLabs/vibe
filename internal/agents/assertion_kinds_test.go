@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	sassert "github.com/SandwichLabs/vibe/internal/semantics/assert"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	sassert "github.com/SandwichLabs/assay/internal/semantics/assert"
 )
 
 // grainSource serves one metric and its saved query to the planner.
@@ -35,7 +35,7 @@ func (g grainSource) Query(_ context.Context, id string) (*queries.Query, error)
 }
 
 // runChecks runs planned checks through the real read-only policy path on a
-// real DuckDB, the way `vibe semantics check` does.
+// real DuckDB, the way `assay semantics check` does.
 func (fx *policyFixture) runChecks(checks []sassert.Check) []sassert.Result {
 	fx.t.Helper()
 	run := func(ctx context.Context, conn, sql string, params map[string]any) (*engine.ResultSet, error) {

@@ -1,6 +1,6 @@
 # Example workspaces
 
-Three small Vibe workspaces that show the [semantic layer](../reference/semantics.md) on public data. Each one is a folder you can open in Studio (**Open folder**) or work through in a terminal; each README is a walkthrough with the real output of every command.
+Three small Assay workspaces that show the [semantic layer](../reference/semantics.md) on public data. Each one is a folder you can open in Studio (**Open folder**) or work through in a terminal; each README is a walkthrough with the real output of every command.
 
 | Workspace | Data | Shows |
 |---|---|---|
@@ -14,10 +14,10 @@ The data is committed as CSV under each `data/` folder. An entity's `table` is a
 
 ```
 cd docs/examples/penguins
-vibe import data/penguins.csv --key auto
-vibe semantics list
-vibe semantics check
-vibe query "SELECT * FROM metric('penguin_count', by => 'species')"
+assay import data/penguins.csv --key auto
+assay semantics list
+assay semantics check
+assay query "SELECT * FROM metric('penguin_count', by => 'species')"
 ```
 
 The README of each workspace has its own import commands and the rest of the tour.
@@ -27,7 +27,7 @@ The README of each workspace has its own import commands and the rest of the tou
 Profiling rewrites `measured.at` (and the counts) in the committed join files, and an import writes generated skills, so work in a copy:
 
 ```
-cp -r docs/examples/chinook ~/vibe-chinook && cd ~/vibe-chinook
+cp -r docs/examples/chinook ~/assay-chinook && cd ~/assay-chinook
 ```
 
 or run `git checkout -- docs/examples` afterwards to put the committed files back.
@@ -35,16 +35,16 @@ or run `git checkout -- docs/examples` afterwards to put the committed files bac
 ## What each workspace contains
 
 ```
-vibe.yaml            from `vibe workspace init`
-.gitignore           keeps .vibe-local/ and data/*.duckdb out of git
+assay.yaml           from `assay workspace init`
+.gitignore           keeps .assay-local/ and data/*.duckdb out of git
 data/*.csv           the committed data
-queries/*.sql        saved queries, with a `-- vibe:` header (some declare parameters)
+queries/*.sql        saved queries, with a `-- assay:` header (some declare parameters)
 semantics/
   entities/*.yaml
   metrics/*.yaml
   joins/*.yaml
   glossary.md
-notebooks/*.vnb      cells that call metric()
+notebooks/*.asnb     cells that call metric()
 README.md            the walkthrough
 ```
 

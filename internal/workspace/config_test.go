@@ -101,7 +101,7 @@ func TestMarshalConfig_GoldenAndRoundTrip(t *testing.T) {
 	}
 	got, err := MarshalConfig(c)
 	require.NoError(t, err)
-	path := filepath.Join("testdata", "vibe.golden.yaml")
+	path := filepath.Join("testdata", "assay.golden.yaml")
 	if *update {
 		require.NoError(t, os.WriteFile(path, got, 0o644))
 	}
@@ -145,7 +145,7 @@ func TestResolve_InterpolatesOnlyInOwnScopesAndOnlyNonSecretFields(t *testing.T)
 		assert.Equal(t, "v-db.internal", r.Options["application_name"])
 	}
 
-	// The shared vibe.yaml never interpolates: the reference is refused, so a
+	// The shared assay.yaml never interpolates: the reference is refused, so a
 	// pulled commit cannot read your environment.
 	_, err := d.Resolve(env, ScopeShared)
 	assert.Error(t, err)

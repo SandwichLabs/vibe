@@ -1,4 +1,4 @@
-// Command ssofake is a loopback AWS IAM Identity Center for driving Vibe Studio's
+// Command ssofake is a loopback AWS IAM Identity Center for driving Assay's
 // AWS sign-in by hand or from a script (task studio:dev:ssofake, Rodney QA). It
 // serves the OIDC device-authorization endpoints and the portal on one port,
 // plus /_ctl/approve, /_ctl/deny, /_ctl/expire and /_ctl/state. With --minio it
@@ -25,7 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 
-	"github.com/SandwichLabs/vibe/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/assay/internal/testsupport/ssofake"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 	minio := flag.String("minio", "", "MinIO host:port; role credentials are minted with STS AssumeRole")
 	key := flag.String("key", "minioadmin", "MinIO root key id (with --minio)")
 	secret := flag.String("secret", "", "MinIO root secret (with --minio)")
-	life := flag.Duration("cred-life", 6*time.Minute, "how long the portal says role credentials last (Vibe renews 5 minutes before)")
+	life := flag.Duration("cred-life", 6*time.Minute, "how long the portal says role credentials last (Assay renews 5 minutes before)")
 	flag.Parse()
 	if !strings.HasPrefix(*addr, "127.0.0.1:") && !strings.HasPrefix(*addr, "localhost:") {
 		log.Fatal("ssofake only listens on loopback")

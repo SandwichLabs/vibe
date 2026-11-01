@@ -40,7 +40,7 @@ func TestImport_CreateWithKey(t *testing.T) {
 	require.NoError(t, db.QueryRow(
 		`SELECT column_default FROM information_schema.columns WHERE table_name='customers' AND column_name='customer_id'`,
 	).Scan(&def))
-	require.Contains(t, def.String, "_vibe_seq_customers_customer_id")
+	require.Contains(t, def.String, "_assay_seq_customers_customer_id")
 
 	_, err = db.Exec("INSERT INTO customers (name) VALUES ('Cara')")
 	require.NoError(t, err)

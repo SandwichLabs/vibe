@@ -2,8 +2,8 @@ import { themeToCssVars, type ResolvedTheme } from './schema'
 
 /**
  * Write a resolved theme onto <html>. Everything downstream is plain CSS:
- * bridge.css maps the `--sh-*` tokens onto these `--vibe-*` properties, the
- * CodeMirror theme reads `var(--vibe-editor-*)`, and `color-scheme` lets
+ * bridge.css maps the `--sh-*` tokens onto these `--assay-*` properties, the
+ * CodeMirror theme reads `var(--assay-editor-*)`, and `color-scheme` lets
  * native scrollbars / form controls follow the theme's light/dark type.
  */
 export function applyThemeToDocument(theme: ResolvedTheme, doc: Document = document): void {
@@ -17,7 +17,7 @@ export function applyThemeToDocument(theme: ResolvedTheme, doc: Document = docum
 
 export function applyUiScale(percent: number, doc: Document = document): void {
   const clamped = Math.min(150, Math.max(75, percent || 100))
-  doc.documentElement.style.setProperty('--vibe-ui-scale', String(clamped / 100))
+  doc.documentElement.style.setProperty('--assay-ui-scale', String(clamped / 100))
 }
 
 export function applyReduceMotion(on: boolean, doc: Document = document): void {

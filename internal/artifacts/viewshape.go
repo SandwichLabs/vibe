@@ -1,6 +1,6 @@
 package artifacts
 
-import "github.com/SandwichLabs/vibe/internal/a2ui"
+import "github.com/SandwichLabs/assay/internal/a2ui"
 
 // CheckViewShape checks an A2UI view (m.View a2ui; view already passed
 // ValidateView) against the result columns of the manifest's queries: a pivot

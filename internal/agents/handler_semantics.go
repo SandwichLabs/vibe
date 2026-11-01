@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics/proposals"
 )
 
 // --- the semantic layer: list_definitions, get_definition, propose_definition ---
@@ -307,12 +307,12 @@ func (h *Handler) handleProposeDefinition(ctx context.Context, req *Request) *Re
 	return NewResponse(req.ID, map[string]any{
 		"proposed": true, "id": p.ID, "kind": string(p.Kind), "name": p.Name, "status": p.Status,
 		"replaces": p.ReplacesRev != "",
-		"note":     "Filed in the person's proposals inbox. Nothing in semantics/ has changed and it takes effect only when the person accepts it (vibe semantics proposals, or Vibe Studio). Do not use the definition until then.",
+		"note":     "Filed in the person's proposals inbox. Nothing in semantics/ has changed and it takes effect only when the person accepts it (assay semantics proposals, or Assay). Do not use the definition until then.",
 	})
 }
 
 func tooManyProposals(err error) string {
-	return fmt.Sprintf("%s. Nothing was filed. Tell the person: `vibe semantics proposals` lists them.", scrubStoreText(err.Error()))
+	return fmt.Sprintf("%s. Nothing was filed. Tell the person: `assay semantics proposals` lists them.", scrubStoreText(err.Error()))
 }
 
 func draftOf(req *Request, kind semantics.Kind) (proposals.Draft, *Response) {

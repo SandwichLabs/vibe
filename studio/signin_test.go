@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/awssso"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/testsupport/ssofake"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/awssso"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/testsupport/ssofake"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 const ssoStudioConfig = `[profile dev]
@@ -396,7 +396,7 @@ func TestSignIn_NoNeedleReachesABindingEventOrFolder(t *testing.T) {
 	for _, n := range needles {
 		assert.NotContains(t, all, n, "bindings, events and statuses")
 	}
-	for _, dir := range []string{r.app.ws.Root(), os.Getenv("VIBE_CONFIG_DIR")} {
+	for _, dir := range []string{r.app.ws.Root(), os.Getenv("ASSAY_CONFIG_DIR")} {
 		require.NoError(t, filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err

@@ -12,7 +12,7 @@
 // Every string is text.
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Icon from './Icon.vue'
-import { createVibeEditor, type VibeEditorInstance } from '../composables/useVibeEditor'
+import { createAssayEditor, type AssayEditorInstance } from '../composables/useAssayEditor'
 import CustomView from './CustomView.vue'
 import PageFiles from './PageFiles.vue'
 import PagePrompt from './PagePrompt.vue'
@@ -35,11 +35,11 @@ type FileTab = 'script' | 'manifest'
 const tab = ref<FileTab>('script')
 const scriptEl = ref<HTMLElement | null>(null)
 const manifestEl = ref<HTMLElement | null>(null)
-const editors: Partial<Record<FileTab, VibeEditorInstance>> = {}
+const editors: Partial<Record<FileTab, AssayEditorInstance>> = {}
 
 function mount(which: FileTab, el: HTMLElement | null) {
   if (!el || editors[which]) return
-  editors[which] = createVibeEditor(el, {
+  editors[which] = createAssayEditor(el, {
     value: (which === 'script' ? status.value?.source : status.value?.manifest) ?? '',
     lang: which === 'script' ? 'javascript' : 'yaml',
     readOnly: true,
@@ -88,8 +88,8 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
         <span>
           <template v-if="state === 'changed' && status.deps_changed" data-testid="view-trust-deps-changed">A metric this {{ isPage ? 'page' : 'view' }} reads changed ({{ (status.metrics_used ?? []).map((m) => m.name).join(', ') }}), though its own files did not. Read the metric below before you allow it again.</template>
           <template v-else-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it.</template>
-          <template v-else-if="isPage">Read the files below before you allow this page. It was written by someone else or by the agent.</template>
-          <template v-else>This view runs code written by someone else or by the agent. It cannot reach the network or your files, and can only run this artifact's queries.</template>
+          <template v-else-if="isPage">Read the files below before you allow this page. It was written by someone else or by the assistant.</template>
+          <template v-else>This view runs code written by someone else or by the assistant. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
 

@@ -1,7 +1,7 @@
 /**
  * usePageFrame — the address of a static HTML page's frame (#162, H3): asks Go
  * for a page token (only for a page that is allowed right now, with the files
- * that were hashed), and builds /vibe-view/<token>/page?<values> from the
+ * that were hashed), and builds /assay-view/<token>/page?<values> from the
  * artifact's parameter values. A change of a value changes the address, which
  * reloads the frame; the page is rendered in Go from that query string, always
  * through Bind. The frame is shown only if Studio's own frame policy (the meta
@@ -66,7 +66,7 @@ export function usePageFrame(
     }
   }
 
-  const src = computed(() => (token.value ? `/vibe-view/${token.value}/page${pageQuery(detail(), values())}` : ''))
+  const src = computed(() => (token.value ? `/assay-view/${token.value}/page${pageQuery(detail(), values())}` : ''))
   onMounted(open)
   // A refresh asks for a new token, so the frame loads again even if no value changed.
   watch(refresh, open)

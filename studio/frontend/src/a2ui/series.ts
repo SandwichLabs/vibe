@@ -17,7 +17,7 @@ export interface SeriesData {
   series: Series[]
 }
 
-// The categorical palette has six roles (--vibe-chart-1..6); series past the
+// The categorical palette has six roles (--assay-chart-1..6); series past the
 // sixth reuse them in order.
 const PALETTE_SIZE = 6
 

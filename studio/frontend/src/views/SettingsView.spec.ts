@@ -23,7 +23,7 @@ function makeApp(mcp: Partial<MCPStatus> = {}) {
     GetMCPStatus: vi.fn(async () => ({ running: false, url: '', canStart: true, reason: '', ...mcp })),
     StartMCP: vi.fn(async () => ({ running: true, url: 'http://127.0.0.1:5555/sse', canStart: true, reason: '' })),
     StopMCP: vi.fn(async () => {}),
-    GetClaudeConfig: vi.fn(async () => ({ name: 'vibe-a', desktop: '{"mcpServers":{}}', code: 'claude mcp add vibe-a -- vibe mcp serve --workspace /w/a' })),
+    GetClaudeConfig: vi.fn(async () => ({ name: 'assay-a', desktop: '{"mcpServers":{}}', code: 'claude mcp add assay-a -- assay mcp serve --workspace /w/a' })),
     SetWorkspaceSettings: vi.fn(async (s: WorkspaceSettings) => ({ ...INFO, name: s.name })),
     GetAgentConfig: vi.fn(async () => ({ provider: 'local', model: 'llama', endpoint: 'http://x', sandbox: 'read-write', askBeforeWrites: true })),
     GetLLMKeyStatus: vi.fn(async () => ({ provider: 'local', source: 'none', set: false, fileKey: false, canMigrate: false, keychainAvailable: true, keychainHasKey: false })),
@@ -67,7 +67,7 @@ describe('SettingsView', () => {
     makeApp()
     const { w, router } = await mountAt('/settings?tab=app')
     expect(w.find('#settings-tab-app').attributes('aria-selected')).toBe('true')
-    expect(w.text()).toContain("The agent's model")
+    expect(w.text()).toContain("The assistant's model")
     expect(w.text()).not.toContain('This workspace')
     await w.find('#settings-tab-workspace').trigger('click')
     await flushPromises()
@@ -120,7 +120,7 @@ describe('SettingsView', () => {
 
     await w.find('[data-testid="copy-claude-code"]').trigger('click')
     await flushPromises()
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('claude mcp add vibe-a'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('claude mcp add assay-a'))
     await w.find('[data-testid="copy-claude-desktop"]').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenLastCalledWith('{"mcpServers":{}}')

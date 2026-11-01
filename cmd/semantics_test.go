@@ -29,12 +29,12 @@ func seedSemantics(t *testing.T, root string) {
 
 func TestSemanticsList_EmptyHandWrittenAndBroken(t *testing.T) {
 	ws := newWS(t)
-	out, stderr, err := runVibe("semantics", "list", "--workspace", ws)
+	out, stderr, err := runAssay("semantics", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "No semantic definitions")
 
 	seedSemantics(t, ws)
-	out, stderr, err = runVibe("semantics", "list", "--workspace", ws)
+	out, stderr, err = runAssay("semantics", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "KIND")
 	assert.Regexp(t, `metric\s+net_revenue\s+sum\(amount\) by region, month\s+-`, out)
@@ -43,7 +43,7 @@ func TestSemanticsList_EmptyHandWrittenAndBroken(t *testing.T) {
 	assert.Regexp(t, `join\s+orders_customers\s+orders to customer \(many_to_one\)`, out)
 	assert.Regexp(t, `glossary\s+glossary.md\s+2 terms`, out)
 
-	out, stderr, err = runVibe("semantics", "list", "--json", "--workspace", ws)
+	out, stderr, err = runAssay("semantics", "list", "--json", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &rows))
@@ -62,38 +62,38 @@ func TestSemanticsShow_PrintsTheFileAsStored(t *testing.T) {
 	ws := newWS(t)
 	seedSemantics(t, ws)
 
-	out, stderr, err := runVibe("semantics", "show", "metric", "net_revenue", "--workspace", ws)
+	out, stderr, err := runAssay("semantics", "show", "metric", "net_revenue", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Equal(t, cliMetric, out, "comments and layout are kept")
 
-	out, _, err = runVibe("semantics", "show", "glossary", "--workspace", ws)
+	out, _, err = runAssay("semantics", "show", "glossary", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "## Refund")
 
-	out, stderr, err = runVibe("semantics", "show", "metric", "broken", "--workspace", ws)
+	out, stderr, err = runAssay("semantics", "show", "metric", "broken", "--workspace", ws)
 	require.Error(t, err)
 	assert.Contains(t, out, "name: broken", "a broken file is still printed")
 	assert.Contains(t, err.Error()+stderr, "does not pass validation")
 
-	_, _, err = runVibe("semantics", "show", "metric", "absent", "--workspace", ws)
+	_, _, err = runAssay("semantics", "show", "metric", "absent", "--workspace", ws)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
-	_, _, err = runVibe("semantics", "show", "colour", "x", "--workspace", ws)
+	_, _, err = runAssay("semantics", "show", "colour", "x", "--workspace", ws)
 	require.Error(t, err)
-	_, _, err = runVibe("semantics", "show", "metric", "--workspace", ws)
+	_, _, err = runAssay("semantics", "show", "metric", "--workspace", ws)
 	require.Error(t, err)
 }
 
 func TestBundle_SemanticsRoundTripThroughTheCLI(t *testing.T) {
 	src := newWS(t)
 	seedSemantics(t, src)
-	out := filepath.Join(t.TempDir(), "share.vibe")
-	stdout, stderr, err := runVibe("export", "bundle", "-o", out, "--semantics", "metrics/net_revenue", "--semantics", "glossary", "--workspace", src)
+	out := filepath.Join(t.TempDir(), "share.assay")
+	stdout, stderr, err := runAssay("export", "bundle", "-o", out, "--semantics", "metrics/net_revenue", "--semantics", "glossary", "--workspace", src)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stdout, "2 semantic definitions")
 
 	dst := newWS(t)
-	stdout, stderr, err = runVibe("import", out, "--workspace", dst)
+	stdout, stderr, err = runAssay("import", out, "--workspace", dst)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, stdout, "semantics/metrics/net_revenue")
 	got, err := os.ReadFile(filepath.Join(dst, "semantics", "metrics", "net_revenue.yaml"))
@@ -108,13 +108,13 @@ func TestSemantics_ControlCharactersNeverReachTheTerminal(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "evil.yaml"), []byte("version: 1\nname: evil\n# \x1b]0;pwned\x07\nquery: q\nmeasure: sum(a)\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x\x1b[31m.yaml"), []byte("x"), 0o644))
 
-	out, stderr, err := runVibe("semantics", "list", "--workspace", ws)
+	out, stderr, err := runAssay("semantics", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.NotContains(t, out, "\x1b")
 	assert.NotContains(t, out, "\x07")
 	assert.Contains(t, out, "<U+001B>")
 
-	out, stderr, err = runVibe("semantics", "show", "metric", "evil", "--workspace", ws)
+	out, stderr, err = runAssay("semantics", "show", "metric", "evil", "--workspace", ws)
 	require.Error(t, err)
 	assert.NotContains(t, out+stderr+err.Error(), "\x1b")
 	assert.Contains(t, out, "<U+001B>]0;pwned<U+0007>")
@@ -128,7 +128,7 @@ func TestSemanticsList_PrintsALongErrorWhole(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "semantics", "metrics"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "semantics", "metrics", "sleep_avg.yaml"), []byte(body), 0o644))
 
-	out, stderr, err := runVibe("semantics", "list", "--workspace", ws)
+	out, stderr, err := runAssay("semantics", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "field unit) not found")
 	assert.Contains(t, out, "inside {...} quote a value")

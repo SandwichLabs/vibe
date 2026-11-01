@@ -20,7 +20,7 @@ export const MAX_MESSAGES_PER_SECOND = 100
 export const MAX_BYTES_PER_SECOND = 16 * 1024 * 1024
 /** A Worker must be ready this long after it started, whatever it says it is loading. */
 export const READY_DEADLINE_MS = 15_000
-/** The library files a Worker may announce it is loading, once each (the build's dist/vibe-view/lib). */
+/** The library files a Worker may announce it is loading, once each (the build's dist/assay-view/lib). */
 export const LIB_FILES: readonly string[] = [
   'd3-array', 'd3-color', 'd3-format', 'd3-geo', 'd3-interpolate', 'd3-path', 'd3-scale', 'd3-shape', 'd3-time', 'd3-time-format',
   'vega', 'vega-interpreter', 'vega-lite',

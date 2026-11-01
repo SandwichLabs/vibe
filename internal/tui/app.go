@@ -1,4 +1,4 @@
-// Package tui is Vibe Studio's terminal interface (#69): a SQL REPL, a
+// Package tui is Assay's terminal interface (#69): a SQL REPL, a
 // read-only table browser, and a notebook list. It is deliberately narrow —
 // the page editor/wizard/renderer that used to live here were removed along
 // with the page system (#66/#69); notebooks and A2UI dashboards are authored
@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/agents"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/usersql"
 	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -60,7 +60,7 @@ type EngineAccess interface {
 	Execute(ctx context.Context, sql string, params map[string]any) (*engine.ResultSet, error)
 }
 
-// App is the top-level BubbleTea model for Vibe Studio's TUI.
+// App is the top-level BubbleTea model for Assay's TUI.
 type App struct {
 	ws     WorkspaceAccess
 	engine EngineAccess
@@ -81,7 +81,7 @@ type App struct {
 	status   string // one-line transient status, cleared on next keypress
 
 	// readOnly marks a TUI opened without owning the workspace's database
-	// (`vibe studio --read-only`); shown in the status bar.
+	// (`assay studio --read-only`); shown in the status bar.
 	readOnly bool
 	// prepare readies typed SQL (nil = as typed); ctx bounds the REPL's queries.
 	prepare PrepareFunc
@@ -449,7 +449,7 @@ func (a *App) renderModeBar() string {
 }
 
 func (a *App) renderStatusBar() string {
-	status := " VIBE STUDIO"
+	status := " ASSAY STUDIO"
 	if a.name != "" {
 		status += " " + sanitizeForTerminal(a.name, false)
 	}

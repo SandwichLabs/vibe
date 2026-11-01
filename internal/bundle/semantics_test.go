@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // Hand-written on purpose: comments and flow style that a re-encode would lose.
@@ -172,7 +172,7 @@ func TestSemantics_OpenRefusesWholeBundle(t *testing.T) {
 		"upper-case name":    set("semantics/metrics/Net.yaml", strings.Replace(semMetric, "net_revenue", "Net", 1)),
 		"stray file":         set("semantics/notes.md", "x"),
 		"yml extension":      set("semantics/metrics/net_revenue.yml", semMetric),
-		"a proposal":         set(".vibe-local/proposals/20261029T153012Z-metric-x-7f3a.yaml", "version: 1\n"),
+		"a proposal":         set(".assay-local/proposals/20261029T153012Z-metric-x-7f3a.yaml", "version: 1\n"),
 		"proposal in folder": set("semantics/proposals/x.yaml", "version: 1\n"),
 		"traversal":          set("semantics/../x.yaml", semMetric),
 	}
@@ -195,8 +195,8 @@ func TestSemantics_AProposalIsNeverABundleEntry(t *testing.T) {
 	src, _ := newWS(t)
 	writeSem(t, src, semFiles)
 	writeSem(t, src, map[string]string{
-		".vibe-local/proposals/20261029T153012Z-metric-x-7f3a.yaml": "version: 1\nid: x\n",
-		"semantics/proposals/y.yaml":                                "version: 1\n",
+		".assay-local/proposals/20261029T153012Z-metric-x-7f3a.yaml": "version: 1\nid: x\n",
+		"semantics/proposals/y.yaml":                                 "version: 1\n",
 	})
 	res, err := Export(context.Background(), src, ExportOptions{Selection: all()})
 	require.NoError(t, err)
@@ -204,10 +204,10 @@ func TestSemantics_AProposalIsNeverABundleEntry(t *testing.T) {
 	require.NoError(t, err)
 	for _, f := range zr.File {
 		assert.NotContains(t, f.Name, "proposals", f.Name)
-		assert.False(t, strings.HasPrefix(f.Name, ".vibe-local"), f.Name)
+		assert.False(t, strings.HasPrefix(f.Name, ".assay-local"), f.Name)
 	}
 	for _, kind := range []ItemKind{KindNotebook, KindQuery, KindSkill, KindArtifact, KindSemantics} {
-		_, _, err := classify(".vibe-local/proposals/x.yaml")
+		_, _, err := classify(".assay-local/proposals/x.yaml")
 		assert.ErrorIs(t, err, ErrCorrupt, string(kind))
 	}
 }

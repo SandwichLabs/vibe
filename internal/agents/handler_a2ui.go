@@ -3,7 +3,7 @@ package agents
 import (
 	"context"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/a2ui"
 )
 
 // --- A2UI handlers (#67) ---

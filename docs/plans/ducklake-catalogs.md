@@ -15,10 +15,10 @@ ATTACH 'ducklake:sqlite:s3://oib-data-local/warehouse/ducklake/catalog.sqlite' A
   DATA_PATH 's3://oib-data-local/warehouse/ducklake/', READ_ONLY);
 ```
 
-In Vibe this is two connections the person adds in their own scopes, with no SQL and no credential in any file:
+In Assay this is two connections the person adds in their own scopes, with no SQL and no credential in any file:
 
 ```yaml
-# <config dir>/vibe/connections.yaml (all my workspaces), or the workspace's local.yaml (this computer)
+# <config dir>/assay/connections.yaml (all my workspaces), or the workspace's local.yaml (this computer)
 connections:
   - name: floci
     type: s3
@@ -65,7 +65,7 @@ It breaks three rules the product depends on: credentials would sit in a config 
 ### Definition (`internal/connections/ducklake.go`)
 
 - New option `catalog`: `duckdb` (default, today's behaviour) or `sqlite`. Unknown values are refused (`oneOf`).
-- `path` stays scheme-free: a local file or a plain storage URL (`storageurl.Validate`). Vibe builds the ATTACH target: `ducklake:<path>` for duckdb, `ducklake:sqlite:<path>` for sqlite. In `Validate`, check `IsDataURL(s.Path)` **before** `metadataSchemeRE` (`s3:` matches the scheme regexp), the way `tablesource.go:56-62` does, so `path: "postgres:…"` is still refused.
+- `path` stays scheme-free: a local file or a plain storage URL (`storageurl.Validate`). Assay builds the ATTACH target: `ducklake:<path>` for duckdb, `ducklake:sqlite:<path>` for sqlite. In `Validate`, check `IsDataURL(s.Path)` **before** `metadataSchemeRE` (`s3:` matches the scheme regexp), the way `tablesource.go:56-62` does, so `path: "postgres:…"` is still refused.
 - **The read-only rule lives in `Validate`**: `!s.ReadOnly && IsDataURL(s.Path)` is refused ("a catalog in object storage can only be read: set read_only"). One place covers save (`conn_crud.go`), open (`validatePreparer.Prepare`) and hand-edited YAML.
 - `AttachSQL` branches on URL for both the `filepath.IsAbs` guard and the `os.Stat` check.
 - A local SQLite catalog is writable, like a local DuckDB catalog (DuckLake creates it on first write).
@@ -131,7 +131,7 @@ The extensions a lake needs depend on its spec: `ducklake`, plus `sqlite` for a 
 
 Verified end to end on the case above (DuckDB 1.5.6, MinIO in a container, `warehouse.dim_students` with 6,007 rows: Parquet files plus rows still inlined in the catalog). The integration tests need a container runtime and the downloaded extensions, so they are behind `-tags integration` and skip without MinIO.
 
-- The YAML above (credentials in the keychain) opens, the lake connects on first use, and `SELECT count(*) FROM lake.warehouse.dim_students` works in Studio, the CLI and over MCP (read-only). *Lake-first ordering* (the lake connects its storage connection itself) is proven by `TestDuckLakeConnectsItsStorageFirstOnMinIO` (step 6); in the floci tests Preflight has already made floci's secret at open. *Verified by:* `TestFlociLakeEndToEnd` (`internal/hub`: `hub.Open` with a keychain credential, floci never connected by hand, the engine and then the agent handler's `run_query`, whose `INSERT`, `DELETE`, `CREATE TABLE`, `__ducklake_metadata_lake`, `sqlite_scan` and `ducklake_flush_inlined_data` are all refused); `TestFlociLakeOverMCPServe` (`vibe mcp serve` over stdio, floci signed in from `FLOCI_*`); `TestFlociLakeThroughTheCLI` (`cmd`: `conn add`, `conn list --json`, `query` in csv and json); Studio by Rodney (add both through the form, open the lake from the rail first, browse the 6,007 rows, a notebook cell returns 6,007).
+- The YAML above (credentials in the keychain) opens, the lake connects on first use, and `SELECT count(*) FROM lake.warehouse.dim_students` works in Studio, the CLI and over MCP (read-only). *Lake-first ordering* (the lake connects its storage connection itself) is proven by `TestDuckLakeConnectsItsStorageFirstOnMinIO` (step 6); in the floci tests Preflight has already made floci's secret at open. *Verified by:* `TestFlociLakeEndToEnd` (`internal/hub`: `hub.Open` with a keychain credential, floci never connected by hand, the engine and then the agent handler's `run_query`, whose `INSERT`, `DELETE`, `CREATE TABLE`, `__ducklake_metadata_lake`, `sqlite_scan` and `ducklake_flush_inlined_data` are all refused); `TestFlociLakeOverMCPServe` (`assay mcp serve` over stdio, floci signed in from `FLOCI_*`); `TestFlociLakeThroughTheCLI` (`cmd`: `conn add`, `conn list --json`, `query` in csv and json); Studio by Rodney (add both through the form, open the lake from the rail first, browse the 6,007 rows, a notebook cell returns 6,007).
 - With `floci` signed out, the lake shows "needs the `floci` connection: it needs credentials", not an S3 error. *Verified by:* the same three tests (exact message from the status and from the failed query), `TestDuckLakeConnectsItsStorageFirstOnMinIO`, and Studio (clearing floci's credentials detaches the lake, and its rail row reads that message).
 - A writable lake with a URL catalog is refused by `Validate` (save, open, hand edit). *Verified by:* the unit tests of steps 4 and 5 (`internal/connections`, `internal/workspace`) and `TestConnAdd_DuckLakeSQLiteCatalogInObjectStorage` (`cmd`).
 - A catalog URL or data path outside every storage scope is refused when the workspace is opened and the connection resolved (an issue in the rail; order-independent, like `data_path`, iceberg and delta), not at save. *Verified by:* the step 5 tests in `internal/workspace` and `TestSyncReregistersDependentsOfAChangedStorageConnection` (`studio`).

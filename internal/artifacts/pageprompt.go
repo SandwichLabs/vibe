@@ -10,7 +10,7 @@ const NetworkDisclosure = "On macOS a scripted page can use a link to open a net
 	"Every other load, lookup and request is blocked, but this one gap exists until the page window can be isolated further."
 
 // CredentialLine is shown for every page.
-const CredentialLine = "Vibe never asks for a password, key or token inside a page. A page that asks for one is trying to steal it: deny it."
+const CredentialLine = "Assay never asks for a password, key or token inside a page. A page that asks for one is trying to steal it: deny it."
 
 // HostLine says where a page of the derived kind runs and what it can reach.
 func HostLine(kind string) string {

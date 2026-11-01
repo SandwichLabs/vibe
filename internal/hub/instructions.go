@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
-	vibemcp "github.com/SandwichLabs/vibe/internal/mcp"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/agents"
+	assaymcp "github.com/SandwichLabs/assay/internal/mcp"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 // maxInstructionConnections caps the connection names listed in the server
@@ -27,17 +27,17 @@ type instructionsInput struct {
 	Connections []string
 }
 
-// mcpServerOptions are the vibemcp options both MCP paths (headless stdio and
+// mcpServerOptions are the assaymcp options both MCP paths (headless stdio and
 // the SSE server) use, so they report the same identity and orientation.
-func mcpServerOptions(ws workspace.Workspace, sess session.Session, h *agents.Handler, app, version string, refresh func()) []vibemcp.Option {
+func mcpServerOptions(ws workspace.Workspace, sess session.Session, h *agents.Handler, app, version string, refresh func()) []assaymcp.Option {
 	if app == "" {
 		app = AppServe
 	}
-	opts := []vibemcp.Option{vibemcp.WithServerInfo(app, version)}
+	opts := []assaymcp.Option{assaymcp.WithServerInfo(app, version)}
 	if h == nil {
 		return opts
 	}
-	return append(opts, vibemcp.WithInstructions(func(ctx context.Context) string {
+	return append(opts, assaymcp.WithInstructions(func(ctx context.Context) string {
 		if refresh != nil {
 			// Studio re-reads the saved settings into the handler here, so a
 			// client that connects after a change is told the current state.
@@ -76,7 +76,7 @@ func connectionNames(ws workspace.Workspace, sess session.Session) []string {
 // reconnects.
 func instructionsText(in instructionsInput) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Vibe workspace %q at %s.\n", in.Workspace, in.Root)
+	fmt.Fprintf(&b, "Assay workspace %q at %s.\n", in.Workspace, in.Root)
 	fmt.Fprintf(&b, "At connect time the agent's sandbox was %s (%q) and \"Ask before changes\" was %s. %s\n",
 		in.Policy.Mode, agents.TierLabel(in.Policy.Mode), onOff(in.Policy.AskBeforeWrites), gateSentence(in))
 	fmt.Fprintf(&b, "Files: file readers only read inside %s (use absolute paths; relative paths are refused).\n",
@@ -88,7 +88,7 @@ func instructionsText(in instructionsInput) string {
 }
 
 // maxInstructionName caps the workspace name, which comes from a committed
-// vibe.yaml and so is not ours to trust for length or content.
+// assay.yaml and so is not ours to trust for length or content.
 const maxInstructionName = 60
 
 func shortName(name string) string {
@@ -108,15 +108,15 @@ func gateSentence(in instructionsInput) string {
 	switch {
 	case in.Policy.Mode == agents.ModeReadOnly:
 		return "Nothing can be changed. To allow changes the person sets the agent to \"Change rows\" or higher in " + agents.SettingsTierPath +
-			"; a --sandbox flag on `vibe mcp serve` or a team limit in vibe.yaml can cap it lower."
+			"; a --sandbox flag on `assay mcp serve` or a team limit in assay.yaml can cap it lower."
 	case in.Policy.AskBeforeWrites && in.HasApprover:
-		return "Each change shows the person an approval card in Vibe Studio and waits for their OK."
+		return "Each change shows the person an approval card in Assay and waits for their OK."
 	case in.Policy.AskBeforeWrites:
 		return "Writes need the person's OK and nobody can give it over this connection, so they are refused. " +
 			"write_artifact, the notebook cell tools (add_query_cell, add_markdown_cell, update_cell, delete_cell, move_cell, create_dashboard), save_query, build_query, propose_definition and create_or_update_skill check your request first: when one says it is valid and ready, ask the person to approve it, or to turn off " +
 			agents.SettingsAskPath + "; that applies when the MCP server restarts."
 	}
-	return "Changes to this workspace's own local files run without asking; any other connection always needs the person's approval in Vibe Studio."
+	return "Changes to this workspace's own local files run without asking; any other connection always needs the person's approval in Assay."
 }
 
 func onOff(b bool) string {

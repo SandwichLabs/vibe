@@ -11,26 +11,26 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/awssso"
-	"github.com/SandwichLabs/vibe/internal/sandbox"
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/awssso"
+	"github.com/SandwichLabs/assay/internal/sandbox"
+	"github.com/SandwichLabs/assay/internal/secrets"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // File and directory names.
 const (
-	ConfigFile      = "vibe.yaml"
-	LocalDir        = ".vibe-local"
+	ConfigFile      = "assay.yaml"
+	LocalDir        = ".assay-local"
 	LocalConfigFile = "connections.yaml"
 	LocalStateFile  = "state.json"
 	UserConfigFile  = "connections.yaml"
 	GitignoreFile   = ".gitignore"
 	GitattrsFile    = ".gitattributes"
 	DataDir         = "data"
-	// ConfigVersion is the vibe.yaml / connections.yaml schema version.
+	// ConfigVersion is the assay.yaml / connections.yaml schema version.
 	ConfigVersion = 1
 	// DefaultConnectionName is the workspace's own DuckDB (D3).
 	DefaultConnectionName = "local"
@@ -38,7 +38,7 @@ const (
 	DefaultConnectionPath = "data/local.duckdb"
 )
 
-// Sandbox tiers, the strings vibe.yaml accepts.
+// Sandbox tiers, the strings assay.yaml accepts.
 const (
 	SandboxReadOnly  = "read-only"
 	SandboxReadWrite = "read-write"
@@ -47,15 +47,15 @@ const (
 
 // Sentinel errors.
 var (
-	// ErrNotWorkspace means no vibe.yaml was found.
-	ErrNotWorkspace = errors.New("not a vibe workspace (no vibe.yaml found)")
-	// ErrMissingID means vibe.yaml has no id; EnsureID can add one.
-	ErrMissingID = errors.New("vibe.yaml has no id")
+	// ErrNotWorkspace means no assay.yaml was found.
+	ErrNotWorkspace = errors.New("not an assay workspace (no assay.yaml found)")
+	// ErrMissingID means assay.yaml has no id; EnsureID can add one.
+	ErrMissingID = errors.New("assay.yaml has no id")
 	// ErrAlreadyWorkspace means Init found an existing workspace.
-	ErrAlreadyWorkspace = errors.New("already a vibe workspace")
+	ErrAlreadyWorkspace = errors.New("already an assay workspace")
 )
 
-// Config is the committed vibe.yaml. Unknown keys are rejected.
+// Config is the committed assay.yaml. Unknown keys are rejected.
 type Config struct {
 	Version           int             `yaml:"version" json:"version"`
 	ID                string          `yaml:"id" json:"id"`
@@ -215,7 +215,7 @@ func ValidateSandbox(s string) error {
 // ValidateIn is Validate plus the rules of the scope the definition lives in
 // (review #109, D-B and D-C):
 //
-//   - shared (vibe.yaml, committed by someone else): no ${ENV} references at
+//   - shared (assay.yaml, committed by someone else): no ${ENV} references at
 //     all, and every path must be relative and stay inside the workspace. A
 //     pulled commit therefore cannot read your environment or point a
 //     connection at a file elsewhere on your disk.
@@ -231,12 +231,12 @@ func (d ConnectionDef) ValidateIn(scope Scope) error {
 	case ScopeShared:
 		for field, v := range values {
 			if strings.Contains(v, "${") {
-				return fmt.Errorf("connection %q: %s uses ${ENV}, which is not allowed in vibe.yaml (it is shared; put per-person values in your own connections file or in the keychain)", d.Name, field)
+				return fmt.Errorf("connection %q: %s uses ${ENV}, which is not allowed in assay.yaml (it is shared; put per-person values in your own connections file or in the keychain)", d.Name, field)
 			}
 		}
 		if p := d.Path; p != "" {
 			if isAbsLike(p) {
-				return fmt.Errorf("connection %q: path %q is absolute, which is not allowed in vibe.yaml (use a path inside the workspace, or define the connection in your own connections file)", d.Name, p)
+				return fmt.Errorf("connection %q: path %q is absolute, which is not allowed in assay.yaml (use a path inside the workspace, or define the connection in your own connections file)", d.Name, p)
 			}
 			if c := filepath.ToSlash(filepath.Clean(filepath.FromSlash(p))); c == ".." || strings.HasPrefix(c, "../") {
 				return fmt.Errorf("connection %q: path %q leaves the workspace folder", d.Name, p)
@@ -297,30 +297,30 @@ func validateDefs(defs []ConnectionDef, scope Scope) error {
 // Validate checks the whole document.
 func (c Config) Validate() error {
 	if c.Version > ConfigVersion {
-		return fmt.Errorf("vibe.yaml was written by a newer version of Vibe (version %d)", c.Version)
+		return fmt.Errorf("assay.yaml was written by a newer version of Assay (version %d)", c.Version)
 	}
 	if c.Version < 0 {
-		return fmt.Errorf("vibe.yaml: invalid version %d", c.Version)
+		return fmt.Errorf("assay.yaml: invalid version %d", c.Version)
 	}
 	if c.ID == "" {
 		return ErrMissingID
 	}
 	if _, err := uuid.Parse(c.ID); err != nil {
-		return fmt.Errorf("vibe.yaml: id %q is not a UUID", c.ID)
+		return fmt.Errorf("assay.yaml: id %q is not a UUID", c.ID)
 	}
 	if strings.ContainsAny(c.Name, "\x00\n\r") {
-		return fmt.Errorf("vibe.yaml: name contains a control character")
+		return fmt.Errorf("assay.yaml: name contains a control character")
 	}
 	if err := ValidateSandbox(c.Sandbox); err != nil {
-		return fmt.Errorf("vibe.yaml: %w", err)
+		return fmt.Errorf("assay.yaml: %w", err)
 	}
 	if c.DefaultConnection != "" {
 		if err := ValidateConnectionName(c.DefaultConnection); err != nil {
-			return fmt.Errorf("vibe.yaml: default_connection: %w", err)
+			return fmt.Errorf("assay.yaml: default_connection: %w", err)
 		}
 	}
 	if err := validateDefs(c.Connections, ScopeShared); err != nil {
-		return fmt.Errorf("vibe.yaml: %w", err)
+		return fmt.Errorf("assay.yaml: %w", err)
 	}
 	return nil
 }
@@ -345,11 +345,11 @@ func decodeStrict(data []byte, v any) error {
 	return nil
 }
 
-// ParseConfig parses and validates vibe.yaml bytes.
+// ParseConfig parses and validates assay.yaml bytes.
 func ParseConfig(data []byte) (Config, error) {
 	var c Config
 	if err := decodeStrict(data, &c); err != nil {
-		return Config{}, fmt.Errorf("invalid vibe.yaml: %w", err)
+		return Config{}, fmt.Errorf("invalid assay.yaml: %w", err)
 	}
 	if c.Version == 0 {
 		c.Version = ConfigVersion
@@ -360,13 +360,13 @@ func ParseConfig(data []byte) (Config, error) {
 	return c, nil
 }
 
-// MarshalConfig renders vibe.yaml deterministically (2-space indent, fixed key
+// MarshalConfig renders assay.yaml deterministically (2-space indent, fixed key
 // order) so it diffs cleanly.
 func MarshalConfig(c Config) ([]byte, error) {
 	if c.Version == 0 {
 		c.Version = ConfigVersion
 	}
-	return marshalYAML(c, "# Vibe workspace. Committed: shared settings and connection definitions only.\n# Never put a password, token or key in this file; Vibe keeps those in your keychain.\n")
+	return marshalYAML(c, "# Assay workspace. Committed: shared settings and connection definitions only.\n# Never put a password, token or key in this file; Assay keeps those in your keychain.\n")
 }
 
 func marshalYAML(v any, header string) ([]byte, error) {
@@ -387,7 +387,7 @@ func marshalYAML(v any, header string) ([]byte, error) {
 // points at: a DuckLake catalog, an Iceberg or Delta table decides which files
 // are read (a crafted one can name any file on this computer). Only the person
 // adds one, in their own scopes ("This computer" or all their workspaces); the
-// shared vibe.yaml, which a pull can change, and a bundle import refuse them.
+// shared assay.yaml, which a pull can change, and a bundle import refuse them.
 func OwnScopeOnlyType(typ string) bool {
 	switch typ {
 	case "ducklake", "iceberg", "delta":
@@ -398,8 +398,8 @@ func OwnScopeOnlyType(typ string) bool {
 
 // OwnScopeOnlyMessage is the refusal shown for such a type. It is checked when a
 // definition is added or moved (validateDefFor) and again when the workspace is
-// opened (ResolveConnection), where a definition that arrived in vibe.yaml by a
+// opened (ResolveConnection), where a definition that arrived in assay.yaml by a
 // pull is skipped with an issue instead of making the whole file unreadable.
 func OwnScopeOnlyMessage(typ string) string {
-	return typ + " connections trust the metadata of what they point at (it decides which files are read), so only you can add them: choose \"This computer\" or \"All my workspaces\", not the team's vibe.yaml"
+	return typ + " connections trust the metadata of what they point at (it decides which files are read), so only you can add them: choose \"This computer\" or \"All my workspaces\", not the team's assay.yaml"
 }

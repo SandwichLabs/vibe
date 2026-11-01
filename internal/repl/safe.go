@@ -1,6 +1,6 @@
 package repl
 
-import "github.com/SandwichLabs/vibe/internal/engine"
+import "github.com/SandwichLabs/assay/internal/engine"
 
 // Everything the console prints that it did not author goes through these two:
 // engine.TerminalText with the C1 controls and the bidirectional format

@@ -10,7 +10,7 @@ import (
 
 // storeContract runs the behaviour every Store must share against the file
 // store and the in-memory Mock. (These cases once ran against the legacy
-// _vibe_notebooks store.)
+// _assay_notebooks store.)
 func storeContract(t *testing.T, run func(t *testing.T, s Store)) {
 	t.Run("file", func(t *testing.T) { run(t, NewFileStore(t.TempDir())) })
 	t.Run("mock", func(t *testing.T) { run(t, &Mock{}) })

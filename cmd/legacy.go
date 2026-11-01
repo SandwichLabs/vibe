@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The container commands are gone with the .vibe container (#113). Each name
+// The container commands are gone with the .assay container (#113). Each name
 // stays registered, hidden, so someone with muscle memory (or a script) gets a
 // pointer instead of "unknown command".
 func init() {
@@ -18,7 +18,7 @@ func init() {
 			DisableFlagParsing: true,
 			SilenceUsage:       true,
 			RunE: func(_ *cobra.Command, _ []string) error {
-				return fmt.Errorf("`vibe %s` worked on .vibe container files, which are no longer opened; use `vibe workspace init` to create a workspace and `vibe workspace info` to inspect one", name)
+				return fmt.Errorf("`assay %s` worked on .assay container files, which are no longer opened; use `assay workspace init` to create a workspace and `assay workspace info` to inspect one", name)
 			},
 		})
 	}

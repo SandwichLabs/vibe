@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/assay/internal/skills"
 )
 
 // --- Skills (#62) ---
@@ -69,7 +69,7 @@ func (a *App) SaveSkill(name, description, instructions, tableName, rev string) 
 }
 
 // DeleteSkill removes a user- or import-authored skill. Built-ins can't be
-// deleted (they aren't rows in _vibe_skills).
+// deleted (they aren't rows in _assay_skills).
 func (a *App) DeleteSkill(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()

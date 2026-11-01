@@ -1,69 +1,69 @@
 # MCP (Model Context Protocol)
 
-Vibe exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
+Assay exposes a **workspace's** tools (the same registry, `internal/agents`, that Studio's chat panel uses) to external MCP clients such as Claude Desktop and Claude Code:
 
-- **`vibe mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
+- **`assay mcp serve [--workspace DIR]`**: a headless server you launch from the client's own config (stdio, the default), or point a network client at (`--transport sse`).
 - **Studio's built-in SSE server**: Studio owns the workspace it has open and can serve MCP on a loopback port (Settings → Workspace → Claude and other tools). A write that needs approval shows the same approval card the chat agent uses, in the Studio window; the card waits for you, and a declined or unanswered card changes nothing.
 
-Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's chat agent (vibe-app#63, vibe-app#70, vibe-app#79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.vibe` files are no longer opened as workspaces: pass a workspace folder (a `.vibe` is a sharing bundle you import).
+Every tool call, through either path, goes through the same sandbox gating, "Ask before changes" policy and result guardrails as Studio's assistant (vibe-app#63, vibe-app#70, vibe-app#79). There is one tool surface, not a looser one for MCP. The agent's SQL is an allow-list per tier ([reference/agent-policy.md](agent-policy.md)), and a write to a connection that is not a local file always needs approval, so headless MCP refuses it. `.assay` files are no longer opened as workspaces: pass a workspace folder (a `.assay` is a sharing bundle you import).
 
-## `vibe mcp serve`
+## `assay mcp serve`
 
 ```
-vibe mcp serve [--workspace DIR] [flags]
+assay mcp serve [--workspace DIR] [flags]
 
 Flags:
       --workspace string   workspace folder (default: the nearest folder above the
-                           current directory that holds a vibe.yaml)
+                           current directory that holds an assay.yaml)
       --transport string   stdio or sse (default "stdio")
       --addr string        listen address for --transport sse (default "127.0.0.1:0")
       --sandbox string     read-only, read-write, or full. Can only TIGHTEN the
                            workspace's own policy, never loosen it
 ```
 
-The workspace is found the way git finds `.git`: `--workspace` (or the current directory) and then each parent until a `vibe.yaml` turns up. A `.vibe` path, as an argument or as `--workspace`, is refused with "`.vibe` files are no longer opened directly; open or create a workspace folder". The old `<file.vibe>` argument, `--read-only-file` and `VIBE_PASSPHRASE` are gone.
+The workspace is found the way git finds `.git`: `--workspace` (or the current directory) and then each parent until an `assay.yaml` turns up. A `.assay` path, as an argument or as `--workspace`, is refused with "`.assay` files are no longer opened directly; open or create a workspace folder". The old `<file.assay>` argument, `--read-only-file` and `ASSAY_PASSPHRASE` are gone.
 
 ### One owner per workspace: owner mode and proxy mode
 
-DuckDB allows one read-write process or many read-only ones per database file, never a mix, so one process owns a workspace's hub at a time, recorded in `.vibe-local/hub.lock` (see [workspaces.md](workspaces.md)). `vibe mcp serve` looks at the lock first:
+DuckDB allows one read-write process or many read-only ones per database file, never a mix, so one process owns a workspace's hub at a time, recorded in `.assay-local/hub.lock` (see [workspaces.md](workspaces.md)). `assay mcp serve` looks at the lock first:
 
-| Who holds the hub | What `vibe mcp serve` does |
+| Who holds the hub | What `assay mcp serve` does |
 |---|---|
 | Nobody | **Owner mode.** Takes the lock, opens the workspace and its DuckDB hub, serves the tools. Writes go straight to their sources: there is nothing to save on exit, and a crash loses nothing but the call in flight. |
 | Studio, serving MCP | **Proxy mode.** Passes stdio through to Studio's MCP server. The client sees the same tools, Studio's approval cards apply to writes, and there is no DuckDB lock error. |
-| Another `vibe mcp serve` | Proxy mode, to that one (an owner over stdio also serves loopback SSE and publishes it in `hub.lock`, so a second client such as Claude Code next to Claude Desktop just works). |
+| Another `assay mcp serve` | Proxy mode, to that one (an owner over stdio also serves loopback SSE and publishes it in `hub.lock`, so a second client such as Claude Code next to Claude Desktop just works). |
 | Studio with MCP off | Fails with a message naming it: "Studio (pid N) has this workspace open but its MCP server is off. Turn it on in Settings → Workspace → Claude and other tools, or close Studio." |
 
 Proxy mode is a transparent pipe, not an MCP client: every SSE `message` event is copied verbatim to stdout (responses, notifications, server-to-client requests) and every stdin line is POSTed verbatim, so the tool list cannot drift and there is no client-side request timeout (a write waiting for an approval card in Studio can take minutes and is never retried by the proxy). Only the stream ending, a 401 or a refused connection means the owner is gone: then every request in flight is answered with a JSON-RPC error (-32001), a short message goes to stderr, and the process exits non-zero; reconnect the client to continue. A failed POST answers just that request. A proxy ends when stdin closes (after a brief drain of replies in flight) and never asks Studio to quit. `--transport sse` needs this process to be the owner.
 
 Two clients started at the same moment (Claude Desktop and Claude Code) both work: the first takes the lock and publishes `mcp: {pending: true}` in its very first write, the second waits up to 15 s for the real endpoint and then proxies.
 
-`--sandbox` in proxy mode is sent to the owner as an `X-Vibe-Sandbox` header on the SSE stream and **enforced by the owner**: for that session the effective mode is the stricter of the owner's policy and the header (tighten-only, bound at connection time, applied to every tool, including content tools). Unknown values are rejected with 400. The owner advertises `mcp.caps: ["sandbox-header"]` in `hub.lock`; a proxy started with `--sandbox` refuses an owner without it.
+`--sandbox` in proxy mode is sent to the owner as an `X-Assay-Sandbox` header on the SSE stream and **enforced by the owner**: for that session the effective mode is the stricter of the owner's policy and the header (tighten-only, bound at connection time, applied to every tool, including content tools). Unknown values are rejected with 400. The owner advertises `mcp.caps: ["sandbox-header"]` in `hub.lock`; a proxy started with `--sandbox` refuses an owner without it.
 
 ### Stdout is the protocol channel
 
-Over stdio, `vibe mcp serve` duplicates stdout to a private handle for the protocol and points file descriptor 1 at stderr for the rest of the process. A Go `fmt.Println`, a C library's `printf`, or a MotherDuck sign-in link printed by DuckDB therefore lands on stderr and cannot corrupt the JSON-RPC stream. Prompts, notices and logs are all stderr.
+Over stdio, `assay mcp serve` duplicates stdout to a private handle for the protocol and points file descriptor 1 at stderr for the rest of the process. A Go `fmt.Println`, a C library's `printf`, or a MotherDuck sign-in link printed by DuckDB therefore lands on stderr and cannot corrupt the JSON-RPC stream. Prompts, notices and logs are all stderr.
 
 ### Sandbox and "Ask before changes"
 
-The effective policy is the workspace's: this person's chosen tier (default **read-write**) clamped to the committed `vibe.yaml` ceiling, and "Ask before changes" on unless this person turned it off and the ceiling allows it (`Workspace.AgentPolicy`). `--sandbox` can only make a session **more** restrictive, never less: a launch config, which may be shared in a dotfiles repo, can never grant more than the owner chose.
+The effective policy is the workspace's: this person's chosen tier (default **read-write**) clamped to the committed `assay.yaml` ceiling, and "Ask before changes" on unless this person turned it off and the ceiling allows it (`Workspace.AgentPolicy`). `--sandbox` can only make a session **more** restrictive, never less: a launch config, which may be shared in a dotfiles repo, can never grant more than the owner chose.
 
 A write needs three gates (tier, writable connection, the person's approval); [agent-policy.md](agent-policy.md#writes-need-three-gates) owns that rule and its exact messages. What it means over MCP, where there is no one to show an approval card to:
 
-- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Vibe Studio → Settings → Workspace → The agent → On this computer → "Ask me before it changes data"**; there is no flag or environment variable that bypasses it from the MCP side.
-- **A content write is validated first, then refused as "valid, needs approval".** `write_artifact`, `add_query_cell`, `add_markdown_cell`, `update_cell`, `delete_cell`, `move_cell`, `create_dashboard`, `create_or_update_skill`, `save_query`, `build_query` and `propose_definition` run all of their checks (decode, schema, the read-only SQL vet, which for `create_dashboard` runs on every `sql`-bound component and lists each failure by component path, the table gate, a stale or missing `rev`) before the approval gate, with nothing written. An invalid request gets its normal validation error, so the agent can fix it and try again. A valid one, when nobody can approve, is refused with "your request is valid and ready, but it was NOT saved yet ... Ask the person to approve it", error code -32001 and a structured payload, `structuredContent: {"valid": true, "needs_approval": true, "nothing_written": true}`, next to the text. The text says it writes `artifacts/<name>/` (or `skills/<name>/SKILL.md`, or `queries/<id>.sql`, or a notebook, or, for `propose_definition`, a proposal in `.vibe-local/proposals/` that changes nothing in `semantics/` until the person accepts it) in the workspace folder, not "the local database". With an approver (Studio's card) nothing changes: the card is shown first and the write follows the person's OK.
-- **A tier refusal says what is needed.** `method "write_artifact" (category "content") is not allowed in read-only mode: it writes files in the workspace folder (artifacts, notebooks, skills, saved queries), which needs the read-write tier ("Change rows"), and this workspace's agent is at read-only ("Look only"). Nothing was changed. To allow it, set the agent to "Change rows" (read-write) or higher in Vibe Studio → Settings → Workspace → The agent → On this computer, or restart the MCP server without a tighter --sandbox.` The tier buttons in Studio are "Look only" (`read-only`), "Change rows" (`read-write`) and "Full control" (`full`).
+- **While "Ask before changes" is on, an MCP client can read but any write is refused outright.** To let MCP clients change the workspace's local files without asking, turn the gate off in **Assay → Settings → Workspace → The agent → On this computer → "Ask me before it changes data"**; there is no flag or environment variable that bypasses it from the MCP side.
+- **A content write is validated first, then refused as "valid, needs approval".** `write_artifact`, `add_query_cell`, `add_markdown_cell`, `update_cell`, `delete_cell`, `move_cell`, `create_dashboard`, `create_or_update_skill`, `save_query`, `build_query` and `propose_definition` run all of their checks (decode, schema, the read-only SQL vet, which for `create_dashboard` runs on every `sql`-bound component and lists each failure by component path, the table gate, a stale or missing `rev`) before the approval gate, with nothing written. An invalid request gets its normal validation error, so the agent can fix it and try again. A valid one, when nobody can approve, is refused with "your request is valid and ready, but it was NOT saved yet ... Ask the person to approve it", error code -32001 and a structured payload, `structuredContent: {"valid": true, "needs_approval": true, "nothing_written": true}`, next to the text. The text says it writes `artifacts/<name>/` (or `skills/<name>/SKILL.md`, or `queries/<id>.sql`, or a notebook, or, for `propose_definition`, a proposal in `.assay-local/proposals/` that changes nothing in `semantics/` until the person accepts it) in the workspace folder, not "the local database". With an approver (Studio's card) nothing changes: the card is shown first and the write follows the person's OK.
+- **A tier refusal says what is needed.** `method "write_artifact" (category "content") is not allowed in read-only mode: it writes files in the workspace folder (artifacts, notebooks, skills, saved queries), which needs the read-write tier ("Change rows"), and this workspace's agent is at read-only ("Look only"). Nothing was changed. To allow it, set the agent to "Change rows" (read-write) or higher in Assay → Settings → Workspace → The agent → On this computer, or restart the MCP server without a tighter --sandbox.` The tier buttons in Studio are "Look only" (`read-only`), "Change rows" (`read-write`) and "Full control" (`full`).
 - **A write to a connection that is not a local `duckdb`/`sqlite` file (Postgres, MotherDuck, ...) is refused even with the gate off**, because approval is forced for those connections. Nothing is changed.
-- To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `vibe mcp serve` proxies to it.
+- To make those changes with approval, open the workspace in Studio, which shows its approval card (naming the non-local connection) while `assay mcp serve` proxies to it.
 
 ### What a client is told on connect
 
 `initialize` returns real `serverInfo` and `instructions`, the same on stdio and SSE:
 
-- **`serverInfo`**: name `Vibe Studio` when Studio serves it and `vibe mcp serve` when the headless server does (the hub-lock app name), and the build's version (`dev` for an unstamped build).
+- **`serverInfo`**: name `Assay` when Studio serves it and `assay mcp serve` when the headless server does (the hub-lock app name), and the build's version (`dev` for an unstamped build).
 - **`instructions`**: a short orientation, well under 2 KB (Claude Code truncates at 2,048 characters): the workspace name and folder; the sandbox tier and the "Ask before changes" state **at connect time**, with what that means (refused with no one to approve; or an approval card in Studio; or direct), and where the person changes it; the absolute `data/` folder (file readers read only there, by absolute path); the connection names (names only, no types, URLs or credentials; at most 12, then "and N more"); and a pointer to `help_search ""` and to `read_skill` `duckdb-sql` and `data-artifacts` (`a2ui` before a dashboard or an artifact view, and `semantic-layer` before working on `semantics/`).
 
-The text is built when each client connects, on `initialize` or, for a client on protocol 2026-07-28, on `server/discover`; a `--sandbox` ceiling on a proxied session is reflected. In Studio it follows the saved settings, so a client that connects after the person changed the tier or the gate sees the new state. A headless `vibe mcp serve` fixes its policy when it starts and never re-reads it, so a change applies only after a restart (the refusal text and the instructions say so). A client already connected keeps the text it was given. Over stdio the process stderr also gets a one-line notice when the gate is on, which a client does not show the model.
+The text is built when each client connects, on `initialize` or, for a client on protocol 2026-07-28, on `server/discover`; a `--sandbox` ceiling on a proxied session is reflected. In Studio it follows the saved settings, so a client that connects after the person changed the tier or the gate sees the new state. A headless `assay mcp serve` fixes its policy when it starts and never re-reads it, so a change applies only after a restart (the refusal text and the instructions say so). A client already connected keeps the text it was given. Over stdio the process stderr also gets a one-line notice when the gate is on, which a client does not show the model.
 
 ### Tool annotations
 
@@ -81,7 +81,7 @@ Reads are not gated by approval; what the agent may read, and the never-list, ar
 
 ### Data artifact tools
 
-Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`): parameterised, live views whose named queries re-run when the artifact opens or a parameter changes. They are in the one registry, so Studio's chat agent and MCP clients see the same tools with the same gates.
+Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`): parameterised, live views whose named queries re-run when the artifact opens or a parameter changes. They are in the one registry, so Studio's assistant and MCP clients see the same tools with the same gates.
 
 | Tool | Category | Notes |
 |---|---|---|
@@ -91,13 +91,13 @@ Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`)
 
 ### Semantic definitions
 
-`list_definitions` and `get_definition` read the [semantic layer](semantics.md) and are introspect tools, so a read-only agent can use metrics (`metric('name')` in `run_query`, see [semantics.md](semantics.md#using-a-metric-in-sql)). `propose_definition` is a content tool: `read-write` and `full` may use it, `read-only` may not. It does not write `semantics/`: it files a proposal in the person's inbox (`.vibe-local/proposals/`, machine-local), and **no tool or MCP method can accept, reject or write a definition**; the person accepts with `vibe semantics accept` or in Studio. Details, formats and caps are in [semantics.md](semantics.md#proposals-an-agent-suggests-you-decide).
+`list_definitions` and `get_definition` read the [semantic layer](semantics.md) and are introspect tools, so a read-only agent can use metrics (`metric('name')` in `run_query`, see [semantics.md](semantics.md#using-a-metric-in-sql)). `propose_definition` is a content tool: `read-write` and `full` may use it, `read-only` may not. It does not write `semantics/`: it files a proposal in the person's inbox (`.assay-local/proposals/`, machine-local), and **no tool or MCP method can accept, reject or write a definition**; the person accepts with `assay semantics accept` or in Studio. Details, formats and caps are in [semantics.md](semantics.md#proposals-an-agent-suggests-you-decide).
 
 | Tool | Notes |
 |---|---|
 | `list_definitions` | `{entities, metrics, joins, glossary, proposals: {open}}`; each item has its `name` and `rev`, an unreadable file its `error` (paths scrubbed). |
 | `get_definition` | `kind` (`entity`, `metric`, `join`, `glossary`) and `name`. Returns `{kind, name, rev, definition}`; a metric adds `parameters` (the declared `$name` parameters of its saved query) and `query_connection`, or `query_error` when the saved query is missing. For the glossary, `name` is a term. |
-| `propose_definition` | `kind`, `name`, `definition`, `rationale`, optional `evidence` (strings) and `replaces_rev` (the `rev` from `get_definition`; required to replace an existing name). The definition is validated with the kind's own decoder before anything is filed, so a bad measure or a reserved word is refused with the reason. The reply is `{proposed: true, id, ...}`; the `id` is made by Vibe. Refused past 200 open proposals ("accept or reject some first"). The approval card reads "goes to your proposals inbox; nothing in semantics/ changes until you accept it". |
+| `propose_definition` | `kind`, `name`, `definition`, `rationale`, optional `evidence` (strings) and `replaces_rev` (the `rev` from `get_definition`; required to replace an existing name). The definition is validated with the kind's own decoder before anything is filed, so a bad measure or a reserved word is refused with the reason. The reply is `{proposed: true, id, ...}`; the `id` is made by Assay. Refused past 200 open proposals ("accept or reject some first"). The approval card reads "goes to your proposals inbox; nothing in semantics/ changes until you accept it". |
 
 ### Saved queries
 
@@ -110,7 +110,7 @@ Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`)
 | `build_query` | `name`, `table`, optional `conditions`, `combinator`, `columns`, `id`, `rev`. Renders the QBE conditions to SQL and saves it the same way. A value is typed by its column: `"15"` against an `INTEGER` column becomes the number 15, and `true`/`false` against a `BOOLEAN`; a value that is not that type is refused by name. |
 | `run_saved_query` | `id`, optional `params` `{name: value}`. Runs the stored SQL through `run_query`'s pipeline on the query's own `connection`, with the same sandbox, wildcard, row-cap and result rules. It runs reads only: a file that has since become a write (a hand edit) is refused. |
 
-Parameters: write a value that varies as `$name` and declare it as `parameters: [{name, type, default}]`; `type` is `text`, `number`, `integer`, `date` or `boolean` and `default` is a string (`"15"`, `"true"`, `"2026-01-31"`; a date may also be `today`, `today-<n>d`, `start-of-month`, `start-of-year`). Every `$name` the SQL uses must be declared and every declared name used. The check binds the defaults; `run_saved_query` binds `params` by type (a number for `number` and `integer`, a boolean for `boolean`, a string for `text` and `date`; a wrong type is refused, not converted) and unnamed parameters take their default. The declaration lives in the query file's `-- vibe:` header (`parameters`).
+Parameters: write a value that varies as `$name` and declare it as `parameters: [{name, type, default}]`; `type` is `text`, `number`, `integer`, `date` or `boolean` and `default` is a string (`"15"`, `"true"`, `"2026-01-31"`; a date may also be `today`, `today-<n>d`, `start-of-month`, `start-of-year`). Every `$name` the SQL uses must be declared and every declared name used. The check binds the defaults; `run_saved_query` binds `params` by type (a number for `number` and `integer`, a boolean for `boolean`, a string for `text` and `date`; a wrong type is refused, not converted) and unnamed parameters take their default. The declaration lives in the query file's `-- assay:` header (`parameters`).
 
 A script view written over MCP is stored but **never runs until the person allows it in Studio or the CLI**: there is no tool, method or other path for a client to allow, deny or revoke a view, and every edit asks again ([artifacts.md](artifacts.md#custom-views-view-script)). A client reads the format with `read_skill` `data-artifacts`. `write_artifact` without a `rev` only creates; to replace an artifact send the `rev` from `get_artifact`, and a change made since is a refusal, not an overwrite ([agent-policy.md](agent-policy.md#data-artifacts)). `create_or_update_skill` follows the same rule: without a `rev` it only creates a new skill name, and replacing a skill needs the `rev` from `read_skill` or `list_skills` (a skill bound to a `table_name` is visible to those only while the table has rows). There is no tool that runs an artifact's queries or returns its results.
 
@@ -120,7 +120,7 @@ A script view written over MCP is stored but **never runs until the person allow
 
 ### Take over
 
-Studio, opening a workspace a headless `vibe mcp serve` owns, can offer to take over: `hub.TakeOver(ctx, ws, "Vibe Studio", timeout)` signals the server (`SIGUSR1`; on Linux through a pidfd, re-verifying the lock still names that pid after the pid is pinned, so a recycled pid is never signalled; it checks it is a live owner on this host that advertised release control; if a client auto-reconnects and a different releasable owner appears while waiting, that one is asked too), the server closes its session, releases the lock and **exits with status 0**, and Studio gets the lock. The Claude session that was using it sees its server end and must reconnect (Claude Code: `/mcp`; Claude Desktop: restart the server or the app); the reconnected `vibe mcp serve` then proxies to Studio. Nothing is deleted, and open notebooks are plain files so they are unaffected.
+Studio, opening a workspace a headless `assay mcp serve` owns, can offer to take over: `hub.TakeOver(ctx, ws, "Assay", timeout)` signals the server (`SIGUSR1`; on Linux through a pidfd, re-verifying the lock still names that pid after the pid is pinned, so a recycled pid is never signalled; it checks it is a live owner on this host that advertised release control; if a client auto-reconnects and a different releasable owner appears while waiting, that one is asked too), the server closes its session, releases the lock and **exits with status 0**, and Studio gets the lock. The Claude session that was using it sees its server end and must reconnect (Claude Code: `/mcp`; Claude Desktop: restart the server or the app); the reconnected `assay mcp serve` then proxies to Studio. Nothing is deleted, and open notebooks are plain files so they are unaffected.
 
 ### For Studio (vibe-app#111)
 
@@ -134,7 +134,7 @@ m.Handler.SetApprover(approve)       // Studio's approval cards; proxies get the
 m.URL(); m.Token()                   // for the Settings screen; token is a secret
 m.Stop()                             // MCP off: clears the endpoint from hub.lock
 hold.Release()                       // after closing the session
-cfg, _ := hub.BuildClaudeConfig(ws.Root(), exe)   // exe from hub.LocateVibe()
+cfg, _ := hub.BuildClaudeConfig(ws.Root(), exe)   // exe from hub.LocateAssay()
 holder, err := hub.ReadHolder(ws.Root())          // who holds it, without the lock
 ```
 
@@ -143,21 +143,21 @@ How the workspace launcher wires it (`studio/workspace_open.go` and `studio/work
 1. **Opening a workspace:** `AcquireHub` first. On `ErrHubHeld`, read `held.Holder` and show the read-only banner (SPEC 7 C): "Open read-only" opens `workspace.Open` only (stores are files, so notebooks/queries/skills stay editable) and does **not** call `OpenSession` for the local `duckdb` connections, which show `locked-by(pid)`; "Take over" calls `TakeOver`, then continues as the owner. `ErrNotReleasable` or a timeout is shown as the reason, never a hang.
 2. **Releasable owner:** pass `WithReleaseHandler` (one per process; Studio holds one workspace at a time). The handler must ask the person if needed, close the session, stop MCP, `Release()`, and switch the window to the launcher or read-only. A second releasable hold in the process is an error (`ErrOneReleasableHold`).
 3. **MCP switch (Settings → Workspace → Claude and other tools):** On = `StartWorkspaceMCP` then `m.Handler.SetApprover(...)` wired to the existing approval card (an approval can take minutes; the proxy waits). Off = `m.Stop()`. Reflect whether a holder advertises MCP with `ReadHolder`. Wrap the handler with `WithMCPHandlerWrap` if Studio needs its own lock around calls.
-4. **Copy Claude Desktop / Claude Code config:** `hub.BuildClaudeConfig(ws.Root(), exe)` with `exe` from `hub.LocateVibe()`; copy `.Desktop` or `.Code`. Never show or copy the token with these.
+4. **Copy Claude Desktop / Claude Code config:** `hub.BuildClaudeConfig(ws.Root(), exe)` with `exe` from `hub.LocateAssay()`; copy `.Desktop` or `.Code`. Never show or copy the token with these.
 5. **Workspace switcher:** release the old workspace's hold (stop MCP, close the session, `hold.Release()`) **before** acquiring the new one. The release signal is process-wide, so only one releasable hold may exist at a time, and a second `WithReleaseHandler` fails with `ErrOneReleasableHold`.
 6. **Quit/close:** `m.Stop()`, close the session, then `hold.Release()` (the lock goes last).
 
 ### Copy Claude config
 
-`hub.BuildClaudeConfig(root, exe)` returns the two snippets Studio copies. **Neither contains a token**: they launch `vibe mcp serve --workspace DIR` over stdio, and when Studio owns the workspace that process reads the token from `hub.lock` at run time.
+`hub.BuildClaudeConfig(root, exe)` returns the two snippets Studio copies. **Neither contains a token**: they launch `assay mcp serve --workspace DIR` over stdio, and when Studio owns the workspace that process reads the token from `hub.lock` at run time.
 
 Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "vibe-acme-analytics": {
-      "command": "/path/to/vibe",
+    "assay-acme-analytics": {
+      "command": "/path/to/assay",
       "args": ["mcp", "serve", "--workspace", "/path/to/acme-analytics"]
     }
   }
@@ -167,29 +167,29 @@ Claude Desktop (`claude_desktop_config.json`):
 Claude Code:
 
 ```
-claude mcp add vibe-acme-analytics -- /path/to/vibe mcp serve --workspace /path/to/acme-analytics
+claude mcp add assay-acme-analytics -- /path/to/assay mcp serve --workspace /path/to/acme-analytics
 ```
 
-The server name is `vibe-<folder>` so two workspaces do not collide. With "Ask before changes" on (the default), the client can read but every write is refused until the gate is off or Studio owns the workspace.
+The server name is `assay-<folder>` so two workspaces do not collide. With "Ask before changes" on (the default), the client can read but every write is refused until the gate is off or Studio owns the workspace.
 
 ### Security notes
 
 - `hub.lock` is `0600` and holds the endpoint and bearer token of a local server. The trust model is **same user only**: a reader refuses the file unless it is a regular file owned by the current uid with no group or world permission bits, ignores it unless the flock is really held, and accepts only a plain-`http` loopback URL, so a lock file committed to a cloned repository (or left by a crash) can never point a client, or its token, anywhere.
-- The lock file is never written through a link: it is opened with `O_NOFOLLOW`, and must be a regular, single-link file owned by you (a committed `hub.lock -> victim` symlink, a hard link or a FIFO is refused, not truncated or hung on); `.vibe-local` itself must be a real directory owned by you.
-- The token never appears on a command line, in the Claude config snippets, in the structured logs, or in error messages. It is regenerated each time a server starts. The one place it is printed is `vibe mcp serve --transport sse`, which writes it to stderr once so a network client can be configured; with stdio (what the Claude snippets use) it is never printed. Anything that can read your files as you can read it; that is the same trust as your own keychain-free local config.
+- The lock file is never written through a link: it is opened with `O_NOFOLLOW`, and must be a regular, single-link file owned by you (a committed `hub.lock -> victim` symlink, a hard link or a FIFO is refused, not truncated or hung on); `.assay-local` itself must be a real directory owned by you.
+- The token never appears on a command line, in the Claude config snippets, in the structured logs, or in error messages. It is regenerated each time a server starts. The one place it is printed is `assay mcp serve --transport sse`, which writes it to stderr once so a network client can be configured; with stdio (what the Claude snippets use) it is never printed. Anything that can read your files as you can read it; that is the same trust as your own keychain-free local config.
 - A proxy sends the token only as an `Authorization: Bearer` header.
-- `SIGUSR1` is only sent to a pid whose lock file says it advertised release control, on this host, with the lock verified held and (Linux) the process pinned by a pidfd. One signal listener exists per process and is never torn down, so a stray signal cannot kill a Vibe process.
+- `SIGUSR1` is only sent to a pid whose lock file says it advertised release control, on this host, with the lock verified held and (Linux) the process pinned by a pidfd. One signal listener exists per process and is never torn down, so a stray signal cannot kill an Assay process.
 
 ### Needs sign-in is reported, never prompted
 
-A connection signed in with `aws-sso:PROFILE` ([connections.md](connections.md#aws-sso-sign-in-s3)) resolves its keys from the person's SSO session when it is used. Headless `vibe mcp serve` (and every CLI command) only reads that session: with none, or an ended one, the connection is *needs-credentials* with the hint "AWS session for profile dev has expired. Sign in, or run `aws sso login --profile dev`", and a statement that needs it fails at once with that text (the agent's refusal of an `s3://` URL names the connection that covers it but is not ready, and its hint; nothing waits, and no browser or sign-in flow can be started from MCP: the device sign-in lives only behind a Studio binding and `vibe conn credentials sign-in`). A session made elsewhere meanwhile (`aws sso login`) is noticed by the next statement, at most every 30 seconds, so a long-running server needs no restart. `list_connections` shows the status word and, for such a connection, `sign_in: {kind, subject, reason}` (the profile name and `missing` or `expired`; never an account, role or start URL). The agent reaches the same scope rule as with any storage connection: SSO keys change nothing it may read, and `~/.aws` is outside `data/`.
+A connection signed in with `aws-sso:PROFILE` ([connections.md](connections.md#aws-sso-sign-in-s3)) resolves its keys from the person's SSO session when it is used. Headless `assay mcp serve` (and every CLI command) only reads that session: with none, or an ended one, the connection is *needs-credentials* with the hint "AWS session for profile dev has expired. Sign in, or run `aws sso login --profile dev`", and a statement that needs it fails at once with that text (the agent's refusal of an `s3://` URL names the connection that covers it but is not ready, and its hint; nothing waits, and no browser or sign-in flow can be started from MCP: the device sign-in lives only behind a Studio binding and `assay conn credentials sign-in`). A session made elsewhere meanwhile (`aws sso login`) is noticed by the next statement, at most every 30 seconds, so a long-running server needs no restart. `list_connections` shows the status word and, for such a connection, `sign_in: {kind, subject, reason}` (the profile name and `missing` or `expired`; never an account, role or start URL). The agent reaches the same scope rule as with any storage connection: SSO keys change nothing it may read, and `~/.aws` is outside `data/`.
 
 ### SSE transport security
 
 Both `--transport sse` and Studio's built-in MCP server bind to
 `127.0.0.1` only and require a random bearer token, generated fresh each
 time the server starts and printed to stderr (`--transport sse`). Studio never
-shows it: the copied Claude config launches `vibe mcp serve`, which reads it from
+shows it: the copied Claude config launches `assay mcp serve`, which reads it from
 `hub.lock` (same user only). A request is rejected if it:
 
 - carries a browser `Origin` header at all (a legitimate MCP client never
@@ -218,11 +218,11 @@ for its one `GET`.
 
 ## Claude Desktop configuration
 
-See "Copy Claude config" above: no passphrase and no token are needed. The older `VIBE_PASSPHRASE` setup applied to `.vibe` files and is gone.
+See "Copy Claude config" above: no passphrase and no token are needed. The older `ASSAY_PASSPHRASE` setup applied to `.assay` files and is gone.
 
 ## Tool list
 
-`vibe mcp serve` (owner or proxy) and Studio's SSE server all advertise exactly
+`assay mcp serve` (owner or proxy) and Studio's SSE server all advertise exactly
 `agents.ListToolsForMode(agents.ModeMCP)`, which is every tool that is not task-mode only. Call `tools/list` for the live set. By category (the sandbox tier that allows each is in [agent-policy.md](agent-policy.md#what-each-tier-allows)):
 
 | Category | Tools |

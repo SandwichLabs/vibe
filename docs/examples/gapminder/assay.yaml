@@ -1,5 +1,5 @@
-# Vibe workspace. Committed: shared settings and connection definitions only.
-# Never put a password, token or key in this file; Vibe keeps those in your keychain.
+# Assay workspace. Committed: shared settings and connection definitions only.
+# Never put a password, token or key in this file; Assay keeps those in your keychain.
 version: 1
 id: e73d588f-6415-49f0-9653-7b509bf13a84
 name: gapminder

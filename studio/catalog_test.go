@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/importer"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/importer"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // appWithSecondCatalog opens an App and attaches "other" (a writable .duckdb
@@ -123,7 +123,7 @@ func TestStudio_SecondCatalog_SchemaChanges(t *testing.T) {
 	require.NoError(t, app.sess.DB().QueryRow("SELECT id FROM other.main.made").Scan(&id))
 	assert.Equal(t, 1, id)
 	var seqs int
-	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_vibe_seq_made_id'").Scan(&seqs))
+	require.NoError(t, app.sess.DB().QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_assay_seq_made_id'").Scan(&seqs))
 	assert.Equal(t, 1, seqs)
 
 	d, err := app.DescribeTable("other.main.items")

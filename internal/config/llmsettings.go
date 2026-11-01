@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LLMSettings are the non-secret model settings Settings and `vibe config llm`
+// LLMSettings are the non-secret model settings Settings and `assay config llm`
 // can write to the config file. The API key is deliberately not here: it lives
 // in the keychain, and SaveLLMSettings never writes or touches llm.api_key.
 type LLMSettings struct {
@@ -51,16 +51,16 @@ func (s LLMSettings) Validate() error {
 
 // LLMEnvOverrides maps each setting ("provider", "model", "endpoint",
 // "accountId", "gateway") that an environment variable currently overrides to
-// that variable's name, so a UI can say "set by VIBE_LLM_MODEL" and disable
+// that variable's name, so a UI can say "set by ASSAY_LLM_MODEL" and disable
 // the field.
 func LLMEnvOverrides() map[string]string {
 	out := map[string]string{}
 	for field, name := range map[string]string{
-		"provider":  "VIBE_LLM_PROVIDER",
-		"model":     "VIBE_LLM_MODEL",
-		"endpoint":  "VIBE_LLM_ENDPOINT",
-		"accountId": "VIBE_LLM_ACCOUNT_ID",
-		"gateway":   "VIBE_LLM_GATEWAY",
+		"provider":  "ASSAY_LLM_PROVIDER",
+		"model":     "ASSAY_LLM_MODEL",
+		"endpoint":  "ASSAY_LLM_ENDPOINT",
+		"accountId": "ASSAY_LLM_ACCOUNT_ID",
+		"gateway":   "ASSAY_LLM_GATEWAY",
 	} {
 		if strings.TrimSpace(os.Getenv(name)) != "" {
 			out[field] = name
@@ -160,7 +160,7 @@ func SaveLLMSettings(path string, s LLMSettings) error {
 
 	out, err := editLLMSettings(data, s)
 	if err != nil {
-		return fmt.Errorf("Vibe can't safely edit %s (%w); edit llm.* by hand", path, err)
+		return fmt.Errorf("Assay can't safely edit %s (%w); edit llm.* by hand", path, err)
 	}
 	if err := writeFileAtomic(path, out, mode); err != nil {
 		return fmt.Errorf("failed to update %s: %w", path, err)

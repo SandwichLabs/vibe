@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 const cliScriptManifest = "version: 1\ntitle: Chart\nview: script\nqueries:\n  - name: rows\n    sql: SELECT 1 AS x\n"
@@ -28,7 +28,7 @@ func seedScriptArtifact(t *testing.T, root string) string {
 
 func viewHashOf(t *testing.T, ws string) string {
 	t.Helper()
-	out, stderr, err := runVibe("artifact", "view", "status", "chart", "--json", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "view", "status", "chart", "--json", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	var st map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &st))
@@ -41,40 +41,40 @@ func TestArtifactView_StatusAllowDenyRevoke(t *testing.T) {
 	ws := newWS(t)
 	dir := seedScriptArtifact(t, ws)
 
-	out, stderr, err := runVibe("artifact", "list", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "list", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Regexp(t, `chart\s+Chart\s+script`, out)
 
-	out, stderr, err = runVibe("artifact", "view", "status", "chart", "--workspace", ws)
+	out, stderr, err = runAssay("artifact", "view", "status", "chart", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "chart: not decided")
 	assert.Contains(t, out, "function draw", "status shows the source that will be allowed")
 	hash := viewHashOf(t, ws)
 
 	// Without a terminal, allow needs the hash that was shown.
-	_, stderr, err = runVibe("artifact", "view", "allow", "chart", "--workspace", ws)
+	_, stderr, err = runAssay("artifact", "view", "allow", "chart", "--workspace", ws)
 	require.Error(t, err)
 	assert.Contains(t, err.Error()+stderr, "--hash")
-	_, _, err = runVibe("artifact", "view", "allow", "chart", "--hash", "0000", "--yes", "--workspace", ws)
+	_, _, err = runAssay("artifact", "view", "allow", "chart", "--hash", "0000", "--yes", "--workspace", ws)
 	require.Error(t, err, "a hash that is not the files' hash is refused")
 
-	out, stderr, err = runVibe("artifact", "view", "allow", "chart", "--hash", hash, "--yes", "--workspace", ws)
+	out, stderr, err = runAssay("artifact", "view", "allow", "chart", "--hash", hash, "--yes", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "chart: allowed")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "view.js"), []byte(cliScriptSource+"// edit\n"), 0o644))
-	out, _, err = runVibe("artifact", "view", "status", "chart", "--workspace", ws)
+	out, _, err = runAssay("artifact", "view", "status", "chart", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "changed since you allowed it")
 
 	// The hash of the old files no longer allows.
-	_, _, err = runVibe("artifact", "view", "allow", "chart", "--hash", hash, "--yes", "--workspace", ws)
+	_, _, err = runAssay("artifact", "view", "allow", "chart", "--hash", hash, "--yes", "--workspace", ws)
 	require.Error(t, err)
 
-	out, _, err = runVibe("artifact", "view", "deny", "chart", "--workspace", ws)
+	out, _, err = runAssay("artifact", "view", "deny", "chart", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "chart: denied")
-	out, _, err = runVibe("artifact", "view", "revoke", "chart", "--workspace", ws)
+	out, _, err = runAssay("artifact", "view", "revoke", "chart", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "chart: not decided")
 
@@ -89,20 +89,20 @@ func TestArtifactView_StatusAllowDenyRevoke(t *testing.T) {
 func TestArtifactView_StatusOfAPlainArtifactAndAMissingOne(t *testing.T) {
 	ws := newWS(t)
 	seedArtifacts(t, ws)
-	out, _, err := runVibe("artifact", "view", "status", "sales", "--workspace", ws)
+	out, _, err := runAssay("artifact", "view", "status", "sales", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`sales: view kind "a2ui", nothing to allow`), out)
-	out, _, err = runVibe("artifact", "view", "status", "nope", "--workspace", ws)
+	out, _, err = runAssay("artifact", "view", "status", "nope", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "cannot be used")
-	_, _, err = runVibe("artifact", "view", "deny", "sales", "--workspace", ws)
+	_, _, err = runAssay("artifact", "view", "deny", "sales", "--workspace", ws)
 	require.Error(t, err)
 }
 
 func TestArtifactView_AllowWithHashNeedsYes(t *testing.T) {
 	ws := newWS(t)
 	seedScriptArtifact(t, ws)
-	_, _, err := runVibe("artifact", "view", "allow", "chart", "--hash", viewHashOf(t, ws), "--workspace", ws)
+	_, _, err := runAssay("artifact", "view", "allow", "chart", "--hash", viewHashOf(t, ws), "--workspace", ws)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--yes")
 }
@@ -129,7 +129,7 @@ func TestArtifactView_StatusOfAnHTMLPageListsItsFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte("version: 1\ntitle: P\nview: html\nqueries:\n  - name: q\n    sql: SELECT 1\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<p>{{ query "q" }}</p>`), 0o644))
 
-	out, stderr, err := runVibe("artifact", "view", "status", "pg", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "view", "status", "pg", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "pg: not decided")
 	assert.Contains(t, out, "page: static")
@@ -139,7 +139,7 @@ func TestArtifactView_StatusOfAnHTMLPageListsItsFiles(t *testing.T) {
 	assert.Contains(t, out, `--- html/index.html.tmpl`)
 	assert.Contains(t, out, `{{ query "q" }}`, "status shows the text that will be allowed")
 
-	out, stderr, err = runVibe("artifact", "view", "status", "pg", "--json", "--workspace", ws)
+	out, stderr, err = runAssay("artifact", "view", "status", "pg", "--json", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	var st map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &st))
@@ -147,9 +147,9 @@ func TestArtifactView_StatusOfAnHTMLPageListsItsFiles(t *testing.T) {
 	require.Regexp(t, `^[0-9a-f]{64}$`, hash)
 	assert.NotContains(t, out, "PageFiles", "the raw bytes are not part of the JSON")
 
-	_, stderr, err = runVibe("artifact", "view", "allow", "pg", "--hash", hash, "--yes", "--workspace", ws)
+	_, stderr, err = runAssay("artifact", "view", "allow", "pg", "--hash", hash, "--yes", "--workspace", ws)
 	require.NoError(t, err, stderr)
-	out, _, err = runVibe("artifact", "view", "status", "pg", "--workspace", ws)
+	out, _, err = runAssay("artifact", "view", "status", "pg", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "pg: allowed")
 }
@@ -163,7 +163,7 @@ func TestArtifactView_StatusOfAScriptedPageListsCapabilities(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<script src="app.js"></script>{{ len (query "q").Rows }}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "app.js"), []byte("1"), 0o644))
 
-	out, stderr, err := runVibe("artifact", "view", "status", "app", "--workspace", ws)
+	out, stderr, err := runAssay("artifact", "view", "status", "app", "--workspace", ws)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "page: scripted")
 	assert.Contains(t, out, "q (on the workspace database, used by its templates)")
@@ -176,7 +176,7 @@ func TestArtifactView_StatusOfAScriptedPageListsCapabilities(t *testing.T) {
 	// local endpoint counts as set up); the no-provider wording is pinned in
 	// studio/page_disclosure_test.go.
 
-	list, _, err := runVibe("artifact", "list", "--workspace", ws)
+	list, _, err := runAssay("artifact", "list", "--workspace", ws)
 	require.NoError(t, err)
 	assert.Contains(t, list, "html (scripted)")
 }
@@ -190,7 +190,7 @@ func TestArtifactView_StatusListsTheMetricsAViewReads(t *testing.T) {
 	assert.Contains(t, out, "metrics it reads:")
 	assert.Contains(t, out, "net_revenue (saved query base)")
 	assert.Contains(t, out, "ghost (no such metric yet)")
-	assert.Contains(t, out, "Vibe asks again")
+	assert.Contains(t, out, "Assay asks again")
 
 	buf.Reset()
 	st.MetricsUsed = nil

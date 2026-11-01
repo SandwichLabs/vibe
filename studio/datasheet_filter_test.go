@@ -3,7 +3,7 @@ package main
 // TDD RED — Phase 2 / unit P2.5: "Datasheet filter-spec -> SQL backend
 // (Filter-by-Selection / Filter-by-Form)" (parity plan §2.3).
 //
-// This is a REAL integration test: it opens a real encrypted .vibe container,
+// This is a REAL integration test: it opens a real encrypted .assay container,
 // materializes DuckDB, seeds a typed table, and drives the production
 // Wails-bound retrieval path (GetTableDataFiltered) with a structured
 // FilterSpec. No mocks; no hand-written SQL string from the caller.

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // hubWithSecondCatalog returns a hardened session with a writable second
@@ -62,8 +62,8 @@ func TestImport_IntoSecondCatalog(t *testing.T) {
 	assert.Equal(t, 0, count(t, db, "SELECT COUNT(*) FROM information_schema.columns WHERE table_catalog = current_database() AND table_name='people' AND column_name='person_id'"))
 
 	// The auto-number sequence was created in the target catalog, next to the table.
-	assert.Equal(t, 1, count(t, db, "SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_vibe_seq_people_person_id'"))
-	assert.Equal(t, 0, count(t, db, "SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name=current_database() AND sequence_name LIKE '_vibe_seq_people%'"))
+	assert.Equal(t, 1, count(t, db, "SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name='other' AND sequence_name='_assay_seq_people_person_id'"))
+	assert.Equal(t, 0, count(t, db, "SELECT COUNT(*) FROM duckdb_sequences() WHERE database_name=current_database() AND sequence_name LIKE '_assay_seq_people%'"))
 	_, err = db.Exec("INSERT INTO other.main.people (name) VALUES ('Cara')")
 	require.NoError(t, err)
 	assert.Equal(t, 3, count(t, db, "SELECT MAX(person_id) FROM other.main.people"))
@@ -114,7 +114,7 @@ func TestImport_RejectsBadQualifiedNames(t *testing.T) {
 	ctx := context.Background()
 	_, db := hubWithSecondCatalog(t)
 	csv := writeCSV(t, t.TempDir(), "c.csv", "name\nAnn\n")
-	for _, bad := range []string{`other.main.x"; DROP TABLE y; --`, "other..t", "a.b.c.d", "other.main._vibe_secret", "system.main.t", "temp.main.t", "system.t", "ghost.main.t"} {
+	for _, bad := range []string{`other.main.x"; DROP TABLE y; --`, "other..t", "a.b.c.d", "other.main._assay_secret", "system.main.t", "temp.main.t", "system.t", "ghost.main.t"} {
 		_, err := Import(ctx, db, Options{Source: Source{Path: csv, HasHeader: true}, Table: bad})
 		assert.Error(t, err, bad)
 	}

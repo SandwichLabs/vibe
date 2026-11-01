@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/assay/internal/session/sessiontest"
 
 	duckdb "github.com/duckdb/duckdb-go/v2"
 	"github.com/stretchr/testify/assert"

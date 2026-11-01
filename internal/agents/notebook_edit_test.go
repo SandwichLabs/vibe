@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 )
 
 // editFixture is a full-access handler over a file-backed notebook store (so

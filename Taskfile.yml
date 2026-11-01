@@ -4,7 +4,7 @@ env:
   CGO_ENABLED: "1"
 
 vars:
-  BINARY: vibe
+  BINARY: assay
   # `task install` stamps these into both binaries (release.yml stamps the same flags from the tag).
   INSTALL_DIR: '{{.HOME}}/go/bin'
   VERSION:
@@ -15,9 +15,9 @@ vars:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   CLI_LDFLAGS: >-
     -s -w
-    -X github.com/SandwichLabs/vibe/cmd.version={{.VERSION}}
-    -X github.com/SandwichLabs/vibe/cmd.commit={{.COMMIT}}
-    -X github.com/SandwichLabs/vibe/cmd.date={{.DATE}}
+    -X github.com/SandwichLabs/assay/cmd.version={{.VERSION}}
+    -X github.com/SandwichLabs/assay/cmd.commit={{.COMMIT}}
+    -X github.com/SandwichLabs/assay/cmd.date={{.DATE}}
   STUDIO_LDFLAGS: >-
     -s -w
     -X main.version={{.VERSION}}
@@ -39,9 +39,9 @@ tasks:
       - go mod tidy
 
   build:
-    desc: Build the vibe binary
+    desc: Build the assay binary
     cmds:
-      - go build -o {{.BINARY}} ./cmd/vibe
+      - go build -o {{.BINARY}} ./cmd/assay
 
   test:
     desc: Run all tests (Go + Studio frontend)
@@ -111,13 +111,13 @@ tasks:
       - npm install
 
   studio:dev:
-    desc: Run Vibe Studio in dev mode
+    desc: Run Assay in dev mode
     dir: studio
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow
 
   studio:dev:ssofake:
-    desc: Studio dev with AWS sign-in pointed at local fakes (Rodney QA only; run tools/ssofake first and set VIBE_SSOFAKE_OIDC and VIBE_SSOFAKE_PORTAL; never a release or CI build)
+    desc: Studio dev with AWS sign-in pointed at local fakes (Rodney QA only; run tools/ssofake first and set ASSAY_SSOFAKE_OIDC and ASSAY_SSOFAKE_PORTAL; never a release or CI build)
     dir: studio
     cmds:
       - wails dev -tags webkit2_41,duckdb_arrow,ssofake
@@ -132,7 +132,7 @@ tasks:
   # The Studio build tasks stamp {{.VERSION}} into wails.json (productVersion, so the macOS bundle
   # says it too) for the length of the build, then restore the file; the tree stays clean.
   build:studio:
-    desc: Build Vibe Studio desktop app (macOS)
+    desc: Build Assay desktop app (macOS)
     dir: studio
     cmds:
       # Deployment target for the host arch (docs/packaging.md); the bundle gets its release name.
@@ -141,37 +141,37 @@ tasks:
         min="$(../scripts/macos-target.sh "$arch")"
         export MACOSX_DEPLOYMENT_TARGET="$min" CGO_CFLAGS="-O2 -g -mmacosx-version-min=$min" CGO_LDFLAGS="-mmacosx-version-min=$min"
         ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
-        rm -rf "build/bin/Vibe Studio.app"
-        mv build/bin/vibe-studio.app "build/bin/Vibe Studio.app"
+        rm -rf "build/bin/Assay.app"
+        mv build/bin/assay-studio.app "build/bin/Assay.app"
 
   build:studio:linux:
-    desc: Build Vibe Studio desktop app (Linux)
+    desc: Build Assay desktop app (Linux)
     dir: studio
     cmds:
       - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
 
   install:
-    desc: Versioned build of the vibe CLI and Vibe Studio into ~/go/bin (Linux; the Studio half is skipped on other platforms)
+    desc: Versioned build of the assay CLI and Assay into ~/go/bin (Linux; the Studio half is skipped on other platforms)
     cmds:
       - task: install:cli
       - task: install:studio
 
   install:cli:
-    desc: Versioned build of the vibe CLI into ~/go/bin
+    desc: Versioned build of the assay CLI into ~/go/bin
     cmds:
       - mkdir -p {{.INSTALL_DIR}}
-      - go build -ldflags "{{.CLI_LDFLAGS}}" -o {{.INSTALL_DIR}}/{{.BINARY}} ./cmd/vibe
+      - go build -ldflags "{{.CLI_LDFLAGS}}" -o {{.INSTALL_DIR}}/{{.BINARY}} ./cmd/assay
       - '{{.INSTALL_DIR}}/{{.BINARY}} --version'
 
   install:studio:
-    desc: Versioned build of Vibe Studio into ~/go/bin (Linux; `vibe studio --gui` finds it beside vibe)
+    desc: Versioned build of Assay into ~/go/bin (Linux; `assay studio --gui` finds it beside assay)
     platforms: [linux]
     dir: studio
     cmds:
       - ../scripts/stamp-wails-version.sh '{{.VERSION}}' wails build -tags webkit2_41,duckdb_arrow -ldflags "{{.STUDIO_LDFLAGS}}"
       - mkdir -p {{.INSTALL_DIR}}
-      - install -m 755 build/bin/vibe-studio {{.INSTALL_DIR}}/vibe-studio
-      - '{{.INSTALL_DIR}}/vibe-studio --version'
+      - install -m 755 build/bin/assay-studio {{.INSTALL_DIR}}/assay-studio
+      - '{{.INSTALL_DIR}}/assay-studio --version'
 
   release:
     desc: How to cut a release (there is no local release; CI builds it)

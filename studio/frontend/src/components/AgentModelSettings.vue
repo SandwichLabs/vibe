@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Settings > App > The agent's model. App-global (every workspace): the
 // provider picker, model, endpoint and Cloudflare account are saved to
-// ~/.vibe.yaml (never the key; docs/reference/llm-config.md). A field set by a
-// VIBE_LLM_* variable is shown disabled with the variable's name.
+// ~/.assay.yaml (never the key; docs/reference/llm-config.md). A field set by a
+// ASSAY_LLM_* variable is shown disabled with the variable's name.
 // The API key is write-only (SPEC 09, #114): it is saved to the OS keychain and
 // never shown again. "•••• In your keychain · Replace · Clear". Nothing here can
 // read a key back; the bindings only set, clear and report where it comes from.
@@ -61,7 +61,7 @@ const {
 
 <template>
   <div data-testid="agent-model-settings">
-    <div class="sec-title"><h2 style="font-size: 22px;">The agent's model</h2><span class="label">Every workspace</span></div>
+    <div class="sec-title"><h2 style="font-size: 22px;">The assistant's model</h2><span class="label">Every workspace</span></div>
     <div class="card card-pad col" style="gap: var(--sh-space-4);">
       <!-- Read-only: what the agent will actually use -->
       <div v-if="view && !changing" class="col" style="gap: var(--sh-space-2);" data-testid="llm-summary">
@@ -170,11 +170,11 @@ const {
 
         <div v-if="needsAccount" class="note warn" data-testid="llm-need-account">
           <Icon name="info" :size="16" />
-          <span>Cloudflare needs an account ID before the agent can run. Add it here, or set <code>CLOUDFLARE_ACCOUNT_ID</code>.</span>
+          <span>Cloudflare needs an account ID before the assistant can run. Add it here, or set <code>CLOUDFLARE_ACCOUNT_ID</code>.</span>
         </div>
         <div v-if="fileKeyHazard" class="note attn" data-testid="llm-file-key-warning">
           <Icon name="lock" :size="16" />
-          <span>The plaintext key in <code>~/.vibe.yaml</code> would be sent to {{ formInfo?.label }}. Move it to the keychain for {{ savedInfo?.label }} first (below), or save a key for {{ formInfo?.label }}.</span>
+          <span>The plaintext key in <code>~/.assay.yaml</code> would be sent to {{ formInfo?.label }}. Move it to the keychain for {{ savedInfo?.label }} first (below), or save a key for {{ formInfo?.label }}.</span>
         </div>
 
         <div class="row" style="gap: var(--sh-space-2); align-items: center;">
@@ -219,18 +219,18 @@ const {
           <button v-if="editing" class="btn btn-sm" type="button" :disabled="busy" @click="editing = false; draft = ''">Cancel</button>
         </form>
 
-        <div v-if="source === 'file'" class="help" data-testid="llm-key-file">The key in use is the plaintext one in <code>~/.vibe.yaml</code>. It is used for whichever provider is selected, so it is sent to {{ keyInfo?.label }}.</div>
-        <div id="llm-key-h" class="help">The <code>VIBE_LLM_API_KEY</code> environment variable<template v-if="keyInfo?.keyEnvVars?.length">, or <template v-for="(v, i) in keyInfo.keyEnvVars" :key="v"><template v-if="i"> / </template><code>{{ v }}</code></template>,</template> if set, is used instead. The key is saved to your computer's keychain and Vibe can't show it again, only replace or clear it.</div>
+        <div v-if="source === 'file'" class="help" data-testid="llm-key-file">The key in use is the plaintext one in <code>~/.assay.yaml</code>. It is used for whichever provider is selected, so it is sent to {{ keyInfo?.label }}.</div>
+        <div id="llm-key-h" class="help">The <code>ASSAY_LLM_API_KEY</code> environment variable<template v-if="keyInfo?.keyEnvVars?.length">, or <template v-for="(v, i) in keyInfo.keyEnvVars" :key="v"><template v-if="i"> / </template><code>{{ v }}</code></template>,</template> if set, is used instead. The key is saved to your computer's keychain and Assay can't show it again, only replace or clear it.</div>
         <div v-if="!keyStatus.keychainAvailable" class="note warn" data-testid="llm-key-nokeychain">
           <Icon name="lock" :size="16" />
-          <span>Can't reach your keychain. Set <code>VIBE_LLM_API_KEY</code> (or your provider's usual variable) in the environment Vibe starts from. Vibe never writes a key to a file.</span>
+          <span>Can't reach your keychain. Set <code>ASSAY_LLM_API_KEY</code> (or your provider's usual variable) in the environment Assay starts from. Assay never writes a key to a file.</span>
         </div>
         <span v-if="message" class="sh-body" role="status" :style="{ fontWeight: 600, color: message.startsWith('Error') ? 'var(--sh-error)' : 'var(--sh-teal-lo)' }">{{ message }}</span>
       </div>
 
       <div v-if="keyStatus && keyStatus.canMigrate && source !== 'keychain'" class="note info" data-testid="llm-key-migrate">
         <Icon name="info" :size="16" />
-        <span>Found a key in <code>~/.vibe.yaml</code>. <button class="linkbtn" type="button" style="padding: 0 4px;" :disabled="busy" data-testid="llm-key-migrate-btn" @click="migrate">Move it to the keychain</button> (as the key for {{ savedInfo?.label ?? 'the saved provider' }}) and blank the file. The rest of the file stays as it is.</span>
+        <span>Found a key in <code>~/.assay.yaml</code>. <button class="linkbtn" type="button" style="padding: 0 4px;" :disabled="busy" data-testid="llm-key-migrate-btn" @click="migrate">Move it to the keychain</button> (as the key for {{ savedInfo?.label ?? 'the saved provider' }}) and blank the file. The rest of the file stays as it is.</span>
       </div>
     </div>
   </div>

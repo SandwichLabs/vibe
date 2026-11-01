@@ -42,19 +42,19 @@ const navItems = [
   { path: '/queries', label: 'Queries', icon: 'terminal' },
   { path: '/skills', label: 'Skills', icon: 'bookOpen' },
   { path: '/semantics', label: 'Semantics', icon: 'network' },
-  { path: '/agent', label: 'Agent', icon: 'bot' },
+  { path: '/agent', label: 'Assistant', icon: 'bot' },
   { path: '/import', label: 'Import', icon: 'download' },
   { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
 // The Agent entry says a turn is running; Semantics says how many proposals wait.
 function navLabel(item: { path: string; label: string }) {
-  if (item.path === '/agent' && agentBusy.value) return 'Agent, a turn is running'
+  if (item.path === '/agent' && agentBusy.value) return 'Assistant, a turn is running'
   if (item.path === '/semantics' && openProposals.value) return `Semantics, ${openProposals.value} ${openProposals.value === 1 ? 'proposal' : 'proposals'} waiting`
   return item.label
 }
 function navTitle(item: { path: string; label: string }) {
-  return item.path === '/agent' && agentBusy.value ? 'Agent: a turn is running' : navLabel(item)
+  return item.path === '/agent' && agentBusy.value ? 'Assistant: a turn is running' : navLabel(item)
 }
 
 function isActive(path: string) {
@@ -66,9 +66,9 @@ function isActive(path: string) {
 const pill = computed(() => {
   const p = info.value?.policy
   if (!p) return { text: '', dot: 'ok' }
-  if (info.value?.readOnly || p.sandbox === 'read-only') return { text: 'Agent can only read here', dot: 'ok' }
-  if (p.askBeforeWrites) return { text: 'Agent asks before changes', dot: 'ok' }
-  return { text: 'Agent changes data without asking', dot: 'warn' }
+  if (info.value?.readOnly || p.sandbox === 'read-only') return { text: 'Assistant can only read here', dot: 'ok' }
+  if (p.askBeforeWrites) return { text: 'Assistant asks before changes', dot: 'ok' }
+  return { text: 'Assistant changes data without asking', dot: 'warn' }
 })
 
 const folderParts = computed(() => {
@@ -112,15 +112,15 @@ const unsubs: Array<() => void> = []
 
 onMounted(() => {
   unsubs.push(startProposalBadge())
-  window.addEventListener('vibe:open-agent', openAgentFromEvent)
+  window.addEventListener('assay:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('vibe:open-agent', openAgentFromEvent)
+  window.removeEventListener('assay:open-agent', openAgentFromEvent)
   window.removeEventListener('keydown', onGlobalKeydown)
   unsubs.splice(0).forEach((u) => u())
-  if (hasWailsRuntime()) WindowSetTitle('Vibe Studio')
+  if (hasWailsRuntime()) WindowSetTitle('Assay')
 })
 
 watch(() => info.value?.sessionId, () => { void refreshProposalBadge() })
@@ -131,7 +131,7 @@ watch(errorMessage, (msg) => {
 
 watch(() => info.value?.name, (name) => {
   if (!hasWailsRuntime()) return
-  WindowSetTitle(name ? `${name} — Vibe Studio` : 'Vibe Studio')
+  WindowSetTitle(name ? `${name} — Assay` : 'Assay')
 }, { immediate: true })
 </script>
 
@@ -147,10 +147,10 @@ watch(() => info.value?.name, (name) => {
           data-testid="agent-toggle"
           :aria-expanded="agentOpen"
           aria-controls="agent-panel"
-          :title="`Toggle agent · ${shortcutLabel('J')}${agentBusy ? ' · a turn is running' : ''}`"
+          :title="`Toggle assistant · ${shortcutLabel('J')}${agentBusy ? ' · a turn is running' : ''}`"
           @click="agentOpen = !agentOpen"
         >
-          <Icon name="bot" :size="16" /> Agent
+          <Icon name="bot" :size="16" /> Assistant
           <i v-if="agentBusy" class="agent-busy" data-testid="agent-busy-toggle" aria-hidden="true"></i>
         </button>
         <button
@@ -217,20 +217,20 @@ watch(() => info.value?.name, (name) => {
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
-  color: var(--vibe-chrome-fg);
-  border: 1.5px solid var(--vibe-chrome-fg);
+  color: var(--assay-chrome-fg);
+  border: 1.5px solid var(--assay-chrome-fg);
   border-radius: var(--sh-radius-sm);
   cursor: pointer;
 }
-.theme-toggle:hover { background: color-mix(in srgb, var(--vibe-chrome-fg) 12%, transparent); }
+.theme-toggle:hover { background: color-mix(in srgb, var(--assay-chrome-fg) 12%, transparent); }
 /* Open-proposals count on the Semantics entry. */
 .nav-badge {
   margin-left: auto;
   min-width: 18px; padding: 0 6px;
   border-radius: 9px;
   font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
-  background: var(--vibe-accent);
-  color: var(--vibe-accent-fg);
+  background: var(--assay-accent);
+  color: var(--assay-accent-fg);
 }
 /* In-flight agent turn marker: a dot, not text, so it survives the collapsed sidebar. */
 .agent-busy {
@@ -238,8 +238,8 @@ watch(() => info.value?.name, (name) => {
   width: 8px; height: 8px;
   margin-left: 6px;
   border-radius: 50%;
-  background: var(--vibe-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vibe-accent) 30%, transparent);
+  background: var(--assay-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--assay-accent) 30%, transparent);
   animation: agent-busy-pulse 1.4s ease-in-out infinite;
 }
 @keyframes agent-busy-pulse { 50% { opacity: 0.35; } }

@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -46,13 +46,13 @@ func resetFlags(c *cobra.Command) {
 	}
 }
 
-// runVibe runs the root command in-process and returns stdout, stderr and the
+// runAssay runs the root command in-process and returns stdout, stderr and the
 // error.
-func runVibe(args ...string) (stdout, stderr string, err error) {
-	return runVibeIn(nil, args...)
+func runAssay(args ...string) (stdout, stderr string, err error) {
+	return runAssayIn(nil, args...)
 }
 
-func runVibeIn(in io.Reader, args ...string) (stdout, stderr string, err error) {
+func runAssayIn(in io.Reader, args ...string) (stdout, stderr string, err error) {
 	var out, errb bytes.Buffer
 	resetFlags(rootCmd)
 	rootCmd.SetOut(&out)
@@ -68,7 +68,7 @@ func runVibeIn(in io.Reader, args ...string) (stdout, stderr string, err error) 
 
 // executeCommand runs the root command and returns stdout and the error.
 func executeCommand(args ...string) (string, error) {
-	out, _, err := runVibe(args...)
+	out, _, err := runAssay(args...)
 	return out, err
 }
 
@@ -76,10 +76,10 @@ func executeCommand(args ...string) (string, error) {
 // config dir) and returns its root.
 func newWS(t *testing.T, extra ...string) string {
 	t.Helper()
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "acme")
 	args := append([]string{"workspace", "init", root}, extra...)
-	_, _, err := runVibe(args...)
+	_, _, err := runAssay(args...)
 	require.NoError(t, err)
 	r, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
@@ -94,24 +94,24 @@ func writeFile(t *testing.T, dir, name, body string) string {
 }
 
 func TestWorkspaceInit_CreatesWorkspaceAndPrintsNextSteps(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "acme-analytics")
-	out, stderr, err := runVibe("workspace", "init", root, "--name", "Acme Analytics")
+	out, stderr, err := runAssay("workspace", "init", root, "--name", "Acme Analytics")
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, `Created workspace "Acme Analytics"`)
 	assert.Contains(t, out, "Next steps")
-	assert.Contains(t, out, "vibe query")
-	assert.Contains(t, out, "vibe import")
+	assert.Contains(t, out, "assay query")
+	assert.Contains(t, out, "assay import")
 
-	for _, p := range []string{"vibe.yaml", ".gitignore", ".gitattributes"} {
+	for _, p := range []string{"assay.yaml", ".gitignore", ".gitattributes"} {
 		assert.FileExists(t, filepath.Join(root, p), p)
 	}
 }
 
 func TestWorkspaceInit_Details(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "w")
-	_, _, err := runVibe("workspace", "init", root, "--name", "Named")
+	_, _, err := runAssay("workspace", "init", root, "--name", "Named")
 	require.NoError(t, err)
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
@@ -129,15 +129,15 @@ func TestWorkspaceInit_Git(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "g")
-	out, _, err := runVibe("workspace", "init", root, "--git")
+	out, _, err := runAssay("workspace", "init", root, "--git")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Initialized a git repository")
 	assert.DirExists(t, filepath.Join(root, ".git"))
 
 	plain := filepath.Join(t.TempDir(), "nogit")
-	_, _, err = runVibe("workspace", "init", plain)
+	_, _, err = runAssay("workspace", "init", plain)
 	require.NoError(t, err)
 	assert.NoDirExists(t, filepath.Join(plain, ".git"))
 }
@@ -152,10 +152,10 @@ func TestWorkspaceInit_Template(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nbs, 1)
 	assert.Equal(t, "Order Entry", nbs[0].Title)
-	files, _ := filepath.Glob(filepath.Join(root, "notebooks", "*.vnb"))
-	assert.Len(t, files, 1, "the notebook is a .vnb file")
+	files, _ := filepath.Glob(filepath.Join(root, "notebooks", "*.asnb"))
+	assert.Len(t, files, 1, "the notebook is a .asnb file")
 
-	out, stderr, err := runVibe("query", "--workspace", root, "SELECT count(*) AS n FROM order_items")
+	out, stderr, err := runAssay("query", "--workspace", root, "SELECT count(*) AS n FROM order_items")
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "3")
 
@@ -171,42 +171,42 @@ func TestWorkspaceInit_Template(t *testing.T) {
 }
 
 func TestWorkspaceInit_UnknownTemplateListsTemplates(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "x")
-	_, _, err := runVibe("workspace", "init", root, "--template", "nope")
+	_, _, err := runAssay("workspace", "init", root, "--template", "nope")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "order-entry")
-	assert.NoFileExists(t, filepath.Join(root, "vibe.yaml"), "nothing is created for an unknown template")
+	assert.NoFileExists(t, filepath.Join(root, "assay.yaml"), "nothing is created for an unknown template")
 }
 
-func TestWorkspaceInit_RefusesExistingWorkspaceAndVibeFiles(t *testing.T) {
+func TestWorkspaceInit_RefusesExistingWorkspaceAndAssayFiles(t *testing.T) {
 	root := newWS(t)
-	_, _, err := runVibe("workspace", "init", root)
+	_, _, err := runAssay("workspace", "init", root)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, workspace.ErrAlreadyWorkspace)
 
-	for _, args := range [][]string{{"workspace", "init", "old.vibe"}, {"init", "old.vibe"}} {
-		_, _, err = runVibe(args...)
+	for _, args := range [][]string{{"workspace", "init", "old.assay"}, {"init", "old.assay"}} {
+		_, _, err = runAssay(args...)
 		require.Error(t, err, "%v", args)
 		assert.Contains(t, err.Error(), "no longer opened")
-		assert.Contains(t, err.Error(), "vibe workspace init")
+		assert.Contains(t, err.Error(), "assay workspace init")
 	}
 }
 
 func TestInit_IsAnAliasOfWorkspaceInit(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
 	root := filepath.Join(t.TempDir(), "alias")
-	out, _, err := runVibe("init", root, "--name", "Aliased")
+	out, _, err := runAssay("init", root, "--name", "Aliased")
 	require.NoError(t, err)
 	assert.Contains(t, out, `Created workspace "Aliased"`)
-	assert.FileExists(t, filepath.Join(root, "vibe.yaml"))
+	assert.FileExists(t, filepath.Join(root, "assay.yaml"))
 }
 
 func TestWorkspaceInfo_ShowsEverything(t *testing.T) {
 	root := newWS(t, "--template", "contacts")
 	writeFile(t, filepath.Join(root, "queries"), "q1.sql", "SELECT 1\n")
 
-	out, stderr, err := runVibe("workspace", "info", "--workspace", root)
+	out, stderr, err := runAssay("workspace", "info", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Root:        "+root)
 	assert.Contains(t, out, "acme")
@@ -218,7 +218,7 @@ func TestWorkspaceInfo_ShowsEverything(t *testing.T) {
 	assert.Contains(t, out, "Hub owner:   none")
 	assert.Regexp(t, `DuckDB:\s+v\d+\.\d+`, out)
 
-	js, _, err := runVibe("workspace", "info", "--workspace", root, "--json")
+	js, _, err := runAssay("workspace", "info", "--workspace", root, "--json")
 	require.NoError(t, err)
 	var rep infoReport
 	require.NoError(t, json.Unmarshal([]byte(js), &rep))
@@ -234,7 +234,7 @@ func TestWorkspaceInfo_ShowsEverything(t *testing.T) {
 
 func TestWorkspaceInfo_FreshWorkspaceDoesNotCreateDataFile(t *testing.T) {
 	root := newWS(t)
-	out, _, err := runVibe("workspace", "info", "--workspace", root)
+	out, _, err := runAssay("workspace", "info", "--workspace", root)
 	require.NoError(t, err)
 	assert.Contains(t, out, "no data file yet")
 	assert.NoFileExists(t, filepath.Join(root, "data", "local.duckdb"), "info must not create anything")
@@ -245,35 +245,35 @@ func TestWorkspaceInfo_NamesTheHubHolder(t *testing.T) {
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
-	hold, err := hub.AcquireHub(ws, "Vibe Studio")
+	hold, err := hub.AcquireHub(ws, "Assay")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
-	out, _, err := runVibe("workspace", "info", "--workspace", root)
+	out, _, err := runAssay("workspace", "info", "--workspace", root)
 	require.NoError(t, err)
-	assert.Contains(t, out, "Hub owner:   Vibe Studio (pid ")
+	assert.Contains(t, out, "Hub owner:   Assay (pid ")
 }
 
 func TestWorkspaceInfo_FindsWorkspaceFromSubfolder(t *testing.T) {
 	root := newWS(t)
 	t.Chdir(filepath.Join(root, "notebooks"))
-	out, _, err := runVibe("workspace", "info")
+	out, _, err := runAssay("workspace", "info")
 	require.NoError(t, err)
 	assert.Contains(t, out, root)
 }
 
 func TestWorkspaceInfo_NoWorkspace(t *testing.T) {
-	t.Setenv("VIBE_CONFIG_DIR", t.TempDir())
-	_, _, err := runVibe("workspace", "info", "--workspace", t.TempDir())
+	t.Setenv("ASSAY_CONFIG_DIR", t.TempDir())
+	_, _, err := runAssay("workspace", "info", "--workspace", t.TempDir())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no Vibe workspace found")
+	assert.Contains(t, err.Error(), "no Assay workspace found")
 }
 
 func TestQuery_Formats(t *testing.T) {
 	root := newWS(t)
 	q := func(args ...string) string {
 		t.Helper()
-		out, stderr, err := runVibe(append([]string{"query", "--workspace", root}, args...)...)
+		out, stderr, err := runAssay(append([]string{"query", "--workspace", root}, args...)...)
 		require.NoError(t, err, stderr)
 		return out
 	}
@@ -295,22 +295,22 @@ func TestQuery_Formats(t *testing.T) {
 
 func TestQuery_WritesLandInTheDefaultConnection(t *testing.T) {
 	root := newWS(t)
-	_, stderr, err := runVibe("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
+	_, stderr, err := runAssay("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
 	require.NoError(t, err, stderr)
 	assert.FileExists(t, filepath.Join(root, "data", "local.duckdb"))
-	out, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT * FROM local.main.t")
+	out, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT * FROM local.main.t")
 	require.NoError(t, err)
 	assert.Equal(t, "id\n1\n", out)
 }
 
 func TestQuery_Limit(t *testing.T) {
 	root := newWS(t)
-	out, stderr, err := runVibe("query", "--workspace", root, "--limit", "3", "--format", "csv", "SELECT * FROM range(10)")
+	out, stderr, err := runAssay("query", "--workspace", root, "--limit", "3", "--format", "csv", "SELECT * FROM range(10)")
 	require.NoError(t, err)
 	assert.Equal(t, 4, strings.Count(out, "\n"), "header plus 3 rows")
 	assert.Contains(t, stderr, "showing the first 3 of 10 rows")
 
-	out, stderr, err = runVibe("query", "--workspace", root, "--limit", "0", "--format", "csv", "SELECT * FROM range(10)")
+	out, stderr, err = runAssay("query", "--workspace", root, "--limit", "0", "--format", "csv", "SELECT * FROM range(10)")
 	require.NoError(t, err)
 	assert.Equal(t, 11, strings.Count(out, "\n"))
 	assert.NotContains(t, stderr, "showing the first")
@@ -318,22 +318,22 @@ func TestQuery_Limit(t *testing.T) {
 
 func TestQuery_StatementFromStdin(t *testing.T) {
 	root := newWS(t)
-	out, _, err := runVibeIn(strings.NewReader("SELECT 7 AS seven"), "query", "--workspace", root, "--format", "csv", "-")
+	out, _, err := runAssayIn(strings.NewReader("SELECT 7 AS seven"), "query", "--workspace", root, "--format", "csv", "-")
 	require.NoError(t, err)
 	assert.Equal(t, "seven\n7\n", out)
 }
 
-func TestQuery_RefusesWhatVibeManagesForYou(t *testing.T) {
+func TestQuery_RefusesWhatAssayManagesForYou(t *testing.T) {
 	root := newWS(t)
 	for _, s := range []string{"ATTACH 'x.duckdb' AS x", "SET threads = 1", "CREATE SECRET s (TYPE s3)", "SELECT 1; INSTALL httpfs"} {
-		_, _, err := runVibe("query", "--workspace", root, s)
+		_, _, err := runAssay("query", "--workspace", root, s)
 		require.Error(t, err, s)
 		assert.Contains(t, err.Error(), "not available here", s)
 	}
 	assert.NoFileExists(t, filepath.Join(root, "data", "local.duckdb"), "a refusal opens nothing for writing")
 
-	// A SQL string that merely mentions a .vibe file is just SQL.
-	_, _, err := runVibe("query", "--workspace", root, "SELECT * FROM s.vibe")
+	// A SQL string that merely mentions a .assay file is just SQL.
+	_, _, err := runAssay("query", "--workspace", root, "SELECT * FROM s.assay")
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "no longer opened")
 }
@@ -341,7 +341,7 @@ func TestQuery_RefusesWhatVibeManagesForYou(t *testing.T) {
 func TestQuery_ReadOnlyRefusesCopyTo(t *testing.T) {
 	root := seededWS(t)
 	dst := filepath.Join(t.TempDir(), "o.csv")
-	_, _, err := runVibe("query", "--workspace", root, "--read-only", "COPY people TO '"+dst+"'")
+	_, _, err := runAssay("query", "--workspace", root, "--read-only", "COPY people TO '"+dst+"'")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--read-only")
 	assert.NoFileExists(t, dst)
@@ -357,22 +357,22 @@ func TestQuery_ConnectionFlag(t *testing.T) {
 	require.NoError(t, db.Close())
 	addConnection(t, root, workspace.ConnectionDef{Name: "archive", Type: "duckdb", Path: "data/archive.duckdb"})
 
-	out, stderr, err := runVibe("query", "--workspace", root, "-c", "archive", "--format", "csv", "SELECT * FROM old")
+	out, stderr, err := runAssay("query", "--workspace", root, "-c", "archive", "--format", "csv", "SELECT * FROM old")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "n\n5\n", out)
 
 	// Writing to a read-only connection says why and how to change it.
-	_, _, err = runVibe("query", "--workspace", root, "-c", "archive", "INSERT INTO old VALUES (6)")
+	_, _, err = runAssay("query", "--workspace", root, "-c", "archive", "INSERT INTO old VALUES (6)")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read_only: false")
 
-	_, _, err = runVibe("query", "--workspace", root, "-c", "missing", "SELECT 1")
+	_, _, err = runAssay("query", "--workspace", root, "-c", "missing", "SELECT 1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown connection "missing"`)
 	assert.Contains(t, err.Error(), "archive")
 }
 
-// addConnection appends a shared connection to the workspace's vibe.yaml.
+// addConnection appends a shared connection to the workspace's assay.yaml.
 func addConnection(t *testing.T, root string, def workspace.ConnectionDef) {
 	t.Helper()
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
@@ -385,47 +385,47 @@ func addConnection(t *testing.T, root string, def workspace.ConnectionDef) {
 
 func TestQuery_WhenAnotherProcessOwnsTheHub(t *testing.T) {
 	root := newWS(t)
-	_, _, err := runVibe("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
+	_, _, err := runAssay("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
 	require.NoError(t, err)
 
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
-	hold, err := hub.AcquireHub(ws, "Vibe Studio")
+	hold, err := hub.AcquireHub(ws, "Assay")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
-	_, _, err = runVibe("query", "--workspace", root, "SELECT * FROM t")
+	_, _, err = runAssay("query", "--workspace", root, "SELECT * FROM t")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, hub.ErrHubHeld)
-	assert.Contains(t, err.Error(), "Vibe Studio (pid ")
+	assert.Contains(t, err.Error(), "Assay (pid ")
 	assert.Contains(t, err.Error(), "--read-only")
 
 	// Nothing in this process has the DuckDB file open (only the lock is
 	// held), so a read-only reader gets through.
-	out, stderr, err := runVibe("query", "--workspace", root, "--read-only", "--format", "csv", "SELECT * FROM t")
+	out, stderr, err := runAssay("query", "--workspace", root, "--read-only", "--format", "csv", "SELECT * FROM t")
 	require.NoError(t, err, stderr)
 	assert.Equal(t, "id\n1\n", out)
 
-	_, _, err = runVibe("query", "--workspace", root, "--read-only", "INSERT INTO t VALUES (2)")
+	_, _, err = runAssay("query", "--workspace", root, "--read-only", "INSERT INTO t VALUES (2)")
 	require.Error(t, err, "a read-only attach cannot write")
 }
 
 func TestQuery_ReadOnlyOnAFreshWorkspaceSaysThereIsNoData(t *testing.T) {
 	root := newWS(t)
-	_, _, err := runVibe("query", "--workspace", root, "--read-only", "SELECT 1")
+	_, _, err := runAssay("query", "--workspace", root, "--read-only", "SELECT 1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no data file yet")
 	assert.NoFileExists(t, filepath.Join(root, "data", "local.duckdb"))
 }
 
-func TestQuery_RefusesVibeFilesAndBadFlags(t *testing.T) {
+func TestQuery_RefusesAssayFilesAndBadFlags(t *testing.T) {
 	root := newWS(t)
-	_, _, err := runVibe("query", "--workspace", "old.vibe", "SELECT 1")
+	_, _, err := runAssay("query", "--workspace", "old.assay", "SELECT 1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no longer opened")
 
-	_, _, err = runVibe("query", "--workspace", root, "--format", "xml", "SELECT 1")
+	_, _, err = runAssay("query", "--workspace", root, "--format", "xml", "SELECT 1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported format")
 }
@@ -434,16 +434,16 @@ func TestImport_CreatesTableWithPK(t *testing.T) {
 	root := newWS(t)
 	csvPath := writeFile(t, t.TempDir(), "customers.csv", "customer_id,name\n1,Ann\n2,Bob\n")
 
-	out, stderr, err := runVibe("import", csvPath, "--workspace", root)
+	out, stderr, err := runAssay("import", csvPath, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Imported 2 row(s)")
 	assert.Contains(t, out, "customers")
 
-	q, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT name FROM customers ORDER BY customer_id")
+	q, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT name FROM customers ORDER BY customer_id")
 	require.NoError(t, err)
 	assert.Equal(t, "name\nAnn\nBob\n", q)
 
-	q, _, err = runVibe("query", "--workspace", root, "--format", "csv",
+	q, _, err = runAssay("query", "--workspace", root, "--format", "csv",
 		`SELECT count(*) FROM duckdb_constraints() WHERE table_name='customers' AND constraint_type='PRIMARY KEY'`)
 	require.NoError(t, err)
 	assert.Contains(t, q, "1", "the suggested customer_id key is used")
@@ -460,16 +460,16 @@ func TestImport_CreatesTableWithPK(t *testing.T) {
 
 // TestImport_LandsInTheWorkspaceNotAnEnvelope is the #72 regression: the CLI
 // used to write into the SQLite envelope, where nothing else could see it.
-// An imported table must be visible to `vibe query` and to a fresh
+// An imported table must be visible to `assay query` and to a fresh
 // workspace.OpenSession (what Studio and `mcp serve` use), and lives in the
 // default connection's DuckDB file.
 func TestImport_LandsInTheWorkspaceNotAnEnvelope(t *testing.T) {
 	root := newWS(t)
 	csvPath := writeFile(t, t.TempDir(), "sales.csv", "id,amount\n1,10.5\n2,20\n")
-	_, stderr, err := runVibe("import", csvPath, "--into", "sales", "--workspace", root)
+	_, stderr, err := runAssay("import", csvPath, "--into", "sales", "--workspace", root)
 	require.NoError(t, err, stderr)
 
-	out, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT sum(amount) AS total FROM sales")
+	out, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT sum(amount) AS total FROM sales")
 	require.NoError(t, err)
 	assert.Contains(t, out, "30.5")
 
@@ -490,14 +490,14 @@ func TestImport_LandsInTheWorkspaceNotAnEnvelope(t *testing.T) {
 	defer db.Close() //nolint:errcheck
 	require.NoError(t, db.QueryRow("SELECT count(*) FROM sales").Scan(&n))
 	assert.Equal(t, 2, n)
-	assert.Empty(t, globVibeFiles(t, root), "no .vibe envelope is ever written")
+	assert.Empty(t, globAssayFiles(t, root), "no .assay envelope is ever written")
 }
 
-func globVibeFiles(t *testing.T, root string) []string {
+func globAssayFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var found []string
 	require.NoError(t, filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err == nil && strings.EqualFold(filepath.Ext(p), ".vibe") {
+		if err == nil && strings.EqualFold(filepath.Ext(p), ".assay") {
 			found = append(found, p)
 		}
 		return nil
@@ -515,14 +515,14 @@ func TestImport_IntoQualifiedConnection(t *testing.T) {
 	addConnection(t, root, workspace.ConnectionDef{Name: "other", Type: "duckdb", Path: "data/other.duckdb", ReadOnly: &rw})
 
 	csvPath := writeFile(t, t.TempDir(), "items.csv", "id,label\n1,a\n")
-	out, stderr, err := runVibe("import", csvPath, "--into", "other.items", "--workspace", root)
+	out, stderr, err := runAssay("import", csvPath, "--into", "other.items", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "other.main.items")
 
-	q, _, err := runVibe("query", "--workspace", root, "-c", "other", "--format", "csv", "SELECT label FROM items")
+	q, _, err := runAssay("query", "--workspace", root, "-c", "other", "--format", "csv", "SELECT label FROM items")
 	require.NoError(t, err)
 	assert.Equal(t, "label\na\n", q)
-	_, _, err = runVibe("query", "--workspace", root, "SELECT * FROM items")
+	_, _, err = runAssay("query", "--workspace", root, "SELECT * FROM items")
 	require.Error(t, err, "the default connection has no such table")
 }
 
@@ -535,7 +535,7 @@ func TestImport_RefusesReadOnlyConnection(t *testing.T) {
 	addConnection(t, root, workspace.ConnectionDef{Name: "archive", Type: "duckdb", Path: "data/archive.duckdb"})
 
 	csvPath := writeFile(t, t.TempDir(), "items.csv", "id\n1\n")
-	_, _, err = runVibe("import", csvPath, "--into", "archive.items", "--workspace", root)
+	_, _, err = runAssay("import", csvPath, "--into", "archive.items", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read-only")
 	assert.Contains(t, err.Error(), "read_only: false")
@@ -545,35 +545,35 @@ func TestImport_RerunNeedsAMode_UpsertAndAppend(t *testing.T) {
 	root := newWS(t)
 	dir := t.TempDir()
 	csvPath := writeFile(t, dir, "customers.csv", "customer_id,name\n1,Ann\n")
-	_, _, err := runVibe("import", csvPath, "--workspace", root)
+	_, _, err := runAssay("import", csvPath, "--workspace", root)
 	require.NoError(t, err)
 
-	out, _, err := runVibe("import", csvPath, "--workspace", root)
+	out, _, err := runAssay("import", csvPath, "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, out, "--mode")
 
 	csv2 := writeFile(t, dir, "customers.csv", "customer_id,name\n1,Ann\n2,Bob\n")
-	out, _, err = runVibe("import", csv2, "--workspace", root, "--mode", "upsert")
+	out, _, err = runAssay("import", csv2, "--workspace", root, "--mode", "upsert")
 	require.NoError(t, err)
 	assert.Contains(t, out, "1 new, 0 changed, 1 unchanged")
 
 	csv3 := writeFile(t, dir, "customers.csv", "customer_id,name\n3,Cy\n")
-	out, _, err = runVibe("import", csv3, "--workspace", root, "--mode", "append")
+	out, _, err = runAssay("import", csv3, "--workspace", root, "--mode", "append")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Added 1 row(s)")
 
-	_, _, err = runVibe("import", csv3, "--workspace", root, "--mode", "bogus")
+	_, _, err = runAssay("import", csv3, "--workspace", root, "--mode", "bogus")
 	require.Error(t, err)
 }
 
 func TestImport_DryRunWritesNothing(t *testing.T) {
 	root := newWS(t)
 	csvPath := writeFile(t, t.TempDir(), "customers.csv", "customer_id,name\n1,Ann\n")
-	out, _, err := runVibe("import", csvPath, "--workspace", root, "--dry-run")
+	out, _, err := runAssay("import", csvPath, "--workspace", root, "--dry-run")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Would import 1 row(s)")
 
-	_, _, err = runVibe("query", "--workspace", root, "SELECT * FROM customers")
+	_, _, err = runAssay("query", "--workspace", root, "SELECT * FROM customers")
 	require.Error(t, err, "a dry run must leave no table behind")
 
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
@@ -583,18 +583,18 @@ func TestImport_DryRunWritesNothing(t *testing.T) {
 	assert.Empty(t, sk, "no skill from a dry run")
 }
 
-func TestImport_UnsupportedFileTypeAndVibeFile(t *testing.T) {
+func TestImport_UnsupportedFileTypeAndAssayFile(t *testing.T) {
 	root := newWS(t)
 	p := writeFile(t, t.TempDir(), "x.parquet", "not parquet")
-	_, _, err := runVibe("import", p, "--workspace", root)
+	_, _, err := runAssay("import", p, "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported file type")
 
-	// A .vibe argument is a bundle now; an older container is refused plainly.
-	old := writeFile(t, t.TempDir(), "old.vibe", "SQLite format 3\x00 and then some data")
-	_, _, err = runVibe("import", old, "--workspace", root)
+	// A .assay argument is a bundle now; an older container is refused plainly.
+	old := writeFile(t, t.TempDir(), "old.assay", "SQLite format 3\x00 and then some data")
+	_, _, err = runAssay("import", old, "--workspace", root)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "older .vibe file that holds data")
+	assert.Contains(t, err.Error(), "older .assay file that holds data")
 }
 
 func TestImport_WhenAnotherProcessOwnsTheHub(t *testing.T) {
@@ -602,22 +602,22 @@ func TestImport_WhenAnotherProcessOwnsTheHub(t *testing.T) {
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
-	hold, err := hub.AcquireHub(ws, "vibe mcp serve")
+	hold, err := hub.AcquireHub(ws, "assay mcp serve")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
 	csvPath := writeFile(t, t.TempDir(), "c.csv", "id\n1\n")
-	_, _, err = runVibe("import", csvPath, "--workspace", root)
+	_, _, err = runAssay("import", csvPath, "--workspace", root)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, hub.ErrHubHeld)
-	assert.Contains(t, err.Error(), "vibe mcp serve (pid ")
+	assert.Contains(t, err.Error(), "assay mcp serve (pid ")
 }
 
 func seededWS(t *testing.T) string {
 	t.Helper()
 	root := newWS(t)
 	csvPath := writeFile(t, t.TempDir(), "people.csv", "id,name\n1,Ann\n2,\"Bob, Jr\"\n")
-	_, stderr, err := runVibe("import", csvPath, "--workspace", root)
+	_, stderr, err := runAssay("import", csvPath, "--workspace", root)
 	require.NoError(t, err, stderr)
 	return root
 }
@@ -627,14 +627,14 @@ func TestExport_FilesByExtension(t *testing.T) {
 	dst := t.TempDir()
 
 	csvOut := filepath.Join(dst, "people.csv")
-	out, stderr, err := runVibe("export", "people", "-o", csvOut, "--workspace", root)
+	out, stderr, err := runAssay("export", "people", "-o", csvOut, "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Exported to "+csvOut)
 	b, _ := os.ReadFile(csvOut)
 	assert.Contains(t, string(b), `"Bob, Jr"`, "a comma in a value is quoted")
 
 	jsonOut := filepath.Join(dst, "people.json")
-	_, _, err = runVibe("export", "local.people", "-o", jsonOut, "--workspace", root)
+	_, _, err = runAssay("export", "local.people", "-o", jsonOut, "--workspace", root)
 	require.NoError(t, err)
 	b, _ = os.ReadFile(jsonOut)
 	var rows []map[string]any
@@ -642,34 +642,34 @@ func TestExport_FilesByExtension(t *testing.T) {
 	assert.Len(t, rows, 2)
 
 	pq := filepath.Join(dst, "people.parquet")
-	_, _, err = runVibe("export", "--sql", "SELECT name FROM people WHERE id = 1", "-o", pq, "--workspace", root)
+	_, _, err = runAssay("export", "--sql", "SELECT name FROM people WHERE id = 1", "-o", pq, "--workspace", root)
 	require.NoError(t, err)
 	fi, err := os.Stat(pq)
 	require.NoError(t, err)
 	assert.Greater(t, fi.Size(), int64(0))
-	got, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT * FROM read_parquet('"+pq+"')")
+	got, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT * FROM read_parquet('"+pq+"')")
 	require.NoError(t, err)
 	assert.Equal(t, "name\nAnn\n", got)
 }
 
 func TestExport_StdoutAndRefusals(t *testing.T) {
 	root := seededWS(t)
-	out, _, err := runVibe("export", "people", "--workspace", root)
+	out, _, err := runAssay("export", "people", "--workspace", root)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(out, "id,name\n"), out)
 
-	out, _, err = runVibe("export", "people", "--format", "json", "--workspace", root)
+	out, _, err = runAssay("export", "people", "--format", "json", "--workspace", root)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(out, "["), out)
 
 	dst := filepath.Join(t.TempDir(), "p.csv")
 	require.NoError(t, os.WriteFile(dst, []byte("keep me"), 0o644))
-	_, _, err = runVibe("export", "people", "-o", dst, "--workspace", root)
+	_, _, err = runAssay("export", "people", "-o", dst, "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--force")
 	b, _ := os.ReadFile(dst)
 	assert.Equal(t, "keep me", string(b), "an existing file is not touched without --force")
-	_, _, err = runVibe("export", "people", "-o", dst, "--force", "--workspace", root)
+	_, _, err = runAssay("export", "people", "-o", dst, "--force", "--workspace", root)
 	require.NoError(t, err)
 	b, _ = os.ReadFile(dst)
 	assert.Contains(t, string(b), "Ann")
@@ -678,11 +678,11 @@ func TestExport_StdoutAndRefusals(t *testing.T) {
 		{"export", "--workspace", root},
 		{"export", "people", "--sql", "SELECT 1", "--workspace", root},
 		{"export", "people", "-o", "x.txt", "--workspace", root},
-		{"export", "./old.vibe", "--workspace", root},
+		{"export", "./old.assay", "--workspace", root},
 		{"export", "--sql", "ATTACH 'x' AS y", "-o", filepath.Join(t.TempDir(), "a.csv"), "--workspace", root},
 		{"export", "nosuchtable", "-o", filepath.Join(t.TempDir(), "n.csv"), "--workspace", root},
 	} {
-		_, _, err = runVibe(args...)
+		_, _, err = runAssay(args...)
 		assert.Error(t, err, "%v", args)
 	}
 }
@@ -692,23 +692,23 @@ func TestExport_ReadOnlyDoesNotNeedTheHub(t *testing.T) {
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
-	hold, err := hub.AcquireHub(ws, "Vibe Studio")
+	hold, err := hub.AcquireHub(ws, "Assay")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
-	_, _, err = runVibe("export", "people", "--workspace", root)
+	_, _, err = runAssay("export", "people", "--workspace", root)
 	require.ErrorIs(t, err, hub.ErrHubHeld)
-	out, stderr, err := runVibe("export", "people", "--read-only", "--workspace", root)
+	out, stderr, err := runAssay("export", "people", "--read-only", "--workspace", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "Ann")
 }
 
 func TestRemovedContainerCommandsPointToWorkspaces(t *testing.T) {
 	for _, name := range []string{"info", "verify", "compact", "rekey", "dump", "passphrase"} {
-		_, _, err := runVibe(name, "old.vibe")
+		_, _, err := runAssay(name, "old.assay")
 		require.Error(t, err, name)
 		assert.Contains(t, err.Error(), "no longer opened", name)
-		assert.Contains(t, err.Error(), "vibe workspace init", name)
+		assert.Contains(t, err.Error(), "assay workspace init", name)
 	}
 }
 
@@ -727,8 +727,8 @@ func slowKeys(keys ...string) io.Reader {
 	return pr
 }
 
-func TestStudio_RefusesVibeFiles(t *testing.T) {
-	_, _, err := runVibe("studio", "old.vibe")
+func TestStudio_RefusesAssayFiles(t *testing.T) {
+	_, _, err := runAssay("studio", "old.assay")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no longer opened")
 }
@@ -738,9 +738,9 @@ func TestStudio_RefusesVibeFiles(t *testing.T) {
 func TestStudioTUI_RunsOnTheWorkspace(t *testing.T) {
 	root := newWS(t, "--template", "contacts")
 	// \t switches to Tables, \t again to Notebooks; ctrl+c quits.
-	out, stderr, err := runVibeIn(slowKeys("\t", "\t", "\x03"), "studio", root)
+	out, stderr, err := runAssayIn(slowKeys("\t", "\t", "\x03"), "studio", root)
 	require.NoError(t, err, stderr)
-	assert.Contains(t, out, "VIBE STUDIO")
+	assert.Contains(t, out, "ASSAY STUDIO")
 	assert.Contains(t, out, "acme")
 	assert.Contains(t, out, "Contacts", "the starter notebook is listed")
 	assert.NotContains(t, out, "[read-only]")
@@ -755,14 +755,14 @@ func TestStudioTUI_ReadOnlyMarksTheStatusBarAndSkipsTheLock(t *testing.T) {
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
 	defer ws.Close() //nolint:errcheck
-	hold, err := hub.AcquireHub(ws, "Vibe Studio")
+	hold, err := hub.AcquireHub(ws, "Assay")
 	require.NoError(t, err)
 	defer hold.Release() //nolint:errcheck
 
-	_, _, err = runVibeIn(strings.NewReader("\x03"), "studio", "--tui", root)
+	_, _, err = runAssayIn(strings.NewReader("\x03"), "studio", "--tui", root)
 	require.ErrorIs(t, err, hub.ErrHubHeld, "stdin is not a terminal, so there is no prompt, just advice")
 
-	out, stderr, err := runVibeIn(slowKeys("\t", "\x03"), "studio", "--read-only", root)
+	out, stderr, err := runAssayIn(slowKeys("\t", "\x03"), "studio", "--read-only", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "[read-only]")
 	assert.Contains(t, out, "people", "the table browser lists the default connection's tables")
@@ -770,29 +770,29 @@ func TestStudioTUI_ReadOnlyMarksTheStatusBarAndSkipsTheLock(t *testing.T) {
 
 func TestStudio_GuiAcceptsAFolder(t *testing.T) {
 	root := newWS(t)
-	t.Setenv("PATH", t.TempDir()) // no vibe-studio to exec: we only check the folder is accepted
-	_, _, err := runVibe("studio", "--gui", root)
+	t.Setenv("PATH", t.TempDir()) // no assay-studio to exec: we only check the folder is accepted
+	_, _, err := runAssay("studio", "--gui", root)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "vibe-studio binary not found", "a folder argument is no longer refused")
+	assert.Contains(t, err.Error(), "assay-studio binary not found", "a folder argument is no longer refused")
 	assert.NotContains(t, err.Error(), "#111")
 }
 
-func TestStudio_GuiPassesAVibeBundleToTheApp(t *testing.T) {
-	// The desktop app opens its Import dialog for a .vibe; only the terminal UI
+func TestStudio_GuiPassesAAssayBundleToTheApp(t *testing.T) {
+	// The desktop app opens its Import dialog for a .assay; only the terminal UI
 	// (which has no import flow) refuses one.
-	t.Setenv("PATH", t.TempDir()) // no vibe-studio to exec (not even one in ~/go/bin)
-	_, _, err := runVibe("studio", "--gui", filepath.Join(t.TempDir(), "x.vibe"))
+	t.Setenv("PATH", t.TempDir()) // no assay-studio to exec (not even one in ~/go/bin)
+	_, _, err := runAssay("studio", "--gui", filepath.Join(t.TempDir(), "x.assay"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "vibe-studio binary not found")
+	assert.Contains(t, err.Error(), "assay-studio binary not found")
 	assert.NotErrorIs(t, err, errLegacyFileArg)
 
-	_, _, err = runVibe("studio", filepath.Join(t.TempDir(), "x.vibe"))
+	_, _, err = runAssay("studio", filepath.Join(t.TempDir(), "x.assay"))
 	assert.ErrorIs(t, err, errLegacyFileArg)
 }
 
 func TestStudio_TuiFlagStillAccepted(t *testing.T) {
 	root := newWS(t)
-	_, stderr, err := runVibeIn(slowKeys("\x03"), "studio", "--tui", root)
+	_, stderr, err := runAssayIn(slowKeys("\x03"), "studio", "--tui", root)
 	require.NoError(t, err, stderr)
 }
 
@@ -804,27 +804,27 @@ func TestStudioTUI_REPLRefusesAttach(t *testing.T) {
 		keys = append(keys, string(r))
 	}
 	keys = append(keys, "\r", "\x03")
-	out, stderr, err := runVibeIn(slowKeys(keys...), "studio", root)
+	out, stderr, err := runAssayIn(slowKeys(keys...), "studio", root)
 	require.NoError(t, err, stderr)
 	assert.Contains(t, out, "not available here")
 }
 
-func TestIsVibeTableArg(t *testing.T) {
+func TestIsAssayTableArg(t *testing.T) {
 	dir := t.TempDir()
-	real := writeFile(t, dir, "old.vibe", "x")
-	assert.True(t, isVibeTableArg(real), "an existing file")
-	assert.True(t, isVibeTableArg("./old.vibe"))
-	assert.True(t, isVibeTableArg("dir/old.vibe"))
-	assert.False(t, isVibeTableArg("s.vibe"), "schema.table shape, no such file")
-	assert.False(t, isVibeTableArg("SELECT * FROM s.vibe"))
-	assert.False(t, isVibeTableArg(`"my.vibe"`))
-	assert.False(t, isVibeTableArg("orders"))
-	assert.True(t, isVibeFile("old.vibe"), "a path argument")
+	real := writeFile(t, dir, "old.assay", "x")
+	assert.True(t, isAssayTableArg(real), "an existing file")
+	assert.True(t, isAssayTableArg("./old.assay"))
+	assert.True(t, isAssayTableArg("dir/old.assay"))
+	assert.False(t, isAssayTableArg("s.assay"), "schema.table shape, no such file")
+	assert.False(t, isAssayTableArg("SELECT * FROM s.assay"))
+	assert.False(t, isAssayTableArg(`"my.assay"`))
+	assert.False(t, isAssayTableArg("orders"))
+	assert.True(t, isAssayFile("old.assay"), "a path argument")
 }
 
-func TestExport_TableNamedLikeAVibeFileIsATable(t *testing.T) {
+func TestExport_TableNamedLikeAAssayFileIsATable(t *testing.T) {
 	root := newWS(t)
-	_, _, err := runVibe("export", "s.vibe", "--workspace", root)
+	_, _, err := runAssay("export", "s.assay", "--workspace", root)
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "no longer opened")
 }
@@ -838,13 +838,13 @@ func TestExport_SQLMustBeOneSelect(t *testing.T) {
 		"SELECT 1; DROP TABLE people",
 		"INSERT INTO people VALUES (9, 'x')",
 	} {
-		_, _, err := runVibe("export", "--sql", q, "-o", dst, "--workspace", root)
+		_, _, err := runAssay("export", "--sql", q, "-o", dst, "--workspace", root)
 		require.Error(t, err, q)
-		_, _, err = runVibe("export", "--sql", q, "--workspace", root)
+		_, _, err = runAssay("export", "--sql", q, "--workspace", root)
 		require.Error(t, err, "also without -o: %s", q)
 	}
 	assert.NoFileExists(t, dst)
-	out, _, err := runVibe("query", "--workspace", root, "--format", "csv", "SELECT count(*) FROM people")
+	out, _, err := runAssay("query", "--workspace", root, "--format", "csv", "SELECT count(*) FROM people")
 	require.NoError(t, err)
 	assert.Equal(t, "count_star()\n2\n", out, "the table survived")
 }
@@ -855,7 +855,7 @@ func TestExport_DanglingSymlinkNeedsForce(t *testing.T) {
 	target := filepath.Join(dir, "elsewhere.csv")
 	link := filepath.Join(dir, "out.csv")
 	require.NoError(t, os.Symlink(target, link))
-	_, _, err := runVibe("export", "people", "-o", link, "--workspace", root)
+	_, _, err := runAssay("export", "people", "-o", link, "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--force")
 	assert.NoFileExists(t, target)
@@ -865,10 +865,10 @@ func TestExportAndImport_ReportADownConnectionBeforeAMissingTable(t *testing.T) 
 	root := newWS(t)
 	addConnection(t, root, workspace.ConnectionDef{Name: "gone", Type: "duckdb", Path: "data/gone.duckdb"})
 	csvPath := writeFile(t, t.TempDir(), "t.csv", "id\n1\n")
-	_, _, err := runVibe("export", "gone.t", "--workspace", root)
+	_, _, err := runAssay("export", "gone.t", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection gone is not available")
-	_, _, err = runVibe("import", csvPath, "--into", "gone.t", "--workspace", root)
+	_, _, err = runAssay("import", csvPath, "--into", "gone.t", "--workspace", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection gone is not available")
 }
@@ -877,35 +877,35 @@ func TestExportAndImport_ReportADownConnectionBeforeAMissingTable(t *testing.T) 
 // accurate, not a dead end.
 func TestHeldWorkspace_AdviceIsAccurate(t *testing.T) {
 	root, cfg := newCmdWorkspace(t)
-	_, _, err := runVibe("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
+	_, _, err := runAssay("query", "--workspace", root, "CREATE TABLE t AS SELECT 1 AS id")
 	require.NoError(t, err)
 
-	_, in, out, stderr := vibeProc(t, cfg, "mcp", "serve", "--workspace", root)
+	_, in, out, stderr := assayProc(t, cfg, "mcp", "serve", "--workspace", root)
 	_, err = io.WriteString(in, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`+"\n")
 	require.NoError(t, err)
 	require.True(t, out.Scan(), stderr.String())
 
 	// A command with a --read-only flag suggests it and says what it reaches.
-	_, _, err = runVibe("query", "--workspace", root, "SELECT 1")
+	_, _, err = runAssay("query", "--workspace", root, "SELECT 1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--read-only")
 	assert.Contains(t, err.Error(), "other than local DuckDB files")
 
 	// import has no such flag, so it must not suggest one.
 	csvPath := writeFile(t, t.TempDir(), "c.csv", "id\n1\n")
-	_, _, err = runVibe("import", csvPath, "--workspace", root)
+	_, _, err = runAssay("import", csvPath, "--workspace", root)
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "--read-only")
 	assert.Contains(t, err.Error(), "close it first")
 
 	// --read-only against the held local file: plain words, not DuckDB's error.
-	_, _, err = runVibe("query", "--workspace", root, "--read-only", "SELECT * FROM t")
+	_, _, err = runAssay("query", "--workspace", root, "--read-only", "SELECT * FROM t")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "has open for writing")
 	assert.NotContains(t, err.Error(), "Conflicting lock")
-	assert.Contains(t, err.Error(), "vibe mcp serve")
+	assert.Contains(t, err.Error(), "assay mcp serve")
 
-	js, _, err := runVibe("workspace", "info", "--workspace", root, "--json")
+	js, _, err := runAssay("workspace", "info", "--workspace", root, "--json")
 	require.NoError(t, err)
 	var rep infoReport
 	require.NoError(t, json.Unmarshal([]byte(js), &rep))
@@ -915,7 +915,7 @@ func TestHeldWorkspace_AdviceIsAccurate(t *testing.T) {
 
 	// The TUI refuses to open on a locked default database instead of showing
 	// an empty screen.
-	_, _, err = runVibeIn(slowKeys("\x03"), "studio", "--read-only", root)
+	_, _, err = runAssayIn(slowKeys("\x03"), "studio", "--read-only", root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "has open for writing")
 }
@@ -930,7 +930,7 @@ func TestGuiTarget(t *testing.T) {
 	assert.Equal(t, root, guiTarget(sub), "a folder inside a workspace opens its root")
 	assert.Equal(t, root, guiTarget(root))
 	assert.Equal(t, plain, guiTarget(plain), "a plain folder passes through")
-	b := filepath.Join(plain, "x.vibe")
+	b := filepath.Join(plain, "x.assay")
 	assert.Equal(t, b, guiTarget(b), "a bundle passes through")
 
 	t.Chdir(sub)
@@ -946,10 +946,10 @@ func TestConnStatusWords_InfoAndListAgree(t *testing.T) {
 	root := newWS(t)
 	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
 	require.NoError(t, err)
-	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "broken", Type: "sqlite", Path: "${NO_SUCH_VIBE_VAR}/x.sqlite"}))
+	require.NoError(t, ws.AddConnection(workspace.ScopeLocal, workspace.ConnectionDef{Name: "broken", Type: "sqlite", Path: "${NO_SUCH_ASSAY_VAR}/x.sqlite"}))
 	require.NoError(t, ws.Close())
 
-	js, _, err := runVibe("workspace", "info", "--workspace", root, "--json")
+	js, _, err := runAssay("workspace", "info", "--workspace", root, "--json")
 	require.NoError(t, err)
 	var rep infoReport
 	require.NoError(t, json.Unmarshal([]byte(js), &rep))
@@ -958,7 +958,7 @@ func TestConnStatusWords_InfoAndListAgree(t *testing.T) {
 		infoStatus[c.Name] = c.Status
 	}
 
-	lj, _, err := runVibe("conn", "list", "--json", "--workspace", root)
+	lj, _, err := runAssay("conn", "list", "--json", "--workspace", root)
 	require.NoError(t, err)
 	var rows []connRow
 	require.NoError(t, json.Unmarshal([]byte(lj), &rows))
@@ -986,7 +986,7 @@ func TestQuery_SavedWithParams(t *testing.T) {
 	require.NoError(t, ws.Close())
 
 	run := func(args ...string) (string, error) {
-		out, _, err := runVibe(append([]string{"query", "--workspace", root, "--format", "csv"}, args...)...)
+		out, _, err := runAssay(append([]string{"query", "--workspace", root, "--format", "csv"}, args...)...)
 		return out, err
 	}
 	out, err := run("--saved", "over")
@@ -1029,18 +1029,18 @@ func TestQuery_SavedShapeIsCheckedLikeTheAgentDoes(t *testing.T) {
 	}
 	require.NoError(t, ws.Close())
 	for id := range cases {
-		_, _, err := runVibe("query", "--workspace", root, "--saved", id)
+		_, _, err := runAssay("query", "--workspace", root, "--saved", id)
 		require.Error(t, err, id)
 		assert.NotContains(t, err.Error(), "failed to execute", id, "refused before the engine ran it")
 	}
 }
 
-func TestRootHelp_ListsVibeRepl(t *testing.T) {
-	out, _, err := runVibe("--help")
+func TestRootHelp_ListsAssayRepl(t *testing.T) {
+	out, _, err := runAssay("--help")
 	require.NoError(t, err)
 	assert.Regexp(t, `(?m)^\s+repl\s`, out)
 	assert.False(t, replCmd.Hidden)
-	help, _, err := runVibe("repl", "--help")
+	help, _, err := runAssay("repl", "--help")
 	require.NoError(t, err)
 	assert.Contains(t, help, "--connection")
 	assert.Contains(t, help, "Console tab")

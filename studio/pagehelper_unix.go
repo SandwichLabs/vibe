@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // claimHelperPipes takes the two descriptors Studio passed and marks both

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 // --- no extension needed -------------------------------------------------
@@ -27,10 +27,10 @@ func TestDenyStatements(t *testing.T) {
 	stmts := denyStatements()
 	require.Len(t, stmts, 4)
 	want := map[string][]string{
-		"vibe-deny-s3":  {"TYPE s3", "SCOPE 's3'", "REGION 'us-east-1'"},
-		"vibe-deny-r2":  {"TYPE r2", "SCOPE 'r2'", "REGION 'auto'"},
-		"vibe-deny-gcs": {"TYPE gcs", "SCOPE 'gcs'", "REGION 'auto'"},
-		"vibe-deny-gs":  {"TYPE gcs", "SCOPE 'gs'", "REGION 'auto'"},
+		"assay-deny-s3":  {"TYPE s3", "SCOPE 's3'", "REGION 'us-east-1'"},
+		"assay-deny-r2":  {"TYPE r2", "SCOPE 'r2'", "REGION 'auto'"},
+		"assay-deny-gcs": {"TYPE gcs", "SCOPE 'gcs'", "REGION 'auto'"},
+		"assay-deny-gs":  {"TYPE gcs", "SCOPE 'gs'", "REGION 'auto'"},
 	}
 	for _, st := range stmts {
 		matched := false
@@ -81,7 +81,7 @@ func (f *fakeDriver) denyCount() int {
 	defer f.mu.Unlock()
 	n := 0
 	for _, s := range f.stmts {
-		if strings.Contains(s, "vibe-deny-") {
+		if strings.Contains(s, "assay-deny-") {
 			n++
 		}
 	}
@@ -286,9 +286,9 @@ func TestHostAWSEnvNeverSignsAnUncoveredRead(t *testing.T) {
 		return err
 	}
 	for _, c := range []struct{ url, kind, secret string }{
-		{"s3://other/x.parquet", "s3", "vibe-deny-s3"}, {"s3a://other/x.parquet", "s3", "vibe-deny-s3"},
-		{"s3n://other/x.parquet", "s3", "vibe-deny-s3"}, {"r2://other/x.parquet", "r2", "vibe-deny-r2"},
-		{"gcs://other/x.parquet", "gcs", "vibe-deny-gcs"}, {"gs://other/x.parquet", "gcs", "vibe-deny-gs"},
+		{"s3://other/x.parquet", "s3", "assay-deny-s3"}, {"s3a://other/x.parquet", "s3", "assay-deny-s3"},
+		{"s3n://other/x.parquet", "s3", "assay-deny-s3"}, {"r2://other/x.parquet", "r2", "assay-deny-r2"},
+		{"gcs://other/x.parquet", "gcs", "assay-deny-gcs"}, {"gs://other/x.parquet", "gcs", "assay-deny-gs"},
 	} {
 		require.Equal(t, c.secret, whichSecret(t, s, c.url, c.kind), "%s must be matched by the deny secret before it is read", c.url)
 		err := read(c.url)
@@ -301,7 +301,7 @@ func TestHostAWSEnvNeverSignsAnUncoveredRead(t *testing.T) {
 	// A URL's own ?s3_* parameters can redirect the request. The deny secret
 	// carries no host token or region, so even then nothing host-derived is sent.
 	q := "s3://other/x.parquet?s3_endpoint=" + host + "&s3_use_ssl=false&s3_url_style=path&s3_access_key_id=Q&s3_secret_access_key=Q"
-	require.Equal(t, "vibe-deny-s3", whichSecret(t, s, q, "s3"))
+	require.Equal(t, "assay-deny-s3", whichSecret(t, s, q, "s3"))
 	_ = read(q)
 	assert.Empty(t, log.tokens(), "the host session token never reaches an endpoint a URL chose")
 	for _, a := range log.all() {
@@ -309,13 +309,13 @@ func TestHostAWSEnvNeverSignsAnUncoveredRead(t *testing.T) {
 	}
 
 	// A scoped secret still wins for its own URLs, and signs with its own key.
-	require.NoError(t, s.CreateTemporarySecret(ctx, "vibe_lake", "s3", []SecretParam{
+	require.NoError(t, s.CreateTemporarySecret(ctx, "assay_lake", "s3", []SecretParam{
 		{Key: "SCOPE", Value: "s3://mine/"}, {Key: "KEY_ID", Value: "OWNKEYID"},
 		{Key: "SECRET", Value: "OWNSECRET", Secret: true}, {Key: "SESSION_TOKEN", Value: "", Secret: true},
 		{Key: "REGION", Value: "us-east-1"},
 		{Key: "ENDPOINT", Value: host}, {Key: "URL_STYLE", Value: "path"}, {Key: "USE_SSL", Value: false},
 	}))
-	require.Equal(t, "vibe_lake", whichSecret(t, s, "s3://mine/x.parquet", "s3"))
+	require.Equal(t, "assay_lake", whichSecret(t, s, "s3://mine/x.parquet", "s3"))
 	require.Error(t, read("s3://mine/x.parquet"), "the fake server answers 403")
 	got := log.all()
 	require.NotEmpty(t, got, "the covered read reached its own endpoint")
@@ -326,7 +326,7 @@ func TestHostAWSEnvNeverSignsAnUncoveredRead(t *testing.T) {
 		assert.Contains(t, a, "Credential=OWNKEYID/")
 	}
 	assert.Empty(t, log.tokens())
-	require.Equal(t, "vibe-deny-s3", whichSecret(t, s, "s3://mine2/x.parquet", "s3"), "a sibling bucket is uncovered")
+	require.Equal(t, "assay-deny-s3", whichSecret(t, s, "s3://mine2/x.parquet", "s3"), "a sibling bucket is uncovered")
 }
 
 func TestDenyScopeIsShorterThanAnyRealScope(t *testing.T) {
@@ -337,12 +337,12 @@ func TestDenyScopeIsShorterThanAnyRealScope(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	ctx := context.Background()
 	require.NoError(t, EnsureExtension(ctx, s.DB(), "httpfs", "test"))
-	require.NoError(t, s.CreateTemporarySecret(ctx, "vibe_all", "s3", []SecretParam{
+	require.NoError(t, s.CreateTemporarySecret(ctx, "assay_all", "s3", []SecretParam{
 		{Key: "SCOPE", Value: "s3://"}, {Key: "KEY_ID", Value: "OWNKEYID"}, {Key: "SECRET", Value: "OWNSECRET", Secret: true},
 		{Key: "REGION", Value: "us-east-1"}, {Key: "ENDPOINT", Value: strings.TrimPrefix(srv.URL, "http://")},
 		{Key: "URL_STYLE", Value: "path"}, {Key: "USE_SSL", Value: false},
 	}))
-	require.Equal(t, "vibe_all", whichSecret(t, s, "s3://anything/x.parquet", "s3"))
+	require.Equal(t, "assay_all", whichSecret(t, s, "s3://anything/x.parquet", "s3"))
 	_, err = s.DB().ExecContext(ctx, "SELECT count(*) FROM read_parquet('s3://anything/x.parquet')")
 	require.Error(t, err)
 	assert.NotEmpty(t, log.all(), "the whole-scheme connection won")
@@ -354,7 +354,7 @@ func TestDenySecretsExistAsSoonAsTheSessionOpens(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	var n int
-	require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM duckdb_secrets() WHERE name LIKE 'vibe-deny-%'").Scan(&n))
+	require.NoError(t, s.DB().QueryRow("SELECT count(*) FROM duckdb_secrets() WHERE name LIKE 'assay-deny-%'").Scan(&n))
 	assert.Equal(t, len(denySecrets), n, "httpfs is installed, so it is loaded and protected before the session is handed out")
 	require.NoError(t, DenyUncoveredStorage(context.Background(), s.DB()))
 }

@@ -141,7 +141,7 @@ onUnmounted(() => {
     <div v-if="!loading && localTables.length === 0" class="card" style="padding: 18px 20px;" data-testid="home-no-tables">
       <div class="sh-body" style="color: var(--sh-graphite);">
         <template v-if="readOnly">The workspace's database is in use by another program, so its tables can't be listed yet.</template>
-        <template v-else>No tables yet. Import a CSV, or ask the agent to build one.</template>
+        <template v-else>No tables yet. Import a CSV, or ask the assistant to build one.</template>
       </div>
     </div>
     <div v-else-if="!loading" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 8px;" data-testid="home-tables">

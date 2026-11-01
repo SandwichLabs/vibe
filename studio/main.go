@@ -1,4 +1,4 @@
-// Command studio is the Vibe desktop app: a Wails v2 shell whose bound App
+// Command studio is the Assay desktop app: a Wails v2 shell whose bound App
 // exposes the workspace, connections, notebooks and agent to the Vue frontend.
 package main
 
@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/SandwichLabs/vibe/internal/connections"
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/connections"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -35,7 +35,7 @@ var (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Printf("vibe-studio %s (commit: %s, built: %s)\n", version, commit, date)
+		fmt.Printf("assay-studio %s (commit: %s, built: %s)\n", version, commit, date)
 		return
 	}
 
@@ -48,7 +48,7 @@ func main() {
 
 	// The MotherDuck connection test re-executes the running binary with this
 	// hidden argument (one MotherDuck token per process, #115). When Studio is
-	// that binary it answers the same way `vibe __conn-test` does, before any
+	// that binary it answers the same way `assay __conn-test` does, before any
 	// window or app state exists.
 	if len(os.Args) > 1 && os.Args[1] == connections.ChildCommand {
 		if err := connections.RunChild(context.Background(), os.Stdin, os.Stdout); err != nil {
@@ -62,18 +62,18 @@ func main() {
 	}))
 
 	app := NewApp(logger)
-	// A workspace folder or .vibe bundle to open at launch (`vibe studio --gui
+	// A workspace folder or .assay bundle to open at launch (`assay studio --gui
 	// <dir>`; a desktop entry passes file:// URIs), else the workspace around
 	// the working directory when started from a terminal (#164).
 	app.setLaunchFromEnvironment(os.Args[1:])
 
 	err := wails.Run(&options.App{
-		Title:  "Vibe Studio",
+		Title:  "Assay",
 		Width:  1280,
 		Height: 800,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
-			// Serves /vibe-view/ (custom artifact views and pinned libraries).
+			// Serves /assay-view/ (custom artifact views and pinned libraries).
 			Middleware: app.views.Middleware(),
 		},
 		OnStartup:  app.startup,
@@ -82,7 +82,7 @@ func main() {
 		// autosave) before the window/process actually closes — see
 		// app.beforeClose's doc comment (review fix, step 4a round 2 #1).
 		OnBeforeClose: app.beforeClose,
-		// macOS delivers "open this with Vibe" (Finder double-click, drop on
+		// macOS delivers "open this with Assay" (Finder double-click, drop on
 		// the Dock icon, `open -a`) as an Apple Event, not argv. It takes the
 		// same route as a command-line argument: queued until the frontend is
 		// ready, an app:open-path event after.

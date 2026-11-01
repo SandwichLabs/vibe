@@ -15,7 +15,7 @@ import (
 // Spike #107: extension install/load vs autoinstall/autoload, community gate,
 // and enable_external_access=false (needs network for INSTALL).
 func TestSpikeExtensionsAndHardening(t *testing.T) {
-	extDir := filepath.Join(os.TempDir(), "vibe-spike-ext")
+	extDir := filepath.Join(os.TempDir(), "assay-spike-ext")
 	require.NoError(t, os.MkdirAll(extDir, 0o755))
 	dsn := "?extension_directory=" + url.QueryEscape(extDir) +
 		"&autoinstall_known_extensions=false&autoload_known_extensions=false&allow_community_extensions=false&allow_persistent_secrets=false"

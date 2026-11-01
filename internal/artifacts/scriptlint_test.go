@@ -9,7 +9,7 @@ import (
 func TestCheckScriptSyntax_AcceptsRealScripts(t *testing.T) {
 	for name, src := range map[string]string{
 		"starter":                "function draw(ctx) { return { svg: '<svg xmlns=\"http://www.w3.org/2000/svg\"/>' } }\n",
-		"async arrow":            "const draw = async ({ params, width }) => {\n  const r = await vibe.run('q', { from: params.from })\n  return { svg: `<svg width=\"${width}\">${r.rows.map((x, i) => `<rect x=\"${i * 10}\" y=\"${x[1] / 2}\"/>`).join('')}</svg>` }\n}\nself.draw = draw",
+		"async arrow":            "const draw = async ({ params, width }) => {\n  const r = await assay.run('q', { from: params.from })\n  return { svg: `<svg width=\"${width}\">${r.rows.map((x, i) => `<rect x=\"${i * 10}\" y=\"${x[1] / 2}\"/>`).join('')}</svg>` }\n}\nself.draw = draw",
 		"regex and division":     "function draw(c) { const a = c.width / 2 / 3; const re = /[/\"']+\\/x/gi; return re.test('a') ? a / 1 : 0 }",
 		"regex after return":     "function draw(c) {\n  return /\\d+/.test('1')\n}",
 		"comments with brackets": "// ( [ {\n/* ) ] } ' \" ` */\nfunction draw(c) { return 1 } // done (",

@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/strictyaml"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/strictyaml"
+	"github.com/SandwichLabs/assay/internal/workspace"
 )
 
 var semanticsCmd = &cobra.Command{
@@ -169,7 +169,7 @@ func foldSpace(s string) string {
 // hide the inbox.
 func hintProposals(cmd *cobra.Command, ws workspace.Workspace) {
 	if n, err := ws.Proposals().OpenCount(cmdCtx(cmd)); err == nil && n > 0 {
-		fmt.Fprintf(cmd.ErrOrStderr(), "%d proposed definition(s) waiting: vibe semantics proposals\n", n)
+		fmt.Fprintf(cmd.ErrOrStderr(), "%d proposed definition(s) waiting: assay semantics proposals\n", n)
 	}
 }
 
@@ -187,9 +187,9 @@ func runSemanticsShow(cmd *cobra.Command, args []string) error {
 	switch {
 	case kind == semantics.KindGlossary && len(args) == 1:
 	case kind == semantics.KindGlossary:
-		return errors.New("the glossary has no name: use \"vibe semantics show glossary\"")
+		return errors.New("the glossary has no name: use \"assay semantics show glossary\"")
 	case len(args) != 2:
-		return fmt.Errorf("usage: vibe semantics show %s <name>", kind)
+		return fmt.Errorf("usage: assay semantics show %s <name>", kind)
 	case kind != semantics.KindEntity && kind != semantics.KindMetric && kind != semantics.KindJoin:
 		return fmt.Errorf("unknown kind %q (want entity, metric, join or glossary)", args[0])
 	default:

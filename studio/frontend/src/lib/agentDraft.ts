@@ -4,7 +4,7 @@
 // caller of send), and no tool or binding is involved.
 import type { LibraryType } from './libraryRoutes'
 
-export const OPEN_AGENT_EVENT = 'vibe:open-agent'
+export const OPEN_AGENT_EVENT = 'assay:open-agent'
 export const MAX_DESCRIPTION = 2000
 
 /** The unsent request for an artifact kind: names the type and the tool. */

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/hub"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/usersql"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/hub"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/usersql"
 	"github.com/spf13/cobra"
 )
 
@@ -84,7 +84,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	o, err := openWorkspace(ctx, e.dir, e.readOnly, true, "vibe export", errW)
+	o, err := openWorkspace(ctx, e.dir, e.readOnly, true, "assay export", errW)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 // validate checks the arguments and flags before the workspace is opened, and
 // returns the COPY options and the lower-cased extension of the destination.
 func (e exportOpts) validate(args []string) (copyOpts, ext string, err error) {
-	if len(args) == 1 && isVibeTableArg(args[0]) {
+	if len(args) == 1 && isAssayTableArg(args[0]) {
 		return "", "", errLegacyFileArg
 	}
 	switch {

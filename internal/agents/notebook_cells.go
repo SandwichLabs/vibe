@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/notebooks"
 )
 
 // --- add_query_cell / create_dashboard (#67 deferred part) ---

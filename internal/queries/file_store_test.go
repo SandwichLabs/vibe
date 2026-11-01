@@ -33,7 +33,7 @@ func TestEncode_Golden(t *testing.T) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
-	assert.True(t, strings.HasPrefix(string(got), "-- vibe: {"))
+	assert.True(t, strings.HasPrefix(string(got), "-- assay: {"))
 	assert.True(t, strings.HasSuffix(string(got), "LIMIT 10\n"))
 	assert.NotContains(t, string(got), "\\u003c")
 }
@@ -94,7 +94,7 @@ func TestFileStore_HeaderlessAndHandEditedFiles(t *testing.T) {
 	assert.Empty(t, q.Parameters)
 	assert.NotNil(t, q.Parameters)
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "queries", "broken.sql"), []byte("-- vibe: {nope\nselect 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "queries", "broken.sql"), []byte("-- assay: {nope\nselect 1\n"), 0o644))
 	gb, err := s.Get(ctx, "broken")
 	require.NoError(t, err, "a malformed header still opens")
 	assert.Contains(t, gb.Error, "header could not be read")
@@ -120,7 +120,7 @@ func TestFileStore_HeaderlessAndHandEditedFiles(t *testing.T) {
 	assert.Equal(t, string(before), string(after))
 
 	// Wrong-shaped parameters are a parse failure too, not "no parameters".
-	require.NoError(t, os.WriteFile(filepath.Join(root, "queries", "shape.sql"), []byte("-- vibe: {\"title\":\"S\",\"parameters\":{\"name\":\"x\"}}\nselect 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "queries", "shape.sql"), []byte("-- assay: {\"title\":\"S\",\"parameters\":{\"name\":\"x\"}}\nselect 1\n"), 0o644))
 	sh, err := s.Get(ctx, "shape")
 	require.NoError(t, err)
 	assert.NotEmpty(t, sh.Error)
@@ -135,8 +135,8 @@ func TestFileStore_BOMAndLeadingWhitespaceBeforeHeader(t *testing.T) {
 	w := func(name, content string) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "queries", name), []byte(content), 0o644))
 	}
-	w("bom.sql", "\xEF\xBB\xBF-- vibe: {\"title\":\"Bom\",\"parameters\":[{\"name\":\"p\",\"type\":\"string\"}]}\r\nSELECT 1\r\n")
-	w("spaced.sql", "\n  \t-- vibe: {\"title\":\"Spaced\"}\nSELECT 3\n")
+	w("bom.sql", "\xEF\xBB\xBF-- assay: {\"title\":\"Bom\",\"parameters\":[{\"name\":\"p\",\"type\":\"string\"}]}\r\nSELECT 1\r\n")
+	w("spaced.sql", "\n  \t-- assay: {\"title\":\"Spaced\"}\nSELECT 3\n")
 	b, err := s.Get(ctx, "bom")
 	require.NoError(t, err)
 	assert.Equal(t, "Bom", b.Title)
@@ -149,7 +149,7 @@ func TestFileStore_BOMAndLeadingWhitespaceBeforeHeader(t *testing.T) {
 	// Saving normalises: the BOM and indentation are gone, the parameter kept.
 	require.NoError(t, s.Update(ctx, b))
 	data, _ := os.ReadFile(filepath.Join(root, "queries", "bom.sql"))
-	assert.True(t, strings.HasPrefix(string(data), "-- vibe: {"))
+	assert.True(t, strings.HasPrefix(string(data), "-- assay: {"))
 	assert.Contains(t, string(data), `"parameters":[{"name":"p"`)
 }
 
@@ -186,7 +186,7 @@ func TestFileStore_ConflictOnStaleUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	path := filepath.Join(root, "queries", q.ID+".sql")
-	require.NoError(t, os.WriteFile(path, []byte("-- vibe: {\"title\":\"Q\"}\nselect 'theirs'\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte("-- assay: {\"title\":\"Q\"}\nselect 'theirs'\n"), 0o644))
 
 	mine.SQL = "select 'mine'"
 	err = s.Update(ctx, mine)

@@ -3,9 +3,9 @@
 //
 // DuckDB allows one read-write process or many read-only processes per
 // .duckdb file, never a mix, so exactly one process per workspace owns the hub
-// (Studio, or a headless `vibe mcp serve`). Ownership is a non-blocking flock
-// on <workspace>/.vibe-local/hub.lock (internal/filelock, the same crash-safe
-// lock behind .vibe files, #80): it dies with the process, so it is never
+// (Studio, or a headless `assay mcp serve`). Ownership is a non-blocking flock
+// on <workspace>/.assay-local/hub.lock (internal/filelock, the same crash-safe
+// lock behind .assay files, #80): it dies with the process, so it is never
 // stale.
 //
 // # The lock file

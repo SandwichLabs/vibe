@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var errBadVerificationURL = errors.New("AWS returned a sign-in page address Vibe will not open")
+var errBadVerificationURL = errors.New("AWS returned a sign-in page address Assay will not open")
 
 // checkVerificationURL accepts only https URLs with a lower-case ASCII host, no
 // user info, no port, no punycode label and no opaque form, whose host is one of

@@ -12,11 +12,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/SandwichLabs/vibe/internal/engine"
+	"github.com/SandwichLabs/assay/internal/engine"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
-	"github.com/SandwichLabs/vibe/internal/pagehost"
+	"github.com/SandwichLabs/assay/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/pagehost"
 )
 
 // serve reads the helper's messages until its pipe closes.
@@ -89,7 +89,7 @@ func (w *pageWindow) succeed(id int64, result []byte) {
 	}
 }
 
-// handleRun answers vibe.run(query, values). The query is looked up in the
+// handleRun answers assay.run(query, values). The query is looked up in the
 // manifest the window was opened with, and runs through RunManifestQuery's
 // gates: vetted SQL on every run, Bind (a value is only ever a bound
 // parameter), the read-only runner, the row cap and the time limit.

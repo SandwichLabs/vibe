@@ -127,7 +127,7 @@ export function useNotebookSync(opts: NotebookSyncOptions) {
     }
     if (!hasEdit && !save.conflict.value) {
       await opts.reload()
-      opts.info(`"${opts.title.value || 'This notebook'}" ${byAgent ? 'was updated by the agent' : 'changed on disk'} and was reloaded.`)
+      opts.info(`"${opts.title.value || 'This notebook'}" ${byAgent ? 'was updated by the assistant' : 'changed on disk'} and was reloaded.`)
       return
     }
     save.raiseConflict(false)

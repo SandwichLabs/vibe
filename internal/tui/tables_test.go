@@ -3,8 +3,8 @@ package tui
 import (
 	"context"
 	"database/sql"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/session/sessiontest"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/session/sessiontest"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/table"

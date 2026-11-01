@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/storageglob"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/storageglob"
 )
 
 // policyEnv describes the workspace to the SQL policy: its data/ folder (when

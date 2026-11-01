@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/SandwichLabs/vibe/internal/lsp"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/lsp"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 // CompleteSQLRequest is one completion request from the Query Explorer or a

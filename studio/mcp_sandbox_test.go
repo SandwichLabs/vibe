@@ -5,7 +5,7 @@ package main
 // so an external MCP client could mutate a file whose Settings agent_sandbox
 // was "read-only" — live-proven with create_table succeeding against a
 // read-only file. The fix makes agentToolHandler re-resolve the sandbox mode
-// from the live "agent_sandbox" _vibe_meta value on every dispatch
+// from the live "agent_sandbox" _assay_meta value on every dispatch
 // (agents.Handler.SetFilePolicy, an atomic swap — see
 // TestHandler_SetFilePolicyConcurrentWithHandle in internal/agents for the
 // -race coverage of that mechanism), so a SetAgentConfig change takes effect
@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/agents"
+	"github.com/SandwichLabs/assay/internal/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

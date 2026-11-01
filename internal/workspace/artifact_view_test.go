@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 )
 
 const viewScriptManifest = "version: 1\ntitle: T\nview: script\nqueries:\n  - name: q\n    sql: SELECT 1\n"
@@ -335,7 +335,7 @@ func askPage(t *testing.T, ws Workspace, name, js string) {
 
 func TestPageAsk_OnAtAllowRevocableSeparatelyAndOffAfterAnEdit(t *testing.T) {
 	ws, _, _ := memWorkspace(t, nil)
-	askPage(t, ws, "pg", "vibe.use('ask')")
+	askPage(t, ws, "pg", "assay.use('ask')")
 	st := viewState(t, ws, "pg")
 	assert.False(t, ws.PageAskEnabled("pg", st.Hash), "not before the page is allowed")
 	require.NoError(t, ws.AllowArtifactView("pg", st.Hash))
@@ -350,14 +350,14 @@ func TestPageAsk_OnAtAllowRevocableSeparatelyAndOffAfterAnEdit(t *testing.T) {
 	assert.Equal(t, "allowed", viewState(t, ws, "pg").State, "the page itself stays allowed")
 
 	// An edit and a new allow do not turn a person's "off" back on.
-	askPage(t, ws, "pg", "vibe.use('ask'); 1")
+	askPage(t, ws, "pg", "assay.use('ask'); 1")
 	st2 := viewState(t, ws, "pg")
 	require.NoError(t, ws.AllowArtifactView("pg", st2.Hash))
 	assert.False(t, ws.PageAskEnabled("pg", st2.Hash))
 	require.NoError(t, ws.SetPageAsk("pg", true))
 	assert.True(t, ws.PageAskEnabled("pg", st2.Hash))
 	// An edit alone ends it, since the hash moved.
-	askPage(t, ws, "pg", "vibe.use('ask'); 2")
+	askPage(t, ws, "pg", "assay.use('ask'); 2")
 	assert.False(t, ws.PageAskEnabled("pg", viewState(t, ws, "pg").Hash))
 }
 
@@ -373,7 +373,7 @@ func TestPageAsk_OnlyForAScriptedPageThatDeclaresIt(t *testing.T) {
 
 func TestArtifactViewStatus_PageQueriesAndDecisionsCarryTheKind(t *testing.T) {
 	ws, _, _ := memWorkspace(t, nil)
-	askPage(t, ws, "pg", "vibe.use('ask')")
+	askPage(t, ws, "pg", "assay.use('ask')")
 	st := viewState(t, ws, "pg")
 	require.Len(t, st.QueryUses, 1)
 	assert.Equal(t, ArtifactViewQuery{Name: "q", Used: true}, st.QueryUses[0], "the default database has an empty connection")
@@ -385,7 +385,7 @@ func TestArtifactViewStatus_PageQueriesAndDecisionsCarryTheKind(t *testing.T) {
 	assert.Equal(t, []string{"ask", "state"}, d[0].Capabilities)
 }
 
-// A scripted page can run every manifest query with vibe.run, so the prompt
+// A scripted page can run every manifest query with assay.run, so the prompt
 // lists them all; a static page lists only what its templates name.
 func TestArtifactViewStatus_ScriptedPageListsEveryQueryItCanRun(t *testing.T) {
 	ws, _, _ := memWorkspace(t, nil)
@@ -394,7 +394,7 @@ func TestArtifactViewStatus_ScriptedPageListsEveryQueryItCanRun(t *testing.T) {
 		files := append([]artifacts.PageFile{{Path: "index.html.tmpl", Data: []byte(tmpl)}}, extra...)
 		require.NoError(t, ws.Artifacts().Put(context.Background(), &artifacts.Artifact{Name: name, ManifestText: []byte(m), Files: files}, artifacts.Overwrite()))
 	}
-	put("scripted", `<p>{{ query "harmless" }}</p><script src="app.js"></script>`, artifacts.PageFile{Path: "app.js", Data: []byte("vibe.run('secrets')")})
+	put("scripted", `<p>{{ query "harmless" }}</p><script src="app.js"></script>`, artifacts.PageFile{Path: "app.js", Data: []byte("assay.run('secrets')")})
 	put("static", `<p>{{ query "harmless" }}</p>`)
 
 	got := viewState(t, ws, "scripted").QueryUses

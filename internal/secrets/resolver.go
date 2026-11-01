@@ -306,7 +306,7 @@ func (r *Resolver) loadExisting(ctx context.Context, s Store, ref Ref) (Credenti
 func refuseUnstored(kind string) error {
 	switch kind {
 	case "env":
-		return fmt.Errorf("%w: environment variables are set outside Vibe", ErrReadOnly)
+		return fmt.Errorf("%w: environment variables are set outside Assay", ErrReadOnly)
 	case MethodAWSSSO:
 		return fmt.Errorf("%w: an AWS SSO sign-in has no stored secret; sign in with your profile", ErrReadOnly)
 	}

@@ -3,7 +3,7 @@ package dotenv
 import (
 	"errors"
 
-	"github.com/SandwichLabs/vibe/internal/trustfile"
+	"github.com/SandwichLabs/assay/internal/trustfile"
 )
 
 // State is where a workspace's .env stands for this person.

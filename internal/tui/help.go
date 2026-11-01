@@ -26,7 +26,7 @@ func renderHelp(keys KeyMap, helpModel help.Model, width, height int) string {
 		Bold(true).
 		Foreground(accentColor).
 		MarginBottom(1).
-		Render("Vibe Studio - Key Bindings")
+		Render("Assay - Key Bindings")
 
 	footer := dimStyle.Render("Press any key to dismiss")
 

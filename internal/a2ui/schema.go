@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
 )
 
 // ColorTokens is the closed enum of A2UI color tokens. Any other value is a

@@ -8,8 +8,8 @@ import { openBundleImport, bundleImportRequest } from '../composables/useBundle'
 import { _resetForTests } from '../composables/useWorkspace'
 
 const preview = (over: Partial<BundlePreview> = {}): BundlePreview => ({
-  handle: 'h1', needsPassphrase: false, wrongPassphrase: false, path: '/x/a.vibe',
-  workspaceName: 'Acme', createdAt: '2026-10-06T00:00:00Z', createdBy: 'Vibe Studio', encrypted: false,
+  handle: 'h1', needsPassphrase: false, wrongPassphrase: false, path: '/x/a.assay',
+  workspaceName: 'Acme', createdAt: '2026-10-06T00:00:00Z', createdBy: 'Assay', encrypted: false,
   items: [
     { key: 'notebook/review', kind: 'notebook', id: 'review', title: 'Quarterly review', size: 10, conflict: true },
     { key: 'query/top', kind: 'query', id: 'top', title: 'Top customers', size: 10, conflict: false },
@@ -21,7 +21,7 @@ const preview = (over: Partial<BundlePreview> = {}): BundlePreview => ({
 
 function makeApp(over: Record<string, any> = {}) {
   const app = {
-    SelectBundleFile: vi.fn(async () => '/x/a.vibe'),
+    SelectBundleFile: vi.fn(async () => '/x/a.assay'),
     PreviewBundleImport: vi.fn(async () => preview()),
     CommitBundleImport: vi.fn(async () => ({ outcomes: [{ key: 'notebook/review', kind: 'notebook', id: 'review', finalId: 'review-2', result: 'renamed' }], dryRun: false, warnings: [] })),
     ImportBundleIntoNewWorkspace: vi.fn(async () => ({ opened: { status: 'opened', path: '/w', info: { root: '/w', name: 'Acme', sessionId: 's' } }, result: { outcomes: [], dryRun: false, warnings: [] } })),
@@ -49,7 +49,7 @@ describe('BundleImportDialog', () => {
     const app = makeApp()
     const w = await mountDialog()
     expect(app.SelectBundleFile).toHaveBeenCalled()
-    expect(app.PreviewBundleImport).toHaveBeenCalledWith('/x/a.vibe', '')
+    expect(app.PreviewBundleImport).toHaveBeenCalledWith('/x/a.assay', '')
     expect(w.text()).toContain('Contains no data and no credentials')
     expect(w.findAll('[data-testid="bi-item"]')).toHaveLength(2)
     const sel = w.find('[data-testid="bi-choice-notebook/review"]')
@@ -130,17 +130,17 @@ describe('BundleImportDialog', () => {
     w.unmount()
   })
 
-  it('shows the plain error for an older .vibe file', async () => {
-    makeApp({ PreviewBundleImport: vi.fn(async () => { throw new Error('This is an older .vibe file that holds data. Vibe no longer opens these.') }) })
-    const w = await mountDialog('here', '/x/old.vibe')
-    expect(w.find('[data-testid="bi-error"]').text()).toContain('older .vibe file that holds data')
+  it('shows the plain error for an older .assay file', async () => {
+    makeApp({ PreviewBundleImport: vi.fn(async () => { throw new Error('This is an older .assay file that holds data. Assay no longer opens these.') }) })
+    const w = await mountDialog('here', '/x/old.assay')
+    expect(w.find('[data-testid="bi-error"]').text()).toContain('older .assay file that holds data')
     expect(w.find('[data-testid="bi-import"]').exists()).toBe(false)
     w.unmount()
   })
 
   it('new-workspace mode needs a name and place, and creates through the launcher binding', async () => {
     const app = makeApp()
-    const w = await mountDialog('new', '/x/a.vibe')
+    const w = await mountDialog('new', '/x/a.assay')
     expect((w.find('[data-testid="bi-ws-name"]').element as HTMLInputElement).value).toBe('Acme')
     expect((w.find('[data-testid="bi-import"]').element as HTMLButtonElement).disabled).toBe(true)
     await w.find('[data-testid="bi-ws-location"]').setValue('/work')

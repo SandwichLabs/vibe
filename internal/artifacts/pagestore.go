@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/filestore"
 )
 
 // maxPageDirDepth bounds the walk of html/: html/assets/<folder>/<file> is the

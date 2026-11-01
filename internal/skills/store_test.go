@@ -185,7 +185,7 @@ func TestFileStore_SymlinkedSkillDirIsNotFollowedOutside(t *testing.T) {
 }
 
 // TestStore_Contract is the behaviour every Store shares; it once ran against
-// the legacy _vibe_skills store.
+// the legacy _assay_skills store.
 func TestStore_Contract(t *testing.T) {
 	for name, mk := range map[string]func(t *testing.T) Store{
 		"file": func(t *testing.T) Store { return NewFileStore(t.TempDir()) },

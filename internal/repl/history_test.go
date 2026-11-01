@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func historyPath(root string) string { return filepath.Join(root, ".vibe-local", "repl", "history") }
+func historyPath(root string) string { return filepath.Join(root, ".assay-local", "repl", "history") }
 
 func TestHistoryNeverStoresCredentialStatements(t *testing.T) {
 	root := t.TempDir()

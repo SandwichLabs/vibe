@@ -2,7 +2,7 @@
  * useAppEvents — what the app root does when the shell or the OS asks for
  * something (F10): the quit flow (flush every pending save, ask before losing one),
  * the workspace shortcuts that work on the launcher too, and an open request
- * (a folder or .vibe passed on the command line, or by the OS).
+ * (a folder or .assay passed on the command line, or by the OS).
  */
 import { App } from '../lib/bindings'
 import { openBundleImport } from './useBundle'
@@ -77,8 +77,8 @@ export function onKeydown(e: KeyboardEvent) {
 
 export interface OpenRequest { path?: string; message?: string; bundlePath?: string }
 
-// handleOpenRequest acts on something the OS or command line asked Vibe to open:
-// a folder opens as a workspace, a .vibe file opens the bundle Import dialog,
+// handleOpenRequest acts on something the OS or command line asked Assay to open:
+// a folder opens as a workspace, a .assay file opens the bundle Import dialog,
 // anything else shows the backend's plain-language note.
 export async function handleOpenRequest(req: OpenRequest | null | undefined) {
   if (!req) return

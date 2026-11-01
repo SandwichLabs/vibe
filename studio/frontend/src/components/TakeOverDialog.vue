@@ -38,9 +38,9 @@ async function confirm() {
     <div ref="root" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="to-h" aria-describedby="to-d" data-testid="takeover-dialog">
       <div class="d-head"><h2 id="to-h">Take over {{ name }}?</h2></div>
       <div id="to-d" class="d-body">
-        <p>Vibe will ask <code>{{ who }}</code> to let go of this workspace, then open it for editing.</p>
-        <p>Claude Desktop or Claude Code sessions that were using it will need to reconnect, and will then go through Vibe Studio. Nothing is deleted, and open notebooks aren't affected.</p>
-        <div class="note info"><Icon name="info" :size="16" /><span>After you take over, any change Claude makes needs your approval in Vibe Studio, and closing Studio ends the session it was passing along.</span></div>
+        <p>Assay will ask <code>{{ who }}</code> to let go of this workspace, then open it for editing.</p>
+        <p>Claude Desktop or Claude Code sessions that were using it will need to reconnect, and will then go through Assay. Nothing is deleted, and open notebooks aren't affected.</p>
+        <div class="note info"><Icon name="info" :size="16" /><span>After you take over, any change Claude makes needs your approval in Assay, and closing Studio ends the session it was passing along.</span></div>
         <div v-if="error" class="note attn" role="alert" data-testid="takeover-error"><Icon name="alert" :size="16" /><span>{{ error }}</span></div>
       </div>
       <div class="d-foot">

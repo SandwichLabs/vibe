@@ -23,7 +23,7 @@ export const isReadOnly = computed(() => !!workspaceInfo.value?.readOnly)
 // outside (another program took it over), or a startup argument problem.
 export const launcherNotice = ref('')
 // appNotice is a plain-language note shown over whichever screen is up (a path the
-// OS asked Vibe to open that could not be used while a workspace is already open).
+// OS asked Assay to open that could not be used while a workspace is already open).
 export const appNotice = ref('')
 
 // Dialog visibility is global so a keyboard shortcut works from any screen.
@@ -52,12 +52,12 @@ export function startWorkspaceTracking(): void {
       if (p?.reason === 'switch') return
       workspaceInfo.value = null
       if (p?.reason === 'released') {
-        launcherNotice.value = 'Another program asked Vibe to let go of the workspace, so it was closed. Your notebooks were saved first.'
+        launcherNotice.value = 'Another program asked Assay to let go of the workspace, so it was closed. Your notebooks were saved first.'
       }
     }),
-    // Settings, MCP on/off, vibe.yaml edited elsewhere: re-read the summary.
+    // Settings, MCP on/off, assay.yaml edited elsewhere: re-read the summary.
     EventsOn('workspace:changed', () => { void refreshWorkspaceInfo() }),
-    // Another program (vibe mcp serve) asked Studio to let go: save what's open.
+    // Another program (assay mcp serve) asked Studio to let go: save what's open.
     EventsOn('workspace:releasing', () => { void flushAll() }),
   )
 }
@@ -106,14 +106,14 @@ interface FlowResult {
 export const launching = ref(true)
 
 // finishOpen turns an OpenWorkspaceResult into the shared state, asking
-// "Make this folder a workspace?" when the folder has no vibe.yaml.
+// "Make this folder a workspace?" when the folder has no assay.yaml.
 async function finishOpen(res: OpenWorkspaceResult): Promise<FlowResult> {
   if (res.status === 'not-workspace') {
     // The question belongs over the Launcher, not over the blank startup page.
     launching.value = false
     const yes = await askConfirm({
       title: 'Make this folder a workspace?',
-      message: `${res.path}\n\nThis folder doesn't have a vibe.yaml yet. Vibe will add one, plus notebooks/, queries/, skills/ and data/. Your other files are left alone and nothing is moved.`,
+      message: `${res.path}\n\nThis folder doesn't have an assay.yaml yet. Assay will add one, plus notebooks/, queries/, skills/ and data/. Your other files are left alone and nothing is moved.`,
       variant: 'primary',
       confirmLabel: 'Make it a workspace',
     })

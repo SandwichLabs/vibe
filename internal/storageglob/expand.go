@@ -1,9 +1,9 @@
 // Package storageglob expands wildcards in S3, GCS and R2 URLs for the SQL
-// Vibe runs (#138 follow-up).
+// Assay runs (#138 follow-up).
 //
 // Every hub session reads those URLs as literal keys (s3_url_compatibility_mode,
 // so that no "?s3_endpoint=" in a URL can send a connection's signed request to
-// another host), and DuckDB then does not glob them. So Vibe globs them itself:
+// another host), and DuckDB then does not glob them. So Assay globs them itself:
 // it finds the pattern literals in a statement with DuckDB's own parser, lists
 // the matching objects in a private session that holds only the covering
 // connection's secret (session.hub.ListMatching), and rewrites exactly those
@@ -30,8 +30,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/storageurl"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/storageurl"
 )
 
 // DefaultMax is the most objects one statement may expand to.
@@ -159,7 +159,7 @@ func Expand(ctx context.Context, text string, o Options) (string, *Rewrite, erro
 			return "", nil, err
 		}
 		if len(ss) > 0 && persistsSQL(toks) {
-			return "", nil, fmt.Errorf("a view or macro cannot hold the wildcard %q: Vibe expands wildcards on s3, gcs and r2 when a query runs, so it would keep today's list of files; create a table from the query, or name the files", ss[0].pattern)
+			return "", nil, fmt.Errorf("a view or macro cannot hold the wildcard %q: Assay expands wildcards on s3, gcs and r2 when a query runs, so it would keep today's list of files; create a table from the query, or name the files", ss[0].pattern)
 		}
 		sites = append(sites, ss...)
 	}
@@ -318,7 +318,7 @@ func listPattern(ctx context.Context, pattern string, o Options, room int) ([]st
 	// anyway; this is a second layer. Such an object is still readable by its
 	// exact name.
 	if odd > 0 {
-		return nil, fmt.Errorf("%d of the objects that match %q have a control character, ? or # in the name, which Vibe does not put into a statement; narrow the pattern (an object like that can still be read by its exact name)", odd, pattern)
+		return nil, fmt.Errorf("%d of the objects that match %q have a control character, ? or # in the name, which Assay does not put into a statement; narrow the pattern (an object like that can still be read by its exact name)", odd, pattern)
 	}
 	if bad > 0 {
 		return nil, fmt.Errorf("%d of the objects that match %q have names that are not plain URLs (a space, ?, #, %% or * in the name), which cannot be read here; narrow the pattern", bad, pattern)

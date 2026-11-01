@@ -3,7 +3,7 @@ package agents
 import (
 	"testing"
 
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/stretchr/testify/assert"
 )
 

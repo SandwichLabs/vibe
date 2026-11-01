@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/engine"
-	"github.com/SandwichLabs/vibe/internal/session"
-	"github.com/SandwichLabs/vibe/internal/workspace"
+	"github.com/SandwichLabs/assay/internal/engine"
+	"github.com/SandwichLabs/assay/internal/session"
+	"github.com/SandwichLabs/assay/internal/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -175,12 +175,12 @@ func (s orderWS) Close() error {
 
 func TestOpenReadWriteTakesTheHubAndCloseFreesIt(t *testing.T) {
 	ws := newWorkspace(t)
-	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "Vibe Studio", Logger: quietLogger()})
+	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "Assay", Logger: quietLogger()})
 	require.NoError(t, err)
 	assert.False(t, o.ReadOnly)
 	require.NotNil(t, o.Hold)
 	require.NotNil(t, o.Eng)
-	assert.Equal(t, "Vibe Studio", o.Hold.Holder().App)
+	assert.Equal(t, "Assay", o.Hold.Holder().App)
 	o.Close()
 	assertLockFree(t, ws)
 
@@ -196,7 +196,7 @@ func TestOpenHeldIsAnErrorUnlessFallbackReadOnly(t *testing.T) {
 	ws := newWorkspace(t)
 	helperHolder(t, ws.Root())
 
-	_, err := Open(t.Context(), ws.Root(), OpenOptions{App: "vibe query", Logger: quietLogger()})
+	_, err := Open(t.Context(), ws.Root(), OpenOptions{App: "assay query", Logger: quietLogger()})
 	require.Error(t, err)
 	var oe *OpenError
 	require.ErrorAs(t, err, &oe)
@@ -205,7 +205,7 @@ func TestOpenHeldIsAnErrorUnlessFallbackReadOnly(t *testing.T) {
 	require.ErrorAs(t, err, &held)
 	assert.ErrorIs(t, err, ErrHubHeld)
 
-	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "Vibe Studio", Logger: quietLogger(), FallbackReadOnly: true})
+	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "Assay", Logger: quietLogger(), FallbackReadOnly: true})
 	require.NoError(t, err)
 	defer o.Close()
 	assert.True(t, o.ReadOnly)
@@ -217,7 +217,7 @@ func TestOpenHeldIsAnErrorUnlessFallbackReadOnly(t *testing.T) {
 func TestOpenReadOnlyTakesNoLock(t *testing.T) {
 	ws := newWorkspace(t)
 	helperHolder(t, ws.Root())
-	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "vibe query", Mode: ModeReadOnly, Logger: quietLogger()})
+	o, err := Open(t.Context(), ws.Root(), OpenOptions{App: "assay query", Mode: ModeReadOnly, Logger: quietLogger()})
 	require.NoError(t, err)
 	defer o.Close()
 	assert.True(t, o.ReadOnly)
@@ -274,14 +274,14 @@ func TestOpenRemoteOnlyTakesNoLockAndAttachesNoLocalFile(t *testing.T) {
 
 func TestOpenTakeOver(t *testing.T) {
 	ws := newWorkspace(t)
-	cmd := helperHolder(t, ws.Root(), "VIBE_HUB_TEST_RELEASABLE=1")
+	cmd := helperHolder(t, ws.Root(), "ASSAY_HUB_TEST_RELEASABLE=1")
 	o, err := Open(t.Context(), ws.Root(), OpenOptions{
-		App: "Vibe Studio", Mode: ModeTakeOver, TakeOverTimeout: 10 * time.Second, Logger: quietLogger(),
+		App: "Assay", Mode: ModeTakeOver, TakeOverTimeout: 10 * time.Second, Logger: quietLogger(),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, o.Hold)
 	assert.False(t, o.ReadOnly)
-	assert.Equal(t, "Vibe Studio", o.Hold.Holder().App)
+	assert.Equal(t, "Assay", o.Hold.Holder().App)
 	o.Close()
 	require.NoError(t, cmd.Wait())
 }
@@ -290,7 +290,7 @@ func TestOpenTakeOverRefusedWhenNotReleasable(t *testing.T) {
 	ws := newWorkspace(t)
 	helperHolder(t, ws.Root())
 	_, err := Open(t.Context(), ws.Root(), OpenOptions{
-		App: "Vibe Studio", Mode: ModeTakeOver, TakeOverTimeout: 300 * time.Millisecond, Logger: quietLogger(),
+		App: "Assay", Mode: ModeTakeOver, TakeOverTimeout: 300 * time.Millisecond, Logger: quietLogger(),
 	})
 	var oe *OpenError
 	require.ErrorAs(t, err, &oe)
@@ -298,7 +298,7 @@ func TestOpenTakeOverRefusedWhenNotReleasable(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotReleasable)
 }
 
-// dropID removes the id line from a workspace's vibe.yaml.
+// dropID removes the id line from a workspace's assay.yaml.
 func dropID(t *testing.T, root string) {
 	t.Helper()
 	p := filepath.Join(root, workspace.ConfigFile)
@@ -336,14 +336,14 @@ func TestOpenMissingIDIsRepairedOnlyOnRequest(t *testing.T) {
 	require.NoError(t, ws.Close())
 	dropID(t, root)
 
-	_, err := Open(t.Context(), root, OpenOptions{App: "vibe query", Logger: quietLogger()})
+	_, err := Open(t.Context(), root, OpenOptions{App: "assay query", Logger: quietLogger()})
 	require.ErrorIs(t, err, workspace.ErrMissingID)
 	var oe *OpenError
 	require.ErrorAs(t, err, &oe)
 	assert.Equal(t, StepOpen, oe.Step)
 	assertLockFreeAt(t, root)
 
-	o, err := Open(t.Context(), root, OpenOptions{App: "Vibe Studio", Logger: quietLogger(), RepairMissingID: true})
+	o, err := Open(t.Context(), root, OpenOptions{App: "Assay", Logger: quietLogger(), RepairMissingID: true})
 	require.NoError(t, err)
 	defer o.Close()
 	assert.NotEmpty(t, o.WS.ID())

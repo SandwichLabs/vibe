@@ -9,7 +9,7 @@ const posted = []
 const handlers = {}
 let clock = 1000000
 const sandbox = {
-  webkit: { messageHandlers: { vibe: { postMessage: (s) => posted.push(s) } } },
+  webkit: { messageHandlers: { assay: { postMessage: (s) => posted.push(s) } } },
   setInterval: () => 0,
   btoa: (s) => Buffer.from(s, 'latin1').toString('base64'),
   navigator: {},
@@ -20,20 +20,20 @@ const sandbox = {
 sandbox.window = sandbox
 vm.createContext(sandbox)
 vm.runInContext(src, sandbox)
-const vibe = sandbox.vibe
+const assay = sandbox.assay
 const out = {}
-const reply = (id, ok, v) => sandbox.__vibeReply(id, ok, v)
+const reply = (id, ok, v) => sandbox.__assayReply(id, ok, v)
 const flush = () => new Promise((r) => setImmediate(r))
 async function main() {
   if (scenario === 'use') {
-    out.state = (await vibe.use('state')) !== null
-    out.download = (await vibe.use('download')) !== null
-    out.ask = (await vibe.use('ask')) !== null
-    out.other = (await vibe.use('constructor')) !== null
-    out.proto = (await vibe.use('__proto__')) !== null
+    out.state = (await assay.use('state')) !== null
+    out.download = (await assay.use('download')) !== null
+    out.ask = (await assay.use('ask')) !== null
+    out.other = (await assay.use('constructor')) !== null
+    out.proto = (await assay.use('__proto__')) !== null
   }
   if (scenario === 'gesture') {
-    const d = await vibe.use('download')
+    const d = await assay.use('download')
     const tryIt = async () => { try { await d.save({ filename: 'a', type: 'csv', data: 'x' }); return 'resolved' } catch (e) { return e.message } }
     out.noGesture = await tryIt()
     handlers.click.fn({ type: 'click', isTrusted: false })
@@ -55,7 +55,7 @@ async function main() {
     out.consumed = await tryIt()
   }
   if (scenario === 'bytes') {
-    const d = await vibe.use('download')
+    const d = await assay.use('download')
     handlers.click.fn({ type: 'click', isTrusted: true })
     const p = d.save({ filename: 'a', type: 'png', data: new Uint8Array([137, 80, 78, 71, 255, 0]) })
     await flush()
@@ -64,7 +64,7 @@ async function main() {
     await p
   }
   if (scenario === 'chunks') {
-    const s = await vibe.use('state')
+    const s = await assay.use('state')
     const value = { t: '"\\\n' + 'é😀'.repeat(15000) }
     const p = s.set('big', value)
     let n = 0
@@ -85,19 +85,19 @@ async function main() {
     out.roundTrips = JSON.stringify({ key: 'big', value }) === text
   }
   if (scenario === 'event') {
-    const s = await vibe.use('state')
+    const s = await assay.use('state')
     const got = []
     const off = s.onChange((e) => got.push(e))
-    sandbox.__vibeEvent('state', { key: 'a', value: 1 })
+    sandbox.__assayEvent('state', { key: 'a', value: 1 })
     off()
-    sandbox.__vibeEvent('state', { key: 'b', value: 2 })
+    sandbox.__assayEvent('state', { key: 'b', value: 2 })
     out.got = got
   }
   if (scenario === 'frozen') {
-    try { vibe.run = null } catch (e) {}
-    try { sandbox.vibe = null } catch (e) {}
-    out.runIsFunction = typeof sandbox.vibe.run === 'function'
-    const s = await vibe.use('state')
+    try { assay.run = null } catch (e) {}
+    try { sandbox.assay = null } catch (e) {}
+    out.runIsFunction = typeof sandbox.assay.run === 'function'
+    const s = await assay.use('state')
     try { s.set = null } catch (e) {}
     out.setIsFunction = typeof s.set === 'function'
   }

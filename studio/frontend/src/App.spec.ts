@@ -92,10 +92,10 @@ describe('App.vue', () => {
     expect(app.OpenWorkspace).toHaveBeenCalledWith('/w/from-cli')
 
     _resetForTests()
-    makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '.vibe files are no longer opened directly.' })) })
+    makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '.assay files are no longer opened directly.' })) })
     mountApp()
     await flushPromises()
-    expect(launcherNotice.value).toContain('.vibe files are no longer opened')
+    expect(launcherNotice.value).toContain('.assay files are no longer opened')
   })
 
   it('consumes the launch target only after the open is handled (#33)', async () => {
@@ -166,11 +166,11 @@ describe('App.vue', () => {
     await flushPromises()
   })
 
-  it('routes OS open requests: a .vibe opens Import, a note shows, a folder opens', async () => {
-    const app = makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '', bundlePath: '/tmp/x.vibe' })) })
+  it('routes OS open requests: a .assay opens Import, a note shows, a folder opens', async () => {
+    const app = makeApp({ GetInitialWorkspace: vi.fn(async () => ({ path: '', message: '', bundlePath: '/tmp/x.assay' })) })
     mountApp()
     await flushPromises()
-    expect(bundleImportRequest.value).toEqual({ mode: 'new', path: '/tmp/x.vibe' })
+    expect(bundleImportRequest.value).toEqual({ mode: 'new', path: '/tmp/x.assay' })
 
     // A request that arrives after startup comes as an event.
     expect(handlers['app:open-path']).toBeTruthy()

@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/prefs"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/prefs"
 )
 
 // ExactRoot returns the workspace root for path when path itself is that root (a
-// folder holding a vibe.yaml, not one inside a workspace). ok is false for
+// folder holding an assay.yaml, not one inside a workspace). ok is false for
 // anything else, including a folder that merely sits inside a workspace.
 func ExactRoot(path string) (root string, ok bool) {
 	root, err := Discover(path)
@@ -20,7 +20,7 @@ func ExactRoot(path string) (root string, ok bool) {
 	return root, true
 }
 
-// Discover walks up from start to the nearest directory holding a vibe.yaml,
+// Discover walks up from start to the nearest directory holding an assay.yaml,
 // like git finds .git, and returns that directory (absolute, symlinks
 // resolved). start may be a file or a directory, and need not exist as long as
 // some ancestor does. ErrNotWorkspace when nothing is found.
@@ -65,7 +65,7 @@ func Discover(start string) (string, error) {
 
 // DiscoverForLaunch is Discover for something that opens a workspace without
 // being asked to (Studio started from a terminal): it walks up from start the
-// same way, but ignores a vibe.yaml that is home itself, any ancestor of home,
+// same way, but ignores an assay.yaml that is home itself, any ancestor of home,
 // or the filesystem root. Those are where a stray file turns every desktop
 // launch into "open that workspace". A workspace strictly below home, or in a
 // tree that does not contain home at all (/srv/x), is found normally. An empty
@@ -80,7 +80,7 @@ func DiscoverForLaunch(start, home string) (string, error) {
 	}
 	if home != "" {
 		// Both spellings of home count: the one given (cleaned) and its
-		// symlink-resolved form, so a vibe.yaml above either is ignored.
+		// symlink-resolved form, so an assay.yaml above either is ignored.
 		homes := []string{home}
 		if abs, err := filepath.Abs(home); err == nil {
 			homes = []string{abs}

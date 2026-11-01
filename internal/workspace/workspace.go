@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/prefs"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
-	"github.com/SandwichLabs/vibe/internal/skills"
-	"github.com/SandwichLabs/vibe/internal/trustfile"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics/proposals"
+	"github.com/SandwichLabs/assay/internal/skills"
+	"github.com/SandwichLabs/assay/internal/trustfile"
 )
 
 // Workspace is an open workspace folder: its configuration (committed, local
@@ -34,9 +34,9 @@ type Workspace interface {
 	Root() string
 	// ID is the committed workspace id (keys keychain entries).
 	ID() string
-	// Name is the display name (the folder name when vibe.yaml has none).
+	// Name is the display name (the folder name when assay.yaml has none).
 	Name() string
-	// Config is the committed vibe.yaml.
+	// Config is the committed assay.yaml.
 	Config() Config
 	// Local is this person's own settings for this workspace (agent loosening,
 	// sign-in methods, "This computer" connections). They live in the user
@@ -54,7 +54,7 @@ type Workspace interface {
 	Connections() []Connection
 	// Connection is the merged definition called name.
 	Connection(name string) (Connection, bool)
-	// DefaultConnection is default_connection from vibe.yaml ("" if unset).
+	// DefaultConnection is default_connection from assay.yaml ("" if unset).
 	DefaultConnection() string
 	// Policy is the agent policy in effect for this person:
 	// EffectivePolicy(committed ceiling, local loosening).
@@ -76,7 +76,7 @@ type Workspace interface {
 	// and the glossary, one yaml file each (docs/reference/semantics.md).
 	Semantics() semantics.Store
 	// Proposals is the inbox of proposed semantic definitions
-	// (.vibe-local/proposals/): machine-local, git-ignored and never bundled.
+	// (.assay-local/proposals/): machine-local, git-ignored and never bundled.
 	// Accepting one (proposals.Accept) is the person's act; agent tools are
 	// given only AgentAccess.Proposals, a proposer that cannot decide.
 	Proposals() proposals.Store
@@ -121,7 +121,7 @@ type Workspace interface {
 	DenyDotEnv() error
 	RevokeDotEnv() error
 	// Connection CRUD (#115). Scope is where the definition lives: shared
-	// (vibe.yaml, committed), local (your own file for this workspace) or user
+	// (assay.yaml, committed), local (your own file for this workspace) or user
 	// (all your workspaces). Every definition is validated by the scope's rules
 	// and its type's rules; none ever holds a credential.
 	AddConnection(scope Scope, def ConnectionDef) error
@@ -149,15 +149,15 @@ type Workspace interface {
 	// secret.
 	CredentialStatus(ctx context.Context, name string) (secrets.CredentialStatus, error)
 
-	// Reload re-reads vibe.yaml and the local and user files. On error the
+	// Reload re-reads assay.yaml and the local and user files. On error the
 	// previous configuration stays in effect.
 	Reload() error
-	// SaveConfig writes vibe.yaml with compare-and-write against the version
+	// SaveConfig writes assay.yaml with compare-and-write against the version
 	// last loaded; a file changed on disk since returns ErrConflict.
 	SaveConfig(Config) error
 	// SaveLocal writes the per-person settings file the same way.
 	SaveLocal(LocalConfig) error
-	// State and SaveState read and write .vibe-local/state.json (open tabs,
+	// State and SaveState read and write .assay-local/state.json (open tabs,
 	// last notebook). A missing or unreadable file is an empty state; state is
 	// never a reason to fail.
 	State() State
@@ -168,7 +168,7 @@ type Workspace interface {
 	Close() error
 }
 
-// State is per-person, per-workspace UI state kept in .vibe-local/state.json.
+// State is per-person, per-workspace UI state kept in .assay-local/state.json.
 type State struct {
 	LastNotebook string   `json:"lastNotebook,omitempty"`
 	OpenTabs     []string `json:"openTabs,omitempty"`
@@ -185,7 +185,7 @@ type options struct {
 	logger    *slog.Logger
 	resolver  *secrets.Resolver
 	user      *UserConfig // tests: replace the user scope instead of reading it
-	configDir string      // "" = $VIBE_CONFIG_DIR or the user config dir
+	configDir string      // "" = $ASSAY_CONFIG_DIR or the user config dir
 }
 
 // WithLogger sets the logger.
@@ -197,8 +197,8 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
-// WithConfigDir sets the per-user config directory (default: $VIBE_CONFIG_DIR,
-// else the OS user config dir + "/vibe"). The user-scope connections.yaml and
+// WithConfigDir sets the per-user config directory (default: $ASSAY_CONFIG_DIR,
+// else the OS user config dir + "/assay"). The user-scope connections.yaml and
 // the per-person workspace settings are read from and written under it.
 func WithConfigDir(dir string) Option { return func(o *options) { o.configDir = dir } }
 
@@ -250,7 +250,7 @@ type workspace struct {
 
 var _ Workspace = (*workspace)(nil)
 
-// Open opens the workspace rooted at dir (the folder that holds vibe.yaml).
+// Open opens the workspace rooted at dir (the folder that holds assay.yaml).
 // Use Discover first to find it from a subdirectory.
 func Open(dir string, opts ...Option) (Workspace, error) {
 	o := options{logger: slog.Default()}
@@ -326,7 +326,7 @@ func (w *workspace) reload() error {
 	// A connections.yaml inside the folder is whatever the repository
 	// committed: it is never read (D-A), only reported.
 	if _, _, ferr := filestore.Read(w.root, LocalDir+"/"+LocalConfigFile); ferr == nil || errors.Is(ferr, filestore.ErrTooLarge) {
-		warnings = append(warnings, ".vibe-local/"+LocalConfigFile+" was ignored: settings that affect the agent, connections and sign-in are only read from your own config directory ("+w.localPath(cfg.ID)+")")
+		warnings = append(warnings, ".assay-local/"+LocalConfigFile+" was ignored: settings that affect the agent, connections and sign-in are only read from your own config directory ("+w.localPath(cfg.ID)+")")
 	}
 
 	user, userWarnings, err := w.loadUserScope()
@@ -647,7 +647,7 @@ func (w *workspace) LocalConfigPath() string {
 	return w.localPath(w.cfg.ID)
 }
 
-// nonceRel is the folder's mark, kept in the git-ignored .vibe-local/. The
+// nonceRel is the folder's mark, kept in the git-ignored .assay-local/. The
 // per-person settings file records the same value; a mismatch means the folder
 // at this path is not the one the settings were made for.
 const nonceRel = LocalDir + "/nonce"

@@ -77,7 +77,7 @@ func (e *EnvStore) Get(context.Context, Ref) ([]byte, error) {
 
 // Set implements Store: the environment is read, never written.
 func (e *EnvStore) Set(context.Context, Ref, []byte) error {
-	return fmt.Errorf("%w: set %s in the environment Vibe starts from", ErrReadOnly, strings.Join(EnvVarNames(e.prefix), ", "))
+	return fmt.Errorf("%w: set %s in the environment Assay starts from", ErrReadOnly, strings.Join(EnvVarNames(e.prefix), ", "))
 }
 
 // Delete implements Store: nothing to delete.

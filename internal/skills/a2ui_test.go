@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/a2ui"
+	"github.com/SandwichLabs/assay/internal/a2ui"
 )
 
 // The a2ui skill is generated from the registries: every component type,

@@ -12,10 +12,10 @@ New to this? Start with the [penguins example](../penguins/README.md), which has
 
 Run every command below from this folder (`cd docs/examples/chinook`).
 
-An entity's `table` is a SQL name, not a file path, so the first step loads the CSVs into the workspace's local DuckDB (`data/local.duckdb`, git-ignored). Each table has its own id column, which we tell `vibe import` to use as the key:
+An entity's `table` is a SQL name, not a file path, so the first step loads the CSVs into the workspace's local DuckDB (`data/local.duckdb`, git-ignored). Each table has its own id column, which we tell `assay import` to use as the key:
 
 ```console
-$ for t in customer employee genre track invoice invoice_line; do vibe import data/$t.csv --key ${t}_id; done
+$ for t in customer employee genre track invoice invoice_line; do assay import data/$t.csv --key ${t}_id; done
 Imported 59 row(s) into local.main.customer
 Imported 8 row(s) into local.main.employee
 Imported 25 row(s) into local.main.genre
@@ -36,11 +36,11 @@ semantics/metrics/                revenue, invoice_count, avg_invoice_value, act
 semantics/joins/                  customer_invoice, invoice_invoice_line, invoice_line_track,
                                   track_genre, customer_support_rep
 semantics/glossary.md
-notebooks/store-metrics.vnb
+notebooks/store-metrics.asnb
 ```
 
 ```console
-$ vibe semantics list
+$ assay semantics list
 KIND      NAME                  SUMMARY                                                                              ERROR
 entity    customer              one row per customer                                                                 -
 entity    employee              one row per employee                                                                 -
@@ -65,7 +65,7 @@ Nothing in the last column, so every file is valid. `list` reads only the files;
 An entity says what a row is, where it lives, which column identifies it and which columns are personal data:
 
 ```console
-$ vibe semantics show entity customer
+$ assay semantics show entity customer
 version: 1
 name: customer
 description: A person or company that has bought from the store.
@@ -87,7 +87,7 @@ assertions:
 
 ```console
 $ cat queries/sales-lines.sql
--- vibe: {"title":"Sales lines","description":"One row per invoice line, with the customer's country, the track's genre and the invoice year: the rows every revenue metric is measured over"}
+-- assay: {"title":"Sales lines","description":"One row per invoice line, with the customer's country, the track's genre and the invoice year: the rows every revenue metric is measured over"}
 SELECT
   l.invoice_line_id,
   l.invoice_id,
@@ -109,7 +109,7 @@ JOIN genre AS g ON g.genre_id = t.genre_id
 Finance said revenue is the sum of `invoice.total`. Marketing said it is the sum of the invoice lines. Over all time the two agree, but they differ as soon as you want revenue by genre (only lines have a genre) or join the invoice to its lines. The `settled_by` block records which one won and why:
 
 ```console
-$ vibe semantics show metric revenue
+$ assay semantics show metric revenue
 version: 1
 name: revenue
 title: Revenue
@@ -129,7 +129,7 @@ assertions:
 You can see the inflation for yourself. Joining invoices to their lines repeats each invoice's total once per line:
 
 ```console
-$ vibe query "SELECT sum(i.total) AS summed_invoice_totals FROM invoice i JOIN invoice_line l USING (invoice_id)"
+$ assay query "SELECT sum(i.total) AS summed_invoice_totals FROM invoice i JOIN invoice_line l USING (invoice_id)"
 summed_invoice_totals
 ---------------------
 20848.62
@@ -137,7 +137,7 @@ summed_invoice_totals
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('revenue')"
+$ assay query "SELECT * FROM metric('revenue')"
 revenue
 -------
 2328.60
@@ -150,7 +150,7 @@ expanded 1 metric: revenue
 ## Check
 
 ```console
-$ vibe semantics check
+$ assay semantics check
 STATUS  SUBJECT                   CHECK                     DETAIL
 pass    entity customer           compile                   compiles
 pass    entity customer           unique customer_id        
@@ -194,7 +194,7 @@ One check fails on purpose, exit status 1: the `invoice` entity declares `freshn
 A join file carries what you **declare** (`cardinality`) and, once you run a profile, what was **measured**. Profiling does a few full scans of both tables, read-only, and writes only the `measured:` block of the join file (the rest of the file is kept as written):
 
 ```console
-$ vibe semantics profile customer_invoice
+$ assay semantics profile customer_invoice
 join customer_invoice (declared one_to_many)
   left rows            59
   right rows           412
@@ -206,7 +206,7 @@ recorded in semantics/joins/customer_invoice.yaml (measured:)
 ```
 
 ```console
-$ vibe semantics profile invoice_invoice_line
+$ assay semantics profile invoice_invoice_line
 join invoice_invoice_line (declared one_to_many)
   left rows            412
   right rows           2240
@@ -218,7 +218,7 @@ recorded in semantics/joins/invoice_invoice_line.yaml (measured:)
 ```
 
 ```console
-$ vibe semantics profile invoice_line_track
+$ assay semantics profile invoice_line_track
 join invoice_line_track (declared many_to_one)
   left rows            2240
   right rows           3503
@@ -230,7 +230,7 @@ recorded in semantics/joins/invoice_line_track.yaml (measured:)
 ```
 
 ```console
-$ vibe semantics profile track_genre
+$ assay semantics profile track_genre
 join track_genre (declared many_to_one)
   left rows            3503
   right rows           25
@@ -251,7 +251,7 @@ What these say:
 The fifth join was declared wrong on purpose. Someone modelling quickly might write that a customer has one support rep, so `one_to_one`:
 
 ```console
-$ vibe semantics profile customer_support_rep
+$ assay semantics profile customer_support_rep
 join customer_support_rep (declared one_to_one)
   left rows            59
   right rows           8
@@ -267,7 +267,7 @@ recorded in semantics/joins/customer_support_rep.yaml (measured:)
 The profile did its job, so the exit status is 0, but it prints a warning and records `verdict: fan_out`: 21 customers share one rep, so joining repeats the rep and any sum over the right side (say, a rep's salary) is inflated. Five of the eight employees have no customers at all (they are not sales agents). Change the declaration to `many_to_one` (`git checkout -- semantics/joins/customer_support_rep.yaml` puts the demo back) and profile again, and the verdict agrees with the data (the five right orphans stay: extra rows on the "one" side are normal):
 
 ```console
-$ vibe semantics profile customer_support_rep
+$ assay semantics profile customer_support_rep
 join customer_support_rep (declared many_to_one)
   left rows            59
   right rows           8
@@ -285,7 +285,7 @@ The committed file keeps the wrong declaration and its `fan_out` block, so you s
 Every metric is a measure over `sales-lines`, grouped by whichever of its dimensions you name (`country`, `genre` and `year`; `avg_invoice_value` has no `genre`, since by genre it would not be an invoice's value):
 
 ```console
-$ vibe query "SELECT * FROM metric('revenue', by => 'year') ORDER BY 1"
+$ assay query "SELECT * FROM metric('revenue', by => 'year') ORDER BY 1"
 year  revenue
 ----  -------
 2009  449.46
@@ -298,7 +298,7 @@ expanded 1 metric: revenue
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('revenue', by => 'genre') ORDER BY 2 DESC LIMIT 5"
+$ assay query "SELECT * FROM metric('revenue', by => 'genre') ORDER BY 2 DESC LIMIT 5"
 genre               revenue
 ------------------  -------
 Rock                826.65
@@ -311,7 +311,7 @@ expanded 1 metric: revenue
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('avg_invoice_value', by => 'country') ORDER BY 2 DESC, 1 LIMIT 5"
+$ assay query "SELECT * FROM metric('avg_invoice_value', by => 'country') ORDER BY 2 DESC, 1 LIMIT 5"
 country         avg_invoice_value
 --------------  -----------------
 Chile           6.659999999999999
@@ -324,7 +324,7 @@ expanded 1 metric: avg_invoice_value
 ```
 
 ```console
-$ vibe query "SELECT * FROM metric('active_customers', by => 'year') ORDER BY 1"
+$ assay query "SELECT * FROM metric('active_customers', by => 'year') ORDER BY 1"
 year  active_customers
 ----  ----------------
 2009  46
@@ -339,7 +339,7 @@ expanded 1 metric: active_customers
 Several metrics in one statement, joined on the dimension they share:
 
 ```console
-$ vibe query "SELECT year, revenue, invoice_count, avg_invoice_value FROM metric('revenue', by => 'year') JOIN metric('invoice_count', by => 'year') USING (year) JOIN metric('avg_invoice_value', by => 'year') USING (year) ORDER BY 1"
+$ assay query "SELECT year, revenue, invoice_count, avg_invoice_value FROM metric('revenue', by => 'year') JOIN metric('invoice_count', by => 'year') USING (year) JOIN metric('avg_invoice_value', by => 'year') USING (year) ORDER BY 1"
 year  revenue  invoice_count  avg_invoice_value
 ----  -------  -------------  ------------------
 2009  449.46   83             5.415180722891566
@@ -354,7 +354,7 @@ expanded 3 metrics: revenue, invoice_count, avg_invoice_value
 Metrics compose in a `SELECT` list too:
 
 ```console
-$ vibe query "SELECT metric('revenue') AS revenue, metric('revenue') / metric('active_customers') AS revenue_per_customer"
+$ assay query "SELECT metric('revenue') AS revenue, metric('revenue') / metric('active_customers') AS revenue_per_customer"
 revenue  revenue_per_customer
 -------  --------------------
 2328.60  39.46779661016949
@@ -370,11 +370,11 @@ expanded 3 metrics: revenue, revenue, active_customers
 
 ```console
 $ head -n 1 queries/top-customers.sql
--- vibe: {"title":"Top customers","description":"Customers by what they spent in one year","parameters":[{"name":"year","type":"integer","required":false,"default":"2013"},{"name":"min_spend","type":"number","required":false,"default":"10"}]}
+-- assay: {"title":"Top customers","description":"Customers by what they spent in one year","parameters":[{"name":"year","type":"integer","required":false,"default":"2013"},{"name":"min_spend","type":"number","required":false,"default":"10"}]}
 ```
 
 ```console
-$ vibe query --saved top-customers --limit 4
+$ assay query --saved top-customers --limit 4
 customer_id  first_name  last_name  country         spent
 -----------  ----------  ---------  --------------  -----
 6            Helena      Holý       Czech Republic  27.84
@@ -386,7 +386,7 @@ showing the first 4 of 18 rows (--limit 0 for all)
 ```
 
 ```console
-$ vibe query --saved top-customers -p year=2011 -p min_spend=15
+$ assay query --saved top-customers -p year=2011 -p min_spend=15
 customer_id  first_name  last_name   country  spent
 -----------  ----------  ----------  -------  -----
 46           Hugh        O'Reilly    Ireland  32.75
@@ -406,14 +406,14 @@ customer_id  first_name  last_name   country  spent
 
 ## The notebook
 
-`notebooks/store-metrics.vnb` has five SQL cells that call `metric()`. Open it from Studio's Library. A notebook stores the questions, not the answers, so every cell runs again when you open it.
+`notebooks/store-metrics.asnb` has five SQL cells that call `metric()`. Open it from Studio's Library. A notebook stores the questions, not the answers, so every cell runs again when you open it.
 
 ## Open it in Studio
 
-Close Studio before running `vibe import`, `vibe semantics check` or `vibe semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
+Close Studio before running `assay import`, `assay semantics check` or `assay semantics profile` from a terminal: they cannot use a local DuckDB that Studio holds.
 
 ```
-vibe studio --gui
+assay studio --gui
 ```
 
 Choose **Open folder** and pick `docs/examples/chinook` (after the import step). Then **Semantics** in the sidebar:
@@ -428,7 +428,7 @@ Choose **Open folder** and pick `docs/examples/chinook` (after the import step).
 
 An agent can read the layer (`list_definitions`, `get_definition`, `metric()`) but it **cannot write under `semantics/`**. It can only propose, and you decide.
 
-1. In Studio's chat (tier read-write or full), or from an MCP client attached with `vibe mcp serve`, ask: "How many tracks do we sell? Propose a metric." The agent calls `propose_definition`, which checks the definition with the same validator the files go through (name, measure, saved query exists), and files it in `.vibe-local/proposals/` on this machine. It is git-ignored and never shared. With **Ask before changes** on (the default), a headless `vibe mcp serve` checks the proposal but files nothing, since no one can approve it there. Use Studio's chat, keep Studio open with its MCP server on so you get an approval card, or turn that switch off.
+1. In Studio's chat (tier read-write or full), or from an MCP client attached with `assay mcp serve`, ask: "How many tracks do we sell? Propose a metric." The agent calls `propose_definition`, which checks the definition with the same validator the files go through (name, measure, saved query exists), and files it in `.assay-local/proposals/` on this machine. It is git-ignored and never shared. With **Ask before changes** on (the default), a headless `assay mcp serve` checks the proposal but files nothing, since no one can approve it there. Use Studio's chat, keep Studio open with its MCP server on so you get an approval card, or turn that switch off.
 2. You see it in Studio (Semantics, Proposals, with a line diff) or on the command line.
 
 The session below was not produced by a model: the proposal file was written by hand, in the exact format `propose_definition` writes, so the commands have something to show. The commands and their output are real.
@@ -436,7 +436,7 @@ The session below was not produced by a model: the proposal file was written by 
 To follow along, create the proposal first:
 
 ```console
-$ mkdir -p .vibe-local/proposals && cat > .vibe-local/proposals/20261030T001500Z-metric-tracks_sold-7f3a.yaml <<'EOF'
+$ mkdir -p .assay-local/proposals && cat > .assay-local/proposals/20261030T001500Z-metric-tracks_sold-7f3a.yaml <<'EOF'
 version: 1
 id: 20261030T001500Z-metric-tracks_sold-7f3a
 kind: metric
@@ -466,12 +466,12 @@ EOF
 ```
 
 ```console
-$ vibe semantics proposals
+$ assay semantics proposals
 ID                                        KIND    NAME         STATUS  BY     WHY
 20261030T001500Z-metric-tracks_sold-7f3a  metric  tracks_sold  open    agent  Revenue says how much was paid, but not how many tracks tha…
 ```
 ```console
-$ vibe semantics show-proposal 20261030T001500Z-metric-tracks_sold-7f3a
+$ assay semantics show-proposal 20261030T001500Z-metric-tracks_sold-7f3a
 Proposal  20261030T001500Z-metric-tracks_sold-7f3a
 Proposes  metric tracks_sold  (open, 2026-10-30T00:15:00Z, by agent)
 Writes    semantics/metrics/tracks_sold.yaml
@@ -498,7 +498,7 @@ semantics/metrics/tracks_sold.yaml is new.
 +   - kind: non_negative
 ```
 ```console
-$ vibe semantics accept 20261030T001500Z-metric-tracks_sold-7f3a
+$ assay semantics accept 20261030T001500Z-metric-tracks_sold-7f3a
 Accepted 20261030T001500Z-metric-tracks_sold-7f3a: wrote semantics/metrics/tracks_sold.yaml
 Proposal  20261030T001500Z-metric-tracks_sold-7f3a
 Proposes  metric tracks_sold  (open, 2026-10-30T00:15:00Z, by agent)
@@ -526,7 +526,7 @@ semantics/metrics/tracks_sold.yaml is new.
 +   - kind: non_negative
 ```
 ```console
-$ vibe query "SELECT * FROM metric('tracks_sold', by => 'year') ORDER BY 1"
+$ assay query "SELECT * FROM metric('tracks_sold', by => 'year') ORDER BY 1"
 year  tracks_sold
 ----  -----------
 2009  454
@@ -538,4 +538,4 @@ year  tracks_sold
 expanded 1 metric: tracks_sold
 ```
 
-`show-proposal` prints who proposed it, why, the evidence, and the diff against the file it would write. `accept` writes exactly what was shown and pins it to the version you looked at: if the proposal or the target file changed after you looked, it refuses. `vibe semantics reject <id>` declines it and touches nothing. After accepting, commit `semantics/metrics/tracks_sold.yaml` like any other file. (This workspace does not include that file: the repository keeps the layer you see above.)
+`show-proposal` prints who proposed it, why, the evidence, and the diff against the file it would write. `accept` writes exactly what was shown and pins it to the version you looked at: if the proposal or the target file changed after you looked, it refuses. `assay semantics reject <id>` declines it and touches nothing. After accepting, commit `semantics/metrics/tracks_sold.yaml` like any other file. (This workspace does not include that file: the repository keeps the layer you see above.)

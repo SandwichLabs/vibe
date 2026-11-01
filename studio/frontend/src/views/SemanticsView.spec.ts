@@ -103,7 +103,7 @@ describe('SemanticsView', () => {
     const w = await mountAt()
     const t = w.get('[data-testid="semantics-empty"]').text()
     expect(t).toContain('semantics/metrics/net_revenue.yaml')
-    expect(t).toContain('Ask the agent')
+    expect(t).toContain('Ask the assistant')
   })
 
   it('opens a metric card with its facts and a link to its saved query', async () => {

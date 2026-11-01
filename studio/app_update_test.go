@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/prefs"
-	"github.com/SandwichLabs/vibe/internal/selfupdate"
+	"github.com/SandwichLabs/assay/internal/prefs"
+	"github.com/SandwichLabs/assay/internal/selfupdate"
 )
 
 func updateTestApp(t *testing.T) (*App, *[]string) {
@@ -47,7 +47,7 @@ func TestRestartAfterUpdate_StartsTheNewStudioOnlyAfterTheQuitIsCommitted(t *tes
 	assert.ErrorIs(t, app.RestartAfterUpdate(), selfupdate.ErrNothingToRestart)
 	assert.Zero(t, quits)
 
-	app.restart.prepare("/home/me/.local/bin/vibe-studio")
+	app.restart.prepare("/home/me/.local/bin/assay-studio")
 	require.NoError(t, app.RestartAfterUpdate())
 	assert.Equal(t, 1, quits, "the normal quit path is asked for")
 	assert.Empty(t, *started, "nothing is started until shutdown")
@@ -60,7 +60,7 @@ func TestRestartAfterUpdate_StartsTheNewStudioOnlyAfterTheQuitIsCommitted(t *tes
 	// Arm again; this time the quit goes through and shutdown starts it, reopening the workspace.
 	require.NoError(t, app.RestartAfterUpdate())
 	app.relaunchAfterQuit("/work")
-	assert.Equal(t, []string{"/home/me/.local/bin/vibe-studio", "/work"}, *started)
+	assert.Equal(t, []string{"/home/me/.local/bin/assay-studio", "/work"}, *started)
 
 	// A later ordinary quit starts nothing.
 	*started = nil

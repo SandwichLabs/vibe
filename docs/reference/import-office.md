@@ -4,7 +4,7 @@
 
 One **Import** wizard (`ImportView.vue`, on `internal/importer`) handles both
 CSV/TSV and XLSX. It is also the only importer: the Studio bindings
-(`SelectImportFile`, `InspectImport`, `ImportFile`) and `vibe import` both
+(`SelectImportFile`, `InspectImport`, `ImportFile`) and `assay import` both
 call `importer.Import` on the workspace session — there is no separate
 "quick" path and no per-row skip-and-continue behaviour. Every import is
 **all-or-nothing**: it runs in one DuckDB transaction, and any unexpected
@@ -95,14 +95,14 @@ own, so append/upsert onto one always uses the plain (non-FK) preflight.
 ### CLI
 
 ```
-vibe import <file> [--into [conn.]table] [--workspace DIR]
+assay import <file> [--into [conn.]table] [--workspace DIR]
             [--mode create|replace|append|upsert] [--key COL|auto|none]
             [--sheet S] [--no-header] [--type col=type ...] [--dry-run]
 ```
 
-`vibe import` runs `importer.Import` on the workspace's DuckDB session, the
+`assay import` runs `importer.Import` on the workspace's DuckDB session, the
 same call as the Studio wizard, so an imported table is immediately visible to
-`vibe query`, Studio, the agent and MCP (vibe-app#113 closed vibe-app#72: the CLI used to write
+`assay query`, Studio, the agent and MCP (vibe-app#113 closed vibe-app#72: the CLI used to write
 into the old SQLite envelope).
 
 - **Target.** `--into` is `table`, `conn.table` or `conn.schema.table`. The
@@ -118,12 +118,12 @@ into the old SQLite envelope).
   non-zero on anything but a clean, unblocked import. `--dry-run` writes
   nothing (no table, no skill).
 - **Ownership.** It takes the workspace's hub lock for the duration, so while
-  Studio or `vibe mcp serve` has the workspace open it stops with a message
+  Studio or `assay mcp serve` has the workspace open it stops with a message
   naming that process.
 - A successful import writes or refreshes the `workspace-<table>` skill into
   `skills/`, as Studio's does.
 
-Notebooks move between workspaces with `vibe export notebook` / `vibe import notebook`, or in `.vibe` bundles (`vibe export bundle`, `vibe import <file.vibe>`); see [workspaces.md](workspaces.md#sharing-without-git-vibe-bundles). That replaced the `vibe notebook import/export` once planned in #9.
+Notebooks move between workspaces with `assay export notebook` / `assay import notebook`, or in `.assay` bundles (`assay export bundle`, `assay import <file.assay>`); see [workspaces.md](workspaces.md#sharing-without-git-assay-bundles). That replaced the `assay notebook import/export` once planned in #9.
 
 ## Export
 
@@ -135,14 +135,14 @@ result is a small, focused action next to the data itself:
 | Query Explorer result | `ExportQueryResults` | CSV, Parquet |
 | A notebook | `ExportNotebook` | the notebook's own JSON document |
 
-XLSX export (the CLI `vibe export`; Studio has no xlsx export binding) uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
+XLSX export (the CLI `assay export`; Studio has no xlsx export binding) uses DuckDB's `excel` extension (`COPY ... TO '...xlsx' WITH
 (FORMAT xlsx)`). Exports are written to a user-chosen path on disk; nothing
 leaves the machine. An xlsx export is an xlsx or an error: there is no
 silent fallback to CSV.
 
-**Excel support needs a one-time download.** Vibe runs DuckDB with
+**Excel support needs a one-time download.** Assay runs DuckDB with
 autoinstall/autoload off and its own private extension directory
-(`<user cache dir>/vibe/duckdb/extensions`), so an Excel extension you
+(`<user cache dir>/assay/duckdb/extensions`), so an Excel extension you
 installed elsewhere (for example `~/.duckdb`) is not used. The first xlsx
 import or export fetches the `excel` extension once (about 2 MB) and needs
 network access; if that fails the action reports "Excel support needs a
@@ -158,18 +158,18 @@ feature in vibe-app#73, not a report one.
 ### CLI
 
 ```
-vibe export <[conn.]table> -o file.{csv,parquet,json,xlsx} [--force]
-vibe export --sql "<query>" [-c conn] -o file.{csv,parquet,json,xlsx}
-vibe export <[conn.]table> [--format csv|json]          # to standard output
+assay export <[conn.]table> -o file.{csv,parquet,json,xlsx} [--force]
+assay export --sql "<query>" [-c conn] -o file.{csv,parquet,json,xlsx}
+assay export <[conn.]table> [--format csv|json]          # to standard output
 ```
 
-`vibe export` writes a table or a query's result with DuckDB's `COPY ... TO`
+`assay export` writes a table or a query's result with DuckDB's `COPY ... TO`
 through the workspace session; the format comes from the file's extension. An
 existing destination is only replaced with `--force`. Excel needs the `excel`
 extension (fetched once, see above). Without `-o` the rows go to standard
 output as CSV or JSON. Exporting only reads, so `--read-only` works without
 taking the workspace's hub lock.
 
-`vibe query "<sql>" [--format table|csv|json] [--limit N]` prints a result
+`assay query "<sql>" [--format table|csv|json] [--limit N]` prints a result
 directly; see `docs/reference/workspaces.md` (Command line).
-`vibe notebook import/export` is tracked in #9.
+`assay notebook import/export` is tracked in #9.

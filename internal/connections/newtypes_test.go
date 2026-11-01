@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
-	"github.com/SandwichLabs/vibe/internal/session"
+	"github.com/SandwichLabs/assay/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/session"
 )
 
 func myDef() Def {
@@ -56,19 +56,19 @@ func TestMySQLEmittedSQL(t *testing.T) {
 	typ := registry["mysql"]
 	stmts, err := typ.AttachSQL(myDef().Spec())
 	require.NoError(t, err)
-	assert.Equal(t, []string{`ATTACH '' AS "my" (TYPE mysql, SECRET "vibe_my", READ_ONLY)`}, stmts)
+	assert.Equal(t, []string{`ATTACH '' AS "my" (TYPE mysql, SECRET "assay_my", READ_ONLY)`}, stmts)
 
 	d := myDef()
 	d.ReadOnly = false
 	d.Options = nil
 	stmts, err = typ.AttachSQL(d.Spec())
 	require.NoError(t, err)
-	assert.Equal(t, []string{`ATTACH '' AS "my" (TYPE mysql, SECRET "vibe_my")`}, stmts)
+	assert.Equal(t, []string{`ATTACH '' AS "my" (TYPE mysql, SECRET "assay_my")`}, stmts)
 
 	steps, err := asCred(typ).SecretSteps(myDef().Spec(), secrets.Credential{User: "rosa", Password: "pw'1"})
 	require.NoError(t, err)
 	require.Len(t, steps, 1)
-	assert.Equal(t, session.SecretStep{Name: "vibe_my", Type: "mysql", Params: []session.SecretParam{
+	assert.Equal(t, session.SecretStep{Name: "assay_my", Type: "mysql", Params: []session.SecretParam{
 		{Key: "HOST", Value: "db.internal"},
 		{Key: "PORT", Value: 3307},
 		{Key: "DATABASE", Value: "shop"},
@@ -76,7 +76,7 @@ func TestMySQLEmittedSQL(t *testing.T) {
 		{Key: "PASSWORD", Value: "pw'1", Secret: true},
 		{Key: "SSL_MODE", Value: "required"},
 	}}, steps[0])
-	assert.Equal(t, `CREATE OR REPLACE TEMPORARY SECRET "vibe_my" (TYPE mysql, HOST 'db.internal', PORT 3307, DATABASE 'shop', USER 'rosa', PASSWORD 'pw''1', SSL_MODE 'required')`, renderSecret(steps[0]))
+	assert.Equal(t, `CREATE OR REPLACE TEMPORARY SECRET "assay_my" (TYPE mysql, HOST 'db.internal', PORT 3307, DATABASE 'shop', USER 'rosa', PASSWORD 'pw''1', SSL_MODE 'required')`, renderSecret(steps[0]))
 
 	// The default port, and no SSL option unless one is set.
 	d = Def{Name: "my", Type: "mysql", Host: "h", Database: "d"}
@@ -175,7 +175,7 @@ func TestAzureEmittedSQL(t *testing.T) {
 		return steps[0]
 	}
 	// Account key: the connection string is built here and is entirely secret.
-	assert.Equal(t, session.SecretStep{Name: "vibe_az", Type: "azure", Params: []session.SecretParam{
+	assert.Equal(t, session.SecretStep{Name: "assay_az", Type: "azure", Params: []session.SecretParam{
 		{Key: "CONNECTION_STRING", Value: "DefaultEndpointsProtocol=https;AccountName=acmelake;AccountKey=a2V5Ck5lZWRsZQ==;EndpointSuffix=core.windows.net", Secret: true},
 		{Key: "SCOPE", Value: "az://raw/events/"},
 	}}, step(azDef("account_key"), secrets.Credential{Secret: "a2V5Ck5lZWRsZQ=="}))
@@ -185,12 +185,12 @@ func TestAzureEmittedSQL(t *testing.T) {
 	assert.Equal(t, "CONNECTION_STRING", step(d, secrets.Credential{Secret: "a2V5Ck5lZWRsZQ=="}).Params[0].Key)
 	// A pasted connection string goes through untouched.
 	cs := "DefaultEndpointsProtocol=https;AccountName=x;AccountKey=k;EndpointSuffix=core.windows.net"
-	assert.Equal(t, session.SecretStep{Name: "vibe_az", Type: "azure", Params: []session.SecretParam{
+	assert.Equal(t, session.SecretStep{Name: "assay_az", Type: "azure", Params: []session.SecretParam{
 		{Key: "CONNECTION_STRING", Value: cs, Secret: true},
 		{Key: "SCOPE", Value: "az://raw/events/"},
 	}}, step(azDef("connection_string"), secrets.Credential{Secret: cs}))
 	// Service principal.
-	assert.Equal(t, session.SecretStep{Name: "vibe_az", Type: "azure", Params: []session.SecretParam{
+	assert.Equal(t, session.SecretStep{Name: "assay_az", Type: "azure", Params: []session.SecretParam{
 		{Key: "PROVIDER", Value: "service_principal"},
 		{Key: "TENANT_ID", Value: "11111111-2222-3333-4444-555555555555"},
 		{Key: "CLIENT_ID", Value: "app-1234"},

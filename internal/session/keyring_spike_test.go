@@ -15,7 +15,7 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-const kSvc = "vibe-spike-107"
+const kSvc = "assay-spike-107"
 
 // Spike #107: go-keyring against the Secret Service on this machine.
 // Run: go test -tags keyring ./internal/session -run Keyring -v

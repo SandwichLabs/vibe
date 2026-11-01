@@ -12,17 +12,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/artifacts"
+	"github.com/SandwichLabs/assay/internal/artifacts"
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/SandwichLabs/vibe/internal/dotenv"
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/notebooks"
-	"github.com/SandwichLabs/vibe/internal/queries"
-	"github.com/SandwichLabs/vibe/internal/semantics"
-	"github.com/SandwichLabs/vibe/internal/semantics/proposals"
-	"github.com/SandwichLabs/vibe/internal/skills"
+	"github.com/SandwichLabs/assay/internal/dotenv"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/notebooks"
+	"github.com/SandwichLabs/assay/internal/queries"
+	"github.com/SandwichLabs/assay/internal/semantics"
+	"github.com/SandwichLabs/assay/internal/semantics/proposals"
+	"github.com/SandwichLabs/assay/internal/skills"
 )
 
 // ChangeKind is what changed on disk.
@@ -43,7 +43,7 @@ const (
 	// KindSemantics is a file under semantics/: ID is "entities/<name>",
 	// "metrics/<name>", "joins/<name>" or "glossary".
 	KindSemantics ChangeKind = "semantics"
-	// KindProposal is a proposed semantic definition in .vibe-local/proposals/
+	// KindProposal is a proposed semantic definition in .assay-local/proposals/
 	// (ID is the proposal id). An agent in this process files proposals through
 	// the workspace's own store, which the watcher does not report; Studio
 	// announces those itself. This kind is for another process or an editor.
@@ -63,12 +63,12 @@ const dotenvFile = dotenv.File
 
 // Change is one debounced, de-duplicated change to a workspace file made by
 // something other than this process's own stores: an editor, a git pull,
-// Claude Code, another Vibe.
+// Claude Code, another Assay.
 type Change struct {
 	Kind ChangeKind `json:"kind"`
 	Op   ChangeOp   `json:"op"`
 	// ID is the notebook id, query id, skill name, or for config the file
-	// name ("vibe.yaml"). Your own per-person settings live outside the
+	// name ("assay.yaml"). Your own per-person settings live outside the
 	// folder and are not watched; SaveLocal and Reload cover them.
 	ID string `json:"id"`
 	// Path is slash-separated and relative to the workspace root.
@@ -88,9 +88,9 @@ func WithDebounce(d time.Duration) WatchOption { return func(o *watchOpts) { o.d
 
 // Watcher reports external changes under a workspace. fsnotify is not
 // recursive on Linux, so every directory that can hold a watched file is
-// registered on its own: the root (for vibe.yaml and the content directories
+// registered on its own: the root (for assay.yaml and the content directories
 // appearing later), notebooks/, queries/, skills/, artifacts/, each
-// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/), semantics/ and its three folders, .vibe-local/ and .vibe-local/proposals/, and directories created afterwards are added as they appear.
+// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/), semantics/ and its three folders, .assay-local/ and .assay-local/proposals/, and directories created afterwards are added as they appear.
 //
 // Its own stores' writes are ignored by content hash: a store announces the
 // hash of what it is about to write, and the watcher drops any event whose
@@ -250,7 +250,7 @@ func (w *Watcher) addSemanticsSubdirs() {
 	}
 }
 
-// addProposalsDir registers .vibe-local/ and .vibe-local/proposals when they
+// addProposalsDir registers .assay-local/ and .assay-local/proposals when they
 // exist now.
 func (w *Watcher) addProposalsDir() {
 	w.addDir(filepath.Join(w.root, LocalDir))

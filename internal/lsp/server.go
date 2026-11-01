@@ -1,4 +1,4 @@
-// Package lsp is `vibe lsp`: a Language Server Protocol server over stdio that
+// Package lsp is `assay lsp`: a Language Server Protocol server over stdio that
 // completes and describes a workspace's connections, schemas, tables, views
 // and columns in any editor with an LSP client (Neovim, Helix, VS Code, Zed,
 // Emacs).
@@ -7,8 +7,8 @@
 // write a .duckdb file or many read it, never both, and an editor's language
 // server runs for hours: holding even a read-only attach would stop the TUI or
 // Studio from opening the workspace. It reads a catalog snapshot,
-// .vibe-local/catalog.json, that the TUI writes (on start and after each
-// statement) or `vibe lsp snapshot` writes on demand, and reloads it when it
+// .assay-local/catalog.json, that the TUI writes (on start and after each
+// statement) or `assay lsp snapshot` writes on demand, and reloads it when it
 // changes. Until one exists, completion is empty.
 package lsp
 
@@ -249,7 +249,7 @@ func (s *Server) initialize(params json.RawMessage) (any, *rpcError) {
 			},
 			"hoverProvider": true,
 		},
-		"serverInfo": map[string]any{"name": "vibe", "version": s.version},
+		"serverInfo": map[string]any{"name": "assay", "version": s.version},
 	}, nil
 }
 

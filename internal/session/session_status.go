@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SandwichLabs/vibe/internal/secrets"
+	"github.com/SandwichLabs/assay/internal/secrets"
 )
 
 func (h *hub) SetDefaultCatalog(ctx context.Context, name string) error {

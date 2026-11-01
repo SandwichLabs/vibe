@@ -16,7 +16,7 @@ import (
 func TestStudioLoggerRedactsSecrets(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("VIBE_CONFIG_FILE", filepath.Join(home, "vibe-test.yaml"))
+	t.Setenv("ASSAY_CONFIG_FILE", filepath.Join(home, "assay-test.yaml"))
 
 	var buf bytes.Buffer
 	a := NewApp(slog.New(slog.NewJSONHandler(&buf, nil)))

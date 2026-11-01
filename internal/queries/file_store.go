@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SandwichLabs/vibe/internal/connname"
-	"github.com/SandwichLabs/vibe/internal/filestore"
-	"github.com/SandwichLabs/vibe/internal/jsonenc"
+	"github.com/SandwichLabs/assay/internal/connname"
+	"github.com/SandwichLabs/assay/internal/filestore"
+	"github.com/SandwichLabs/assay/internal/jsonenc"
 )
 
 // Extension is the query file extension; Dir the workspace directory.
@@ -23,14 +23,14 @@ const (
 	Extension = ".sql"
 	Dir       = "queries"
 	// HeaderPrefix starts the first line of a query file.
-	HeaderPrefix = "-- vibe:"
+	HeaderPrefix = "-- assay:"
 )
 
 // FileStore keeps queries as queries/<id>.sql under a workspace root.
 //
 // # File format
 //
-//	-- vibe: {"title":"Top customers","description":"...","connection":"prod_pg","parameters":[...]}
+//	-- assay: {"title":"Top customers","description":"...","connection":"prod_pg","parameters":[...]}
 //	SELECT ...
 //
 // The first line is a SQL comment followed by one line of JSON (so any SQL
@@ -133,7 +133,7 @@ func Decode(id string, data []byte) (Query, error) {
 			// Update) because rewriting would drop or alter the header the
 			// store could not read.
 			q.SQL = strings.TrimRight(text, "\n")
-			q.Error = fmt.Sprintf("the -- vibe: header could not be read: %v", err)
+			q.Error = fmt.Sprintf("the -- assay: header could not be read: %v", err)
 			return q, nil
 		}
 		if strings.TrimSpace(h.Title) != "" {

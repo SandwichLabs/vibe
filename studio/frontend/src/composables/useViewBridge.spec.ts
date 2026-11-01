@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   blobs = []
   revoked = []
-  URL.createObjectURL = vi.fn((b: Blob) => { blobs.push(b); return `blob:vibe/${blobs.length}` }) as any
+  URL.createObjectURL = vi.fn((b: Blob) => { blobs.push(b); return `blob:assay/${blobs.length}` }) as any
   URL.revokeObjectURL = vi.fn((u: string) => { revoked.push(u) }) as any
 })
 afterEach(() => { vi.useRealTimers() })
@@ -63,7 +63,7 @@ describe('starting', () => {
     const r = rig()
     await r.b.start()
     expect(r.deps.openView).toHaveBeenCalledWith('chart', 'http://localhost:34115')
-    expect(r.urls).toEqual([`/vibe-view/${'t'.repeat(64)}/worker.js`])
+    expect(r.urls).toEqual([`/assay-view/${'t'.repeat(64)}/worker.js`])
     expect(r.worker.postMessage).toHaveBeenCalledWith({ t: 'init', theme: { type: 'light', 'chart.1': '#123456' } }, [{ fake: 'port2' }])
     expect(r.b.phase.value).toBe('starting')
     r.fromWorker({ t: 'ready' })
@@ -181,14 +181,14 @@ describe('drawing', () => {
     await ready(r)
     r.b.draw({}, 600, 400)
     r.fromWorker({ t: 'drawn', id: 1, svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' })
-    expect(r.b.svgUrl.value).toBe('blob:vibe/1')
+    expect(r.b.svgUrl.value).toBe('blob:assay/1')
     expect(blobs[0].type).toBe('image/svg+xml')
     r.b.draw({}, 600, 400)
     r.fromWorker({ t: 'drawn', id: 2, svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' })
-    expect(r.b.svgUrl.value).toBe('blob:vibe/2')
-    expect(revoked).toEqual(['blob:vibe/1'])
+    expect(r.b.svgUrl.value).toBe('blob:assay/2')
+    expect(revoked).toEqual(['blob:assay/1'])
     r.scope.stop()
-    expect(revoked).toEqual(['blob:vibe/1', 'blob:vibe/2'])
+    expect(revoked).toEqual(['blob:assay/1', 'blob:assay/2'])
     expect(r.worker.terminate).toHaveBeenCalled()
     expect(r.port.closed).toBe(true)
   })
@@ -380,6 +380,6 @@ describe('watchdog', () => {
     expect(r.b.phase.value).toBe('stopped')
     await r.b.start()
     expect(r.b.phase.value).toBe('starting')
-    expect(r.urls[1]).toBe(`/vibe-view/${'b'.repeat(64)}/worker.js`)
+    expect(r.urls[1]).toBe(`/assay-view/${'b'.repeat(64)}/worker.js`)
   })
 })

@@ -85,7 +85,7 @@ func TestHasConfigFile(t *testing.T) {
 	assert.False(t, HasConfigFile(dir))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ConfigFile), []byte("id: x\n"), 0o600))
 	assert.True(t, HasConfigFile(dir))
-	// A symlink named vibe.yaml is not a workspace mark.
+	// A symlink named assay.yaml is not a workspace mark.
 	other := t.TempDir()
 	require.NoError(t, os.Symlink(filepath.Join(dir, ConfigFile), filepath.Join(other, ConfigFile)))
 	assert.False(t, HasConfigFile(other))
