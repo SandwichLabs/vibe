@@ -340,3 +340,48 @@ func TestExpand_DimensionNamedLikeAFunctionGroupsByTheColumn(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int64{"a": 3, "b": 5}, got)
 }
+
+func TestExpandGrain_ShapeAndRefusals(t *testing.T) {
+	f := newFake(t)
+	r, err := ExpandGrain(context.Background(), f.metrics["net_revenue"], f, Options{})
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT count(*) FROM (SELECT 1 FROM (\nSELECT region, month, amount FROM sales\n) AS vibe_grain_net_revenue GROUP BY \"region\", \"month\" HAVING count(*) > 1) AS vibe_grain_dups", r.SQL)
+	require.Len(t, r.Bodies, 1)
+
+	// No dimension, no grain.
+	_, err = ExpandGrain(context.Background(), f.metrics["orders"], f, Options{})
+	require.ErrorIs(t, err, ErrInvalid)
+
+	// A saved query that is not one read statement, uses metric() or sits on
+	// another connection is refused exactly like a metric() expansion.
+	f.queries["net_revenue_base"].SQL = "SELECT 1; DROP TABLE sales"
+	_, err = ExpandGrain(context.Background(), f.metrics["net_revenue"], f, Options{})
+	require.ErrorIs(t, err, ErrInvalid)
+	f.queries["net_revenue_base"].SQL = "SELECT * FROM metric('orders')"
+	_, err = ExpandGrain(context.Background(), f.metrics["net_revenue"], f, Options{})
+	require.ErrorIs(t, err, ErrInvalid)
+	f.queries["net_revenue_base"] = &queries.Query{ID: "net_revenue_base", SQL: "SELECT region, month, amount FROM sales", Connection: "pg"}
+	_, err = ExpandGrain(context.Background(), f.metrics["net_revenue"], f, Options{})
+	require.ErrorIs(t, err, ErrInvalid)
+}
+
+func TestExpandGrain_DefaultsBindAndDuplicatesAreCounted(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE sales AS SELECT * FROM (VALUES ('a', 1), ('a', 2), ('b', 5), ('b', 6), ('b', 7), ('c', 0)) t(region, amount)`)
+	require.NoError(t, err)
+	f := &fakeSource{
+		metrics: map[string]*Metric{"total": metricNamed(t, "total", "base", "sum(amount)", "region")},
+		queries: map[string]*queries.Query{"base": {ID: "base", SQL: "SELECT region, amount FROM sales WHERE amount >= $floor",
+			Parameters: []queries.Param{{Name: "floor", Type: "number", Default: "1"}}}},
+	}
+	r, err := ExpandGrain(context.Background(), f.metrics["total"], f, Options{})
+	require.NoError(t, err)
+	params, err := r.BindParams(nil, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"floor": float64(1)}, params)
+	var n int
+	require.NoError(t, db.QueryRow(r.SQL, sql.Named("floor", 1.0)).Scan(&n))
+	assert.Equal(t, 2, n, "regions a and b each hold more than one row")
+}

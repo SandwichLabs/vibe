@@ -1,0 +1,12 @@
+version: 1
+name: population_by_country
+title: Population of a country in a year
+description: "The population figure for one country in one survey year. Its saved query has one row per country and year, which the unique assertion keeps true."
+query: country-years
+measure: sum(pop)
+dimensions: [country, year]
+format: number
+owner: example
+assertions:
+  - {kind: unique}
+  - {kind: range, min: 0}

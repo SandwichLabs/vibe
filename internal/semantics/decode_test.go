@@ -3,6 +3,7 @@ package semantics
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,7 +116,7 @@ func TestDecodeMetric_Refusals(t *testing.T) {
 		"bad format":      sub("format: currency", "format: euro"),
 		"settled no text": sub(`text: "A counted refunds, B excluded them. Refunds are excluded."`, `text: ""`),
 		"assert column":   sub("{kind: non_negative}", "{kind: non_negative, column: x}"),
-		"assert kind":     sub("{kind: non_negative}", "{kind: unique}"),
+		"assert kind":     sub("{kind: non_negative}", "{kind: freshness}"),
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -294,4 +295,80 @@ func TestValidate_ReservedKeywordsAreRefused(t *testing.T) {
 	j.Name = "x"
 	j.On = []JoinOn{{Left: "from", Right: "id"}}
 	assert.ErrorIs(t, ValidateJoin(j), ErrInvalid)
+}
+
+func entityWith(assertions string) []byte {
+	return []byte("version: 1\nname: log\ngrain: one row per day\ntable: logs\nid_column: log_date\nassertions:\n" + assertions)
+}
+
+func metricWith(dims, assertions string) []byte {
+	return []byte("version: 1\nname: score\nquery: q\nmeasure: sum(x)\n" + dims + "assertions:\n" + assertions)
+}
+
+func TestDecode_NewAssertionKinds(t *testing.T) {
+	e, err := DecodeEntity("log", entityWith("  - {kind: range, column: n, min: -5, max: 99.5}\n  - {kind: freshness, column: log_date, max_age: 36h}\n  - {kind: row_count, min_rows: 3}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Number(-5), *e.Assertions[0].Min)
+	assert.Equal(t, Number(99.5), *e.Assertions[0].Max)
+	assert.Equal(t, "36h", e.Assertions[1].MaxAge)
+	assert.Equal(t, Count(3), *e.Assertions[2].MinRows)
+	d, err := MaxAgeDuration("2d")
+	require.NoError(t, err)
+	assert.Equal(t, 48*time.Hour, d)
+
+	// Written back, the bounds keep their plain decimal form.
+	out, err := EncodeEntity(e)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "min: -5")
+	assert.Contains(t, string(out), "max: 99.5")
+	_, err = DecodeEntity("log", out)
+	require.NoError(t, err)
+
+	m, err := DecodeMetric("score", metricWith("dimensions: [log_date]\n", "  - {kind: unique}\n  - {kind: range, max: 100}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, AssertUnique, m.Assertions[0].Kind)
+}
+
+func TestDecode_NewAssertionKindsRefusals(t *testing.T) {
+	entity := map[string]string{
+		"quoted bound":         "  - {kind: range, column: n, max: \"100\"}\n",
+		"exponent":             "  - {kind: range, column: n, max: 1e3}\n",
+		"hex":                  "  - {kind: range, column: n, max: 0x10}\n",
+		"inf":                  "  - {kind: range, column: n, max: .inf}\n",
+		"nan":                  "  - {kind: range, column: n, min: .nan}\n",
+		"no bounds":            "  - {kind: range, column: n}\n",
+		"min above max":        "  - {kind: range, column: n, min: 2, max: 1}\n",
+		"range needs column":   "  - {kind: range, max: 1}\n",
+		"values on range":      "  - {kind: range, column: n, max: 1, values: [a]}\n",
+		"min on unique":        "  - {kind: unique, column: n, min: 1}\n",
+		"max_age no unit":      "  - {kind: freshness, column: d, max_age: 7}\n",
+		"max_age zero":         "  - {kind: freshness, column: d, max_age: 0d}\n",
+		"max_age weeks":        "  - {kind: freshness, column: d, max_age: 2w}\n",
+		"max_age too long":     "  - {kind: freshness, column: d, max_age: 100000d}\n",
+		"freshness no column":  "  - {kind: freshness, max_age: 7d}\n",
+		"max_age on not_null":  "  - {kind: not_null, column: d, max_age: 7d}\n",
+		"min_rows fraction":    "  - {kind: row_count, min_rows: 1.5}\n",
+		"min_rows zero":        "  - {kind: row_count, min_rows: 0}\n",
+		"min_rows missing":     "  - {kind: row_count}\n",
+		"row_count has column": "  - {kind: row_count, column: n, min_rows: 1}\n",
+		"min_rows on range":    "  - {kind: range, column: n, max: 1, min_rows: 1}\n",
+	}
+	for name, a := range entity {
+		_, err := DecodeEntity("log", entityWith(a))
+		require.Error(t, err, name)
+		assert.ErrorIs(t, err, ErrInvalid, name)
+	}
+	metric := map[string][2]string{
+		"unique without dimensions": {"", "  - {kind: unique}\n"},
+		"freshness":                 {"dimensions: [d]\n", "  - {kind: freshness, max_age: 7d}\n"},
+		"row_count":                 {"dimensions: [d]\n", "  - {kind: row_count, min_rows: 1}\n"},
+		"range with column":         {"dimensions: [d]\n", "  - {kind: range, column: x, max: 1}\n"},
+		"unique with min":           {"dimensions: [d]\n", "  - {kind: unique, min: 1}\n"},
+		"quoted bound":              {"dimensions: [d]\n", "  - {kind: range, min: '0'}\n"},
+	}
+	for name, a := range metric {
+		_, err := DecodeMetric("score", metricWith(a[0], a[1]))
+		require.Error(t, err, name)
+		assert.ErrorIs(t, err, ErrInvalid, name)
+	}
 }

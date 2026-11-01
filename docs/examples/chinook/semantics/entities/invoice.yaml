@@ -10,3 +10,6 @@ owner: sales
 assertions:
   - {kind: unique, column: invoice_id}
   - {kind: not_null, column: customer_id}
+  - {kind: row_count, min_rows: 400}
+  - {kind: range, column: total, min: 0, max: 30}
+  - {kind: freshness, column: invoice_date, max_age: 30d}

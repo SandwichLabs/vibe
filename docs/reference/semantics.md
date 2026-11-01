@@ -58,6 +58,9 @@ assertions:                                 # optional, up to 50
   - {kind: unique, column: customer_id}
   - {kind: not_null, column: created_at}
   - {kind: accepted_values, column: status, values: [active, churned]}
+  - {kind: range, column: lifetime_value, min: 0}
+  - {kind: freshness, column: created_at, max_age: 7d}
+  - {kind: row_count, min_rows: 1}
 ```
 
 | Field | Meaning |
@@ -66,7 +69,7 @@ assertions:                                 # optional, up to 50
 | `connection` | Optional connection name (the name rule) where an unqualified `table` resolves. |
 | `id_column` | The column that identifies one row of this entity. |
 | `columns` | Notes on columns: `name` (unique), `pii: true` to flag personal data, `description`. Optional; a column that is not listed is simply unannotated. |
-| `assertions` | Checks you declare. Each names a `column`. |
+| `assertions` | Checks you declare. Each names a `column`, except `row_count` (see [Assertions](#assertions)). |
 
 ## Metrics: `semantics/metrics/<name>.yaml`
 
@@ -141,9 +144,20 @@ An assertion is a check you declare; `vibe semantics check` (or Studio's Run ass
 | Kind | On | Takes |
 |---|---|---|
 | `unique` | entity | `column` |
+| `unique` | metric | nothing; the metric needs at least one dimension |
 | `not_null` | entity or metric | `column` on an entity, nothing on a metric |
 | `accepted_values` | entity | `column` and `values` (1 to 200 values, each up to 200 characters) |
 | `non_negative` | metric | nothing |
+| `range` | entity or metric | `column` on an entity, nothing on a metric; `min`, `max` or both |
+| `freshness` | entity | `column` and `max_age` |
+| `row_count` | entity | `min_rows` (no column) |
+
+The extra fields are strict, so a file never means something other than what it says:
+
+- **`min`, `max`** (range) are plain decimal numbers such as `0`, `-5` or `99.5`, at most 15 digits and under 10^15 in size. A quoted `"100"`, `1e3`, `0x10`, `.inf` and `.nan` are refused, not coerced. At least one is required, and `min` may not be above `max`.
+- **`max_age`** (freshness) is a whole number of days or hours: `7d`, `36h` (`^[1-9][0-9]{0,4}[dh]$`). `7` without a unit, `1w` and `0d` are refused.
+- **`min_rows`** (row_count) is a whole number from 1, written in decimal.
+- A field that belongs to another kind (`min` on `unique`, `max_age` on `range`, `values` on `range`) is refused.
 
 ### Running assertions
 
@@ -156,10 +170,19 @@ An assertion is a check you declare; `vibe semantics check` (or Studio's Run ass
 | `accepted_values` on `col` | rows where `CAST(col AS VARCHAR)` is none of the listed values; the values are bound parameters (`$v0`, `$v1`, ...), compared as text, and NULL is not a violation |
 | `non_negative` on a metric | rows where the metric is below 0 |
 | `not_null` on a metric | rows where the metric is NULL |
+| `range` on `col` | rows where `col < min` or `col > max` (either bound alone is fine); NULL is not a violation. The bounds are bound parameters (`$vibe_min`, `$vibe_max`) |
+| `range` on a metric (a saved query that declares `$vibe_min` or `$vibe_max` is refused) | the same over the metric at its full dimension set, so a total of 106.1 on a 0 to 100 scale is found |
+| `unique` on a metric | dimension sets (the metric's `dimensions` together) that **its saved query** has more than one row for. A metric is grouped, so its own result is trivially unique; this looks at the saved query's rows under it, which is where a fan-out or a double-sourced row shows. It is the one check that embeds a saved query outside a `metric()` expansion, built by the same expander with the same rules and `$name` defaults. Declare it only when the saved query is meant to be at the metric's grain; a query of order lines measured by region would, rightly, fail |
+| `freshness` on `col` | 1 when the latest value of `col` is older than `max_age`, or when there is no value at all (an empty table, or all NULL), else 0. The threshold is `now` minus `max_age`, worked out in Go in UTC and bound as a timestamp (`$vibe_threshold`), so no interval text from the file reaches SQL. A `DATE`, `TIMESTAMP` or `TIMESTAMPTZ` column compares as a timestamp, a date counting from its midnight; a text or number column does not compare with a timestamp, which the compile check reports (below) |
+| `row_count` | 1 when the entity's table has fewer than `min_rows` rows (bound as `$vibe_min_rows`), else 0 |
+
+`freshness` and `row_count` return a second column, a plain-words detail: `latest 2026-09-30` or `no values`; `412 rows`. The report prints it in DETAIL (`stale: latest 2026-09-30`, `too few rows: 0 rows`; a passing check prints it as is), `--json` carries it as `detail` (present for `freshness` and `row_count` only) and Studio shows it under the status. The count is still one statement and one number: a freshness or row_count check is 0 or 1 violation. The detail is the planner's own text with a value from the data; it is shown with control characters escaped.
+
+The compile check (below) covers every column an assertion names and the typed comparison of each `range` and `freshness` assertion (the bounds and the threshold are bound placeholder values, cast to the comparison type, `CAST($vibe_max AS DOUBLE)` and `CAST($vibe_threshold AS TIMESTAMP)`, and nothing is run), so a typo in a column, or a `range` on a text column or `freshness` on a text or number column, is a "does not compile" row with the binder's own message, and the assertions of a subject that does not compile are `not run` like the others.
 
 ### The compile check
 
-Every entity and metric starts with a `compile` row, so a definition with no assertions still gets one. It builds one statement from the definition and **vets it instead of running it**: the agent policy's read-only verdict, whose last step is `EXPLAIN` on the real connection, which binds every identifier without reading a row. An entity's is `SELECT "id_column", "col", ... FROM <table>` (its table and every declared column exist). A metric's is the metric at its full dimension set (none for a metric with no `dimensions:`), expanded like any `metric()` call, so the `measure` and every dimension are bound against the saved query's output columns and a `$name` parameter takes its declared default. Joins are not compiled here; `profile` binds both sides in its first statement.
+Every entity and metric starts with a `compile` row, so a definition with no assertions still gets one. It builds one statement from the definition and **vets it instead of running it**: the agent policy's read-only verdict, whose last step is `EXPLAIN` on the real connection, which binds every identifier without reading a row. An entity's is `SELECT "id_column", "col", ... FROM <table>` (its table, every annotated column and every column an assertion names exist). A metric's is the metric at its full dimension set (none for a metric with no `dimensions:`), expanded like any `metric()` call, so the `measure` and every dimension are bound against the saved query's output columns and a `$name` parameter takes its declared default. Joins are not compiled here; `profile` binds both sides in its first statement.
 
 `vibe semantics check --compile` runs only these rows: no rows are scanned for the result (binding can still read a file's header or sample, a parquet footer or an object listing), so it is quick enough to run after every edit, including over a MotherDuck connection. A definition that does not compile is a `fail` (fix the file; exit 1) and the detail is the database's own message, printed as `does not compile: ...`, and Studio's Run assertions shows the row as "Compiles" or "Does not compile: ...". A policy refusal (a saved query that reads outside the workspace) is also a `fail`. Only the database's Binder, Catalog and Parser errors and the policy's denials count as the definition being wrong; a connection that cannot be reached, a timeout or a failed read while binding is an `error` (exit 2), since that says nothing about the files. A metric's saved-query parameters that have no default get a type-valid placeholder for this check. When no data check could run, the report says so ("No data check could run"), even if the compile rows passed. When a subject does not compile, its own assertions are not run: they are `error` rows, `not run: the definition does not compile`, instead of one copy of the same binder message each.
 
@@ -175,7 +198,7 @@ Every statement runs through the agent policy's read-only path in the tightest t
 | `fail` | that many violating rows broke the assertion |
 | `error` | the check could not run (a connection is down, the entity or metric file is unreadable, the saved query is missing); it says nothing about the data, and the other checks still run |
 
-Exit status: `0` when every check passes or none is declared, `1` when any check failed, `2` for anything that stopped the run from saying whether the data is right: a check that could not run, and also a usage or open error (an unknown kind or name, a bad flag, no workspace). So a script can tell "fix the data" (1) from "fix the command or the setup" (2). `vibe semantics profile` exits 0 on success and 2 on any error, including a join file that changed while it ran. `--json` prints one object per check (`subject_kind`, `subject`, `assertion`, `column`, `status`, `violations`, `duration_ms`, `error`, and an empty `receipt` reserved for [receipts](../plans/answers-you-can-check.md)). Names and messages are printed with control characters shown as `<U+XXXX>`. When no check could run at all, the report ends with "Nothing was verified", so a run that checked nothing is not mistaken for a clean one. The command opens the workspace read-only (no hub lock, every connection attached read-only), so it takes no lock. The one exception is MotherDuck, which cannot be attached read-only: since every statement `check` and `profile` run goes through the read-only policy, they attach a MotherDuck connection as it is defined (as Studio does for the same runs) instead of leaving it unreachable. Like any connection other than a local file, it connects on first use, and a connection that fails to connect is reported with its own error (a missing token, a refused attach). It still cannot read a local DuckDB file that Studio has attached read-write: that check ends as an `error` (the file is in use) until you close the workspace in Studio or use a copy, so run `check` beside Studio only against remote or read-only connections.
+Exit status: `0` when every check passes or none is declared, `1` when any check failed, `2` for anything that stopped the run from saying whether the data is right: a check that could not run, and also a usage or open error (an unknown kind or name, a bad flag, no workspace). So a script can tell "fix the data" (1) from "fix the command or the setup" (2). `vibe semantics profile` exits 0 on success and 2 on any error, including a join file that changed while it ran. `--json` prints one object per check (`subject_kind`, `subject`, `assertion`, `column`, `status`, `violations`, `detail`, `duration_ms`, `error`, and an empty `receipt` reserved for [receipts](../plans/answers-you-can-check.md)). Names and messages are printed with control characters shown as `<U+XXXX>`. When no check could run at all, the report ends with "Nothing was verified", so a run that checked nothing is not mistaken for a clean one. The command opens the workspace read-only (no hub lock, every connection attached read-only), so it takes no lock. The one exception is MotherDuck, which cannot be attached read-only: since every statement `check` and `profile` run goes through the read-only policy, they attach a MotherDuck connection as it is defined (as Studio does for the same runs) instead of leaving it unreachable. Like any connection other than a local file, it connects on first use, and a connection that fails to connect is reported with its own error (a missing token, a refused attach). It still cannot read a local DuckDB file that Studio has attached read-write: that check ends as an `error` (the file is in use) until you close the workspace in Studio or use a copy, so run `check` beside Studio only against remote or read-only connections.
 
 ### Profiling a join
 
@@ -276,7 +299,7 @@ Studio's bindings for running definitions are `RunAssertions(kind, name)` (rows 
 
 - **The list** on the left groups Metrics, Entities, Joins, the Glossary (its term count) and Proposals (an inbox row, then one row per open proposal). A file that cannot be read is listed with an `error` badge, and opens as its text with the reason, so it can be found and fixed. The selection is in the URL (`#/semantics?kind=metric&name=net_revenue`; `kind=proposal&name=<id>` for a proposal), so a reload and a link keep it.
 - **A metric card** shows the title, description, owner and format, the measure, the dimensions, the saved query (a link that opens it in the Query Explorer; a missing query is flagged), how the disagreement over it was settled (`settled_by`), and its assertions. **Try it** has a checkbox per dimension and a Run button: it runs the metric by the ticked dimensions (none: the single total) and shows the rows in a grid, with a notice when the result stopped at the row cap. **Run assertions** checks the metric and lists each check, starting with its Compiles / Does not compile row, as pass, fail (with the number of violating rows) or error (the check could not run, which says nothing about the data).
-- **An entity card** shows the grain, the table and its connection, the id column, the columns flagged as personal data (`pii`), the assertions and **Run assertions**.
+- **An entity card** shows the grain, the table and its connection, the id column, the columns flagged as personal data (`pii`), the assertions (each with its bounds, window or minimum: `range on score (min 0, max 100)`, `freshness on log_date (max age 7d)`, `row_count (min 1 row)`) and **Run assertions**. A freshness or row_count row shows what it saw beneath its status.
 - **A join card** shows the declared cardinality beside the measured one with its counts and when it was measured, and a warning when the data contradicts the declaration. **Profile** measures the join and writes `measured:` into its file. It is off in a read-only workspace, and a join file that changed while the profile ran is shown as a conflict ("nothing was written") rather than overwritten.
 - **The glossary** is the file rendered with the app's one safe markdown renderer, with the raw file a click away.
 - **The proposals inbox** lists what the agent has proposed. A proposal opens with its rationale, the evidence the agent gave, the warnings Go found, and a line diff of the current file against the proposed one (changed lines carry `+` and `-` as well as colour). **Accept** writes exactly the version on screen: it sends `shown_rev`, so a file or proposal that changed after you looked is refused ("changed again since you looked"), and the view reads the proposal again and shows the new diff. When the file changed since the agent proposed, the view says how and offers **Accept anyway** (which also needs the version on screen) in place of Accept. **Reject** marks it rejected. Accept is off in a read-only workspace. After an accept the new definition opens.

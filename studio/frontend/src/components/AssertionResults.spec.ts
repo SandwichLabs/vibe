@@ -33,4 +33,9 @@ describe('AssertionResults', () => {
     expect(w.get('[data-testid="assertion-compile-0"]').text()).toBe('Compile check')
     expect(w.text()).not.toContain('Does not compile')
   })
+  it('shows what a freshness check saw, as text', () => {
+    const w = mount(AssertionResults, { props: { rows: [row({ assertion: 'freshness', column: 'log_date', status: 'fail', violations: 1, detail: 'latest 2026-09-30' })] } })
+    expect(w.get('[data-testid="assertion-detail-0"]').text()).toBe('latest 2026-09-30')
+    expect(w.get('[data-testid="assertion-row-0"]').text()).toContain('freshness')
+  })
 })

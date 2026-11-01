@@ -130,7 +130,7 @@ func planAssertions(ctx context.Context, ws Workspace, kind, name string, now ti
 		}
 		for i := range list {
 			p := subjectPlan{kind: assert.SubjectEntity, name: list[i].Name}
-			p.checks, p.err = planEntityChecks(&list[i])
+			p.checks, p.err = planEntityChecks(&list[i], now)
 			out = append(out, p)
 		}
 	}
@@ -150,12 +150,12 @@ func planAssertions(ctx context.Context, ws Workspace, kind, name string, now ti
 }
 
 // planEntityChecks is the compile check followed by the declared assertions.
-func planEntityChecks(e *semantics.Entity) ([]assert.Check, error) {
+func planEntityChecks(e *semantics.Entity, now time.Time) ([]assert.Check, error) {
 	compile, err := assert.PlanEntityCompile(e)
 	if err != nil {
 		return nil, err
 	}
-	rest, err := assert.PlanEntity(e)
+	rest, err := assert.PlanEntity(e, now)
 	if err != nil {
 		return nil, err
 	}

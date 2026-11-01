@@ -583,3 +583,52 @@ func (r *Result) CheckOuterParams(input string, supplied map[string]any, declare
 	}
 	return nil
 }
+
+// ExpandGrain builds the statement behind a metric's unique assertion: the
+// number of dimension sets the metric's saved query holds more than one row
+// for. It is the only other place a saved query's text is written into SQL
+// besides Expand, and it goes through the same steps (the query is loaded, held
+// to one read statement and cut like a metric expansion, its $name parameters
+// declared), so there is one set of rules for embedding a saved query:
+//
+//	SELECT count(*) FROM (SELECT 1 FROM (
+//	<saved query SQL>
+//	) AS vibe_grain_<metric> GROUP BY "d1", ..., "dn" HAVING count(*) > 1) AS vibe_grain_dups
+//
+// The metric needs at least one dimension. The Result carries the declared
+// parameters for BindParams like an expanded text.
+func ExpandGrain(ctx context.Context, m *Metric, src Reader, o Options) (*Result, error) {
+	label := fmt.Sprintf("metric(%s)", quoteForMessage(m.Name))
+	if len(m.Dimensions) == 0 {
+		return nil, refuse("%s: unique needs at least one dimension", label)
+	}
+	if src == nil {
+		return nil, refuse("%s: there are no semantic definitions here", label)
+	}
+	res := &Result{ParamOwner: map[string]string{}}
+	x := &expander{ctx: ctx, src: src, o: o, res: res, bodies: map[string]bool{}, params: map[string]paramOwner{}}
+	q, err := x.loadQuery(m, label)
+	if err != nil {
+		return nil, err
+	}
+	if err := x.checkConnection(m, q); err != nil {
+		return nil, err
+	}
+	body, err := checkBody(q, label)
+	if err != nil {
+		return nil, err
+	}
+	if err := x.addParams(m, q, body); err != nil {
+		return nil, err
+	}
+	res.Bodies = []Body{{Metric: m.Name, Query: q.ID, SQL: body}}
+	quoted := make([]string, len(m.Dimensions))
+	for i, d := range m.Dimensions {
+		quoted[i] = session.QuoteIdent(d)
+	}
+	res.SQL = "SELECT count(*) FROM (SELECT 1 FROM (\n" + body + "\n) AS vibe_grain_" + m.Name +
+		" GROUP BY " + strings.Join(quoted, ", ") + " HAVING count(*) > 1) AS vibe_grain_dups"
+	res.Changed = true
+	sort.Slice(res.Params, func(i, j int) bool { return res.Params[i].Name < res.Params[j].Name })
+	return res, nil
+}

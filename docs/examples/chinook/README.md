@@ -152,27 +152,42 @@ expanded 1 metric: revenue
 ```console
 $ vibe semantics check
 STATUS  SUBJECT                   CHECK                     DETAIL
+pass    entity customer           compile                   compiles
 pass    entity customer           unique customer_id        
 pass    entity customer           not_null country          
+pass    entity employee           compile                   compiles
 pass    entity employee           unique employee_id        
+pass    entity genre              compile                   compiles
 pass    entity genre              unique genre_id           
+pass    entity invoice            compile                   compiles
 pass    entity invoice            unique invoice_id         
 pass    entity invoice            not_null customer_id      
+pass    entity invoice            row_count                 412 rows
+pass    entity invoice            range total               
+fail    entity invoice            freshness invoice_date    stale: latest 2013-12-22
+pass    entity invoice_line       compile                   compiles
 pass    entity invoice_line       unique invoice_line_id    
 pass    entity invoice_line       not_null track_id         
 pass    entity invoice_line       accepted_values quantity  
+pass    entity track              compile                   compiles
 pass    entity track              unique track_id           
 pass    entity track              not_null genre_id         
+pass    metric active_customers   compile                   compiles
 pass    metric active_customers   non_negative              
+pass    metric avg_invoice_value  compile                   compiles
 pass    metric avg_invoice_value  non_negative              
+pass    metric invoice_count      compile                   compiles
 pass    metric invoice_count      non_negative              
+pass    metric revenue            compile                   compiles
 pass    metric revenue            non_negative              
 pass    metric revenue            not_null                  
 
-16 passed, 0 failed, 0 could not run
+28 passed, 1 failed, 0 could not run
+Error: 1 of 29 checks failed
+(exit status 1)
 ```
 
-Everything passes on this data, exit status 0. (The penguins example has a check that fails.) Note that `invoice_line.quantity` is asserted to be `1` everywhere: `accepted_values` compares as text, so `values: ["1"]`. If a future import brought in a line with quantity 2, this would fail and the glossary's "one track per line" would be wrong.
+One check fails on purpose, exit status 1: the `invoice` entity declares `freshness` on `invoice_date` with `max_age: 30d`, and the store's last invoice is from 2013, so the table is stale and the check says which date it saw (`stale: latest 2013-12-22`). The same entity declares `row_count` (at least 400 invoices; the DETAIL says how many it found) and a `range` on `total` (between 0 and 30), which pass. Note that `invoice_line.quantity` is asserted to be `1` everywhere: `accepted_values` compares as text, so `values: ["1"]`. If a future import brought in a line with quantity 2, this would fail and the glossary's "one track per line" would be wrong.
 
 ## Profile the joins
 

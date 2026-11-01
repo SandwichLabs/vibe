@@ -14,3 +14,5 @@ assertions:
   - {kind: not_null, column: life_exp}
   - {kind: not_null, column: pop}
   - {kind: accepted_values, column: continent, values: [Africa, Americas, Asia, Europe, Oceania]}
+  - {kind: row_count, min_rows: 1704}
+  - {kind: range, column: life_exp, min: 20, max: 90}

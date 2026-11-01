@@ -23,10 +23,14 @@ type Result struct {
 	// Status is pass, fail (Violations rows broke the assertion) or error (the
 	// check could not run: a connection down, a refusal by the policy, a
 	// failed plan). An error says nothing about the data.
-	Status     string        `json:"status"`
-	Violations int64         `json:"violations"`
-	Duration   time.Duration `json:"duration_ns"`
-	Error      string        `json:"error,omitempty"`
+	Status     string `json:"status"`
+	Violations int64  `json:"violations"`
+	// Detail is what a check says about the data beside the count: a freshness
+	// check names the latest value it saw, a row_count the rows it found. It is
+	// empty for the other kinds.
+	Detail   string        `json:"detail,omitempty"`
+	Duration time.Duration `json:"duration_ns"`
+	Error    string        `json:"error,omitempty"`
 	// Receipt is reserved for the receipts epic: the id of the receipt a run
 	// will record. It is empty until then.
 	Receipt string `json:"receipt,omitempty"`
@@ -106,6 +110,7 @@ func runOne(ctx context.Context, c Check, rn Runner) Result {
 		return r
 	}
 	r.Violations = n
+	r.Detail = detailOf(rs)
 	r.Status = StatusPass
 	if n > 0 {
 		r.Status = StatusFail
@@ -156,6 +161,24 @@ func violationCount(rs *engine.ResultSet) (int64, error) {
 	return n, nil
 }
 
+// detailOf reads the optional second column of a check's result: text the
+// planner wrote after the count, capped. Anything else is ignored.
+func detailOf(rs *engine.ResultSet) string {
+	if len(rs.Columns) < 2 {
+		return ""
+	}
+	s, ok := rs.Value(0, 1).(string)
+	if !ok {
+		return ""
+	}
+	if r := []rune(s); len(r) > maxDetail {
+		s = string(r[:maxDetail]) + "..."
+	}
+	return s
+}
+
+const maxDetail = 200
+
 // AsCount reads a database integer of any width.
 func AsCount(v any) (int64, bool) {
 	switch x := v.(type) {
@@ -189,6 +212,7 @@ type Row struct {
 	Column      string `json:"column,omitempty"`
 	Status      string `json:"status"`
 	Violations  int64  `json:"violations"`
+	Detail      string `json:"detail,omitempty"`
 	DurationMS  int64  `json:"duration_ms"`
 	Error       string `json:"error,omitempty"`
 	Receipt     string `json:"receipt,omitempty"`
@@ -199,7 +223,7 @@ func Rows(rs []Result) []Row {
 	out := make([]Row, len(rs))
 	for i, r := range rs {
 		out[i] = Row{SubjectKind: r.Check.SubjectKind, Subject: r.Check.Subject, Assertion: r.Check.Kind, Column: r.Check.Column,
-			Status: r.Status, Violations: r.Violations, DurationMS: r.Duration.Milliseconds(), Error: r.Error, Receipt: r.Receipt}
+			Status: r.Status, Violations: r.Violations, Detail: r.Detail, DurationMS: r.Duration.Milliseconds(), Error: r.Error, Receipt: r.Receipt}
 	}
 	return out
 }

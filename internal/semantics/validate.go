@@ -1,7 +1,10 @@
 package semantics
 
 import (
+	"fmt"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,8 +23,8 @@ var tablePartRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
 // AssertionKinds, Cardinalities, Formats and Verdicts are the closed value
 // sets, for callers and docs. They are the only values Validate accepts.
 var (
-	EntityAssertionKinds = []string{AssertUnique, AssertNotNull, AssertAcceptedValues}
-	MetricAssertionKinds = []string{AssertNonNegative, AssertNotNull}
+	EntityAssertionKinds = []string{AssertUnique, AssertNotNull, AssertAcceptedValues, AssertRange, AssertFreshness, AssertRowCount}
+	MetricAssertionKinds = []string{AssertNonNegative, AssertNotNull, AssertRange, AssertUnique}
 	Cardinalities        = []string{OneToOne, ManyToOne, OneToMany, ManyToMany}
 	Formats              = []string{FormatNumber, FormatCurrency, FormatPercent}
 	Verdicts             = []string{VerdictConsistent, VerdictFanOut, VerdictOrphans}
@@ -123,7 +126,7 @@ func ValidateEntity(e *Entity) error {
 	if err := checkColumns(e.Columns); err != nil {
 		return err
 	}
-	return checkAssertions(e.Assertions, EntityAssertionKinds, true)
+	return checkAssertions(e.Assertions, EntityAssertionKinds, true, 0)
 }
 
 func checkTable(table string) error {
@@ -165,9 +168,20 @@ func checkColumns(cols []Column) error {
 	return nil
 }
 
+// maxAgeRE is a freshness window: whole days or hours, 1 to 99999.
+var maxAgeRE = regexp.MustCompile(`^[1-9][0-9]{0,4}[dh]$`)
+
+// MaxBound is the largest magnitude a range bound may have.
+const MaxBound = 1e15
+
+// MaxMinRows is the largest min_rows.
+const MaxMinRows = 1_000_000_000_000_000
+
 // checkAssertions validates a list against the kinds one owner takes. Entity
-// assertions name a column; accepted_values also lists the values.
-func checkAssertions(list []Assertion, kinds []string, entity bool) error {
+// assertions name a column (except row_count); accepted_values also lists the
+// values, range its bounds, freshness its max_age and row_count its min_rows.
+// dims is a metric's dimension count (a metric's unique needs at least one).
+func checkAssertions(list []Assertion, kinds []string, entity bool, dims int) error {
 	if len(list) > MaxAssertions {
 		return invalid("%d assertions, over the limit of %d", len(list), MaxAssertions)
 	}
@@ -175,34 +189,134 @@ func checkAssertions(list []Assertion, kinds []string, entity bool) error {
 		if !oneOf(a.Kind, kinds) {
 			return invalid("assertion %d: kind %q is not one of %s", i+1, a.Kind, strings.Join(kinds, ", "))
 		}
-		if !entity {
-			if a.Column != "" || len(a.Values) > 0 {
-				return invalid("assertion %d (%s): a metric assertion takes no column or values", i+1, a.Kind)
-			}
-			continue
-		}
-		if err := validIdent("assertion "+a.Kind+" column", a.Column); err != nil {
+		label := fmt.Sprintf("assertion %d (%s)", i+1, a.Kind)
+		if err := checkAssertionFields(label, a, entity, dims); err != nil {
 			return err
-		}
-		if a.Kind != AssertAcceptedValues {
-			if len(a.Values) > 0 {
-				return invalid("assertion %d (%s): values belong to accepted_values only", i+1, a.Kind)
-			}
-			continue
-		}
-		if len(a.Values) == 0 || len(a.Values) > MaxValues {
-			return invalid("assertion %d (accepted_values): needs 1 to %d values (got %d)", i+1, MaxValues, len(a.Values))
-		}
-		for _, v := range a.Values {
-			if utf8.RuneCountInString(v) > MaxValueLen {
-				return invalid("assertion %d (accepted_values): a value is over %d characters", i+1, MaxValueLen)
-			}
-			if err := noHidden("an accepted value", v, false); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
+}
+
+// checkAssertionFields holds one assertion to the fields its kind takes and
+// refuses every field that belongs to another kind.
+func checkAssertionFields(label string, a Assertion, entity bool, dims int) error {
+	hasBounds := a.Min != nil || a.Max != nil
+	if a.Kind != AssertRange && hasBounds {
+		return invalid("%s: min and max belong to range only", label)
+	}
+	if a.Kind != AssertFreshness && a.MaxAge != "" {
+		return invalid("%s: max_age belongs to freshness only", label)
+	}
+	if a.Kind != AssertRowCount && a.MinRows != nil {
+		return invalid("%s: min_rows belongs to row_count only", label)
+	}
+	if a.Kind != AssertAcceptedValues && len(a.Values) > 0 {
+		if entity {
+			return invalid("%s: values belong to accepted_values only", label)
+		}
+		return invalid("%s: a metric assertion takes no column or values", label)
+	}
+	if !entity {
+		return checkMetricAssertion(label, a, dims)
+	}
+	if a.Kind == AssertRowCount {
+		if a.Column != "" {
+			return invalid("%s: row_count counts the table's rows and takes no column", label)
+		}
+	} else if err := validIdent("assertion "+a.Kind+" column", a.Column); err != nil {
+		return err
+	}
+	switch a.Kind {
+	case AssertAcceptedValues:
+		return checkAcceptedValues(label, a.Values)
+	case AssertRange:
+		return checkRange(label, a)
+	case AssertFreshness:
+		return checkFreshness(label, a)
+	case AssertRowCount:
+		return checkRowCount(label, a)
+	}
+	return nil
+}
+
+func checkMetricAssertion(label string, a Assertion, dims int) error {
+	if a.Column != "" {
+		return invalid("%s: a metric assertion takes no column or values", label)
+	}
+	switch a.Kind {
+	case AssertRange:
+		return checkRange(label, a)
+	case AssertUnique:
+		if dims == 0 {
+			return invalid("%s: unique on a metric checks that its saved query has one row per dimension set, so the metric needs at least one dimension", label)
+		}
+	}
+	return nil
+}
+
+func checkAcceptedValues(label string, values []string) error {
+	if len(values) == 0 || len(values) > MaxValues {
+		return invalid("%s: needs 1 to %d values (got %d)", label, MaxValues, len(values))
+	}
+	for _, v := range values {
+		if utf8.RuneCountInString(v) > MaxValueLen {
+			return invalid("%s: a value is over %d characters", label, MaxValueLen)
+		}
+		if err := noHidden("an accepted value", v, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkRange(label string, a Assertion) error {
+	if a.Min == nil && a.Max == nil {
+		return invalid("%s: needs min, max or both", label)
+	}
+	for _, b := range []*Number{a.Min, a.Max} {
+		if b == nil {
+			continue
+		}
+		f := b.Float()
+		// The bound must survive a round trip through the file's plain decimal form.
+		if math.IsNaN(f) || math.Abs(f) >= MaxBound || !numberRE.MatchString(strconv.FormatFloat(f, 'f', -1, 64)) {
+			return invalid("%s: a bound must be a plain decimal number under %g in size with at most 15 decimals", label, MaxBound)
+		}
+	}
+	if a.Min != nil && a.Max != nil && *a.Min > *a.Max {
+		return invalid("%s: min %v is above max %v", label, float64(*a.Min), float64(*a.Max))
+	}
+	return nil
+}
+
+func checkFreshness(label string, a Assertion) error {
+	if !maxAgeRE.MatchString(a.MaxAge) {
+		return invalid("%s: max_age must be a whole number of days or hours such as 7d or 36h (got %q)", label, a.MaxAge)
+	}
+	return nil
+}
+
+func checkRowCount(label string, a Assertion) error {
+	if a.MinRows == nil || *a.MinRows < 1 || *a.MinRows > MaxMinRows {
+		return invalid("%s: min_rows is required and must be a whole number from 1 to %d", label, int64(MaxMinRows))
+	}
+	return nil
+}
+
+// MaxAgeDuration reads a freshness max_age ("7d", "36h") as a duration.
+func MaxAgeDuration(s string) (time.Duration, error) {
+	if !maxAgeRE.MatchString(s) {
+		return 0, invalid("max_age must be a whole number of days or hours such as 7d or 36h (got %q)", s)
+	}
+	n, err := strconv.Atoi(s[:len(s)-1])
+	if err != nil {
+		return 0, invalid("max_age %q: %v", s, err)
+	}
+	unit := time.Hour
+	if s[len(s)-1] == 'd' {
+		unit = 24 * time.Hour
+	}
+	return time.Duration(n) * unit, nil
 }
 
 // ValidateMetric checks a metric's structure and the lexical shape of its
@@ -246,7 +360,7 @@ func ValidateMetric(m *Metric) error {
 			return err
 		}
 	}
-	return checkAssertions(m.Assertions, MetricAssertionKinds, false)
+	return checkAssertions(m.Assertions, MetricAssertionKinds, false, len(m.Dimensions))
 }
 
 func checkDimensions(dims []string) error {

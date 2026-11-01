@@ -57,28 +57,44 @@ are closed:
 
 - entity `unique` on the `id_column`, and `not_null` on the columns you rely on;
 - entity `accepted_values` on a status or category column that a `CASE` or filter depends on (compared as text, case-sensitive);
-- metric `non_negative` for a count, sum or amount; metric `not_null` when a gap would mislead.
+- entity `range` (`min`, `max` or both) on a numeric column with a known scale (a 0 to 100 score, a price that cannot be negative);
+- entity `freshness` (`column`, `max_age` as `7d` or `36h`) on the date or timestamp a dashboard depends on being current; an empty table is stale;
+- entity `row_count` (`min_rows`) so an empty or truncated load is noticed;
+- metric `non_negative` for a count, sum or amount; metric `not_null` when a gap would mislead;
+- metric `range` (`min`, `max` or both) on the metric's value at its full dimension set, such as an average on a 0 to 100 scale;
+- metric `unique`, which checks that the **saved query** has one row per dimension set (needs at least one dimension). This is what finds the fan-out and the double-sourced night of section 2: the metric's own output is grouped, so it cannot show duplicates, but the rows under it can.
 
-In a definition, an entity assertion names its column and a metric assertion
-takes none:
+In a definition, an entity assertion names its column (except `row_count`) and
+a metric assertion takes none. Bounds are plain numbers (unquoted, no
+exponent); `max_age` needs its unit:
 
 ```yaml
 # entity
 assertions:
   - {kind: unique, column: id}
   - {kind: accepted_values, column: status, values: [open, closed]}
+  - {kind: range, column: score, min: 0, max: 100}
+  - {kind: freshness, column: log_date, max_age: 7d}
+  - {kind: row_count, min_rows: 1}
 ```
 
 ```yaml
 # metric
+dimensions: [log_date]
 assertions:
   - {kind: non_negative}
+  - {kind: unique}
+  - {kind: range, min: 0, max: 100}
 ```
 
-These check the entity's **table** and the metric's output. They do not check
-the saved query's grain or a value range, so keep running the section 1 query
-yourself. `check` exits 1 when any check fails, otherwise 2 when some could not
-run: a run where every row errors verified nothing.
+Declare metric `unique` only when the saved query is meant to be at the
+metric's grain (one row per night, say). A query of raw rows measured by
+region would rightly fail it. A failed `freshness` or `row_count` says what it
+saw (`stale: latest 2026-09-30`, `too few rows: 0 rows`); the others report a
+count of violating rows. They do not replace section 1: they keep the answers
+you found there true as the data changes. `check` exits 1 when any check
+fails, otherwise 2 when some could not run: a run where every row errors
+verified nothing.
 
 Each entity and metric gets a `compile` row first: its table and columns, or
 its measure and dimensions against the saved query, are bound on the real
