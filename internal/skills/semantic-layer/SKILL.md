@@ -1,0 +1,136 @@
+---
+name: semantic-layer
+description: Model entities, metrics and joins under semantics/ — check the grain and double-sourced rows first, declare assertions, use metric() correctly, and propose definitions instead of writing files.
+---
+
+# Semantic layer
+
+`semantics/` holds reviewed definitions (entities, metrics, joins, a
+glossary) that dashboards and answers build on. A metric is a measure over a
+**saved query**; a wrong saved query makes every number built on it wrong, and
+`metric()` will not notice. Do these checks before you write a definition.
+Field-by-field reference: `docs/reference/semantics.md`; the tool reference is
+`help_search "semantics"`.
+
+## 1. Grain first
+
+Before a metric, state the saved query's grain ("one row per night") and
+prove it. Profile the source (`SUMMARIZE <table>`, see `data-profiling`), then
+count rows per intended key:
+
+```sql
+SELECT log_date, count(*) AS n FROM <the saved query's FROM> GROUP BY 1 HAVING count(*) > 1;
+```
+
+Zero rows means one row per key. Any rows mean a sum or average over that key
+is wrong. Check what the key's date means too: a timestamp stamped by **start
+time** puts an event that crosses midnight, or two sessions in one day, on
+dates you did not expect.
+
+Worked example: a sleep table stamped by start time had two nights sharing a
+date. The saved query combined the two nights into one row per date, adding
+their scores, and the metric's average came back as 106.1 on a 0-100 scale.
+The grain query above found the repeated dates at once; the fix was to
+collapse to one row per date in the saved query (`max_by` / a window, or pick
+the main sleep), then re-check. A number outside its possible
+range is a grain bug until proven otherwise.
+
+## 2. Double-sourced rows
+
+Two sources often record the same event (a workout from one app and a
+tracker, the same night from two devices). Look for overlap on the grain key
+across the source column:
+
+```sql
+SELECT log_date, count(DISTINCT source_id) AS sources, count(*) AS n
+FROM <table> GROUP BY 1 HAVING count(DISTINCT source_id) > 1 LIMIT 20;
+```
+
+If the same key appears under more than one source, decide which source wins
+and filter or dedup in the saved query, then re-run section 1. Say so in the
+metric's `description` or `settled_by` so the choice is reviewable.
+
+## 3. Assertions to declare
+
+An assertion is a counted violation, run by `vibe semantics check`. The kinds
+are closed:
+
+- entity `unique` on the `id_column`, and `not_null` on the columns you rely on;
+- entity `accepted_values` on a status or category column that a `CASE` or filter depends on (compared as text, case-sensitive);
+- metric `non_negative` for a count, sum or amount; metric `not_null` when a gap would mislead.
+
+In a definition, an entity assertion names its column and a metric assertion
+takes none:
+
+```yaml
+# entity
+assertions:
+  - {kind: unique, column: id}
+  - {kind: accepted_values, column: status, values: [open, closed]}
+```
+
+```yaml
+# metric
+assertions:
+  - {kind: non_negative}
+```
+
+These check the entity's **table** and the metric's output. They do not check
+the saved query's grain or a value range, so keep running the section 1 query
+yourself. `check` exits 1 when any check fails, otherwise 2 when some could not
+run: a run where every row errors verified nothing.
+
+## 4. Using `metric()`
+
+```sql
+SELECT * FROM metric('avg_sleep_score', by => 'log_date');
+SELECT * FROM metric('revenue', by => ['region', 'month']);
+```
+
+The grammar is only `metric('name')`, `metric('name', by => 'dim')` or
+`by => ['dim', ...]`, with plain quoted literals. There is no `where =>`, time
+grain or parameter in the call, and `by` takes only the metric's declared
+`dimensions`. The result column is named after the metric. A metric runs on
+its saved query's connection, so the statement must run on that connection
+(`vibe query -c <conn>`, or the cell's connection).
+
+**A window: filter outside.** Put one `WHERE` on the expansion:
+
+```sql
+SELECT * FROM metric('avg_sleep_score', by => 'log_date')
+WHERE log_date >= current_date - 30 ORDER BY log_date;
+```
+
+It can only filter a dimension or the metric value. If the window belongs in
+the data, give the saved query a `$since` parameter with a default such as
+`today-30d`. The Query Explorer, `vibe query` and the console run it with
+that default; through `run_query` you pass a value in `params`.
+
+**A derived number across two metrics: join by hand.** There is no derived
+metric. Join the two expansions on their shared dimensions (same connection):
+
+```sql
+SELECT d, i.calories_in - o.calories_out AS balance
+FROM metric('calories_in', by => 'd') i
+JOIN metric('calories_out', by => 'd') o USING (d);
+```
+
+An inner join drops a day either side lacks; use `FULL OUTER JOIN` and say so
+if the gap matters.
+
+## 5. Propose, don't write
+
+Agents never write under `semantics/`. File a definition with
+`propose_definition` (`kind`, `name`, `definition`, `rationale`, and
+`evidence`: the queries or values you checked, for example the grain result).
+It is validated now and waits in the person's inbox; **nothing changes and
+`metric()` will not find it until they accept it** (`vibe semantics proposals`,
+`accept`, `reject`, or Studio). Save the query first (`save_query`), since a
+metric's saved query must exist. To change a definition send the `rev` from
+`get_definition` as `replaces_rev`. Do not use a proposed definition in
+answers until accepted. Use `list_definitions` first: reuse a name that
+exists rather than proposing a near-duplicate.
+
+From a shell: `vibe semantics list`, `show <kind> <name>`, `check`, `profile
+<join>`. Run `check` after the person accepts, and report what passed and what
+could not run.

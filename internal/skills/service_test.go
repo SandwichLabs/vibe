@@ -91,7 +91,7 @@ func TestLoadSkills_IncludesBuiltins(t *testing.T) {
 	for _, e := range entries {
 		names[e.Name] = e
 	}
-	for _, want := range []string{"data-profiling", "trustworthy-numbers", "duckdb-sql"} {
+	for _, want := range []string{"data-profiling", "trustworthy-numbers", "duckdb-sql", "semantic-layer"} {
 		e, ok := names[want]
 		require.True(t, ok, "expected built-in %q", want)
 		assert.Equal(t, SourceBuiltin, e.Source)

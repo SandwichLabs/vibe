@@ -10,6 +10,8 @@ beside the queries and notebooks that use them. There are four kinds:
 
 Three runnable example workspaces, with real output, are in [`docs/examples/`](../examples/README.md).
 
+An agent reads the modelling conventions (grain first, double-sourced rows, which assertions to declare, the `metric()` window and hand-join patterns, propose rather than write) from the built-in `semantic-layer` skill (`read_skill semantic-layer`). This page is the reference it points to.
+
 Everything is files you can write by hand. Nothing here needs AI. `vibe semantics list` reads the files and nothing else; a metric runs when SQL calls it with [`metric()`](#using-a-metric-in-sql).
 
 ```
