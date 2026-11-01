@@ -62,7 +62,7 @@ func TestBuiltins_ShipsExpectedSkills(t *testing.T) {
 		names[s.Name] = s
 	}
 
-	for _, want := range []string{"data-profiling", "trustworthy-numbers", "duckdb-sql"} {
+	for _, want := range []string{"data-profiling", "trustworthy-numbers", "duckdb-sql", "semantic-layer"} {
 		s, ok := names[want]
 		require.True(t, ok, "expected built-in skill %q", want)
 		assert.NotEmpty(t, s.Description)
